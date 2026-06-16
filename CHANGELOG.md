@@ -1,15 +1,14 @@
 # Changelog
 
+## 2026.6.9 - 2026-06-16
+
+Hygiene. The client identity stays in mode-0600 sandbox-container files - we
+evaluated the keychain and deliberately stayed on files (the data-protection
+keychain needs a provisioning profile a Developer-ID app can't ship, and the
+0600 sandbox files already beat the reference client's plaintext plist). No
+user-visible change.
+
 ## 2026.6.8 - 2026-06-16
-
-### Security
-
-- **Client identity now lives in the data-protection keychain.** On signed
-  builds the RSA client identity (the key that authenticates you to paired
-  hosts) is stored in the per-app data-protection keychain - encrypted at rest,
-  readable only by Glimmer's signed identity - instead of mode-0600 files, so a
-  Full-Disk-Access process can no longer read the private key off disk. Existing
-  installs migrate automatically on first launch.
 
 ### Updates
 
