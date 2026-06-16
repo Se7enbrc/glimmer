@@ -19,36 +19,17 @@ extension IdentityManager {
         let defaults = UserDefaults.standard
 
         // -----------------------------------------------------------------
-        // Step 0 - data-protection keychain fast path (Team-ID-signed builds).
-        // On a signed build the keychain is the SOLE identity home; everything
-        // below (file store, legacy keychain, UserDefaults) is only a one-time
-        // migration source + the adhoc-build fallback.
-        // -----------------------------------------------------------------
-        if useKeychainBackend(), let identity = try? loadFromKeychain() {
-            cached = identity
-            log.info("Loaded identity from the data-protection keychain")
-            return identity
-        }
-
-        // -----------------------------------------------------------------
-        // Step 1 - file-store fast path. On a signed build with the keychain
-        // still empty but a legacy file identity on disk (the first launch
-        // after this ships), lift it into the keychain (verified) and delete
-        // the plaintext files. On adhoc builds the file store is the home.
+        // Step 1 - file-store fast path.
         // -----------------------------------------------------------------
         if defaults.integer(forKey: Self.fileStorageFlag) >= Self.fileStorageVersion {
             if let identity = try loadFromFileStore() {
                 cached = identity
-                // try? not try: a keychain hiccup must not break a working
-                // file-based install. persistIdentity verifies before deleting
-                // the files, so failure leaves them intact.
-                if useKeychainBackend() { try? persistIdentity(identity) }
                 log.info("Loaded identity from file store")
                 return identity
             }
             // Flag set but file missing - user wiped Application Support,
             // disk error, whatever. Fall through to regen below. The flag
-            // stays set; the regen path writes to the active store and the
+            // stays set; the regen path writes to the file store and the
             // flag remains accurate.
             log.error("identityFileStorageVersion flag set but file store is empty - regenerating")
         }
@@ -67,7 +48,7 @@ extension IdentityManager {
         // `cleanupOrphanLoginKeychainEntries` on a subsequent launch.
         // -----------------------------------------------------------------
         if let migrated = (try? loadFromLegacyKeychain()) {
-            try persistIdentity(migrated)
+            try writeIdentityToFileStore(migrated)
             deleteLegacyKeychainItems()
             defaults.set(Self.fileStorageVersion, forKey: Self.fileStorageFlag)
             cached = migrated
@@ -127,7 +108,7 @@ extension IdentityManager {
                 uid = try generateUniqueID()
             }
             let identity = Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
-            try persistIdentity(identity)
+            try writeIdentityToFileStore(identity)
             wipeUserDefaultsPlaintext()
             // SECURITY (#5): once the file store has the canonical copy,
             // remove the PEM material from moonlight-qt's plist so the
@@ -155,11 +136,11 @@ extension IdentityManager {
             uid = try generateUniqueID()
         }
         let identity = Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
-        try persistIdentity(identity)
+        try writeIdentityToFileStore(identity)
         wipeUserDefaultsPlaintext()
         defaults.set(Self.fileStorageVersion, forKey: Self.fileStorageFlag)
         cached = identity
-        log.info("Wrote freshly-generated identity to the active store")
+        log.info("Wrote freshly-generated identity to file store")
         return identity
     }
 
@@ -249,64 +230,6 @@ extension IdentityManager {
                                     account: Self.accountKey)
         try FileIdentityStore.write(Data(identity.uniqueID.utf8),
                                     account: Self.accountUID)
-    }
-
-    // MARK: Keychain backend (data-protection; sole store on signed builds)
-
-    /// Read the identity from the data-protection keychain. nil if any
-    /// component is absent; throws only on a real keychain error.
-    func loadFromKeychain() throws -> Identity? {
-        guard let certData = try KeychainIdentityStore.read(account: Self.accountCert),
-              let certPEM = String(data: certData, encoding: .utf8), !certPEM.isEmpty else {
-            return nil
-        }
-        guard let keyData = try KeychainIdentityStore.read(account: Self.accountKey),
-              let keyPEM = String(data: keyData, encoding: .utf8), !keyPEM.isEmpty else {
-            return nil
-        }
-        let uid: String
-        if let uidData = try KeychainIdentityStore.read(account: Self.accountUID),
-           let stored = String(data: uidData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-           !stored.isEmpty {
-            uid = stored
-        } else {
-            uid = try generateUniqueID()
-            try? KeychainIdentityStore.write(Data(uid.utf8), account: Self.accountUID)
-        }
-        return Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
-    }
-
-    /// Write all three components into the data-protection keychain.
-    func writeIdentityToKeychain(_ identity: Identity) throws {
-        try KeychainIdentityStore.write(Data(identity.certPEM.utf8), account: Self.accountCert)
-        try KeychainIdentityStore.write(Data(identity.keyPEM.utf8), account: Self.accountKey)
-        try KeychainIdentityStore.write(Data(identity.uniqueID.utf8), account: Self.accountUID)
-    }
-
-    /// Persist to the active store. On a Team-ID-signed build the data-
-    /// protection keychain is the SOLE home: write it, VERIFY via read-back,
-    /// then delete any plaintext file copy - we never write a fresh mode-0600
-    /// file on a signed build, and a keychain failure THROWS rather than
-    /// silently downgrading to plaintext (the availability probe already proved
-    /// the keychain writable). Only adhoc builds (no Team ID, keychain
-    /// genuinely unavailable) fall back to the file store.
-    func persistIdentity(_ identity: Identity) throws {
-        guard useKeychainBackend() else {
-            try writeIdentityToFileStore(identity)
-            return
-        }
-        try writeIdentityToKeychain(identity)
-        guard let check = try? loadFromKeychain(),
-              check.certPEM == identity.certPEM,
-              check.keyPEM == identity.keyPEM,
-              check.uniqueID == identity.uniqueID else {
-            throw StreamError.crypto("Keychain identity failed read-back verification")
-        }
-        FileIdentityStore.delete(account: Self.accountCert)
-        FileIdentityStore.delete(account: Self.accountKey)
-        FileIdentityStore.delete(account: Self.accountUID)
-        log.info("Identity persisted to the data-protection keychain")
     }
 
     // MARK: Legacy keychain (read-only migration source)

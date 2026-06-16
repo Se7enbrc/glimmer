@@ -5,36 +5,35 @@
 //  RSA-2048 keypair under a self-signed X.509 certificate (CN = "NVIDIA
 //  GameStream Client", 20-year validity). These three pieces of state are what
 //  the host uses to recognize us - both during the pairing handshake and on
-//  every subsequent TLS connection. Generated once on first launch and stored
-//  in the data-protection keychain on signed builds (mode-0600 files only as an
-//  adhoc fallback) - see STORAGE below.
+//  every subsequent TLS connection. They're generated once on first launch and
+//  persisted to mode-0600 files under ~/Library/Application Support/Glimmer/
+//  Identity/ so a process running as our UID can re-load them silently across
+//  rebuilds without any Security.framework prompt.
 //
 //  Ported (loosely now) from moonlight-qt's app/backend/identitymanager.{h,cpp}.
 //
 //
-// STORAGE: data-protection keychain on signed builds; mode-0600 files only as
-// an adhoc fallback. `useKeychainBackend()` probes (a keychain write/read/delete
-// round-trip, cached) whether this build can use the data-protection keychain:
+// STORAGE DECISION: mode-0600 files in the sandbox container, deliberately.
+// We evaluated moving to the keychain once builds went Developer-ID signed,
+// and chose to stay on files:
 //
-//   * Signed with a real Team ID (Developer ID - every release, and every
-//     `make dev` build, which now signs with the Developer ID too): the
-//     data-protection keychain is the SOLE home. `KeychainIdentityStore` stores
-//     the three components as generic-password items (kSecUseDataProtection-
-//     Keychain, AfterFirstUnlockThisDeviceOnly) - encrypted at rest, gated to
-//     this app's signed identity, never synced off-device, invisible in
-//     Keychain Access.app. NO plaintext key touches disk. An existing install's
-//     mode-0600 files are migrated in once (write keychain, verify on read-back,
-//     then delete the files); see `persistIdentity` + load() Step 0. A keychain
-//     write that doesn't verify THROWS - it never silently downgrades to a file.
+//   * The data-protection keychain (the clean per-app store) is gated behind a
+//     `keychain-access-groups` entitlement, which on a Developer-ID Mac app
+//     (no provisioning profile) makes AMFI refuse to LAUNCH the process
+//     (RBSRequestErrorDomain Code=5 / POSIX 163). It needs an embedded
+//     provisioning profile to work at all - not worth that machinery here.
 //
-//   * Adhoc / no Team ID (a from-source build with no Developer ID cert): the
-//     data-protection keychain needs a signing identity, so it's unavailable;
-//     `FileIdentityStore` (three mode-0600 PEM files under the sandbox
-//     container) is the only option. This path never runs on a signed build.
+//   * The login keychain works without a profile, and a stable Developer-ID
+//     signature fixes the adhoc CDHash-ACL re-prompt that drove us off it
+//     before - but it only buys encryption-at-rest for a narrow gain on a LAN
+//     streaming identity, and the project already tried it once and retreated.
 //
-// The data-protection keychain (unlike the login keychain) does NOT use the
-// SecTrustedApplication CDHash ACL that prompted on every adhoc rebuild - the
-// reason files were the store before a stable Team ID existed.
+//   * The reference (moonlight-qt) stores PLAINTEXT PEM in a mode-0644
+//     QSettings plist under ~/Library/Preferences - no keychain at all. Our
+//     mode-0600 files inside the App Sandbox container are already stricter:
+//     the sandbox blocks other same-UID apps from the container, and 0600 > 0644.
+//
+// So: files. See SECURITY.md for the user-facing version.
 //
 //
 // THREAT MODEL:
@@ -43,12 +42,11 @@
 // host indefinitely. If it leaks, the attacker is a permanent imposter against
 // every host this install paired with - until the user unpairs each one.
 //
-// On a signed build the key lives ONLY in the data-protection keychain:
-// encrypted at rest and readable only by this app's signed identity, so even a
-// same-UID process with Full Disk Access sees encrypted blobs, not the PEM. On
-// an adhoc build the mode-0600 files are readable by any same-UID process
-// (including an FDA-allowlisted one) - the cost of an unsigned build, which
-// never affects shipped/signed Glimmer.
+// The mode-0600 files live in the App Sandbox container: other users on the Mac
+// are out (0600), and the sandbox keeps other same-UID apps out of the
+// container by default. A TCC-allowlisted app with Full Disk Access can still
+// read them - an OS-level boundary, not a Glimmer-specific defence, and a
+// narrower exposure than moonlight-qt's unsandboxed 0644 plist.
 //
 
 import Foundation
@@ -192,99 +190,6 @@ enum FileIdentityStore {
     }
 }
 
-// MARK: - KeychainIdentityStore
-//
-// Data-protection keychain backend (kSecUseDataProtectionKeychain). Used on
-// builds signed with a real Team ID (Developer ID): the per-bundle-id DP
-// keychain encrypts the items at rest and gates them to this app's signed
-// identity, closing the "a Full-Disk-Access process reads the plaintext PEM"
-// gap the file store carries. It is NOT the login keychain - no CDHash-ACL
-// prompt - and is a distinct store from the legacy login-keychain items the
-// cleanup sweep targets (those queries omit the DP flag, so they never reach
-// these). On adhoc / no-Team-ID builds the DP keychain is unavailable and we
-// fall back to files; `isAvailable()` probes that with a write/read/delete
-// round-trip (the caller caches the result for the process).
-
-enum KeychainIdentityStore {
-
-    /// DP-keychain service. Items land in the app's default access group (its
-    /// application-identifier); kSecAttrAccessGroup is omitted since Glimmer
-    /// shares with nothing. The account names match the file store + the
-    /// legacy login-keychain items, so the same migration call sites read.
-    static let service = "io.ugfugl.Glimmer.identity"
-
-    private static func baseQuery(account: String) -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecUseDataProtectionKeychain as String: true,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-    }
-
-    /// Item data, or nil if absent. Throws on a real keychain error (anything
-    /// but errSecItemNotFound) so the caller can fall back to files.
-    static func read(account: String) throws -> Data? {
-        var q = baseQuery(account: account)
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(q as CFDictionary, &item)
-        switch status {
-        case errSecSuccess:    return item as? Data
-        case errSecItemNotFound: return nil
-        default:
-            throw StreamError.crypto("KeychainIdentityStore.read(\(account)) failed: \(status)")
-        }
-    }
-
-    /// Upsert: add the item, or update its data if it already exists.
-    /// AfterFirstUnlockThisDeviceOnly: readable after the first post-boot
-    /// unlock, never synced or migrated off this device.
-    static func write(_ data: Data, account: String) throws {
-        var add = baseQuery(account: account)
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(add as CFDictionary, nil)
-        switch addStatus {
-        case errSecSuccess:
-            return
-        case errSecDuplicateItem:
-            let update = [kSecValueData as String: data]
-            let upStatus = SecItemUpdate(baseQuery(account: account) as CFDictionary,
-                                         update as CFDictionary)
-            guard upStatus == errSecSuccess else {
-                throw StreamError.crypto("KeychainIdentityStore.update(\(account)) failed: \(upStatus)")
-            }
-        default:
-            throw StreamError.crypto("KeychainIdentityStore.add(\(account)) failed: \(addStatus)")
-        }
-    }
-
-    /// Idempotent delete.
-    static func delete(account: String) {
-        _ = SecItemDelete(baseQuery(account: account) as CFDictionary)
-    }
-
-    /// Probe whether the DP keychain accepts items for this app (true on
-    /// Team-ID-signed builds, false on adhoc / missing-entitlement) via a
-    /// throwaway write/read/delete round-trip. No prompt either way.
-    static func isAvailable() -> Bool {
-        let probe = "glimmer.dp-availability-probe"
-        delete(account: probe)
-        let token = Data("ok".utf8)
-        do {
-            try write(token, account: probe)
-            let back = try read(account: probe)
-            delete(account: probe)
-            return back == token
-        } catch {
-            delete(account: probe)
-            return false
-        }
-    }
-}
-
 // MARK: - IdentityManager
 
 public actor IdentityManager {
@@ -302,26 +207,10 @@ public actor IdentityManager {
     var cached: Identity?
     var cachedIdentity: SecIdentity?    // built once, reused for life of process
 
-    /// Whether the data-protection keychain is usable on THIS build (true when
-    /// signed with a real Team ID; false on adhoc). Probed once, lazily, and
-    /// cached for the life of the actor - see `useKeychainBackend()`.
-    private var keychainBackendAvailable: Bool?
-
     let log = Logger(subsystem: "io.ugfugl.Glimmer",
                              category: "Stream.Identity")
 
     private init() {}
-
-    /// Pick the identity backend for this build: the data-protection keychain
-    /// when it's usable (Team-ID-signed), else mode-0600 files. Probes once
-    /// and caches - the probe is a keychain round-trip, so we don't repeat it.
-    func useKeychainBackend() -> Bool {
-        if let v = keychainBackendAvailable { return v }
-        let v = KeychainIdentityStore.isAvailable()
-        keychainBackendAvailable = v
-        log.info("Identity backend: \(v ? "data-protection keychain" : "mode-0600 files", privacy: .public)")
-        return v
-    }
 
     // MARK: Public surface
 

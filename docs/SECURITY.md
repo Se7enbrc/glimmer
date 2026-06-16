@@ -68,37 +68,54 @@ Per-machine RSA-2048 client identity, generated on first launch, 20-year
 self-signed cert with CN `NVIDIA GameStream Client` (the standard GameStream
 client identifier; moonlight-qt uses the same).
 
-**Storage: the data-protection keychain on signed builds; mode-0600 files only
-as an adhoc fallback.** At launch `IdentityManager.useKeychainBackend()` probes
-(a keychain write/read/delete round-trip, cached) which backend this build uses:
+**Storage: mode-0600 files**, not the keychain. Three files:
 
-- **Signed builds (Developer ID - every release, and every `make dev` build,
-  which signs with the Developer ID too):** `KeychainIdentityStore` is the SOLE
-  home. The three components (cert PEM, key PEM, unique ID) are generic-password
-  items with `kSecUseDataProtectionKeychain` +
-  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` - encrypted at rest, gated
-  to this app's signed identity, not synced or migrated off the device, and not
-  shown in Keychain Access.app. No plaintext key touches disk. An existing
-  install's legacy PEM files are migrated in once (write keychain, verify on
-  read-back, then delete the files); a keychain write that doesn't verify throws
-  rather than silently falling back to a plaintext file.
-- **Adhoc builds (a from-source build with no Developer ID cert):** the
-  data-protection keychain needs a signing identity, so it's unavailable, and
-  `FileIdentityStore` (three mode-0600 PEM files - `client-cert.pem`,
-  `client-key.pem`, `client-uniqueid.txt` - under the sandbox container at
-  `~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`)
-  is the only option. This path never runs on a shipped/signed build.
+- `client-cert.pem` - X.509 cert in PEM
+- `client-key.pem` - RSA private key in PEM (PKCS#8 unencrypted)
+- `client-uniqueid.txt` - 32-hex-char client unique ID
 
-`FileIdentityStore.write` (the adhoc path) writes atomically
-(`Data.write(options: [.atomic])`), applies mode 0600 and `stat`-verifies it
-stuck (some FUSE/NFS backends silently ignore `chmod`; on failure the partial
-file is deleted and the call throws), and creates the parent directory at 0700.
+Post-sandbox (current state):
+`~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`.
 
-Pre-sandbox (legacy) identities under
-`~/Library/Application Support/Glimmer/Identity/` are **not** auto-migrated -
-the sandbox can't read that path and a temporary-exception read would widen the
-path-traversal surface. Those users re-pair each host once (a 30-second task per
-host).
+Pre-sandbox (legacy): `~/Library/Application Support/Glimmer/Identity/`.
+Migration is **not** automatic - the sandboxed container cannot read the legacy
+path, and adding a temporary-exception read would expand the path-traversal
+surface for a same-UID attacker. Users on a pre-sandbox build re-pair each host
+once after upgrading. 30-second task per host.
+
+`FileIdentityStore.write` (`Identity.swift`):
+
+- Atomic write via `Data.write(options: [.atomic])` so a crash mid-write cannot
+  leave a torn PEM on disk.
+- `setAttributes([.posixPermissions: 0o600])` then `stat`-verify the permission
+  bits stuck. Some FUSE / NFS backends silently ignore `chmod`; if the
+  verification fails, the partial file is deleted and the call throws.
+  Half-written secrets on a too-permissive filesystem are worse than no file at
+  all.
+- Parent directory created at mode 0700.
+
+**Why files, not the keychain (a deliberate call).** We evaluated moving to the
+keychain once builds became Developer ID signed, and stayed on files:
+
+- The **data-protection keychain** (the clean per-app store) needs a
+  `keychain-access-groups` entitlement, which on a Developer ID Mac app with no
+  embedded provisioning profile makes the OS refuse to launch the process (AMFI
+  / "Launchd job spawn failed"). It would require shipping a provisioning
+  profile - machinery not worth it here.
+- The **login keychain** works without a profile and, now that signing is stable
+  (Developer ID), no longer hits the per-rebuild ACL prompt that drove us off it
+  before - but it only adds encryption-at-rest for a narrow gain on a LAN
+  streaming identity, and the project already tried it once and retreated.
+- The reference implementation (**moonlight-qt**) stores the same RSA key as
+  **plaintext PEM in a mode-0644 QSettings plist** under
+  `~/Library/Preferences`, no keychain at all. Glimmer's mode-0600 files inside
+  the App Sandbox container are already stricter: the sandbox blocks other
+  same-UID apps from the container, and 0600 beats 0644.
+
+The one residual exposure is a Full-Disk-Access same-UID process reading the key
+
+- a narrow threat the sandbox already blocks for ordinary apps, and one the
+  reference implementation doesn't address either.
 
 **One-shot moonlight-qt migration.** On first launch, Glimmer reads the
 `com.moonlight-stream.Moonlight` and `com.moonlight-stream.moonlight-qt`
