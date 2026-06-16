@@ -1,19 +1,35 @@
 # Glimmer - Mac-native game-streaming client.
 #
-# Common targets:
+# FAST ITERATION (the dev inner-loop - no publishing):
 #   make                   Build Glimmer.app (Debug).
-#   make release           Build Release configuration.
-#   make install           Copy Glimmer.app to /Applications (Dev ID if present, else adhoc).
+#   make dev               Build + install + relaunch, signed with the stable dev
+#                          identity so TCC grants stick across rebuilds. The loop.
+#   make reinstall         Build + install + quit-and-relaunch (guarantees the new
+#                          binary is the one actually running).
+#   make install           Build + copy Glimmer.app to /Applications.
+#   make open              Build + install + open.
+#   make release           Build the Release configuration (no install).
 #   make uninstall         Remove Glimmer.app.
 #   make clean             Remove build outputs.
-#   make profile           Launch under Instruments → Time Profiler (CPU).
-#   make profile-signposts Launch under Instruments → Logging (OSSignposts).
-#   make creds-init        One-time: write the signing credentials file template.
-#   make codesign-setup    One-time: signing keychain + Developer ID import (creds file).
-#   make setup-notary      One-time: store the notarytool profile (creds file).
-#   make dist              Release → Developer ID sign → notarize → staple → DMG.
-#   make sparkle-keys      One-time: generate the Sparkle EdDSA update-signing keypair.
-#   make release-publish   dist → ZIP + EdDSA-sign → GitHub release + appcast (auto-update).
+#
+# RELEASE (one published, auto-updatable build - everything flows here):
+#   make release-publish   THE release. dist → ZIP + EdDSA-sign → GitHub release +
+#                          appcast; existing installs auto-update (Sparkle).
+#   make dist              Build-only checkpoint: Release → Developer ID sign →
+#                          notarize → staple → DMG (no publish). This is
+#                          release-publish's first step; run it alone only to
+#                          inspect a DMG before publishing.
+#
+# ONE-TIME SETUP (signing / notarization / update keys):
+#   make creds-init        Write the signing credentials file template.
+#   make codesign-setup    Build the signing keychain + import the Developer ID.
+#   make setup-notary      Store the notarytool profile.
+#   make dev-sign-setup    Create the stable self-signed dev identity (for make dev).
+#   make sparkle-keys      Generate the Sparkle EdDSA update-signing keypair.
+#
+# PROFILING / TELEMETRY:
+#   make profile           Instruments → Time Profiler (CPU).
+#   make profile-signposts Instruments → Logging (OSSignposts).
 #   make enable-telem      Turn the app's opt-in telemetry exporter on.
 #   make disable-telem     Turn the app's opt-in telemetry exporter off.
 
@@ -73,7 +89,7 @@ RELEASES_REPO   ?= Se7enbrc/glimmer
 SPARKLE_VERSION ?= 2.9.3
 export SPARKLE_VERSION
 
-.PHONY: all release install uninstall clean app sign embed open \
+.PHONY: all release install reinstall uninstall clean app sign embed open \
         profile profile-signposts setup-notary notarize dmg dist preflight \
         codesign-setup codesign-teardown ensure-signing dev dev-sign-setup \
         creds-init enable-telem disable-telem release-publish sparkle-keys

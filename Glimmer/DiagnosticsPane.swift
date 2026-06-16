@@ -9,10 +9,8 @@
 //      stream start) - applies on the NEXT stream;
 //    * the telemetry-bookmark chord (⌃B), shown for discoverability - it's the
 //      client-only "that felt bad" marker, intercepted ONLY while telemetry is on;
-//    * a status line: where the telemetry log dir lives + the Grafana
-//      port-forward command for the optional local dashboard rig (NOT part of
-//      this repo - see docs/PROFILING.md, "Opt-in telemetry + the local
-//      dashboard rig").
+//    * a status line: where the telemetry log dir lives (the NDJSON + scorecard
+//      files are the portable artifacts; see docs/PROFILING.md).
 //
 //  Nothing here changes streaming behaviour; it's all observation/opt-in.
 //
@@ -30,17 +28,6 @@ struct DiagnosticsPane: View {
     /// always carry every level regardless. Resolved at session start, like
     /// the telemetry gate.
     @AppStorage("diagFileLogDebug") private var fileLogDebug = false
-
-    /// One-line surface for the OPTIONAL local dashboard rig (a
-    /// Prometheus/Grafana stack). The rig is deliberately not part of this
-    /// repository and nothing in the app depends on it - the NDJSON +
-    /// scorecard files in the telemetry log dir are the portable artifacts.
-    /// Public-facing description: docs/PROFILING.md, "Opt-in telemetry + the
-    /// local dashboard rig". The whole pane is already debug-gated (hidden
-    /// unless Diagnostics is revealed via option-click on the About version
-    /// line), so this row never reaches normal users.
-    private let grafanaPortForward =
-        "kubectl -n glimmer-telemetry port-forward svc/grafana 3000:3000"
 
     /// `~/Library/Logs/Glimmer` - the SAME directory the telemetry NDJSON writer
     /// and the per-session Diag log sink use (see TelemetryExporter.openNDJSONFile
@@ -123,28 +110,6 @@ struct DiagnosticsPane: View {
                         .help("Reveal in Finder")
                     }
                 }
-                LabeledContent("Grafana") {
-                    HStack(spacing: 8) {
-                        Text(grafanaPortForward)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Button {
-                            copyToPasteboard(grafanaPortForward)
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Copy command")
-                    }
-                }
-                Text("Then open http://localhost:3000. The debug stack "
-                    + "(Prometheus + Grafana + Loki + Alloy) runs in the "
-                    + "glimmer-telemetry namespace on a local cluster.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             } header: {
                 Text("Where the data goes")
             }
@@ -164,12 +129,6 @@ struct DiagnosticsPane: View {
         // the reveal lands somewhere instead of silently no-opping.
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         NSWorkspace.shared.activateFileViewerSelecting([dir])
-    }
-
-    private func copyToPasteboard(_ string: String) {
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(string, forType: .string)
     }
 }
 
