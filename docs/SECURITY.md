@@ -68,39 +68,37 @@ Per-machine RSA-2048 client identity, generated on first launch, 20-year
 self-signed cert with CN `NVIDIA GameStream Client` (the standard GameStream
 client identifier; moonlight-qt uses the same).
 
-**Storage: mode-0600 files**, not the keychain. Three files:
+**Storage: the data-protection keychain on signed builds; mode-0600 files only
+as an adhoc fallback.** At launch `IdentityManager.useKeychainBackend()` probes
+(a keychain write/read/delete round-trip, cached) which backend this build uses:
 
-- `client-cert.pem` - X.509 cert in PEM
-- `client-key.pem` - RSA private key in PEM (PKCS#8 unencrypted)
-- `client-uniqueid.txt` - 32-hex-char client unique ID
+- **Signed builds (Developer ID - every release, and every `make dev` build,
+  which signs with the Developer ID too):** `KeychainIdentityStore` is the SOLE
+  home. The three components (cert PEM, key PEM, unique ID) are generic-password
+  items with `kSecUseDataProtectionKeychain` +
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` - encrypted at rest, gated
+  to this app's signed identity, not synced or migrated off the device, and not
+  shown in Keychain Access.app. No plaintext key touches disk. An existing
+  install's legacy PEM files are migrated in once (write keychain, verify on
+  read-back, then delete the files); a keychain write that doesn't verify throws
+  rather than silently falling back to a plaintext file.
+- **Adhoc builds (a from-source build with no Developer ID cert):** the
+  data-protection keychain needs a signing identity, so it's unavailable, and
+  `FileIdentityStore` (three mode-0600 PEM files - `client-cert.pem`,
+  `client-key.pem`, `client-uniqueid.txt` - under the sandbox container at
+  `~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`)
+  is the only option. This path never runs on a shipped/signed build.
 
-Post-sandbox (current state):
-`~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`.
+`FileIdentityStore.write` (the adhoc path) writes atomically
+(`Data.write(options: [.atomic])`), applies mode 0600 and `stat`-verifies it
+stuck (some FUSE/NFS backends silently ignore `chmod`; on failure the partial
+file is deleted and the call throws), and creates the parent directory at 0700.
 
-Pre-sandbox (legacy): `~/Library/Application Support/Glimmer/Identity/`.
-Migration is **not** automatic - the sandboxed container cannot read the legacy
-path, and adding a temporary-exception read would expand the path-traversal
-surface for a same-UID attacker. Users on a pre-sandbox build re-pair each host
-once after upgrading. 30-second task per host.
-
-`FileIdentityStore.write` (`Identity.swift`):
-
-- Atomic write via `Data.write(options: [.atomic])` so a crash mid-write cannot
-  leave a torn PEM on disk.
-- `setAttributes([.posixPermissions: 0o600])` then `stat`-verify the permission
-  bits stuck. Some FUSE / NFS backends silently ignore `chmod`; if the
-  verification fails, the partial file is deleted and the call throws.
-  Half-written secrets on a too-permissive filesystem are worse than no file at
-  all.
-- Parent directory created at mode 0700.
-
-**Future: Developer ID + data-protection keychain.** The `Identity.swift`
-top-of-file comment documents the planned switch. The data-protection keychain
-(per-bundle-id container, doesn't show in Keychain Access.app) doesn't have the
-CDHash-ACL prompt that breaks adhoc-signed rebuilds - but it requires a stable
-Team ID, which means a Developer ID-signed bundle. The current adhoc-signed
-state can't use it without a "Glimmer wants to use its key" prompt on every
-rebuild. Files for now.
+Pre-sandbox (legacy) identities under
+`~/Library/Application Support/Glimmer/Identity/` are **not** auto-migrated -
+the sandbox can't read that path and a temporary-exception read would widen the
+path-traversal surface. Those users re-pair each host once (a 30-second task per
+host).
 
 **One-shot moonlight-qt migration.** On first launch, Glimmer reads the
 `com.moonlight-stream.Moonlight` and `com.moonlight-stream.moonlight-qt`
