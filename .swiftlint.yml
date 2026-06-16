@@ -126,6 +126,9 @@ identifier_name:
     - g
     - b
     - a
+    - n # count
+    - s # source/size in low-level byte parsing
+    - d # dest/data in low-level byte parsing
     - dx
     - dy
     - vk # virtual-key

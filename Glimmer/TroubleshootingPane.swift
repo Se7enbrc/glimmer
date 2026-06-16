@@ -46,11 +46,11 @@ struct TroubleshootingPane: View {
     }
 }
 
+// Module-internal (was private) so Settings → Input can host it alongside the
+// mouse + controller-quit settings; the live input test below stays here.
 /// Opt-in control for the raw-HID DualSense reader. Off by default; turning it
 /// on shows a plain-language explanation BEFORE macOS's "Input Monitoring"
 /// prompt, so that scary system dialog is never a surprise.
-// Module-internal (was private) so Settings → Input can host it alongside the
-// mouse + controller-quit settings; the live input test below stays here.
 struct RawHIDControl: View {
     @Environment(MoonlightManager.self) private var moonlight
     @State private var showExplain = false
