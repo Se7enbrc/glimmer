@@ -58,16 +58,16 @@ enum Enet {
     static let ctrlChannelKeyboard: UInt8 = 0x02  // CTRL_CHANNEL_KEYBOARD
     static let ctrlChannelMouse: UInt8 = 0x03     // CTRL_CHANNEL_MOUSE (mouse/scroll/hscroll)
     static let ctrlChannelGamepadBase: UInt8 = 0x10 // CTRL_CHANNEL_GAMEPAD_BASE + (num % 16)
-    /// CTRL_CHANNEL_SENSOR_BASE + (num % 16) — controller motion uplink rides
+    /// CTRL_CHANNEL_SENSOR_BASE + (num % 16) - controller motion uplink rides
     /// its own per-pad channel, apart from the button/axis stream, so a
     /// retransmitted sensor sample can never stall a button edge.
     static let ctrlChannelSensorBase: UInt8 = 0x20
-    /// MAX_GAMEPADS — Sunshine supports up to 16; controllerNumber %= this.
+    /// MAX_GAMEPADS - Sunshine supports up to 16; controllerNumber %= this.
     static let maxGamepads: Int = 16
 
-    /// ENET_PEER_PING_INTERVAL (enet.h) — transport keepalive cadence.
+    /// ENET_PEER_PING_INTERVAL (enet.h) - transport keepalive cadence.
     static let pingIntervalMs: UInt32 = 500
-    /// PERIODIC_PING_INTERVAL_MS (ControlStream.c) — app-level keepalive.
+    /// PERIODIC_PING_INTERVAL_MS (ControlStream.c) - app-level keepalive.
     static let periodicPingIntervalMs: UInt32 = 100
 }
 
@@ -81,32 +81,32 @@ enum CtrlV2 {
     // Sunshine's IDX_SET_RGB_LED, and Glimmer never sends per-frame FEC status
     // (see EnetControlChannel.queueFrameFecStatus), so the constant is omitted.
     static let termination: UInt16 = 0x0109          // extended termination
-    /// Controller rumble — packetTypesGen7Enc[IDX_RUMBLE_DATA]. Dispatched by
+    /// Controller rumble - packetTypesGen7Enc[IDX_RUMBLE_DATA]. Dispatched by
     /// handleInboundControl → handleRumbleData → onRumble → ControllerHaptics
     /// (GameController force feedback). Payload layout + the C-source citation
     /// live on handleRumbleData (EnetControlChannel+Inbound.swift).
     static let rumbleData: UInt16 = 0x010b
-    /// Trigger rumble — packetTypesGen7Enc[IDX_RUMBLE_TRIGGER_DATA] (Sunshine
+    /// Trigger rumble - packetTypesGen7Enc[IDX_RUMBLE_TRIGGER_DATA] (Sunshine
     /// protocol extension; the host only sends it to pads that advertised
     /// LI_CCAP_TRIGGER_RUMBLE). Dispatched by handleInboundControl →
     /// handleRumbleTriggers → onRumbleTriggers → ControllerHaptics. Payload
     /// layout + the C-source citation live on handleRumbleTriggers.
     static let rumbleTriggers: UInt16 = 0x5500
-    /// Motion enable — Sunshine's IDX_SET_MOTION_EVENT (host→client; arrives
+    /// Motion enable - Sunshine's IDX_SET_MOTION_EVENT (host→client; arrives
     /// because we advertise LI_CCAP_ACCEL/GYRO on IMU-capable pads).
     /// Dispatched by handleInboundControl → handleSetMotionEvent →
     /// onSetMotionEvent → ControllerMotion (GCMotion sampling at the
     /// requested rate). Payload layout + the dual C-source citation live on
     /// handleSetMotionEvent (EnetControlChannel+Inbound.swift).
     static let setMotionEvent: UInt16 = 0x5501
-    /// Set RGB LED — Sunshine's IDX_SET_RGB_LED (host→client). The same wire
+    /// Set RGB LED - Sunshine's IDX_SET_RGB_LED (host→client). The same wire
     /// value as moonlight's outbound SS_FRAME_FEC_PTYPE (see the NOTE above),
     /// but unambiguous in the inbound direction. Dispatched by
     /// handleInboundControl → handleSetRgbLed → onSetRgbLed → GCDeviceLight on
     /// the mapped pad. Advertised via LI_CCAP_RGB_LED on light-bar pads
     /// (ControllerForwarder); Sunshine paints the slot color at session start.
     static let setRgbLed: UInt16 = 0x5502
-    /// Set adaptive triggers — Sunshine's IDX_DS_ADAPTIVE_TRIGGERS (host→client;
+    /// Set adaptive triggers - Sunshine's IDX_DS_ADAPTIVE_TRIGGERS (host→client;
     /// Sunshine protocol extension, sent only to DualSense pads). Dispatched by
     /// handleInboundControl → handleSetAdaptiveTriggers → onSetAdaptiveTriggers →
     /// NativeConnectionEvents → DualSenseHID raw-HID OUTPUT report. Payload
@@ -114,7 +114,7 @@ enum CtrlV2 {
     /// (EnetControlChannel+Inbound.swift).
     static let setAdaptiveTriggers: UInt16 = 0x5503
     static let hdrInfo: UInt16 = 0x010e              // HDR mode
-    /// Input data — packetTypesGen7Enc[IDX_INPUT_DATA] (ControlStream.c:209).
+    /// Input data - packetTypesGen7Enc[IDX_INPUT_DATA] (ControlStream.c:209).
     /// Carries the NV_INPUT_HEADER+body that InputEncoder builds.
     static let inputData: UInt16 = 0x0206
 }
@@ -157,7 +157,7 @@ struct ByteWriter {
     mutating func u32Raw(_ value: UInt32) {
         withUnsafeBytes(of: value) { bytes.append(contentsOf: $0) }
     }
-    /// Little-endian u32 — for control-V2 payloads (RFI/LTR fields are LE).
+    /// Little-endian u32 - for control-V2 payloads (RFI/LTR fields are LE).
     mutating func u32LE(_ value: UInt32) {
         bytes.append(UInt8(value & 0xFF)); bytes.append(UInt8((value >> 8) & 0xFF))
         bytes.append(UInt8((value >> 16) & 0xFF)); bytes.append(UInt8((value >> 24) & 0xFF))
@@ -210,7 +210,7 @@ struct ByteReader {
 /// reportFinalFrameFecStatus) as each FEC block completes or is abandoned, and
 /// handed to the FEC status sink. Glimmer does NOT transmit it: moonlight only
 /// sends FEC status on actual loss, and its Sunshine wire type (0x5502) collides
-/// with IDX_SET_RGB_LED — so EnetControlChannel.queueFrameFecStatus is a no-op.
+/// with IDX_SET_RGB_LED - so EnetControlChannel.queueFrameFecStatus is a no-op.
 /// The type is retained because the video FEC path constructs and routes it; the
 /// fields mirror the C struct (Video.h, "fields are big-endian" on the wire).
 struct FrameFecStatus {
@@ -234,9 +234,9 @@ struct SentReliable {
     let reliableSequenceNumber: UInt16
     /// The fully-assembled command bytes (header + inline payload) for resend.
     let commandBytes: [UInt8]
-    /// Last time (ms) this command was (re)sent — drives the retransmit timer.
+    /// Last time (ms) this command was (re)sent - drives the retransmit timer.
     var sentAtMs: UInt32
-    /// First time (ms) this command was ever sent — drives the age-based give-up
+    /// First time (ms) this command was ever sent - drives the age-based give-up
     /// eviction (mirrors enet_protocol_check_timeouts' timeoutMinimum=5000ms,
     /// protocol.c:1371-1379) so a wedged peer is detected instead of resending
     /// forever. Set once at append; never updated on resend.

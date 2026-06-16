@@ -1,7 +1,7 @@
 //
 //  LogViewerView.swift
 //
-//  The Troubleshooting log viewer — renders LogStore's in-app ring buffer
+//  The Troubleshooting log viewer - renders LogStore's in-app ring buffer
 //  live, with a level filter, copy, and clear. Split out of
 //  TroubleshootingPane.swift.
 //

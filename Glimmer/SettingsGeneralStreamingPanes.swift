@@ -4,7 +4,7 @@
 //  The General and Quality settings panes (+ their resolution/stats helpers),
 //  split out of SettingsView.swift. SettingsRoot composes them across files, so
 //  the pane types are internal. (Filename keeps the pane's pre-rename
-//  "Streaming" spelling — renaming the file means touching the pbxproj for
+//  "Streaming" spelling - renaming the file means touching the pbxproj for
 //  zero behavioural gain.)
 //
 
@@ -61,7 +61,7 @@ enum LoginItemManager {
     }
 
     /// Re-assert the saved intent at launch so a registration invalidated by an
-    /// app update / move self-heals — the root cause of "doesn't start after
+    /// app update / move self-heals - the root cause of "doesn't start after
     /// reboot". Runs only when the user wants launch-at-login, and only
     /// re-registers when the actual status has drifted from enabled.
     static func reconcile() {
@@ -74,7 +74,7 @@ enum LoginItemManager {
         case .requiresApproval:
             Diag.notice("login item needs approval in System Settings ▸ General ▸ Login Items", "LoginItem")
         default:
-            Diag.notice("login item drifted (\(statusLabel(status))) — re-registering", "LoginItem")
+            Diag.notice("login item drifted (\(statusLabel(status))) - re-registering", "LoginItem")
             apply(launchAtLogin: true, minimized: minimized)
         }
     }
@@ -98,12 +98,12 @@ struct GeneralPane: View {
     @AppStorage("launchMinimized") private var launchMinimized: Bool = false
 
     /// True when macOS has the login item but it's pending the user's approval
-    /// in System Settings ▸ Login Items — surfaced inline so the user isn't left
+    /// in System Settings ▸ Login Items - surfaced inline so the user isn't left
     /// with a toggle that silently does nothing at the next reboot.
     @State private var loginItemNeedsApproval = false
 
     /// Defer the SMAppService register/unregister off the SwiftUI `.onChange`
-    /// transaction — running it inline (synchronous, XPC-backed) mid-update
+    /// transaction - running it inline (synchronous, XPC-backed) mid-update
     /// dismissed the Settings window. The @AppStorage write still happens
     /// synchronously; only the side-effect hops to the next main-queue tick.
     private func scheduleLoginItemRegistration(launchAtLogin: Bool, minimized: Bool) {
@@ -113,7 +113,7 @@ struct GeneralPane: View {
         }
     }
 
-    /// Default-launch app options — host applist with "Desktop" pinned first.
+    /// Default-launch app options - host applist with "Desktop" pinned first.
     private var launchAppOptions: [String] {
         var seen = Set<String>()
         var out: [String] = []
@@ -129,7 +129,7 @@ struct GeneralPane: View {
     }
 
     var body: some View {
-        // @Bindable shim — surfaces $moonlight.x bindings from an @Observable
+        // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
         // alone exposes the value but not per-property Bindings).
         @Bindable var moonlight = moonlight
@@ -195,7 +195,7 @@ struct GeneralPane: View {
 // MARK: - Quality
 
 /// Resolution presets surfaced from the "common resolutions" menu next
-/// to the custom resolution fields. Curated rather than exhaustive —
+/// to the custom resolution fields. Curated rather than exhaustive -
 /// the user can still type any value they like; this is just a
 /// no-typo shortcut for the 95% case (1080p / 1440p / 2160p).
 enum CommonResolution: CaseIterable {
@@ -232,8 +232,8 @@ struct QualityPane: View {
 
     /// Width clamp: 640..7680 (480p min, 8K max). Matches Moonlight's
     /// upstream bounds. Wired to .onChange so it runs on EVERY commit:
-    /// TextField(value:format:) writes the binding whenever editing ends —
-    /// focus loss included — and the old Return-only .onSubmit clamp let a
+    /// TextField(value:format:) writes the binding whenever editing ends -
+    /// focus loss included - and the old Return-only .onSubmit clamp let a
     /// click-away commit feed raw values (0, 99999) straight into the
     /// stream config, the bitrate guidance, and the session-receipt mode
     /// keys. The binding still only commits on editing end (never per
@@ -254,12 +254,12 @@ struct QualityPane: View {
     }
 
     var body: some View {
-        // @Bindable shim — surfaces $moonlight.x bindings from an @Observable
+        // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
         // alone exposes the value but not per-property Bindings).
         @Bindable var moonlight = moonlight
         Form {
-            // Header is "Preset" now that the pane itself is named Quality —
+            // Header is "Preset" now that the pane itself is named Quality -
             // "Quality" twice in a row read as a stutter.
             Section("Preset") {
                 Picker("", selection: $moonlight.qualityPreset) {
@@ -280,7 +280,7 @@ struct QualityPane: View {
                     HStack {
                         Text("Resolution")
                         Spacer()
-                        // Common resolutions shortcut — one tap fills both
+                        // Common resolutions shortcut - one tap fills both
                         // fields with a standard pair. Saves the user from
                         // typing 3840×2160 every time and prevents typos
                         // that would land them at 384×216.
@@ -341,7 +341,7 @@ struct QualityPane: View {
                     bitrateGuidance
                     Toggle("Brighter highlights, deeper color (needs HDR on host and display)",
                            isOn: $moonlight.customHDR)
-                        .help("HDR — sends a 10-bit high-dynamic-range stream when the host and this display both support it.")
+                        .help("HDR - sends a 10-bit high-dynamic-range stream when the host and this display both support it.")
                     HStack {
                         Text("Currently driving: \(moonlight.currentDisplayDescription)")
                             .font(.caption)
@@ -364,7 +364,7 @@ struct QualityPane: View {
                     + "(configurable in Shortcuts) while streaming to toggle the overlay.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                // Overlay position lives here (not a right-click menu — the
+                // Overlay position lives here (not a right-click menu - the
                 // InputForwarder claims mouse events mid-stream). Position +
                 // preset + custom rows stay editable even when the overlay is
                 // off, so it's gating display, not configuration.
@@ -405,7 +405,7 @@ struct QualityPane: View {
                 // the safe-area inset is zero and the toggle has no effect.
                 // The value is snapshotted into the stream window once at
                 // session start (no live provider, unlike stats/hotkeys), so
-                // the footnote carries the next-stream caveat — same copy as
+                // the footnote carries the next-stream caveat - same copy as
                 // the equally session-snapshotted captureSysKeys toggle.
                 Toggle(isOn: $moonlight.streamCoversNotch) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -426,23 +426,23 @@ struct QualityPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            // EXPERIMENTS FENCE — the single home for try-it-and-see dials so
+            // EXPERIMENTS FENCE - the single home for try-it-and-see dials so
             // they never scatter across panes. Anything here must be safe to
             // flip blind and safe to ignore. A dial that proves itself moves
             // up into a real section; one that doesn't gets deleted, not
-            // hidden. (The notch toggle graduated to Display above —
+            // hidden. (The notch toggle graduated to Display above -
             // full-panel coverage is the product default, not an
             // experiment.) The fence is currently EMPTY, so no Section
             // is emitted at all: SwiftUI's grouped Form renders a Section
             // HEADER even over an EmptyView body, leaving a dangling flask
-            // card. Re-add `Section { … } header: { Label("Experiments",
+            // card. Re-add `Section { ... } header: { Label("Experiments",
             // systemImage: "flask") }` with the first new dial.
         }
         .formStyle(.grouped)
     }
 
     /// Two-tier bitrate guidance under the slider. Tier 1 is the baked-in
-    /// measured recommendation (harness measurements + 20% headroom — provenance
+    /// measured recommendation (harness measurements + 20% headroom - provenance
     /// on `MoonlightManager.measuredBitrateAnchors`); Tier 2 speaks only when the
     /// user's own recent sessions for this exact host+mode pressed the
     /// encoder's ceiling. The closing footnote keeps the budget honest.
@@ -470,18 +470,18 @@ struct QualityPane: View {
     }
 
     /// Per-preset hint string. Kept inline alongside the picker so the
-    /// preset definitions and their UI copy live in the same file —
+    /// preset definitions and their UI copy live in the same file -
     /// translating into Localizable.strings later means moving both
     /// together.
     private func presetSubtitle(_ preset: StatsOverlayPreset) -> String {
         // Counts derive from the row-set constants so the copy can't
-        // drift when a preset gains a row — the hardcoded "6 metrics"
+        // drift when a preset gains a row - the hardcoded "6 metrics"
         // survived microRows growing to 7 with zero signal.
         switch preset {
         case .minimal:
-            return "\(StatsOverlayDefaults.minimalRows.count) metrics — render FPS, latency, bitrate"
+            return "\(StatsOverlayDefaults.minimalRows.count) metrics - render FPS, latency, bitrate"
         case .micro:
-            return "\(StatsOverlayDefaults.microRows.count) metrics — framerate, network, bitrate"
+            return "\(StatsOverlayDefaults.microRows.count) metrics - framerate, network, bitrate"
         case .extended: return "All metrics except audio"
         case .custom:   return "Pick rows individually below"
         }
@@ -499,7 +499,7 @@ struct StatsCustomRowsPicker: View {
     @Environment(MoonlightManager.self) private var moonlight
 
     /// Row catalogue grouped by section for display. The order here
-    /// matches the rendering order in StreamStatsSnapshot.rows() — the
+    /// matches the rendering order in StreamStatsSnapshot.rows() - the
     /// user sees the same top-to-bottom shape in the checkbox list as
     /// in the overlay. Audio sits at the bottom and is unchecked by
     /// default; users opt in via Custom.
@@ -536,7 +536,7 @@ struct StatsCustomRowsPicker: View {
     init() {
         // Exhaustiveness tripwire: every StatsRow.Kind must appear in the
         // hand-maintained catalogue above, or that row silently becomes
-        // un-toggleable in Custom (how .smoothness went missing — added
+        // un-toggleable in Custom (how .smoothness went missing - added
         // to the enum and Extended, never to this list). Debug-only;
         // assert() compiles out of release builds.
         assert(

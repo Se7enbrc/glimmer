@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# embed-dylibs.sh — make a built Glimmer.app self-contained for distribution
+# embed-dylibs.sh - make a built Glimmer.app self-contained for distribution
 #
 # The Release build links openssl@3 (libssl + libcrypto) and opus from
 # /opt/homebrew/opt/.../lib/*. Those paths don't exist on user machines,
@@ -19,7 +19,7 @@
 # Run after xcodebuild -configuration Release, before packaging the DMG.
 #
 # Args:
-#   $1 — absolute path to Glimmer.app (Release build product)
+#   $1 - absolute path to Glimmer.app (Release build product)
 #
 # Requires `/opt/homebrew/opt/openssl@3` and `/opt/homebrew/opt/opus` to be
 # present on the build machine. The CI host needs `brew install openssl@3 opus`
@@ -30,20 +30,20 @@ set -euo pipefail
 APP="${1:?usage: embed-dylibs.sh /path/to/Glimmer.app [signing-identity]}"
 
 # Signing identity: arg $2 wins, else $SIGN_IDENTITY env, else adhoc ("-").
-# A real "Developer ID Application: …" identity triggers a *secure timestamp*
+# A real "Developer ID Application: ..." identity triggers a *secure timestamp*
 # (--timestamp) and hardened runtime, both REQUIRED for notarization. Adhoc
 # keeps the prior local-dev behaviour (no timestamp server round-trip).
 SIGN_IDENTITY="${2:-${SIGN_IDENTITY:--}}"
 # Optional 3rd arg: keychain to PIN identity resolution to. The same
 # Developer ID cert usually exists in the login keychain too (the original
 # import), and codesign resolving by NAME can land on that unauthorized copy
-# and prompt per dylib — pinning makes prompts structurally impossible.
+# and prompt per dylib - pinning makes prompts structurally impossible.
 SIGN_KEYCHAIN="${3:-}"
 KC_FLAG=""
 [ -n "$SIGN_KEYCHAIN" ] && [ "$SIGN_IDENTITY" != "-" ] && KC_FLAG="--keychain $SIGN_KEYCHAIN"
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
   TS_FLAG="--timestamp=none"
-  echo "Signing identity: adhoc (local dev — NOT notarizable)"
+  echo "Signing identity: adhoc (local dev - NOT notarizable)"
 else
   TS_FLAG="--timestamp"
   echo "Signing identity: $SIGN_IDENTITY (secure timestamp + hardened runtime)"
@@ -73,11 +73,11 @@ install_name_tool -id @rpath/libcrypto.3.dylib "$FRAMEWORKS/libcrypto.3.dylib"
 install_name_tool -id @rpath/libopus.0.dylib   "$FRAMEWORKS/libopus.0.dylib"
 
 # Rewrite EVERY Homebrew-path reference each Mach-O actually carries, as
-# reported by otool — never a hardcoded expected path. References are spelled
+# reported by otool - never a hardcoded expected path. References are spelled
 # inconsistently: the app binary records the `opt` symlink path it linked
 # against, but brew's dylibs reference each other via the REAL
 # `Cellar/<version>` path. `install_name_tool -change` with a non-matching
-# old path is a SILENT no-op — that exact mismatch shipped 2026.6.2 with
+# old path is a SILENT no-op - that exact mismatch shipped 2026.6.2 with
 # libssl still loading libcrypto from /opt/homebrew/Cellar/..., which fails
 # to launch on any Mac without Homebrew (issue #18).
 rewrite_brew_refs() {

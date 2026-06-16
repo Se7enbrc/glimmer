@@ -3,11 +3,11 @@
 //
 //  Owns the video UDP flow for the Swift-native backend: ONE UNCONNECTED POSIX
 //  UDP socket (bind a wildcard ephemeral local port; NEVER connect()) used for
-//  BOTH the periodic ping (sendto host:VideoPortNumber — punches NAT + tells the
+//  BOTH the periodic ping (sendto host:VideoPortNumber - punches NAT + tells the
 //  host where to send video) and RTP receive (recvfrom from ANY source). A
 //  *connected* NWConnection silently drops video because Sunshine sources RTP
 //  from a port != VideoPortNumber and a connected UDP flow filters by the full
-//  4-tuple — that was the "no frames render" bug. Source: VideoStream.c +
+//  4-tuple - that was the "no frames render" bug. Source: VideoStream.c +
 //  PlatformSockets.c (bindUdpSocket = bind only; recvUdpSocket = recvfrom NULL
 //  src).
 //
@@ -15,16 +15,16 @@
 //
 //  PING (VideoStream.c:54-82): send a 20-byte SS_PING
 //  { char payload[16]; uint32 sequenceNumber (BIG-endian) } on the CONDITIONAL
-//  steady cadence (EnvSignalController.steadyPingInterval — 75ms Wi-Fi-doze
+//  steady cadence (EnvSignalController.steadyPingInterval - 75ms Wi-Fi-doze
 //  keepalive / 500ms relaxed; upstream pings a flat 500ms). payload = the 16
 //  raw bytes captured from SETUP-video X-SS-Ping-Payload. sequenceNumber starts
 //  at 1, incremented BEFORE each send. If no payload captured (legacy GFE),
 //  send the 4-byte { 0x50,0x49,0x4E,0x47 } ("PING") instead. The host will NOT
-//  start sending video until it receives a ping — this is the most likely fix
+//  start sending video until it receives a ping - this is the most likely fix
 //  for the frame watchdog firing on the native path today.
 //
 //  RECEIVE (VideoStream.c:85-236): for our SDP (encEnabled=0 ⇒ SS_ENC_VIDEO
-//  unset) video is PLAINTEXT — NO decryption. Drop runt packets (< 12 bytes),
+//  unset) video is PLAINTEXT - NO decryption. Drop runt packets (< 12 bytes),
 //  hand the rest to RtpVideoQueue which host-byteswaps the RTP header, runs FEC,
 //  and feeds the depacketizer → VideoSink.
 //
@@ -61,7 +61,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     /// Dedicated high-priority queue for the RTP receive loop. `.userInteractive`
     /// so recvfrom is never starved behind default-QoS work while the host fires
-    /// ~14k pkts/s at 4K240 — matching moonlight-common-c's dedicated
+    /// ~14k pkts/s at 4K240 - matching moonlight-common-c's dedicated
     /// high-priority RTP receive thread (VideoStream.c VideoReceiveThreadProc).
     /// A default-QoS queue (the prior value) let the receive loop get preempted
     /// under load, which let the kernel socket buffer back up and serviced
@@ -92,7 +92,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     // SO_RCVBUF bandwidth-delay-product sizing (see openSocket). Kept LOCAL to
     // this file (not EnetWire) so the change stays self-contained.
     //
-    /// Headroom RTT the receive buffer is sized to cover. Generous on purpose —
+    /// Headroom RTT the receive buffer is sized to cover. Generous on purpose -
     /// the live RTT estimate isn't available yet at socket setup, and a too-small
     /// buffer turns a brief client-side scheduling stall into invisible wire loss.
     private static let rcvbufMaxExpectedRttSec = 0.15
@@ -183,8 +183,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         let sock = socket(family, SOCK_DGRAM, 0)
         guard sock >= 0 else { throw EnetError.socketFailure("socket() errno \(errno)") }
 
-        // Wi-Fi QoS: tag the socket NET_SERVICE_TYPE_VI (Interactive Video) — the
-        // 802.11e WMM video access category — so the radio prioritizes video over
+        // Wi-Fi QoS: tag the socket NET_SERVICE_TYPE_VI (Interactive Video) - the
+        // 802.11e WMM video access category - so the radio prioritizes video over
         // bulk/best-effort traffic while leaving the strictly-higher VOICE category
         // for audio. moonlight binds the video socket SOCK_QOS_TYPE_VIDEO →
         // SO_NET_SERVICE_TYPE=NET_SERVICE_TYPE_VI (PlatformSockets.c:253-254); the
@@ -196,7 +196,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         }
         // Large receive buffer, sized by BANDWIDTH-DELAY PRODUCT rather than a
         // fixed packet count. The old size (2048*(packetSize+16)) is a constant
-        // number of packets whose TIME headroom shrinks as bitrate rises — at a
+        // number of packets whose TIME headroom shrinks as bitrate rises - at a
         // high bitrate those 2048 packets drain in a fraction of the RTT, so a
         // brief client-side scheduling stall silently overflows the kernel
         // buffer (= invisible wire loss). BDP sizing instead targets a fixed
@@ -205,7 +205,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         // isn't available yet at socket setup). We clamp UP to the old fixed
         // value (never request LESS headroom than before) and DOWN to the
         // kernel's kern.ipc.maxsockbuf ceiling (requesting above it just clips,
-        // wasting the request) before reading back what was actually granted —
+        // wasting the request) before reading back what was actually granted -
         // the kernel can still grant less (mbuf-cluster accounting).
         let bitrateBytesPerSec = Double(bitrateKbps) * 1000.0 / 8.0
         let bdpBytes = Int(bitrateBytesPerSec * Self.rcvbufMaxExpectedRttSec)
@@ -232,7 +232,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         var tv = timeval(tv_sec: 0, tv_usec: 100_000)
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
-        // Bind to a wildcard ephemeral local port — UNCONNECTED, so recvfrom
+        // Bind to a wildcard ephemeral local port - UNCONNECTED, so recvfrom
         // accepts RTP from any source port (Sunshine does NOT source video from
         // videoPort). The host learns our return port from the ping's UDP source.
         let bound: Bool
@@ -266,7 +266,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     /// Read the kernel's per-socket buffer ceiling (`kern.ipc.maxsockbuf`) so we
     /// never request a SO_RCVBUF above it. Returns nil on any sysctl failure (the
-    /// caller then leaves the request unclamped — the kernel still clips it).
+    /// caller then leaves the request unclamped - the kernel still clips it).
     private static func kernMaxSockBuf() -> Int? {
         var value: Int = 0
         var size = MemoryLayout<Int>.size
@@ -285,7 +285,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         recvQueue.async { [weak self] in
             // Name the thread this loop OWNS for the session: the blocking
             // recv loop occupies one worker until teardown, so this is an
-            // owned entry point, not a transient pool block — and the hottest
+            // owned entry point, not a transient pool block - and the hottest
             // thread in the process was sampling as an unresolvable `tid-NNN`
             // in the per-thread CPU telemetry (every hot sample unresolved in
             // testing; dispatch labels are not pthread names).
@@ -296,7 +296,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // Batched receive (issue #24): up to `cap` datagrams per recvmsg_x
             // syscall, cutting the ~14k recvfrom/s floor at 4K240 (measurably
             // smoother). Buffers allocated once and reused; handleDatagram
-            // copies each out — the win is the syscall COUNT. recvmsg_x is
+            // copies each out - the win is the syscall COUNT. recvmsg_x is
             // universally available on macOS; the plain recvfrom path it
             // replaced is in git history if a fallback is ever needed.
             let cap = 32
@@ -351,19 +351,19 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     // MARK: - Ping loop (steady keepalive, dedicated thread)
 
-    /// Dedicated OS thread — NOT the Swift cooperative pool — so the keepalive
+    /// Dedicated OS thread - NOT the Swift cooperative pool - so the keepalive
     /// can never be starved. Sunshine times out the whole session (~5s) if these
     /// pings stop, so this MUST keep firing under any load. Mirrors moonlight's
     /// VideoPingThreadProc dedicated pthread (VideoStream.c:55-81). The cadence
-    /// is CONDITIONAL (EnvSignalController.steadyPingInterval): 75ms — the
-    /// Wi-Fi-doze keepalive, WHY/VERDICT/COST on UdpPinger's dial — on a
+    /// is CONDITIONAL (EnvSignalController.steadyPingInterval): 75ms - the
+    /// Wi-Fi-doze keepalive, WHY/VERDICT/COST on UdpPinger's dial - on a
     /// wifi/unknown stream route while input-idle or under link caution; 500ms
     /// (upstream's rate) on a confirmed-wired route or active-input clear wifi
     /// play. The thread always WAKES at the fast quantum (exactly the
     /// pre-conditional wake rate, so the thread cost is unchanged) and gates
     /// the SEND on the live interval: a cadence flip (idle onset, route
     /// change) takes effect within one quantum, and protocol safety never
-    /// rides the slow path — even relaxed is 20x inside the 10s ping timeout.
+    /// rides the slow path - even relaxed is 20x inside the 10s ping timeout.
     private func startPingLoop() {
         EnvSignalController.shared.noteVideoPingLoopStart()
         let thread = Thread { [weak self] in
@@ -407,7 +407,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             }
         }
         // pings_sent (the keepalive cadence judge): counts datagrams handed
-        // to sendto — the counter whose absence made the 75ms experiment
+        // to sendto - the counter whose absence made the 75ms experiment
         // unjudgeable from data. Always-live integer add at ≤13.3Hz.
         EnvSignalController.shared.videoPingsSentTotal.increment()
         if pingCount == 1 {
@@ -421,9 +421,9 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     func depacketizerDidAssembleFrame(_ unit: DecodeUnit) {
         guard let sink else { return }
         // Latency telemetry (opt-in; nil = zero cost). t_receive + t_assemble are
-        // both already captured upstream — `receiveTimeUs` is the frame's
+        // both already captured upstream - `receiveTimeUs` is the frame's
         // last/first-packet arrival and `enqueueTimeUs` is the reassemble
-        // instant — so this is a pure map insert, no new clock read. Keyed by
+        // instant - so this is a pure map insert, no new clock read. Keyed by
         // rtpTimestamp (the only identity that survives the VideoToolbox boundary).
         // Done BEFORE the synchronous submit so the entry exists when the
         // submit/output stages record against it. us → ns (the upstream stamps
@@ -442,7 +442,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                 // to ms inside the tracker.
                 hostEncodeTenthsMs: unit.frameHostProcessingLatency)
             // P2 IDR/RFI ROUND-TRIP (signal: IDR-RTT): if an IDR landed while a
-            // request was outstanding, this IS the resulting frame — resolve the
+            // request was outstanding, this IS the resulting frame - resolve the
             // round-trip (request-send → arrival) into the histogram + trace.
             // Gate-on only (the tracker exists), so this is paired with the gate-on
             // arm in EnetControlChannel and costs nothing off. An unsolicited IDR
@@ -459,14 +459,14 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         if result == StreamProtocol.DR_NEED_IDR {
             // Two producers share this return (VideoDecoder+Decode.swift
             // decodeAssembledFrame): a GENUINE sustained backlog stall
-            // (reserveDecodeSlot — transient VPN bursts are absorbed by the
+            // (reserveDecodeSlot - transient VPN bursts are absorbed by the
             // deeper in-flight bound and only a backlog that stays full while VT
             // produces no output reaches here), and the hidden-window decode
-            // gate's DESIGNED resume resync (`.resyncToIdr` — the first
+            // gate's DESIGNED resume resync (`.resyncToIdr` - the first
             // post-gate frame is a P-frame by timing on nearly every gated
             // resume: 8.3ms frame cadence vs the ~12ms IDR round-trip).
-            // Recoverable, designed behavior logs quietly — warnings are for
-            // faults — so the resume edge gets at most ONE info line (one by
+            // Recoverable, designed behavior logs quietly - warnings are for
+            // faults - so the resume edge gets at most ONE info line (one by
             // construction: requestDecoderRefresh below puts the depacketizer
             // into wait-for-IDR on this thread, so no further non-IDR frame can
             // reach the submit boundary until the resync IDR lands); the stall
@@ -476,15 +476,15 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                     + "(expected after decode gate; frame \(unit.frameNumber))", Self.cat)
             } else {
                 Diag.warn("NativeVideo decoder backlog stall (frame \(unit.frameNumber)) "
-                    + "— flushing to next IDR", Self.cat)
+                    + "- flushing to next IDR", Self.cat)
             }
             // Either cause needs the same recovery. moonlight's matching
             // overflow path (VideoDepacketizer.c:513-532) does NOT just request
-            // a wire IDR — it flushes-to-IDR: waitingForIdrFrame +
+            // a wire IDR - it flushes-to-IDR: waitingForIdrFrame +
             // dropFrameState + drop everything until the next real IDR. Driving
             // the depacketizer into wait-for-IDR here (we're on its owning
             // receive thread) means it STOPS emitting reference-broken P-frames
-            // into VideoToolbox — that's what was causing the white/purple HDR
+            // into VideoToolbox - that's what was causing the white/purple HDR
             // corruption, and the load-bearing concealment we must preserve.
             // requestDecoderRefresh also requests the IDR (coalesced to one per
             // loss event by ENet).
@@ -496,8 +496,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// non-IDR frame to read as the gate's designed resume resync (info)
     /// instead of a backlog stall (WARN). Generous next to the ≤~10ms the
     /// first post-gate submit actually takes (frames keep arriving at stream
-    /// cadence through the gate). The worst misread — a genuine stall inside
-    /// this window — costs one demoted log line, never recovery: the
+    /// cadence through the gate). The worst misread - a genuine stall inside
+    /// this window - costs one demoted log line, never recovery: the
     /// consumer's flush-to-IDR runs for both causes.
     private static let postGateResyncWindowSeconds = 1.0
 
@@ -512,7 +512,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// latch), so a stall on the resync IDR itself still reads as a fault.
     /// The downcast is deliberate: `VideoSink` carries no gate-state surface
     /// and this only picks a LOG SEVERITY, so widening the protocol for it
-    /// isn't warranted — a non-decoder sink keeps the conservative WARN.
+    /// isn't warranted - a non-decoder sink keeps the conservative WARN.
     private func isExpectedPostGateResync(isIDR: Bool) -> Bool {
         !isIDR && secondsSinceGateLift < Self.postGateResyncWindowSeconds
     }
@@ -531,7 +531,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     func depacketizerNeedsIdr() {
         // Inside the gate-lift resync window this is the DESIGNED refocus path
         // (the post-gate P-frame drove the depacketizer into wait-for-IDR and
-        // it now asks for one) — nearly all of one measured session's WARNINGs
+        // it now asks for one) - nearly all of one measured session's WARNINGs
         // were exactly this, each within 1s of a 'decode gate lifted' NOTICE.
         // Expected behavior logs quietly; WARN stays reserved for genuine IDR
         // starvation (loss-driven), where it still fires unchanged.

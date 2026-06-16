@@ -5,7 +5,7 @@
 //  honest TTF spans plus the startup-pacing verdict), the silent-audio
 //  `audio_pending` probe, and the shared two-sink EVENT carrier (Diag NOTICE
 //  line + TelemetryExporter NDJSON row). Split out of RtpAudioReceiver.swift
-//  — pure move, the FramePacer split idiom — to keep that file
+//  - pure move, the FramePacer split idiom - to keep that file
 //  under the length limit; the TTF latch fields stay declared on the
 //  receiver.
 //
@@ -15,10 +15,10 @@ import Foundation
 extension RtpAudioReceiver {
 
     /// Emit the one-shot `audio_ttf` EVENT: both honest TTF spans in one
-    /// machine-readable row — ping→first-RTP (the Diag METRIC span) and
+    /// machine-readable row - ping→first-RTP (the Diag METRIC span) and
     /// connectStart→first-decoded (the user-facing span; with the backlog-aware
     /// gate the first arrival IS the first decode, so no fixed drop inflates
-    /// it) — plus the ping count, the gate's verdict (`startup`, `dropped_ms`),
+    /// it) - plus the ping count, the gate's verdict (`startup`, `dropped_ms`),
     /// an `over_target` flag against the <1s goal (so a slow cold start is a
     /// greppable alarm instead of an unflagged log line), and the warm/cold
     /// `ttf_class` + `host_idle_s` covariate (see `AudioTtfContext`) so every
@@ -32,14 +32,14 @@ extension RtpAudioReceiver {
             fields.append(String(format: "\"ping_to_rtp_ms\":%.1f", pingMs))
         }
         // The connectStart→first-decoded span the always-live counters
-        // computed in recordAudioFirstPacket() — read back so the event and the
+        // computed in recordAudioFirstPacket() - read back so the event and the
         // exporter gauge can never disagree.
         let connectMs = TelemetryCounters.shared.audioFirstPacketMs
         if let connectMs {
             fields.append(String(format: "\"connect_to_decoded_ms\":%.1f", connectMs))
         }
         fields.append("\"pings\":\(firstRtpPings)")
-        // The startup-pacing verdict travels with the TTF spans — one row
+        // The startup-pacing verdict travels with the TTF spans - one row
         // tells the whole startup story: how fast audio came up, and how much
         // (if any) stale backlog was discarded to get there.
         fields.append("\"startup\":\"\(startupVerdictBurst ? "burst" : "paced")\"")
@@ -49,7 +49,7 @@ extension RtpAudioReceiver {
         // emits exactly the record the session scorecard reads at stop, so the
         // two sinks can never disagree on the split. A nil ping span classifies
         // cold (no RTP answer inside any warm window); host_idle_s is OMITTED
-        // when underivable (first stream this process run — absent ≠ 0).
+        // when underivable (first stream this process run - absent ≠ 0).
         let record = TelemetryCounters.shared.audioTtf.latchClassifying(
             pingToRtpMs: firstRtpPingToRtpMs,
             startup: startupVerdictBurst ? "burst" : "paced")
@@ -60,7 +60,7 @@ extension RtpAudioReceiver {
         // The cushion seed rides the startup row (latched at decoder init,
         // before any RTP flows): the session self-describes the target/floor
         // it STARTED from, so a clean first-3-minutes is attributable to the
-        // per-host memory and a ratchet walk to a missing one. Link only —
+        // per-host memory and a ratchet walk to a missing one. Link only -
         // the host half of the memory key never leaves UserDefaults.
         if let seed = AudioCushionTelemetry.shared.seed {
             fields.append(String(format: "\"cushion_seed_ms\":%.0f", seed.targetMs))
@@ -76,7 +76,7 @@ extension RtpAudioReceiver {
     /// Arm the one-shot silent-audio probe: if no audio RTP has arrived
     /// `audioPendingProbeSeconds` after the receive path comes up, emit an
     /// `audio_pending` event. Sessions have been abandoned by the user with
-    /// audio never arriving and NOTHING flagged the silence — this makes it
+    /// audio never arriving and NOTHING flagged the silence - this makes it
     /// visible (with the ping count as evidence the keepalive loop is alive).
     /// A detached utility-QoS one-shot: it cannot run on `recvQueue` (the
     /// blocking receive loop occupies it for the session), so it reads the
@@ -88,7 +88,7 @@ extension RtpAudioReceiver {
             guard let self, !self.interrupted.isSet, !self.firstRtpReceived.isSet else { return }
             let pings = self.pingsSent.load()
             Diag.warn("NativeAudio no audio RTP \(Int(Self.audioPendingProbeSeconds))s after "
-                + "receive start (\(pings) pings sent — ping loop alive; host hasn't aimed audio "
+                + "receive start (\(pings) pings sent - ping loop alive; host hasn't aimed audio "
                 + "at us yet; still retrying)", Self.cat)
             self.emitAudioEvent([
                 "\"event\":\"audio_pending\"",
@@ -106,7 +106,7 @@ extension RtpAudioReceiver {
     /// (`TelemetryExporter.recordEvent`), which stamps the `ts`+`session` header
     /// keys the bookmark/handshake rows carry. A row fired BEFORE the exporter
     /// is up (warm hosts: this receiver spins up mid-handshake, the exporter
-    /// only after the connection establishes — audio_ttf lost that race by 61ms
+    /// only after the connection establishes - audio_ttf lost that race by 61ms
     /// and vanished) is BUFFERED by the sink and flushed at exporter start, so
     /// the one-shots survive the ordering. Thread-safe (Diag is lock-guarded;
     /// the sink hops onto the exporter queue); called from the receive thread

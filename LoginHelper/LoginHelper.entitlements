@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- Helper is sandboxed to match the main app. No special entitlements
-	     needed — `NSWorkspace.openApplication` works under app-sandbox to
+	     needed - `NSWorkspace.openApplication` works under app-sandbox to
 	     launch siblings of the same bundle. -->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>

@@ -9,7 +9,7 @@
 //  early/late and the motion judders even on a perfectly-paced 60/120/240 Hz
 //  panel.
 //
-//  Design — a faithful port of moonlight-qt's `pacer.cpp` two-queue model,
+//  Design - a faithful port of moonlight-qt's `pacer.cpp` two-queue model,
 //  adapted to AVSampleBufferDisplayLayer + CADisplayLink instead of FFmpeg
 //  AVFrames + CVDisplayLink:
 //
@@ -19,8 +19,8 @@
 //      `m_PacingQueue`.
 //
 //    * A CADisplayLink bound to the STREAM WINDOW's screen drives a per-vsync
-//      tick. On each tick we decide whether a frame is DUE — by the display
-//      link's own cadence, never a hardcoded refresh — and if so release
+//      tick. On each tick we decide whether a frame is DUE - by the display
+//      link's own cadence, never a hardcoded refresh - and if so release
 //      exactly one frame to `renderer.enqueue(...)`. This is the analogue of
 //      `Pacer::handleVsync` releasing one frame from the pacing queue per
 //      vsync. The release runs on a DEDICATED serial queue, never the main
@@ -42,11 +42,11 @@
 //      between vsyncs; the adaptive trim drops the stale excess so only the
 //      freshest DUE frame presents, bounding wall-clock latency.
 //
-//  Adaptive depth — passthrough on a clean link, absorb only MEASURED jitter
+//  Adaptive depth - passthrough on a clean link, absorb only MEASURED jitter
 //  --------------------------------------------------------------------------
 //  The baseline target depth RESTS AT 1 frame (o2p median ~10.8ms at fps==refresh;
 //  moonlight's fixed 3-frame buffer is ~25ms) and GROWS only for genuine MEASURED
-//  jitter — the RtpVideoQueue's ~1s-smoothed RFC-3550 reorder jitter (0.09ms wired
+//  jitter - the RtpVideoQueue's ~1s-smoothed RFC-3550 reorder jitter (0.09ms wired
 //  / ~22ms wifi) through a dead-zone, never wall-clock submit spacing. It DECAYS
 //  back to 1 over a ~250ms clean window; the grow-without-a-hitch hold is OFF on a
 //  clean link (target == 1). Every release also TRIMS the FIFO drop-to-newest
@@ -55,18 +55,18 @@
 //
 //  Code map (this type is split across same-module extension files)
 //  ----------------------------------------------------------------
-//    * FramePacer.swift            — the class decl, stored state, init, and
+//    * FramePacer.swift            - the class decl, stored state, init, and
 //                                    the lifecycle / link plumbing.
-//    * FramePacer+Constants.swift  — the static tuning constants.
-//    * FramePacer+Submit.swift     — the decode-queue submit path.
-//    * FramePacer+Tick.swift       — the CADisplayLink vsync tick.
-//    * FramePacer+DueGate.swift    — the trim → backoff → due-gate → release core
+//    * FramePacer+Constants.swift  - the static tuning constants.
+//    * FramePacer+Submit.swift     - the decode-queue submit path.
+//    * FramePacer+Tick.swift       - the CADisplayLink vsync tick.
+//    * FramePacer+DueGate.swift    - the trim → backoff → due-gate → release core
 //                                    (+ the BackoffBeat/DueGateResult types).
-//    * FramePacer+Recovery.swift   — the self-heal watchdog actions + snapshots
+//    * FramePacer+Recovery.swift   - the self-heal watchdog actions + snapshots
 //                                    (+ the LivenessSnapshot/RefreshWindowSnapshot types).
-//    * FramePacer+AdaptiveDepth.swift — measured-jitter input + depth math.
-//    * FramePacer+FrameRateRange.swift — the present-callback throttle floor.
-//    * FramePacer+TickDeficit.swift — the tick-deficit degraded mode (off-tick
+//    * FramePacer+AdaptiveDepth.swift - measured-jitter input + depth math.
+//    * FramePacer+FrameRateRange.swift - the present-callback throttle floor.
+//    * FramePacer+TickDeficit.swift - the tick-deficit degraded mode (off-tick
 //                                    release + governor repaint), the warm
 //                                    re-enable handover, and the floor-violation
 //                                    breadcrumbs.
@@ -81,7 +81,7 @@
 //  * `start`/`stop`/`screenDidChange` run on the main actor (lifecycle).
 //  All shared mutable state is guarded by a single `os_unfair_lock`, the same
 //  discipline StatsCollector uses. The lock is held only for a handful of
-//  field updates per submit/tick — well under a microsecond.
+//  field updates per submit/tick - well under a microsecond.
 //
 //  Pacing model ported from moonlight-qt's pacer.cpp (GPLv3); see CREDITS.md.
 //
@@ -95,7 +95,7 @@ import os
 /// Drives presentation of decoded frames against the display's true vsync
 /// cadence. One per streaming session; owned by `VideoDecoder`.
 ///
-/// `@unchecked Sendable` over an internal `os_unfair_lock` — the decode queue
+/// `@unchecked Sendable` over an internal `os_unfair_lock` - the decode queue
 /// (`submit`), the main run loop (the link tick), and the main actor
 /// (lifecycle) all touch it, mirroring `StatsCollector`'s contract.
 final class FramePacer: @unchecked Sendable {
@@ -144,7 +144,7 @@ final class FramePacer: @unchecked Sendable {
     /// The most recent SMOOTHED RFC-3550 reorder jitter (ms) measured by the RTP
     /// receive path (`RtpVideoQueue` → `TelemetryCounters.recvJitterMs`), refreshed
     /// each tick from the shared gauge. This is the signal that drives grow/decay
-    /// — 0.09ms on a clean wired link, ~22ms on lossy wifi — read instead of the
+    /// - 0.09ms on a clean wired link, ~22ms on lossy wifi - read instead of the
     /// old wall-clock submit-spacing estimator (which was dominated by VT/FEC
     /// drain unevenness on a clean link and falsely pinned the target at the cap).
     var measuredJitterMs: Double = 0.0
@@ -172,11 +172,11 @@ final class FramePacer: @unchecked Sendable {
     /// decision (`targetDepth + headroomLevel`, clamped), refreshed off-lock.
     var reconciledTargetDepth: Int = FramePacer.targetDepth
     /// Generation of the published decision last folded into `reconciledTargetDepth`
-    /// — the refresh re-maps only when the controller's generation advances.
+    /// - the refresh re-maps only when the controller's generation advances.
     var reconciledDecisionGeneration: UInt64 = 0
 
     /// Display-clock time (`CADisplayLink.targetTimestamp`) of the last
-    /// present — the cadence base we gate the next "is a frame DUE" decision
+    /// present - the cadence base we gate the next "is a frame DUE" decision
     /// against. `.nan` until the first present so the first frame goes out
     /// immediately.
     var lastPresentMediaTime: CFTimeInterval = .nan
@@ -187,10 +187,10 @@ final class FramePacer: @unchecked Sendable {
 
     /// True while presentation is intentionally suppressed (window hidden → the
     /// display link stops ticking by design): `submit()` then keeps ONLY the
-    /// newest frame, counting displaced frames as SUPPRESSED — not late — drops.
+    /// newest frame, counting displaced frames as SUPPRESSED - not late - drops.
     /// Set/cleared on the suppression edges via `setPresentSuppressed` (in
     /// FramePacer+Submit.swift, with the drop logic it gates); NOT reset by
-    /// `stop()` — it mirrors `VideoDecoder`'s state, which outlives a link rebuild.
+    /// `stop()` - it mirrors `VideoDecoder`'s state, which outlives a link rebuild.
     var presentSuppressed = false
 
     // MARK: - Present-side liveness (self-heal watchdog + instrumentation)
@@ -216,19 +216,19 @@ final class FramePacer: @unchecked Sendable {
     /// released (the wedge signature: `due` latched false). Reset on any
     /// release. Used to log the diagnostic once it crosses a threshold.
     var starvedTickStreak: Int = 0
-    /// Consecutive empty-queue ticks — the delivery-GAP signature (vs the non-empty
+    /// Consecutive empty-queue ticks - the delivery-GAP signature (vs the non-empty
     /// wedge above). Drives `releaseDueFrame`'s post-gap leniency.
     var emptyTickStreak: Int = 0
     /// `CFAbsoluteTime` of the last gap-recovery edge; lenient window measures from here.
     var lastGapRecoveryTime: CFTimeInterval = 0
     /// Count of consecutive ticks the OVER-TARGET short-circuit had to force a
     /// release (a genuine backlog above the adaptive target the due gate would
-    /// otherwise have latched not-due — the no-network present-stall fix). Reset
+    /// otherwise have latched not-due - the no-network present-stall fix). Reset
     /// the moment a normally-due release lands, so the streak measures ONLY the
     /// over-drain↔re-grow oscillation episodes, not steady state (where it stays
     /// 0). Drives a one-shot diagnostic signpost; never affects the present.
     var overTargetReleaseStreak: Int = 0
-    /// Consecutive pacer-path releases the RENDERER refused (`willPresent` false —
+    /// Consecutive pacer-path releases the RENDERER refused (`willPresent` false -
     /// backpressure / not-ready), reset on any frame that reached it. The renderer-
     /// wedge signature: the due gate kept dequeuing while every frame died at
     /// `isReadyForMoreMediaData == false`, so `releaseCount` froze and the starvation
@@ -238,17 +238,17 @@ final class FramePacer: @unchecked Sendable {
     /// Latched so the starvation-diagnostic warning logs once per episode, not
     /// every tick. Cleared on the next successful release.
     var loggedStarvation = false
-    /// Total ticks observed since start — exposed so instrumentation can derive
+    /// Total ticks observed since start - exposed so instrumentation can derive
     /// a ticks/sec rate across a sampling window.
     var tickCount: UInt64 = 0
-    /// Total releases observed since start — same, for a present/sec rate.
+    /// Total releases observed since start - same, for a present/sec rate.
     var releaseCount: UInt64 = 0
 
     // MARK: - Display-refresh telemetry (ProMotion ramp-down detector)
     //
     // The live displayLink vsync interval → derived refresh Hz, accumulated per tick
     // and exposed (min/avg/max) via LivenessSnapshot for the 1Hz exporter. Catches
-    // ProMotion ramping the panel down (120→24Hz) on a static scene — a stretched
+    // ProMotion ramping the panel down (120→24Hz) on a static scene - a stretched
     // interval means the pacer paces slow / the buffer builds, then spikes when
     // motion resumes. Guarded by `lock`; accumulators roll in handleTick.
 
@@ -265,7 +265,7 @@ final class FramePacer: @unchecked Sendable {
     /// until the first tick.
     var lastRefreshIntervalSeconds: Double = .nan
     /// Set true by a tick whose derived refresh Hz differs from the previous
-    /// tick's by more than a small tolerance — surfaces a "refresh changed"
+    /// tick's by more than a small tolerance - surfaces a "refresh changed"
     /// marker in the snapshot. Reset on read. The signpost is emitted on the
     /// main run loop (in handleTick); this flag is the snapshot-side latch.
     var refreshChangedSinceRead: Bool = false
@@ -280,7 +280,7 @@ final class FramePacer: @unchecked Sendable {
     // releases due frames OFF-TICK at stream cadence until ticks return. Logic in
     // FramePacer+TickDeficit.swift; this is the stored state.
 
-    /// Rolling ~250ms rate window over `tickCount`/`releaseCount` — the MEASURED
+    /// Rolling ~250ms rate window over `tickCount`/`releaseCount` - the MEASURED
     /// (not inferred) realized tick/release rates everything below keys on.
     /// Rolled by `serviceTickDeficitLocked` from handleTick, livenessSnapshot
     /// (the 20Hz watchdog keeps it rolling even when ticks stop), and the
@@ -296,7 +296,7 @@ final class FramePacer: @unchecked Sendable {
     /// Expected tick rate from the last window: min(stream Hz, NOMINAL panel
     /// Hz). The nominal link duration keeps reading the rated panel cadence
     /// even while callbacks are throttled (verified: refresh_changed=0 through
-    /// every collapse), so this is the honest "what ticks SHOULD arrive" bar —
+    /// every collapse), so this is the honest "what ticks SHOULD arrive" bar -
     /// and it keeps a 120fps-stream-on-60Hz-panel setup (ticks legitimately
     /// half the stream rate) from ever reading as a deficit.
     var lastExpectedTickHz: Double = .nan
@@ -304,7 +304,7 @@ final class FramePacer: @unchecked Sendable {
     /// (hysteresis: enter <0.5×, clear ≥0.8× expected). `.nan` = no deficit.
     var tickDeficitSince: CFTimeInterval = .nan
     /// Until this host time, deficit / floor-violation VERDICTS are held (the
-    /// rates keep being measured) — armed on the suppression-clear edge so the
+    /// rates keep being measured) - armed on the suppression-clear edge so the
     /// rebound link's delayed first post-refocus ticks can't mint a false
     /// engage (all 8 false engages + the 1 false FLOOR VIOLATION observed were
     /// this resume-edge artifact). `.nan` = no hold.
@@ -319,14 +319,14 @@ final class FramePacer: @unchecked Sendable {
     /// cadence. `.nan` = none this episode.
     var lastRepaintHostTime: CFTimeInterval = .nan
     /// The most recent sample buffer that reached the renderer via the pacing
-    /// queue — the repaint source during a deficit (re-committing the current
+    /// queue - the repaint source during a deficit (re-committing the current
     /// frame so the governor never classifies the layer as static). Holds the
     /// SAME buffer the layer is already displaying, so no extra surface is
     /// retained from VT's pool. Cleared on stop().
     var lastPresentedSampleBuffer: CMSampleBuffer?
     /// WARM HANDOVER: true while a re-enabled pacer keeps presenting DIRECT
     /// (submit bypasses the queue) until the rebuilt link proves a healthy
-    /// realized tick rate — the cold cutover onto an un-primed link queued
+    /// realized tick rate - the cold cutover onto an un-primed link queued
     /// arriving frames to the depth cap and re-froze 350ms after re-enable
     /// (measured on a battery wifi link). Armed by
     /// `armWarmHandover()` before start().
@@ -334,7 +334,7 @@ final class FramePacer: @unchecked Sendable {
     /// Consecutive healthy rate windows seen while warming up.
     var warmHealthyWindowStreak = 0
     /// Floor-violation breadcrumb state (NOTICE when realized ticks violate the
-    /// pinned preferredFrameRateRange floor >1s — direct governor evidence).
+    /// pinned preferredFrameRateRange floor >1s - direct governor evidence).
     var floorViolationSince: CFTimeInterval = .nan
     var floorViolationLogged = false
     /// Lock-guarded mirror of the main-actor `appliedFloorHz`, written wherever
@@ -347,7 +347,7 @@ final class FramePacer: @unchecked Sendable {
 
     // MARK: - Collaborators
 
-    /// Stats sink — present cadence, late/on-time counts, depth samples, and
+    /// Stats sink - present cadence, late/on-time counts, depth samples, and
     /// the presentation-late drop cause. Shared with `VideoDecoder` (the same
     /// `@unchecked Sendable` collector the decode path records into).
     let stats: StatsCollector
@@ -373,7 +373,7 @@ final class FramePacer: @unchecked Sendable {
 
     // No `onSustainedLag`/IDR-escalation hook: a presentation-timing drop of an
     // already-decoded CMSampleBuffer leaves the reference chain intact, so a keyframe
-    // can't fix pacing (and the bitrate-capped 4K240 IDR arrives soft then refines —
+    // can't fix pacing (and the bitrate-capped 4K240 IDR arrives soft then refines -
     // visible blur/refocus). The pacer trims-to-newest and counts every drop as
     // presentation-late (load-bearing telemetry); IDR/RFI is for genuine
     // decode/reference breaks only (depacketizer RFI on real loss; VT errors).
@@ -393,7 +393,7 @@ final class FramePacer: @unchecked Sendable {
     /// rebinds ONLY when this changes: macOS posts screen-parameter
     /// notifications ~1/s on a ProMotion panel (VRR housekeeping), and the
     /// unconditional rebind reset the cadence base 785 times in a ~12-minute
-    /// run — a standing micro-judder source invisible until the (re)bind
+    /// run - a standing micro-judder source invisible until the (re)bind
     /// breadcrumbs landed. A no-op notification must stay a no-op.
     @MainActor var boundScreenSignature: String?
 
@@ -412,7 +412,7 @@ final class FramePacer: @unchecked Sendable {
     /// FramePacer+FrameRateRange.swift can read/update it.
     @MainActor var appliedFloorHz: Double = .nan
 
-    // Floor re-pin smoothing state (the re-pin-storm fix — see
+    // Floor re-pin smoothing state (the re-pin-storm fix - see
     // `reapplyPreferredRangeIfNeeded`): the EWMA-smoothed refined cadence the
     // clamped candidate is built from, the last re-pin instant (min-dwell),
     // and the last floor MIRRORED to Diag (once-per-change-class demotion).
@@ -440,7 +440,7 @@ final class FramePacer: @unchecked Sendable {
     }
 
     /// Clamp a frame-interval estimate to a sane [1ms, 1s] range. A poisoned
-    /// PTS window (NaN, 0, or an absurd gap) must never feed the `due` gate —
+    /// PTS window (NaN, 0, or an absurd gap) must never feed the `due` gate -
     /// a NaN/0 interval would make `due` evaluate against garbage and could
     /// wedge the present path, exactly the freeze this pass closes.
     static func clampFrameInterval(_ seconds: Double) -> Double {
@@ -454,7 +454,7 @@ final class FramePacer: @unchecked Sendable {
     /// Call once the stream view has a window + screen (from `StreamWindow`'s
     /// show path). The actual `renderer.enqueue` is delegated to the owner's
     /// `willPresent` closure, so the pacer needs no renderer reference of its
-    /// own. Idempotent — a second start with the same view rebinds the link.
+    /// own. Idempotent - a second start with the same view rebinds the link.
     @MainActor
     func start(drivingView view: NSView) {
         os_unfair_lock_lock(&lock)
@@ -470,14 +470,14 @@ final class FramePacer: @unchecked Sendable {
         presentRejectStreak = 0
         loggedStarvation = false
         // Seed the realized-rate window from "now" too, so the first deficit /
-        // floor-violation verdicts measure from start — never from a stale or
+        // floor-violation verdicts measure from start - never from a stale or
         // .nan origin that would mint a giant fake first window.
         rateWindowStartHostTime = now
         rateWindowStartTicks = tickCount
         rateWindowStartReleases = releaseCount
         // D3 (warm re-enable floor seed): a re-enabled pacer is freshly built
         // from the CONFIGURED fps, but its predecessor had already refined the
-        // true content cadence — adopt it so installLink pins the refined
+        // true content cadence - adopt it so installLink pins the refined
         // floor (~174Hz), not the configured 240. See the helper for the WHY.
         adoptStashedRefinedCadenceLocked()
         os_unfair_lock_unlock(&lock)
@@ -487,23 +487,23 @@ final class FramePacer: @unchecked Sendable {
         displayLink = nil
         boundView = view
         installLink(on: view)
-        log.info("FramePacer started — streamInterval=\(self.streamFrameIntervalSeconds * 1000, privacy: .public)ms")
+        log.info("FramePacer started - streamInterval=\(self.streamFrameIntervalSeconds * 1000, privacy: .public)ms")
     }
 
     // The cadence-base reset/re-anchor helpers (`resetCadenceBaseLocked`,
     // `anchorCadenceBaseOnGridLocked`) live in FramePacer+DueGate.swift with the
-    // due-gate that consumes the base they manage — moved there with the
+    // due-gate that consumes the base they manage - moved there with the
     // tick-deficit state additions to keep THIS file under the length limit.
 
     /// Tear the pacer down: stop + invalidate the link and drain the queue.
-    /// Safe to call more than once and from teardown races — after this the
+    /// Safe to call more than once and from teardown races - after this the
     /// tick and any in-flight dispatched release no-op.
     @MainActor
     func stop() {
         // Stash the refined content cadence FIRST (helper takes the lock) so a
         // warm re-enable after a give-up can seed its fresh pacer's floor from
         // the truth (~174Hz) instead of the configured fps (the D3 240.0Hz
-        // warm-re-enable seed bug) — see adoptStashedRefinedCadenceLocked.
+        // warm-re-enable seed bug) - see adoptStashedRefinedCadenceLocked.
         stashRefinedCadenceForWarmReenable()
         os_unfair_lock_lock(&lock)
         running = false
@@ -552,18 +552,18 @@ final class FramePacer: @unchecked Sendable {
         log.info("FramePacer stopped")
         // Mirror to the Diag/LogStore file sink: os_log-only pacer breadcrumbs
         // were structurally invisible postmortem (the glimmer-*.log sink records
-        // only Diag entries — 0 FramePacer lines across whole sessions).
+        // only Diag entries - 0 FramePacer lines across whole sessions).
         Diag.info("FramePacer stopped", "Stream.Pacer")
     }
 
     // The link-rebind recovery actions (`screenDidChange`, `rebuildLink`) and
     // `installLink` itself (the single bind path all of start / screen-change /
-    // rebuild route through) live in FramePacer+Recovery.swift — installLink
+    // rebuild route through) live in FramePacer+Recovery.swift - installLink
     // moved there with the tick-deficit state additions to keep THIS file under
     // the length limit. `tickProxy` setter access for it is below.
 
     /// Stash the @objc tick shim the live link retains. Main-actor setter for
-    /// `installLink` (FramePacer+Recovery.swift) — the stored property itself is
+    /// `installLink` (FramePacer+Recovery.swift) - the stored property itself is
     /// private so nothing else can swap the proxy out from under a live link.
     @MainActor
     func setTickProxy(_ proxy: DisplayLinkProxy?) {
@@ -576,7 +576,7 @@ final class FramePacer: @unchecked Sendable {
     // trim → backoff → due-gate → release core (+ `BackoffBeat` /
     // `DueGateResult`) in FramePacer+DueGate.swift; the watchdog/self-heal
     // recovery actions + snapshots (`LivenessSnapshot` /
-    // `RefreshWindowSnapshot`) in FramePacer+Recovery.swift — each split out
+    // `RefreshWindowSnapshot`) in FramePacer+Recovery.swift - each split out
     // to keep THIS file under the length limit.
 
     // MARK: - Helpers

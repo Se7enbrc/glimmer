@@ -5,8 +5,8 @@
 // keeps under the file-length guardrail.
 //
 // Usage (run via `swift scripts/generate-icons.swift [flag]`):
-//   (none)      light variant — legacy .appiconset output
-//   --dark      dark variant — brighter palette for a dark Dock
+//   (none)      light variant - legacy .appiconset output
+//   --dark      dark variant - brighter palette for a dark Dock
 //   --layered   the 1024px layered PNGs for macOS 26's Icon Composer bundle
 
 import AppKit
@@ -49,7 +49,7 @@ func rgb(_ r: Int, _ g: Int, _ b: Int, _ a: CGFloat = 1.0) -> CGColor {
 // just avoids a force-unwrap.
 let srgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
 
-// Palette — instance-based so light + dark variants swap at CLI time. See the
+// Palette - instance-based so light + dark variants swap at CLI time. See the
 // companion doc for the per-variant color rationale.
 struct Palette {
     let bgTopLeft: CGColor          // background diagonal
@@ -92,7 +92,7 @@ struct Palette {
         smallNotch: rgb(0x2B, 0x1F, 0x6B)
     )
 
-    // Dark variant — brighter, saturated purple; bottom-right pulls brand
+    // Dark variant - brighter, saturated purple; bottom-right pulls brand
     // accent #8110FE; moon palette unchanged. Rationale in the companion doc.
     static let dark = Palette(
         bgTopLeft: rgb(0x2B, 0x10, 0x6E),   // brighter deep purple
@@ -268,7 +268,7 @@ func withBitmapContext(pixels: Int, _ draw: (_ ctx: CGContext, _ dim: CGFloat) -
 // The full-size icon and the two layered exports share these drawing recipes;
 // the single copy keeps the renderers short and provably identical.
 
-/// Atmospheric glows — warm accent (top-right) + cool counter-glow (bottom-left)
+/// Atmospheric glows - warm accent (top-right) + cool counter-glow (bottom-left)
 /// for depth, drawn at the caller's current clip/transform.
 func drawGlows(_ ctx: CGContext, dim: CGFloat, palette: Palette) {
     let accentGlow = linearGradient([
@@ -306,7 +306,7 @@ func drawTopRim(_ ctx: CGContext, dim: CGFloat, palette: Palette) {
     ctx.restoreGState()
 }
 
-/// Glass moon — atmospheric halo, radial body lit from upper-left, lower-right
+/// Glass moon - atmospheric halo, radial body lit from upper-left, lower-right
 /// crescent shading, inset inner shadow, and an upper-left specular highlight.
 /// `palette` supplies the moon colors so light + dark share one recipe.
 func drawMoon(_ ctx: CGContext, dim: CGFloat, palette: Palette) {
@@ -327,7 +327,7 @@ func drawMoon(_ ctx: CGContext, dim: CGFloat, palette: Palette) {
                radius: moonRadius * 1.55,
                innerRadius: moonRadius * 0.85)   // innerCenter defaults to center
     ctx.restoreGState()
-    // Body — radial gradient, light source offset to the upper-left.
+    // Body - radial gradient, light source offset to the upper-left.
     ctx.saveGState()
     ctx.addPath(moonPath)
     ctx.clip()
@@ -344,7 +344,7 @@ func drawMoon(_ ctx: CGContext, dim: CGFloat, palette: Palette) {
                                     y: moonCenter.y + moonRadius * 0.35),
                innerRadius: moonRadius * 0.08)
     ctx.restoreGState()
-    // Crescent shading — cool wash on the lower-right for the 3D read.
+    // Crescent shading - cool wash on the lower-right for the 3D read.
     ctx.saveGState()
     ctx.addPath(moonPath)
     ctx.clip()
@@ -382,7 +382,7 @@ func drawMoon(_ ctx: CGContext, dim: CGFloat, palette: Palette) {
     ctx.restoreGState()
 }
 
-/// Sparkles — for each layout point: an outer light halo, a filled twinkle
+/// Sparkles - for each layout point: an outer light halo, a filled twinkle
 /// body, and a bright specular pop in the dead center. `starCore`/`starHalo` are
 /// the palette's core + outer-fade colors so each variant's tail matches.
 func drawSparkles(_ ctx: CGContext, dim: CGFloat, starCore: CGColor, starHalo: CGColor) {
@@ -445,7 +445,7 @@ func renderSmallIcon(size: Int) -> Data? {
         ctx.clip()
         ctx.setFillColor(palette.smallBg)
         ctx.fill(rect)
-        // Moon: ~50% canvas, dead center, FLAT fill — obviously a moon, nothing else.
+        // Moon: ~50% canvas, dead center, FLAT fill - obviously a moon, nothing else.
         let moonRadius = dim * 0.30
         let moonCenter = CGPoint(x: dim * 0.5, y: dim * 0.5)
         ctx.setFillColor(palette.smallMoon)
@@ -493,7 +493,7 @@ func renderIcon(size: Int) -> Data? {
                    end: CGPoint(x: dim, y: 0))
         drawGlows(ctx, dim: dim, palette: palette)
 
-        // Layers 2–4: glass moon, sparkles, top rim highlight.
+        // Layers 2-4: glass moon, sparkles, top rim highlight.
         drawMoon(ctx, dim: dim, palette: palette)
         drawSparkles(ctx, dim: dim, starCore: palette.starCore, starHalo: palette.starHalo)
         drawTopRim(ctx, dim: dim, palette: palette)
@@ -512,7 +512,7 @@ func renderIcon(size: Int) -> Data? {
 
 // MARK: - Layered rendering (macOS 26 .icon bundle)
 //
-// Two 1024×1024 raster layers (NO squircle clip — Tahoe masks them) on top of
+// Two 1024×1024 raster layers (NO squircle clip - Tahoe masks them) on top of
 // icon.json's flat `fill`: glows + rim → background overlay, moon + sparkles →
 // foreground. Full bundle layout in the companion doc.
 
@@ -565,7 +565,7 @@ if isLayered {
     // Layered mode: the three PNGs the Tahoe .icon bundle references (see the
     // companion doc for the bundle layout).
     try? FileManager.default.createDirectory(at: layeredOutputDir, withIntermediateDirectories: true)
-    print("Generating layered icon assets (1024×1024) into \(layeredOutputDir.path)…")
+    print("Generating layered icon assets (1024×1024) into \(layeredOutputDir.path)...")
 
     let label = "1024×1024"
     writeLayer(renderBackgroundOverlay(palette: .light), named: "Background-Light.png", sizeLabel: label, into: layeredOutputDir)
@@ -578,7 +578,7 @@ if isLayered {
 
 try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
 
-print("Generating \(isDark ? "DARK" : "LIGHT") variant…")
+print("Generating \(isDark ? "DARK" : "LIGHT") variant...")
 for entry in sizes {
     // <=64px (the 16/32pt @1x/@2x slots) gets the flat small-size renderer;
     // larger sizes get the full design. See the companion doc.

@@ -8,7 +8,7 @@ import SwiftUI
 /// the app-menu command and the menu-bar dropdown.
 ///
 /// The whole file is gated on `canImport(Sparkle)` so Glimmer still builds before
-/// the Sparkle SPM package is linked — the updater and its menu items simply don't
+/// the Sparkle SPM package is linked - the updater and its menu items simply don't
 /// exist until the package is added. Feed URL + ed25519 public key live in
 /// Info.plist (SUFeedURL / SUPublicEDKey); updates are published prompt-free by
 /// `make release-publish`.
@@ -23,7 +23,7 @@ final class UpdaterController {
         // Sparkle only offers an update when the appcast's build number is
         // STRICTLY greater than the running build's. So a dev build OLDER than a
         // release grabs it, and a dev build at/after the latest release stays
-        // silent until the next one — exactly the desired behavior, for free.
+        // silent until the next one - exactly the desired behavior, for free.
         controller = SPUStandardUpdaterController(
             startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     }
@@ -33,7 +33,7 @@ final class UpdaterController {
 
 /// Tracks Sparkle's KVO-observable `canCheckForUpdates` as Observation-tracked
 /// state so the menu command can grey out while a check is already running.
-/// Modern Observation + `NSKeyValueObservation` — no Combine, matching the app's
+/// Modern Observation + `NSKeyValueObservation` - no Combine, matching the app's
 /// `@Observable` model style.
 @MainActor
 @Observable
@@ -50,7 +50,7 @@ final class UpdateAvailability {
     }
 }
 
-/// The "Check for Updates…" menu command. Disables itself mid-check via the
+/// The "Check for Updates..." menu command. Disables itself mid-check via the
 /// observed `UpdateAvailability` (a plain Button can't reflect that state).
 struct CheckForUpdatesView: View {
     private let updater: SPUUpdater
@@ -62,7 +62,7 @@ struct CheckForUpdatesView: View {
     }
 
     var body: some View {
-        Button("Check for Updates…") { updater.checkForUpdates() }
+        Button("Check for Updates...") { updater.checkForUpdates() }
             .disabled(!availability.canCheckForUpdates)
     }
 }

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# publish-release.sh — publish a Sparkle auto-update for the just-built, notarized
+# publish-release.sh - publish a Sparkle auto-update for the just-built, notarized
 # Glimmer bundle. PROMPT-FREE from any session: the EdDSA key comes from the
 # signing creds file (scripts/signing-creds.sh), GitHub from the gh token. Called
 # by `make release-publish` AFTER `make dist` (so the bundle is Developer-ID
@@ -23,15 +23,15 @@ TAG="$SHORT"
 ASSET_URL="https://github.com/$REPO/releases/download/$TAG/Glimmer-$SHORT.zip"
 APPCAST="appcast.xml"
 
-[ -d "$APP" ] || { echo "ERR: app bundle not found at $APP — run via 'make release-publish'" >&2; exit 1; }
+[ -d "$APP" ] || { echo "ERR: app bundle not found at $APP - run via 'make release-publish'" >&2; exit 1; }
 "$CREDS" get SPARKLE_ED_PRIVATE_KEY >/dev/null || {
-	echo "ERR: SPARKLE_ED_PRIVATE_KEY missing from $($CREDS path) — run 'make sparkle-keys' once" >&2; exit 1; }
+	echo "ERR: SPARKLE_ED_PRIVATE_KEY missing from $($CREDS path) - run 'make sparkle-keys' once" >&2; exit 1; }
 
-echo "▶ Zipping notarized bundle for Sparkle…"
+echo "▶ Zipping notarized bundle for Sparkle..."
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
-echo "▶ EdDSA-signing the update (prompt-free, key from creds file)…"
+echo "▶ EdDSA-signing the update (prompt-free, key from creds file)..."
 SIG_LINE="$("$CREDS" get SPARKLE_ED_PRIVATE_KEY | "$TOOLS/sign_update" --ed-key-file - "$ZIP")"
 ED_SIG="$(printf '%s' "$SIG_LINE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
 LENGTH="$(printf '%s' "$SIG_LINE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
@@ -49,7 +49,7 @@ else
 fi
 echo "  ✓ release published"
 
-echo "▶ Updating the Pages appcast…"
+echo "▶ Updating the Pages appcast..."
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 gh api "repos/$REPO/contents/$APPCAST" -H "Accept: application/vnd.github.raw" > "$TMP/appcast.xml"
 SHA="$(gh api "repos/$REPO/contents/$APPCAST" --jq '.sha')"
@@ -61,4 +61,4 @@ jq -n --arg m "appcast: Glimmer $SHORT" --arg c "$CONTENT" --arg s "$SHA" \
 	'{message:$m, content:$c, sha:$s}' \
 	| gh api -X PUT "repos/$REPO/contents/$APPCAST" --input - --jq '"  ✓ appcast → " + .commit.html_url'
 
-echo "✅ Published Glimmer $SHORT — Sparkle clients see it within a day (or now via Check for Updates…)."
+echo "✅ Published Glimmer $SHORT - Sparkle clients see it within a day (or now via Check for Updates...)."

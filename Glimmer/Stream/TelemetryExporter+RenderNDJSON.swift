@@ -9,7 +9,7 @@
 //
 //  Hand-built (no Codable) so the field order is stable + readable in a tail and
 //  nil fields are simply omitted. Every value is a number, a bool, the opaque
-//  session id, or a label (wifi ssid/band, build SHA/date) — nothing that could
+//  session id, or a label (wifi ssid/band, build SHA/date) - nothing that could
 //  be a secret.
 //
 
@@ -54,7 +54,7 @@ extension TelemetryRenderer {
         builder.fields.append("\"ts\":\"\(snap.wallClockISO8601)\"")
         builder.fields.append("\"session\":\"\(snap.sessionId)\"")
         // Identity: which Mac (`client`) streaming from which Sunshine PC
-        // (`host`) — mirrors the Prometheus label pair so the NDJSON splits the
+        // (`host`) - mirrors the Prometheus label pair so the NDJSON splits the
         // same way offline.
         builder.addString("client", TelemetryRenderer.clientNameRaw)
         builder.addString("host", snap.serverName)
@@ -82,7 +82,7 @@ extension TelemetryRenderer {
     /// P2 SESSION-LIFECYCLE fields on the per-second line: handshake breakdown
     /// legs, reconnect count + disconnect reason, IDR/RFI round-trip counts + last
     /// RTT, and the corruption heuristic total + per-second rate. (The handshake
-    /// ALSO gets a one-shot explicit `event:"handshake"` line — see the exporter.)
+    /// ALSO gets a one-shot explicit `event:"handshake"` line - see the exporter.)
     /// Numbers, the reason label, nil legs omitted.
     private static func ndjsonSessionLifecycle(_ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot) {
         if let handshake = snap.handshake {
@@ -97,7 +97,7 @@ extension TelemetryRenderer {
         builder.addString("disconnect_reason_label", snap.disconnectReason.label)
         if let idr = snap.idrRoundTrip {
             // EXPLICIT-IDR-only (RFIs ride rfi_total and don't arm round-trips)
-            // — see IdrRoundTripSnapshot.
+            // - see IdrRoundTripSnapshot.
             builder.addCount("idr_round_trip_request_total", idr.requestsTotal)
             builder.addCount("idr_round_trip_matched_total", idr.matchedTotal)
             builder.add("idr_round_trip_last_ms", idr.lastRoundTripMs)
@@ -124,7 +124,7 @@ extension TelemetryRenderer {
         builder.add("audio_fec_recovery_rate", audio.fecRecoveryRate)
         builder.add("audio_buffer_fill_ms", audio.bufferFillMs)
         builder.add("audio_buffer_fill_min_ms", audio.bufferFillMinMs)
-        // The adaptive target the fill is steered toward — fill vs target is
+        // The adaptive target the fill is steered toward - fill vs target is
         // the cushion judge (base 30 / cap 150 / ceiling 190).
         builder.add("audio_playout_target_ms", extras.audioPlayoutTargetMs)
         builder.addCount("audio_underrun_total", audio.underrunTotal)
@@ -137,14 +137,14 @@ extension TelemetryRenderer {
         builder.add("audio_underruns_per_s", audio.underrunsPerSecond)
         builder.add("audio_overruns_per_s", audio.overrunsPerSecond)
         builder.add("audio_clock_drift_ms", audio.audioClockDriftMs)
-        // av_skew_ms — the true CROSS-STREAM A/V alignment, deliberately next
+        // av_skew_ms - the true CROSS-STREAM A/V alignment, deliberately next
         // to the wall-clock drift it must never be confused with. SIGN: + =
         // audio late (behind video). Derived per the formerly-deferred recipe
         // (both streams ride the host capture clock; the two hot-path stores
-        // now exist — last-presented video RTP at the renderer-enqueue site,
+        // now exist - last-presented video RTP at the renderer-enqueue site,
         // last-scheduled audio RTP at the decode hand-off) with the buffer
         // fill converting schedule-head to playhead. Pair-anchored epoch: a
-        // small constant bias rides along — trend and steps are the signal.
+        // small constant bias rides along - trend and steps are the signal.
         // Absent (not 0) while either stream is dark/stale or re-anchoring;
         // rebase_total makes every mid-session re-baseline countable. THIS
         // call is the accumulating one (the scorecard percentiles feed at
@@ -153,7 +153,7 @@ extension TelemetryRenderer {
             bufferFillMs: audio.bufferFillMs, accumulate: true))
         builder.addCount("av_skew_rebase_total", AudioVideoSkewStore.shared.rebaseTotal)
         // The live learned LOSS FLOOR under the playout target (the decay
-        // limit-cycle fix) — absent until first learned, so a floor-held
+        // limit-cycle fix) - absent until first learned, so a floor-held
         // target is legible against the evidence holding it.
         let cushionFloorMs = AudioCushionTelemetry.shared.floorMs
         builder.add("audio_cushion_floor_ms", cushionFloorMs > 0 ? cushionFloorMs : nil)
@@ -235,7 +235,7 @@ extension TelemetryRenderer {
         // once-per-type log suppression would otherwise hide).
         builder.addCount("ctrl_ignored_total", extras.ctrlIgnoredTotal)
         // Per-socket GAP-EVENT totals (video=net_ / audio_ / enet_ × the
-        // 20/50/100ms thresholds): the honest link-health counters — the
+        // 20/50/100ms thresholds): the honest link-health counters - the
         // jitter EWMA and the windowed gap gauges above are provably blind to
         // rare 40-110ms blips. All three sockets ride this one section so the
         // NIC-doze discriminator ("all sockets gapped together" vs one path)
@@ -244,7 +244,7 @@ extension TelemetryRenderer {
         // ACK, measured in handleAcknowledge), not raw arrival gaps: the
         // control channel is quiet by design between messages (its idle cadence
         // otherwise reads as a flood of fake >100ms "gaps" on a clean link),
-        // and arrival-gap gating was blind during input-idle — exactly where
+        // and arrival-gap gating was blind during input-idle - exactly where
         // NIC doze lives. ACK-delay data is the comparable "host answered late"
         // leg beside net_/audio_.
         builder.addCount("net_gaps_over_20ms_total", extras.videoGapOver20msTotal)
@@ -264,7 +264,7 @@ extension TelemetryRenderer {
         builder.addInt("pacing_depth", snap.pacingQueueDepth)
         builder.addInt("pacing_target_depth", snap.pacingAdaptiveTargetDepth)
         builder.addInt("decode_backlog", snap.inFlightDecodeBacklog)
-        // Pacer tick/release rates — the direct display-link-callback-miss
+        // Pacer tick/release rates - the direct display-link-callback-miss
         // measure (a ticks/s deficit below the refresh Hz is missed callbacks).
         builder.add("pacer_ticks_per_s", extras.pacerTicksPerSecond)
         builder.add("pacer_releases_per_s", extras.pacerReleasesPerSecond)
@@ -291,7 +291,7 @@ extension TelemetryRenderer {
         builder.addCount("input_idle_to_active_total", snap.inputIdleToActiveTotal)
         builder.add("input_since_last_ms", snap.timeSinceLastInputMs)
         // Host rumble RECEIVED at dispatch (pre-guard) + the invalid-drop
-        // sibling — the shipped feature's volume signal, riding the input
+        // sibling - the shipped feature's volume signal, riding the input
         // section it correlates with. events − dropped = deposited.
         builder.addCount("rumble_events_total", extras.rumbleEventTotal)
         builder.add("rumble_events_per_s", extras.rumbleEventsPerSecond)
@@ -343,7 +343,7 @@ extension TelemetryRenderer {
             // IOReport bring-up #2 (T2 export keys): package watts + GPU
             // residency (0..100, unlike the 0..1 cluster fields above) off the
             // same once-per-tick sampler delta the prom family reads. A nil
-            // gauge (group unavailable / first-tick baseline) omits its key —
+            // gauge (group unavailable / first-tick baseline) omits its key -
             // fail-quiet, absent ≠ 0.
             builder.add("package_power_w", cluster.packagePowerW)
             builder.add("gpu_residency_percent", cluster.gpuResidencyPercent)
@@ -363,13 +363,13 @@ extension TelemetryRenderer {
 
     /// LINK fields: the stream ROUTE pair first, then the Wi-Fi radio (signal
     /// 3). Two truths, deliberately distinct keys:
-    ///   * stream_link / stream_if — the interface the stream's packets
+    ///   * stream_link / stream_if - the interface the stream's packets
     ///     actually traverse (StreamRouteProbe). THE field that gates the
     ///     env-signal layer; "wired" here with wifi_link:"wifi" below is the
     ///     normal docked-laptop case, not a contradiction.
-    ///   * wifi_* — the ASSOCIATED RADIO's state, whether or not the stream
+    ///   * wifi_* - the ASSOCIATED RADIO's state, whether or not the stream
     ///     rides it (a wired session still reads wifi_link:"wifi" on every
-    ///     row, truthfully — about the radio). Kept as-is for continuity.
+    ///     row, truthfully - about the radio). Kept as-is for continuity.
     /// Radio physics + ssid/band only when associated; addString skips nil.
     private static func ndjsonLink(
         _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
@@ -378,7 +378,7 @@ extension TelemetryRenderer {
             builder.addString("stream_link", routeSnapshot.linkLabel)
             builder.addString("stream_if", routeSnapshot.interfaceName)
         }
-        // ENV-SIGNAL shadow state + the conditional-keepalive judge fields —
+        // ENV-SIGNAL shadow state + the conditional-keepalive judge fields -
         // they ride the link section because the link IS their evidence.
         // Transitions additionally get their own `event:"env_state"` row with
         // the full evidence vector (see EnvSignalController).
@@ -435,25 +435,25 @@ extension TelemetryRenderer {
 
     /// ROLLING 60s latency NDJSON fields: the same p50/p95/p99 derivation as
     /// `ndjsonLatencyFields`, but over the 60s windowed difference the exporter
-    /// folds per tick — so the offline forensics can tell "is bad" from "was
+    /// folds per tick - so the offline forensics can tell "is bad" from "was
     /// bad" without Grafana's `rate()` windows. Cumulative fields stay; only
     /// the five `lat_*` pipeline stages and the headline glass-to-glass get the
     /// `_60s` variant to bound row bloat. A stage with zero observations in the
-    /// window emits nothing (absent, not a stale number — a suppressed/gated
+    /// window emits nothing (absent, not a stale number - a suppressed/gated
     /// minute stays honest). Empty when the rig has no data this tick.
     ///
     /// READ SEMANTICS: (1) after presents stop,
     /// the windowed values hold near their last numbers for up to ~60s (the
-    /// window still covers an AGING population) before the keys go absent —
+    /// window still covers an AGING population) before the keys go absent -
     /// `frames_in_window_60s` makes that staleness machine-detectable: a
     /// shrinking count means the percentiles describe ever-older frames; (2)
-    /// presented-frame percentiles are SURVIVOR-BIASED — dropped frames never
+    /// presented-frame percentiles are SURVIVOR-BIASED - dropped frames never
     /// enter the histograms, so a stall barely moves them. Alert on tick
     /// deficit / late-drop deltas, never on percentile flatness.
     static func ndjsonRollingLatencyFields(_ extras: TelemetrySnapshot.Extras) -> [String] {
         guard let rolling = extras.latencyRolling60s else { return [] }
         var fields: [String] = []
-        // Emitted even at 0 (unlike the stages) — 0 is exactly the signal that
+        // Emitted even at 0 (unlike the stages) - 0 is exactly the signal that
         // distinguishes "stale window" from "live but quiet". endToEnd is the
         // per-present spine, so its count IS the presented-frames-in-window.
         fields.append("\"frames_in_window_60s\":\(rolling.endToEnd.observationCount)")
@@ -476,7 +476,7 @@ extension TelemetryRenderer {
     }
 
     /// Escape a string for a JSON value (NDJSON). Backslash, double-quote, and
-    /// control chars an SSID or label could carry. Kept minimal — the rig only
+    /// control chars an SSID or label could carry. Kept minimal - the rig only
     /// ever emits ASCII labels (SSIDs, band names) plus the build SHA/date.
     static func jsonStringEscape(_ value: String) -> String {
         var out = ""
@@ -500,7 +500,7 @@ extension TelemetryRenderer {
     }
 
     /// JSON number with the same integer/decimal discipline as the Prometheus
-    /// formatter — avoids exponent notation that some NDJSON readers choke on.
+    /// formatter - avoids exponent notation that some NDJSON readers choke on.
     static func jsonNumber(_ value: Double) -> String {
         if value == value.rounded() && abs(value) < 1e15 {
             return String(Int64(value))
@@ -513,12 +513,12 @@ extension TelemetryRenderer {
 
 /// Process-level CPU% (sum of thread CPU usage, in percent of one core) + live
 /// thread count, via the Mach task threads port. Sampled at 1Hz from the
-/// exporter — cheap (one `task_threads` + per-thread `thread_info`); not on any
+/// exporter - cheap (one `task_threads` + per-thread `thread_info`); not on any
 /// hot path. Mirrors the approach `MacSystemStats` uses for system CPU but
 /// scoped to THIS process so the rig measures Glimmer's own footprint.
 enum ProcessMetrics {
 
-    /// Map `ProcessInfo.ThermalState` to a 0…3 ordinal (nominal/fair/serious/
+    /// Map `ProcessInfo.ThermalState` to a 0...3 ordinal (nominal/fair/serious/
     /// critical) so it plots as a gauge and a Grafana threshold (≥2 = serious) is
     /// trivial. Unknown future cases map to 0 (nominal) defensively.
     static func thermalOrdinal(_ state: ProcessInfo.ThermalState) -> Int {
@@ -550,7 +550,7 @@ enum ProcessMetrics {
         }
 
         // THREAD_BASIC_INFO_COUNT is a C macro (struct size in integer_t units),
-        // not bridged to Swift — derive it from the type layout.
+        // not bridged to Swift - derive it from the type layout.
         let basicInfoCount = mach_msg_type_number_t(
             MemoryLayout<thread_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
         var totalCpu: Double = 0

@@ -54,8 +54,8 @@ extension StreamSession {
         // present-suppression state. The decoder uses it to stop
         // misreading the intentional non-present backlog as packet loss
         // (no IDR/RFI spam while unfocused) and to flush+resync on
-        // refocus. Wrapping here keeps the single source of truth — the
-        // window's key/occlusion observers — driving both consumers.
+        // refocus. Wrapping here keeps the single source of truth - the
+        // window's key/occlusion observers - driving both consumers.
         win.onBackgroundedChanged = { [weak dec] backgrounded in
             dec?.setPresentSuppressed(backgrounded)
             onBackgroundedChanged?(backgrounded)
@@ -86,7 +86,7 @@ extension StreamSession {
         // First decoded frame → fade the (currently invisible) stream
         // window in. Without this the window sits at alphaValue 0 from
         // show() time and only the launcher (dimmed to 40%) is visible.
-        // (This closure is EXTENDED below — after the bridge exists — to
+        // (This closure is EXTENDED below - after the bridge exists - to
         // ALSO yield `.firstFrame` so a decoded frame promotes the UI to
         // .streaming even if the one-shot .connectionEstablished edge was
         // lost. See the `onFirstDecodedFrame` re-wire in the post-bridge
@@ -102,7 +102,7 @@ extension StreamSession {
         }
         // Present-path last-resort self-heal: when the renderer
         // hard-latches `.status == .failed` and a flush won't clear it,
-        // the decoder asks for a fresh AVSampleBufferDisplayLayer —
+        // the decoder asks for a fresh AVSampleBufferDisplayLayer -
         // rebuild it, re-point the decoder, re-apply colorspace/EDR.
         dec.rebuildDisplayLayerHook = { [weak win, weak dec] in
             guard let win, let dec else { return nil }
@@ -114,7 +114,7 @@ extension StreamSession {
         // Capture-sys-keys is read from config at attach time and
         // captured by the InputForwarder for the lifetime of the
         // session. The toggle in Settings doesn't take effect until
-        // the next stream starts — changing it mid-stream is
+        // the next stream starts - changing it mid-stream is
         // intentionally a no-op because mid-stream behavior changes
         // for system keys would surprise the user (Cmd-Tab suddenly
         // stops working mid-game, etc.).
@@ -132,7 +132,7 @@ extension StreamSession {
         }
         win.show()
         // Stand up the display-clock frame pacer now that the window
-        // is on screen with a real NSScreen — bind its CADisplayLink to
+        // is on screen with a real NSScreen - bind its CADisplayLink to
         // the stream content view's display so frames present on the
         // panel's true vsync cadence instead of the instant VT decodes
         // them. Seed the cadence from the negotiated stream fps; the
@@ -170,7 +170,7 @@ extension StreamSession {
         }
         // Stats-overlay toggle. Flips a MainActor-isolated bool on the
         // VideoDecoder (read by the render loop) but intentionally does
-        // NOT touch `MoonlightManager.showStreamStats` — the toggle is
+        // NOT touch `MoonlightManager.showStreamStats` - the toggle is
         // session-scoped so the user's persisted preference is what the
         // next stream starts with. Capture the decoder weakly so the
         // InputForwarder's closure doesn't extend its lifetime past
@@ -178,24 +178,24 @@ extension StreamSession {
         setup.1.onStatsHotkey = { [weak decoder = setup.2] in
             decoder?.toggleStatsOverlay()
         }
-        // Bookmark chord (signal 4 — "that felt bad"). Client-only: the chord
+        // Bookmark chord (signal 4 - "that felt bad"). Client-only: the chord
         // is consumed in the input path; this just records the marker into the
         // telemetry. `telemetryExporter` is nil unless telemetry is opt-in ON
         // (the exporter is started later in startTelemetryExporter), so when
-        // off this is a harmless no-op — the chord is still swallowed (never
+        // off this is a harmless no-op - the chord is still swallowed (never
         // forwarded to the host), it simply records nothing. Resolved at press
         // time so it picks up the exporter once it exists.
         setup.1.onBookmarkHotkey = { [weak self] in
             // `telemetryExporter` is actor-isolated, so hop onto the session
             // actor to read it. The marker timestamp is taken inside
             // `recordBookmark` (connect-relative), and a "felt bad" marker
-            // tolerates the few-ms hop — the user's perception spans hundreds
+            // tolerates the few-ms hop - the user's perception spans hundreds
             // of ms. Mirrors how `onQuitHotkey` hops to `stop()`.
             Task { await self?.recordTelemetryBookmark() }
         }
         // Watch effective HDR-active state. Decoder fires this on the
         // main actor when the layer transitions to/from the PQ pipeline.
-        // Yield directly through the bridge's continuation — no actor hop
+        // Yield directly through the bridge's continuation - no actor hop
         // needed; AsyncStream.Continuation is Sendable + ordered.
         setup.2.onHDRActiveChanged = { [weak bridge] active in
             bridge?.eventContinuation?.yield(.hdrActive(active))
@@ -205,8 +205,8 @@ extension StreamSession {
         // the bridge + its event continuation exist. This is the
         // belt-and-suspenders for the connecting→streaming transition:
         // `.connectionEstablished` is a ONE-SHOT edge fired from inside the
-        // synchronous startConnection — before the consumer's for-await loop
-        // is necessarily draining — so if it is ever torn/dropped the
+        // synchronous startConnection - before the consumer's for-await loop
+        // is necessarily draining - so if it is ever torn/dropped the
         // launcher would stay stuck at "Connecting" forever even though
         // video is on screen. A decoded frame is GROUND TRUTH that the
         // stream is live, and unlike the established edge it CANNOT be lost

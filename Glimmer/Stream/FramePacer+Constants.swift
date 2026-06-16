@@ -1,12 +1,12 @@
 //
 //  FramePacer+Constants.swift
 //
-//  The pacer's static tuning constants — FIFO caps, the adaptive jitter-buffer
+//  The pacer's static tuning constants - FIFO caps, the adaptive jitter-buffer
 //  depth schedule (baseline/cap/dead-zone/decay), the starvation failsafe
 //  thresholds, and the present-loop backoff lateness. Split out of
 //  FramePacer.swift to keep that file under the length limit; these are
 //  module-internal `static let`s consumed across the pacer's extension files
-//  (DueGate / AdaptiveDepth / Submit). Pure values — no logic.
+//  (DueGate / AdaptiveDepth / Submit). Pure values - no logic.
 //
 
 import Foundation
@@ -16,16 +16,16 @@ extension FramePacer {
     /// Hard cap on the jitter/reorder FIFO. One slot above the adaptive target
     /// cap (`maxTargetDepth` = 5) so a saturated buffer under sustained jitter
     /// still has in-flight slack. On overflow the OLDEST (most stale) frame is
-    /// dropped — a real-time stream wants the freshest pixels, not a backlog.
+    /// dropped - a real-time stream wants the freshest pixels, not a backlog.
     /// Stays well under VideoDecoder.maxInFlightDecodes (fps-scaled, ~250ms, floor
     /// 15) so the adaptive buffer can never overrun the decode pool. On a clean link the
     /// queue rides at the depth-1 rest state; this cap only matters under the
     /// genuine measured-jitter (wifi) case where the buffer grows to absorb it.
     static let maxQueuedFrames = 6
 
-    /// Percentile (0…1) of the PTS-delta window used as the SKIP-ROBUST cadence
+    /// Percentile (0...1) of the PTS-delta window used as the SKIP-ROBUST cadence
     /// estimate (`skipRobustInterval`). The lower quartile reads the no-skip
-    /// cluster — the true per-frame interval — instead of the median, which
+    /// cluster - the true per-frame interval - instead of the median, which
     /// skipped frames (delivery dips / loss) drag UP by counting their multi-
     /// interval gaps as the cadence. p25 stays robust until >~75% of frames are
     /// skipped (catastrophic delivery) while a genuine uniform rate change still
@@ -39,9 +39,9 @@ extension FramePacer {
     /// the lower-quartile estimate is meaningful. ~8 frames ≈ 67ms at 120fps.
     static let minCadenceRefineSamples = 8
 
-    /// Baseline (clean-link) REST depth. On a clean link the pacer rests here —
+    /// Baseline (clean-link) REST depth. On a clean link the pacer rests here -
     /// one frame of slack, essentially direct enqueue (output_to_present
-    /// ~0.1–0.3ms, the direct path's measured ideal): at fps<refresh the queue
+    /// ~0.1-0.3ms, the direct path's measured ideal): at fps<refresh the queue
     /// already sits at ~1 because frames arrive slower than vsyncs, so depth-1 is
     /// the NATURAL rest state and adds zero latency (the layer re-shows the last
     /// frame on idle ticks). This is the FLOOR the adaptive target decays back to
@@ -52,7 +52,7 @@ extension FramePacer {
 
     /// Upper bound on the adaptive target depth under SUSTAINED MEASURED jitter.
     /// 5 frames is the jitter ceiling for the genuine lossy-link (wifi ~22ms)
-    /// case — deep enough to absorb a real reorder-jitter envelope. Because the
+    /// case - deep enough to absorb a real reorder-jitter envelope. Because the
     /// floor is now 1 and grow keys off the smoothed RFC-3550 recv-jitter through
     /// a 3ms dead-zone, this cap is ONLY ever reached under real sustained
     /// measured jitter; a clean link never leaves depth 1. Kept under
@@ -78,7 +78,7 @@ extension FramePacer {
     static let targetShrinkInterval = 0.25
 
     /// POST-GAP LENIENCY. Consecutive empty ticks that mark a real delivery GAP
-    /// (~3 ≈ 25ms@120Hz) — past a healthy depth-1 beat's jitter, so ordinary
+    /// (~3 ≈ 25ms@120Hz) - past a healthy depth-1 beat's jitter, so ordinary
     /// motion-bunches (no empty stretch) don't trip it; only a true >50ms wifi gap.
     /// The discriminator the old blanket "queue ≤ target" leniency lacked.
     static let gapRecoveryTickThreshold = 3
@@ -90,7 +90,7 @@ extension FramePacer {
 
     /// After this many consecutive ticks with frames queued but nothing
     /// released, the in-pacer failsafe re-seeds the cadence base to force a
-    /// release. ~8 ticks ≈ 33ms at 240Hz / 133ms at 60Hz — well clear of the
+    /// release. ~8 ticks ≈ 33ms at 240Hz / 133ms at 60Hz - well clear of the
     /// healthy fps<refresh case (where idle ticks have an EMPTY-DUE queue, not
     /// a wedged non-empty one) but fast enough to break a real wedge long
     /// before the external watchdog's ~300ms window.
@@ -100,7 +100,7 @@ extension FramePacer {
     /// allowed to run. With the rest depth now 1, the grow-hold is structurally
     /// OFF on a clean link (it keys on `adaptiveTargetDepth > targetDepth`, and a
     /// clean link rests at `adaptiveTargetDepth == targetDepth == 1`), so this
-    /// startup gate is MOOT on a clean link — there is no hold to suppress. It is
+    /// startup gate is MOOT on a clean link - there is no hold to suppress. It is
     /// retained as a belt-and-suspenders guard for the lossy case: if real
     /// measured jitter raises the target while the PTS-median cadence is still
     /// converging (the first ~30 frames ≈ ~0.25s at 120fps), the normal
@@ -113,15 +113,15 @@ extension FramePacer {
     static let starvationLogTicks = 4
 
     /// PRESENT-LOOP BACKOFF threshold (in stream-frame intervals). When the head
-    /// frame is HOPELESSLY late — its display-time lateness exceeds this many
-    /// stream intervals AND a fresher frame is queued behind it — the tick stops
+    /// frame is HOPELESSLY late - its display-time lateness exceeds this many
+    /// stream intervals AND a fresher frame is queued behind it - the tick stops
     /// trying to walk the normal due gate over a doomed stale head. Instead it
     /// drops the whole backlog to the single newest frame, presents THAT, and
     /// yields. This kills the busy-spin where the present path churns doomed
-    /// late frames every tick (measured on a lossy wifi link: 80–96% CPU
+    /// late frames every tick (measured on a lossy wifi link: 80-96% CPU
     /// while fps_rendered→0). 3 intervals is well past the half-vsync due slack and the
     /// +1 adaptive trim, so a normally-paced or jitter-buffered stream NEVER trips
-    /// it — only a genuinely-behind present path (the throttled-callback pile-up)
+    /// it - only a genuinely-behind present path (the throttled-callback pile-up)
     /// reaches it, and it catches up to NOW in one tick rather than over many.
     static let presentBackoffLatenessIntervals = 3.0
 }

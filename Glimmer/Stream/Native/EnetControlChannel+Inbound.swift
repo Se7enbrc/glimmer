@@ -63,7 +63,7 @@ extension EnetControlChannel {
         }
     }
 
-    /// Per-socket GAP-EVENT accumulation — the ENet leg of the 20/50/100ms
+    /// Per-socket GAP-EVENT accumulation - the ENet leg of the 20/50/100ms
     /// family (cumulative: a 100ms gap counts in all three). Completes the
     /// video/audio/ENet trio that makes "all sockets gapped together" (NIC
     /// doze) vs "one path stalled" a single NDJSON-row query instead of a
@@ -72,8 +72,8 @@ extension EnetControlChannel {
     /// Dispatch one ENet command parsed off the inbound datagram. Returns true
     /// to keep parsing subsequent coalesced commands, false to stop parsing this
     /// datagram (truncated body, unknown command, or DISCONNECT). Split out of
-    /// `onDatagram` so each unit stays focused; the per-command behaviour —
-    /// body-length advance, ACK emission, and dispatch — is unchanged.
+    /// `onDatagram` so each unit stays focused; the per-command behaviour -
+    /// body-length advance, ACK emission, and dispatch - is unchanged.
     private func handleEnetCommand(
         command: UInt8,
         commandByte: UInt8,
@@ -104,12 +104,12 @@ extension EnetControlChannel {
             // u16 dataLength + inline bytes (advancing the reader correctly
             // so multi-command datagrams stay in sync), ACK it, then decrypt
             // + dispatch. This is the path the old `default: return` silently
-            // dropped — the literal "onDatagram bails on unknown commands".
+            // dropped - the literal "onDatagram bails on unknown commands".
             guard let dataLength = reader.u16BE(),
                   let inner = reader.take(Int(dataLength)) else {
                 return false // truncated; can't safely continue parsing
             }
-            // ACK UNCONDITIONALLY — including stale/duplicates. Real enet
+            // ACK UNCONDITIONALLY - including stale/duplicates. Real enet
             // returns a dummy command for a discarded duplicate precisely so
             // it still gets ACKed (enet_peer_queue_incoming_command's
             // discardCommand path); withholding the ACK would keep the host
@@ -119,8 +119,8 @@ extension EnetControlChannel {
             // Per-channel staleness gate (see lastDispatchedInboundRelSeq):
             // dispatch only a STRICTLY-NEWER reliable seq. A host retransmit
             // (lost client ACK) or UDP reorder of an already-superseded
-            // command — the rumble(x,y) that would land after motors-off and
-            // latch the pad buzzing — is dropped here instead of dispatched.
+            // command - the rumble(x,y) that would land after motors-off and
+            // latch the pad buzzing - is dropped here instead of dispatched.
             guard Self.reliableSeqIsNewer(relSeq,
                                           than: lastDispatchedInboundRelSeq[channelID] ?? 0) else {
                 if !loggedFirstStaleReliableDrop {
@@ -128,7 +128,7 @@ extension EnetControlChannel {
                     Diag.info("ENet dropped stale/duplicate inbound reliable "
                         + "(ch \(channelID) relSeq \(relSeq), last dispatched "
                         + "\(lastDispatchedInboundRelSeq[channelID] ?? 0)); "
-                        + "ACKed, not re-dispatched — first sighting this session",
+                        + "ACKed, not re-dispatched - first sighting this session",
                         Self.logCategory)
                 }
                 return true
@@ -137,7 +137,7 @@ extension EnetControlChannel {
             handleInboundControl(inner)
         default:
             // Remaining commands carry a body we don't act on but MUST consume
-            // exactly so multi-command datagrams stay in sync — a RELIABLE
+            // exactly so multi-command datagrams stay in sync - a RELIABLE
             // command (e.g. a retransmitted HDR) is often coalesced AFTER one of
             // these, and dropping it stalls the host's reliable backlog (~6s peer
             // timeout). `skipCommandBody` advances past the body or, for a truly
@@ -151,7 +151,7 @@ extension EnetControlChannel {
 
     /// Advance `reader` past the body of a known fixed/variable-length ENet
     /// command (the ones `handleEnetCommand` consumes but doesn't dispatch).
-    /// Returns false on a truncated body or a truly unknown command — both mean
+    /// Returns false on a truncated body or a truly unknown command - both mean
     /// "stop parsing this datagram" because the next command offset is unknown.
     private func skipCommandBody(command: UInt8, reader: inout ByteReader) -> Bool {
         switch command {
@@ -171,7 +171,7 @@ extension EnetControlChannel {
             // body = 3×u32 = 12 bytes (interval/accel/decel).
             guard reader.take(12) != nil else { return false }
         default:
-            // Truly unknown command — its body length is unknown, so we cannot
+            // Truly unknown command - its body length is unknown, so we cannot
             // safely advance to the next command; stop parsing THIS datagram.
             return false
         }
@@ -179,10 +179,10 @@ extension EnetControlChannel {
     }
 
     /// Serial-number "newer than" for the 16-bit wrapping per-channel reliable
-    /// sequence (pre-incremented u16, wraps 65535 → 0 — the same silent `++`
+    /// sequence (pre-incremented u16, wraps 65535 → 0 - the same silent `++`
     /// wrap the vendored C does on the outgoing side). `seq` is strictly newer
     /// than `last` when the forward distance is nonzero and under half the
-    /// window — the standard half-space rule, safe because the host can never
+    /// window - the standard half-space rule, safe because the host can never
     /// be more than its (small, ACK-clocked) retransmit backlog ahead of us.
     static func reliableSeqIsNewer(_ seq: UInt16, than last: UInt16) -> Bool {
         seq != last && (seq &- last) < 0x8000
@@ -196,21 +196,21 @@ extension EnetControlChannel {
         // ENet ACKs a reliable command whenever it carries the ACKNOWLEDGE flag.
         // The SENT_TIME header flag ONLY governs whether a timestamp is present
         // to echo back (enet_protocol_handle_incoming_commands passes the header
-        // sentTime, which is 0 when the flag is absent) — it is NOT a condition
+        // sentTime, which is 0 when the flag is absent) - it is NOT a condition
         // on whether to acknowledge. The old code ALSO required headerFlagSentTime,
         // so a host reliable arriving in a datagram WITHOUT a sent-time went
         // silently un-ACKed: the host then retransmitted it until its ~10s ENet
         // peer-timeout elapsed and tore the whole session down (0x80030023). That
-        // is the lock-screen / secure-desktop disconnect — Sunshine emits a
+        // is the lock-screen / secure-desktop disconnect - Sunshine emits a
         // control message across the transition in a datagram that omits
         // SENT_TIME, we never ACK it, and ~10s later we're closed (matching the
         // observed "fine for ~10s, then terminated" signature). Echo `sentTime`
-        // as-is (0 when the flag is absent — a harmless throwaway RTT sample on
+        // as-is (0 when the flag is absent - a harmless throwaway RTT sample on
         // the host, infinitely better than withholding the ACK).
         if flags & Enet.headerFlagSentTime == 0, !loggedFirstReliableWithoutSentTime {
             loggedFirstReliableWithoutSentTime = true
             Diag.notice("ENet inbound reliable WITHOUT sent-time flag (ch \(channelID) "
-                + "relSeq \(relSeq)) — ACKing with sentTime=0 (was previously skipped, "
+                + "relSeq \(relSeq)) - ACKing with sentTime=0 (was previously skipped, "
                 + "the host-retransmit→peer-timeout teardown cause); first sighting this session",
                 Self.logCategory)
         }
@@ -226,7 +226,7 @@ extension EnetControlChannel {
     /// count + once-per-type log + continue (NOT bail). Mirrors
     /// controlReceiveThreadFunc.
     /// Parse SS_HDR_METADATA from a 0x010e payload: payload[0]=enable, then 13
-    /// little-endian UInt16 (offsets 1,3,…,25) in HdrMetadata field order
+    /// little-endian UInt16 (offsets 1,3,...,25) in HdrMetadata field order
     /// (R/G/B primaries x,y, white point x,y, max/min display luminance,
     /// maxCLL, maxFALL, maxFullFrameLuminance). Verified against the live host
     /// (decodes to Rec.2020 primaries + D65 white point).
@@ -265,33 +265,33 @@ extension EnetControlChannel {
     /// Layout verified against moonlight-common-c ControlStream.c
     /// (https://github.com/moonlight-stream/moonlight-common-c/blob/master/src/ControlStream.c):
     /// queueAsyncCallback (~:1001-1020) wraps the post-header bytes
-    /// BYTE_ORDER_LITTLE — decryptControlMessageToV1 has already stripped the
+    /// BYTE_ORDER_LITTLE - decryptControlMessageToV1 has already stripped the
     /// V2 payloadLength field and the buffer starts at
     /// sizeof(NVCTL_ENET_PACKET_HEADER_V1)=2 past the u16 type, i.e. exactly
-    /// our `payload` — then `BbAdvanceBuffer(&bb, 4)` skips 4 unused bytes
+    /// our `payload` - then `BbAdvanceBuffer(&bb, 4)` skips 4 unused bytes
     /// before three BbGet16 reads: controllerNumber, lowFreqRumble,
     /// highFreqRumble. So the 10-byte payload is
     /// [4 unused][u16 LE controllerNumber][u16 LE lowFreq][u16 LE highFreq].
     ///
-    /// (0,0) is "motors off" and is forwarded like any other value — the
+    /// (0,0) is "motors off" and is forwarded like any other value - the
     /// actuator relies on it to idle the pad. A truncated payload is dropped
     /// log-quietly (rumble is fire-and-forget state, the next event ≤~10ms
     /// away during active rumble supersedes it, and logging per event would
     /// re-create the per-datagram flood the suppression machinery exists to
-    /// prevent) — but COUNTED: see the receipt-counter contract below.
+    /// prevent) - but COUNTED: see the receipt-counter contract below.
     func handleRumbleData(_ payload: [UInt8]) {
-        // Receipt is counted HERE, at dispatch, before any validity guard —
+        // Receipt is counted HERE, at dispatch, before any validity guard -
         // so `rumble_events_total == 0` PROVES zero 0x010b arrived, full stop.
         // (It previously incremented behind the actuator's slot guard, which
         // weakened the contract to "none arrived well-formed with a valid
-        // slot" — exactly the ambiguity that muddied the host-sent-nothing
+        // slot" - exactly the ambiguity that muddied the host-sent-nothing
         // forensics.) Defects then land in rumble_dropped_invalid_total, so
         // deposited-to-actuator = events_total − dropped_invalid_total.
         TelemetryCounters.shared.rumbleEventTotal.increment()
         // Receipt INSTANT next to the receipt COUNT: the detach-context
         // breadcrumb (ControllerForwarder.detach) reads this as last-rumble
         // age, the discriminator that separates a mid-rumble radio drop from
-        // pad idle auto-sleep — both observed BT drops needed a three-file
+        // pad idle auto-sleep - both observed BT drops needed a three-file
         // join to recover exactly this number. Sub-µs locked store at ~135/s.
         TelemetryCounters.shared.rumbleActivity.stamp()
         guard payload.count >= 10 else {
@@ -317,7 +317,7 @@ extension EnetControlChannel {
     ///
     /// Layout verified against moonlight-common-c ControlStream.c
     /// queueAsyncCallback (IDX_RUMBLE_TRIGGER_DATA branch): BYTE_ORDER_LITTLE
-    /// with NO leading skip (unlike 0x010b's 4 unused bytes) — three BbGet16
+    /// with NO leading skip (unlike 0x010b's 4 unused bytes) - three BbGet16
     /// reads: controllerNumber, leftTriggerMotor, rightTriggerMotor. So the
     /// 6-byte payload is [u16 LE controllerNumber][u16 LE left][u16 LE right].
     ///
@@ -335,7 +335,7 @@ extension EnetControlChannel {
     ///
     /// Layout verified against moonlight-common-c ControlStream.c
     /// queueAsyncCallback (IDX_SET_RGB_LED branch): BYTE_ORDER_LITTLE, no
-    /// leading skip — one BbGet16 (controllerNumber) then three BbGet8
+    /// leading skip - one BbGet16 (controllerNumber) then three BbGet8
     /// (r, g, b). So the 5-byte payload is
     /// [u16 LE controllerNumber][u8 r][u8 g][u8 b].
     ///
@@ -376,14 +376,14 @@ extension EnetControlChannel {
     /// Layout verified against moonlight-common-c ControlStream.c
     /// (queueAsyncCallback, IDX_DS_ADAPTIVE_TRIGGERS branch) and Sunshine
     /// stream.cpp control_adaptive_triggers_t: BYTE_ORDER_LITTLE, no leading
-    /// skip — BbGet16 controllerNumber, BbGet8 eventFlags, BbGet8 typeLeft,
+    /// skip - BbGet16 controllerNumber, BbGet8 eventFlags, BbGet8 typeLeft,
     /// BbGet8 typeRight, then two DS_EFFECT_PAYLOAD_SIZE (10-byte) param arrays
     /// (left, then right). So the 25-byte payload is
     /// [u16 LE controllerNumber][u8 eventFlags][u8 typeLeft][u8 typeRight]
     /// [10 left params][10 right params]. eventFlags carries
     /// DS_EFFECT_RIGHT_TRIGGER (0x04) / DS_EFFECT_LEFT_TRIGGER (0x08) for which
     /// trigger blocks the host wants applied. typeLeft/typeRight are the
-    /// DualSense-native mode bytes (no abstract enum — passed through verbatim
+    /// DualSense-native mode bytes (no abstract enum - passed through verbatim
     /// to the HID output report, the moonlight-qt shape).
     ///
     /// Truncated → dropped but LOGGED (the handleSetMotionEvent discipline, not
@@ -454,14 +454,14 @@ extension EnetControlChannel {
         case CtrlV2.setAdaptiveTriggers:
             handleSetAdaptiveTriggers(payload)
         default:
-            // ACKed + decrypted but not dispatched — truly-unknown types now
+            // ACKed + decrypted but not dispatched - truly-unknown types now
             // (rumble 0x010b, triggers 0x5500, and RGB LED 0x5502 each lived
             // here until they grew a dispatch above). Such types can arrive at
             // game-frame rate (rumble hit ~135/s here), so logging per datagram
             // would evict the diagnostic ring; log each type ONCE (the
             // handleHdrInfo transition-gating discipline) and preserve the
             // volume signal in the counters. ONE call bumps the aggregate AND
-            // the bounded per-type tally together so they can never skew — the
+            // the bounded per-type tally together so they can never skew - the
             // per-type counts are durable in the session scorecard, because the
             // teardown Diag NOTICE alone is lossy (a crash or a still-running
             // session loses it).
@@ -474,13 +474,13 @@ extension EnetControlChannel {
             if firstSighting {
                 // Bounded payload peek (≤16 bytes, once per type per session):
                 // enough to identify the wire layout against moonlight-common-c
-                // in a 30-second lookup — 0x010b cost a whole investigation
+                // in a 30-second lookup - 0x010b cost a whole investigation
                 // precisely because nothing ever logged its bytes. Post-decrypt
                 // host CONTROL data, the same class as the HDR metadata we
-                // already parse — never key material.
+                // already parse - never key material.
                 let peek = payload.prefix(16).map { String(format: "%02x", $0) }
                     .joined(separator: " ")
-                let suffix = payload.count > 16 ? "…" : ""
+                let suffix = payload.count > 16 ? "..." : ""
                 Diag.info("ENet inbound control type 0x\(String(innerType, radix: 16))"
                     + "\(Self.ignoredControlTypeName(innerType)) (\(payloadLen) bytes"
                     + "\(peek.isEmpty ? "" : ": \(peek)\(suffix)")); "
@@ -511,13 +511,13 @@ extension EnetControlChannel {
         var ackDelayMs: UInt32 = 0
         withState {
             // Any inbound ACK is proof the host is alive and draining our reliable
-            // backlog — refresh the silence clock the control loop watches.
+            // backlog - refresh the silence clock the control loop watches.
             lastAckRecvMs = serviceTimeMs
             // SUB-MS RTT: the host echoes back the 16-bit `sentTime` token we
             // stamped on the datagram. We use that token ONLY to look up the
             // HIGH-RES local instant we recorded when sending (localSentByToken),
             // then measure the round trip = monotonicMs - localSent as FRACTIONAL
-            // ms — not the quantized whole-ms wire delta the old code computed
+            // ms - not the quantized whole-ms wire delta the old code computed
             // (UInt16 now - receivedSentTime), which floored every sample to an
             // integer and made the overlay read "9.00 ms" while jitter showed
             // 0.09. Only update the EWMA when we have a matching stamp; a token we
@@ -557,7 +557,7 @@ extension EnetControlChannel {
                 // ENet leg of the per-socket GAP-EVENT family: how long did the
                 // host leave this reliable command unanswered? Measured at the
                 // matched ACK (first send → ACK, wrap-safe), so this channel's
-                // designed inter-message idle can never read as a gap — and a
+                // designed inter-message idle can never read as a gap - and a
                 // doze/radio stall is visible the moment the late ACK lands,
                 // even when the stall began with nothing outstanding (the
                 // failure mode the earlier arrival-gap gate was blind to: in
@@ -588,14 +588,14 @@ extension EnetControlChannel {
         cmd.u16BE(relSeq)
         cmd.u16BE(relSeq)            // receivedReliableSequenceNumber
         cmd.u16BE(sentTime)         // receivedSentTime (echo host's sentTime)
-        // recordRtt: false — the host never echoes an ACK datagram's token, so
+        // recordRtt: false - the host never echoes an ACK datagram's token, so
         // an RTT stamp for it is unconsumable dead weight in localSentByToken
         // (at rumble's ~135 ACKs/s it kept the map pinned over its cap and
         // turned every send into a full-map sweep). The wire is unchanged:
         // SENT_TIME flag + token still go out per the ENet wire facts.
         sendDatagram(wrapDatagram(commands: [cmd.bytes], sentTime: true,
                                   recordRtt: false))
-        // SAMPLED 1-in-256 (log diet): this line fired per reliable packet —
+        // SAMPLED 1-in-256 (log diet): this line fired per reliable packet -
         // ~76% of one measured session log, evicting the 2,000-entry diagnostic
         // ring in ~2 minutes of streaming. The DATA
         // already rides telemetry (ACK delays feed the enet gap counters; the

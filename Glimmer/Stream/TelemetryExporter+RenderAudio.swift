@@ -3,8 +3,8 @@
 //
 //  The PROMETHEUS render for the P1 AUDIO metric family (the other stream):
 //  receive-quality, output-buffer health, A/V clock drift, and the cold-start
-//  first-packet time. Split from TelemetryExporter+Render.swift — pure move,
-//  same file-split idiom as the FramePacer split — to keep that file under the
+//  first-packet time. Split from TelemetryExporter+Render.swift - pure move,
+//  same file-split idiom as the FramePacer split - to keep that file under the
 //  length budget. Appends to the SAME `PromBuilder` (declared there) so the
 //  body stays one document.
 //
@@ -47,14 +47,14 @@ extension TelemetryRenderer {
                      "Windowed MIN buffer fill this scrape, ms (the trough that precedes an under-run; reset-on-read).",
                      audio.bufferFillMinMs)
         builder.emit("glimmer_audio_playout_target_ms",
-                     "Adaptive playout target the buffer fill is steered toward, ms — fill vs "
+                     "Adaptive playout target the buffer fill is steered toward, ms - fill vs "
                      + "target is the cushion judge (base 30 / cap 150 / ceiling 190).",
                      extras.audioPlayoutTargetMs)
         builder.emitCounter("glimmer_audio_underrun_total",
                             "Audio output under-runs (player drained → audible gap).",
                             audio.underrunTotal)
         builder.emitCounter("glimmer_audio_overrun_total",
-                            "Audio output over-runs (decoded buffer dropped — backlog over the ceiling backstop).",
+                            "Audio output over-runs (decoded buffer dropped - backlog over the ceiling backstop).",
                             audio.overrunTotal)
         builder.emitCounter("glimmer_audio_trim_total",
                             "Designed audio playout-backlog trims (5ms chops back to the playout target).",
@@ -77,16 +77,16 @@ extension TelemetryRenderer {
         // The true cross-stream meter the drift line above disclaims: host-RTP
         // positions of last-presented video vs the audio playhead (schedule
         // head minus buffer fill), pair-anchored. Derives WITHOUT feeding the
-        // session accumulator — the NDJSON 1Hz tick is the single feeder, so
+        // session accumulator - the NDJSON 1Hz tick is the single feeder, so
         // scrape cadence can never double-count the scorecard percentiles.
         builder.emit("glimmer_av_skew_ms",
                      "Cross-stream A/V skew, ms signed (+ = audio late/behind video; pair-anchored "
-                     + "host-RTP positions, small constant bias — trend is the signal).",
+                     + "host-RTP positions, small constant bias - trend is the signal).",
                      AudioVideoSkewStore.shared.deriveSkewMs(
                         bufferFillMs: audio.bufferFillMs, accumulate: false))
         builder.emitCounter("glimmer_av_skew_rebase_total",
                             "A/V-skew pair re-anchors after the first (stale stream or RTP "
-                            + "discontinuity) — each one steps the skew baseline.",
+                            + "discontinuity) - each one steps the skew baseline.",
                             AudioVideoSkewStore.shared.rebaseTotal)
         let cushionFloorMs = AudioCushionTelemetry.shared.floorMs
         builder.emit("glimmer_audio_cushion_floor_ms",

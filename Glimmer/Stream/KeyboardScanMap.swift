@@ -7,7 +7,7 @@
 //  positional values that map to physical key positions on a US ANSI keyboard.
 //  To get the host to react to "the key in the W position" regardless of the
 //  user's actual layout, we translate kVK_* to its corresponding Windows VK
-//  and let LiSendKeyboardEvent2's high-bit `0x8000` mark it as positional —
+//  and let LiSendKeyboardEvent2's high-bit `0x8000` mark it as positional -
 //  the host then skips its layout-correction pass.
 //
 //  Reference: moonlight-qt/app/streaming/input/keyboard.cpp's
@@ -135,7 +135,7 @@ private let carbonToVKScanCode: [Int: Int16] = [
     kVK_ANSI_KeypadDivide: 0x6F,
     kVK_ANSI_KeypadEnter: 0x0D,  // VK_RETURN
     kVK_ANSI_KeypadEquals: 0xBB,
-    kVK_ANSI_KeypadClear: 0x90,  // VK_NUMLOCK (best match — Mac's "Clear" is NumLock's position)
+    kVK_ANSI_KeypadClear: 0x90,  // VK_NUMLOCK (best match - Mac's "Clear" is NumLock's position)
 
     // Misc
     kVK_CapsLock: 0x14,  // VK_CAPITAL

@@ -1,7 +1,7 @@
 //
 //  StatsCollector+Record.swift
 //
-//  The hot-path recording API + lightweight accessors for StatsCollector — the
+//  The hot-path recording API + lightweight accessors for StatsCollector - the
 //  per-frame `record*` mutators called from the native backend's receive
 //  thread, the VideoToolbox decode queue, and the FramePacer's pacing queue,
 //  plus the `secondsSince*` / `*Count` reads the watchdog + telemetry use. Split
@@ -24,7 +24,7 @@ extension StatsCollector {
         lastReceivedFrameTime = CFAbsoluteTimeGetCurrent()
         if bytes > 0 {
             receivedBytes &+= UInt64(bytes)
-            // Telemetry frame-size + type window accumulators — cheap integer adds
+            // Telemetry frame-size + type window accumulators - cheap integer adds
             // under the lock we already hold (no extra hot-path cost).
             windowFrameBytesSum &+= UInt64(bytes)
             windowFrameCount &+= 1
@@ -53,7 +53,7 @@ extension StatsCollector {
 
     /// Seconds since VT successfully decoded a frame, or `Double.infinity`
     /// if we've never decoded one. THIS is what the frame-arrival watchdog
-    /// in StreamSession gates on — reception alone doesn't mean the user is
+    /// in StreamSession gates on - reception alone doesn't mean the user is
     /// seeing anything.
     func secondsSinceLastDecodedFrame() -> Double {
         os_unfair_lock_lock(&lock)
@@ -66,7 +66,7 @@ extension StatsCollector {
     /// `Double.infinity` if nothing has presented yet. MODE-AGNOSTIC: fed by the
     /// single `renderer.enqueue` site (`recordRendererEnqueue`) in both the paced
     /// and direct-enqueue paths, so the present-path watchdog gates on real
-    /// screen updates in EITHER mode — the detector the direct path was missing.
+    /// screen updates in EITHER mode - the detector the direct path was missing.
     func secondsSinceLastPresent() -> Double {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
@@ -78,7 +78,7 @@ extension StatsCollector {
     /// DECODE_UNIT (Limelight.h: capture + encode time measured *on the
     /// host*, in 1/10 ms units). Zero means the host didn't measure this
     /// frame (e.g. a repeated frame on Sunshine, or GFE which never fills it
-    /// in) — we skip the count/sum/min update but still let `max` see the
+    /// in) - we skip the count/sum/min update but still let `max` see the
     /// zero, matching moonlight-qt's exact behavior in ffmpeg.cpp.
     func recordHostProcessingLatency(_ tenthsOfMs: UInt16) {
         os_unfair_lock_lock(&lock)
@@ -99,7 +99,7 @@ extension StatsCollector {
     /// `OSSignpostIntervalState` it just got back from
     /// `OSSignposter.beginInterval("DecodeFrame")`; we stash it so the
     /// matching `recordDecodeComplete` / `recordDecodeAbandoned` can return
-    /// it for the caller to close the interval — possibly on a different
+    /// it for the caller to close the interval - possibly on a different
     /// thread (the VT output callback fires on VT's own queue).
     func recordDecodeSubmit(intervalState: OSSignpostIntervalState) {
         let now = CFAbsoluteTimeGetCurrent()
@@ -109,7 +109,7 @@ extension StatsCollector {
         if submitFifo.count > StatsCollector.submitFifoCapacity {
             // Drop the oldest to keep the FIFO bounded. The submit-side opened
             // a "DecodeFrame" interval that a matching `recordDecodeComplete`
-            // would normally close — but the matching callback can no longer
+            // would normally close - but the matching callback can no longer
             // find this state, so closing the interval is our responsibility.
             // Without the explicit endInterval below the OSSignpostIntervalState
             // token leaks and Instruments draws a dangling DecodeFrame span
@@ -131,7 +131,7 @@ extension StatsCollector {
     /// Close out a decode submit. Returns the matching
     /// `OSSignpostIntervalState` the caller stamped at submit time so the
     /// caller can close the `DecodeFrame` interval. Returns nil if the FIFO
-    /// is empty (stray output callback) — caller should skip the
+    /// is empty (stray output callback) - caller should skip the
     /// `endInterval` in that case.
     func recordDecodeComplete(dropped: Bool) -> OSSignpostIntervalState? {
         let now = CFAbsoluteTimeGetCurrent()
@@ -162,12 +162,12 @@ extension StatsCollector {
     /// returned non-noErr inline, so the output callback will never fire for
     /// this frame). Returns the matching `OSSignpostIntervalState` so the
     /// caller can close the `DecodeFrame` interval with an "abandoned"
-    /// message — leaving it open would have Instruments draw the interval
+    /// message - leaving it open would have Instruments draw the interval
     /// running forever in the timeline.
     func recordDecodeAbandoned() -> OSSignpostIntervalState? {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
-        // Pop the most-recent (LIFO) submit — that's the one we just stamped
+        // Pop the most-recent (LIFO) submit - that's the one we just stamped
         // synchronously and which VT rejected inline. We don't credit a
         // "decoded" or "dropped by decoder" frame because VT never saw it.
         var poppedState: OSSignpostIntervalState?
@@ -181,8 +181,8 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         renderedFrames &+= 1
-        // Stamp the mode-agnostic present clock here — the single enqueue site
-        // for BOTH paced and direct presents — so the present-path watchdog and
+        // Stamp the mode-agnostic present clock here - the single enqueue site
+        // for BOTH paced and direct presents - so the present-path watchdog and
         // fps_rendered both source from the actual screen-update moment and
         // never gap on a pacer disable/re-enable transition.
         lastPresentTime = CFAbsoluteTimeGetCurrent()
@@ -191,7 +191,7 @@ extension StatsCollector {
     /// Record a frame dropped because the AVSampleBufferVideoRenderer was
     /// not ready for more data (its internal queue was full). Per Apple's
     /// AVSampleBufferDisplayLayer docs the correct strategy for real-time
-    /// streaming is to drop, not block — see the renderer-backpressure path
+    /// streaming is to drop, not block - see the renderer-backpressure path
     /// in VideoDecoder.enqueueDecodedFrame.
     func recordRendererBackpressureDrop() {
         os_unfair_lock_lock(&lock)
@@ -220,7 +220,7 @@ extension StatsCollector {
     }
 
     /// Credit a frame DISCARDED in the decode pipeline BEFORE VT produced (or
-    /// even saw) an output for it — folded into the decoder-drop cause so the
+    /// even saw) an output for it - folded into the decoder-drop cause so the
     /// drops-by-cause split reflects EVERY assembled frame the decode side lost,
     /// not only VT-accepted-then-dropped frames. Three call sites previously
     /// undercounted to ~0%:
@@ -241,7 +241,7 @@ extension StatsCollector {
 
     // MARK: - Frame-pacer smoothness
 
-    /// Record a frame the pacer could not present in time — the jitter buffer
+    /// Record a frame the pacer could not present in time - the jitter buffer
     /// overflowed or the adaptive trim aged it out. The NEW third drop cause,
     /// counted separately from decoder + renderer-backpressure drops so the
     /// overlay's drops-by-cause split can attribute "we're behind on
@@ -264,7 +264,7 @@ extension StatsCollector {
 
     /// Sample the pacing queue depth once per link tick. Updates the live gauge
     /// and the window peak. Called from FramePacer on the pacing queue at the
-    /// display's vsync rate (60–240 Hz).
+    /// display's vsync rate (60-240 Hz).
     func recordPacingDepth(_ depth: Int) {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }

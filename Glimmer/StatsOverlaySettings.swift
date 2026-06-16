@@ -4,7 +4,7 @@
 //  Settings-pane views for the in-stream stats overlay: the StatsThresholds
 //  editor (warn / critical color thresholds for each metric). Lifted out of
 //  SettingsView.swift to keep that file under the swiftlint file_length
-//  ceiling — adding new overlay-config surfaces (additional metrics, new
+//  ceiling - adding new overlay-config surfaces (additional metrics, new
 //  health rules) lives here, not in the main Settings monolith.
 //
 

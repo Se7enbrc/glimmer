@@ -3,7 +3,7 @@
 //
 //  First-responder NSView that captures keyboard/mouse events for the stream
 //  session. Forwards them through a delegate so the AppKit responder chain
-//  and the C-bridge (InputForwarder) stay decoupled — InputForwarder's
+//  and the C-bridge (InputForwarder) stay decoupled - InputForwarder's
 //  `StreamInputViewDelegate` conformance lives in InputForwarder.swift.
 //
 
@@ -41,8 +41,8 @@ final class StreamInputView: NSView {
     /// stream content AppKit asks the view for its cursor, and handing it an
     /// invisible cursor guarantees no arrow paints even if the CGDisplay hide
     /// latch slips (e.g. a becomeKey that raced the pointer off-content).
-    /// This layer is inherently self-balancing — AppKit resets the cursor to
-    /// the system default the instant the pointer leaves the view — so it can
+    /// This layer is inherently self-balancing - AppKit resets the cursor to
+    /// the system default the instant the pointer leaves the view - so it can
     /// never strand the system cursor invisible the way a counted latch can.
     private static let transparentCursor: NSCursor = {
         let image = NSImage(size: NSSize(width: 1, height: 1))
@@ -85,8 +85,8 @@ final class StreamInputView: NSView {
     /// CGDisplayHideCursor latch owned by StreamWindow: if that latch ever
     /// slips (e.g. a becomeKey fired while the pointer was momentarily off
     /// content), this still guarantees no arrow paints over the stream. Unlike
-    /// the counted latch this is balanced for free — AppKit restores the
-    /// system cursor the moment the pointer leaves the view — so it can never
+    /// the counted latch this is balanced for free - AppKit restores the
+    /// system cursor the moment the pointer leaves the view - so it can never
     /// leave the system cursor invisible.
     override func cursorUpdate(with event: NSEvent) {
         Self.transparentCursor.set()
@@ -94,13 +94,13 @@ final class StreamInputView: NSView {
 
     /// Re-apply the transparent cursor directly, without waiting for the next
     /// `cursorUpdate(with:)`. AppKit re-invokes `cursorUpdate` on every pointer
-    /// motion, so motion already repairs an OS re-show for free — but a display
+    /// motion, so motion already repairs an OS re-show for free - but a display
     /// reconfig (display/HDR/VRR change, sleep-wake, HID attach) with the pointer
     /// perfectly STATIONARY produces no motion event until the user moves, so the
     /// re-shown system arrow could momentarily sit on screen for that zero-motion
     /// window. The display observers in StreamWindow call this to close that gap.
     /// Setting an invisible IMAGE (never a CGDisplayShowCursor/HideCursor pair)
-    /// means no frame can ever composite a visible arrow — it cannot flash by
+    /// means no frame can ever composite a visible arrow - it cannot flash by
     /// construction. Self-balancing like `cursorUpdate`: AppKit restores the
     /// system cursor the instant the pointer leaves the view, so it can never
     /// strand the cursor invisible.
@@ -108,7 +108,7 @@ final class StreamInputView: NSView {
         Self.transparentCursor.set()
     }
 
-    // MARK: NSResponder — keyboard
+    // MARK: NSResponder - keyboard
 
     override func keyDown(with event: NSEvent) {
         // Diagnostic: confirms the responder chain is delivering keyDown
@@ -116,7 +116,7 @@ final class StreamInputView: NSView {
         // (window not key, view not first responder, app not active) and the
         // fix is in StreamWindow.show() / InputForwarder.installFirstResponder().
         //
-        // SECURITY: do NOT include the character value here — `chars=…` at
+        // SECURITY: do NOT include the character value here - `chars=...` at
         // `.public` would leak every keystroke (passwords typed mid-stream
         // included) into the unified log, where any process with the right
         // entitlement can read it. Scan code + modifier mask are positional
@@ -126,16 +126,16 @@ final class StreamInputView: NSView {
             .debug("StreamInputView.keyDown keyCode=\(event.keyCode, privacy: .public) mods=0x\(modsHex, privacy: .public)")
         // The delegate returns `true` when it consumed the event (forwarded
         // to the host, or handled it locally as the quit hotkey). It returns
-        // `false` for Cmd-modified events when sys-key capture is off — in
+        // `false` for Cmd-modified events when sys-key capture is off - in
         // that case we want macOS to deal with it, but most of those chords
         // have already been handled higher in the dispatch chain:
-        //   * Cmd-Tab / Cmd-Space — WindowServer intercepts; we never see them.
-        //   * Cmd-Q / Cmd-H / Cmd-M / Cmd-W — main menu's performKeyEquivalent
+        //   * Cmd-Tab / Cmd-Space - WindowServer intercepts; we never see them.
+        //   * Cmd-Q / Cmd-H / Cmd-M / Cmd-W - main menu's performKeyEquivalent
         //     fires before keyDown, so we only see these here if no menu
         //     item is bound.
         // For the remaining "unbound Cmd-chord" leftovers, calling `super.keyDown`
         // would walk up the responder chain to `noResponderFor:` and beep.
-        // moonlight-qt also drops these silently — see keyboard.cpp's
+        // moonlight-qt also drops these silently - see keyboard.cpp's
         // `if (!isSystemKeyCaptureActive()) return;`. Match that: swallow
         // silently without forwarding and without beeping.
         _ = delegate?.streamView(self, handleKeyDown: event)
@@ -152,7 +152,7 @@ final class StreamInputView: NSView {
         delegate?.streamView(self, handleFlagsChanged: event)
     }
 
-    // MARK: NSResponder — mouse
+    // MARK: NSResponder - mouse
 
     override func mouseMoved(with event: NSEvent) { delegate?.streamView(self, handleMouseMoved: event) }
     override func mouseDragged(with event: NSEvent) { delegate?.streamView(self, handleMouseMoved: event) }
@@ -172,7 +172,7 @@ final class StreamInputView: NSView {
     // NOTE: warpCursorIfNearEdge was DELETED with the P0 mouse-snap fix. Under
     // the SDL associate-false model (InputForwarder.enterCapturedMode) the OS
     // does not move the system cursor while relative aim is engaged, so the
-    // cursor can never reach a screen edge / hot corner — there is nothing to
+    // cursor can never reach a screen edge / hot corner - there is nothing to
     // warp away from. The per-motion warp was the source of the edge→centre
     // reconciliation delta that snapped in-game aim to an edge/corner; removing
     // it (and switching to associate-false) eliminates the bug class entirely.
@@ -184,14 +184,14 @@ final class StreamInputView: NSView {
 // MARK: - Shared cursor-centering helper
 
 /// One owner of the warp-to-centre coordinate convention. The ONLY remaining
-/// call site is the cosmetic pre-position in `StreamWindow.show()` — it runs
+/// call site is the cosmetic pre-position in `StreamWindow.show()` - it runs
 /// once, before the relative-delta pipeline and the associate-false latch are
 /// live, so it cannot inject a motion delta. (The per-motion edge warp it used
 /// to share with was deleted by the P0 mouse-snap fix.)
 ///
-/// `CGWarpMouseCursorPosition` takes GLOBAL TOP-LEFT (y-down) coordinates —
+/// `CGWarpMouseCursorPosition` takes GLOBAL TOP-LEFT (y-down) coordinates -
 /// the Quartz/CoreGraphics display space whose origin is the top-left of the
-/// primary display — NOT AppKit's bottom-left (y-up) space. Passing an AppKit
+/// primary display - NOT AppKit's bottom-left (y-up) space. Passing an AppKit
 /// `frame.midY` straight through warps the cursor to the vertically mirrored
 /// point. We flip Y against the primary display's height to convert.
 enum StreamCursor {

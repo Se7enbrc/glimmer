@@ -5,25 +5,25 @@
 //  `VideoDecoder` for the lifetime of one streaming session.
 //
 //  Touched from three thread contexts during normal operation:
-//    * The native backend's receive thread, via `recordReceivedFrame` — once
+//    * The native backend's receive thread, via `recordReceivedFrame` - once
 //      per submitDecodeUnit, before VT touches anything.
 //    * VT decode dispatch queue, via `recordDecodeSubmit` /
 //      `recordDecodeComplete` / `recordDecodeAbandoned` /
 //      `recordRendererEnqueue`. Submit and complete fire in lock-step on the
 //      same queue (we serialize decode on a single queue with ThreadCount=1),
-//      so the submit-time FIFO doesn't need an external lock for ordering —
+//      so the submit-time FIFO doesn't need an external lock for ordering -
 //      just for the cross-thread snapshot read.
 //    * The FramePacer's dedicated serial queue, via `recordPacingDepth` (once
-//      per display vsync, 60–240 Hz) / `recordPresent` (once per released
+//      per display vsync, 60-240 Hz) / `recordPresent` (once per released
 //      frame) / `recordPresentationLateDrop` (on overflow + trim). The same
 //      lock serializes these against the snapshot read.
-//    * Main actor, via `snapshot(minWindowSeconds:)` / `reset()` — at 4 Hz
+//    * Main actor, via `snapshot(minWindowSeconds:)` / `reset()` - at 4 Hz
 //      from the overlay timer. The FPS averaging window is DECOUPLED from that
 //      tick: `snapshot(minWindowSeconds:)` only slides + recomputes the
 //      window-relative fields once `minWindowSeconds` (~1s) of data has
 //      accumulated, serving the cached last-good average on the in-between
 //      ticks (see the cache block + the window-complete gate in snapshot()).
-//      A literal 500ms window was too tight at 60Hz — single-frame boundary
+//      A literal 500ms window was too tight at 60Hz - single-frame boundary
 //      effects pushed the displayed FPS by ±2fps; the ~1s window smooths to
 //      ±1fps on a steady stream while the live latency gauges still refresh
 //      every 4 Hz tick. The telemetry exporter calls it with the default
@@ -31,8 +31,8 @@
 //      window on its own cadence.
 //
 //  All shared mutable state is protected by a single os_unfair_lock. The hot
-//  paths only hold it for a handful of integer/double updates per frame —
-//  well under a microsecond — which at 240 FPS is nowhere near a contention
+//  paths only hold it for a handful of integer/double updates per frame -
+//  well under a microsecond - which at 240 FPS is nowhere near a contention
 //  risk and orders of magnitude under any frame-pacing budget. Using a lock
 //  rather than atomics here is the right tradeoff: the decode-time EMA and
 //  submit FIFO need consistent multi-field updates, and a single lock is
@@ -43,11 +43,11 @@ import os
 final class StatsCollector: @unchecked Sendable {
 
     /// FIFO of `(timestamp, intervalState)` pairs for in-flight decode
-    /// submits. Timestamps come from `CFAbsoluteTimeGetCurrent()` — wall-
+    /// submits. Timestamps come from `CFAbsoluteTimeGetCurrent()` - wall-
     /// clock seconds, ms resolution. Bounded at 64 entries which is well
     /// over the deepest in-flight queue VT hands us at 4K/240 (typically
-    /// 1–2, occasionally 4 during a P-frame burst); overflow drops the
-    /// oldest, biasing the EMA slightly toward recent frames — acceptable
+    /// 1-2, occasionally 4 during a P-frame burst); overflow drops the
+    /// oldest, biasing the EMA slightly toward recent frames - acceptable
     /// for a diagnostic readout.
     ///
     /// The `OSSignpostIntervalState` is `Sendable` (macOS 13+) so we hand
@@ -69,7 +69,7 @@ final class StatsCollector: @unchecked Sendable {
     // The window-start values are reset only once a snapshot COMPLETES a window
     // (`now - windowStart >= minWindowSeconds`), so the reported FPS is the
     // average over the last ~1s sampling window even when the overlay reads at
-    // 4 Hz — same shape as moonlight-qt's `STATS_INTERVAL` accumulators.
+    // 4 Hz - same shape as moonlight-qt's `STATS_INTERVAL` accumulators.
     /// Wall-clock of the last frame the native backend's receive thread
     /// handed us. Reception != decode: a host sending packets we can't
     /// decode (corrupted bitstream, missing IDR, AV1-on-no-AV1-hardware)
@@ -89,7 +89,7 @@ final class StatsCollector: @unchecked Sendable {
     /// single `renderer.enqueue` site in `presentFrame` feeds it in BOTH the
     /// paced and the direct-enqueue paths, so the present-path watchdog can
     /// detect a screen freeze without depending on the pacer's liveness (which
-    /// is nil in direct mode — the gap that let the direct path wedge with no
+    /// is nil in direct mode - the gap that let the direct path wedge with no
     /// recovery). 0 means we haven't presented our first frame yet.
     var lastPresentTime: CFAbsoluteTime = 0
     var receivedFrames: UInt64 = 0
@@ -151,7 +151,7 @@ final class StatsCollector: @unchecked Sendable {
     // the same lock as the rest of the collector. These power the overlay's
     // smoothness readout and the present-vs-PTS / drop-by-cause split.
 
-    /// Frames dropped because the pacer could not present them in time — the
+    /// Frames dropped because the pacer could not present them in time - the
     /// jitter buffer overflowed (sustained lag) or the adaptive trim aged them
     /// out at a vsync. This is the NEW third drop cause, distinct from decoder
     /// drops (VT rejected the bitstream) and renderer-backpressure drops (the
@@ -161,34 +161,34 @@ final class StatsCollector: @unchecked Sendable {
     /// On-cadence presents this window: |cadence error| within tolerance of the
     /// stream's frame interval. Reset each snapshot alongside the FPS window.
     var onTimePresents: UInt64 = 0
-    /// Off-cadence presents this window: |cadence error| past tolerance — the
+    /// Off-cadence presents this window: |cadence error| past tolerance - the
     /// frame landed visibly early/late vs the ideal present grid.
     var latePresents: UInt64 = 0
     /// Running sum + count of |cadence error| (ms) for the window average.
     var presentCadenceErrorMsSum: Double = 0
     var presentCadenceSamples: UInt64 = 0
-    /// Worst |cadence error| (ms) seen this window — the spike a user feels.
+    /// Worst |cadence error| (ms) seen this window - the spike a user feels.
     var presentCadenceErrorMsMax: Double = 0
     /// Tolerance (ms) for the on-time/late split. 2ms is below the perceptual
-    /// floor at every refresh we target (≈ a quarter-vsync at 120Hz) — inside
+    /// floor at every refresh we target (≈ a quarter-vsync at 120Hz) - inside
     /// it the present is indistinguishable from perfectly paced.
     static let presentCadenceToleranceMs: Double = 2.0
 
     /// Most-recently-sampled pacing queue depth (frames waiting for a vsync),
     /// sampled once per link tick. We surface the last value rather than an
     /// average because depth is a "how deep is the buffer right now" gauge, and
-    /// the tick rate (60–240 Hz) is far above the 4Hz overlay read so the
+    /// the tick rate (60-240 Hz) is far above the 4Hz overlay read so the
     /// last-sample is representative. Live, surfaced every snapshot (NOT
     /// window-reset).
     var lastPacingDepth: Int = 0
-    /// Peak pacing depth this window — surfaces a transient build the
+    /// Peak pacing depth this window - surfaces a transient build the
     /// last-sample gauge would miss. Reset on each COMPLETED window (so it now
     /// tracks the peak across the full ~1s slice, not a sub-window read).
     var maxPacingDepth: Int = 0
 
     // Host-side capture + encode latency, as reported in each DECODE_UNIT's
     // `frameHostProcessingLatency` (1/10 ms units; 0 == no measurement).
-    // This is a host-measured number — totally distinct from our own
+    // This is a host-measured number - totally distinct from our own
     // `decodeTimeEmaSeconds`, which times VT submit → output on our side.
     // Tracking min / max / total / count lets the snapshot compute the same
     // min/max/avg triple moonlight-qt shows in its overlay. Window-relative:
@@ -267,14 +267,14 @@ final class StatsCollector: @unchecked Sendable {
     /// cadence, host-processing latency, frame size) are only RECOMPUTED + the
     /// window only SLID once at least `minWindowSeconds` have elapsed since the
     /// last slide; calls in between serve those fields from the cached last-
-    /// completed-window values. The LIVE gauges (decode-time EMA, RTT/jitter —
+    /// completed-window values. The LIVE gauges (decode-time EMA, RTT/jitter -
     /// added by the caller, pacing depth, cumulative drop percentages) are
     /// recomputed EVERY call. The result: the overlay can tick at 4 Hz so the
     /// latency rows feel live, while FPS keeps its stable ~1 s average instead
     /// of the ±4fps noise a 250 ms window would show.
     ///
     /// Pass `minWindowSeconds = 0` (the default) to preserve the original
-    /// reset-on-every-read behaviour — the telemetry exporter calls it that way
+    /// reset-on-every-read behaviour - the telemetry exporter calls it that way
     /// so its NDJSON keeps emitting fresh per-tick windows on its own cadence.
     func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
         let now = CFAbsoluteTimeGetCurrent()
@@ -311,7 +311,7 @@ final class StatsCollector: @unchecked Sendable {
             snap.idrFramePercent = cache.idrFramePercent
         }
 
-        // ---- LIVE gauges — recomputed every call regardless of the window ----
+        // ---- LIVE gauges - recomputed every call regardless of the window ----
         if let ema = decodeTimeEmaSeconds {
             snap.avgDecodeTimeMs = ema * 1000.0
         }
@@ -319,7 +319,7 @@ final class StatsCollector: @unchecked Sendable {
             snap.decoderDroppedPercent = Double(totalDecoderDropped) / Double(totalReceived) * 100.0
         }
         // Pacing depth is a live "how deep is the buffer right now" gauge,
-        // sampled once per link tick (60–240 Hz, far above the overlay read).
+        // sampled once per link tick (60-240 Hz, far above the overlay read).
         snap.pacingQueueDepth = lastPacingDepth
         snap.pacingQueueDepthMax = maxPacingDepth
         snap.presentationLateDrops = presentationLateDrops
@@ -340,8 +340,8 @@ final class StatsCollector: @unchecked Sendable {
         cache.decodedFps = Double(decodedFrames &- windowStartDecodedFrames) / windowDuration
         cache.renderedFps = Double(renderedFrames &- windowStartRenderedFrames) / windowDuration
         // Bytes → Mbps: bytes * 8 / 1_000_000 / seconds. Use 1_000_000 (not
-        // 1024*1024) to match how every other tool — including moonlight-qt's
-        // `Bitrate: X Mbps` row — reports it.
+        // 1024*1024) to match how every other tool - including moonlight-qt's
+        // `Bitrate: X Mbps` row - reports it.
         let dBytes = receivedBytes &- windowStartReceivedBytes
         cache.measuredBitrateMbps = (Double(dBytes) * 8.0) / 1_000_000.0 / windowDuration
 

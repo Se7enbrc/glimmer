@@ -14,7 +14,7 @@ import os.log
 // MARK: - Optional knobs on StreamConfig
 //
 // The shared StreamConfig type in Types.swift doesn't yet expose the
-// remote-input AES key / IV — they're internal to the launch handshake and
+// remote-input AES key / IV - they're internal to the launch handshake and
 // not something a caller should set. We extend it here with two computed
 // Optional<Data> stubs so the launch path has a single, testable seam to
 // override the entropy. In production both come back nil and we generate
@@ -30,7 +30,7 @@ extension StreamConfig {
 
 // MARK: - URLSession TLS delegate
 //
-// All of this runs on URLSession's delegate queue — synchronous, non-actor
+// All of this runs on URLSession's delegate queue - synchronous, non-actor
 // context. The delegate is a class (URLSessionDelegate requires it) and
 // stores its credentials behind a small lock. We can't make it an actor
 // because URLSession won't await us.
@@ -72,7 +72,7 @@ final class TLSDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
         case NSURLAuthenticationMethodClientCertificate:
             // Host is asking us to prove who we are. Hand over the SecIdentity
             // we built from IdentityManager. If it isn't ready yet (very
-            // first call before identity prep finished), drop to default —
+            // first call before identity prep finished), drop to default -
             // URLSession will cancel and we surface that as a TLS error.
             lock.lock(); let cred = clientCredential; lock.unlock()
             if let cred {
@@ -91,14 +91,14 @@ final class TLSDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
             //     would let a hostile log scraper read the pinned cert; but
             //     we do log the mismatch so a real cert rotation is
             //     diagnosable from `log show` under our subsystem.
-            //   - pin set, no leaf in chain: refuse — handshake is too
+            //   - pin set, no leaf in chain: refuse - handshake is too
             //     broken to evaluate. Better to fail than to fall through
             //     to "accept blindly".
             //   - no pin set, leaf present: this is the unpaired first-
             //     contact path. Sunshine over HTTPS during /pair is the
             //     only path that hits this. We record the leaf so the
             //     actor can pin it after the RSA-validated pairing
-            //     handshake — but we DO NOT auto-pin here.
+            //     handshake - but we DO NOT auto-pin here.
             guard let trust = space.serverTrust else {
                 completionHandler(.cancelAuthenticationChallenge, nil)
                 return
@@ -119,9 +119,9 @@ final class TLSDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
             lock.lock(); let pin = pinnedServerCert; lock.unlock()
 
             if let pin {
-                // Pin set — only accept exact match.
+                // Pin set - only accept exact match.
                 guard let leaf else {
-                    log.error("Pinned host returned no leaf cert in chain — refusing")
+                    log.error("Pinned host returned no leaf cert in chain - refusing")
                     completionHandler(.cancelAuthenticationChallenge, nil)
                     return
                 }
@@ -130,7 +130,7 @@ final class TLSDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
                 if pinData == leafData {
                     completionHandler(.useCredential, URLCredential(trust: trust))
                 } else {
-                    log.error("Pinned cert mismatch — refusing TLS handshake (possible MITM or host re-imaged)")
+                    log.error("Pinned cert mismatch - refusing TLS handshake (possible MITM or host re-imaged)")
                     completionHandler(.cancelAuthenticationChallenge, nil)
                 }
             } else {
@@ -153,7 +153,7 @@ final class TLSDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
 // MARK: - XML parser
 //
 // Builds an in-memory XMLNode tree from raw bytes. We deliberately do this by
-// hand on top of XMLParser instead of pulling in SWXMLHash or similar — the
+// hand on top of XMLParser instead of pulling in SWXMLHash or similar - the
 // GameStream protocol is tiny and the dependency cost isn't worth it.
 
 final class XMLTreeBuilder: NSObject, XMLParserDelegate {

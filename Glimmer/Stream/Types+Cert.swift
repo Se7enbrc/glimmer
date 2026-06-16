@@ -12,7 +12,7 @@ import CryptoKit
 // MARK: - Cert fingerprint helper
 //
 // SHA-256 of the DER-encoded cert, formatted as lowercase hex bytes
-// separated by `:` — the same shape `ssh-keygen -E sha256 -lf` prints
+// separated by `:` - the same shape `ssh-keygen -E sha256 -lf` prints
 // and the shape Sunshine's web UI surfaces to the user. Keeping the
 // format identical means the user can copy-paste the fingerprint
 // Sunshine shows next to the one Glimmer's UI shows and visually
@@ -46,7 +46,7 @@ public enum CertFingerprint {
 
 // MARK: - Pinned cert storage key (canonical form)
 //
-// Pinning is split across call sites — Pairing.swift writes the pin
+// Pinning is split across call sites - Pairing.swift writes the pin
 // after a successful pair, MoonlightManager.nativeServerInfo /
 // HostsStore.unpair / HostsStore.saveHost read or delete it.
 // All MUST hash to the same UserDefaults key for the pin to actually
@@ -54,7 +54,7 @@ public enum CertFingerprint {
 // reads (= the host UUID from moonlight-qt migration, or the hostname for
 // fresh-Glimmer hosts) and `server.uniqueId` for writes (= the hostname
 // before `/serverinfo`'s `<uniqueid>` element was parsed). For users with
-// a real qt-migrated UUID, those two diverged — a freshly-paired host's
+// a real qt-migrated UUID, those two diverged - a freshly-paired host's
 // pin would land under the hostname key while the lookup checked the
 // UUID key. Result: every stream went through trust-on-first-use even
 // though the user had a "paired" host record on disk.
@@ -63,19 +63,19 @@ public enum CertFingerprint {
 // it in `NetworkClient.fetchServerInfo` and seed it onto ServerInfo, so
 // `server.uniqueId` is the right value at pair time. The lookup side
 // (`MoonlightManager.nativeServerInfo`) uses `host.id`, which for migrated
-// hosts is the qt UUID — same value the host emits in `/serverinfo`. The
+// hosts is the qt UUID - same value the host emits in `/serverinfo`. The
 // fresh-pair fallback (no qt migration) is the hostname on both sides, so
 // the keys still align.
 public enum PinnedCertStore {
     /// Legacy UserDefaults key, kept only for the read-side migration
     /// (`load(forHostID:)`) which lifts the value out then deletes it.
-    /// Nothing writes here anymore — see the file-backed store below.
+    /// Nothing writes here anymore - see the file-backed store below.
     fileprivate static func legacyDefaultsKey(for hostID: String) -> String {
         "glimmer.pinnedCert.\(hostID)"
     }
 
     /// Backward-compat alias used by a couple of HostsStore call sites.
-    /// New code should not need this — the file-backed `load/store/delete`
+    /// New code should not need this - the file-backed `load/store/delete`
     /// methods are the API.
     public static func key(for hostID: String) -> String {
         legacyDefaultsKey(for: hostID)
@@ -85,7 +85,7 @@ public enum PinnedCertStore {
     //
     // UserDefaults backs onto a plain XML plist in
     // ~/Library/Preferences/ (sandbox-containered or not). Any same-UID
-    // process can both read and *write* to it via cfprefsd — there is no
+    // process can both read and *write* to it via cfprefsd - there is no
     // per-app ACL. For a pinned host cert the read leak is mostly
     // harmless (the cert is public anyway), but the write surface is the
     // problem: a same-UID attacker can swap the pin for their own,
@@ -95,7 +95,7 @@ public enum PinnedCertStore {
     // New shape: one PEM file per host at
     //   <ApplicationSupport>/Glimmer/PinnedHosts/<sanitized-id>.pem
     // with mode 0600 (owner-only). Same enforcement pattern as
-    // `FileIdentityStore` in Identity.swift — atomic write, stat(2)
+    // `FileIdentityStore` in Identity.swift - atomic write, stat(2)
     // verify, on-failure delete-and-throw. Inside the sandbox this lands
     // at <Container>/Library/Application Support/Glimmer/PinnedHosts/...
     // which is per-app private at the filesystem level.
@@ -118,7 +118,7 @@ public enum PinnedCertStore {
            !pem.isEmpty {
             return pem
         }
-        // 2. Legacy UserDefaults — read then migrate.
+        // 2. Legacy UserDefaults - read then migrate.
         let defaults = UserDefaults.standard
         let legacyKey = legacyDefaultsKey(for: hostID)
         if let legacy = defaults.string(forKey: legacyKey), !legacy.isEmpty {
@@ -128,7 +128,7 @@ public enum PinnedCertStore {
                 defaults.synchronize()
                 return legacy
             } catch {
-                // Can't write the file — return the legacy value so the
+                // Can't write the file - return the legacy value so the
                 // current stream still authenticates; next launch will
                 // try again. We deliberately do NOT delete the legacy
                 // entry on write failure.

@@ -60,7 +60,7 @@ enum StreamCryptoError: Error, CustomStringConvertible {
 /// AES-128-GCM control-stream crypto for the Gen7 "control V2" framing. One
 /// instance per session; reuse the single key. `seq` uniqueness (driven by a
 /// strictly-monotonic counter held by the caller) is what makes each (key,
-/// nonce) pair unique — never reuse a seq.
+/// nonce) pair unique - never reuse a seq.
 struct ControlCrypto {
     private let key: SymmetricKey
 

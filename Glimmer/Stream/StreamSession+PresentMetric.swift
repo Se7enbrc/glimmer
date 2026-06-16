@@ -1,7 +1,7 @@
 //
 //  StreamSession+PresentMetric.swift
 //
-//  The 2 Hz NOTICE-level present/decode-path instrumentation timer — the
+//  The 2 Hz NOTICE-level present/decode-path instrumentation timer - the
 //  diagnostic that pinpoints a present-path freeze from the log alone (pacer
 //  tick rate, last-release age, queue depth, decode-output rate). Split out of
 //  StreamSession+Watchdog.swift to keep the watchdog file focused on the
@@ -52,12 +52,12 @@ extension StreamSession {
         // gauge on), so the adaptive buffer grows ONLY for SUSTAINED MEASURED
         // jitter (lossy wifi) and rests at depth 1 on a clean link (0.09ms wired).
         dec.pacingNoteMeasuredJitter(TelemetryCounters.shared.recvJitterMs)
-        // sincePresent is the MODE-AGNOSTIC present clock — meaningful in BOTH
+        // sincePresent is the MODE-AGNOSTIC present clock - meaningful in BOTH
         // paced and direct mode, so the metric line shows how long since a frame
         // reached the screen even when the pacer is down.
         let sincePresent = dec.secondsSinceLastPresentedFrame()
         guard let live = dec.pacingLiveness() else {
-            // Direct-enqueue fallback path — report decode + present liveness.
+            // Direct-enqueue fallback path - report decode + present liveness.
             self.log.notice(
                 // swiftlint:disable:next line_length
                 "PRESENT METRIC pacer=direct decodeIdle=\(decodeIdle * 1000, format: .fixed(precision: 1), privacy: .public)ms sincePresent=\(sincePresent * 1000, format: .fixed(precision: 1), privacy: .public)ms")

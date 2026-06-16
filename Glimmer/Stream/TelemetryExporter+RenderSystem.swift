@@ -4,8 +4,8 @@
 //  The PROMETHEUS render for the HOST/SYSTEM metric families: input + process
 //  gauges, the P1 per-thread/QoS + SoC cluster-residency resource block, the
 //  thermal/power state, and the build-info attribution gauge. Split from
-//  TelemetryExporter+Render.swift — pure move, same file-split idiom as the
-//  FramePacer split — to keep that file under the length budget. Each section
+//  TelemetryExporter+Render.swift - pure move, same file-split idiom as the
+//  FramePacer split - to keep that file under the length budget. Each section
 //  appends to the SAME `PromBuilder` (declared there) so the body stays one
 //  document.
 //
@@ -28,7 +28,7 @@ extension TelemetryRenderer {
                             snap.inputIdleToActiveTotal)
         builder.emit("glimmer_input_since_last_ms",
                      "Milliseconds since the last input event.", snap.timeSinceLastInputMs)
-        // Host rumble dispatched to pad actuators — same Extras sample as the
+        // Host rumble dispatched to pad actuators - same Extras sample as the
         // NDJSON rumble fields, riding the input family it correlates with.
         builder.emitCounter("glimmer_rumble_events_total",
                             "Host rumble events received at protocol dispatch (pre-guard).",
@@ -61,8 +61,8 @@ extension TelemetryRenderer {
                                     "Per-thread CPU usage, percent of one core (hot-thread view).",
                                     thread.cpuPercent, labels: labels)
                 builder.emitLabeled("glimmer_thread_qos",
-                                    "Per-thread QoS class ordinal (33 userInteractive … 9 background) "
-                                    + "— the P-core-tier intent.",
+                                    "Per-thread QoS class ordinal (33 userInteractive ... 9 background) "
+                                    + "- the P-core-tier intent.",
                                     Double(thread.qos), labels: labels)
             }
             builder.emit("glimmer_process_phys_footprint_bytes",
@@ -84,29 +84,29 @@ extension TelemetryRenderer {
                          cluster.eClusterActive)
             builder.emit("glimmer_soc_pcluster_active_residency",
                          "P-cluster (performance cores) active residency this window, 0..1 (IOReport) "
-                         + "— the SoC-side confirmation the hot path is on the fast cores.",
+                         + "- the SoC-side confirmation the hot path is on the fast cores.",
                          cluster.pClusterActive)
-            // IOReport bring-up #2 (power/GPU) rides the SAME snapshot — the
+            // IOReport bring-up #2 (power/GPU) rides the SAME snapshot - the
             // sampler is delta-based, so it is read exactly once per tick (in
             // fillResource) and shared with NDJSON; a second read here would
             // corrupt its baselines. Each gauge degrades to nil independently
             // (group unavailable / first-tick baseline) and `emit` then omits
-            // the family — the sampler's fail-quiet design, absent ≠ 0.
+            // the family - the sampler's fail-quiet design, absent ≠ 0.
             builder.emit("glimmer_package_power_w",
-                         "SoC package power this window, watts — IOReport Energy Model "
+                         "SoC package power this window, watts - IOReport Energy Model "
                          + "CPU+GPU+ANE rails (powermetrics' Combined Power).",
                          cluster.packagePowerW)
             builder.emit("glimmer_gpu_residency_percent",
                          "GPU active residency this window, 0..100 (IOReport GPU Stats: non-OFF "
-                         + "share of the GPUPH states) — PERCENT, unlike the 0..1 cluster gauges.",
+                         + "share of the GPUPH states) - PERCENT, unlike the 0..1 cluster gauges.",
                          cluster.gpuResidencyPercent)
         }
     }
 
-    /// Thermal + power state — catches throttling that correlates with a spike.
+    /// Thermal + power state - catches throttling that correlates with a spike.
     static func promThermal(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         builder.emit("glimmer_thermal_state",
-                     "ProcessInfo thermal state ordinal (0 nominal … 3 critical).",
+                     "ProcessInfo thermal state ordinal (0 nominal ... 3 critical).",
                      snap.thermalState.map(Double.init))
         if let lowPower = snap.lowPowerModeEnabled {
             builder.emit("glimmer_low_power_mode", "1 if Low Power Mode is enabled, else 0.",
@@ -120,7 +120,7 @@ extension TelemetryRenderer {
         guard !snap.buildCommit.isEmpty else { return }
         builder.emitInfo(
             "glimmer_build_info",
-            "Build attribution — commit SHA + build date (value is always 1).",
+            "Build attribution - commit SHA + build date (value is always 1).",
             labels: [("commit", snap.buildCommit), ("date", snap.buildDate)])
     }
 }

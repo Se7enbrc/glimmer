@@ -29,7 +29,7 @@ extension VideoDecoder {
 
         // FPS-SCALE the in-flight decode pool now that we know the frame rate. The
         // bound is a TIME budget (~250ms) / ceiling (~375ms), not a fixed frame
-        // count — a fixed 30/45 is 1s/1.5s of buffered latency at 30fps. Floors of
+        // count - a fixed 30/45 is 1s/1.5s of buffered latency at 30fps. Floors of
         // 15/22 keep enough slots to ride a VPN arrival burst on a low-fps stream.
         // (See `maxInFlightDecodes` in VideoDecoder.swift for the full rationale.)
         let fps = max(1, Int(redrawRate))
@@ -74,7 +74,7 @@ extension VideoDecoder {
         statsCollector.reset()
         // Configure the display layer's colorspace + EDR engagement ONCE
         // at stream start, based on the negotiated stream format. The
-        // AVSampleBufferDisplayLayer takes care of pacing internally — no
+        // AVSampleBufferDisplayLayer takes care of pacing internally - no
         // display link needed on our side.
         Task { @MainActor [weak self] in
             self?.configureLayerColorspace()
@@ -85,7 +85,7 @@ extension VideoDecoder {
         log.info("Stream stopping")
         isStreaming = false
         // ZOMBIE-SESSION GUARD: on a HOST-INITIATED terminate this stop (via
-        // stopConnection's sink-stop) runs with NO StreamSession.stop() yet —
+        // stopConnection's sink-stop) runs with NO StreamSession.stop() yet -
         // an engaged hidden-window decode gate would otherwise block the frame
         // watchdog (the only route to a real stop()) forever. See the helper.
         clearDecodeGateForConnectionStop()
@@ -109,7 +109,7 @@ extension VideoDecoder {
             // output callbacks will fire to drain whatever was in flight. This
             // runs on the serial decodeQueue after any already-queued async
             // decode block, so the count reflects only frames VT may still be
-            // holding — which invalidate above just discarded.
+            // holding - which invalidate above just discarded.
             self.inFlightDecodeLock.lock()
             self.inFlightDecodes = 0
             self.inFlightDecodeLock.unlock()
@@ -144,7 +144,7 @@ extension VideoDecoder {
     /// Mirrors VideoDepacketizer.c reassembleFrame → submitDecodeUnit
     /// semantics.
     ///
-    /// THREADING — the whole VT pipeline (param rebuild, sample build, decode
+    /// THREADING - the whole VT pipeline (param rebuild, sample build, decode
     /// submit) is dispatched to `decodeQueue` ASYNCHRONOUSLY. The caller is
     /// the native backend's receive/depacketize thread, and it must NEVER block on
     /// VideoToolbox: if it did, recvfrom would stall behind VT, the kernel
@@ -152,16 +152,16 @@ extension VideoDecoder {
     /// exact 4K240 chug this fix removes). This matches moonlight-common-c's
     /// dedicated decoder thread pulling from a queue fed by the receive thread
     /// (VideoStream.c VideoRecv/VideoDec). Because `decodeQueue` is SERIAL, the
-    /// async blocks run in strict submission order — param-set rebuilds and the
+    /// async blocks run in strict submission order - param-set rebuilds and the
     /// frames that follow them stay correctly sequenced; nothing is reordered.
     ///
-    /// RETURN VALUE — with the decode now async, the synchronous return can no
+    /// RETURN VALUE - with the decode now async, the synchronous return can no
     /// longer reflect VT decode success (that's known only later, in the output
     /// callback). It returns DR_OK in the steady path. The need-IDR signal is
     /// routed ASYNCHRONOUSLY instead, via `backend?.requestIdrFrame()`, from
     /// every failure site that can no longer be reported through the return:
     ///   * decode-backlog SUSTAINED stall (transient bursts are absorbed; only a
-    ///     genuine stall drops the new frame — see `reserveDecodeSlot`),
+    ///     genuine stall drops the new frame - see `reserveDecodeSlot`),
     ///   * parameter-set rebuild / session-create failure,
     ///   * sample-buffer build failure,
     ///   * inline VTDecompressionSessionDecodeFrame rejection.
@@ -176,21 +176,21 @@ extension VideoDecoder {
         pictureData: Data, newSps: Data?, newPps: Data?, newVps: Data?,
         isIDR: Bool, rtpTimestamp: UInt32, totalLength: Int32
     ) -> Int32 {
-        // ---- Hidden-window decode gate (suppression stage 2 — see the
+        // ---- Hidden-window decode gate (suppression stage 2 - see the
         // `_decodeGated` doc in VideoDecoder.swift). While the window has been
         // hidden past the gate delay we stop feeding AUs to VideoToolbox at
-        // all — decoding 4K120 (~30% CPU) for a pacer that discards every
+        // all - decoding 4K120 (~30% CPU) for a pacer that discards every
         // frame is pure waste. The drop is QUIET: no slot reserved, no counter
         // (these frames were headed for the suppressed pacer's drop-to-newest
         // anyway); the depacketizer/RFI bookkeeping upstream keeps flowing
         // untouched, so the wire never sees the gate.
         //
-        // ARTIFACT SAFETY — the same invariant as the backlog drop below: a
+        // ARTIFACT SAFETY - the same invariant as the backlog drop below: a
         // silent sink-side drop is only safe because nothing non-IDR is fed
         // after the gap. `.resyncToIdr` returns DR_NEED_IDR exactly once when
         // the first post-gate frame is a P-frame, driving the depacketizer
         // into its EXISTING wait-for-IDR recovery gate (requestDecoderRefresh
-        // — the same flush-to-IDR the sustained-stall path uses, IDR request
+        // - the same flush-to-IDR the sustained-stall path uses, IDR request
         // coalesced by the control channel with the resume edge's resync), so
         // no reference-broken P-frame can reach VT. A first post-gate frame
         // that already IS the resync IDR feeds straight through.
@@ -207,12 +207,12 @@ extension VideoDecoder {
         // Checked + reserved on the receive thread BEFORE we dispatch any work.
         // The bound is deep enough (~250ms at 120fps) that a transient VPN
         // arrival burst is absorbed by VT's async pipeline rather than tripping
-        // it — that's the hitch this pass removes.
+        // it - that's the hitch this pass removes.
         //
         // ARTIFACT-SAFETY INVARIANT: dropping a not-yet-decoded P-frame here
         // WITHOUT flushing-to-IDR would orphan the reference chain (the
         // white/purple corruption fixed in an earlier build), because the depacketizer
-        // already considers this frame DELIVERED — it assembled it off the wire
+        // already considers this frame DELIVERED - it assembled it off the wire
         // and handed it to us, so its on-the-wire loss detection
         // (`depacketizerDetectedFrameLoss`) will NOT see the gap a sink-side drop
         // creates. So there is no safe SILENT pre-decode drop: the only two
@@ -223,13 +223,13 @@ extension VideoDecoder {
         // `reserveDecodeSlot()` therefore returns only those two outcomes. It
         // ABSORBS a burst by reserving past the nominal bound while VT is
         // actively draining (recent decode output), up to a hard ceiling that
-        // still bounds memory/latency — so a single transient burst NEVER
+        // still bounds memory/latency - so a single transient burst NEVER
         // flushes-to-IDR. It escalates to `.dropAndFlush` only on a GENUINE
         // sustained stall: the backlog stays at the hard ceiling across a streak
         // of assembled frames AND VT has produced no output for a stall window.
         // That `.dropAndFlush` routes DR_NEED_IDR so the VideoSink caller
         // (VideoRtpReceiver.depacketizerDidAssembleFrame) drives the depacketizer
-        // into wait-for-IDR + one coalesced IDR request — the same self-heal
+        // into wait-for-IDR + one coalesced IDR request - the same self-heal
         // moonlight does when its bounded decodeUnitQueue overflows
         // (VideoDepacketizer.c:513-532). We deliberately do NOT also call
         // `backend?.requestIdrFrame()` here, so an overflow requests exactly one
@@ -239,7 +239,7 @@ extension VideoDecoder {
             break
         case .dropAndFlush:
             TelemetryCounters.shared.backlogOverflowTotal.increment()
-            // This assembled frame is dropped before VT ever sees it — credit a
+            // This assembled frame is dropped before VT ever sees it - credit a
             // decoder-side discard so the drops-by-cause split counts it (it
             // never reaches recordDecodeComplete, the only counter the overlay's
             // decoder% used to read).
@@ -278,7 +278,7 @@ extension VideoDecoder {
             // Teardown gate: stop() may have flipped isStreaming off (and
             // handleCleanup may be queued behind us) between the receive thread
             // returning DR_OK and this block running. Skip VT work and DON'T
-            // request an IDR against a backend that's tearing down — just
+            // request an IDR against a backend that's tearing down - just
             // release the slot we reserved so the counter stays balanced.
             guard self.isStreaming else {
                 self.releaseInFlightDecode()
@@ -295,7 +295,7 @@ extension VideoDecoder {
     /// out of `decodeAssembledFrame` so the receive-thread half (backlog gate +
     /// dispatch) stays small. Each early-out releases the in-flight slot the
     /// caller reserved and routes the need-IDR signal asynchronously via
-    /// `backend?.requestIdrFrame()` — the same thread-safe IDR route the VT
+    /// `backend?.requestIdrFrame()` - the same thread-safe IDR route the VT
     /// output callback / renderer-failed path use. The success path's slot is
     /// released later by the VT output callback (`releaseInFlightDecode`), which
     /// fires exactly once per accepted submit.
@@ -312,7 +312,7 @@ extension VideoDecoder {
             // (it never reaches recordDecodeComplete), and request an IDR.
             releaseInFlightDecode()
             statsCollector.recordDecoderDiscard()
-            log.error("Decode param/session setup failed — requesting IDR")
+            log.error("Decode param/session setup failed - requesting IDR")
             OSSignposter.decode.emitEvent("IDRRequested", "trigger=param_rebuild_failed")
             backend?.requestIdrFrame()
             return
@@ -321,7 +321,7 @@ extension VideoDecoder {
         guard formatDescription != nil, let session = decompressionSession else {
             releaseInFlightDecode()
             statsCollector.recordDecoderDiscard()
-            log.error("Decode session missing — requesting IDR")
+            log.error("Decode session missing - requesting IDR")
             OSSignposter.decode.emitEvent("IDRRequested", "trigger=no_session")
             backend?.requestIdrFrame()
             return
@@ -351,7 +351,7 @@ extension VideoDecoder {
         guard let sample = preparedSample else {
             releaseInFlightDecode()
             statsCollector.recordDecoderDiscard()
-            log.error("Sample-buffer build failed — requesting IDR")
+            log.error("Sample-buffer build failed - requesting IDR")
             OSSignposter.decode.emitEvent("IDRRequested", "trigger=sample_build_failed")
             backend?.requestIdrFrame()
             return
@@ -393,7 +393,7 @@ extension VideoDecoder {
         // engages can briefly show torn/old-geometry frames. Flush the renderer so
         // the layer starts clean on the new format. This rebuild is always
         // triggered by an IDR (the param sets ride the keyframe), so the very next
-        // sample is a clean keyframe in the new format — the flush just guarantees
+        // sample is a clean keyframe in the new format - the flush just guarantees
         // nothing stale precedes it. `sampleBufferRenderer.flush()` is documented
         // safe off the main thread, so calling it from the decode queue is fine.
         // Distinct from loss recovery: no IDR is requested here (the keyframe is
@@ -425,12 +425,12 @@ extension VideoDecoder {
         //
         // We deliberately do NOT pass _EnableTemporalProcessing here.
         // Temporal processing tells VT it may reorder frames into
-        // display order — useful for streams with B-frames where the
+        // display order - useful for streams with B-frames where the
         // decoder receives frames in coded order and the renderer
         // needs them in display order. Sunshine and GFE encode with
         // zero B-frames (low-latency encode, no reordering possible),
         // so temporal processing buys us nothing semantic and adds a
-        // one-frame reordering buffer — measurable cost on real-time
+        // one-frame reordering buffer - measurable cost on real-time
         // game streaming (≈8ms at 120Hz, ≈4ms at 240Hz, end-to-end
         // photons-to-input). moonlight-qt's vt_avsamplelayer.mm also
         // omits this flag for the same reason. The realtime hint on
@@ -472,7 +472,7 @@ extension VideoDecoder {
             // NOT fire for a synchronously-rejected submit, so release the
             // in-flight slot here and pop our pending submit timestamp so the
             // FIFO stays aligned with the output callback's pops. Credit a
-            // decoder-side discard too — VT rejected the frame inline, so it
+            // decoder-side discard too - VT rejected the frame inline, so it
             // never reaches recordDecodeComplete and would otherwise undercount.
             releaseInFlightDecode()
             statsCollector.recordDecoderDiscard()
@@ -489,7 +489,7 @@ extension VideoDecoder {
 
     /// Outcome of a backlog reservation. Only two artifact-safe outcomes exist
     /// (see `decodeAssembledFrame`): reserve + decode, or drop + flush-to-IDR.
-    /// There is deliberately no silent-drop case — a sink-side drop without a
+    /// There is deliberately no silent-drop case - a sink-side drop without a
     /// flush would orphan the reference chain the depacketizer believes is
     /// intact.
     enum DecodeSlotDecision {
@@ -513,7 +513,7 @@ extension VideoDecoder {
     ///     `decodeStallWindowSeconds`) → ABSORB: reserve anyway so the VPN burst
     ///     rides VT's pipeline instead of flushing-to-IDR. A transient burst is
     ///     never flushed, no matter how deep, as long as VT keeps retiring frames
-    ///     — that's the whole point of the deep bound.
+    ///     - that's the whole point of the deep bound.
     ///   * VT has produced NO output for the stall window (genuine VT stall) OR
     ///     backlog ≥ `maxInFlightDecodeCeiling` (memory/latency ceiling even with
     ///     absorption) → `.dropAndFlush`.
@@ -521,7 +521,7 @@ extension VideoDecoder {
     /// gate: it cleanly separates "transient burst VT is working through" from
     /// "VT genuinely stopped." `consecutiveBacklogOverflow` is tracked only for
     /// the diagnostic log (how long the burst has sat in the overflow zone), not
-    /// as a flush trigger — flushing a deep-but-draining burst would defeat the
+    /// as a flush trigger - flushing a deep-but-draining burst would defeat the
     /// bound bump and reintroduce the hitch.
     ///
     /// The matching decrement is `releaseInFlightDecode`, called when VT retires
@@ -540,7 +540,7 @@ extension VideoDecoder {
             return .reserved
         }
 
-        // At/over the nominal bound — a burst is building. Decide absorb vs
+        // At/over the nominal bound - a burst is building. Decide absorb vs
         // flush. `secondsSinceLastDecodedFrame()` is the VT-draining signal: it
         // advances on every VT output callback, so a small value means VT is
         // actively retiring frames (a transient burst it will drain), while a
@@ -562,14 +562,14 @@ extension VideoDecoder {
 
         // Genuine sustained stall (VT not draining, or hit the ceiling). Drop +
         // flush-to-IDR. `streak` is how many assembled frames sat in the overflow
-        // zone before this escalation — large means a long burst, small means VT
+        // zone before this escalation - large means a long burst, small means VT
         // hard-stopped immediately.
         let streak = consecutiveBacklogOverflow
         consecutiveBacklogOverflow = 0
         inFlightDecodeLock.unlock()
         log.warning(
             // swiftlint:disable:next line_length
-            "Decode backlog stall (\(backlog) in flight, overflowStreak=\(streak), vtDraining=\(vtDraining)) — dropping frame, flushing to next IDR")
+            "Decode backlog stall (\(backlog) in flight, overflowStreak=\(streak), vtDraining=\(vtDraining)) - dropping frame, flushing to next IDR")
         OSSignposter.decode.emitEvent("IDRRequested", "trigger=decode_backlog_stall")
         return .dropAndFlush
     }

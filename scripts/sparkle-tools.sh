@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# sparkle-tools.sh — ensure Sparkle's CLI tools are available locally and print
+# sparkle-tools.sh - ensure Sparkle's CLI tools are available locally and print
 # the directory that holds them. Pinned, cached under ~/.cache so the download
 # happens once; prompt-free, network only on first use.
 #
@@ -8,9 +8,9 @@
 # Sparkle's binary release tarball. The publish pipeline (scripts/publish-release.sh)
 # uses sign_update; generate_keys is used once for the EdDSA keypair.
 #
-# Usage:  TOOLS="$(scripts/sparkle-tools.sh)"   # $TOOLS/sign_update …
-# Pin a different version with SPARKLE_VERSION=… ; relocate the cache with
-# GLIMMER_SPARKLE_CACHE=… .
+# Usage:  TOOLS="$(scripts/sparkle-tools.sh)"   # $TOOLS/sign_update ...
+# Pin a different version with SPARKLE_VERSION=... ; relocate the cache with
+# GLIMMER_SPARKLE_CACHE=... .
 set -euo pipefail
 
 SPARKLE_VERSION="${SPARKLE_VERSION:-2.9.3}"
@@ -20,7 +20,7 @@ BIN="$CACHE/bin"
 if [ ! -x "$BIN/sign_update" ]; then
 	mkdir -p "$CACHE"
 	url="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
-	echo "▶ fetching Sparkle ${SPARKLE_VERSION} CLI tools…" >&2
+	echo "▶ fetching Sparkle ${SPARKLE_VERSION} CLI tools..." >&2
 	curl -fsSL "$url" -o "$CACHE/sparkle.tar.xz"
 	tar -xJf "$CACHE/sparkle.tar.xz" -C "$CACHE"
 	rm -f "$CACHE/sparkle.tar.xz"

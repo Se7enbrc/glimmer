@@ -12,14 +12,14 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "General"
-        // Titled "Quality" — the pane is about how the stream looks and
+        // Titled "Quality" - the pane is about how the stream looks and
         // feels, not the act of streaming. The case name (and rawValue
         // "streaming") stays put: selection is session-only @State today,
         // but keeping the raw value stable means nothing breaks if it is
         // ever persisted or deep-linked.
         case .streaming: return "Quality"
         case .pcs: return "PCs"
-        // Titled "Input" — it now holds every input control (shortcuts, macOS
+        // Titled "Input" - it now holds every input control (shortcuts, macOS
         // keys, controller raw-HID + quit chord, mouse). Case/rawValue
         // "shortcuts" stays put so nothing persisted/deep-linked breaks.
         case .shortcuts: return "Input"
@@ -31,7 +31,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .general: return "gearshape.fill"
-        // A quality dial, not a play button — the pane tunes how the
+        // A quality dial, not a play button - the pane tunes how the
         // stream looks, it doesn't start one. `dial.high.fill` has shipped
         // since SF Symbols 3, so no missing-glyph risk on macOS 26.
         case .streaming: return "dial.high.fill"
@@ -39,7 +39,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .shortcuts: return "keyboard.fill"
         case .troubleshooting: return "stethoscope"
         case .diagnostics: return "waveform.path.ecg"
-        // System Settings' About uses `info.circle.fill` — the bare "info"
+        // System Settings' About uses `info.circle.fill` - the bare "info"
         // symbol doesn't ship in SF Symbols 6 and falls back to a missing
         // glyph on macOS 26.
         case .about: return "info.circle.fill"
@@ -64,7 +64,7 @@ struct SettingsRoot: View {
     @State private var selection: SettingsPane = .general
 
     /// Panes shown in the sidebar. Diagnostics is HIDDEN until revealed by the
-    /// option-click gesture on the version line in About — normal users never
+    /// option-click gesture on the version line in About - normal users never
     /// see it, so the debug/tuning wires stay out of the way.
     private var visiblePanes: [SettingsPane] {
         SettingsPane.allCases.filter { $0 != .diagnostics || moonlight.showDiagnostics }
@@ -86,7 +86,7 @@ struct SettingsRoot: View {
                         .frame(width: 22, height: 22)
                         .background(
                             // Subtle top-edge highlight on the colored chip
-                            // — matches Tahoe's System Settings chips for
+                            // - matches Tahoe's System Settings chips for
                             // Bluetooth/Network/etc. The gradient lightens
                             // the top ~40% of the chip and falls off to the
                             // base color, giving the glossy "lit from above"

@@ -24,7 +24,7 @@ extension MoonlightManager {
     func bootstrap() async {
         // Self-heal the login item: if the user wants launch-at-login but the
         // registration drifted (invalidated by an app update / move), re-assert
-        // it now. This is the fix for "doesn't start after reboot" — the next
+        // it now. This is the fix for "doesn't start after reboot" - the next
         // reboot picks up the freshly-reconciled registration.
         LoginItemManager.reconcile()
         log.info("Glimmer stream engine: Swift-native")
@@ -56,7 +56,7 @@ extension MoonlightManager {
             object: nil, queue: .main
         ) { [weak self] _ in
             // Dock / undock / external display plugged in. Re-derive smart
-            // defaults for the new primary display. Skip if streaming —
+            // defaults for the new primary display. Skip if streaming -
             // yanking the resolution mid-stream would be disruptive.
             Task { @MainActor in
                 guard let self, !self.isStreaming else { return }
@@ -77,7 +77,7 @@ extension MoonlightManager {
                 // Refresh the host status poller on activation so the chip
                 // updates within one RTT of the user returning, rather than
                 // waiting out the current 10s interval. This is no longer a
-                // "resume" — polling now runs continuously regardless of focus
+                // "resume" - polling now runs continuously regardless of focus
                 // (see restartHostStatusPolling); restarting here just resets
                 // the streak and fires an immediate probe for snappy feedback.
                 self.restartHostStatusPolling()
@@ -86,7 +86,7 @@ extension MoonlightManager {
                 // launcher after plugging it in mid-stream).
                 self.maybeOfferRawHID()
                 // Cmd-Tab back into Glimmer while a stream is parked in the
-                // background should bring the stream forward — but ONLY for a
+                // background should bring the stream forward - but ONLY for a
                 // keyboard-style reactivation (Cmd-Tab). If the user clicked
                 // the launcher window (or its menu) to reach Settings, leave
                 // them there. StreamWindow.swift deliberately avoids a blanket
@@ -104,9 +104,9 @@ extension MoonlightManager {
         })
         // NOTE: there is intentionally no `didResignActiveNotification` handler
         // cancelling the host-status poller. We used to pause polling whenever
-        // Glimmer lost focus, on the theory "the chip can't be seen" — but the
+        // Glimmer lost focus, on the theory "the chip can't be seen" - but the
         // chip is plainly visible when Glimmer's window sits behind another app,
-        // and cancelling on resign stranded it on "Checking…" the instant the
+        // and cancelling on resign stranded it on "Checking..." the instant the
         // user clicked away (last sample aged past HostLiveStatus.stale). The
         // poller now runs continuously while on the launcher (matching
         // Moonlight) and only pauses for an active stream or no selected host.
@@ -118,12 +118,12 @@ extension MoonlightManager {
         // Mid-stream invariant: plugging a pad in during a live stream must be
         // SILENT and NON-BLOCKING. This handler only updates
         // `controllerConnected` and calls `maybeOfferRawHID()`, which is
-        // `!isStreaming`-gated — so the offer alert never fires mid-stream. Even
+        // `!isStreaming`-gated - so the offer alert never fires mid-stream. Even
         // the "Enable" path (`enableRawHIDFromPrompt`) is now side-effect-free
         // (no IOHIDRequestAccess, no NSWorkspace.open), so nothing on this path
         // can block the present thread or flash a System Settings window. If
         // raw HID is already enabled + granted, the pad attaches silently via
-        // `ControllerForwarder.retain()` — never from here.
+        // `ControllerForwarder.retain()` - never from here.
         notificationTokens.append(nc.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
         ) { [weak self] _ in
@@ -154,7 +154,7 @@ extension MoonlightManager {
     /// Reads `NSScreen.main` (a global) so `@Observable`'s automatic
     /// tracking can't see when the value would change. We deliberately
     /// touch `displayInfoRevision` first so any view that read this
-    /// property gets a tracking edge on the sentinel — when the
+    /// property gets a tracking edge on the sentinel - when the
     /// screen-parameter notification bumps the sentinel, the view
     /// recomputes.
     var currentDisplayDescription: String {

@@ -125,7 +125,7 @@ extension PairingClient {
     // MARK: X509 signature extraction
     //
     // The "cert signature" we hash into the challenge response is the raw
-    // ASN.1 BIT STRING from the X509 — not a recomputed signature, but the
+    // ASN.1 BIT STRING from the X509 - not a recomputed signature, but the
     // bytes that are already on the cert. Both sides extract it the same
     // way from the same PEM, so they end up with the same value.
 
@@ -136,7 +136,7 @@ extension PairingClient {
 
         // X509_get0_signature takes a const ASN1_BIT_STRING ** out-param. We
         // hand it a slot, then read the pointer back out. Ownership stays
-        // with the X509 — we must NOT free `asnSig`.
+        // with the X509 - we must NOT free `asnSig`.
         var asnSig: UnsafePointer<ASN1_BIT_STRING>?
         withUnsafeMutablePointer(to: &asnSig) { sigPP in
             X509_get0_signature(sigPP, nil, cert)
@@ -202,7 +202,7 @@ extension PairingClient {
             }
         }
         // 1 = signature valid, 0 = invalid, <0 = hard error. Treat anything
-        // but 1 as "not valid" — we only care about the boolean outcome and
+        // but 1 as "not valid" - we only care about the boolean outcome and
         // the caller throws on false.
         return result == 1
     }
@@ -273,7 +273,7 @@ extension PairingClient {
             throw StreamError.pairingFailed("response missing <root> element")
         }
         let codeRaw = root.attributes["status_code"] ?? "-1"
-        // GFE 3.20.3 sometimes returns 0xFFFFFFFF — parse as UInt32 first then
+        // GFE 3.20.3 sometimes returns 0xFFFFFFFF - parse as UInt32 first then
         // narrow, matching NvHTTP::verifyResponseStatus.
         let code: Int
         if let unsigned = UInt32(codeRaw) {
@@ -301,12 +301,12 @@ extension Data {
     /// Lowercase hex string. We deliberately match moonlight-qt's wire format
     /// (`QByteArray::toHex()` → lowercase). GFE / Sunshine appear to accept
     /// either case in practice, but moonlight-qt has been the reference
-    /// implementation for ~a decade — any divergence is a latent risk on some
+    /// implementation for ~a decade - any divergence is a latent risk on some
     /// GFE 3.x build we haven't tested against. The performance cost is
     /// identical; the readability of packet captures is exactly the same. If
     /// we ever need uppercase for a specific endpoint we can add a flag.
     func hex() -> String {
-        // Reserve exact capacity — saves the dynamic-resize cost on a hot path
+        // Reserve exact capacity - saves the dynamic-resize cost on a hot path
         // (cert blobs are ~1KB which means ~2KB of hex).
         var out = String()
         out.reserveCapacity(count * 2)
@@ -317,7 +317,7 @@ extension Data {
     }
 
     /// Lenient hex decode. Accepts mixed case and ignores embedded whitespace
-    /// — GFE sometimes pretty-prints with newlines inside <plaincert>.
+    /// - GFE sometimes pretty-prints with newlines inside <plaincert>.
     init?(hex: String) {
         let cleaned = hex.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) }
         guard cleaned.count % 2 == 0 else { return nil }
@@ -351,7 +351,7 @@ extension Data {
 // resolved or downgraded based on a line-by-line read of moonlight-qt's
 // `app/backend/nvpairingmanager.cpp`:
 //
-// 1. CHALLENGE RESPONSE LAYOUT — moonlight-qt's `decrypt(challengeresponse)`
+// 1. CHALLENGE RESPONSE LAYOUT - moonlight-qt's `decrypt(challengeresponse)`
 //    treats the entire decrypted blob as `hashLen || 16-byte challenge ||
 //    server-cert-sig` (the sig is whatever the cert's ASN.1 BIT STRING is
 //    long, typically 256/384 bytes for RSA-2048/3072). It does NOT assume
@@ -361,17 +361,17 @@ extension Data {
 //    formally require it. → kept as-is; surface a clear error if it ever
 //    happens, then revisit.
 //
-// 2. HEX CASE — moonlight-qt uses `QByteArray::toHex()` which is lowercase.
+// 2. HEX CASE - moonlight-qt uses `QByteArray::toHex()` which is lowercase.
 //    We now match this exactly (see `Data.hex()` below). GFE / Sunshine
 //    both accept either case in observed packet captures, but lowercase
 //    eliminates a latent divergence.
 //
-// 3. UNIQUEID / UUID — `NetworkClient.rawRequest` injects the well-known
+// 3. UNIQUEID / UUID - `NetworkClient.rawRequest` injects the well-known
 //    `uniqueid=0123456789ABCDEF` (matching moonlight-qt's hardcoded shared
 //    ID, see comment in nvhttp.cpp) and a fresh `uuid=` nonce per request.
 //    Pairing only passes its own keys.
 //
-// 4. URL-ENCODING — URLComponents percent-encodes hex query values, which
+// 4. URL-ENCODING - URLComponents percent-encodes hex query values, which
 //    is harmless because hex chars are unreserved. Sunshine cert blobs
 //    push us toward ~3KB URLs; moonlight-qt uses GET for the same payload
 //    so we are within established tolerances. No action.

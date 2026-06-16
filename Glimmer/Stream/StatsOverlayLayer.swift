@@ -19,19 +19,19 @@ import os.log
 ///
 /// Hierarchy:
 ///   displayLayer (AVSampleBufferDisplayLayer, view's root)
-///     └─ StatsOverlayLayer container (CALayer) — rounded translucent panel
+///     └─ StatsOverlayLayer container (CALayer) - rounded translucent panel
 ///        ├─ row 0: icon (CALayer.contents = SF Symbol CGImage)
-///        │         + text (CATextLayer with NSAttributedString —
+///        │         + text (CATextLayer with NSAttributedString -
 ///        │           SF Pro Text label on the left, SF Mono value on
 ///        │           the right with health color)
 ///        ├─ row 1: same shape
-///        ├─ divider (1pt CALayer at 8% white) — only between sections
-///        ├─ row 2 …
+///        ├─ divider (1pt CALayer at 8% white) - only between sections
+///        ├─ row 2 ...
 ///        └─ row N
 ///
 /// Why a row-per-sublayer-pair architecture and not one big newlined
 /// CATextLayer:
-///   * Per-row icons require their own CALayer.contents anyway — once
+///   * Per-row icons require their own CALayer.contents anyway - once
 ///     we have a sublayer per row to host the icon, packing the text
 ///     into the same row's text sublayer keeps the icon and its row's
 ///     baseline aligned naturally (one CATextLayer line height, one
@@ -58,7 +58,7 @@ public final class StatsOverlayLayer {
     /// attachment is in `StreamWindow.init` via `attach(to:)`.
     public let layer: CALayer
 
-    // Layout constants — tuned to match the Liquid Glass aesthetic Apple
+    // Layout constants - tuned to match the Liquid Glass aesthetic Apple
     // ships in macOS 26 for floating in-stream overlays.
     private static let inset: CGFloat = 20
     private static let padding: CGFloat = 12
@@ -121,7 +121,7 @@ public final class StatsOverlayLayer {
     private var dividerLayers: [CALayer] = []
 
     /// Cached SF Symbol CGImages keyed by SF Symbol name. The icons are
-    /// rendered once per (name, scale) combo and reused — the alternative
+    /// rendered once per (name, scale) combo and reused - the alternative
     /// (NSImage(systemSymbolName:) → CGImage every tick) would re-render
     /// the symbol bitmap 12 times per snapshot.
     ///
@@ -132,15 +132,15 @@ public final class StatsOverlayLayer {
     private var iconCache: [String: CGImage] = [:]
 
     public init() {
-        // Container layer — the background rounded rectangle.
+        // Container layer - the background rounded rectangle.
         let bg = CALayer()
         bg.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 0.42)
         bg.cornerRadius = StatsOverlayLayer.cornerRadius
-        // 1 pt inner rim — a hairline at the top edge fakes the rim
+        // 1 pt inner rim - a hairline at the top edge fakes the rim
         // highlight Liquid Glass surfaces get from real refraction.
         // Without this the panel reads as a flat dark rectangle against
         // bright HDR content. We can't use a real backdrop blur here
-        // (would break EDR composition — see StreamWindow.init), so the
+        // (would break EDR composition - see StreamWindow.init), so the
         // rim is doing the work of communicating "floating material".
         bg.borderColor = CGColor(red: 1, green: 1, blue: 1, alpha: 0.14)
         bg.borderWidth = 1
@@ -197,11 +197,11 @@ public final class StatsOverlayLayer {
 
     /// Push a new snapshot into the overlay. Builds the row list,
     /// diffs against the live sublayers, and updates only what changed.
-    /// At the 4 Hz overlay cadence the diff overhead is negligible — and the
+    /// At the 4 Hz overlay cadence the diff overhead is negligible - and the
     /// diff is exactly what makes the faster tick free: most ticks only the
     /// live latency rows (RTT / jitter) change, so we update one
     /// CATextLayer.string and leave the FPS / bitrate rows (still on their ~1s
-    /// average) untouched — no churn on the steady rows.
+    /// average) untouched - no churn on the steady rows.
     public func update(
         snapshot: StreamStatsSnapshot,
         enabled: Set<StatsRow.Kind>,
@@ -234,13 +234,13 @@ public final class StatsOverlayLayer {
             }
         }
 
-        // 2) Re-flow positions — the row count may have changed (preset
+        // 2) Re-flow positions - the row count may have changed (preset
         //    flip, audio toggled in/out via custom checkboxes), which
         //    changes the panel height and the per-row Y origins.
         if let host = layer.superlayer {
             layoutInHost(host)
         } else {
-            // No host yet (very early init) — still size ourselves
+            // No host yet (very early init) - still size ourselves
             // against the cached width so the next attach() has the
             // right geometry.
             layoutRowsAndDividers(inWidth: layer.bounds.width, height: layer.bounds.height)
@@ -281,7 +281,7 @@ public final class StatsOverlayLayer {
         icon.contentsGravity = .resizeAspect
         icon.contentsScale = scale
         icon.actions = StatsOverlayLayer.disabledActions
-        // Contents are populated by the apply() call below — icon
+        // Contents are populated by the apply() call below - icon
         // reconciliation lives there so first render and later symbol
         // changes share one code path.
         container.addSublayer(icon)
@@ -293,7 +293,7 @@ public final class StatsOverlayLayer {
         text.alignmentMode = .left
         text.actions = StatsOverlayLayer.disabledActions
         // The attributed string carries the per-range fonts + colors so
-        // the layer doesn't need its own font/foregroundColor — both
+        // the layer doesn't need its own font/foregroundColor - both
         // are ignored when the `string` is an NSAttributedString.
         container.addSublayer(text)
 
@@ -309,9 +309,9 @@ public final class StatsOverlayLayer {
     /// sublayer pair.
     private func apply(row: StatsRow, to sub: RowSublayers) {
         // Icons are per-Kind and usually static, but not always: the
-        // battery row picks a level glyph (battery.0/25/…/bolt) that
+        // battery row picks a level glyph (battery.0/25/.../bolt) that
         // moves with the charge, and goes nil when there's no battery to
-        // read (desktop Macs) — an empty icon slot, never a misleading
+        // read (desktop Macs) - an empty icon slot, never a misleading
         // battery-empty glyph. Reconcile only on change so the static
         // rows skip the bitmap lookup on every tick.
         if sub.lastRender?.symbolName != row.symbolName {
@@ -364,7 +364,7 @@ public final class StatsOverlayLayer {
         // 80% alpha de-emphasises labels so the value reads as the
         // primary content. The HIG-respecting alternative is the
         // semantic NSColor.secondaryLabelColor, but the panel composites
-        // against arbitrary HDR video — that color resolves to a system
+        // against arbitrary HDR video - that color resolves to a system
         // gray that disappears against bright content. Fixed-alpha white
         // works at every backdrop.
         let labelColor = NSColor(white: 1.0, alpha: 0.80)
@@ -398,7 +398,7 @@ public final class StatsOverlayLayer {
     /// but in practice the labels on neutral rows ("Host", "Bitrate",
     /// "Host encode", "Audio") already telegraph that they're
     /// informational, and dimming would make the bitrate row hard to
-    /// read at a glance — which is exactly when the user looks at it.
+    /// read at a glance - which is exactly when the user looks at it.
     private func healthColor(_ h: StatsRow.Health) -> NSColor {
         switch h {
         case .healthy, .neutral: return NSColor(white: 1.0, alpha: 1.0)
@@ -467,7 +467,7 @@ public final class StatsOverlayLayer {
         // StreamStatsSnapshot.rows). Section changes between adjacent
         // rows emit a divider. We don't track Section explicitly here;
         // instead we look up each row's section from its last-render
-        // payload — the apply() path always sets lastRender, and a
+        // payload - the apply() path always sets lastRender, and a
         // freshly-created row has its own section in lastRender from
         // makeRow's apply() call.
         let ordered: [StatsRow.Kind] = StatsRow.Kind.allCases
@@ -562,7 +562,7 @@ public final class StatsOverlayLayer {
 
     /// Disable all implicit CAAction animations on a layer. CALayer's
     /// default actions crossfade contents/position/bounds changes,
-    /// which we don't want here — the overlay should snap to its new
+    /// which we don't want here - the overlay should snap to its new
     /// value every tick. Reused across the background, the row
     /// containers, the icon + text sublayers, and the dividers.
     private static let disabledActions: [String: CAAction] = [
@@ -579,7 +579,7 @@ public final class StatsOverlayLayer {
 
 /// Heap-allocated single-slot container for a one-shot NotificationCenter
 /// observer token. The observer's closure needs to know its OWN token so it can
-/// remove itself after firing — but `var token: NSObjectProtocol?` captured by
+/// remove itself after firing - but `var token: NSObjectProtocol?` captured by
 /// a `@Sendable` closure is rejected in Swift 6 strict mode (the `var` cannot
 /// be safely shared). Holding the token in a small class lets the closure
 /// capture a reference to the class instead of mutating an in-scope var. We

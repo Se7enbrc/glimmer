@@ -10,7 +10,7 @@
 //  sequence detector that latches receivedOosData).
 //
 //  These run on the SAME single receive thread as the parse entry point and the
-//  reconstruct half (RtpVideoQueue.swift / RtpVideoQueue+Reconstruct.swift) — the
+//  reconstruct half (RtpVideoQueue.swift / RtpVideoQueue+Reconstruct.swift) - the
 //  split is purely textual (a Swift extension can only reach non-private members,
 //  which is why the queue's touched state is `internal` rather than `private`; see
 //  the visibility note atop RtpVideoQueue.swift). No isolation, ordering, locking,
@@ -67,9 +67,9 @@ extension RtpVideoQueue {
         // (`presentationTimeUs > lastOos + COOLDOWN`): presentationUs is a
         // NON-modular mapping of the host's u32 90kHz RTP timestamp, so it
         // COLLAPSES from ~47.7e9µs toward 0 when the host clock crosses 2^32
-        // (period ~13.26h, origin arbitrary — the wrap can land mid-session).
+        // (period ~13.26h, origin arbitrary - the wrap can land mid-session).
         // A wrapping `&-` delta here goes astronomically large at that collapse
-        // and clears receivedOosData on a still-reordering link — failing OPEN,
+        // and clears receivedOosData on a still-reordering link - failing OPEN,
         // so the next cross-frame reorder is declared an immediate unrecoverable
         // loss (spurious RFI + one dropped frame, the exact false-loss hitch the
         // hold exists to prevent). The plain `>` instead goes FALSE at the wrap:
@@ -108,7 +108,7 @@ extension RtpVideoQueue {
         // Issue 2b: a deferred next-frame packet is held ONLY to give the
         // CURRENT frame's late shards time to land. If the incoming datagram is
         // NOT for the current frame (it's another later frame, or even the
-        // deferred frame's own next packet), the hold can no longer help — flush
+        // deferred frame's own next packet), the hold can no longer help - flush
         // the deferred packet first so frame N's loss is declared and N+1 opens
         // in order BEFORE we process this datagram. This is what keeps the
         // one-deep slot from ever stranding the deferred SOF. A packet that DOES
@@ -158,7 +158,7 @@ extension RtpVideoQueue {
 
     /// Handle the new-frame / new-FEC-block transition (RtpVideoQueue.c:583-744):
     /// the bounded cross-frame reorder hold, the unrecoverable-frame reporting +
-    /// drop paths, and — when we genuinely advance — the per-frame buffer-window
+    /// drop paths, and - when we genuinely advance - the per-frame buffer-window
     /// reset. Returns `.proceed` to continue the add with the freshly opened
     /// window, or `.finished` with the terminal result (a reorder hold `.queued`
     /// or a dropped frame `.rejected`).
@@ -166,23 +166,23 @@ extension RtpVideoQueue {
                                        receiveTimeUs: UInt64, allowHold: Bool) -> TransitionOutcome {
         let frameIndex = fields.frameIndex
 
-        // Issue 2b — BOUNDED CROSS-FRAME REORDER HOLD. The next frame's first
+        // Issue 2b - BOUNDED CROSS-FRAME REORDER HOLD. The next frame's first
         // packet has arrived while the current frame is still incomplete. On
         // a link we've SEEN reorder (receivedOosData), the current frame's
         // late tail/EOF shards are probably microseconds away and FEC can
-        // still complete it — so defer this next-frame packet for a bounded
+        // still complete it - so defer this next-frame packet for a bounded
         // window instead of immediately declaring loss. Strictly gated:
-        //   * receivedOosData          — only on a proven-reordering link
+        //   * receivedOosData          - only on a proven-reordering link
         //   * currentFrameNumber != frameIndex && !pending.isEmpty
-        //                              — genuinely "next frame started, this
+        //                              - genuinely "next frame started, this
         //                                frame incomplete" (not a new FEC
         //                                block of the same frame)
-        //   * isFecRecoveryStillPossible — FEC can still recover with the
+        //   * isFecRecoveryStillPossible - FEC can still recover with the
         //                                parity we expect (never hold a frame
         //                                that's already unrecoverable)
-        //   * deferredDatagram == nil  — one-deep: a SECOND new frame forces
+        //   * deferredDatagram == nil  - one-deep: a SECOND new frame forces
         //                                immediate loss (no unbounded stall)
-        //   * within reorderWindowUs   — time bound from the frame's first
+        //   * within reorderWindowUs   - time bound from the frame's first
         //                                receive
         // A held packet returns .queued WITHOUT advancing currentFrameNumber;
         // it's replayed once the late shard lands (the next datagram re-drives
@@ -200,7 +200,7 @@ extension RtpVideoQueue {
 
         if !pending.isEmpty {
             // Report the final status of the FEC queue before dropping this
-            // frame (RtpVideoQueue.c:596-597) — the per-frame reception
+            // frame (RtpVideoQueue.c:596-597) - the per-frame reception
             // feedback Sunshine's QoS eval needs.
             reportFinalFrameFecStatus()
 
@@ -325,7 +325,7 @@ extension RtpVideoQueue {
             multiFecCurrentBlockNumber = 0
             // Issue 2b: the held current frame just completed via its late
             // shard. Replay the deferred next-frame packet now so the next
-            // frame opens normally — strict in-order submit is preserved (we
+            // frame opens normally - strict in-order submit is preserved (we
             // never reorder frames into the depacketizer; we only delayed the
             // loss DECISION). Replay drives addPacket re-entrantly, but the
             // one-deep slot is cleared first so depth is bounded to 1.
@@ -337,7 +337,7 @@ extension RtpVideoQueue {
 
     /// FEC could still recover the current frame: the data deficit is within the
     /// parity we expect to receive for this block. Never hold a frame that's
-    /// already mathematically unrecoverable — that's genuine loss, declare it.
+    /// already mathematically unrecoverable - that's genuine loss, declare it.
     private func isFecRecoveryStillPossible() -> Bool {
         // Need fecPercentage > 0 (otherwise no parity can ever fill the gap) and
         // the count of still-missing DATA packets must not exceed the parity we

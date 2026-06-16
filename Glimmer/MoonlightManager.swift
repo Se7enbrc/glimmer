@@ -5,12 +5,12 @@
 //  settings, pairing state, and stream lifecycle. This file is the class
 //  core (published properties + orchestration). The split is:
 //
-//    * Models/Host.swift      — MoonlightHost, MoonlightApp, QualityPreset,
+//    * Models/Host.swift      - MoonlightHost, MoonlightApp, QualityPreset,
 //                               HotkeyChord, HostLiveStatus
-//    * HostsStore.swift       — UserDefaults read/write of the host list,
+//    * HostsStore.swift       - UserDefaults read/write of the host list,
 //                               moonlight-qt migration, unpair/retrust
-//    * QualityCalculator.swift — bitrate/resolution/fps recommendation logic
-//    * HostStatusPoller.swift — periodic readiness-chip polling Task
+//    * QualityCalculator.swift - bitrate/resolution/fps recommendation logic
+//    * HostStatusPoller.swift - periodic readiness-chip polling Task
 //
 
 import Foundation
@@ -48,7 +48,7 @@ final class MoonlightManager {
     @ObservationIgnored var nativeSession: StreamSession?
 
     // Quality
-    // Default `.matchDisplay` (panel-native resolution + refresh) — the option
+    // Default `.matchDisplay` (panel-native resolution + refresh) - the option
     // shown at the top of the preset list. Users on constrained links can drop
     // to Smooth; an explicit choice is persisted in init() and honored.
     var qualityPreset: QualityPreset = .matchDisplay {
@@ -115,7 +115,7 @@ final class MoonlightManager {
     var muteMacWhileStreaming: Bool = false {
         didSet {
             UserDefaults.standard.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming")
-            // Mid-stream flips act immediately — doc on applyMutePreferenceMidStream().
+            // Mid-stream flips act immediately - doc on applyMutePreferenceMidStream().
             applyMutePreferenceMidStream()
         }
     }
@@ -165,11 +165,11 @@ final class MoonlightManager {
     /// via hotkey, the host disconnected, or an error occurred); the
     /// ContentView toast auto-dismisses after ~2s by clearing this back
     /// to false on its own timer. Lives here so any view in the launcher
-    /// can react to it — the stream window itself fades independently
+    /// can react to it - the stream window itself fades independently
     /// (see StreamWindow.close()).
     var streamEndedToastVisible: Bool = false
 
-    /// Receipt for the most recently ENDED session — nil when the last
+    /// Receipt for the most recently ENDED session - nil when the last
     /// attempt never went live or ran under the stash threshold. Assigned in
     /// the teardown cleanup right before `streamEndedToastVisible` flips so
     /// the toast's first render already carries its "2h 12m · 12 ms median"
@@ -178,14 +178,14 @@ final class MoonlightManager {
 
     /// Always-on route monitor for the SELECTED host (the readiness chip's
     /// quiet bolt / Wi-Fi glyph). Deliberately independent of the gate-on
-    /// telemetry probe — see MoonlightManager+HostRoute.swift. Re-pointed by
+    /// telemetry probe - see MoonlightManager+HostRoute.swift. Re-pointed by
     /// the launcher via `refreshHostRoute()` as the selection changes.
     let hostRoute = HostRouteMonitor()
 
     /// Latest reachability + activity snapshot for the selected host. Drives
     /// the HostHero readiness chip ("Ready · 12 ms", "Streaming Helldivers 2",
     /// "Asleep"). `nil` until the first poll completes after selection. Always
-    /// keyed by the selected host's id — see `liveStatusForSelected` for the
+    /// keyed by the selected host's id - see `liveStatusForSelected` for the
     /// safe read accessor used by the UI.
     var hostLiveStatus: HostLiveStatus?
     var showStreamStats: Bool = false {
@@ -204,7 +204,7 @@ final class MoonlightManager {
     }
 
     /// Curated row set for the stats overlay. Fresh installs default to
-    /// `.minimal` (render fps / latency / bitrate — the three-row
+    /// `.minimal` (render fps / latency / bitrate - the three-row
     /// "is my stream OK" check). UserDefaults persistence happens in didSet.
     var statsOverlayPreset: StatsOverlayPreset = .minimal {
         didSet {
@@ -214,7 +214,7 @@ final class MoonlightManager {
     }
 
     /// Per-row visibility set used only when `statsOverlayPreset == .custom`.
-    /// Persisted as the array of `StatsRow.Kind.rawValue` strings — Codable
+    /// Persisted as the array of `StatsRow.Kind.rawValue` strings - Codable
     /// + JSON would work but a `[String]` is what
     /// `UserDefaults.set(_:forKey:)` natively handles, so we stay on the
     /// stringly-typed path used by every other preference here.
@@ -229,7 +229,7 @@ final class MoonlightManager {
     /// the current preset. Custom mode reaches into `statsOverlayCustomRows`;
     /// the curated presets resolve to their static sets in
     /// `StatsOverlayDefaults`. Computed property so the resolution is
-    /// always in sync with the preset — no caching, no invalidation.
+    /// always in sync with the preset - no caching, no invalidation.
     var effectiveStatsRows: Set<StatsRow.Kind> {
         switch statsOverlayPreset {
         case .minimal:  return StatsOverlayDefaults.minimalRows
@@ -243,7 +243,7 @@ final class MoonlightManager {
     /// row health colors. Persisted as JSON because the struct has 8
     /// fields and a single Data blob beats 8 separate UserDefaults keys
     /// for atomicity (a partial write under a crash leaves the prefs in
-    /// a coherent state — either old defaults or fully new values).
+    /// a coherent state - either old defaults or fully new values).
     var statsThresholds: StatsThresholds = .default {
         didSet {
             if let data = try? JSONEncoder().encode(statsThresholds) {
@@ -264,7 +264,7 @@ final class MoonlightManager {
     var statsHotkey: HotkeyChord = .defaultStats {
         didSet {
             // The in-stream toggle of `showStreamStats` deliberately does
-            // NOT round-trip back to UserDefaults — the hotkey is a
+            // NOT round-trip back to UserDefaults - the hotkey is a
             // session-scope override, the defaults checkbox is the
             // persistent surface.
             if let data = try? JSONEncoder().encode(statsHotkey) {
@@ -279,9 +279,9 @@ final class MoonlightManager {
     var streamCoversNotch: Bool = true {
         didSet { UserDefaults.standard.set(streamCoversNotch, forKey: "streamCoversNotch") }
     }
-    /// Controller-side quit chord — fires the same path as `quitHotkey`
+    /// Controller-side quit chord - fires the same path as `quitHotkey`
     /// from the keyboard, but driven by a multi-button hold on the
-    /// gamepad. Defaults to Options (≡) + L1 + R1 — the menu button isn't held
+    /// gamepad. Defaults to Options (≡) + L1 + R1 - the menu button isn't held
     /// during action play, so it's awkward to trip mid-game, and (unlike
     /// Moonlight's Start+Select+L1+R1) it needs no Share/Create button, which
     /// macOS doesn't expose on a DualSense. Users who prefer keyboard-only can
@@ -293,7 +293,7 @@ final class MoonlightManager {
     }
 
     /// User-recorded buttons backing the `.custom` quit chord (press the buttons,
-    /// we store them — issue #9). Persisted as JSON.
+    /// we store them - issue #9). Persisted as JSON.
     var customControllerChord: Set<ControllerButton> = MoonlightManager.loadCustomChord() {
         didSet {
             if let data = try? JSONEncoder().encode(customControllerChord) {
@@ -312,7 +312,7 @@ final class MoonlightManager {
     /// `GCControllerDidConnect` / `GCControllerDidDisconnect` observers in
     /// `startLiveRefresh()` and seeded at launch. Because it's an `@Observable`
     /// stored property, SwiftUI views that read it rebuild as controllers come
-    /// and go — used to show/hide the controller-permission UI without polling.
+    /// and go - used to show/hide the controller-permission UI without polling.
     var controllerConnected: Bool = !GCController.controllers().isEmpty
 
     /// Opt-in raw-HID DualSense reading (Options / Create / Mute buttons that
@@ -333,13 +333,13 @@ final class MoonlightManager {
         + "Create/Share, and Mute buttons.\n\nmacOS will then ask for "
         + "\u{201C}Input Monitoring\u{201D} permission. Its dialog says "
         + "\u{201C}keystrokes\u{201D} because that's the same system permission "
-        + "— but Glimmer only reads the controller, never your keyboard."
+        + "- but Glimmer only reads the controller, never your keyboard."
 
     /// Reveals the Settings ▸ Diagnostics pane (the single hideable home for the
     /// debug/tuning wires: the Telemetry toggle, the bookmark chord, and the
-    /// log/telemetry status line). HIDDEN by default — a normal user never sees it. It's
+    /// log/telemetry status line). HIDDEN by default - a normal user never sees it. It's
     /// unhidden by a deliberate option-click on the version line in About (the
-    /// Telemetry toggle lives INSIDE this pane, so it can't gate its own reveal —
+    /// Telemetry toggle lives INSIDE this pane, so it can't gate its own reveal -
     /// hence a separate, plainly-debug-only UserDefault). Persisted so a power
     /// user who revealed it keeps it across launches.
     var showDiagnostics: Bool = UserDefaults.standard.bool(forKey: "showDiagnostics") {
@@ -350,7 +350,7 @@ final class MoonlightManager {
 
     /// Opt-in performance telemetry (the gate read by `TelemetryGate.isEnabled`
     /// at stream start). OFF by default; surfaced only in the hidden Diagnostics
-    /// pane. Changing it applies on the NEXT stream — the exporter snapshots the
+    /// pane. Changing it applies on the NEXT stream - the exporter snapshots the
     /// gate when a session starts. Mirrors the raw key `TelemetryGate` reads so
     /// the UI toggle and the engine agree.
     var telemetryEnabled: Bool = UserDefaults.standard.bool(forKey: "telemetryEnabled") {
@@ -363,7 +363,7 @@ final class MoonlightManager {
     /// is seen and the user hasn't decided yet. Transient.
     var showRawHIDPrompt = false
 
-    /// Whether the user has answered the auto-offer (Enable or Cancel) — so we
+    /// Whether the user has answered the auto-offer (Enable or Cancel) - so we
     /// only proactively ask once. They can still flip the Settings toggle.
     var rawHIDPromptAnswered: Bool = UserDefaults.standard.bool(forKey: "rawHIDPromptAnswered") {
         didSet {
@@ -386,7 +386,7 @@ final class MoonlightManager {
     ///     stalls the present path and trips the present-stall watchdog (which
     ///     disables the pacer). See DualSenseHID.start()'s note.
     ///   * `NSWorkspace.open(Privacy_ListenEvent)` flashes a System Settings
-    ///     window — jarring mid-game.
+    ///     window - jarring mid-game.
     /// Both belong only behind an explicit user action in Settings (the
     /// Troubleshooting "Open Settings" button, `RawHIDControl.registerAndOpen`),
     /// off the main thread. Flipping the flag is enough: if the permission is
@@ -394,7 +394,7 @@ final class MoonlightManager {
     /// `ControllerForwarder` (mid-stream) / the input test; if it isn't, the
     /// Troubleshooting pane's permission card guides the user there on their own
     /// schedule. The proactive offer itself is `!isStreaming`-gated
-    /// (`maybeOfferRawHID`), so this only runs from the launcher anyway — but we
+    /// (`maybeOfferRawHID`), so this only runs from the launcher anyway - but we
     /// keep it side-effect-free so it can never block or pop a window.
     func enableRawHIDFromPrompt() {
         rawHIDControllerEnabled = true
@@ -418,7 +418,7 @@ final class MoonlightManager {
 
     // `pairingMessage` (the String shim over `pairingPhase`) lives in MoonlightManager+Pairing.swift.
 
-    // Persisted stream config — held here so the UI's "Your next stream"
+    // Persisted stream config - held here so the UI's "Your next stream"
     // summary stays truthful without depending on moonlight-qt's UserDefaults
     // domain. Internal (not private) so the QualityCalculator extension
     // in QualityCalculator.swift can write them.
@@ -439,26 +439,26 @@ final class MoonlightManager {
 
     /// Background poller for the host readiness chip. Cancelled and
     /// re-spawned on every lifecycle edge (host change, app activation,
-    /// stream start/end) — callers go through `restartHostStatusPolling()`
+    /// stream start/end) - callers go through `restartHostStatusPolling()`
     /// which owns the cancel+respawn dance. Internal so
     /// HostStatusPoller.swift can drive it.
     @ObservationIgnored var hostStatusTask: Task<Void, Never>?
 
     /// Consecutive unreachable TCP probes for the currently-polled host. A
-    /// SINGLE timed-out probe degrades the chip to `.unknown` ("Checking…")
+    /// SINGLE timed-out probe degrades the chip to `.unknown` ("Checking...")
     /// rather than asserting `.asleep`; only TWO misses in a row publish
     /// `.asleep`. This is the guard against the post-stream false negative:
     /// right after a session ends the app sends the host `/cancel`, and
     /// Sunshine's HTTP front-end is briefly unresponsive in that window, so a
     /// single probe through that blip would otherwise slander an awake host
     /// (that was streaming <6s ago) as "asleep". Reset to 0 on any reachable
-    /// probe. Keyed implicitly to the active poll loop — `restartHostStatusPolling`
+    /// probe. Keyed implicitly to the active poll loop - `restartHostStatusPolling`
     /// resets it when re-arming for a (possibly different) host.
     @ObservationIgnored var hostUnreachableStreak = 0
 
     /// Number of consecutive unreachable probes required before the chip
     /// asserts `.asleep`. Sub-threshold misses publish NOTHING (the chip holds
-    /// its last-good status — see `publishUnreachable`), so this is purely the
+    /// its last-good status - see `publishUnreachable`), so this is purely the
     /// confidence bar for declaring a host down: 3 consecutive 2 s misses
     /// (~30 s) ride out Wi-Fi double-blips and a momentarily busy host without
     /// a false "Asleep", while a genuinely-off box still resolves cleanly.
@@ -473,7 +473,7 @@ final class MoonlightManager {
     static let postStreamPollSettle: TimeInterval = 2.0
 
     /// Poll interval between /serverinfo refreshes for the selected host's
-    /// readiness chip. 10 s is the load-bearing knob from the spec — it's
+    /// readiness chip. 10 s is the load-bearing knob from the spec - it's
     /// frequent enough to feel live without hammering the host (Sunshine logs
     /// every /serverinfo) and cheaper than the connection stats overlay's own
     /// per-second cadence.
@@ -482,7 +482,7 @@ final class MoonlightManager {
     // MARK: Init / lifecycle
 
     /// Sentinel that `currentDisplayDescription` reads at the top of its
-    /// body. `@Observable` can only auto-track stored-property reads — it
+    /// body. `@Observable` can only auto-track stored-property reads - it
     /// can't see through `NSScreen.main` (a global API we don't own), so
     /// the screen-parameter-change notification bumps this revision to
     /// force any view watching `currentDisplayDescription` to recompute.
@@ -490,7 +490,7 @@ final class MoonlightManager {
 
     isolated deinit {
         // Drain NotificationCenter observer tokens we registered with the
-        // closure form — without this they outlive the manager and keep the
+        // closure form - without this they outlive the manager and keep the
         // closures (and any captured state) alive in NC's global table.
         // `isolated deinit` keeps the deinit on MainActor (the class's
         // isolation) so we can safely read the MainActor-isolated
@@ -506,7 +506,7 @@ final class MoonlightManager {
     init() {
         // Every line below is a DIRECT property write inside the initializer, so
         // the properties' `didSet`/`willSet` observers do NOT fire (Swift
-        // suppresses observers during init) — this logic stays in `init` for
+        // suppresses observers during init) - this logic stays in `init` for
         // exactly that reason. The `?? <currentValue>` form keeps the property's
         // declared default whenever the persisted key is absent / out of range /
         // undecodable, which is identical to the prior inline `if let` /
@@ -532,7 +532,7 @@ final class MoonlightManager {
         // Stats overlay preset. Key-absence means the user never touched
         // the Settings picker (didSet is suppressed here and the picker is
         // the only post-init writer), so absent keeps the .minimal default
-        // declared above — deliberately no migration shim. Existing
+        // declared above - deliberately no migration shim. Existing
         // installs decode their saved choice; an unrecognised raw value
         // (downgrade from a build that added a preset) falls back to
         // .minimal silently.
@@ -554,7 +554,7 @@ final class MoonlightManager {
     // Small typed wrappers around UserDefaults so `init()` reads as a flat list
     // of assignments instead of a branch per key. Each returns nil when the key
     // is absent / out of range / undecodable, so the caller keeps the property's
-    // declared default — identical to the prior inline `if let` / `if x > 0`.
+    // declared default - identical to the prior inline `if let` / `if x > 0`.
 
     /// A positive `Int`, or nil when the key is absent (`integer(forKey:)`
     /// returns 0) or non-positive.
@@ -597,6 +597,6 @@ final class MoonlightManager {
 
     /// Pre-mute capture of the system output level. Non-nil doubles as the
     /// did-mute LATCH: the stream-end restore keys off THIS, never the live
-    /// toggle — see MoonlightManager+Audio.swift for the full contract.
+    /// toggle - see MoonlightManager+Audio.swift for the full contract.
     @ObservationIgnored var prePausedMacVolume: Float?
 }

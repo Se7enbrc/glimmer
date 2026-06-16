@@ -2,11 +2,11 @@
 //  RtpAudioReceiver+Socket.swift
 //
 //  The unconnected-UDP socket bring-up: bind a wildcard ephemeral local port
-//  (NEVER connect() — the host sources RTP from a port != audioPort and aims
+//  (NEVER connect() - the host sources RTP from a port != audioPort and aims
 //  it at the ping's UDP source port, see the core file's header), tag it
 //  NET_SERVICE_TYPE_VO for the Wi-Fi voice queue, size SO_RCVBUF, and set the
 //  100ms SO_RCVTIMEO the receive loop's stop polling rides. Split out of
-//  RtpAudioReceiver.swift — pure move, the FramePacer split idiom —
+//  RtpAudioReceiver.swift - pure move, the FramePacer split idiom -
 //  to keep that file under the length limit; the fd/destAddr socket state
 //  stays declared on the receiver.
 //
@@ -26,8 +26,8 @@ extension RtpAudioReceiver {
         let sock = socket(family, SOCK_DGRAM, 0)
         guard sock >= 0 else { throw EnetError.socketFailure("socket() errno \(errno)") }
 
-        // Wi-Fi QoS: tag the socket NET_SERVICE_TYPE_VO (Interactive Voice) — the
-        // highest 802.11e WMM access category — so the radio dequeues audio ahead
+        // Wi-Fi QoS: tag the socket NET_SERVICE_TYPE_VO (Interactive Voice) - the
+        // highest 802.11e WMM access category - so the radio dequeues audio ahead
         // of bulk/best-effort traffic. moonlight binds the audio socket
         // SOCK_QOS_TYPE_AUDIO → SO_NET_SERVICE_TYPE=NET_SERVICE_TYPE_VO
         // (PlatformSockets.c:250-251). This is the fragility fix for mobile Wi-Fi.
@@ -46,7 +46,7 @@ extension RtpAudioReceiver {
         var tv = timeval(tv_sec: 0, tv_usec: 100_000)
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
-        // Bind to a wildcard ephemeral local port — UNCONNECTED, so recvfrom
+        // Bind to a wildcard ephemeral local port - UNCONNECTED, so recvfrom
         // accepts RTP from any source port. The host learns our return port from
         // the ping's UDP source.
         let bound: Bool

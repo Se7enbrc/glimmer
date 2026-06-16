@@ -51,7 +51,7 @@ extension VideoDecoder {
             }
             // obu_size leb128 (when present). Sunshine/GFE ship with
             // has_size_field=1; if absent, the OBU consumes the rest of the
-            // packet — we still need to compute the payload length to bit-
+            // packet - we still need to compute the payload length to bit-
             // read it.
             var payloadLen = bytes.count - i
             if hasSize == 1 {
@@ -86,7 +86,7 @@ extension VideoDecoder {
     }
 
     /// Decode the §5.5.1 sequence_header_obu payload up through color_config.
-    /// We only read the fields needed for av1C — once we have them, the rest
+    /// We only read the fields needed for av1C - once we have them, the rest
     /// of the sequence header (timing info, tile dims, etc.) is irrelevant.
     /// The header walk is split across a few private helpers (each consuming
     /// the shared `inout BitReader`) so no single function carries the whole
@@ -279,7 +279,7 @@ extension VideoDecoder {
             guard let monoFlag = reader.read(1) else { return nil }
             monochrome = UInt8(monoFlag)
         }
-        // color_description_present_flag — skip the triple if present
+        // color_description_present_flag - skip the triple if present
         guard let colorDescPresent = reader.read(1) else { return nil }
         if colorDescPresent == 1 {
             _ = reader.read(8)  // color_primaries

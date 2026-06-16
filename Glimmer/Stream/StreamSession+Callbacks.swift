@@ -13,7 +13,7 @@ extension StreamSession {
     // MARK: - Connection edges
 
     /// Actor-isolated side effects for connection-edge events. The event has
-    /// already been yielded to the stream by `NativeConnectionEvents` — this
+    /// already been yielded to the stream by `NativeConnectionEvents` - this
     /// handles state that must be touched on the actor (signpost-interval close)
     /// or hopped to MainActor (InputForwarder gate flip).
     ///
@@ -23,7 +23,7 @@ extension StreamSession {
     fileprivate func handleConnectionEdge(_ event: StreamEvent) {
         switch event {
         case .connectionEstablished:
-            // Ground truth that we reached a LIVE state — gates the silent
+            // Ground truth that we reached a LIVE state - gates the silent
             // reconnect (a terminate before this is a failed connect, not a
             // recoverable interruption). Fires again on every reconnect; never
             // reset until a full stop().

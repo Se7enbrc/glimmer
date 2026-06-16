@@ -4,7 +4,7 @@
 
 included:
   - Glimmer
-  # scripts/ is build-time tooling (icon generators, not product code) — not
+  # scripts/ is build-time tooling (icon generators, not product code) - not
   # subject to the product lint bar.
 
 excluded:
@@ -29,7 +29,7 @@ opt_in_rules:
   - empty_string
   - implicit_return
   # unused_import is an analyzer rule (requires `swiftlint analyze` with
-  # compiler args) — leaving it out of the lint pass.
+  # compiler args) - leaving it out of the lint pass.
   - vertical_whitespace_closing_braces
   - redundant_nil_coalescing
   - convenience_type
@@ -51,7 +51,7 @@ opt_in_rules:
   - force_unwrapping # warning only, see below
 
 # Line length: matches what the codebase actually uses. Some os_log format
-# strings exceed 220 cols and can't reasonably be split — keep error generous.
+# strings exceed 220 cols and can't reasonably be split - keep error generous.
 line_length:
   warning: 140
   error: 280
@@ -76,14 +76,14 @@ type_body_length:
   error: 1500
 
 # Post-split file_length: warning at 600 (top of the green zone for a
-# focused module), error at 1500 — ~23% headroom over the current largest
+# focused module), error at 1500 - ~23% headroom over the current largest
 # file (Network.swift at 1219). VideoDecoder, InputForwarder, and
 # MoonlightManager are all under 1200 after the splits.
 file_length:
   warning: 600
   error: 1500
 
-# InputForwarder's vk-mapping switch tops 100 — that's a flat dispatch table,
+# InputForwarder's vk-mapping switch tops 100 - that's a flat dispatch table,
 # not real complexity. Warn early; only error on truly egregious.
 cyclomatic_complexity:
   warning: 15

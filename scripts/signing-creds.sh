@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# signing-creds.sh — sole reader/writer of the Glimmer signing credentials file.
+# signing-creds.sh - sole reader/writer of the Glimmer signing credentials file.
 #
 # The release pipeline (make codesign-setup / setup-notary / dist / dev) must be
-# non-interactive from ANY session — SSH, cron, a CI runner — which rules out
+# non-interactive from ANY session - SSH, cron, a CI runner - which rules out
 # both 1Password (`op read` wants an interactive/biometric signin) and the login
 # keychain (locked outside GUI sessions; and signing flows that touch the login
 # keychain are the known re-prompt trap). So every signing secret lives in ONE
@@ -13,7 +13,7 @@
 #
 # Default path: ~/.config/glimmer/signing.env
 # Override:     GLIMMER_SIGNING_CREDS env var (the Makefile exports it from its
-#               SIGNING_CREDS variable, so `make dist SIGNING_CREDS=…` works).
+#               SIGNING_CREDS variable, so `make dist SIGNING_CREDS=...` works).
 #
 # Subcommands:
 #   path                  Print the resolved credentials-file path.
@@ -25,7 +25,7 @@
 #   init                  Write a commented template (refuses to overwrite).
 #
 # File format: one KEY=VALUE per line; the value is everything after the FIRST
-# '=' — no quoting, no expansion, quotes would become part of the value. Lines
+# '=' - no quoting, no expansion, quotes would become part of the value. Lines
 # starting with '#' are comments. The file is parsed, never sourced, so values
 # cannot execute anything.
 #
@@ -47,7 +47,7 @@ CREDS="${GLIMMER_SIGNING_CREDS:-$HOME/.config/glimmer/signing.env}"
 
 die() { echo "signing-creds: $*" >&2; exit 1; }
 
-# Key names are a fixed vocabulary — validate before they reach grep/sed so a
+# Key names are a fixed vocabulary - validate before they reach grep/sed so a
 # malformed caller can't smuggle regex metacharacters into the file scan.
 require_key() {
     case "${1:-}" in
@@ -55,7 +55,7 @@ require_key() {
     esac
 }
 
-# The whole trust model is "this file is as private as an ssh key" — enforce it
+# The whole trust model is "this file is as private as an ssh key" - enforce it
 # on every read so a chmod slip can't silently leak the .p12 passphrase.
 check_perms() {
     [ -f "$CREDS" ] || die "credentials file not found: $CREDS
@@ -67,7 +67,7 @@ check_perms() {
     [ "$owner" = "$(id -u)" ] || die "$CREDS is not owned by you (uid $owner)"
     case "$mode" in
         (600 | 400) ;;
-        (*) die "$CREDS has mode $mode — must be 0600 or 0400: chmod 600 '$CREDS'" ;;
+        (*) die "$CREDS has mode $mode - must be 0600 or 0400: chmod 600 '$CREDS'" ;;
     esac
 }
 
@@ -97,7 +97,7 @@ cmd_set() {
     [ -n "$value" ] || die "refusing to store an empty value for '$key'"
     umask 077
     mkdir -p "$(dirname "$CREDS")"
-    # Never write through a file with loose permissions — fix it first.
+    # Never write through a file with loose permissions - fix it first.
     [ ! -f "$CREDS" ] || check_perms
     # Atomic rewrite (filter the old line, append the new) instead of sed -i:
     # values are base64/passwords full of sed-special characters.
@@ -111,12 +111,12 @@ cmd_set() {
     mv "$tmp" "$CREDS"
 }
 
-# Provision missing keys from 1Password — `make dist` "goes and gets what it
+# Provision missing keys from 1Password - `make dist` "goes and gets what it
 # needs". OP_SOURCE in the creds file holds an op://
-# item REFERENCE (a pointer — safe in a 0600 file, useless to an attacker
+# item REFERENCE (a pointer - safe in a 0600 file, useless to an attacker
 # without the 1Password account); the fixed field map below matches the
 # owner's item layout and is documented in the template. Resolution happens
-# through `op read`, which raises 1Password's own biometric/approval prompt —
+# through `op read`, which raises 1Password's own biometric/approval prompt -
 # so this works in GUI sessions and degrades to the manual-fill message
 # anywhere op can't authorize. Resolved VALUES land in this file (mode 0600,
 # the same trust model as ~/.ssh) so every later run is fully non-interactive.
@@ -134,7 +134,7 @@ cmd_fill_from_op() {
         "APPLE_TEAM_ID:team-id" \
         "P12_PASSWORD:developer-id-p12-pass"; do
         key="${pair%%:*}"; field="${pair##*:}"
-        # Skip keys that already have a value — fill, never overwrite.
+        # Skip keys that already have a value - fill, never overwrite.
         [ -z "$(sed -n "s/^${key}=//p" "$CREDS" | tail -n 1)" ] || continue
         if val="$(op read "${source}/${field}" 2>/dev/null)" && [ -n "$val" ]; then
             cmd_set "$key" "$val"
@@ -142,12 +142,12 @@ cmd_fill_from_op() {
         fi
     done
     # Materialize the Developer ID .p12 itself (a FILE field on the item) so the
-    # cert+key come from the vault, not a loose file in ~/Downloads. Binary —
+    # cert+key come from the vault, not a loose file in ~/Downloads. Binary -
     # use `op read --out-file`, NEVER $(...) (command substitution corrupts
     # binary + drops NULs). Fill only when P12_PATH is unset, mirroring the
     # never-overwrite rule; clear P12_PATH to re-pull from the vault. The field
     # label `developer-id-p12` parallels the `developer-id-p12-pass` password
-    # field — adjust here if the item names the attachment differently.
+    # field - adjust here if the item names the attachment differently.
     if [ -z "$(sed -n 's/^P12_PATH=//p' "$CREDS" | tail -n 1)" ]; then
         local p12dest; p12dest="$(dirname "$CREDS")/developer-id.p12"
         if op read --out-file "$p12dest" "${source}/developer-id-p12" >/dev/null 2>&1 && [ -s "$p12dest" ]; then
@@ -180,14 +180,14 @@ cmd_missing() {
 }
 
 cmd_init() {
-    [ ! -f "$CREDS" ] || die "$CREDS already exists — refusing to overwrite"
+    [ ! -f "$CREDS" ] || die "$CREDS already exists - refusing to overwrite"
     umask 077
     mkdir -p "$(dirname "$CREDS")"
     cat > "$CREDS" <<'EOF'
-# Glimmer signing credentials — keep mode 0600, OUTSIDE the repo.
+# Glimmer signing credentials - keep mode 0600, OUTSIDE the repo.
 # Read/written ONLY by scripts/signing-creds.sh (see its header for the rules).
 # One KEY=VALUE per line; the value is everything after the first '=' (no
-# quotes — they would become part of the value).
+# quotes - they would become part of the value).
 
 # Absolute path to the Developer ID Application cert+key exported as .p12
 # (Keychain Access → My Certificates → export, or your password manager).

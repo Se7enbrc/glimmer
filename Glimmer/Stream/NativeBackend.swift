@@ -49,7 +49,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     /// Input queue+merge+1ms-flush (InputStream.c's inputSendThreadProc). Owns
     /// the high-rate mouse/controller coalescing so the reliable input RATE drops
-    /// from ~150-250/s to ~1 packet per change per ~1ms tick — the fix for the
+    /// from ~150-250/s to ~1 packet per change per ~1ms tick - the fix for the
     /// host-side ENet peer-timeout that silently killed the stream at ~16-18s.
     /// Constructed when inputReady flips true (with the live enetChannel); torn
     /// down in stopConnection/interruptConnection.
@@ -81,7 +81,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         withState { videoSink = sink }
     }
 
-    /// Scoped lock helper — `NSLock.lock()/unlock()` are unavailable from async
+    /// Scoped lock helper - `NSLock.lock()/unlock()` are unavailable from async
     /// contexts under Swift 6 strict concurrency, so all state mutation in the
     /// async pipeline goes through this synchronous critical section.
     func withState<T>(_ body: () -> T) -> T {
@@ -111,7 +111,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         // caller) and the blocking `done.wait()` runs on THAT dedicated thread, so
         // the semaphore wait never parks a Swift cooperative-pool thread (the
         // caller is an actor whose continuation runs on the pool). The async
-        // pipeline itself runs at .userInitiated priority — it only awaits (it does
+        // pipeline itself runs at .userInitiated priority - it only awaits (it does
         // not block), so it yields its pool thread across each RTSP/ENet suspension
         // rather than hogging a capped pool thread.
         let resultBox = ErrorBox()
@@ -131,8 +131,8 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
             // Overall safety cap. Each sub-stage is individually bounded, but this
             // guards any unforeseen stall (a host that accepts the TCP socket then
             // never responds, or a dropped ENet handshake). On timeout we interrupt
-            // — cancelling the in-flight RTSP/ENet connections so the async pipeline
-            // unwinds — and fail cleanly rather than blocking forever.
+            // - cancelling the in-flight RTSP/ENet connections so the async pipeline
+            // unwinds - and fail cleanly rather than blocking forever.
             if done.wait(timeout: .now() + 30) == .timedOut {
                 timedOutBox.increment()
             }
@@ -143,7 +143,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         bridgeThread.start()
         bridge.wait()
         if timedOutBox.value > 0 {
-            Diag.error("native backend: connection timed out after 30s — interrupting", Self.logCategory)
+            Diag.error("native backend: connection timed out after 30s - interrupting", Self.logCategory)
             // Cancel the in-flight RTSP/ENet connections so the still-running async
             // pipeline unwinds on its own (its weak self-captures no-op after
             // teardown). We do not block the caller waiting for that unwind.
@@ -240,7 +240,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
 
     func stageStarting(_ name: String) {
         Diag.info("stage starting: \(name)", Self.logCategory)
-        // P2 CONNECT-HANDSHAKE breakdown (always-live; off any hot path — a stage
+        // P2 CONNECT-HANDSHAKE breakdown (always-live; off any hot path - a stage
         // edge is the rarest event). Stamp the connect-relative instant of the
         // stages that bound the breakdown legs. Name-matched against the engine's
         // own stage labels (performRtspStage / performControlStage).
@@ -269,7 +269,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
 
     func connectionStarted() {
         Diag.notice("connection established (native)", Self.logCategory)
-        // P2 CONNECT-HANDSHAKE: established edge — bounds the ENet-connect leg and
+        // P2 CONNECT-HANDSHAKE: established edge - bounds the ENet-connect leg and
         // starts the first-frame leg (established → first decoded frame). Also the
         // RECONNECT signal: a SECOND established edge in one run means the link
         // re-established after a drop, so count it (the first established is the
@@ -284,11 +284,11 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         // fired into the void (the UI's connecting→streaming promotion would
         // then rely entirely on the .firstFrame fallback). Surface it instead
         // of silently dropping it so a genuinely-torn yield is diagnosable.
-        // This is best-effort recovery insurance, NOT the load-bearing path —
+        // This is best-effort recovery insurance, NOT the load-bearing path -
         // the first decoded frame independently promotes the phase.
         if bridge?.eventContinuation == nil {
             Diag.error("connection established but event continuation is nil "
-                + "(bridge=\(bridge == nil ? "nil" : "live")) — relying on first-frame fallback "
+                + "(bridge=\(bridge == nil ? "nil" : "live")) - relying on first-frame fallback "
                 + "to promote streaming", Self.logCategory)
         }
         bridge?.eventContinuation?.yield(.connectionEstablished)
@@ -333,7 +333,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
     }
 
     func setHdrMode(_ enabled: Bool) {
-        // Intent signal only — the native video path engages HDR through
+        // Intent signal only - the native video path engages HDR through
         // EnetControlChannel.onHdrMode (see startVideoStage). This yields the
         // matching UI event for ConnectionEvents parity with the C bridge.
         StreamBridgeContext.current?.eventContinuation?.yield(.hdrModeChanged(enabled))

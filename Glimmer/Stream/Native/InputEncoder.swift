@@ -7,7 +7,7 @@
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  ADDITIVE: this file produces ONLY bytes — no sockets, no crypto, no control
+//  ADDITIVE: this file produces ONLY bytes - no sockets, no crypto, no control
 //  state. The plaintext [UInt8] each method returns is handed verbatim to
 //  EnetControlChannel.sendEncryptedControl(type: 0x0206, ...) which performs the
 //  control-V2 AES-GCM seal. On Sunshine 7.1.431 encryptedControlStream is TRUE,
@@ -63,7 +63,7 @@ private struct InputWriter {
     mutating func i16LE(_ value: Int16) { u16LE(UInt16(bitPattern: value)) }
 
     /// netfloat: raw 4 little-endian bytes of the IEEE-754 float
-    /// (floatToNetfloat, InputStream.c:309 — memcpy on little-endian hosts).
+    /// (floatToNetfloat, InputStream.c:309 - memcpy on little-endian hosts).
     mutating func netfloat(_ value: Float) {
         let bits = value.bitPattern   // host-endian; arm64 is little-endian
         u32LE(bits)
@@ -116,13 +116,13 @@ enum InputEncoder {
     /// Writes NV_INPUT_HEADER: u32 size BIG-endian (= bodyLength, i.e. the rest
     /// of the packet excluding this 4-byte size field) then u32 magic LITTLE-endian.
     /// `bodyLength` = sizeof(struct) - sizeof(NV_INPUT_HEADER.size field's u32... )
-    /// — in C terms BE32(sizeof(STRUCT) - sizeof(uint32_t)).
+    /// - in C terms BE32(sizeof(STRUCT) - sizeof(uint32_t)).
     private static func writeHeader(into w: inout InputWriter, magicLE: UInt32, bodyLength: UInt32) {
         w.u32BE(bodyLength)
         w.u32LE(magicLE)
     }
 
-    // MARK: 1. Keyboard — LiSendKeyboardEvent2 (14 bytes)
+    // MARK: 1. Keyboard - LiSendKeyboardEvent2 (14 bytes)
 
     /// NV_KEYBOARD_PACKET: header + char flags + short keyCode LE + char modifiers + short zero2.
     /// `action` = KEY_ACTION_DOWN (0x03) / KEY_ACTION_UP (0x04). Sunshine passes
@@ -139,11 +139,11 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 2. Mouse move (relative) — LiSendMouseMoveEvent (12 bytes)
+    // MARK: 2. Mouse move (relative) - LiSendMouseMoveEvent (12 bytes)
 
     /// NV_REL_MOUSE_MOVE_PACKET: header + short deltaX BE + short deltaY BE.
     /// Callers must split deltas that exceed Int16 range into multiple packets
-    /// (InputStream.c:382-410) — this builder encodes one already-clamped chunk.
+    /// (InputStream.c:382-410) - this builder encodes one already-clamped chunk.
     static func mouseMove(dx: Int16, dy: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.mouseMoveRelGen5, bodyLength: 8) // 12 - 4
@@ -153,7 +153,7 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 3. Mouse position (absolute) — LiSendMousePositionEvent (18 bytes)
+    // MARK: 3. Mouse position (absolute) - LiSendMousePositionEvent (18 bytes)
 
     /// NV_ABS_MOUSE_MOVE_PACKET (Input.h #pragma pack(1), sizeof = 18): header +
     /// short x BE + short y BE + short unused(0) + short width BE (= refW - 1) +
@@ -171,7 +171,7 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 4. Mouse button — LiSendMouseButtonEvent (9 bytes)
+    // MARK: 4. Mouse button - LiSendMouseButtonEvent (9 bytes)
 
     /// NV_MOUSE_BUTTON_PACKET: header + uint8 button. magic = LE32(action + 1)
     /// for Gen5+ → PRESS(0x07)→0x08 DOWN, RELEASE(0x08)→0x09 UP (InputStream.c:869).
@@ -184,10 +184,10 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 5. Scroll (vertical) — LiSendHighResScrollEvent (14 bytes)
+    // MARK: 5. Scroll (vertical) - LiSendHighResScrollEvent (14 bytes)
 
     /// NV_SCROLL_PACKET: header + short scrollAmt1 BE + short scrollAmt2 BE (= amt1)
-    /// + short zero3(0). Sunshine: NO WHEEL_DELTA batching — raw amount sent.
+    /// + short zero3(0). Sunshine: NO WHEEL_DELTA batching - raw amount sent.
     static func scroll(_ amount: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.scrollGen5, bodyLength: 10) // 14 - 4
@@ -198,7 +198,7 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 6. Horizontal scroll — LiSendHighResHScrollEvent (10 bytes)
+    // MARK: 6. Horizontal scroll - LiSendHighResHScrollEvent (10 bytes)
 
     /// SS_HSCROLL_PACKET: header + short scrollAmount BE. Sunshine-only on the
     /// wire (the !IS_SUNSHINE → LI_ERR_UNSUPPORTED guard is enforced by the caller).
@@ -210,7 +210,7 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 7. Multi-controller — LiSendMultiControllerEvent (30 bytes)
+    // MARK: 7. Multi-controller - LiSendMultiControllerEvent (30 bytes)
 
     /// NV_MULTI_CONTROLLER_PACKET (all body fields LITTLE-endian):
     /// header + headerB(0x001A) + controllerNumber + activeGamepadMask + midB(0x0014)
@@ -247,14 +247,14 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 8. Controller arrival — LiSendControllerArrivalEvent (16 bytes)
+    // MARK: 8. Controller arrival - LiSendControllerArrivalEvent (16 bytes)
 
     /// SS_CONTROLLER_ARRIVAL_PACKET: header + u8 controllerNumber + u8 type
     /// + u16 capabilities LE + u32 supportedButtonFlags LE. Caps fix-up: dual
     /// touchpad implies the legacy single-touchpad cap (InputStream.c:1439).
     ///
-    /// NOTE: the caller must ALSO emit a fallback multiController(num, mask, 0, …)
-    /// after this (InputStream.c:1471) — that dual-send is not the encoder's job.
+    /// NOTE: the caller must ALSO emit a fallback multiController(num, mask, 0, ...)
+    /// after this (InputStream.c:1471) - that dual-send is not the encoder's job.
     static func controllerArrival(num: UInt8, mask: UInt16, type: UInt8,
                                   supportedButtons: UInt32, caps: UInt16) -> [UInt8] {
         var fixedCaps = caps
@@ -271,7 +271,7 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 9. Controller touch — LiSendControllerTouchEvent2 (24 bytes)
+    // MARK: 9. Controller touch - LiSendControllerTouchEvent2 (24 bytes)
 
     /// SS_CONTROLLER_TOUCH_PACKET: header + u8 controllerNumber + u8 eventType
     /// + u8 zero(0) + u8 touchpadIndex + u32 pointerId LE + netfloat x + netfloat y
@@ -293,14 +293,14 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 10. Controller motion — LiSendControllerMotionEvent (24 bytes)
+    // MARK: 10. Controller motion - LiSendControllerMotionEvent (24 bytes)
 
     /// SS_CONTROLLER_MOTION_PACKET (Input.h): header + u8 controllerNumber
     /// + u8 motionType + u8 zero[2] (alignment/reserved) + netfloat x +
     /// netfloat y + netfloat z. Units are the caller's contract (Limelight.h):
     /// accel m/s^2 inclusive of gravity, gyro deg/s, axes per SDL's sensor
     /// convention. Requires SunshineFeatureFlags & LI_FF_CONTROLLER_TOUCH_EVENTS
-    /// — motion shares touch's feature flag (LiSendControllerMotionEvent) —
+    /// - motion shares touch's feature flag (LiSendControllerMotionEvent) -
     /// enforced by the caller.
     static func controllerMotion(num: UInt8, motionType: UInt8,
                                  x: Float, y: Float, z: Float) -> [UInt8] {
@@ -317,7 +317,7 @@ enum InputEncoder {
         return w.bytes
     }
 
-    // MARK: 11. Controller battery — LiSendControllerBatteryEvent (12 bytes)
+    // MARK: 11. Controller battery - LiSendControllerBatteryEvent (12 bytes)
 
     /// SS_CONTROLLER_BATTERY_PACKET (Input.h): header + u8 controllerNumber
     /// + u8 batteryState + u8 batteryPercentage + u8 zero[1] (alignment/

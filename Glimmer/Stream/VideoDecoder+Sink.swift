@@ -36,12 +36,12 @@ extension VideoDecoder: VideoSink {
     nonisolated public func stop() { handleStop() }
     nonisolated public func cleanup() { handleCleanup() }
 
-    /// The decoder's advertised capability bits — single source of truth. The
+    /// The decoder's advertised capability bits - single source of truth. The
     /// RFI bits here are read by the RTSP handshake's SDP builder (via
     /// `SdpBuilder.decoderRfiCapabilities`) so the host learns we accept
     /// reference-frame-invalidation recovery (maxNumReferenceFrames=0) for the
     /// negotiated codec, instead of forcing a full IDR on every loss. We
-    /// advertise HEVC + AV1 RFI (not AVC) — H.264 recovery stays full-IDR.
+    /// advertise HEVC + AV1 RFI (not AVC) - H.264 recovery stays full-IDR.
     nonisolated public static let rfiCapabilities: Int32 =
         StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC
             | StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_AV1

@@ -1,6 +1,6 @@
 // SINGLE SOURCE OF TRUTH for the app version. Bump here only.
 //
-// CalVer: YYYY.M.MICRO — no zero-pad on month, MICRO resets to 0 each month.
+// CalVer: YYYY.M.MICRO - no zero-pad on month, MICRO resets to 0 each month.
 //   2026.6.0 = first June 2026 release; 2026.6.1 = same-month hotfix.
 // CURRENT_PROJECT_VERSION (build number) is a monotonic YYYYMMDD stamp.
 //
@@ -8,7 +8,7 @@
 // (DMG_NAME / release tag). Pulled into the build via #include in
 // StreamLib.xcconfig, which the Makefile applies with -xcconfig. NOTE:
 // because the build is driven by `make` (which passes -xcconfig), the
-// version is NOT set in project.pbxproj — bump it HERE, build with `make`.
+// version is NOT set in project.pbxproj - bump it HERE, build with `make`.
 
 MARKETING_VERSION = 2026.6.6
 CURRENT_PROJECT_VERSION = 20260617

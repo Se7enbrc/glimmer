@@ -23,7 +23,7 @@ struct PCsPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if moonlight.hosts.isEmpty {
-                    // Unified with the launcher's EmptyPairingState — same
+                    // Unified with the launcher's EmptyPairingState - same
                     // tone (calm, plain) so a user landing here from the
                     // launcher's empty state doesn't experience copy
                     // whiplash. The Pair button below is the action; the
@@ -71,7 +71,7 @@ struct PCsPane: View {
             PairSheet(initialAddress: initialPairAddress)
                 .environment(moonlight)
                 // Sheets on macOS 26 read better with the Tahoe glass
-                // backdrop — `.thinMaterial` matches the Settings window
+                // backdrop - `.thinMaterial` matches the Settings window
                 // chrome so the PIN tiles' tinted glass layers cleanly on
                 // top instead of stacking against an opaque sheet plate.
                 .presentationBackground(.thinMaterial)
@@ -140,7 +140,7 @@ struct PCTile: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Glass tile — each PC card reads as a floating panel against the
+        // Glass tile - each PC card reads as a floating panel against the
         // settings background. Interactive so hover gives a subtle sheen
         // before the user opens the context menu / clicks the default star.
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
@@ -173,9 +173,9 @@ struct PCTile: View {
 
     private var monoColor: Color {
         // FNV-1a deterministic hash (NOT String.hashValue, which Swift
-        // randomizes per process launch — would give the same PC tile a
+        // randomizes per process launch - would give the same PC tile a
         // different colour every app start). Hashed on host.id (UUID) so
-        // a rename doesn't reroll the tile's colour — the monogram on
+        // a rename doesn't reroll the tile's colour - the monogram on
         // the LEFT changes when the user renames; the chip colour stays
         // stable to that physical PC.
         let hue = Double(host.id.deterministicHash() % 360) / 360.0
@@ -190,7 +190,7 @@ struct ShortcutsPane: View {
     @State private var showChordCapture = false
 
     var body: some View {
-        // @Bindable shim — surfaces $moonlight.x bindings from an @Observable
+        // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
         // alone exposes the value but not per-property Bindings).
         @Bindable var moonlight = moonlight
@@ -204,14 +204,14 @@ struct ShortcutsPane: View {
                 // Session-scoped on purpose: the hotkey flips the overlay
                 // only for the current stream. The next stream starts from
                 // the stats-overlay toggle in Quality.
-                Text("Flips the overlay on or off for the current stream only — the next stream starts from your Quality preference.")
+                Text("Flips the overlay on or off for the current stream only - the next stream starts from your Quality preference.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section("Controller quit") {
                 // Hold-to-quit chord on the gamepad. Fires the same path as
-                // the keyboard quit hotkey above — useful for couch
+                // the keyboard quit hotkey above - useful for couch
                 // streaming where the keyboard isn't reachable.
                 Picker("Hold to leave the stream", selection: $moonlight.controllerQuitChord) {
                     ForEach(ControllerQuitChord.allCases, id: \.self) { chord in
@@ -225,16 +225,16 @@ struct ShortcutsPane: View {
                              : ControllerButton.describe(moonlight.customControllerChord))
                             .foregroundStyle(moonlight.customControllerChord.isEmpty ? .secondary : .primary)
                         Spacer()
-                        Button("Record…") { showChordCapture = true }
+                        Button("Record...") { showChordCapture = true }
                     }
                 }
                 Text("Hold these buttons simultaneously on the gamepad to quit the stream. "
-                    + "Off by default — the keyboard chord stays available either way.")
+                    + "Off by default - the keyboard chord stays available either way.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            // Raw-HID DualSense reader — co-located here (was in Troubleshooting)
+            // Raw-HID DualSense reader - co-located here (was in Troubleshooting)
             // so all raw input lives in one place. Shown when a pad is connected
             // or the feature is already on (its off-switch must not vanish with
             // the pad). RawHIDControl is defined in TroubleshootingPane.swift.
@@ -244,8 +244,8 @@ struct ShortcutsPane: View {
                 } header: {
                     Text("Extra DualSense buttons")
                 } footer: {
-                    Text("Reads controller buttons macOS hides — on a DualSense, "
-                        + "the Options, Create/Share, and Mute buttons — for the "
+                    Text("Reads controller buttons macOS hides - on a DualSense, "
+                        + "the Options, Create/Share, and Mute buttons - for the "
                         + "Moonlight-style exit chord and to forward them to the host. "
                         + "Off by default; needs Input Monitoring.")
                 }
@@ -270,7 +270,7 @@ struct ShortcutsPane: View {
             }
 
             // (Raw/accel-free mouse was explored here but is impossible while
-            // sandboxed — macOS won't let a sandboxed app open the pointer's HID
+            // sandboxed - macOS won't let a sandboxed app open the pointer's HID
             // (kIOReturnNotPermitted) and CGEventTap deltas are accelerated. See
             // issue #22, closed not-planned. Mouse motion uses macOS's deltas.)
         }
@@ -291,7 +291,7 @@ private struct ChordCaptureSheet: View {
     @Environment(MoonlightManager.self) private var moonlight
     @Environment(\.dismiss) private var dismiss
     @State private var current: Set<ControllerButton> = []
-    /// Sticky union of every button held during this recording — so releasing
+    /// Sticky union of every button held during this recording - so releasing
     /// the combo one button at a time still captures the whole chord.
     @State private var accumulated: Set<ControllerButton> = []
     @State private var captured: Set<ControllerButton> = []
@@ -309,7 +309,7 @@ private struct ChordCaptureSheet: View {
                 Text("Hold all the buttons for your chord at once, then **release** to capture.")
                     .font(.callout).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Text(accumulated.isEmpty ? "Waiting for input…" : ControllerButton.describe(accumulated))
+                Text(accumulated.isEmpty ? "Waiting for input..." : ControllerButton.describe(accumulated))
                     .font(.title3.monospaced())
                     .foregroundStyle(accumulated.isEmpty ? Color.secondary : Color.accentColor)
                     .frame(minHeight: 28)
@@ -345,7 +345,7 @@ private struct ChordCaptureSheet: View {
 
     /// Register input handlers directly (rather than via the input-test
     /// ControllerMonitor) so capture works regardless of stream state, and so
-    /// every press/release drives `poll()` — not just the timer.
+    /// every press/release drives `poll()` - not just the timer.
     private func engage() {
         GCController.shouldMonitorBackgroundEvents = true
         GCController.startWirelessControllerDiscovery {}
@@ -471,7 +471,7 @@ struct HotkeyBadge: View {
 
     private var displayText: String {
         if isCapturing {
-            return livePreview.isEmpty ? "Press keys…" : livePreview
+            return livePreview.isEmpty ? "Press keys..." : livePreview
         }
         return hotkey.displayString
     }
@@ -505,7 +505,7 @@ struct HotkeyBadge: View {
             if mods.contains(.option) { parts.append("⌥") }
             if mods.contains(.shift) { parts.append("⇧") }
             if mods.contains(.command) { parts.append("⌘") }
-            livePreview = parts.isEmpty ? "" : parts.joined() + "…"
+            livePreview = parts.isEmpty ? "" : parts.joined() + "..."
             return
         }
 

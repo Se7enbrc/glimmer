@@ -5,7 +5,7 @@
 Required:
 
 - macOS 26 or newer
-- Xcode 26 (full toolchain — Swift 6 strict concurrency, `swiftc`, `xcodebuild`,
+- Xcode 26 (full toolchain - Swift 6 strict concurrency, `swiftc`, `xcodebuild`,
   `xcrun`)
 - Homebrew
 
@@ -16,7 +16,7 @@ brew install openssl@3 opus swiftlint
 ```
 
 (`swiftlint` is required for the pre-commit hook; `openssl@3` and `opus` are the
-Swift streaming engine's two link-time dependencies — OpenSSL for identity /
+Swift streaming engine's two link-time dependencies - OpenSSL for identity /
 pairing / network crypto, Opus for audio decode. There are no submodules and no
 vendored C library.)
 
@@ -53,7 +53,7 @@ xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 ```
 
 For an inner-loop edit cycle, either use `make dev` (Release build with a stable
-self-signed dev signature so TCC grants survive rebuilds — see the Makefile
+self-signed dev signature so TCC grants survive rebuilds - see the Makefile
 comments), or work in Xcode against `Glimmer.xcodeproj`:
 
 1. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
@@ -75,9 +75,9 @@ See [PROFILING.md](PROFILING.md) for per-category predicates.
 warnings are surfaced for review but only errors block the commit. Custom rules
 in `.swiftlint.yml`:
 
-- `no_coauthor_trailer` — bans `Co-Authored-By:` (error).
-- `no_claude_attribution` — bans `Generated with .*Claude` (error).
-- `force_unwrapping`, `force_cast`, `force_try` — warning only.
+- `no_coauthor_trailer` - bans `Co-Authored-By:` (error).
+- `no_claude_attribution` - bans `Generated with .*Claude` (error).
+- `force_unwrapping`, `force_cast`, `force_try` - warning only.
 - File / type body / function body lengths warn at ~600 / 600 / 80, error well
   above the current largest case.
 
@@ -85,11 +85,11 @@ The pre-commit wrapper runs `swiftlint --fix` first; if it modifies any staged
 file, the commit is **refused** and the user is told to re-stage the diff.
 Auto-staging by the hook is explicitly avoided so the user sees what changed.
 
-`swift-format` is intentionally NOT enforced — Apple's formatter reflows the
+`swift-format` is intentionally NOT enforced - Apple's formatter reflows the
 codebase's trailing-aligned function arguments into a noisier style.
 
 A `trufflehog` secret-scan also runs per commit via pre-commit (install it with
-`brew install trufflehog` if the hook complains) — credentials never belong in
+`brew install trufflehog` if the hook complains) - credentials never belong in
 the tree; see [SECURITY.md](SECURITY.md).
 
 ## Style
@@ -103,7 +103,7 @@ the tree; see [SECURITY.md](SECURITY.md).
   `c_decodeAndPlaySample`). Allowed by `identifier_name.allowed_symbols`.
 - Comments earn their keep: short for obvious code, expansive when documenting a
   non-obvious decision. The HDR pipeline comments in `VideoDecoder.swift` and
-  the bridge-lifetime comment in `StreamSession.swift` are the bar — if a future
+  the bridge-lifetime comment in `StreamSession.swift` are the bar - if a future
   maintainer would have to dig through a `moonlight-qt` PR thread to understand
   why a line exists, the comment goes in the source.
 - No emoji in source files.
@@ -132,7 +132,7 @@ Rules:
 ### `nonisolated(unsafe)`
 
 `nonisolated(unsafe)` IS acceptable in this codebase. It's used ~30 times. Every
-use must document the invariant in a comment on the property — what the
+use must document the invariant in a comment on the property - what the
 synchronisation discipline is and why a regular actor / lock isn't viable.
 
 Acceptable patterns:
@@ -141,7 +141,7 @@ Acceptable patterns:
   control events on its own receive threads, on hot paths that can't afford an
   actor hop per frame. The weak refs on `StreamBridgeContext` are
   `nonisolated(unsafe)` because Swift weak storage is atomic per spec and the
-  engine serialises its callbacks per-stream — Swift 6 strict-concurrency can't
+  engine serialises its callbacks per-stream - Swift 6 strict-concurrency can't
   see through to that guarantee, but the load is sound.
 - **VT decode-queue state.** `decompressionSession`, `formatDescription`, SPS /
   PPS / VPS, stream parameters in `VideoDecoder.swift` are touched from the
@@ -162,7 +162,7 @@ NOT acceptable:
 
 - "It compiled" without an invariant comment.
 - Multi-writer races. If two threads can write the same slot,
-  `nonisolated(unsafe)` is wrong — use a lock or hop to an actor.
+  `nonisolated(unsafe)` is wrong - use a lock or hop to an actor.
 - Anything with a Sendable-incomplete type behind it (CALayer, CAMetalLayer,
   AVSampleBufferDisplayLayer). Wrap with an `NSLock` around the load/store
   (`VideoDecoder._displayLayer` is the reference pattern).
@@ -174,7 +174,7 @@ The canonical place to surface a stream event to the consumer is
 is `Sendable` and FIFO-ordered, so yielding from a C worker thread preserves the
 order the C library invoked us in. The previous `Task { await deliver(...) }`
 pattern lost ordering because consecutive Tasks land on the global concurrent
-executor without inter-Task happens-before — see the comment at
+executor without inter-Task happens-before - see the comment at
 `StreamSession.swift:807` for the motivating regression.
 
 ## Logging
@@ -205,7 +205,7 @@ executor without inter-Task happens-before — see the comment at
     host names, error message strings, host versions.
   - Never log:
     - Key characters from `keyDown` events (a later change fixed the regression
-      where chars=… leaked at `.public`).
+      where chars=... leaked at `.public`).
     - URLs containing `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, host UUIDs (the
       redaction helper in `Network.swift` strips them).
     - Cert PEMs or fingerprints at `.public` (see the TLS-delegate comment about
@@ -215,7 +215,7 @@ executor without inter-Task happens-before — see the comment at
 The current Swift 6 strict-concurrency posture means
 `Logger.info("\(value, privacy: .public)")` is the standard form. Logging on
 long-running paths (per-frame, per-mouseMoved) is gated behind explicit
-conditions — never log per-frame at `.info`.
+conditions - never log per-frame at `.info`.
 
 ## Commits
 
@@ -224,14 +224,14 @@ CalVer for releases (`YYYY.M.MICRO`). See [RELEASE.md](RELEASE.md).
 Conventional-commit-style prefixes are used in the repo's history; match what's
 there. Common prefixes:
 
-- `fix(area)` — bug fix scoped to a subsystem
-- `perf(area)` — performance fix
-- `refactor(area)` — non-behavioural rework
-- `concurrency` — Swift 6 isolation cleanup
-- `security` — anything in the threat-model surface
-- `build` — Xcode / Makefile / scripts
-- `chore` — repo hygiene
-- `docs(area)` — these files
+- `fix(area)` - bug fix scoped to a subsystem
+- `perf(area)` - performance fix
+- `refactor(area)` - non-behavioural rework
+- `concurrency` - Swift 6 isolation cleanup
+- `security` - anything in the threat-model surface
+- `build` - Xcode / Makefile / scripts
+- `chore` - repo hygiene
+- `docs(area)` - these files
 
 Subject line: imperative mood, lowercase after the prefix, no trailing period.
 Body wrapped at ~72 columns when one's needed.
@@ -247,4 +247,4 @@ commits. Same for any "Generated with Claude" attribution.
 - Smoke-test checklist before tagging is in
   [RELEASE.md](RELEASE.md#3-pre-tag-smoke-test-checklist).
 - All four parallel-developable areas (codec, concurrency, security, hygiene)
-  have landed independently — keep PRs scoped so they can do the same.
+  have landed independently - keep PRs scoped so they can do the same.

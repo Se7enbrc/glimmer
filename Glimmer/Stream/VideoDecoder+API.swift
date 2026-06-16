@@ -26,12 +26,12 @@ extension VideoDecoder {
     /// caller (StreamSession's overlay timer) augments it with
     /// `LiGetEstimatedRttInfo` data before handing it to the overlay layer.
     ///
-    /// Safe to call from the main actor at any time — the underlying
+    /// Safe to call from the main actor at any time - the underlying
     /// `StatsCollector` uses atomic counters + an internal lock for the
     /// decode-time EMA, so it tolerates the cross-thread reads.
     /// `minWindowSeconds` is forwarded to `StatsCollector.snapshot` so the
     /// overlay can tick faster than the FPS averaging window without making the
-    /// FPS rows noisy — the collector keeps the FPS/bitrate/cadence fields on a
+    /// FPS rows noisy - the collector keeps the FPS/bitrate/cadence fields on a
     /// `minWindowSeconds`-wide average while the live latency gauges refresh
     /// every call. Defaults to 0 (reset-every-read) to preserve every existing
     /// caller's behaviour.
@@ -53,13 +53,13 @@ extension VideoDecoder {
         // (the percentage alone can't show the D/B/L breakdown). Same raw counter
         // the telemetry exporter reads.
         snap.decoderDropCount = statsCollector.decoderDropCount()
-        // Audio config — picked at session start from
+        // Audio config - picked at session start from
         // AudioConfig.bestForCurrentOutput(); nil before session start.
         if let audio = activeAudioConfigLabel {
             snap.audioConfigDescription = audio
         }
         // Drop a marker on the OS-signpost timeline so a profile run can
-        // correlate the stats overlay text with timeline state. Cheap —
+        // correlate the stats overlay text with timeline state. Cheap -
         // the snapshot tick is 2 Hz, well below any signpost-rate concern.
         OSSignposter.decode.emitEvent(
             "StatsSnapshot",
@@ -73,7 +73,7 @@ extension VideoDecoder {
 
     /// Stash the negotiated bitrate so `statsSnapshot()` can surface it
     /// alongside the measured bitrate. Called by `StreamSession.start` right
-    /// after it builds the `STREAM_CONFIGURATION`. Optional — if the caller
+    /// after it builds the `STREAM_CONFIGURATION`. Optional - if the caller
     /// never sets it, the overlay just shows the measured value.
     public func setNegotiatedBitrateKbps(_ kbps: Int) {
         negotiatedBitrateKbps = kbps
@@ -100,8 +100,8 @@ extension VideoDecoder {
     /// @MainActor isolation.
 
     /// Public proxies for StreamSession's frame-arrival watchdog. The
-    /// watchdog gates on `secondsSinceLastDecodedFrame()` — "did VT produce
-    /// an output frame" — so a host sending us packets we can't decode
+    /// watchdog gates on `secondsSinceLastDecodedFrame()` - "did VT produce
+    /// an output frame" - so a host sending us packets we can't decode
     /// (corrupted bitstream, missing IDR, AV1-on-no-AV1-hardware) trips the
     /// watchdog instead of the user staring at a black screen while the log
     /// reports healthy reception. `secondsSinceLastReceivedFrame()` is
@@ -117,8 +117,8 @@ extension VideoDecoder {
     }
 
     /// Seconds since a frame last reached the renderer (the MODE-AGNOSTIC present
-    /// clock). Unlike `pacingLiveness()` — which is nil once the pacer is disabled
-    /// and so blinds the watchdog on the direct-enqueue path — this advances on
+    /// clock). Unlike `pacingLiveness()` - which is nil once the pacer is disabled
+    /// and so blinds the watchdog on the direct-enqueue path - this advances on
     /// every `renderer.enqueue` in BOTH modes. The present-path watchdog uses it
     /// to detect a screen freeze (decode healthy, nothing presented) regardless
     /// of whether pacing is up.
@@ -141,12 +141,12 @@ extension VideoDecoder {
     // performance numbers the overlay shows, read WITHOUT hopping to the main
     // actor. The StatsCollector + FramePacer are both `@unchecked Sendable` with
     // their own locks, so these reads are safe from any thread. They reuse the
-    // StatsCollector's EXISTING lock — no second hot-path lock is added.
+    // StatsCollector's EXISTING lock - no second hot-path lock is added.
 
     /// Raw collector snapshot (decode/pacing/drop counters). Same call the
     /// overlay's `statsSnapshot()` wraps, minus the MainActor-only augmentation.
     /// `StreamStatsSnapshot` is public, so this one can be too. The rest return
-    /// module-internal types (`FramePacer.LivenessSnapshot`) and stay internal —
+    /// module-internal types (`FramePacer.LivenessSnapshot`) and stay internal -
     /// the only caller is StreamSession, in this module.
     public nonisolated func telemetryStatsSnapshot() -> StreamStatsSnapshot {
         var snap = statsCollector.snapshot()
@@ -154,7 +154,7 @@ extension VideoDecoder {
         // goodput-vs-ceiling (P1) signal. The MainActor `statsSnapshot()` augments
         // this for the overlay; the telemetry path is nonisolated, so we read the
         // session-constant slot directly (set once at session start, then read-only
-        // — `nonisolated(unsafe)` for exactly this cross-thread read).
+        // - `nonisolated(unsafe)` for exactly this cross-thread read).
         if negotiatedBitrateKbps > 0 {
             snap.negotiatedBitrateMbps = Double(negotiatedBitrateKbps) / 1000.0
         }
@@ -171,7 +171,7 @@ extension VideoDecoder {
         framePacer?.livenessSnapshot()
     }
     /// Per-second display-refresh window (min/avg/max derived Hz + change marker)
-    /// for the exporter; nil when pacing isn't up. RESET-ON-READ — only the 1Hz
+    /// for the exporter; nil when pacing isn't up. RESET-ON-READ - only the 1Hz
     /// exporter may call this (see `FramePacer.refreshWindowSnapshot`).
     nonisolated func telemetryRefreshWindow() -> FramePacer.RefreshWindowSnapshot? {
         framePacer?.refreshWindowSnapshot()
@@ -182,7 +182,7 @@ extension VideoDecoder {
     /// the screen name, and the panel's ProMotion / max-refresh capability. All
     /// are main-actor-isolated (NSScreen / AVSampleBufferDisplayLayer), so this is
     /// `@MainActor`; the `DisplayTelemetry` sampler calls it from a MAIN-queue 1Hz
-    /// timer that exists ONLY on the gate-on path — never a hot path. Returns nil
+    /// timer that exists ONLY on the gate-on path - never a hot path. Returns nil
     /// before the layer is bound to a screen (nothing to probe yet).
     @MainActor
     func telemetryDisplayProbe() -> DisplayProbe? {
@@ -208,7 +208,7 @@ extension VideoDecoder {
     /// the window can be closed cleanly without a frozen final frame.
     ///
     /// Complements (and is idempotent with) the handleCleanup path that the
-    /// native backend invokes via the decoder-renderer `cleanup` sink — we
+    /// native backend invokes via the decoder-renderer `cleanup` sink - we
     /// call it from StreamSession.stop() to guarantee teardown order even when
     /// the backend defers cleanup or has already been stopped.
     public func teardown() {
@@ -218,7 +218,7 @@ extension VideoDecoder {
 
         // Stand down the hidden-window decode gate: cancel a pending gate
         // timer (its task must not fire against a dead session) and clear the
-        // gate flags. Pure state hygiene — the submit boundary is already
+        // gate flags. Pure state hygiene - the submit boundary is already
         // closed by isStreaming=false above, and the decoder is one-shot, but
         // a cancelled timer can resolve after teardown and must find nothing
         // to do (engageDecodeGate's isStreaming guard is the second lock).
@@ -237,7 +237,7 @@ extension VideoDecoder {
         framePacer = nil
 
         // Drain any in-flight decode operations before invalidating the
-        // session — VTDecompressionSessionWaitForAsynchronousFrames blocks
+        // session - VTDecompressionSessionWaitForAsynchronousFrames blocks
         // until pending decodes either complete or are flushed.
         //
         // Also clear every HDR-related cache here. Without this, the next
@@ -282,7 +282,7 @@ extension VideoDecoder {
         }
 
         // Tear down the proactive layer observers (KVO + failedToDecode) before
-        // dropping the layer — they retain a closure that touches the renderer,
+        // dropping the layer - they retain a closure that touches the renderer,
         // and an observation outliving the layer it watches is a leak.
         removeLayerStallObservers()
 
@@ -290,7 +290,7 @@ extension VideoDecoder {
         // enqueue onto a layer the window has already torn down.
         displayLayer = nil
 
-        // No bridging-pointer cleanup needed here — the backend callbacks
+        // No bridging-pointer cleanup needed here - the backend callbacks
         // resolve us through StreamBridgeContext.current (weak). When this
         // VideoDecoder dies the weak ref nils out and any late callback
         // short-circuits at the bridge's weak load.
@@ -353,7 +353,7 @@ extension VideoDecoder {
     /// onto. Must be called from the main actor before the stream starts so
     /// that the layer exists by the time `setup()` runs on a moonlight
     /// worker thread. Also called by the present-path self-heal's rebuild hook
-    /// when a hard-failed renderer is swapped for a fresh layer — so it
+    /// when a hard-failed renderer is swapped for a fresh layer - so it
     /// re-installs the proactive layer observers onto the new layer.
     public func attach(to displayLayer: AVSampleBufferDisplayLayer) {
         self.displayLayer = displayLayer
@@ -395,7 +395,7 @@ extension VideoDecoder {
             return self.presentFrame(sampleBuffer)
         }
         // Governor-repaint hook (tick-deficit degraded mode): re-commits the
-        // current frame WITHOUT counting a rendered frame — deliberately NOT
+        // current frame WITHOUT counting a rendered frame - deliberately NOT
         // routed through presentFrame, whose stats would fake renders>received
         // during a deficit. See `repaintFrameForGovernor` for the enqueue-site
         // rationale.
@@ -404,7 +404,7 @@ extension VideoDecoder {
         }
         // A rebuilt pacer must inherit the decoder's CURRENT suppression state:
         // the pacer-side flag mirrors VideoDecoder's (which outlives a pacer
-        // rebuild — see the field doc in FramePacer.swift), but a fresh pacer's
+        // rebuild - see the field doc in FramePacer.swift), but a fresh pacer's
         // copy starts false, so one stood up while the window is hidden would
         // mint ~120/s of fake overflow late-drops until the next suppression
         // edge re-stamps it. Stamp BEFORE publishing the pacer so a submit
@@ -412,12 +412,12 @@ extension VideoDecoder {
         // single construction site (reenablePacing routes through here).
         pacer.setPresentSuppressed(presentSuppressed)
         // WARM HANDOVER (re-enable path only): keep direct-presenting until the
-        // rebuilt link proves healthy ticks, then cut over atomically — the
+        // rebuilt link proves healthy ticks, then cut over atomically - the
         // cold cutover re-froze the stream 350ms after a measured re-enable.
         // Armed BEFORE publishing the pacer so the first submit already takes
         // the warm path. A cold SESSION start stays queued-from-frame-1: its
         // link has no failure history, the watchdog grace covers priming, and
-        // the fade-in hides the first beats — no reason to change a path the
+        // the fade-in hides the first beats - no reason to change a path the
         // wired 4K240 baseline validates.
         if warmHandover {
             pacer.armWarmHandover()
@@ -456,7 +456,7 @@ extension VideoDecoder {
     /// Snapshot the pacer's present-side liveness for the present-path
     /// watchdog. Nil if pacing isn't up (the direct-enqueue fallback path,
     /// which can't freeze the way the pacer can). Safe to call from the main
-    /// actor — `livenessSnapshot()` is lock-guarded. Module-internal (returns
+    /// actor - `livenessSnapshot()` is lock-guarded. Module-internal (returns
     /// the pacer's internal `LivenessSnapshot`); the only caller is
     /// StreamSession's present-path watchdog, in the same module.
     func pacingLiveness() -> FramePacer.LivenessSnapshot? {
@@ -483,7 +483,7 @@ extension VideoDecoder {
 
     /// Graceful TRANSIENT degradation: tear the pacer down and revert to DIRECT
     /// renderer enqueue while the present path is rough. We lose the jitter-buffer
-    /// smoothing temporarily, but the direct path is WATCHED — the present-path
+    /// smoothing temporarily, but the direct path is WATCHED - the present-path
     /// watchdog gates on the mode-agnostic present clock and self-heals a direct
     /// wedge (flush / layer-rebuild / IDR), and the adaptive pacer is continuously
     /// re-engaged once the link is healthy. `enqueueDecodedFrame` falls through to
@@ -491,11 +491,11 @@ extension VideoDecoder {
     /// path uses). This is NEVER a permanent one-way disable.
     func disablePacingFallbackToDirect(reason: String) {
         guard framePacer != nil else { return }
-        // NOTICE, not error: this is a RECOVERABLE transient degradation — the
+        // NOTICE, not error: this is a RECOVERABLE transient degradation - the
         // direct path is watched and the adaptive pacer is continuously
         // re-engaged on a healthy link. It is NOT "for the rest of the session".
         // swiftlint:disable:next line_length
-        log.notice("Present-path paced-recovery did not resume (\(reason, privacy: .public)); transiently reverting to direct renderer enqueue — pacer will re-engage when the link is healthy")
+        log.notice("Present-path paced-recovery did not resume (\(reason, privacy: .public)); transiently reverting to direct renderer enqueue - pacer will re-engage when the link is healthy")
         Diag.info(
             "Frame pacer transiently disabled after present-path stall (\(reason)); "
             + "stream continues with direct presentation, pacing re-engages when healthy",
@@ -512,15 +512,15 @@ extension VideoDecoder {
     /// FRESH `FramePacer` is built (the same clean-state path `startPacing` uses
     /// at session start), so the restore can't inherit the cadence/link
     /// discontinuity that tripped the give-up. No-op if a pacer somehow already
-    /// exists (defensive — the give-up nil'd it) or the driving view is gone
-    /// (window torn down — nothing to pace onto). Returns true if pacing was
+    /// exists (defensive - the give-up nil'd it) or the driving view is gone
+    /// (window torn down - nothing to pace onto). Returns true if pacing was
     /// rebuilt. Driven by StreamSession's present-path watchdog, which owns the
     /// stability-window timing and the per-session give-up budget.
     func reenablePacing(configuredFps: Int32) -> Bool {
         guard framePacer == nil, let view = pacingDrivingView else { return false }
         log.notice(
             // swiftlint:disable:next line_length
-            "Present-path recovered after give-up; re-enabling FramePacer (fresh pacer, warm handover — direct present continues until the rebuilt link proves healthy ticks)")
+            "Present-path recovered after give-up; re-enabling FramePacer (fresh pacer, warm handover - direct present continues until the rebuilt link proves healthy ticks)")
         Diag.info(
             "Frame pacer re-enabled after present-path recovery (warm handover); "
             + "pacing smoothing restores once the rebuilt link proves healthy ticks",
@@ -532,13 +532,13 @@ extension VideoDecoder {
 
     /// MODE-AGNOSTIC present-path recovery. The single self-heal routine for a
     /// genuine present freeze (decode healthy, nothing reaching the screen),
-    /// called from BOTH the pacer-stall path and the new direct-path stall — so
+    /// called from BOTH the pacer-stall path and the new direct-path stall - so
     /// the direct enqueue path is no longer unwatched after a give-up.
     ///
     /// Escalation, cheapest first:
     ///   1. Flush the renderer (clears a soft-stuck queue / requiresFlush latch).
-    ///   2. If the renderer has HARD-latched `.status == .failed` — a 4K240 HDR panel
-    ///      4K240 HDR wedge, which a bare flush does NOT always clear — rebuild
+    ///   2. If the renderer has HARD-latched `.status == .failed` - a 4K240 HDR panel
+    ///      4K240 HDR wedge, which a bare flush does NOT always clear - rebuild
     ///      the AVSampleBufferDisplayLayer entirely via the wired hook (fresh
     ///      layer, re-attached overlay, re-applied colorspace) so the failed
     ///      renderer is replaced rather than uselessly re-flushed forever.
@@ -546,7 +546,7 @@ extension VideoDecoder {
     ///      from a clean keyframe.
     ///
     /// Generalizes the old `requestIdrForPresentStall` and the inline
-    /// renderer-FAILED block in `presentFrame` into one place. MainActor —
+    /// renderer-FAILED block in `presentFrame` into one place. MainActor -
     /// rebuilding the layer touches AppKit. `nonisolated`-callable wrappers exist
     /// for the pacer/decode-queue FAILED path; see `recoverPresentPathFromRenderQueue`.
     @MainActor
@@ -556,7 +556,7 @@ extension VideoDecoder {
         let failed = renderer?.status == .failed
         log.notice(
             // swiftlint:disable:next line_length
-            "Present-path self-heal (\(reason, privacy: .public)) rendererFailed=\(failed, privacy: .public) — flush\(failed ? "+rebuild" : "")+IDR")
+            "Present-path self-heal (\(reason, privacy: .public)) rendererFailed=\(failed, privacy: .public) - flush\(failed ? "+rebuild" : "")+IDR")
         OSSignposter.render.emitEvent(
             "PresentPathRecover",
             "reason=\(reason, privacy: .public) failed=\(failed, privacy: .public)")
@@ -564,7 +564,7 @@ extension VideoDecoder {
         // 1. Flush whatever renderer we currently have.
         renderer?.flush()
 
-        // 2. If the renderer hard-failed, a flush won't clear it — swap in a
+        // 2. If the renderer hard-failed, a flush won't clear it - swap in a
         // fresh layer. The hook re-points us at the new layer + reconfigures
         // colorspace/EDR; if it's unwired (defensive) we keep the flushed layer.
         if failed, let hook = rebuildDisplayLayerHook {
@@ -577,7 +577,7 @@ extension VideoDecoder {
     }
 
     /// Renderer-FAILED recovery reachable from the pacer/decode queue (NOT the
-    /// main actor) — the inline `presentFrame` failed-status branch. Hops to the
+    /// main actor) - the inline `presentFrame` failed-status branch. Hops to the
     /// main actor to run the full `recoverPresentPath` (which may rebuild the
     /// layer). The hop is fine: a failed renderer is already dropping frames, so
     /// the one-runloop deferral to rebuild costs nothing and avoids touching
@@ -588,7 +588,7 @@ extension VideoDecoder {
         }
     }
 
-    // The governor-repaint hook (`repaintFrameForGovernor` — the stats-silent
+    // The governor-repaint hook (`repaintFrameForGovernor` - the stats-silent
     // re-commit the tick-deficit degraded mode drives) lives in
     // VideoDecoder+GovernorRepaint.swift to keep this file under the length limit.
 }

@@ -42,8 +42,8 @@ public final class AudioDecoder: @unchecked Sendable {
     //
     // The audio OUTPUT-side signals: buffer level / fill, under-runs, trims,
     // over-runs, and A/V sync drift. All accounting is a handful of integer/double
-    // updates per 5ms packet behind a tiny dedicated lock (`audioMeterLock`) — NEVER
-    // the decoder's `stateLock` — so the off-thread `scheduleBuffer` completion handler
+    // updates per 5ms packet behind a tiny dedicated lock (`audioMeterLock`) - NEVER
+    // the decoder's `stateLock` - so the off-thread `scheduleBuffer` completion handler
     // can update the playhead without contending the decode/shutdown path. The
     // published gauge (`TelemetryCounters.setAudioState`) and the always-live
     // under-run/trim/over-run counters are READ only by the exporter when telemetry is
@@ -57,33 +57,33 @@ public final class AudioDecoder: @unchecked Sendable {
     /// incremented in the scheduleBuffer completion handler (off-thread). The
     /// scheduled-ahead backlog = framesScheduled − framesPlayed.
     var framesPlayed: UInt64 = 0
-    /// Output sample rate (Hz) — set at init so the meter can convert frames↔ms.
+    /// Output sample rate (Hz) - set at init so the meter can convert frames↔ms.
     var meterSampleRate: Double = 48_000
     /// Wall-clock (`DispatchTime` ns) anchor for the audio-clock-drift metric: the
     /// start of the CURRENT continuous-playout SEGMENT. RE-BASELINED whenever
-    /// playout (re)starts after a drain — see `driftAnchorFramesPlayed`. 0 = audio
+    /// playout (re)starts after a drain - see `driftAnchorFramesPlayed`. 0 = audio
     /// playout not started yet.
     ///
     /// Why per-segment, not session-monotonic: drift = wall-elapsed − media-played
     /// − buffer-cushion. On an under-run the player drains to empty, so `framesPlayed`
     /// STALLS (no completions fire) while wall time keeps advancing AND the cushion
-    /// is 0 — the drain gap would otherwise be folded permanently into drift (a
+    /// is 0 - the drain gap would otherwise be folded permanently into drift (a
     /// multi-second step-jump that then pins). Re-baselining both the wall
     /// anchor and the media-played reference at each playout restart makes drift
     /// reflect the CURRENT playout segment's clock slip, not the cumulative drain
     /// gap. (Measurement-only; the drain itself is still counted as an under-run.)
     var driftAnchorNanos: UInt64 = 0
-    /// `framesPlayed` captured at `driftAnchorNanos` — the media-played reference for
+    /// `framesPlayed` captured at `driftAnchorNanos` - the media-played reference for
     /// the current segment. Drift uses (framesPlayed − this) so a re-baseline after a
     /// drain doesn't double-count media already played in an earlier segment.
     var driftAnchorFramesPlayed: UInt64 = 0
     /// Media (ms) the drift MICRO-STRETCH has inserted this playout segment to
     /// repay measured clock skew (AudioDecoder+CushionMemory.swift). The drift
-    /// gauge stays RAW — each insert credits `driftAnchorFramesPlayed`, the
-    /// backfill idiom — so this ledger is what separates skew already repaid
+    /// gauge stays RAW - each insert credits `driftAnchorFramesPlayed`, the
+    /// backfill idiom - so this ledger is what separates skew already repaid
     /// from skew still standing. Reset wherever the drift anchor re-baselines.
     var driftCompAppliedMs: Double = 0
-    /// `DispatchTime` ns of the last micro-stretch — its rate limit (the
+    /// `DispatchTime` ns of the last micro-stretch - its rate limit (the
     /// haywire-gauge bound). Guarded by `audioMeterLock`. 0 = none yet.
     var lastDriftStretchNanos: UInt64 = 0
     /// Mirror of `isShutdown` in the METER lock's domain, raised by `shutdown()`
@@ -100,7 +100,7 @@ public final class AudioDecoder: @unchecked Sendable {
     var playoutStarted = false
     /// Latch: true while the playout backlog is at zero, so an under-run is counted
     /// once on the EDGE into empty (a true drain) rather than on every completion
-    /// that happens to find the queue empty — which at a 1-deep steady queue would
+    /// that happens to find the queue empty - which at a 1-deep steady queue would
     /// massively over-count. Cleared the next time a buffer is scheduled.
     var playoutDrained = false
     // (The OVER-RUN ceiling constants are link-aware cushion-cap policy and live in
@@ -110,34 +110,34 @@ public final class AudioDecoder: @unchecked Sendable {
     //
     // Root cause of the under-run cluster: there was NO playout cushion.
     // Each 5ms opus packet was decoded and immediately `play()`ed, so the
-    // scheduled-ahead depth sat at ~0-5ms — ON the under-run floor. Any momentary
+    // scheduled-ahead depth sat at ~0-5ms - ON the under-run floor. Any momentary
     // slip (host-vs-Mac clock drift on a ~5s cadence; per-event scheduling jitter
-    // under peak high-bitrate video load — NOT CPU saturation) drained it to empty → an
+    // under peak high-bitrate video load - NOT CPU saturation) drained it to empty → an
     // audible gap. 0 over-runs / only-ever-drains was the tell.
     //
     // The fix holds a small playout cushion BEFORE starting playback, then lets it
     // run gapless: defer `play()` until a target of decoded audio is queued
     // (a PRE-ROLL), so drift + jitter drain into headroom instead of into a
-    // gap. This is audio-only — the latency-critical video path is untouched — and
+    // gap. This is audio-only - the latency-critical video path is untouched - and
     // the cushion (~30ms up to the link-aware cap: 150ms wired / 300ms tunnel) is
     // within the non-critical audio budget and under the over-run ceiling (cap+40ms),
     // so audio cannot drift seconds behind. The cushion
     // ADAPTS like the video pacer's jitter buffer: it starts at the base target and
     // grows one step per measured under-run (a full drain), so a link whose delivery
     // gaps outpace the base cushion deepens itself instead of glitching repeatedly.
-    // It only grows on real evidence (an under-run), never blanket-deep — and it
+    // It only grows on real evidence (an under-run), never blanket-deep - and it
     // DECAYS one step per sustained under-run-free window, so depth is a temporary,
     // evidence-keyed state that recovers toward the base, never a permanent pin.
     //
     // The paused pre-roll exists at COLD START only. After a mid-stream drain the
-    // node keeps playing — the scheduleBuffer completion path deliberately makes
+    // node keeps playing - the scheduleBuffer completion path deliberately makes
     // ZERO AV-node calls (it runs unserialized against `shutdown()`; every AV call
     // lives on paths the state lock or the meter-lock-then-call discipline covers)
-    // — and the cushion rebuilds via whichever of TWO paths the link offers:
-    //   (1) the post-gap CATCH-UP CLUMP — a jittery link delivers the gap's
+    // - and the cushion rebuilds via whichever of TWO paths the link offers:
+    //   (1) the post-gap CATCH-UP CLUMP - a jittery link delivers the gap's
     //       packets in a burst, and the 250ms gate grace shields that clump from
     //       the trim and the ceiling so it can stack back up to target; or
-    //   (2) the grace-expiry SILENCE BACKFILL — on a STEADY link (host-side audio
+    //   (2) the grace-expiry SILENCE BACKFILL - on a STEADY link (host-side audio
     //       outage, playback-side drain) packets resume at exactly real-time rate,
     //       no clump ever forms, and standing fill would pin at ~0 while the
     //       target ratchet climbed uselessly (the under-run cascade). When the
@@ -148,14 +148,14 @@ public final class AudioDecoder: @unchecked Sendable {
     //       buys the headroom that ends the cascade.
     // The re-prime is a state-machine re-arm, not a wall-time pause.
     //
-    // The cap, though, governs only PRE-ROLL — so once steady-state backlog grew (an
+    // The cap, though, governs only PRE-ROLL - so once steady-state backlog grew (an
     // early under-run deepening the cushion, or receive briefly outrunning playout) it
     // had no trim/decay and PINNED deep (~235ms measured = ~235ms pure A/V lag). The
     // companion fix is a steady-state TRIM-TOWARD-TARGET on the schedule path
     // (`meterRegisterScheduleOrOverrun`): once primed, packets that would hold the
-    // backlog a hysteresis band past the cushion target are dropped — rate-limited,
+    // backlog a hysteresis band past the cushion target are dropped - rate-limited,
     // and standing down briefly after a re-prime so the post-gap catch-up clump
-    // (the cushion rebuild itself) isn't chopped — walking the queue back DOWN to
+    // (the cushion rebuild itself) isn't chopped - walking the queue back DOWN to
     // the target. Net: backlog rests near the target (~30ms typical on a clean
     // link; deeper only while gaps recur, decaying back once they stop).
     //
@@ -163,7 +163,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// 5ms; inaudible for non-critical audio yet >> the worst per-event slip and
     /// ~60× the ~0.5ms/5s drift budget at ~100ppm.
     static let playoutCushionBaseMs: Double = 30
-    /// Step (ms) the cushion grows by on each measured under-run — one extra packet-
+    /// Step (ms) the cushion grows by on each measured under-run - one extra packet-
     /// pair of headroom per real drain, so the cushion converges on what THIS link
     /// needs rather than guessing.
     static let playoutCushionStepMs: Double = 10
@@ -173,7 +173,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// margin. Depth this deep is evidence-keyed (one under-run per +10ms step) AND
     /// temporary (decays after a quiet minute). The RUNTIME cap is LINK-AWARE
     /// (`effectiveCushionMaxMs`): a wifi/tunnel gap envelope is deeper, so a flat
-    /// 150ms cap there is a disguised permanent give-up — the ratchet saturates
+    /// 150ms cap there is a disguised permanent give-up - the ratchet saturates
     /// below the gap and under-runs cascade. Audio is non-critical, so the deeper
     /// cap on a worse link is right. (Tunnel cap `playoutCushionMaxMsTunnel` +
     /// `cushionMaxMs(forLink:)` live in AudioDecoder+CushionMemory.)
@@ -185,10 +185,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// (last session's learning; base when none) and grows by `playoutCushionStepMs`
     /// (capped at `effectiveCushionMaxMs`) on each under-run. Exported as the
     /// `audio_playout_target_ms` gauge (rides the published `AudioState`): fill vs
-    /// target is the cushion judge — base 30 / cap 150 wired or 300 tunnel /
-    /// ceiling cap+40 — legible only against the target it steers toward.
+    /// target is the cushion judge - base 30 / cap 150 wired or 300 tunnel /
+    /// ceiling cap+40 - legible only against the target it steers toward.
     var playoutTargetMs: Double = AudioDecoder.playoutCushionBaseMs
-    /// LINK-AWARE runtime cushion cap (ms): `cushionMaxMs(forLink:)` — wired 150 /
+    /// LINK-AWARE runtime cushion cap (ms): `cushionMaxMs(forLink:)` - wired 150 /
     /// tunnel|wifi|unknown 300. Resolved at init, re-resolved by `resolveCushionLink`
     /// if the route lands late. The grow ratchet, loss-floor clamp, and over-run
     /// ceiling key off this so a worse link can deepen past the wired cap instead of
@@ -200,24 +200,24 @@ public final class AudioDecoder: @unchecked Sendable {
         AudioDecoder.playoutCushionMaxMsTunnel + AudioDecoder.bufferOverrunCeilingSlackMs
     /// True once `playerNode.play()` has been called (the cold-start pre-roll
     /// fired). Until then buffers are scheduled but the player is paused, building
-    /// the cushion. Re-armed (set false) on a full drain — a STATE-MACHINE edge
+    /// the cushion. Re-armed (set false) on a full drain - a STATE-MACHINE edge
     /// only: the node keeps playing (the completion path makes no AV calls), so the
     /// re-prime's `play()` is a no-op and the cushion rebuilds via the post-gap
-    /// catch-up clump under the gate grace — or, when no clump arrives by grace
-    /// expiry, via the one-shot silence backfill — not via a paused pre-roll.
+    /// catch-up clump under the gate grace - or, when no clump arrives by grace
+    /// expiry, via the one-shot silence backfill - not via a paused pre-roll.
     var primed = false
-    /// Count of buffers scheduled since the last prime/re-prime — drives the
+    /// Count of buffers scheduled since the last prime/re-prime - drives the
     /// fallback-prime (COLD START only; a re-prime rebuilds via clump or backfill
     /// instead) so silence can't wedge playback un-started.
     var buffersSinceArm: UInt64 = 0
     /// True while the current un-primed episode is a mid-stream RE-prime (the node
     /// kept playing) rather than the cold start (node paused, pre-rolling). Steers
     /// `maybePrime`: cold start keeps its paused pre-roll + buffer-count fallback;
-    /// a re-prime gets the grace-then-backfill rebuild — the fallback at 12 buffers
+    /// a re-prime gets the grace-then-backfill rebuild - the fallback at 12 buffers
     /// would otherwise declare the rebuild done at ~15ms standing fill regardless
     /// of target (the under-run-cascade bug). Guarded by `audioMeterLock`.
     var rebuildIsReprime = false
-    /// `DispatchTime` ns of the most recent steady-state trim — enforces the trim
+    /// `DispatchTime` ns of the most recent steady-state trim - enforces the trim
     /// rate limit. Guarded by `audioMeterLock`. 0 = no trim yet this session.
     var lastTrimNanos: UInt64 = 0
     /// `DispatchTime` ns deadline of the post-(re)prime gate grace: both backlog
@@ -234,20 +234,20 @@ public final class AudioDecoder: @unchecked Sendable {
     // Design narrative + persistence/seeding: AudioDecoder+CushionMemory.swift.
     // Only the stored words live here (stored properties cannot live in
     // extensions); ALL guarded by `audioMeterLock`.
-    /// Learned LOSS FLOOR (ms): EWMA of the cushion target at each under-run —
+    /// Learned LOSS FLOOR (ms): EWMA of the cushion target at each under-run -
     /// the level this link has PROVEN it under-runs at. Decay never steps below
     /// floor + one step; the floor itself decays on a slow (~10min) clock so an
     /// improved link re-earns shallow cushions. 0 = unlearned.
     var learnedFloorMs: Double = 0
-    /// `DispatchTime` ns anchor of the FLOOR's own decay window — reset on
+    /// `DispatchTime` ns anchor of the FLOOR's own decay window - reset on
     /// every under-run edge and on each floor decay step.
     var floorQuietSinceNanos: UInt64 = 0
     /// MIN buffer fill (ms) at completions within the CURRENT decay quiet
-    /// window — the near-miss evidence: a trough within one step of empty
+    /// window - the near-miss evidence: a trough within one step of empty
     /// holds depth WITHOUT an audible event. Reset (to +inf) on under-run
     /// edges, decay steps, and near-miss holds.
     var quietWindowMinFillMs: Double = .infinity
-    /// True once this session took a real under-run edge — the one-shot
+    /// True once this session took a real under-run edge - the one-shot
     /// link-resolve merge may then only deepen, never shallow, the cushion.
     var cushionHadUnderrun = false
     /// UserDefaults key ("prefix.host|link") the cushion memory persists
@@ -257,7 +257,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// the key without re-reading the route latch.
     var cushionHostLabel = "unknown"
     /// One-shot latch: true once the stream link is resolved (or the resolve
-    /// window expired) — the steady-state resolve cost is then one Bool read
+    /// window expired) - the steady-state resolve cost is then one Bool read
     /// under the lock already held.
     var cushionLinkResolved = false
     /// `DispatchTime` ns deadline for link-resolve attempts (the exporter feeds
@@ -268,15 +268,15 @@ public final class AudioDecoder: @unchecked Sendable {
     /// init and refreshed by the default-output-device listener. Carried on the
     /// under-run NOTICE so a drain's trigger class (BT detach, device switch) is
     /// attributable postmortem WITHOUT any CoreAudio/AV call on the completion
-    /// thread — it reads a plain cached String. Guarded by `audioMeterLock`.
+    /// thread - it reads a plain cached String. Guarded by `audioMeterLock`.
     var audioRouteCache = "unknown"
     /// `DispatchTime` ns of the last under-run NOTICE actually emitted, and the
-    /// count of edges the rate limit swallowed since — carried on the next line
+    /// count of edges the rate limit swallowed since - carried on the next line
     /// so a cascade stays countable from the log alone. Guarded by
     /// `audioMeterLock`.
     var lastUnderrunNoticeNanos: UInt64 = 0
     var underrunNoticesSuppressed: UInt64 = 0
-    /// Default-output-device listener block (held so `shutdown()` can remove it —
+    /// Default-output-device listener block (held so `shutdown()` can remove it -
     /// the HAL requires the same address/queue/block triple) and the utility
     /// queue it fires on. Lifecycle-guarded by `stateLock` (installed at init,
     /// removed at shutdown); the block body touches only `audioMeterLock` state
@@ -293,7 +293,7 @@ public final class AudioDecoder: @unchecked Sendable {
     // field that PROVES the cushion holds above 0. Only the re-prime count is kept
     // here (it's part of the published `AudioState` gauge).
     //
-    /// RE-PRIME count this session: the number of pre-roll RE-ARM edges — the
+    /// RE-PRIME count this session: the number of pre-roll RE-ARM edges - the
     /// state machine dropping back to un-primed after a full drain. NOT a count of
     /// paused wall-time pre-rolls (the node keeps playing across a re-arm; the
     /// cushion rebuilds via the catch-up clump or the grace-expiry silence
@@ -380,9 +380,9 @@ public final class AudioDecoder: @unchecked Sendable {
         // order:  FL, FR, FC, LFE, BL, BR        (5.1)
         //         FL, FR, FC, LFE, BL, BR, SL, SR (7.1)
         // Apple's `kAudioChannelLayoutTag_AudioUnit_5_1` (= MPEG_5_1_A) is
-        // L,R,C,LFE,Ls,Rs — that matches the 5.1 order exactly, so no remap.
+        // L,R,C,LFE,Ls,Rs - that matches the 5.1 order exactly, so no remap.
         // Apple's `kAudioChannelLayoutTag_AudioUnit_7_1` (= MPEG_7_1_C) is
-        // L,R,C,LFE,Ls,Rs,Rls,Rrs — channels 4-7 are *paired-swapped*
+        // L,R,C,LFE,Ls,Rs,Rls,Rrs - channels 4-7 are *paired-swapped*
         // versus Sunshine. Build an explicit reorder table here; the alternative
         // (rewriting `mapping` like moonlight-qt's SLAudio renderer does)
         // bakes assumptions into the opus decoder we don't need.
@@ -439,7 +439,7 @@ public final class AudioDecoder: @unchecked Sendable {
         // Quiesce the meter's EVIDENCE machinery BEFORE stopping the node:
         // stop() flushes a completion-handler burst for the standing cushion
         // (6-30 buffers), and un-gated its last completion minted a synthetic
-        // under-run on EVERY session end — ratcheting the target +10ms, EWMA-
+        // under-run on EVERY session end - ratcheting the target +10ms, EWMA-
         // pulling the learned floor, and PERSISTING both per-host, so sub-10-min
         // sessions walked toward the 150ms cap across sessions (the disguised-
         // permanent-pin class). Gate details: `meterCompleteOnePlayout`.
@@ -453,7 +453,7 @@ public final class AudioDecoder: @unchecked Sendable {
             opus_multistream_decoder_destroy(decoderPtr)
             decoder = nil
         }
-        // No global to clear here — the StreamBridgeContext holds a weak
+        // No global to clear here - the StreamBridgeContext holds a weak
         // ref to us; when StreamSession drops its strong reference the bridge
         // sees nil at the next callback (or the bridge itself is released
         // first, which short-circuits earlier).
@@ -476,15 +476,15 @@ public final class AudioDecoder: @unchecked Sendable {
     // than immediately fabricate a NULL-input PLC frame, that call now ARMS a
     // single pending-gap latch (`pendingFecGap`) and produces NO frame yet. The
     // gap frame is then minted EXACTLY ONCE, by whichever resolves first:
-    //   • the next REAL packet (`decodeCore`) — FEC recovery (decode_fec=1); if
+    //   • the next REAL packet (`decodeCore`) - FEC recovery (decode_fec=1); if
     //     that packet happens to carry no FEC, opus still returns a concealed
     //     frame for the gap, so we always get one frame, never zero; or
-    //   • a SECOND consecutive `decodeAndPlayPLC()` — we can't defer a gap past
+    //   • a SECOND consecutive `decodeAndPlayPLC()` - we can't defer a gap past
     //     one packet without adding latency, so the standing gap is flushed with
     //     a NULL-input PLC frame and the new gap re-arms.
     // Bounded to ONE recovered/concealed frame per gap (no double-count: the
     // latch is cleared the instant the gap frame is scheduled). On a CLEAN link
-    // `pendingFecGap` is never armed, so this whole path is inert — `decodeCore`
+    // `pendingFecGap` is never armed, so this whole path is inert - `decodeCore`
     // takes the plain `decode_fec=0` branch with zero added work or latency.
     /// True while a wire gap is owed exactly one concealment frame, to be minted
     /// by the next real packet (via opus FEC) or the next PLC. Guarded by
@@ -494,7 +494,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// The shared decode → schedule path for a REAL opus packet. If a wire gap is
     /// pending (`pendingFecGap`), first mint the gap's concealment frame from
     /// THIS packet's opus in-band FEC (`decode_fec=1`) before decoding the packet
-    /// itself (`decode_fec=0`) — the standard opus PLC-with-FEC pattern. Used by
+    /// itself (`decode_fec=0`) - the standard opus PLC-with-FEC pattern. Used by
     /// the Swift-native `NativeAudioSink` path.
     func decodeCore(input: UnsafePointer<UInt8>?, length: Int32) {
         // Hold the state lock for the whole decode so `shutdown()` can't
@@ -504,7 +504,7 @@ public final class AudioDecoder: @unchecked Sendable {
         defer { stateLock.unlock() }
         guard !isShutdown, let decoder, let fmt = inputFormat else { return }
 
-        // `AudioFrame` interval — covers opus decode + scheduleBuffer. One
+        // `AudioFrame` interval - covers opus decode + scheduleBuffer. One
         // per network-delivered opus packet, on whatever audio receive thread
         // we're called on. Cheap enough at 200 Hz (5 ms packets) that we don't
         // gate it.
@@ -561,7 +561,7 @@ public final class AudioDecoder: @unchecked Sendable {
 
         guard let channelData = pcm.floatChannelData else { return false }
         if let reorder = outputReorder {
-            // 7.1 path — swap surround pairs into AVAudio's expected layout.
+            // 7.1 path - swap surround pairs into AVAudio's expected layout.
             for srcChannel in 0..<channelCount {
                 let dstChannel = reorder[srcChannel]
                 let dst = channelData[dstChannel]
@@ -583,7 +583,7 @@ public final class AudioDecoder: @unchecked Sendable {
         // this freshly-decoded buffer (which is the NEWEST packet; since an
         // AVAudioPlayerNode buffer can't be pulled once scheduled, declining to queue
         // the incoming packet trims the scheduled-ahead backlog by exactly one 5ms
-        // packet — the same net effect as dropping the oldest, with no reschedule
+        // packet - the same net effect as dropping the oldest, with no reschedule
         // churn): (a) the steady-state TRIM-TOWARD-TARGET, which clips the backlog
         // back to the adaptive cushion target so it can't pin high, and (b) the hard
         // OVER-RUN ceiling backstop for genuinely bad links. Both keep latency bounded.
@@ -596,13 +596,13 @@ public final class AudioDecoder: @unchecked Sendable {
         })
         // PRE-ROLL / RE-PRIME: now that this buffer is queued (into a paused node
         // only before the cold-start prime), decide whether the cushion is deep
-        // enough to (re)declare playback primed — and, on a re-prime whose grace
+        // enough to (re)declare playback primed - and, on a re-prime whose grace
         // expired clumpless, schedule the silence backfill (which needs the node
         // format, hence the parameter). No-op once primed, so this stays one lock
         // + a compare on the steady-state path.
         maybePrime(format: fmt)
         // Deterministic clock-skew repayment (the measured −40ppm drain): DECODE
-        // path only — it schedules into the node, which must stay serialized
+        // path only - it schedules into the node, which must stay serialized
         // against `shutdown()`. Design + gates: AudioDecoder+CushionMemory.swift.
         driftMicroStretch(format: fmt)
         publishAudioState()
@@ -648,7 +648,7 @@ public final class AudioDecoder: @unchecked Sendable {
 extension AudioDecoder: NativeAudioSink {
     public func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
         let chCount = Int(gl_channel_count_from_audio_configuration(audioConfig))
-        // ★5 — NEGOTIATED multistream config. The passed `opus` carries the
+        // ★5 - NEGOTIATED multistream config. The passed `opus` carries the
         // STEREO defaults (RtspHandshakeResult.defaultOpusConfig); the RTSP
         // SETUP-audio response does NOT send an explicit per-channel opus
         // stream layout. As in moonlight-common-c (AudioStream.c's
@@ -682,7 +682,7 @@ extension AudioDecoder: NativeAudioSink {
     /// output channel); the front L/R + back/side reorder onto Apple's layout
     /// is a SEPARATE, later step (`outputReorder` in `initDecoderCore`). An
     /// unrecognized channel count falls back to the passed config (the stereo
-    /// default), padded/trimmed to the channel count — the prior behavior.
+    /// default), padded/trimmed to the channel count - the prior behavior.
     static func opusMultistreamConfig(
         forChannels channels: Int, fallback: OpusConfig
     ) -> (streams: Int32, coupledStreams: Int32, mapping: [UInt8]) {
@@ -712,7 +712,7 @@ extension AudioDecoder: NativeAudioSink {
         // ★6: arm the pending-gap latch so the next real packet recovers this
         // frame via opus in-band FEC (decode_fec=1). The actual concealment
         // frame is minted there, or by `concealGap` itself on a second
-        // consecutive loss (NULL-input PLC) — exactly one frame per gap.
+        // consecutive loss (NULL-input PLC) - exactly one frame per gap.
         concealGap()
     }
 

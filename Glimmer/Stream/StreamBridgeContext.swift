@@ -22,7 +22,7 @@ import os
 //
 // All references are *weak*. A subsystem that's been torn down (e.g. the
 // VideoDecoder during stop() but before the backend stops) simply becomes nil
-// at the callback site, which is the no-op behaviour we want — no UAF, no order
+// at the callback site, which is the no-op behaviour we want - no UAF, no order
 // dependency between subsystem teardown and the backend's own thread drain.
 //
 // Threading: the native backend serializes its callbacks per-stream, so the
@@ -37,7 +37,7 @@ import os
 //   * Allocated by StreamSession.start()
 //   * `passRetained(bridge).toOpaque()` produces the opaque pointer retained
 //     as both renderContext and audioContext. That retain count keeps the
-//     bridge alive across the lifetime of the connection — even if every weak
+//     bridge alive across the lifetime of the connection - even if every weak
 //     ref it holds nils out.
 //   * StreamSession also stores a strong `bridge` field for direct access.
 //   * StreamSession.stop() stops the backend (which drains the receive

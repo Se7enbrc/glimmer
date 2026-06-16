@@ -2,7 +2,7 @@
 //  ResourceTelemetry.swift
 //
 //  Opt-in P1 RESOURCE sampler (per-process): the PER-THREAD view that answers
-//  "are we using P vs E cores right?" from OUR side — which threads are hot
+//  "are we using P vs E cores right?" from OUR side - which threads are hot
 //  (per-thread CPU%) and whether the hot ones carry a high QoS (the P-core-tier
 //  INTENT), mapped to the thread NAME so a reader sees "decode 38% @
 //  userInteractive" instead of an anonymous TID. Plus the process memory
@@ -11,20 +11,20 @@
 //  E-cluster active residency via IOReport) lives in IOReportSampler.swift; the
 //  two together bracket the question from intent (here) to outcome (there).
 //
-//  ALSO HERE: a one-shot QoS AUDIT (`QoSAudit`) the exporter logs once at start —
+//  ALSO HERE: a one-shot QoS AUDIT (`QoSAudit`) the exporter logs once at start -
 //  it confirms the hot-path threads are on `.userInteractive` and FLAGS any hot
 //  thread that is NOT high-QoS, so a future regression that demotes the decode or
 //  pacer queue surfaces immediately instead of as mysterious judder. The audit is
 //  derived from the SAME per-thread sample, so it costs nothing extra.
 //
-//  GATING + HOT-PATH SAFETY (load-bearing — see TelemetryExporter.swift):
+//  GATING + HOT-PATH SAFETY (load-bearing - see TelemetryExporter.swift):
 //    * Every sampler here is a pure static read called ONLY on the exporter's
-//      ~1Hz serial workQueue (and the one-shot audit at start) — NEVER a hot
+//      ~1Hz serial workQueue (and the one-shot audit at start) - NEVER a hot
 //      path. There is no per-frame and no per-packet cost.
 //    * When telemetry is off (default) the exporter never exists, so none of this
 //      is ever called: zero overhead. The per-thread enumeration mirrors the
 //      already-shipped `ProcessMetrics.sample()` (one task_threads + per-thread
-//      thread_info) — it is cheap and bounded by the thread count (tens), run at
+//      thread_info) - it is cheap and bounded by the thread count (tens), run at
 //      1Hz, not on any decode/pacer/receive thread.
 //    * Any Mach/IOKit failure degrades to "no sample" (nil / empty), so a probe
 //      hiccup can never affect the stream.
@@ -46,18 +46,18 @@ import IOKit.ps
 struct ThreadResourceSample: Sendable {
     /// Our thread name (e.g. "Glimmer.enetControl") or, for an unnamed
     /// dispatch-queue worker, the queue label the OS exposes. Empty if neither is
-    /// available — then `tid` disambiguates.
+    /// available - then `tid` disambiguates.
     var name: String
-    /// Kernel thread id (`thread_identifier_info.thread_id`) — a stable per-thread
+    /// Kernel thread id (`thread_identifier_info.thread_id`) - a stable per-thread
     /// label so an unnamed thread is still a distinct, attributable series.
     var tid: UInt64
     /// CPU usage, percent of ONE core (so a thread pegging a core reads ~100).
     var cpuPercent: Double
     /// QoS class ordinal (the raw `qos_class_t`): 33 user-interactive, 25
     /// user-initiated, 21 default, 17 utility, 9 background, 0 unspecified. The
-    /// P-core-tier INTENT — a hot thread here should be 25/33 (P-tier).
+    /// P-core-tier INTENT - a hot thread here should be 25/33 (P-tier).
     var qos: Int
-    /// Compact QoS label for the dashboard ("userInteractive" / "utility" / …).
+    /// Compact QoS label for the dashboard ("userInteractive" / "utility" / ...).
     var qosLabel: String
 }
 
@@ -69,12 +69,12 @@ struct ThreadResourceSample: Sendable {
 struct ResourceSnapshot: Sendable {
     /// The per-thread lines, sorted hottest-first so the top entries are the ones
     /// worth labelling. Capped (see `ResourceTelemetry.maxThreadsEmitted`) so a
-    /// transient thread storm can't bloat a scrape — the cap keeps the busiest.
+    /// transient thread storm can't bloat a scrape - the cap keeps the busiest.
     var threads: [ThreadResourceSample] = []
     /// Process physical memory footprint (the number Activity Monitor's "Memory"
-    /// column shows), bytes — `task_vm_info.phys_footprint`. nil on a probe miss.
+    /// column shows), bytes - `task_vm_info.phys_footprint`. nil on a probe miss.
     var physFootprintBytes: UInt64?
-    /// True iff the Mac is on battery (the streaming machine unplugged — a power
+    /// True iff the Mac is on battery (the streaming machine unplugged - a power
     /// budget the scheduler may clamp, correlating with a perf dip). nil if the
     /// power source can't be read (e.g. a desktop with no battery → reads AC).
     var onBattery: Bool?
@@ -92,7 +92,7 @@ struct ResourceSnapshot: Sendable {
 
 // MARK: - Sampler
 
-/// Static per-process resource samplers. No state — each call is a fresh read on
+/// Static per-process resource samplers. No state - each call is a fresh read on
 /// the exporter's serial queue (never a hot path).
 enum ResourceTelemetry {
 
@@ -128,7 +128,7 @@ enum ResourceTelemetry {
     /// Capture the per-thread CPU/QoS/name lines + the memory footprint + the
     /// power-source state. One `task_threads` + per-thread `thread_info` (mirrors
     /// `ProcessMetrics.sample()`), one `task_info(TASK_VM_INFO)`, one
-    /// `IOPSCopyPowerSourcesInfo`. All on the exporter's 1Hz queue — never a hot
+    /// `IOPSCopyPowerSourcesInfo`. All on the exporter's 1Hz queue - never a hot
     /// path.
     static func sample() -> ResourceSnapshot {
         var snapshot = ResourceSnapshot()
@@ -206,8 +206,8 @@ enum ResourceTelemetry {
                 // TRIM AT THE FIRST NUL before conversion. `String(validating:)`
                 // consumes the WHOLE 64-byte buffer (embedded NULs are valid
                 // UTF-8), so every name carried its NUL padding: an unnamed
-                // thread rendered as 64 \u0000 escapes — ~1.5KB of pure noise
-                // per NDJSON row across 24 threads — and the never-empty result
+                // thread rendered as 64 \u0000 escapes - ~1.5KB of pure noise
+                // per NDJSON row across 24 threads - and the never-empty result
                 // meant the `tid-<id>` fallback could not fire. Truncating at
                 // the terminator restores both the real names (P/E-core
                 // visibility, the field's whole point) and the fallback.
@@ -248,7 +248,7 @@ enum ResourceTelemetry {
         // header says the caller must NOT release it), so this must be
         // takeUnretainedValue(). The previous takeRetainedValue() over-released
         // once per 1Hz capture tick and survived only because the documented
-        // return values are immortal compile-time CFSTR constants — the exact
+        // return values are immortal compile-time CFSTR constants - the exact
         // masking that already burned IOReport bring-up (IOReportSampler.swift:
         // the tagged-pointer names survived, the heap-allocated ones crashed).
         let providing = IOPSGetProvidingPowerSourceType(blob)?.takeUnretainedValue() as String?
@@ -277,13 +277,13 @@ enum ResourceTelemetry {
 /// One-shot QoS audit derived from a per-thread sample. Confirms our hot-path
 /// queues are on `.userInteractive` (the P-core tier) and FLAGS any hot thread
 /// that is not high-QoS, so a regression that demotes the decode/pacer/receive
-/// queue surfaces in the log the moment telemetry comes up — instead of as
+/// queue surfaces in the log the moment telemetry comes up - instead of as
 /// unexplained judder. Logged once by the exporter on start; never on a hot path.
 enum QoSAudit {
 
     /// The hot-path queue/thread labels we EXPECT to be high-QoS (the
     /// `.userInteractive` decode/pacer/receive/input/enet threads). Network.swift's
-    /// `.utility` queues are deliberately omitted — they are the control-plane
+    /// `.utility` queues are deliberately omitted - they are the control-plane
     /// reachability probe (a status-pill RTT), not a hot path, so `.utility` there
     /// is CORRECT and must NOT be flagged. Same for the telemetry/diag `.utility`
     /// queues.
@@ -297,7 +297,7 @@ enum QoSAudit {
     /// Run the audit over a sample and log the result once. Reports the high-QoS
     /// confirmation for the hot-path threads it can see, and warns for any thread
     /// drawing real CPU that is on a low QoS tier (the demotion tell). Purely
-    /// observational — it changes NO scheduling, only reports.
+    /// observational - it changes NO scheduling, only reports.
     static func runAndLog(_ snapshot: ResourceSnapshot, category: String) {
         var confirmed: [String] = []
         var demotions: [String] = []
@@ -312,23 +312,23 @@ enum QoSAudit {
                 }
             } else if thread.cpuPercent >= 5.0 && !ResourceTelemetry.isHighQoS(thread.qos) {
                 // A non-hot-path thread burning ≥5% on a low tier is worth a glance
-                // (it might be ours under a different name) — flag it, don't fail.
+                // (it might be ours under a different name) - flag it, don't fail.
                 demotions.append("\(thread.name.isEmpty ? "tid \(thread.tid)" : thread.name)"
                     + "=\(thread.qosLabel) " + String(format: "(%.0f%% CPU)", thread.cpuPercent))
             }
         }
         if !confirmed.isEmpty {
-            Diag.notice("QoS audit OK — hot-path threads on P-core tier: "
+            Diag.notice("QoS audit OK - hot-path threads on P-core tier: "
                 + confirmed.joined(separator: ", ") + ". (Network.swift .utility queue is "
                 + "control-plane, correctly NOT hot-path.)", category)
         }
         if !demotions.isEmpty {
-            Diag.warn("QoS audit FLAG — thread(s) on a low QoS tier while drawing CPU: "
-                + demotions.joined(separator: ", ") + " — a hot path may have been demoted "
+            Diag.warn("QoS audit FLAG - thread(s) on a low QoS tier while drawing CPU: "
+                + demotions.joined(separator: ", ") + " - a hot path may have been demoted "
                 + "off the P-core tier.", category)
         }
         if confirmed.isEmpty && demotions.isEmpty {
-            Diag.notice("QoS audit — no hot-path threads sampled yet (stream may be "
+            Diag.notice("QoS audit - no hot-path threads sampled yet (stream may be "
                 + "pre-roll); will re-confirm via the per-thread telemetry series.", category)
         }
     }

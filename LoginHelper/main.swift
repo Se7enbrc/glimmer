@@ -1,5 +1,5 @@
 //
-//  main.swift — Glimmer Login Helper
+//  main.swift - Glimmer Login Helper
 //
 //  Auto-launched at login by the system (registered via
 //  SMAppService.loginItem from the main app). Its only job is to relaunch
@@ -7,7 +7,7 @@
 //  main app knows to suppress its window auto-show, then exit.
 //
 //  This is the macOS-blessed pattern for "launch at login but stay in
-//  menu bar" — Apple's own login items (iCloud Drive, etc.) work the same
+//  menu bar" - Apple's own login items (iCloud Drive, etc.) work the same
 //  way. The previous heuristic-based approach (systemUptime < 90s) was
 //  unreliable for rapid manual relaunches after boot.
 //
@@ -30,7 +30,7 @@ let mainAppURL = helperURL
 // embedded location we'd rather exit silently than launch the wrong app.
 guard mainAppURL.pathExtension == "app",
       FileManager.default.fileExists(atPath: mainAppURL.path) else {
-    NSLog("Glimmer Login Helper: couldn't resolve main app at \(mainAppURL.path) — exiting")
+    NSLog("Glimmer Login Helper: couldn't resolve main app at \(mainAppURL.path) - exiting")
     exit(0)
 }
 
@@ -44,7 +44,7 @@ NSWorkspace.shared.openApplication(at: mainAppURL, configuration: config) { _, e
     if let error {
         NSLog("Glimmer Login Helper: failed to launch main app: \(error)")
     }
-    // Exit either way — the helper has no further job after this.
+    // Exit either way - the helper has no further job after this.
     DispatchQueue.main.async { exit(0) }
 }
 

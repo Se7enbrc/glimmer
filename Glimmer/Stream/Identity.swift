@@ -4,7 +4,7 @@
 //  Client-side identity for the streaming engine: a stable unique ID plus an
 //  RSA-2048 keypair under a self-signed X.509 certificate (CN = "NVIDIA
 //  GameStream Client", 20-year validity). These three pieces of state are what
-//  the host uses to recognize us — both during the pairing handshake and on
+//  the host uses to recognize us - both during the pairing handshake and on
 //  every subsequent TLS connection. They're generated once on first launch and
 //  persisted to mode-0600 files under ~/Library/Application Support/Glimmer/
 //  Identity/ so a process running as our UID can re-load them silently across
@@ -13,9 +13,9 @@
 //  Ported (loosely now) from moonlight-qt's app/backend/identitymanager.{h,cpp}.
 //
 //
-// Future: when signed with a Developer ID — once we have a real Team ID and
+// Future: when signed with a Developer ID - once we have a real Team ID and
 // can produce a stable codesign identity for shipped builds, the right move is
-// to switch the on-disk store back to the keychain — specifically the
+// to switch the on-disk store back to the keychain - specifically the
 // **data-protection** keychain, not the login keychain:
 //
 //   1. Storage attrs become:
@@ -24,7 +24,7 @@
 //        kSecAttrAccount                 : "client-cert-pem" / "client-key-pem" / "client-unique-id"
 //        kSecUseDataProtectionKeychain   : true
 //        kSecAttrAccessGroup             : "<TEAMID>.io.ugfugl.Glimmer"
-//            (or omit entirely — we have no other apps and so no need to share)
+//            (or omit entirely - we have no other apps and so no need to share)
 //        kSecAttrAccessible              : kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 //
 //   2. Delete the `FileIdentityStore` backend below and all of its migration
@@ -33,7 +33,7 @@
 //
 //   3. The data-protection keychain on macOS is per-bundle-id (effectively a
 //      private container for the app), doesn't show up in Keychain Access.app,
-//      and — crucially — does NOT use the SecTrustedApplication CDHash ACL
+//      and - crucially - does NOT use the SecTrustedApplication CDHash ACL
 //      that breaks every adhoc rebuild. It needs the bundle to be signed by
 //      a recognized Team ID, though, which is why we can't use it today.
 //
@@ -44,14 +44,14 @@
 //
 // The long-lived RSA-2048 private key authenticates Glimmer to every paired
 // host indefinitely. If it leaks, the attacker becomes a permanent imposter
-// against every host this install has paired with — until the user manually
+// against every host this install has paired with - until the user manually
 // unpairs each host.
 //
 // File storage at `~/Library/Application Support/Glimmer/Identity/*` is
 // readable by any process running as the same UID. That includes
 // TCC-allowlisted apps with Full Disk Access. mode 0600 keeps OTHER users on
 // the same Mac out, but not other processes of the same user. That's the
-// same security level moonlight-qt provides — it puts the same PEMs into a
+// same security level moonlight-qt provides - it puts the same PEMs into a
 // QSettings plist (mode 0644 by default) in ~/Library/Preferences. We're
 // actually slightly tighter because we enforce 0600.
 //
@@ -60,7 +60,7 @@
 // the CDHash changes on every rebuild. That makes the read after the next
 // rebuild fail the ACL check, which surfaces as a Security.framework prompt
 // asking the user to allow Glimmer to use its own key. Every. Single. Build.
-// We've regressed on this surface three times. No more — file storage it is
+// We've regressed on this surface three times. No more - file storage it is
 // until we ship signed builds.
 //
 
@@ -73,7 +73,7 @@ import Security
 // SecIdentity / SecCertificate / SecKey are CoreFoundation reference types
 // (SecIdentityRef etc). Apple documents the Security framework's object types
 // as thread-safe for retain/release, and the values themselves are immutable
-// once created — so they're effectively `Sendable`. The SDK headers do not
+// once created - so they're effectively `Sendable`. The SDK headers do not
 // (yet) declare the conformance, so we add it retroactively. The
 // `@retroactive` attribute makes the intent explicit to readers and silences
 // the Swift 6 warning about adopting a protocol the type's owner did not
@@ -154,7 +154,7 @@ enum FileIdentityStore {
     /// because `FileManager.setAttributes` can return `true` on filesystems
     /// that don't actually honour POSIX permissions (NFS without map-uid,
     /// some FUSE backends). On a permissions verification failure we delete
-    /// the partial file and throw — half-written secrets on a too-permissive
+    /// the partial file and throw - half-written secrets on a too-permissive
     /// filesystem are worse than no file at all.
     static func write(_ data: Data, account: String) throws {
         guard let url = try fileURL(account: account) else {
@@ -167,7 +167,7 @@ enum FileIdentityStore {
         // Ensure directory exists at 0700. `createDirectory` is a no-op if it
         // already exists (with `withIntermediateDirectories: true`), but it
         // does NOT chmod an existing directory back down. So we explicitly
-        // setAttributes afterward. Best-effort — directory tightness is a
+        // setAttributes afterward. Best-effort - directory tightness is a
         // defense-in-depth bonus on top of the file mode.
         try fm.createDirectory(at: dir,
                                withIntermediateDirectories: true,
@@ -187,7 +187,7 @@ enum FileIdentityStore {
             try? fm.removeItem(at: url)
             throw StreamError.crypto("FileIdentityStore: missing POSIX permissions for \(url.lastPathComponent)")
         }
-        // Mask off the SUID/SGID/sticky bits in the comparison — those are
+        // Mask off the SUID/SGID/sticky bits in the comparison - those are
         // never set by us but a paranoid umask could in theory surface them.
         let permBits = mode.uint16Value & 0o777
         guard permBits == 0o600 else {
@@ -253,7 +253,7 @@ public actor IdentityManager {
         return id
     }
 
-    /// Bootstrap step — call this early (from MoonlightManager.bootstrap()) so
+    /// Bootstrap step - call this early (from MoonlightManager.bootstrap()) so
     /// the identity setup happens during launch, not on the user's first
     /// stream click. Idempotent.
     public func preflight() async {
@@ -287,7 +287,7 @@ public actor IdentityManager {
 
         // Sweep 1: leftovers from earlier builds that imported unlabelled into
         // the user's login keychain. NOTE: do NOT include "Glimmer Client
-        // Identity" here — that's our current SecIdentity item, and the
+        // Identity" here - that's our current SecIdentity item, and the
         // per-preflight re-import in `buildOrLoadIdentity` manages its
         // lifecycle.
         let names = ["Imported Private Key"]
@@ -328,7 +328,7 @@ public actor IdentityManager {
         }
 
         // Sweep 3: the abandoned file-based SecKeychain from an even earlier
-        // build. Different path from our new mode-0600 identity files —
+        // build. Different path from our new mode-0600 identity files -
         // this was an entire SecKeychain database at
         // ~/Library/Application Support/Glimmer/identity.keychain that we
         // no longer need. Safe to delete on every install where the flag
@@ -373,7 +373,7 @@ public actor IdentityManager {
             throw StreamError.crypto("SHA-256 of salted PIN failed")
         }
 
-        // AES-128 — first 16 bytes only. The remaining bytes of the digest are
+        // AES-128 - first 16 bytes only. The remaining bytes of the digest are
         // discarded (this matches GFE/Sunshine behaviour, not a quirk on our end).
         return Data(digest.prefix(16))
     }
@@ -382,7 +382,7 @@ public actor IdentityManager {
     //
     // Source-of-truth precedence on every cold launch:
     //
-    //   1. File store — the canonical home post-migration. Fast path: three
+    //   1. File store - the canonical home post-migration. Fast path: three
     //      mode-0600 PEM files, read with no keychain involvement and no
     //      Security.framework prompts.
     //
@@ -405,10 +405,10 @@ public actor IdentityManager {
     //
     // After any non-file-store source, the result lands in the file store and
     // `glimmer.identityFileStorageVersion` is set so subsequent launches
-    // go straight to step 1. The migration is idempotent — re-running it on
+    // go straight to step 1. The migration is idempotent - re-running it on
     // an already-migrated install hits step 1 and returns.
 
-    /// Versioned flag — once set to `fileStorageVersion`, future launches
+    /// Versioned flag - once set to `fileStorageVersion`, future launches
     /// load identity directly from the file store and skip all migration
     /// branches. Bump if the on-disk shape ever changes incompatibly.
     static let fileStorageFlag = "glimmer.identityFileStorageVersion"
@@ -423,7 +423,7 @@ public actor IdentityManager {
     static let legacyKeychainOnlyFlag = "glimmer.identityKeychainOnly"
 
     /// Service string the prior build used for the three generic-password
-    /// keychain items. We only ever read from this now — never write back.
+    /// keychain items. We only ever read from this now - never write back.
     static let legacyKeychainService = "io.ugfugl.Glimmer.identity"
     static let accountCert = "client-cert-pem"
     static let accountKey  = "client-key-pem"

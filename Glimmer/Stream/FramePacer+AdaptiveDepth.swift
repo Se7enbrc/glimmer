@@ -22,13 +22,13 @@ extension FramePacer {
     /// the RTP receive path, and walk the grow path one step toward the desired
     /// target. Driven on the same ~2s metric cadence that updates
     /// `TelemetryCounters.recvJitterMs`, so a deeper buffer requires SUSTAINED
-    /// real jitter across several windows — a lone spike (already ~1s-smoothed)
+    /// real jitter across several windows - a lone spike (already ~1s-smoothed)
     /// can't ratchet it. Grows one step per call when the desired target exceeds
     /// the current depth; shrinking stays rate-limited in `decayTargetLocked`.
     ///
     /// RECONCILER ON (default): `ms` is recorded but the desired target comes from
     /// the published headroom level (see `justifiedDepthLocked`), so this call is
-    /// just a cadence-aligned GROW TICK toward that level — it no longer self-
+    /// just a cadence-aligned GROW TICK toward that level - it no longer self-
     /// decides off `ms`. RECONCILER OFF: `ms` IS the self-decide signal (the
     /// original behavior). Either way `bumpTargetForJitterLocked` does the
     /// one-step grow.
@@ -42,11 +42,11 @@ extension FramePacer {
 
     /// Pull the reconciler's latest published headroom level into
     /// `reconciledTargetDepth` (mapped `targetDepth + level`, clamped). MUST be
-    /// called WITHOUT the pacer lock held — it takes EnvSignalController's lock
+    /// called WITHOUT the pacer lock held - it takes EnvSignalController's lock
     /// (via `.decision`), so calling it under the pacer lock would nest two locks.
     /// No-ops on an unchanged decision generation (the common path costs one
     /// short controller-lock read + a `UInt64` compare). When the reconciler is
-    /// off this leaves `reconciledTargetDepth` untouched — `justifiedDepthLocked`
+    /// off this leaves `reconciledTargetDepth` untouched - `justifiedDepthLocked`
     /// ignores it and self-decides off `measuredJitterMs` instead.
     func refreshReconciledTarget() {
         guard EnvSignalController.reconcilerEnabled else { return }
@@ -63,20 +63,20 @@ extension FramePacer {
 
     // MARK: - Adaptive target depth (Issue 2a). All run under `lock`.
 
-    /// The depth the CURRENT desired target justifies — the value the rate-limited
+    /// The depth the CURRENT desired target justifies - the value the rate-limited
     /// grow/decay actuator walks `adaptiveTargetDepth` toward. Clamped to
     /// [targetDepth, maxTargetDepth].
     ///
     /// RECONCILER ON (the default): the desired depth comes from the UNIFIED
-    /// jitter→headroom decision EnvSignalController publishes — `targetDepth +
-    /// headroomLevel` — so the pacer and the FEC reorder-hold walk off ONE shared
+    /// jitter→headroom decision EnvSignalController publishes - `targetDepth +
+    /// headroomLevel` - so the pacer and the FEC reorder-hold walk off ONE shared
     /// level instead of each reading `recvJitterMs` independently. headroomLevel 0
     /// (clear / jitter under the dead-zone) → depth 1 (REST), each level up → +1
     /// depth, capped at `maxTargetDepth`. Only the TARGET changes; the grow/decay
     /// rate-limiter and the depth-1 floor below are untouched (they are the
     /// actuator).
     ///
-    /// RECONCILER OFF (the kill-switch A/B fallback): the ORIGINAL self-decide —
+    /// RECONCILER OFF (the kill-switch A/B fallback): the ORIGINAL self-decide -
     /// compute the depth off the SMOOTHED RFC-3550 `recvJitterMs` through a
     /// DEAD-ZONE: jitter at/below `jitterDeadZoneMs` (3ms) earns NO extra depth, so
     /// a clean link rests at 1; above it, +1 frame per `jitterMsPerExtraFrame` of
@@ -84,7 +84,7 @@ extension FramePacer {
     /// cap. Byte-identical to today.
     func justifiedDepthLocked() -> Int {
         if EnvSignalController.reconcilerEnabled {
-            // Read ONLY the off-lock-refreshed snapshot — never the controller —
+            // Read ONLY the off-lock-refreshed snapshot - never the controller -
             // so the pacer holds exactly one lock (its own). Already clamped to
             // [targetDepth, maxTargetDepth] by the refresh.
             return reconciledTargetDepth
@@ -99,10 +99,10 @@ extension FramePacer {
     }
 
     /// Recompute the adaptive target from the current measured jitter and RAISE
-    /// it — by AT MOST one frame per call — if SUSTAINED measured jitter demands
+    /// it - by AT MOST one frame per call - if SUSTAINED measured jitter demands
     /// more depth. Stepping one frame at a time, driven on the ~2s metric / tick
     /// cadence off the ~1s-smoothed signal, means a deeper buffer requires real
-    /// sustained jitter, never a lone spike. Never lowers here — shrinking is
+    /// sustained jitter, never a lone spike. Never lowers here - shrinking is
     /// rate-limited in `decayTargetLocked`. Called under the lock.
     func bumpTargetForJitterLocked() {
         let justified = justifiedDepthLocked()
@@ -126,7 +126,7 @@ extension FramePacer {
         // RFC-3550 recv-jitter (0.09ms wired / ~22ms wifi) even if the explicit
         // noteMeasuredJitter path isn't wired. This is the self-decide read the
         // diagnosis endorsed. RECONCILER ON: the pacer does NOT self-read the
-        // shared gauge — `justifiedDepthLocked()` pulls the published headroom
+        // shared gauge - `justifiedDepthLocked()` pulls the published headroom
         // level instead (the whole point of the unification: ONE reader of the
         // jitter signal, not two racing). `measuredJitterMs` then just goes stale
         // (it feeds only the OFF path), which is harmless.
@@ -144,7 +144,7 @@ extension FramePacer {
             return adaptiveTargetDepth
         }
         // What does CURRENT measured jitter justify? If it still wants the present
-        // depth, hold — don't shrink into ongoing, sustained jitter. Because the
+        // depth, hold - don't shrink into ongoing, sustained jitter. Because the
         // signal is the ~1s-smoothed RFC-3550 metric, a transient spike clears
         // quickly and the guard below releases, letting the rate-limited shrink
         // run back to 1.
@@ -182,20 +182,20 @@ extension FramePacer {
     /// SKIP-ROBUST frame-interval estimator: the lower-quartile (p25) of the PTS
     /// deltas. The cadence-learning fix for the cold-connect chug.
     ///
-    /// A SKIPPED frame — the host's stream-start ramp under-delivering, or wifi
-    /// loss — produces a PTS delta that is a near-MULTIPLE of the true interval
+    /// A SKIPPED frame - the host's stream-start ramp under-delivering, or wifi
+    /// loss - produces a PTS delta that is a near-MULTIPLE of the true interval
     /// (the gap spans the missing frame's slot). The MEDIAN counts those inflated
     /// gaps as the cadence, so a delivery dip to ~64fps dragged the estimate to
-    /// 43–64Hz and the due gate paced the WHOLE grid that slow — the measured cold-
+    /// 43-64Hz and the due gate paced the WHOLE grid that slow - the measured cold-
     /// connect stutter (rendered 38 while 64 frames/s were arriving). The lower
     /// quartile keys off the no-skip CLUSTER (the true per-frame interval is the
     /// SMALLEST delta; skips only ever ADD), so the cadence stays pinned to the
     /// real content rate through a transient dip. A GENUINE sustained rate change
-    /// still moves it once the new uniform interval dominates the window —
+    /// still moves it once the new uniform interval dominates the window -
     /// asymmetric by design: quick to adopt a FASTER rate (>p25 of the window at
     /// the short interval), slow to follow a SLOWER one (a dip is usually not a
     /// real slowdown). Steady clean state: every delta ≈ the interval, so p25 ==
-    /// median == the interval — byte-identical to the prior behavior.
+    /// median == the interval - byte-identical to the prior behavior.
     func skipRobustInterval(_ values: [Double]) -> Double {
         guard !values.isEmpty else { return streamFrameIntervalSeconds }
         let sorted = values.sorted()
@@ -204,7 +204,7 @@ extension FramePacer {
         return sorted[idx]
     }
 
-    /// True while recovering from a real delivery GAP — a recent empty-tick streak,
+    /// True while recovering from a real delivery GAP - a recent empty-tick streak,
     /// or within the lenient window after one. Lets the post-gap catch-up play
     /// through instead of being trimmed/backed-off to newest. Called under `lock`.
     func inGapRecoveryLocked(now: CFTimeInterval) -> Bool {

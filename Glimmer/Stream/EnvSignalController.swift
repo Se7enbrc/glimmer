@@ -1,14 +1,14 @@
 //
 //  EnvSignalController.swift
 //
-//  The ENV-SIGNAL adaptive layer — SHADOW MODE. A CLEAR/CAUTION/DISTRESS
+//  The ENV-SIGNAL adaptive layer - SHADOW MODE. A CLEAR/CAUTION/DISTRESS
 //  link-condition state machine fed once per telemetry capture tick (~1Hz)
-//  with the stream ROUTE (StreamRouteProbe — the honest stream_link, re-probed
+//  with the stream ROUTE (StreamRouteProbe - the honest stream_link, re-probed
 //  on every NWPathMonitor change), the associated-radio physics (RSSI / PHY
 //  tx-rate), and the per-socket gap-event counters. It models the in-repo
 //  FecHeadroomController safety contract:
 //
-//   1. SUSTAINED: escalation needs CONSECUTIVE ~2s evidence windows — co-gap
+//   1. SUSTAINED: escalation needs CONSECUTIVE ~2s evidence windows - co-gap
 //      evidence needs 3 (~6s), pure-radio evidence needs 5 (~10s; a radio sag
 //      with no delivery impact must prove itself longer). Never one sample.
 //   2. SESSION-RELATIVE, never prescriptive absolutes: radio thresholds key
@@ -18,7 +18,7 @@
 //      (30s) per de-escalation step + a minimum dwell between any two level
 //      changes. Every state is always recoverable; reset per session.
 //   4. GATED: radio evidence arms ONLY when stream_link == wifi, and a wired
-//      route FORCES CLEAR — environmental signals gate radio compensation but
+//      route FORCES CLEAR - environmental signals gate radio compensation but
 //      must never explain away client-side present-path collapses (a felt jank
 //      marker on a FLAT-RSSI link is the pipeline's fault, not the radio's).
 //      DISTRESS seconds are excluded from present-path quality scorecards,
@@ -26,22 +26,22 @@
 //
 //  EVIDENCE (per 2s window):
 //   * co-gap: the video AND audio sockets both logged a >50ms inter-arrival
-//     gap in the same window — the link-common-cause discriminator (one
+//     gap in the same window - the link-common-cause discriminator (one
 //     socket gapping alone is that path's own story; both together is the
 //     radio). Severe tier: both logged >100ms. The enet gap family is
 //     deliberately NOT consumed here (expectation-gated only recently; its
 //     idle-cadence artifact polluted exactly this kind of read).
-//   * radio: RSSI ≤ session-p50 − 8dB, or tx-rate ≤ 0.5× session-p95 —
+//   * radio: RSSI ≤ session-p50 − 8dB, or tx-rate ≤ 0.5× session-p95 -
 //     armed only on a wifi stream route, only after a ~1min baseline warmup.
 //
 //  SHADOW MODE (the contract for this pass): the state machine RUNS and
 //  EXPORTS (env_state / env_state_changes_total / pings_sent counters, plus
 //  an `env_state` NDJSON event with the evidence vector + a Diag NOTICE on
-//  every transition) but ACTUATES nothing — except the single approved live
+//  every transition) but ACTUATES nothing - except the single approved live
 //  actuation below. The state machine is judged against felt events for one
 //  full session BEFORE any further dial moves; see "Future actuations".
 //
-//  LIVE ACTUATION #1 — CONDITIONAL KEEPALIVE (`steadyPingInterval()`):
+//  LIVE ACTUATION #1 - CONDITIONAL KEEPALIVE (`steadyPingInterval()`):
 //  75ms steady ping cadence only when stream_link == wifi AND (input-idle OR
 //  state ≥ CAUTION); 500ms (upstream's cadence) otherwise. Safe on a jittery
 //  link because the gate only ever RELAXES the 75ms doze countermeasure
@@ -50,17 +50,17 @@
 //  holds the radio awake (a busy input stream is far less blip-prone than an
 //  idle one). If 500ms ever proves insufficient on active-input wifi, the gaps
 //  it causes ARE the co-gap evidence that escalates to CAUTION and re-tightens
-//  the cadence — the safeguard recovers itself, never gives up.
+//  the cadence - the safeguard recovers itself, never gives up.
 //  Unknown/tunnel/stale routes FAIL TOWARD 75ms: wrongly fast costs a few
 //  kbps; wrongly slow on a dozing radio costs a felt multi-frame gap.
 //
 //  THREADING: evidence/baseline state is confined to the exporter's serial
 //  workQueue (the only `observeCaptureTick` caller; exactly one exporter
-//  exists at a time — the CaptureBaselines discipline). The few outputs that
+//  exists at a time - the CaptureBaselines discipline). The few outputs that
 //  cross threads (state, stream link, feed freshness) sit behind one lock;
 //  the ping counters are self-locked. When telemetry is OFF the state
 //  machine is never fed, the cadence reads "unknown route", and the loops
-//  hold the validated 75ms everywhere — gate-off behavior is byte-identical
+//  hold the validated 75ms everywhere - gate-off behavior is byte-identical
 //  to the pre-conditional shipped dial.
 //
 
@@ -74,16 +74,16 @@ final class EnvSignalController: @unchecked Sendable {
     static let shared = EnvSignalController()
     private static let cat = "EnvSignal"
 
-    // MARK: - Reconciler kill-switch (INCREMENT 1 — the A/B flag)
+    // MARK: - Reconciler kill-switch (INCREMENT 1 - the A/B flag)
 
     /// When TRUE (the default) the unified LINK RECONCILER is live: this
     /// controller publishes ONE jitter→headroom decision (`headroomLevel` +
-    /// `smoothedJitterMs`) and both jitter-racing actuators — the FramePacer
-    /// adaptive depth and the FecHeadroomController reorder-hold — CONSUME it
+    /// `smoothedJitterMs`) and both jitter-racing actuators - the FramePacer
+    /// adaptive depth and the FecHeadroomController reorder-hold - CONSUME it
     /// instead of each reading `TelemetryCounters.recvJitterMs` independently.
     ///
     /// When FALSE both actuators fall back to their CURRENT self-deciding
-    /// behavior, unchanged — the old code paths stay reachable behind this flag,
+    /// behavior, unchanged - the old code paths stay reachable behind this flag,
     /// so the build compiles to "identical to today" with the flag off. A simple
     /// process-global flag (read on the actuators' own ticks, set at most once at
     /// bring-up) so we can A/B without a rebuild. `nonisolated(unsafe)`: a plain
@@ -96,7 +96,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// The three-level link-condition state. Ordinals are stable (exported as
     /// the `env_state` gauge): 0 clear, 1 caution, 2 distress.
     enum EnvState: Int, Sendable {
-        /// No sustained evidence — the baseline. Wired routes are pinned here.
+        /// No sustained evidence - the baseline. Wired routes are pinned here.
         case clear = 0
         /// Sustained degradation evidence (co-gaps and/or a radio sag): the
         /// "arm the gentle compensations" tier.
@@ -117,10 +117,10 @@ final class EnvSignalController: @unchecked Sendable {
     // MARK: - Tunables (the FecHeadroomController contract numbers)
 
     /// Capture ticks folded into one evidence window (~2s at the exporter's
-    /// 1Hz — the same window size the FEC headroom controller trends on).
+    /// 1Hz - the same window size the FEC headroom controller trends on).
     static let ticksPerWindow = 2
     /// Consecutive evidence windows before an escalation when the run carried
-    /// CO-GAP evidence (~6s) — actual delivery impact earns the faster entry.
+    /// CO-GAP evidence (~6s) - actual delivery impact earns the faster entry.
     static let escalateWindows = 3
     /// Consecutive evidence windows for a PURE-RADIO run (~10s): a signal sag
     /// that isn't hurting delivery yet must sustain longer before it counts.
@@ -133,7 +133,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// floor, same role as FecHeadroomController.minDwellWindows).
     static let minDwellWindows = 2
     /// Escalate radio threshold: RSSI at or below session-p50 minus this many
-    /// dB counts as degraded. Relax needs to clear a SMALLER deficit — the
+    /// dB counts as degraded. Relax needs to clear a SMALLER deficit - the
     /// gap between the two is the dead band that prevents flapping.
     static let rssiDegradeDb = 8
     static let rssiRelaxDb = 6
@@ -166,29 +166,29 @@ final class EnvSignalController: @unchecked Sendable {
     static let headroomJitterMsPerLevel = FecHeadroomController.stepUs == 0 ? 8.0
         : Double(FecHeadroomController.stepUs) / 1_000.0
     /// EWMA weight smoothing the per-window recv-jitter that drives the published
-    /// headroom — copied from FecHeadroomController.jitterBaseEwmaWeight so the
+    /// headroom - copied from FecHeadroomController.jitterBaseEwmaWeight so the
     /// FEC actuator's jitter-scaled base is byte-identical whether it consumes
     /// the published value or (flag off) smooths its own.
     static let jitterBaseEwmaWeight = FecHeadroomController.jitterBaseEwmaWeight
 
     // MARK: - Keepalive cadence dials
 
-    /// FAST cadence = the validated 75ms anti-doze dial (verdict KEEP — the
+    /// FAST cadence = the validated 75ms anti-doze dial (verdict KEEP - the
     /// WHY/JUDGE/COST live on that constant).
     static let fastPingIntervalSeconds = UdpPinger.steadyPingIntervalSeconds
-    /// RELAXED cadence = upstream moonlight's 500ms keepalive — the proven-
+    /// RELAXED cadence = upstream moonlight's 500ms keepalive - the proven-
     /// sufficient rate wherever NIC doze is not in play.
     static let relaxedPingIntervalSeconds = UdpPinger.relaxedPingIntervalSeconds
     /// Input-silence gate for "input-idle": NIC power-save doze sets in well
     /// under a second after uplink traffic stops, and active-play inter-input
-    /// gaps are sub-100ms — 1s cleanly separates the regimes (deliberately
+    /// gaps are sub-100ms - 1s cleanly separates the regimes (deliberately
     /// NOT TelemetryCounters.idleGapSeconds, which is a 2s telemetry-UX edge,
     /// not a radio constant).
     static let keepaliveIdleSeconds = 1.0
     /// How long a published stream_link stays trusted without a fresh feed.
     /// The exporter feeds every ~1s while telemetry is on; once feeds stop
     /// (telemetry off, session over) the route claim expires and the cadence
-    /// falls back to the validated fast dial — stale knowledge never relaxes
+    /// falls back to the validated fast dial - stale knowledge never relaxes
     /// the countermeasure.
     static let routeTrustHorizonNanos: UInt64 = 30_000_000_000
     /// Send-due slop: the ping threads wake on the fast quantum and gate the
@@ -208,7 +208,7 @@ final class EnvSignalController: @unchecked Sendable {
     private var stateValue: EnvState = .clear
     /// Last published stream route class ("wired"/"wifi"/"tunnel"/"unknown").
     private var streamLinkValue = "unknown"
-    /// Monotonic instant of the last exporter feed (0 = never) — the cadence
+    /// Monotonic instant of the last exporter feed (0 = never) - the cadence
     /// only trusts the route within `routeTrustHorizonNanos` of this.
     private var lastFedNanos: UInt64 = 0
 
@@ -216,15 +216,15 @@ final class EnvSignalController: @unchecked Sendable {
     //
     // The single jitter→headroom decision both actuators PULL on their own
     // ticks. Computed in the reconcile phase at window close (`reconcileLocked`)
-    // and published behind THIS controller's `lock` — the same pattern as
+    // and published behind THIS controller's `lock` - the same pattern as
     // `stateValue`/`streamLinkValue`. Each consumer reads these with one short
     // lock on its own thread, under its OWN existing lock, and never calls back
     // into this controller. The `generation` counter lets a consumer no-op when
     // the decision is unchanged, so the hot RTP receive thread takes the lock
     // only to compare a `UInt64` on the common (unchanged) path.
 
-    /// Desired headroom level (0…`Self.maxHeadroomLevel`). 0 = clear / jitter
-    /// under the dead-zone — the REST decision: FEC reorder-hold at its 24ms
+    /// Desired headroom level (0...`Self.maxHeadroomLevel`). 0 = clear / jitter
+    /// under the dead-zone - the REST decision: FEC reorder-hold at its 24ms
     /// base, pacer adaptive depth at 1 (byte-identical to no-reconciler). Each
     /// level up = +1 FEC step (8ms) + 1 pacer depth, capped at FEC 48ms / the
     /// mapped depth. Forced to 0 whenever the link state is CLEAR (which a wired
@@ -238,7 +238,7 @@ final class EnvSignalController: @unchecked Sendable {
     private var smoothedJitterMsValue: Double = 0
     /// Monotonic decision generation, bumped on every reconcile that CHANGES the
     /// published level or smoothed jitter. A consumer caches the last generation
-    /// it applied and re-applies only when this advances — so an unchanged
+    /// it applied and re-applies only when this advances - so an unchanged
     /// decision costs the hot path one locked `UInt64` compare and nothing more.
     private var decisionGeneration: UInt64 = 0
 
@@ -252,7 +252,7 @@ final class EnvSignalController: @unchecked Sendable {
     }
 
     /// Pull the current published decision (lock-guarded read; any thread). The
-    /// ONLY cross-thread surface the actuators touch — they never call back in.
+    /// ONLY cross-thread surface the actuators touch - they never call back in.
     var decision: Decision {
         lock.lock(); defer { lock.unlock() }
         return Decision(headroomLevel: headroomLevelValue,
@@ -274,13 +274,13 @@ final class EnvSignalController: @unchecked Sendable {
 
     // MARK: - Ping counters (the keepalive cadence judge)
 
-    // pings_sent, PER SOCKET — without this counter the keepalive A/B is
+    // pings_sent, PER SOCKET - without this counter the keepalive A/B is
     // unjudgeable from data ("was it even active?"); this makes it legible.
     // Counted at the send site; transmit failures keep their own streak-edge
     // logging. Each resets at ITS OWN producer's start edge (note*PingLoopStart
     // below), NOT the exporter start: the audio loop starts mid-handshake,
     // before any exporter exists, so an exporter-time reset would wipe the burst
-    // pings — and loop-start IS the session edge for these.
+    // pings - and loop-start IS the session edge for these.
     let videoPingsSentTotal = TelemetryCounters.Counter()
     let audioPingsSentTotal = TelemetryCounters.Counter()
     /// State transitions this session (`env_state_changes_total`).
@@ -288,13 +288,13 @@ final class EnvSignalController: @unchecked Sendable {
 
     /// Video ping loop bring-up edge: reset the video pings counter and drop
     /// any prior session's route claim (the new session must re-prove its
-    /// route before the cadence may relax — fail toward the countermeasure).
+    /// route before the cadence may relax - fail toward the countermeasure).
     func noteVideoPingLoopStart() {
         videoPingsSentTotal.reset()
         expireRouteClaim()
     }
 
-    /// Audio ping loop bring-up edge (mid-handshake — the earliest of the two).
+    /// Audio ping loop bring-up edge (mid-handshake - the earliest of the two).
     func noteAudioPingLoopStart() {
         audioPingsSentTotal.reset()
         expireRouteClaim()
@@ -312,13 +312,13 @@ final class EnvSignalController: @unchecked Sendable {
     /// The steady keepalive interval the RTP ping loops should honor RIGHT
     /// NOW. Called from both dedicated ping threads each wake (~13Hz); cost is
     /// two short lock reads. Decision table (the header carries the WHY):
-    ///   * wired (fresh)  → relaxed 500ms — a wired NIC doesn't doze, so the
+    ///   * wired (fresh)  → relaxed 500ms - a wired NIC doesn't doze, so the
     ///     fast cadence would just spend packets for nothing.
     ///   * wifi (fresh)   → fast 75ms when input-idle OR state ≥ CAUTION
     ///     (doze window open / link already degraded); relaxed 500ms during
     ///     active-input CLEAR play (input traffic holds the radio awake).
     ///   * tunnel/unknown/stale → fast 75ms: route truth absent or possibly
-    ///     riding the radio — keep the validated countermeasure. Never a
+    ///     riding the radio - keep the validated countermeasure. Never a
     ///     permanent give-up: the next exporter feed or route probe re-opens
     ///     the relaxed path within a second.
     func steadyPingInterval() -> TimeInterval {
@@ -344,7 +344,7 @@ final class EnvSignalController: @unchecked Sendable {
 
     /// True when no input event landed within `keepaliveIdleSeconds`. Reads
     /// the always-live last-input stamp (one unfair-lock read; the stamp is
-    /// reset at the connect edge, so "no input yet this session" reads idle —
+    /// reset at the connect edge, so "no input yet this session" reads idle -
     /// the correct doze posture for a freshly opened stream).
     private func isInputIdle(nowNanos: UInt64) -> Bool {
         guard let last = TelemetryCounters.shared.lastInputNanos else { return true }
@@ -353,20 +353,20 @@ final class EnvSignalController: @unchecked Sendable {
 
     // MARK: - Evidence state (exporter-workQueue-confined)
 
-    /// Session-relative RSSI distribution: 1dB buckets over 0…−100dBm
+    /// Session-relative RSSI distribution: 1dB buckets over 0...−100dBm
     /// (index = −dBm). Integer histogram so the p50 is exact and the memory
     /// is fixed (~0.8KB) over a session of any length.
     private var rssiHistogram = [Int](repeating: 0, count: 101)
     private var rssiSampleCount = 0
     /// Session-relative tx-rate distribution: 25Mbps buckets, capped at
-    /// 6Gbps (index 240). Coarse is fine — the thresholds are 0.5×/0.6×.
+    /// 6Gbps (index 240). Coarse is fine - the thresholds are 0.5×/0.6×.
     private var txHistogram = [Int](repeating: 0, count: 241)
     private var txSampleCount = 0
     private static let txBucketMbps = 25.0
 
     /// One tick's gap-counter totals (the per-socket >50/>100ms families) plus
     /// the receive-quality totals the reconciler delta-snapshots for its jitter
-    /// evidence (out-of-order + ENet retransmit — recv-jitter is a live gauge,
+    /// evidence (out-of-order + ENet retransmit - recv-jitter is a live gauge,
     /// read directly, not a delta).
     private struct GapTotals {
         var net50: UInt64 = 0
@@ -386,18 +386,18 @@ final class EnvSignalController: @unchecked Sendable {
     private var window = WindowEvidence()
     private var degradedRun = 0
     /// True iff any window in the CURRENT degraded run carried co-gap
-    /// evidence — selects the 3-window entry over the 5-window radio-only one.
+    /// evidence - selects the 3-window entry over the 5-window radio-only one.
     private var runHadCoGap = false
     private var severeRun = 0
     private var quietRun = 0
     private var windowsSinceChange = Int.max
     /// EWMA of the per-window recv-jitter (ms) driving the published headroom's
-    /// smoothed jitter — exporter-queue-confined like the rest of the evidence
+    /// smoothed jitter - exporter-queue-confined like the rest of the evidence
     /// state; copied into the lock-guarded `smoothedJitterMsValue` at reconcile.
     /// 0 until the first window (the FEC base then stays at its clean floor).
     private var reconcileSmoothedJitterMs: Double = 0
 
-    /// One evidence window's facts — kept whole so a state transition can
+    /// One evidence window's facts - kept whole so a state transition can
     /// emit the exact vector that caused it (the post-hoc judge needs the
     /// evidence, not just the verdict).
     private struct WindowEvidence {
@@ -405,7 +405,7 @@ final class EnvSignalController: @unchecked Sendable {
         var audioGap50: UInt64 = 0
         var netGap100: UInt64 = 0
         var audioGap100: UInt64 = 0
-        /// Worst (minimum) radio readings across the window's ticks —
+        /// Worst (minimum) radio readings across the window's ticks -
         /// conservative toward detection; the sustained-run requirement is
         /// what keeps one bad probe from ever escalating anything.
         var rssiDbm: Int?
@@ -417,7 +417,7 @@ final class EnvSignalController: @unchecked Sendable {
         // the window's ticks (live gauge, max-folded), plus the window-summed
         // out-of-order + ENet-retransmit deltas. Folded delta-snapshotted like
         // the gap counters so the state classifier captures the jitter racer the
-        // FecHeadroomController already tuned thresholds for — not just co-gap /
+        // FecHeadroomController already tuned thresholds for - not just co-gap /
         // radio. Worst-jitter (max) keeps it conservative toward detection; the
         // sustained-run requirement keeps a single noisy window from escalating.
         var maxJitterMs: Double = 0
@@ -425,14 +425,14 @@ final class EnvSignalController: @unchecked Sendable {
         var retransmit: UInt64 = 0
         var coGap50: Bool { netGap50 > 0 && audioGap50 > 0 }
         var coGap100: Bool { netGap100 > 0 && audioGap100 > 0 }
-        /// Jitter/loss escalate predicate — FecHeadroomController's already-tuned
+        /// Jitter/loss escalate predicate - FecHeadroomController's already-tuned
         /// soft thresholds (jitter ≥8ms, ooo ≥6, retx ≥4).
         var jitterDegraded: Bool {
             maxJitterMs >= FecHeadroomController.jitterEscalateMs
                 || outOfOrder >= UInt64(FecHeadroomController.oooEscalate)
                 || retransmit >= UInt64(FecHeadroomController.retransmitEscalate)
         }
-        /// Jitter/loss relax predicate — ALL three under FEC's lower relax lines
+        /// Jitter/loss relax predicate - ALL three under FEC's lower relax lines
         /// (jitter ≤4ms, ooo ≤2, retx ≤1). The gap to `jitterDegraded` is the
         /// dead band that prevents flapping.
         var jitterQuiet: Bool {
@@ -456,13 +456,13 @@ final class EnvSignalController: @unchecked Sendable {
         lock.unlock()
 
         // A wired route FORCES CLEAR (the spec's gate), immediately and
-        // outside the dwell guard — there is no radio to compensate for, and
+        // outside the dwell guard - there is no radio to compensate for, and
         // whatever evidence was mid-run no longer describes the stream path.
         if link == "wired", state != .clear {
             applyTransition(to: .clear, reason: "stream_link_wired")
             resetRuns()
             // Publish REST immediately (don't wait for the window close): a wired
-            // route forced CLEAR, so the headroom decision must drop to 0 now —
+            // route forced CLEAR, so the headroom decision must drop to 0 now -
             // FEC 24ms base + pacer depth 1 = byte-identical to no-reconciler.
             publishRestDecision()
         }
@@ -477,7 +477,7 @@ final class EnvSignalController: @unchecked Sendable {
     }
 
     /// Accumulate the session-relative radio percentile baselines. The radio
-    /// is sampled whenever ASSOCIATED (route-independent — the radio is the
+    /// is sampled whenever ASSOCIATED (route-independent - the radio is the
     /// same radio while docked); only the EVIDENCE arming is route-gated.
     private func accumulateRadioBaseline(_ wifi: WiFiSnapshot?) {
         guard let wifi, wifi.linkState == .associated else { return }
@@ -493,9 +493,9 @@ final class EnvSignalController: @unchecked Sendable {
 
     /// Fold this tick's gap-counter deltas + radio readings into the current
     /// window. Gap deltas come off the always-live per-socket counters the
-    /// receive paths already maintain — no new hot-path cost anywhere. A
+    /// receive paths already maintain - no new hot-path cost anywhere. A
     /// non-monotonic step (the connect-edge counter reset of a mid-session
-    /// reconnect) re-arms the baseline instead of folding a wrapped delta —
+    /// reconnect) re-arms the baseline instead of folding a wrapped delta -
     /// one quiet-looking tick beats a fabricated 2^64-gap "evidence" window.
     private func foldTickIntoWindow(wifi: WiFiSnapshot?) {
         let counters = TelemetryCounters.shared
@@ -517,7 +517,7 @@ final class EnvSignalController: @unchecked Sendable {
             window.retransmit &+= totals.retransmit &- prev.retransmit
         }
         prevGapTotals = totals
-        // Recv-jitter is a LIVE gauge (last-writer-wins), not a monotonic total —
+        // Recv-jitter is a LIVE gauge (last-writer-wins), not a monotonic total -
         // fold the worst (max) reading across the window's ticks, conservative
         // toward detection. Sanitized like the FEC controller does.
         let jitter = counters.recvJitterMs
@@ -533,7 +533,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// Close one ~2s window: classify it (degraded / severe / quiet /
     /// neutral), advance the runs, and move the state one step when a run
     /// satisfies the sustained contract. The classification mirrors
-    /// FecHeadroomController.observeWindow — escalate thresholds high, relax
+    /// FecHeadroomController.observeWindow - escalate thresholds high, relax
     /// thresholds lower, a neutral dead band that resets BOTH runs.
     private func evaluateWindow(link: String) {
         window.rssiP50 = rssiSessionP50()
@@ -562,7 +562,7 @@ final class EnvSignalController: @unchecked Sendable {
         let severe = window.coGap100 || (window.coGap50 && radioDegraded)
         // Quiet (the relax tier): no >50ms co-gap AND the radio above its
         // relax lines AND jitter/loss below the relax dead band. Single-socket
-        // gaps don't block quiet — one path stalling alone is that path's own
+        // gaps don't block quiet - one path stalling alone is that path's own
         // story, not the link's.
         let quiet = !window.coGap50 && !window.coGap100 && radioQuiet && window.jitterQuiet
 
@@ -590,9 +590,9 @@ final class EnvSignalController: @unchecked Sendable {
     // MARK: - RECONCILE: publish the shared jitter→headroom decision
 
     /// Close the window's RECONCILE phase: smooth this window's worst recv-jitter
-    /// (EWMA, weight `jitterBaseEwmaWeight` — the FEC controller's), map the
+    /// (EWMA, weight `jitterBaseEwmaWeight` - the FEC controller's), map the
     /// CURRENT link state + smoothed jitter to a desired `headroomLevel`, and
-    /// publish both (plus a bumped `generation` on any change) behind `lock` —
+    /// publish both (plus a bumped `generation` on any change) behind `lock` -
     /// the same lock-guarded pattern as `stateValue`/`streamLinkValue`. Both
     /// actuators PULL this on their own ticks; the reconciler never calls into
     /// them and holds only its own lock here.
@@ -622,7 +622,7 @@ final class EnvSignalController: @unchecked Sendable {
     }
 
     /// Map the current link state + smoothed jitter to the desired headroom
-    /// level (0…`maxHeadroomLevel`). CLEAR (incl. the wired-pinned case) is the
+    /// level (0...`maxHeadroomLevel`). CLEAR (incl. the wired-pinned case) is the
     /// REST decision: level 0. Above CLEAR, jitter under the dead-zone is still
     /// level 0 (the link state escalated on radio/co-gap, not jitter, and the
     /// jitter racer is what the level steps absorb); each `headroomJitterMsPerLevel`
@@ -638,7 +638,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// Publish the REST decision (headroom level 0, smoothed jitter 0) and clear
     /// the smoothing accumulator. Called at the wired-forces-CLEAR edge and on a
     /// fresh-session reset so the published decision is at REST the instant the
-    /// link is known clean — never a stale escalation an actuator could pull.
+    /// link is known clean - never a stale escalation an actuator could pull.
     private func publishRestDecision() {
         reconcileSmoothedJitterMs = 0
         lock.lock()
@@ -649,7 +649,7 @@ final class EnvSignalController: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Apply the run counters to the level — one step at a time, dwell-
+    /// Apply the run counters to the level - one step at a time, dwell-
     /// guarded, wired pinned to CLEAR (handled at the feed edge).
     private func advanceStateMachine(link: String) {
         if windowsSinceChange != Int.max { windowsSinceChange += 1 }
@@ -658,7 +658,7 @@ final class EnvSignalController: @unchecked Sendable {
 
         let current = state
         // Co-gap runs enter at 3 windows; pure-radio runs need 5 (sustained
-        // ~10s — a sag with no delivery impact has to insist).
+        // ~10s - a sag with no delivery impact has to insist).
         let entryWindows = runHadCoGap ? Self.escalateWindows : Self.radioOnlyEscalateWindows
         if current == .clear, degradedRun >= entryWindows {
             applyTransition(to: .caution, reason: runHadCoGap ? "sustained_co_gaps" : "sustained_radio_sag")
@@ -679,7 +679,7 @@ final class EnvSignalController: @unchecked Sendable {
     }
 
     /// Publish a state change: bump the counter, log the recoverable-state
-    /// NOTICE (quiet — never warn/error for a state the machine recovers
+    /// NOTICE (quiet - never warn/error for a state the machine recovers
     /// from), and emit the `env_state` NDJSON event WITH the evidence vector
     /// so the shadow session is judgeable post-hoc.
     private func applyTransition(to next: EnvState, reason: String) {
@@ -691,7 +691,7 @@ final class EnvSignalController: @unchecked Sendable {
         guard previous != next else { return }
         windowsSinceChange = 0
         stateChangesTotal.increment()
-        Diag.notice("ENV \(previous.label) → \(next.label) (\(reason)) — shadow mode, "
+        Diag.notice("ENV \(previous.label) → \(next.label) (\(reason)) - shadow mode, "
             + "no dial moved (keepalive cadence aside)", Self.cat)
         var fields = [
             "\"event\":\"env_state\"",
@@ -752,7 +752,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// emptied, the transition counter zeroed. Called from the exporter's
     /// `start()` on its workQueue (the same confinement as the feed; the
     /// first capture tick is at least a second away, so nothing races it).
-    /// No transition event is emitted — a fresh session starting at CLEAR is
+    /// No transition event is emitted - a fresh session starting at CLEAR is
     /// a baseline, not a recovery. The ping counters reset at their own
     /// loop-start edges instead (see the counter docs above).
     func resetForNewSession() {
@@ -782,7 +782,7 @@ final class EnvSignalController: @unchecked Sendable {
         windowsSinceChange = Int.max
     }
 
-    // MARK: - Future actuations (LISTED BUT DARK — the shadow-mode contract)
+    // MARK: - Future actuations (LISTED BUT DARK - the shadow-mode contract)
     //
     // Every candidate below is an EXISTING, bounded, reversible dial. None is
     // wired; each gets enabled ONE AT A TIME, only after a full shadow
@@ -792,13 +792,13 @@ final class EnvSignalController: @unchecked Sendable {
     //
     //  * AUDIO PLAYOUT PRE-RATCHET (dark): on CLEAR→CAUTION, pre-ratchet the
     //    audio playout target ONE 10ms step (within AudioDecoder's existing
-    //    base/cap envelope) — pays 10ms of latency BEFORE the gap instead of
+    //    base/cap envelope) - pays 10ms of latency BEFORE the gap instead of
     //    one audible blip after it (the one-blip-per-upward-ratchet pattern).
     //    Decays via the existing 60s target decay.
     //
     //  * FEC HEADROOM ARMING BIAS (dark): feed `state != .clear` to
     //    FecHeadroomController as an additional escalate input. Receive-side
-    //    only — zero extra bytes on the wire, same hard cap. Explicit
+    //    only - zero extra bytes on the wire, same hard cap. Explicit
     //    NON-GOAL stays: no bitrate/FEC wire request exists for this host
     //    profile (see that controller's header).
     //

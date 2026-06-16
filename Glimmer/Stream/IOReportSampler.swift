@@ -5,7 +5,7 @@
 //  ACTIVE RESIDENCY via Apple's IOReport "CPU Stats / CPU Complex Performance
 //  States" channels, plus (bring-up #2) SoC PACKAGE POWER via "Energy Model"
 //  and GPU ACTIVE RESIDENCY via "GPU Stats". The cluster half is the SYSTEM
-//  side of the "are we using P vs E cores right?" question — the per-process
+//  side of the "are we using P vs E cores right?" question - the per-process
 //  per-thread half lives in ResourceTelemetry. The power/GPU half closes the
 //  one resource question neither could answer: is a heavy session GPU-bound or
 //  thermal-budget-bound?
@@ -13,39 +13,39 @@
 //  WHY IOReport (and the deliberate scope): IOReport is the same private-but-
 //  stable C API `powermetrics`/asitop/macmon read. We dlopen it at RUNTIME
 //  (/usr/lib/libIOReport.dylib resolves from the dyld shared cache) so there is
-//  NO link-time framework dependency and NO change to the Xcode project — a
+//  NO link-time framework dependency and NO change to the Xcode project - a
 //  client-side-only addition.
 //
 //  SECOND BRING-UP (power + GPU), what attempt #1 missed: both groups needed a
 //  different DECODE, not a different subscription. "Energy Model" channels are
-//  SIMPLE-format integer accumulators — IOReportStateGetCount returns -1 for
+//  SIMPLE-format integer accumulators - IOReportStateGetCount returns -1 for
 //  them, so the state-residency parse read nothing; they decode via
 //  IOReportSimpleGetIntegerValue plus the per-channel unit label ("CPU Energy"
 //  is mJ while "GPU Energy" is nJ on the SAME SoC). And the GPU "GPUPH" state
 //  channel matches neither the `E` nor `P` cluster-name prefix and idles in a
 //  bucket named "OFF", so the CPU-cluster fold skipped it. With those decode
 //  fixes the same minimal dlopen/subscription path reads both groups cleanly.
-//  Package power = the "CPU Energy" + "GPU Energy" + ANE rails — the sum
+//  Package power = the "CPU Energy" + "GPU Energy" + ANE rails - the sum
 //  powermetrics reports as "Combined Power (CPU + GPU + ANE)"; deliberately
 //  NOT the DRAM/display/PCIe rails, so it tracks the compute work we cause.
 //  Each group rides its OWN subscription, so a failure of either new read
 //  degrades to nil without touching the proven cluster-residency path.
 //
-//  GATING + HOT-PATH SAFETY (load-bearing — see TelemetryExporter.swift):
+//  GATING + HOT-PATH SAFETY (load-bearing - see TelemetryExporter.swift):
 //    * Constructed ONLY on the gate-on path (the exporter builds it in start()).
 //      When telemetry is off (default) NOTHING here is constructed: no dlopen, no
-//      subscription, no sample — zero overhead, exactly like WiFiTelemetry.
-//    * Sampled ONLY on the exporter's serial workQueue at ~1Hz — NEVER a hot
+//      subscription, no sample - zero overhead, exactly like WiFiTelemetry.
+//    * Sampled ONLY on the exporter's serial workQueue at ~1Hz - NEVER a hot
 //      path. There is no per-frame and no per-packet cost. Each IOReport delta
 //      between two ~1s-apart samples is one cheap framework call.
 //    * Any dlopen/symbol/subscription failure degrades to "no sample" (nil) so a
-//      bring-up hiccup can never affect the stream — but NEVER silently: every
+//      bring-up hiccup can never affect the stream - but NEVER silently: every
 //      failing stage now leaves a one-time Diag NOTICE (see below). Without
 //      these breadcrumbs the fields can ship DARK (zero rows, zero clues) even
-//      when bring-up succeeds in a different environment — the many silent nil
+//      when bring-up succeeds in a different environment - the many silent nil
 //      paths mean a packaged app could be dead-on-arrival invisibly.
 //
-//  ENTITLE-OR-REMOVE DECISION (made on a packaged run's evidence — do not
+//  ENTITLE-OR-REMOVE DECISION (made on a packaged run's evidence - do not
 //  pre-empt it in code):
 //    * The prime suspect for production darkness is the App Sandbox
 //      (Glimmer.entitlements enables it; a successful bring-up environment may
@@ -57,7 +57,7 @@
 //      hook (TelemetryExporter+CaptureSections.fillResource), the NDJSON/prom
 //      render keys, and gate the dashboard power/GPU panels off.
 //    * If API-stage (a group/format change on a newer OS): fix the decode or
-//      drop only the failing group — each group already degrades independently.
+//      drop only the failing group - each group already degrades independently.
 //    * What is NOT acceptable is the prior state: fields documented as shipped
 //      yet absent from every row with no way to know why.
 //
@@ -71,15 +71,15 @@ import os
 /// One ~1Hz SoC sample: P/E cluster active residency, package power, and GPU
 /// active residency. Plain value type built on the exporter queue from
 /// `IOReportSampler.sample()`; rendered to both wire forms. (The type name
-/// predates the power/GPU fields — bring-up #1 carried only the cluster
-/// residencies — and is kept so the capture/render call sites stay untouched.)
+/// predates the power/GPU fields - bring-up #1 carried only the cluster
+/// residencies - and is kept so the capture/render call sites stay untouched.)
 struct ClusterResidencySnapshot: Sendable {
-    /// E-cluster (efficiency cores) active residency this window, 0…1. The cluster
+    /// E-cluster (efficiency cores) active residency this window, 0...1. The cluster
     /// the LOW-QoS / background work should land on; high here while the stream is
     /// quiet is fine, high here while P is idle during active play is a hint our
     /// hot work got demoted.
     var eClusterActive: Double?
-    /// P-cluster (performance cores) active residency this window, 0…1. The cluster
+    /// P-cluster (performance cores) active residency this window, 0...1. The cluster
     /// our `.userInteractive` decode/pacer/receive threads SHOULD drive; this is the
     /// SoC-side confirmation the hot path is actually on the fast cores.
     var pClusterActive: Double?
@@ -89,15 +89,15 @@ struct ClusterResidencySnapshot: Sendable {
     /// Number of distinct P-cluster channels folded into `pClusterActive`.
     var pClusterCount: Int = 0
     /// SoC package power this window, watts: the "CPU Energy" + "GPU Energy" +
-    /// ANE rails of the "Energy Model" group over the window's wall time — the
+    /// ANE rails of the "Energy Model" group over the window's wall time - the
     /// same sum powermetrics calls "Combined Power (CPU + GPU + ANE)". The
     /// thermal-budget signal: a 4K120 HDR session that creeps toward the SoC's
     /// sustained budget explains throttling before `thermal_state` moves. nil
     /// until the first clean delta or if the Energy Model read is unavailable.
     /// Export key `package_power_w` (T2 contract).
     var packagePowerW: Double?
-    /// GPU active residency this window, 0…100 — the non-OFF share of the
-    /// "GPU Stats / GPU Performance States" GPUPH window. PERCENT, not the 0…1
+    /// GPU active residency this window, 0...100 - the non-OFF share of the
+    /// "GPU Stats / GPU Performance States" GPUPH window. PERCENT, not the 0...1
     /// of the cluster gauges above, matching the `gpu_residency_percent` export
     /// key (T2 contract). Answers "is heavy decode/present GPU-bound?". nil
     /// until the first clean delta or if the GPU Stats read is unavailable.
@@ -118,14 +118,14 @@ final class IOReportSampler: @unchecked Sendable {
 
     // MARK: - IOReport C entry points (resolved once via dlopen / dlsym)
     //
-    // Memory discipline: the IOReport `…Get…` accessors (channel name, state
-    // name, unit label) follow the CF *Get* rule — they return +0 borrows owned
-    // by the channel dictionary — so every read below uses
+    // Memory discipline: the IOReport `...Get...` accessors (channel name, state
+    // name, unit label) follow the CF *Get* rule - they return +0 borrows owned
+    // by the channel dictionary - so every read below uses
     // `takeUnretainedValue()`. Bring-up #2 caught the original
     // `takeRetainedValue()` over-release the hard way: it only survived on the
     // CPU path because names like "ECPU"/"IDLE" are tagged-pointer strings
     // (release is a no-op); the longer "Energy Model" names crashed. The
-    // `…Copy…`/`…Create…` entry points stay +1 (`takeRetainedValue()`).
+    // `...Copy...`/`...Create...` entry points stay +1 (`takeRetainedValue()`).
 
     private typealias CopyChannelsInGroupT =
         @convention(c) (CFString, CFString?, UInt64, UInt64, UInt64) -> Unmanaged<CFMutableDictionary>?
@@ -163,7 +163,7 @@ final class IOReportSampler: @unchecked Sendable {
     private let cpuSubscription: AnyObject
     private let cpuChannels: CFMutableDictionary
     /// The "Energy Model" (package power) and "GPU Stats" (GPU residency)
-    /// subscriptions — bring-up #2, each OPTIONAL and independent: nil if its
+    /// subscriptions - bring-up #2, each OPTIONAL and independent: nil if its
     /// bring-up failed, in which case only its gauge stays nil.
     private let energySubscription: AnyObject?
     private let energyChannels: CFMutableDictionary?
@@ -177,7 +177,7 @@ final class IOReportSampler: @unchecked Sendable {
     private var previousCpuSample: CFDictionary?
     private var previousEnergySample: CFDictionary?
     private var previousGpuSample: CFDictionary?
-    /// Monotonic timestamp of the previous energy sample — energy-to-watts
+    /// Monotonic timestamp of the previous energy sample - energy-to-watts
     /// needs the window's actual wall time, not the nominal 1s cadence.
     private var previousEnergyTickNs: UInt64?
 
@@ -192,9 +192,9 @@ final class IOReportSampler: @unchecked Sendable {
 
     /// One-time bring-up/runtime failure NOTICE, through Diag so it lands in
     /// the session log file (the os_log-only Logger here was never even
-    /// invoked — structurally invisible postmortem).
+    /// invoked - structurally invisible postmortem).
     private static func noteBringUpFailure(_ stage: String) {
-        Diag.notice("IOReport power/GPU telemetry unavailable — \(stage). "
+        Diag.notice("IOReport power/GPU telemetry unavailable - \(stage). "
             + "package_power_w / gpu_residency_percent / soc_* will be absent; "
             + "see the entitle-or-remove criteria in IOReportSampler.swift.",
             TelemetryExporter.logCategory)
@@ -202,19 +202,19 @@ final class IOReportSampler: @unchecked Sendable {
 
     // MARK: - Construction
 
-    /// Build the sampler, or return nil if IOReport is unavailable — with a
+    /// Build the sampler, or return nil if IOReport is unavailable - with a
     /// one-time Diag NOTICE naming the FAILING STAGE (dlopen / which dlsym /
     /// which subscription), so a packaged sandboxed run answers sandbox-vs-API
     /// from its session log instead of shipping silently-dark fields again.
     /// Called ONLY on the gate-on path (the exporter constructs it in start(),
     /// after the session log sink is up), so the dlopen + subscription cost is
-    /// paid only when telemetry is opt-in ON — and the NOTICEs are bounded to
+    /// paid only when telemetry is opt-in ON - and the NOTICEs are bounded to
     /// one construction per session.
     init?() {
-        // Resolves from the dyld shared cache — no on-disk file, no link-time dep.
+        // Resolves from the dyld shared cache - no on-disk file, no link-time dep.
         guard let handle = dlopen("/usr/lib/libIOReport.dylib", RTLD_LAZY) else {
             Self.noteBringUpFailure("dlopen(/usr/lib/libIOReport.dylib) returned nil"
-                + " — sandbox denial is the prime suspect for a packaged build")
+                + " - sandbox denial is the prime suspect for a packaged build")
             return nil
         }
         var missingSymbols: [String] = []
@@ -261,14 +261,14 @@ final class IOReportSampler: @unchecked Sendable {
             return (sub, dup)
         }
 
-        // The CPU-cluster group is required — without it the sampler is nil,
+        // The CPU-cluster group is required - without it the sampler is nil,
         // exactly as in bring-up #1 (the subscribe above already named the stage).
         guard let cpu = subscribe("CPU Stats", "CPU Complex Performance States") else { return nil }
         // The power/GPU groups are best-effort extras; the energy one is only
         // worth holding if its simple-format decode pair resolved too.
         if simpleValue == nil || unitLabel == nil {
             Self.noteBringUpFailure("simple-format decode pair unresolved ("
-                + missingSymbols.joined(separator: ", ") + ") — package_power_w disabled")
+                + missingSymbols.joined(separator: ", ") + ") - package_power_w disabled")
         }
         let energy = (simpleValue != nil && unitLabel != nil) ? subscribe("Energy Model", nil) : nil
         let gpu = subscribe("GPU Stats", "GPU Performance States")
@@ -296,7 +296,7 @@ final class IOReportSampler: @unchecked Sendable {
     /// Capture one SoC sample (a delta over the window since the last call).
     /// Returns nil on the FIRST call (no previous samples to delta against) and
     /// when every group read hiccupped; otherwise whichever of the cluster /
-    /// power / GPU reads came through cleanly. On the exporter's serial queue —
+    /// power / GPU reads came through cleanly. On the exporter's serial queue -
     /// never the hot path. The first post-baseline outcome is logged ONCE
     /// (LIVE with the per-group inventory, or DARK naming the failing stage) so
     /// no session can ship these fields silently absent again.
@@ -315,7 +315,7 @@ final class IOReportSampler: @unchecked Sendable {
         }
         if !firstSampleOutcomeLogged {
             firstSampleOutcomeLogged = true
-            Diag.notice("IOReport sampler LIVE — clusters E:\(snapshot.eClusterCount)"
+            Diag.notice("IOReport sampler LIVE - clusters E:\(snapshot.eClusterCount)"
                 + "/P:\(snapshot.pClusterCount), package power "
                 + "\(snapshot.packagePowerW != nil ? "yes" : "NO"), GPU residency "
                 + "\(snapshot.gpuResidencyPercent != nil ? "yes" : "NO").",
@@ -325,7 +325,7 @@ final class IOReportSampler: @unchecked Sendable {
     }
 
     /// One cluster-residency delta. nil on the first call (baseline) and on any
-    /// IOReport hiccup — each nil path names itself for the one-time DARK
+    /// IOReport hiccup - each nil path names itself for the one-time DARK
     /// NOTICE in `sample()`.
     private func sampleClusters() -> ClusterResidencySnapshot? {
         guard let raw = createSamples(cpuSubscription, cpuChannels, nil)?.takeRetainedValue() else {
@@ -335,7 +335,7 @@ final class IOReportSampler: @unchecked Sendable {
         defer { previousCpuSample = raw }
         guard let previous = previousCpuSample,
               let delta = createSamplesDelta(previous, raw, nil)?.takeRetainedValue() else {
-            // First sample: establish the baseline, emit nothing yet — but if
+            // First sample: establish the baseline, emit nothing yet - but if
             // a delta keeps failing, that IS the stage to report.
             lastClusterFailure = previousCpuSample == nil
                 ? "first-sample baseline (designed)"
@@ -348,7 +348,7 @@ final class IOReportSampler: @unchecked Sendable {
     }
 
     /// One package-power delta, watts. Sums the top-level "CPU Energy" +
-    /// "GPU Energy" + ANE rails — NOT every Energy Model channel: the group also
+    /// "GPU Energy" + ANE rails - NOT every Energy Model channel: the group also
     /// carries the per-core / per-cluster / SRAM sub-rails those aggregates are
     /// built from (summing all would triple-count) plus DRAM/display/PCIe rails
     /// outside the conventional package sum. Units are read PER CHANNEL ("CPU
@@ -375,12 +375,12 @@ final class IOReportSampler: @unchecked Sendable {
         var matchedAny = false
         for channel in reportChannels(in: delta) {
             guard let name = channelName(channel)?.takeUnretainedValue() as String? else { continue }
-            // "ANE" is bare on this SoC, "ANE0/ANE1 …" on multi-die parts; the
+            // "ANE" is bare on this SoC, "ANE0/ANE1 ..." on multi-die parts; the
             // SRAM exclusion keeps a hypothetical "ANE SRAM" sub-rail out.
             guard name == "CPU Energy" || name == "GPU Energy"
                     || (name.hasPrefix("ANE") && !name.contains("SRAM")) else { continue }
             let value = Double(simpleValue(channel, 0))
-            guard value >= 0 else { continue }  // counter reset mid-window — skip.
+            guard value >= 0 else { continue }  // counter reset mid-window - skip.
             switch unitLabelOf(channel)?.takeUnretainedValue() as String? ?? "" {
             case "mJ": watts += value / 1e3 / elapsedSeconds; matchedAny = true
             case "uJ": watts += value / 1e6 / elapsedSeconds; matchedAny = true
@@ -391,7 +391,7 @@ final class IOReportSampler: @unchecked Sendable {
         return matchedAny ? watts : nil
     }
 
-    /// One GPU-residency delta, 0…100. The same state-bucket fold as the CPU
+    /// One GPU-residency delta, 0...100. The same state-bucket fold as the CPU
     /// clusters (GPUPH idles in "OFF", actives are its P-states), averaged
     /// across channels should a future SoC report more than the single GPUPH.
     /// nil on the first call (baseline), when the group's bring-up failed, and
@@ -435,16 +435,16 @@ final class IOReportSampler: @unchecked Sendable {
     /// (performance); within a channel, the `IDLE` (and `DOWN`) buckets are
     /// non-active and every other bucket is an active P-state. Active residency =
     /// active-ticks / total-ticks. We average across the channels of each cluster
-    /// so a multi-channel cluster (ECPU+ECPM, PCPU+PCPU1+…) reads as one number.
+    /// so a multi-channel cluster (ECPU+ECPM, PCPU+PCPU1+...) reads as one number.
     private func parseClusters(delta: CFDictionary) -> ClusterResidencySnapshot? {
         var eSum = 0.0, eCount = 0
         var pSum = 0.0, pCount = 0
         for channel in reportChannels(in: delta) {
             guard let name = channelName(channel)?.takeUnretainedValue() as String?,
                   let active = activeResidency(of: channel) else { continue }
-            // Channel names: ECPU/ECPM/ECPM_IDLE (efficiency), PCPU/PCPM/PCPU1/…
+            // Channel names: ECPU/ECPM/ECPM_IDLE (efficiency), PCPU/PCPM/PCPU1/...
             // (performance). The `_IDLE` companion channels are a different view of
-            // the same cluster — skip them so we don't double-count.
+            // the same cluster - skip them so we don't double-count.
             if name.hasSuffix("_IDLE") { continue }
             if name.hasPrefix("E") {
                 eSum += active; eCount += 1
@@ -458,7 +458,7 @@ final class IOReportSampler: @unchecked Sendable {
         return (eCount > 0 || pCount > 0) ? snapshot : nil
     }
 
-    /// Active residency (0…1) of one state-format channel: the sum of every
+    /// Active residency (0...1) of one state-format channel: the sum of every
     /// non-idle state bucket over the sum of ALL state buckets in this delta. The
     /// `IDLE` and `DOWN` buckets are the inactive states for the CPU clusters,
     /// `OFF` is the GPU's; everything else is an active voltage/frequency

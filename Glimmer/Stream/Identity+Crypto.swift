@@ -35,7 +35,7 @@ extension IdentityManager {
         // --- Key ---------------------------------------------------------
         // EVP_RSA_gen is the modern OpenSSL 3 one-shot; it returns a fully
         // initialized EVP_PKEY* containing a fresh 2048-bit RSA keypair.
-        // EVP_RSA_gen / EVP_PKEY_Q_keygen are macros / variadic — Swift can't
+        // EVP_RSA_gen / EVP_PKEY_Q_keygen are macros / variadic - Swift can't
         // import either. Use the gl_rsa_keygen wrapper in CHelpers.h.
         guard let pkey = gl_rsa_keygen(2048) else {
             throw StreamError.crypto("gl_rsa_keygen(2048) failed")
@@ -53,7 +53,7 @@ extension IdentityManager {
             throw StreamError.crypto("X509_set_version failed")
         }
 
-        // Serial number — fixed at 0 to match moonlight-qt. The host never
+        // Serial number - fixed at 0 to match moonlight-qt. The host never
         // validates the serial against anything, so giving it a constant is
         // both safe and exactly what's already on the wire.
         if let serial = X509_get_serialNumber(cert) {
@@ -77,7 +77,7 @@ extension IdentityManager {
             throw StreamError.crypto("X509_set_pubkey failed")
         }
 
-        // Subject + Issuer — same name since this is self-signed. The host
+        // Subject + Issuer - same name since this is self-signed. The host
         // looks for this specific CN to identify a Moonlight-protocol client.
         guard let name = X509_NAME_new() else {
             throw StreamError.crypto("X509_NAME_new failed")
@@ -105,14 +105,14 @@ extension IdentityManager {
         }
 
         // SHA-256 signature. X509_sign returns the signature size on success,
-        // zero on failure — anything > 0 is fine.
+        // zero on failure - anything > 0 is fine.
         guard X509_sign(cert, pkey, EVP_sha256()) > 0 else {
             throw StreamError.crypto("X509_sign failed")
         }
 
         // --- Serialize key -----------------------------------------------
         let keyPEM = try pemFromBIO { bio in
-            // No cipher, no passphrase — the key sits in a mode-0600 file
+            // No cipher, no passphrase - the key sits in a mode-0600 file
             // already, so any extra encryption here would only be security
             // theatre against a same-UID attacker who already lost.
             PEM_write_bio_PrivateKey(bio, pkey, nil, nil, 0, nil, nil)
@@ -151,7 +151,7 @@ extension IdentityManager {
             throw onError()
         }
 
-        // PEM is ASCII — copying into a String is safe and removes our reliance
+        // PEM is ASCII - copying into a String is safe and removes our reliance
         // on the BIO's backing memory. The failable `String(bytes:encoding:)`
         // can only return nil on non-UTF-8 bytes, which OpenSSL's PEM writers
         // never produce; treat that impossible case as an encode failure.
@@ -183,7 +183,7 @@ extension IdentityManager {
     func buildOrLoadIdentity() throws -> SecIdentity {
         // We deliberately do NOT reuse the existing labelled identity from a
         // prior launch. Its ACL is pinned (via SecTrustedApplication) to the
-        // Glimmer executable's CDHash at the time of import — which means
+        // Glimmer executable's CDHash at the time of import - which means
         // every rebuild during development (and every signed app-update for
         // shipped users without a stable Developer ID) invalidates the ACL,
         // making the "Glimmer wants to use the key" prompt fire.
@@ -249,7 +249,7 @@ extension IdentityManager {
         }
         // The CF type for kSecImportItemIdentity is documented as SecIdentityRef,
         // but defend against keychain misbehaviour with a typeID check before
-        // casting — an unexpected value throws a crypto error rather than
+        // casting - an unexpected value throws a crypto error rather than
         // trapping. Past the check, unsafeDowncast is the established idiom for
         // a typeID-verified CF cast (mirrors the CGColorSpace casts in
         // VideoDecoder+HDR) and avoids a force-cast.
@@ -269,7 +269,7 @@ extension IdentityManager {
         ]
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         if addStatus != errSecSuccess && addStatus != errSecDuplicateItem {
-            log.error("SecItemAdd for labelled identity failed: \(addStatus, privacy: .public) (continuing — identity still usable)")
+            log.error("SecItemAdd for labelled identity failed: \(addStatus, privacy: .public) (continuing - identity still usable)")
         }
 
         log.info("Imported SecIdentity from file-store PEMs (pre-authorized for current binary, no prompt)")

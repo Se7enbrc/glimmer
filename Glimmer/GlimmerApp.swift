@@ -6,7 +6,7 @@ import SwiftUI
 /// AppKit reopen handler can spawn the main window when SwiftUI's `Window`
 /// scene has destroyed its instance after an X-close. Hosted on the
 /// `MenuBarExtra` content (NOT the main window) so the captured closure's
-/// SwiftUI environment outlives the launcher window — closing the launcher
+/// SwiftUI environment outlives the launcher window - closing the launcher
 /// leaves the menu bar item alive, so this view stays alive, so the closure
 /// stays callable.
 struct OpenWindowCapture: View {
@@ -23,7 +23,7 @@ struct OpenWindowCapture: View {
 /// Sentinel arg passed by Glimmer Login Helper when it relaunches the main
 /// app at login. Read once at App.init and used to gate `.defaultLaunchBehavior`
 /// so the main window stays suppressed on login launches but auto-shows on
-/// every user-initiated launch (Spotlight / Finder / Dock). No heuristics —
+/// every user-initiated launch (Spotlight / Finder / Dock). No heuristics -
 /// we control both sides of the launch.
 private let launchedAtLogin = ProcessInfo.processInfo.arguments.contains("--launched-at-login")
 
@@ -39,13 +39,13 @@ struct GlimmerApp: App {
     }
 
     var body: some Scene {
-        // `Window` (single-instance) over `WindowGroup` — `openWindow(id:)`
+        // `Window` (single-instance) over `WindowGroup` - `openWindow(id:)`
         // brings the existing one to front instead of spawning a duplicate.
         Window("Glimmer", id: "main") {
             MainWindow()
                 .environment(moonlight)
                 // Honest minimums: the hero caps at 520pt + 64pt surface
-                // padding (~584), and the empty state's copy wraps at 440 —
+                // padding (~584), and the empty state's copy wraps at 440 -
                 // 720×500 keeps every layout intact with no truncation.
                 .frame(minWidth: 720, idealWidth: 860, minHeight: 500, idealHeight: 540)
                 // Liquid Glass: on macOS 26 `.regularMaterial` resolves to
@@ -54,7 +54,7 @@ struct GlimmerApp: App {
                 .containerBackground(.regularMaterial, for: .window)
         }
         .windowStyle(.hiddenTitleBar)
-        // Tighter default than the old 920×580 — the launcher is one hero
+        // Tighter default than the old 920×580 - the launcher is one hero
         // card + a button, not a document; the hero geometry trim (248pt
         // card) keeps the composition centred at this size.
         .defaultSize(width: 780, height: 540)
@@ -69,10 +69,10 @@ struct GlimmerApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
             #if canImport(Sparkle)
-            // Standard macOS "Check for Updates…" under the app menu (after the
+            // Standard macOS "Check for Updates..." under the app menu (after the
             // About item). Sparkle drives the rest: a daily background check plus
             // the update panels. Mirrored in the menu-bar dropdown for the
-            // accessory (no-window) case — see MenuBarContent.
+            // accessory (no-window) case - see MenuBarContent.
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: UpdaterController.shared.updater)
             }
@@ -126,11 +126,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Version + build + commit on the FIRST log line, so any pasted log
         // (bug report, telemetry session) identifies the exact build with no
-        // back-and-forth — the issue template asks; the log now answers.
+        // back-and-forth - the issue template asks; the log now answers.
         let bundle = Bundle.main
         let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-        Diag.notice("app launching — Glimmer \(version) (\(build)) commit \(BuildInfo.commit) "
+        Diag.notice("app launching - Glimmer \(version) (\(build)) commit \(BuildInfo.commit) "
             + "built \(BuildInfo.date) (launchedAtLogin=\(launchedAtLogin))", "Launch")
         if let mgr = Self.boundManager {
             self.moonlight = mgr
@@ -186,7 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Dock-click handler. Fires on Dock-icon click, `open -a Glimmer`, and
-    /// Launchpad reopen — NOT on every app activation (Cmd-Tab, in-app
+    /// Launchpad reopen - NOT on every app activation (Cmd-Tab, in-app
     /// window clicks).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if moonlight?.isStreaming == true {

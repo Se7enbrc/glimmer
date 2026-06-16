@@ -41,7 +41,7 @@ extension VideoDecoder {
         let destImageBufferAttrs: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: outputPixelFormat,
             // IOSurface backing is required for direct AVSampleBufferDisplayLayer
-            // ingestion without a copy — the layer's compositor reads the
+            // ingestion without a copy - the layer's compositor reads the
             // IOSurface directly. moonlight-qt's vt_avsamplelayer.mm relies on
             // the same path (FFmpeg's VT hwaccel already opts in via
             // av_hwdevice_ctx_create).
@@ -59,7 +59,7 @@ extension VideoDecoder {
         // resolves the decoder with `takeUnretainedValue()`. A passUnretained
         // refcon would let a decode-in-flight callback dereference a
         // deallocating VideoDecoder if the last strong ref dropped between
-        // submit and output — the `isolated deinit` backstop invalidates the
+        // submit and output - the `isolated deinit` backstop invalidates the
         // session WITHOUT draining async frames, so that race is reachable.
         // The +1 retain keeps the decoder alive for as long as the session
         // that holds the refcon lives; it is balanced by
@@ -79,7 +79,7 @@ extension VideoDecoder {
             decompressionSessionOut: &sessionOut)
 
         guard status == noErr, let session = sessionOut else {
-            // No session means no callback will ever consume the refcon —
+            // No session means no callback will ever consume the refcon -
             // balance the passRetained above so we don't leak self.
             refcon.release()
             log.error("VTDecompressionSessionCreate failed: \(status)")
@@ -87,13 +87,13 @@ extension VideoDecoder {
         }
         self.outputCallbackRefcon = refcon
 
-        // Real-time hint — lets VT prefer latency over throughput. The
+        // Real-time hint - lets VT prefer latency over throughput. The
         // capture path on the host already paces frames; we want them out
         // ASAP. moonlight-qt sets the equivalent via ffmpeg's VT hwaccel
         // path; we set it directly here.
         VTSessionSetProperty(
             session, key: kVTDecompressionPropertyKey_RealTime, value: kCFBooleanTrue)
-        // Disable any power-savings deferrals — every millisecond of decode
+        // Disable any power-savings deferrals - every millisecond of decode
         // latency adds end-to-end input-to-photon latency, which is what we
         // sell. Available on macOS 10.10+; ignore failures on older OSes.
         VTSessionSetProperty(
@@ -106,14 +106,14 @@ extension VideoDecoder {
             session, key: kVTDecompressionPropertyKey_ThreadCount, value: 1 as CFNumber)
 
         self.decompressionSession = session
-        // Telemetry (opt-in): a fresh VT session was built — bump the recreate
+        // Telemetry (opt-in): a fresh VT session was built - bump the recreate
         // counter + publish the live DECODE state (gate-on). See the helper file.
         noteSessionCreatedTelemetry(outputPixelFormat: outputPixelFormat)
         return true
     }
 
     /// Release the +1 self-retain the VT output callback holds via its refcon
-    /// (created in `ensureDecompressionSession`). Idempotent — nil'ing the
+    /// (created in `ensureDecompressionSession`). Idempotent - nil'ing the
     /// stored `Unmanaged` guards against a double-release if two teardown
     /// paths race. Call immediately after `VTDecompressionSessionInvalidate`
     /// at every invalidation site.
@@ -183,7 +183,7 @@ extension VideoDecoder {
                 OSSignposter.decode.emitEvent(
                     "FrameDropped",
                     "reason=\(reason, privacy: .public) status=\(status, privacy: .public)")
-                // P2 CORRUPTION/ARTIFACT heuristic (signal: quality) — counted in
+                // P2 CORRUPTION/ARTIFACT heuristic (signal: quality) - counted in
                 // the DecodeTelemetry helper for a VT decode-STATUS error (the cheap
                 // white/purple-flash-class tell; see noteCorruptionIfDecodeError).
                 VideoDecoder.noteCorruptionIfDecodeError(status: status)
@@ -191,7 +191,7 @@ extension VideoDecoder {
 
             guard status == noErr, let imageBuffer else { return }
             // Stamp the decoded-frame timestamp so the StreamSession
-            // watchdog gates on real decode output, not byte reception —
+            // watchdog gates on real decode output, not byte reception -
             // see `secondsSinceLastDecodedFrame()` for the rationale.
             decoder.statsCollector.recordDecodedFrame()
             // Latency telemetry stage t_output (opt-in; nil = zero cost): VT just
@@ -230,7 +230,7 @@ extension VideoDecoder {
     /// Wraps the pixel buffer in a CMSampleBuffer and SUBMITS it to the frame
     /// pacer (`FramePacer`), which holds it in a bounded hostPTS-ordered jitter
     /// buffer and releases it to the AVSampleBufferDisplayLayer's renderer on
-    /// the display's true vsync via a CADisplayLink — so network-arrival jitter
+    /// the display's true vsync via a CADisplayLink - so network-arrival jitter
     /// no longer maps 1:1 onto screen time. (We used to call renderer.enqueue
     /// inline here, the instant VT decoded, which is the micro-stutter this
     /// pass removes.) There is no Metal render pass on our side; the OS still
@@ -240,7 +240,7 @@ extension VideoDecoder {
     /// recovered from `du.rtpTimestamp` (90kHz units) via VT's PTS
     /// propagation through the input sample's timing info. We stamp the
     /// output CMSampleBuffer's PTS with it so the layer can make stale-
-    /// frame drop decisions in the host's clock — under stutter (renderer
+    /// frame drop decisions in the host's clock - under stutter (renderer
     /// blocked, OS-side compositor falling behind, host bitrate spike) the
     /// layer sees PTSes from before the stall and drops them cleanly when
     /// it resumes, rather than catching up frame-by-frame and never
@@ -261,7 +261,7 @@ extension VideoDecoder {
 
         // `EnqueueFrame` interval: VT output callback → sample buffer built
         // and handed to the frame pacer's submit (the actual renderer.enqueue
-        // now happens later, on the pacer's serial queue at the due vsync —
+        // now happens later, on the pacer's serial queue at the due vsync -
         // see `presentFrame`). Stays entirely on this thread so a per-call
         // interval state (no FIFO needed). Target is sub-1ms p99 at 4K60.
         let enqueueSignpostID = OSSignposter.render.makeSignpostID()
@@ -272,7 +272,7 @@ extension VideoDecoder {
             OSSignposter.render.endInterval("EnqueueFrame", enqueueIntervalState)
         }
 
-        // Strip VT-attached pixel-aspect-ratio attachment — verbatim from
+        // Strip VT-attached pixel-aspect-ratio attachment - verbatim from
         // moonlight-qt's vt_avsamplelayer.mm:220:
         //
         //   // The VideoToolbox decoder attaches pixel aspect ratio information
@@ -332,7 +332,7 @@ extension VideoDecoder {
         // input sample's timing info and surfaced as
         // `presentationTimeStamp` in the output callback. When PTS is
         // invalid (older Sunshine builds, defensive path), fall back to
-        // `.invalid` — the layer will still render but its stale-frame
+        // `.invalid` - the layer will still render but its stale-frame
         // drop logic loses precision. We deliberately do NOT synthesize
         // a local mach_absolute_time PTS here; that's the bug this fix
         // closes. moonlight-qt's vt_avsamplelayer.mm follows the same
@@ -358,7 +358,7 @@ extension VideoDecoder {
         // enqueueing it straight onto the renderer.
         //
         // This is the heart of the buttery-smooth pass. Previously we called
-        // renderer.enqueue() right here — the instant VT finished decoding —
+        // renderer.enqueue() right here - the instant VT finished decoding -
         // so network-arrival jitter on the host capture clock mapped 1:1 onto
         // screen time and motion juddered even on a perfectly-paced panel. The
         // pacer interposes a bounded, hostPTS-ordered jitter buffer and a
@@ -399,11 +399,11 @@ extension VideoDecoder {
         // ITUR_2100_PQ; BT.2020 (no PQ) → kCGColorSpaceITUR_2020; BT.709 →
         // kCGColorSpaceITUR_709; everything else → sRGB.
         //
-        // Critically — and this is where Glimmer used to diverge — we attach
+        // Critically - and this is where Glimmer used to diverge - we attach
         // this colorspace on EVERY FRAME unconditionally. VT often leaves an
         // sRGB-equivalent default attachment on the buffer when the bitstream
         // didn't tag its color metadata, which the layer then renders as if
-        // sRGB even when PQ codes are sitting in the YUV planes — that's the
+        // sRGB even when PQ codes are sitting in the YUV planes - that's the
         // washed-out overbright HDR symptom. moonlight-qt's loop always calls
         // `CVBufferSetAttachment(pixBuf, kCVImageBufferCGColorSpaceKey, ...)`
         // after computing the colorspace; we match that contract here.
@@ -426,7 +426,7 @@ extension VideoDecoder {
         // ALSO override the per-attribute color triple (primaries / transfer
         // function / YCbCr matrix). VT populates these from the bitstream's
         // VUI / OBU, but Sunshine ships PQ Main10 with the VUI tagged as
-        // BT.709 on a number of GPU/driver combos — so VT writes 709 onto
+        // BT.709 on a number of GPU/driver combos - so VT writes 709 onto
         // an actually-PQ frame. macOS's HDR-engagement heuristic cross-
         // checks the CGColorSpace attachment against these triple attrs
         // and, if they conflict, refuses to engage display HDR (the symptom:
@@ -486,7 +486,7 @@ extension VideoDecoder {
     /// Present one paced frame onto the AVSampleBufferDisplayLayer's renderer.
     /// Invoked by `FramePacer` via its `willPresent` hook on the pacer's
     /// dedicated serial queue (NOT the main actor) at the moment a frame is due
-    /// for its vsync — or inline from `enqueueDecodedFrame` on the fallback
+    /// for its vsync - or inline from `enqueueDecodedFrame` on the fallback
     /// path when the pacer isn't running. Returns true if the frame was handed
     /// to the renderer, false if it was dropped (renderer failed / not ready).
     ///
@@ -495,7 +495,7 @@ extension VideoDecoder {
     ///   * renderer.status == .failed → flush + request an IDR (unchanged).
     ///   * renderer not ready for more media → drop + count (no IDR here; a
     ///     presentation-timing drop of an already-decoded frame never requests a
-    ///     keyframe — the reference chain is intact).
+    ///     keyframe - the reference chain is intact).
     @discardableResult
     nonisolated func presentFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
         // Re-check the teardown gate: the pacer's serial queue can race a
@@ -509,7 +509,7 @@ extension VideoDecoder {
         // flush/status/error) directly on the AVSampleBufferDisplayLayer
         // is deprecated. The replacement is `layer.sampleBufferRenderer`
         // (AVSampleBufferVideoRenderer), which is explicitly safe to drive
-        // from a background thread — exactly the pacer's serial queue here.
+        // from a background thread - exactly the pacer's serial queue here.
         //
         // If the renderer's status latched to `.failed` (bad sample, an HDR
         // mid-stream toggle, or other decoder glitch), it silently stops
@@ -529,7 +529,7 @@ extension VideoDecoder {
                 "RendererFailed",
                 "error=\(String(describing: renderer.error), privacy: .public)")
             // Route to the MODE-AGNOSTIC self-heal: flush, and if the renderer
-            // has HARD-failed (a bare flush won't clear it — the 4K240
+            // has HARD-failed (a bare flush won't clear it - the 4K240
             // HDR wedge), REBUILD the layer so the present path can't latch
             // failed forever (the old behaviour: flush-noop → IDR → return false
             // every frame, decode healthy, screen frozen, no escalation). The
@@ -543,11 +543,11 @@ extension VideoDecoder {
         // for live content). When AVSampleBufferVideoRenderer's internal queue
         // fills, `isReadyForMoreMediaData` flips to false. The pacer already
         // bounds our own wall-clock latency upstream, so a not-ready renderer
-        // here is the OS-side queue momentarily full — we drop this frame and
+        // here is the OS-side queue momentarily full - we drop this frame and
         // count it, but DON'T request an IDR off it: a single late vsync can
         // flip the flag for one frame, and an IDR on transient jitter just
         // compounds lag. A presentation-timing drop of an already-decoded frame
-        // never requests a keyframe — the reference chain is intact.
+        // never requests a keyframe - the reference chain is intact.
         if !renderer.isReadyForMoreMediaData {
             consecutiveBackpressureDrops += 1
             statsCollector.recordRendererBackpressureDrop()
@@ -557,7 +557,7 @@ extension VideoDecoder {
             return false
         }
 
-        // Healthy frame — reset the backpressure streak and present.
+        // Healthy frame - reset the backpressure streak and present.
         consecutiveBackpressureDrops = 0
         renderer.enqueue(sampleBuffer)
 
@@ -571,7 +571,7 @@ extension VideoDecoder {
             let rtpTimestamp = VideoDecoder.rtpTimestamp(from: pts)
             tracker.recordPresent(rtpTimestamp: rtpTimestamp)
             // AV-skew VIDEO half (`av_skew_ms`): the host-timeline RTP of the
-            // frame that just reached the renderer — the one-word store the
+            // frame that just reached the renderer - the one-word store the
             // deferred cross-stream derivation needed. Inside the tracker
             // nil-check so telemetry-off sessions stay zero-cost.
             AudioVideoSkewStore.shared.noteVideoPresented(rtp: rtpTimestamp)
@@ -579,7 +579,7 @@ extension VideoDecoder {
 
         // Stats: one renderer enqueue equals one frame handed to the OS for
         // v-sync presentation. The OS may still drop it at composite time if
-        // it falls behind, but that's outside our visibility — moonlight-qt's
+        // it falls behind, but that's outside our visibility - moonlight-qt's
         // "rendering FPS" row is defined the same way.
         statsCollector.recordRendererEnqueue()
         return true
@@ -587,13 +587,13 @@ extension VideoDecoder {
 
     // A presentation-late / drop-to-newest / sustained-lag drop in the
     // FramePacer discards an ALREADY-DECODED CMSampleBuffer from the present
-    // queue — the VideoToolbox decoder already decoded it, so the reference
+    // queue - the VideoToolbox decoder already decoded it, so the reference
     // chain is INTACT and NO IDR is needed. Requesting a keyframe for a
     // presentation-timing drop is a category error: it can't fix pacing, and at
     // 4K240 the bitrate-capped IDR arrives soft/blocky then refines = a
     // visible blur/refocus. The old `notePacerSustainedLag` IDR-after-N
     // trigger (and the pacer's `onSustainedLag` signal that fed it) is therefore
-    // GONE — the pacer keeps trimming-to-newest and keeps counting
+    // GONE - the pacer keeps trimming-to-newest and keeps counting
     // presentation-late drops (that telemetry is correct + load-bearing), but
     // never escalates a pacing trim to a keyframe. IDR/RFI is now reserved for
     // GENUINE decode/reference breaks only: real packet loss (the depacketizer

@@ -1,19 +1,19 @@
 //
 //  MoonlightManager+HostRoute.swift
 //
-//  Always-on route classification for the SELECTED host — feeds the quiet
+//  Always-on route classification for the SELECTED host - feeds the quiet
 //  bolt / Wi-Fi glyph on the launcher's readiness chip ("Ready · 12 ms ⚡").
 //
 //  DELIBERATELY not the engine's `StreamRouteProbe`: that probe is
 //  constructed by the opt-in telemetry exporter (gate-on only) and must stay
-//  removable with it — nothing UI-facing may depend on it. This monitor rides
+//  removable with it - nothing UI-facing may depend on it. This monitor rides
 //  pure Network.framework instead: one connected UDP NWConnection to the host
-//  (connecting a UDP socket sends NOTHING — it only asks the kernel to bind a
+//  (connecting a UDP socket sends NOTHING - it only asks the kernel to bind a
 //  route), whose NWPath reports the egress interface class for THAT
 //  destination. Path updates are pushed on every route-table event
 //  (dock/undock, VPN up, Wi-Fi join), so the glyph flips live with no timers.
 //  Idle cost: one parked socket, zero traffic. Unlike the exporter probe we
-//  tolerate hostnames here — Network.framework resolves asynchronously off
+//  tolerate hostnames here - Network.framework resolves asynchronously off
 //  the main thread, and the launcher has no hot path to protect.
 //
 
@@ -30,7 +30,7 @@ import Observation
 final class HostRouteMonitor {
 
     /// The route class the kernel chose toward the monitored host. `tunnel`
-    /// (utun/ipsec — Network.framework's `.other`) and `unknown` (no route /
+    /// (utun/ipsec - Network.framework's `.other`) and `unknown` (no route /
     /// not yet resolved) both render as NO glyph: absent knowledge stays
     /// unlabelled, never guessed.
     enum RouteClass {
@@ -39,7 +39,7 @@ final class HostRouteMonitor {
 
     private(set) var routeClass: RouteClass = .unknown
 
-    /// Chip glyph for the current route — bolt for wired, arcs for Wi-Fi,
+    /// Chip glyph for the current route - bolt for wired, arcs for Wi-Fi,
     /// nothing when the route is a tunnel or unknown.
     var glyphSystemName: String? {
         switch routeClass {
@@ -49,7 +49,7 @@ final class HostRouteMonitor {
         }
     }
 
-    /// VoiceOver flavour appended to the chip sentence ("…, over Wi-Fi").
+    /// VoiceOver flavour appended to the chip sentence ("..., over Wi-Fi").
     var accessibilityDescription: String? {
         switch routeClass {
         case .wired: return "over Ethernet"
@@ -77,7 +77,7 @@ final class HostRouteMonitor {
         guard let address, !address.isEmpty else { return }
 
         // The port is irrelevant to route selection (only the destination
-        // address picks the egress interface) — discard keeps intent obvious.
+        // address picks the egress interface) - discard keeps intent obvious.
         let conn = NWConnection(host: NWEndpoint.Host(address), port: 9, using: .udp)
         let gen = generation
         conn.pathUpdateHandler = { [weak self] path in
@@ -108,7 +108,7 @@ final class HostRouteMonitor {
 extension MoonlightManager {
 
     /// The destination `refreshHostRoute()` monitors for the current
-    /// selection — the same fallback chain `nativeServerInfo(for:)` dials, so
+    /// selection - the same fallback chain `nativeServerInfo(for:)` dials, so
     /// the glyph always classifies the address a stream would actually use.
     /// Exposed so the launcher can key its refresh task on the ADDRESS rather
     /// than `selectedHost?.id`: re-pairing a host after a DHCP move rewrites
@@ -120,7 +120,7 @@ extension MoonlightManager {
     }
 
     /// Re-point the readiness chip's route monitor at the currently selected
-    /// host (nil selection tears the parked socket down — see the launcher's
+    /// host (nil selection tears the parked socket down - see the launcher's
     /// empty-hosts task in MainWindow, which relies on that to release the
     /// socket when the last PC is unpaired). Driven by the launcher
     /// (`.task(id: selectedHostRouteAddress)`) so it follows host switches

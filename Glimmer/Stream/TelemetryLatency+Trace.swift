@@ -6,7 +6,7 @@
 //  the live histograms + the per-frame timing tracker. This is the rendering half:
 //  the bundled per-frame record and the hand-built NDJSON line emitter the tracker
 //  appends off the hot path. SECRET-FREE: every value is a nanosecond delta or a
-//  frame index — nothing that could carry a secret, key, or host identity.
+//  frame index - nothing that could carry a secret, key, or host identity.
 //
 
 import Foundation
@@ -21,8 +21,8 @@ extension FrameTimingTracker {
         let frameBytes: Int32
         let isIDR: Bool
         /// PRESENT-CLOCK timestamp (monotonic uptime, ms): makes present
-        /// intervals — and so the felt-judder metric |present-interval −
-        /// content-interval| — computable straight off this file, instead of
+        /// intervals - and so the felt-judder metric |present-interval −
+        /// content-interval| - computable straight off this file, instead of
         /// reconstructing present time offline from rtp + g2g deltas.
         let presentUptimeMs: Double
         /// First present after un-suppress: carries the retained frame's
@@ -42,10 +42,10 @@ extension FrameTimingTracker {
     }
 
     /// Render one per-frame NDJSON line. Hand-built (matches the exporter's
-    /// renderer) so nil deltas are simply omitted. Every value is a number — no
+    /// renderer) so nil deltas are simply omitted. Every value is a number - no
     /// secrets. ROW DISCRIMINATION for line-oriented consumers: frame SAMPLE
     /// rows never carry an `event` key; event rows (idr_round_trip, frame_drop)
-    /// always do — test `event`'s presence, not `type`'s (the null-`type`
+    /// always do - test `event`'s presence, not `type`'s (the null-`type`
     /// misread that cost a digest correction).
     func renderTraceLine(_ record: TraceRecord) -> String {
         var fields: [String] = []
@@ -69,7 +69,7 @@ extension FrameTimingTracker {
         add("end_to_end_ms", record.endToEnd)
         // The two headline composite signals, per frame. input_to_photon is a
         // lower-bound ESTIMATE (the host doesn't mark which frame reflects an
-        // input) — the key name keeps `_est` so a reader never mistakes it for a
+        // input) - the key name keeps `_est` so a reader never mistakes it for a
         // measured number.
         add("glass_to_glass_ms", record.glassToGlass)
         add("input_to_photon_est_ms", record.inputToPhoton)
@@ -77,15 +77,15 @@ extension FrameTimingTracker {
     }
 
     /// Emit frames-file DROP STUBS (`event:"frame_drop"`) for frames the
-    /// in-flight map evicted: received + assembled but never presented — i.e.
+    /// in-flight map evicted: received + assembled but never presented - i.e.
     /// dropped somewhere downstream. The stage the frame DID reach narrows the
     /// drop site ("assembled" = died pre-decode, "submitted" = in decode,
-    /// "decoded" = died at the pacer — the late-drop class that makes judder).
+    /// "decoded" = died at the pacer - the late-drop class that makes judder).
     /// Honesty notes baked into the format: (a) stubs surface ~maxInFlight
-    /// frames AFTER the drop (eviction lag, ~1.5s at 170fps) — `t_evict_ms` is
+    /// frames AFTER the drop (eviction lag, ~1.5s at 170fps) - `t_evict_ms` is
     /// the eviction instant, NOT the drop instant; (b) DESIGNED drops while
     /// suppressed/gated are skipped (no judder to attribute, and a hidden
-    /// window would otherwise spray ~200 stubs/s of noise — the suppressed/
+    /// window would otherwise spray ~200 stubs/s of noise - the suppressed/
     /// gated counters already account those), with the state read at eviction
     /// time so a drop racing a suppression edge can rarely be mis-skipped.
     /// Called off the mapLock on the (gate-on-only) telemetry path.

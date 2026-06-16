@@ -16,7 +16,7 @@ import Foundation
 /// Drives the PairSheet's spinner, PIN field, and result banner.
 ///
 /// Each non-`idle` case carries the localized status text we display while
-/// in that phase — old call sites read this through the `pairingMessage`
+/// in that phase - old call sites read this through the `pairingMessage`
 /// computed shim on `MoonlightManager` (kept for back-compat during the
 /// gradual UI migration). New call sites should switch on the phase
 /// directly.
@@ -32,14 +32,14 @@ enum PairingPhase: Equatable {
 
 /// Lifecycle of a live stream session. Backed by connection events from the
 /// native backend (`stageStarting`, `connectionEstablished`,
-/// `connectionTerminated`, …) plus our own intent transitions (the user
+/// `connectionTerminated`, ...) plus our own intent transitions (the user
 /// pressed Stream → `connecting`, the user is exiting → `disconnecting`).
 ///
 /// `connecting(stage:)` carries the engineering-jargon stage string from
 /// the backend callback verbatim ("Starting RTSP handshake", "Initializing the
 /// connection") so the UI can show progress without forcing every stage
 /// into a closed enum case. The connect-banner translates that into a
-/// user-friendly "Connecting to <host>…" itself.
+/// user-friendly "Connecting to <host>..." itself.
 enum StreamPhase: Equatable {
     case idle
     case connecting(stage: String)

@@ -11,10 +11,10 @@
 //  TelemetryCounters in maybeLogMetrics; see RtpVideoQueue.swift for those fields.
 //
 //  HOT-PATH SAFETY: these run on the single receive thread per non-replay
-//  datagram, off the receiveTimeUs the jitter path already reads — pure integer
+//  datagram, off the receiveTimeUs the jitter path already reads - pure integer
 //  compares + a histogram bump, no lock, no alloc, no extra clock read. The one
 //  exception is deliberate: the 20/50/100ms GAP-EVENT counters in observeGap pay
-//  a locked add, but only on a >20ms inter-arrival gap — i.e. only after the
+//  a locked add, but only on a >20ms inter-arrival gap - i.e. only after the
 //  path just sat idle for 20ms+, where a sub-µs add is noise. The always-live
 //  counters they feed are only ever READ by the exporter when telemetry is
 //  opt-in ON (default OFF), so a normal stream pays only the integer work and
@@ -27,7 +27,7 @@ extension RtpVideoQueue {
 
     /// P1 NETWORK per-datagram receive-quality + inter-packet-gap accumulation.
     /// Pure integer work off the RTP seq and the arrival time the jitter path
-    /// already has — no lock, no alloc, no extra clock read — so it adds nothing
+    /// already has - no lock, no alloc, no extra clock read - so it adds nothing
     /// measurable to the multi-kHz receive path. Classifies each datagram:
     ///   * FORWARD (seq advances the highest seen): the normal case. The forward
     ///     jump beyond +1 is pre-FEC LOSS (a gap in the wire sequence space).
@@ -36,7 +36,7 @@ extension RtpVideoQueue {
     /// All wrap-aware via the existing isBefore16 helper. The gap histogram buckets
     /// the inter-arrival µs gap for the microburst detector.
     func accumulateReceiveQuality(seq: UInt16, receiveTimeUs: UInt64) {
-        // Inter-packet gap (µs) — the microburst detector. First packet seeds it.
+        // Inter-packet gap (µs) - the microburst detector. First packet seeds it.
         if haveLastArrival, receiveTimeUs >= lastArrivalUs {
             observeGap(Double(receiveTimeUs &- lastArrivalUs))
         }
@@ -75,7 +75,7 @@ extension RtpVideoQueue {
             } else {
                 windowOutOfOrder += 1
                 // A reordered packet that fills a previously-counted gap recovers
-                // one "lost" slot — uncount it so a pure reorder (no real loss)
+                // one "lost" slot - uncount it so a pure reorder (no real loss)
                 // doesn't read as loss. The gap was counted as a forward jump; if it
                 // happened in THIS window we credit it straight away. But the gap and
                 // its late filler often straddle a maybeLogMetrics boundary, so when
@@ -132,11 +132,11 @@ extension RtpVideoQueue {
     func observeGap(_ gapUs: Double) {
         guard gapUs.isFinite, gapUs >= 0 else { return }
         if gapUs > gapMaxUs { gapMaxUs = gapUs }
-        // GAP-EVENT counters (20/50/100ms, cumulative — a 100ms gap counts in all
+        // GAP-EVENT counters (20/50/100ms, cumulative - a 100ms gap counts in all
         // three). The histogram below is windowed: flushed and DISCARDED every ~2s,
         // and its p95 is structurally blind to a rare blip (one 100ms gap is
         // 1/10200 of window samples at ~5,100 pkts/s), so only the gauge-
-        // overwritten max ever saw one — and a max can't COUNT. These go straight
+        // overwritten max ever saw one - and a max can't COUNT. These go straight
         // into the always-live per-socket totals at the crossing instant: a >20ms
         // gap means the receive path just sat idle that long, so the counter's
         // sub-µs locked add amortizes into dead air already paid; the steady
@@ -157,8 +157,8 @@ extension RtpVideoQueue {
         gapCount += 1
     }
 
-    /// Estimate a quantile (0…1) from the cumulative gap histogram via linear
-    /// interpolation within the matching bucket — the same model the latency rig
+    /// Estimate a quantile (0...1) from the cumulative gap histogram via linear
+    /// interpolation within the matching bucket - the same model the latency rig
     /// uses. Returns 0 when no gaps recorded. Used to publish p50/p95 each window.
     func gapQuantile(_ quantile: Double) -> Double {
         guard gapCount > 0 else { return 0 }

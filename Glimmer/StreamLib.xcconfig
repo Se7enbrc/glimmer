@@ -8,7 +8,7 @@
 // from the Makefile so the pbxproj stays portable (no absolute paths committed).
 //
 // Resolves at build time:
-//   OPENSSL_PREFIX / OPUS_PREFIX = $(brew --prefix …), injected by Makefile
+//   OPENSSL_PREFIX / OPUS_PREFIX = $(brew --prefix ...), injected by Makefile
 
 // SRCROOT = repo root (directory containing Glimmer.xcodeproj).
 GLIMMER_REPO_ROOT = $(SRCROOT)

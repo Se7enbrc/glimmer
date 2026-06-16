@@ -26,7 +26,7 @@ extension MoonlightManager {
         // Keyed off the did-mute latch inside restoreMac() (prePausedMacVolume
         // non-nil), NOT the live muteMacWhileStreaming flag: the toggle can be
         // flipped OFF mid-stream, and the old flag-gated restore then left the
-        // Mac stuck at volume 0 — with the saved level destroyed by the next
+        // Mac stuck at volume 0 - with the saved level destroyed by the next
         // muted stream's re-capture of that 0. Unconditional restore keeps
         // teardown symmetric with whatever beforeStreamStart() / the live
         // toggle (applyMutePreferenceMidStream) actually did, and is a no-op
@@ -61,7 +61,7 @@ extension MoonlightManager {
 
     /// Generate a 4-digit pairing PIN.
     ///
-    /// SECURITY (#10) — note on PIN entropy:
+    /// SECURITY (#10) - note on PIN entropy:
     ///
     /// The PIN encrypts the challenge round-trip via AES-128-ECB with the
     /// key SHA-256(salt || pin)[0..16]. Per-PIN search cost is ~one
@@ -76,7 +76,7 @@ extension MoonlightManager {
     /// the practical attack surface that PIN brute-force would otherwise
     /// open.
     ///
-    /// We deliberately keep 4 digits for protocol compatibility — GFE
+    /// We deliberately keep 4 digits for protocol compatibility - GFE
     /// 3.x's pairing UI accepts any string but its pair-page may auto-
     /// submit on 4 chars (untested for 6); Sunshine accepts arbitrary
     /// length but a user typing six on a host UI that auto-submits at
@@ -108,7 +108,7 @@ extension MoonlightManager {
         }
 
         pairingInFlight = true
-        pairingPhase = .awaitingPin("Pairing… enter \(pin) on \(hostnameOrIP).")
+        pairingPhase = .awaitingPin("Pairing... enter \(pin) on \(hostnameOrIP).")
 
         // Stop the background chip poller for the duration of pairing. It hits
         // the host's HTTPS :47984 every few seconds; Sunshine's pairing state
@@ -138,9 +138,9 @@ extension MoonlightManager {
                 return
             }
             let client = PairingClient(network: network, server: fetched)
-            pairingPhase = .verifying("Pairing… enter \(pin) on \(hostnameOrIP).")
+            pairingPhase = .verifying("Pairing... enter \(pin) on \(hostnameOrIP).")
             let paired = try await client.pair(pin: pin)
-            // Persist the host record so it survives loadHosts() — pairing only
+            // Persist the host record so it survives loadHosts() - pairing only
             // pinned the cert; without this the freshly-paired PC didn't save.
             // Fetch /applist (best-effort) so the host has its launchable apps;
             // a "Desktop" fallback keeps it usable if the call fails.
@@ -166,14 +166,14 @@ extension MoonlightManager {
             pairingPhase = .success("Paired with \(hostnameOrIP) ✓")
             Diag.notice("Pairing succeeded", "Pairing")
         } catch let err as StreamError {
-            // SECURITY (#10): the externally-visible message is uniform —
+            // SECURITY (#10): the externally-visible message is uniform -
             // we don't tell the user (or an attacker watching over their
             // shoulder) whether the failure was "wrong PIN" vs "host
             // signature did not verify" vs "host returned status N".
             // The detailed cause goes to the log at `.private` so a real
             // bug report can still pull the cause via `log show`.
             log.error("Pairing failed for host=\(hostnameOrIP, privacy: .private(mask: .hash)): \(err.description, privacy: .private)")
-            pairingPhase = .failure("Pairing failed — try again.")
+            pairingPhase = .failure("Pairing failed - try again.")
             Diag.error("Pairing failed", "Pairing")
         } catch {
             log.error(
@@ -182,7 +182,7 @@ extension MoonlightManager {
                 \(error.localizedDescription, privacy: .private)
                 """
             )
-            pairingPhase = .failure("Pairing failed — try again.")
+            pairingPhase = .failure("Pairing failed - try again.")
             Diag.error("Pairing failed", "Pairing")
         }
         pairingInFlight = false
@@ -199,16 +199,16 @@ extension MoonlightManager {
         }
     }
 
-    /// Menu-bar icon — three states the user can read at a glance:
-    ///   * `moon.stars`                 — idle (default)
-    ///   * `play.fill`                  — streaming
-    ///   * `exclamationmark.triangle.fill` — error
+    /// Menu-bar icon - three states the user can read at a glance:
+    ///   * `moon.stars`                 - idle (default)
+    ///   * `play.fill`                  - streaming
+    ///   * `exclamationmark.triangle.fill` - error
     /// Reading `streamPhase` / `isStreaming` / `nativeStreamError`
     /// means `@Observable` automatically tracks the icon and SwiftUI
     /// rebuilds the MenuBarExtra label when any of them flip.
     /// SF Symbol for the menu-bar charm's STATE overrides (error/streaming);
     /// nil means idle, where the charm shows the custom Eclipse template mark
-    /// (Assets.xcassets/MenuBarIcon — original art) instead of
+    /// (Assets.xcassets/MenuBarIcon - original art) instead of
     /// the old `moon.stars` stand-in. The alternate mark ships alongside as
     /// MenuBarIconAlt; swapping is a one-string change in GlimmerApp.
     var menuBarSystemImageName: String? {
@@ -219,10 +219,10 @@ extension MoonlightManager {
 
     /// Battery of the first connected game controller that reports one, for
     /// the menu-bar "controller" charm. Read straight from the GameController
-    /// registry — works whenever a pad is connected to the Mac (not only
+    /// registry - works whenever a pad is connected to the Mac (not only
     /// mid-stream), and is sampled fresh each time the menu is opened (a
-    /// rebuild), so it doesn't need to be @Observable. Returns nil — hiding
-    /// the charm — for wired-only pads / pads with no battery telemetry,
+    /// rebuild), so it doesn't need to be @Observable. Returns nil - hiding
+    /// the charm - for wired-only pads / pads with no battery telemetry,
     /// INCLUDING macOS's .unknown + 0.0 no-data sentinel (Xbox over BT),
     /// which an unguarded read used to show as a false "0%". The hide is not
     /// a give-up: the next menu open re-reads, so the charm reappears the
@@ -241,7 +241,7 @@ extension MoonlightManager {
             // An unknown STATE with a real level (DualSense: 0.95/.unknown)
             // still shows its percentage. Mapping nil-charging to false is
             // honest in THIS view because the charm's copy only ever ADDS
-            // "· charging" — it never claims "on battery", so the unknown
+            // "· charging" - it never claims "on battery", so the unknown
             // case renders as the bare number.
             return (reading.percent, reading.charging == true)
         }

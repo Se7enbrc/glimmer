@@ -4,7 +4,7 @@
 //  THE streaming-engine abstraction boundary. Everything Glimmer needs from a
 //  streaming engine is expressed here as ONE Swift protocol plus three
 //  sink/delegate protocols and a set of Glimmer-owned value types. `NativeBackend`
-//  (Glimmer/Stream/Native/*) is the sole conformer — a pure-Swift GameStream /
+//  (Glimmer/Stream/Native/*) is the sole conformer - a pure-Swift GameStream /
 //  Sunshine client. The protocol keeps the rest of the app decoupled from the
 //  transport internals.
 //
@@ -66,7 +66,7 @@ public struct BackendServerInfo: Sendable {
     public var gfeVersion: String
     public var rtspSessionUrl: String
     /// The RAW SCM_* bitmask straight from /serverinfo. NOT the VIDEO_FORMAT_*
-    /// layout — see StreamProtocol.SCM_* landmine note.
+    /// layout - see StreamProtocol.SCM_* landmine note.
     public var serverCodecModeRaw: Int32
 
     public init(
@@ -243,8 +243,8 @@ public struct HdrMetadata: Sendable {
 /// on its receive thread in order.
 /// rumble (0x010b), rumbleTriggers (0x5500), setControllerLED (0x5502),
 /// setMotionEventState (0x5501), and setAdaptiveTriggers (0x5503) are wired
-/// (host control → the GameController actuator/sampler, or — for adaptive
-/// triggers, which GameController can't drive — the DualSense raw-HID write);
+/// (host control → the GameController actuator/sampler, or - for adaptive
+/// triggers, which GameController can't drive - the DualSense raw-HID write);
 /// the remaining controller-feedback slot (logMessage) is NULL today and given
 /// a no-op default below.
 public protocol ConnectionEvents: AnyObject, Sendable {
@@ -259,7 +259,7 @@ public protocol ConnectionEvents: AnyObject, Sendable {
     /// DispatchQueue.main FIFO ordering.
     func setHdrMode(_ enabled: Bool)
     /// Host rumble event (SS_RUMBLE_DATA 0x010b). (0,0) is "motors off" and is
-    /// forwarded like any other pair — actuators rely on it to idle the pad. A
+    /// forwarded like any other pair - actuators rely on it to idle the pad. A
     /// declared REQUIREMENT (not extension-default-only) so a conformer's
     /// implementation is reached through the witness table at any
     /// `any ConnectionEvents` call site instead of silently hitting the no-op
@@ -268,11 +268,11 @@ public protocol ConnectionEvents: AnyObject, Sendable {
     func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16)
     /// Host trigger rumble (SS_RUMBLE_TRIGGERS 0x5500; Sunshine extension,
     /// only sent to pads that advertised LI_CCAP_TRIGGER_RUMBLE). Same
-    /// contract as rumble — (0,0) means "trigger motors off" and is forwarded
-    /// — and a declared REQUIREMENT for the same witness-table reason.
+    /// contract as rumble - (0,0) means "trigger motors off" and is forwarded
+    /// - and a declared REQUIREMENT for the same witness-table reason.
     func rumbleTriggers(controller: UInt16, left: UInt16, right: UInt16)
     /// Host light-bar color (SET_RGB_LED 0x5502; only sent to pads that
-    /// advertised LI_CCAP_RGB_LED — Sunshine paints the slot color at session
+    /// advertised LI_CCAP_RGB_LED - Sunshine paints the slot color at session
     /// start and games may re-color at frame rate). A declared REQUIREMENT
     /// for the same witness-table reason as rumble.
     func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8)
@@ -289,7 +289,7 @@ public protocol ConnectionEvents: AnyObject, Sendable {
     /// which trigger blocks to apply; typeLeft/typeRight are DualSense-native
     /// mode bytes and left/right the 10-byte param arrays (passed through to the
     /// raw-HID OUTPUT report). A declared REQUIREMENT for the same witness-table
-    /// reason as rumble — so a conformer's implementation is reached through the
+    /// reason as rumble - so a conformer's implementation is reached through the
     /// witness table at any `any ConnectionEvents` call site instead of silently
     /// hitting the no-op default below. (GameController exposes no adaptive-
     /// trigger API, so unlike rumble/LED/motion the native conformer routes this
@@ -335,7 +335,7 @@ public protocol AudioSink: AnyObject, Sendable {
 // MARK: - StreamingBackend
 
 /// The contract every streaming engine satisfies. `NativeBackend` is the sole
-/// conformer — the pure-Swift GameStream / Sunshine engine.
+/// conformer - the pure-Swift GameStream / Sunshine engine.
 ///
 /// `@unchecked Sendable` because the concrete backend carries state guarded by
 /// actor isolation and its own serialization; it is passed across the
@@ -392,7 +392,7 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// = LiGetStageName. Human label for a connection stage int.
     func stageName(for stage: Int32) -> String
 
-    // MARK: Input uplink — Int32 return; -2 == input stream not ready.
+    // MARK: Input uplink - Int32 return; -2 == input stream not ready.
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32
     func sendMouseMove(dx: Int16, dy: Int16) -> Int32
     func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32
@@ -404,13 +404,13 @@ public protocol StreamingBackend: AnyObject, Sendable {
         num: UInt8, mask: UInt16, type: UInt8,
         supportedButtons: UInt32, caps: UInt16
     ) -> Int32
-    /// = LiSendControllerTouchEvent2 — DualSense/DualShock touchpad finger
+    /// = LiSendControllerTouchEvent2 - DualSense/DualShock touchpad finger
     /// down/move/up. (The 7th input symbol the design doc §2.1 omitted.)
     func sendControllerTouch(
         num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
         pointerId: UInt32, x: Float, y: Float, pressure: Float
     ) -> Int32
-    /// = LiSendControllerMotionEvent — one accel/gyro sample for a pad the
+    /// = LiSendControllerMotionEvent - one accel/gyro sample for a pad the
     /// host enabled via ConnectionEvents.setMotionEventState. Units/axes are
     /// the wire's contract (Limelight.h): accel m/s^2 INCLUSIVE of gravity,
     /// gyro deg/s, axes per SDL's sensor convention. motionType is

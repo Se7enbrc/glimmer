@@ -41,7 +41,7 @@ extension InputForwarder {
         // for delivery on `queue: .main`. The pragmatic, safe pattern:
         // observer body runs on main queue (we pinned it), so we can
         // assume MainActor and look the controller up via the framework's
-        // own `GCController.controllers()` registry — which IS the source
+        // own `GCController.controllers()` registry - which IS the source
         // of truth and is documented as main-thread-only access.
         connectObserver = NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
@@ -49,7 +49,7 @@ extension InputForwarder {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 // Newly-connected controller is the last one in the registry
-                // we haven't yet attached. Walk and pick up any unknowns —
+                // we haven't yet attached. Walk and pick up any unknowns -
                 // this also recovers from a missed observer fire.
                 for controller in GCController.controllers()
                 where self.attachedControllers[ObjectIdentifier(controller)] == nil {
@@ -72,7 +72,7 @@ extension InputForwarder {
                         if let state = self.attachedControllers.removeValue(forKey: id) {
                             self.gamepadMask &= ~(UInt16(1) << state.slot)
                             // The pad object (and its motors) died with the
-                            // deallocation — still release the haptics,
+                            // deallocation - still release the haptics,
                             // motion and battery slots so a future attach
                             // starts clean.
                             ControllerHaptics.shared.unregister(slot: state.slot)
@@ -134,7 +134,7 @@ extension InputForwarder {
         // DualSense / DualShock expose a touchpad surface + click through
         // GameController. Advertise LI_CCAP_TOUCHPAD so the host knows it can
         // expect LiSendControllerTouchEvent2 fingers from this slot. (One
-        // physical touchpad tracking two fingers — NOT LI_CCAP_DUAL_TOUCHPAD,
+        // physical touchpad tracking two fingers - NOT LI_CCAP_DUAL_TOUCHPAD,
         // which is for controllers with two separate pads.)
         if let ex = gamepad.extendedGamepad, touchpadElements(of: ex) != nil {
             caps |= UInt16(StreamProtocol.LI_CCAP_TOUCHPAD)
@@ -153,13 +153,13 @@ extension InputForwarder {
         let useHID = isDualSense && DualSenseHID.isEnabled
         // OBSERVABILITY: a DualSense with raw-HID OFF can't read its Create/Mute
         // centre buttons, so a quit chord that needs them silently never fires
-        // (the diagnosed regression — invisible because the open state only logged
+        // (the diagnosed regression - invisible because the open state only logged
         // at INFO). Surface it once, plainly, so the fix is obvious.
         if isDualSense, !useHID, quitChordNeedsRawHIDCenterButtons(),
            !Self.warnedQuitChordNeedsRawHID {
             Self.warnedQuitChordNeedsRawHID = true
             Diag.notice("Quit chord needs DualSense centre buttons (Create/Mute) that require "
-                + "raw-HID, but raw-HID controller support is OFF — the chord will NOT fire on "
+                + "raw-HID, but raw-HID controller support is OFF - the chord will NOT fire on "
                 + "this DualSense. Enable raw-HID in Settings → Troubleshooting (and grant Input "
                 + "Monitoring), or pick a chord that uses GameController-native buttons.",
                 "Controller")
@@ -167,7 +167,7 @@ extension InputForwarder {
         if useHID {
             DualSenseHID.shared.retain()
             // Drive a gamepad update when the HID-only buttons (Options /
-            // Create / Mute) change — GameController never fires for them, so
+            // Create / Mute) change - GameController never fires for them, so
             // without this the quit chord and host-forwarding only update when
             // some *other* (GameController) input changes. That's why holding
             // L1+R1 and then adding Options+Create never triggered the chord.
@@ -176,7 +176,7 @@ extension InputForwarder {
                 guard let self, let ex = gamepad?.extendedGamepad else { return }
                 // Center-button edge only (DualSenseHID gates onChange on a real
                 // bit change). Push controller state WITHOUT re-forwarding the
-                // touchpad — that stays on the GameController valueChangedHandler,
+                // touchpad - that stays on the GameController valueChangedHandler,
                 // the single full-state source. Kills the old double-feed.
                 self.sendCenterButtonUpdate(pad: ex, slot: hidSlot)
             }
@@ -192,7 +192,7 @@ extension InputForwarder {
         // Make this slot addressable by inbound host rumble (control 0x010b):
         // we advertise LI_CCAP_RUMBLE unconditionally above, so the actuator
         // must be able to resolve every slot we hand out. Unconditional on
-        // purpose — ControllerHaptics degrades quietly if the pad turns out to
+        // purpose - ControllerHaptics degrades quietly if the pad turns out to
         // expose no haptics, and registration alone never spins a motor.
         ControllerHaptics.shared.register(slot: slot, controller: gamepad)
 
@@ -203,7 +203,7 @@ extension InputForwarder {
         log.info("\(detail, privacy: .public)")
         // The Diag line carries type/caps/buttons hex too: the os_log copy
         // above is volatile (unified log), so until these reached the durable
-        // session file, a postmortem could not PROVE which caps went out —
+        // session file, a postmortem could not PROVE which caps went out -
         // e.g. Xbox 0x47 (trigger rumble probed) vs 0x43. Cost an
         // investigation once; never again.
         Diag.info("controller attached: \(gamepad.vendorName ?? "Unknown") (slot \(slot)"
@@ -236,7 +236,7 @@ extension InputForwarder {
         // Stop this pad's rumble engines AND motion sampling: a disconnect
         // mid-rumble must never leave motors buzzing, mid-gyro must not strand
         // the host on a stale rotation (the sampler sends the gyro null).
-        // Battery is plain bookkeeping — the detach event retires the pad.
+        // Battery is plain bookkeeping - the detach event retires the pad.
         ControllerHaptics.shared.unregister(slot: state.slot)
         ControllerMotion.shared.unregister(slot: state.slot)
         ControllerBattery.shared.unregister(slot: state.slot)
@@ -245,14 +245,14 @@ extension InputForwarder {
             DualSenseHID.shared.release()
         }
         // If this pad armed the in-flight quit-chord dwell, the hold can no
-        // longer complete — cancel rather than let the timer re-read a
+        // longer complete - cancel rather than let the timer re-read a
         // disconnected profile.
         if quitChordDwellSlot == state.slot { cancelQuitChordDwell() }
         log.info("Gamepad detached: slot=\(state.slot) remaining mask=0x\(String(self.gamepadMask, radix: 16), privacy: .public)")
-        // DETACH-CONTEXT breadcrumb (NOTICE — a detach is rare and is exactly
+        // DETACH-CONTEXT breadcrumb (NOTICE - a detach is rare and is exactly
         // the postmortem anchor the file sink must keep): last-input and
         // last-rumble ages auto-classify the disconnect cause that previously
-        // took a three-file join — idle auto-sleep reads minutes/minutes (input
+        // took a three-file join - idle auto-sleep reads minutes/minutes (input
         // tens of minutes idle, rumble frozen), a mid-rumble radio drop reads
         // seconds/sub-second (rumble active at detach). Ages are process-global
         // session stamps (any pad + kbd/mouse for input), the same sources the
@@ -278,21 +278,21 @@ extension InputForwarder {
     /// Session-teardown twin of `detach(gamepad:)`, called from
     /// `InputForwarder.detach()`. detach(gamepad:) balances per-controller
     /// acquisitions for pads that physically disconnect MID-session, but its
-    /// trigger — the GCControllerDidDisconnect observer — dies with this
+    /// trigger - the GCControllerDidDisconnect observer - dies with this
     /// forwarder, so session teardown is the LAST place those can ever be
     /// released for pads still connected when the stream ends. Without this
     /// walk (the measured leak): the DualSenseHID retain from attach() was
     /// never balanced, so the IOHIDManager stayed open and scheduled on the
     /// MAIN run loop decoding every BT input report for the rest of the
     /// process with no stream up (one extra stranded retain per session),
-    /// Input Monitoring stayed engaged app-wide, and — because the live raw
-    /// reader keeps the pad in enhanced-report mode — GCController.battery
+    /// Input Monitoring stayed engaged app-wide, and - because the live raw
+    /// reader keeps the pad in enhanced-report mode - GCController.battery
     /// read nil, so the NEXT session's battery probe silently declined and
     /// LI_CCAP_BATTERY_STATE stopped being advertised. The Battery/Motion/
     /// Haptics registries are process singletons with the same session-
     /// scoped-unregister mismatch: stale Pad slots kept the shared 30s
     /// battery poll timer firing no-op wakeups until app quit. Mirrors
-    /// detach(gamepad:) minus the host-facing detach event — StreamSession
+    /// detach(gamepad:) minus the host-facing detach event - StreamSession
     /// .stop() runs this after stopConnection(), so there is no live
     /// connection to tell.
     func releaseAttachedControllers() {
@@ -321,7 +321,7 @@ extension InputForwarder {
         record("LiSendControllerArrivalEvent", rc)
         // Durable per-session witness of WHAT we told the host and whether the
         // enqueue took (record() above logs failures to os_log only, and only
-        // once per code). Arrivals replay once per pad per stream — bounded.
+        // once per code). Arrivals replay once per pad per stream - bounded.
         Diag.info("controller \(state.slot) arrival sent: "
             + "caps=0x\(String(state.capabilities, radix: 16)) rc=\(rc)", "Controller")
         // Battery baseline rides right behind the arrival: the host learns
@@ -370,7 +370,7 @@ extension InputForwarder {
         // `GCXboxGamepad.buttonShare` (macOS 12+); GCExtendedGamepad has no
         // equivalent, so it's a downcast probe like the touchpad above. The
         // DualSense Mute already rides MISC_FLAG via the raw-HID path, and
-        // moonlight-qt maps Xbox Share to the same misc/touchpad-button slot —
+        // moonlight-qt maps Xbox Share to the same misc/touchpad-button slot -
         // a spare host button no other pad button claims.
         if xboxShareButton(of: ex) != nil { b |= StreamProtocol.MISC_FLAG }
         return UInt32(bitPattern: b)
@@ -404,13 +404,13 @@ extension InputForwarder {
 
     // MARK: - Per-frame state push
 
-    /// FULL-state push from the GameController valueChangedHandler — the SINGLE
+    /// FULL-state push from the GameController valueChangedHandler - the SINGLE
     /// source of truth for sticks/triggers/face buttons/touchpad. Pushes the
     /// merged multiController state AND forwards the touchpad surface.
     func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8) {
         guard pushControllerState(pad: pad, slot: slot) else { return }
         // Forward the touchpad surface (finger contacts) as host touch events.
-        // ONLY from this GameController path — touchpad data comes through
+        // ONLY from this GameController path - touchpad data comes through
         // GameController, so the raw-HID center-button path must NOT re-run this
         // (it would emit redundant touch pass-through events, an amplifier).
         forwardTouchpad(pad: pad, slot: slot)
@@ -420,7 +420,7 @@ extension InputForwarder {
     /// (Options/Create/PS/Mute) actually changed (DualSenseHID gates onChange on a
     /// real bit change). GameController never delivers those buttons and does NOT
     /// fire its valueChangedHandler for them, so this push is necessary to carry a
-    /// center-button edge to the host — but it does NOT re-forward the touchpad
+    /// center-button edge to the host - but it does NOT re-forward the touchpad
     /// (that stays on the GameController path) and the InputBatcher coalesces it
     /// with the latest GC-sourced axes for the slot, so it is not a double-feed of
     /// stick/axis state. This is the de-duplicated half of the old double-feed.
@@ -430,18 +430,18 @@ extension InputForwarder {
 
     /// Build + push the current multiController state for `slot`. Returns false if
     /// the push was short-circuited (not ready, or the quit chord fired). The
-    /// touchpad surface is NOT forwarded here — callers that own the GameController
+    /// touchpad surface is NOT forwarded here - callers that own the GameController
     /// frame do that separately.
     @discardableResult
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
         guard isReady else { return false }
 
-        // Controller-side quit chord — fires the same `onQuitHotkey` the
+        // Controller-side quit chord - fires the same `onQuitHotkey` the
         // keyboard chord uses, but only after the chord stays held through
         // the dwell window (the Settings label promises "HOLD to leave the
         // stream"; firing on the first coincident frame meant any in-game
-        // moment where the chord buttons momentarily overlapped — e.g. both
-        // shoulders with the .l1r1 option — killed the session instantly).
+        // moment where the chord buttons momentarily overlapped - e.g. both
+        // shoulders with the .l1r1 option - killed the session instantly).
         // Checked BEFORE building the bitmask we forward to the host so the
         // chord-holding frames don't get sent through (the host would
         // otherwise see L1+R1+L2+R2 in a game and act on it for the whole
@@ -452,7 +452,7 @@ extension InputForwarder {
         }
         // Released before the dwell elapsed (or never held): an in-game
         // button coincidence, not a quit. Only the arming pad's frames may
-        // cancel — another pad's traffic says nothing about the holder.
+        // cancel - another pad's traffic says nothing about the holder.
         if quitChordDwellSlot == slot { cancelQuitChordDwell() }
 
         let buttons = pressedButtonFlags(pad: pad)
@@ -549,7 +549,7 @@ extension InputForwarder {
     ///
     /// EXPERIMENTAL: GameController exposes no explicit "finger down" flag, so
     /// "touching" is inferred from a non-zero position. A finger resting at the
-    /// exact geometric centre is therefore indistinguishable from "lifted" —
+    /// exact geometric centre is therefore indistinguishable from "lifted" -
     /// acceptable for taps/swipes (which move), a known edge for a dead-centre
     /// hold. Validate on-device.
     func forwardTouchpad(pad: GCExtendedGamepad, slot: UInt8) {
@@ -612,7 +612,7 @@ extension InputForwarder {
     }
 
     // (matchesControllerQuitChord and the shared heldControllerButtons reader
-    // live in ControllerForwarder+QuitChord.swift — the topic split.)
+    // live in ControllerForwarder+QuitChord.swift - the topic split.)
 }
 
 // MARK: - Local numeric helper

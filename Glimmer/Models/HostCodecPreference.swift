@@ -3,7 +3,7 @@
 //
 //  Per-host codec override. The DEFAULT is smart: the client advertises
 //  everything this Mac can hardware-decode (VideoFormats.probedSupported) and
-//  the RTSP negotiation picks the best the host can encode — AV1 if both
+//  the RTSP negotiation picks the best the host can encode - AV1 if both
 //  sides speak it, else HEVC, else H.264, with the 10-bit flavor riding the
 //  HDR toggle. So "Automatic" already does the right thing on a host that
 //  can't encode AV1 (e.g. an RTX 3080): it lands on HEVC with zero
@@ -11,8 +11,8 @@
 //
 //  The override exists for the host that negotiates a codec it then handles
 //  badly (broken AV1 driver, ancient encoder): it CAPS what we advertise for
-//  that one host. Persisted like the cert pins — one UserDefaults key per
-//  host id — so it never touches the migrated host blob.
+//  that one host. Persisted like the cert pins - one UserDefaults key per
+//  host id - so it never touches the migrated host blob.
 //
 
 import Foundation
@@ -33,7 +33,7 @@ enum HostCodecPreference: String, CaseIterable, Identifiable {
     }
 
     /// Cap the probed client capability set for this preference. Lower
-    /// formats always stay advertised — the cap removes ceilings, never
+    /// formats always stay advertised - the cap removes ceilings, never
     /// fallbacks, so a misconfigured override can't fail a connection.
     func apply(to probed: VideoFormats) -> VideoFormats {
         switch self {

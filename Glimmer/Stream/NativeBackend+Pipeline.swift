@@ -17,18 +17,18 @@ extension NativeBackend {
         let events = NativeConnectionEvents()
 
         if server.rtspSessionUrl.lowercased().contains("rtspenc://") {
-            Diag.info("native backend: encrypted RTSP (rtspenc://) — sealing messages", Self.logCategory)
+            Diag.info("native backend: encrypted RTSP (rtspenc://) - sealing messages", Self.logCategory)
         }
 
         let host = NWEndpoint.Host(server.address)
 
         // The audio ping can start MID-handshake (rtsp.onAudioPortNegotiated fires
-        // at SETUP-audio time, before PLAY — moonlight's
+        // at SETUP-audio time, before PLAY - moonlight's
         // notifyAudioPortNegotiationComplete ordering), so the audio receiver may
         // be live before any of these stages return. Wrap everything from the
         // handshake onward so a failure in ANY later step (SETUP video/control,
         // ANNOUNCE, PLAY, ENet control, video bring-up) tears down the audio
-        // ping/socket cleanly — run() only rethrows; the synchronous bridge in
+        // ping/socket cleanly - run() only rethrows; the synchronous bridge in
         // startConnection does NOT auto-call stopConnection on a thrown error.
         do {
             let handshake = try await performRtspStage(server: server, config: config,
@@ -177,7 +177,7 @@ extension NativeBackend {
         events.stageComplete("video stream initialization")
 
         // Kick off the persistent ENet control loop (keepalives) on a DEDICATED
-        // elevated-QoS Thread — NOT the Swift cooperative pool. The loop that must
+        // elevated-QoS Thread - NOT the Swift cooperative pool. The loop that must
         // emit ACKs/keepalives to keep the host's ENet peer alive cannot be allowed
         // to starve behind high-QoS main-thread controller input (the cooperative
         // pool is capped at ~CPU-count threads and these Tasks ran at default QoS).
@@ -203,14 +203,14 @@ extension NativeBackend {
         // the actuator does its own latest-wins hop onto a serial queue so the
         // control channel can never block on Core Haptics. streamActivated()
         // lifts the actuator's quiesce gate (armed at init and on every stream
-        // teardown) — without it a late event from a PREVIOUS session could
+        // teardown) - without it a late event from a PREVIOUS session could
         // re-spin motors with no host left to send the (0,0) clear.
         ControllerHaptics.shared.streamActivated()
         enet.onRumble = { controllerNumber, lowFreq, highFreq in
             events.rumble(controller: controllerNumber, lowFreq: lowFreq, highFreq: highFreq)
         }
         // No stuck motors, no ghost sampling: whatever ends this control
-        // channel (user stop, watchdog teardown, host TERMINATION — all
+        // channel (user stop, watchdog teardown, host TERMINATION - all
         // funnel into the channel's interrupt()/close() pair, which fires
         // this at most once) parks every pad at (0,0), tears the haptic
         // engines down, and halts motion sampling. The host's own "motors
@@ -226,7 +226,7 @@ extension NativeBackend {
         // LI_CCAP_TRIGGER_RUMBLE on probed trigger localities and
         // LI_CCAP_RGB_LED on gamepad.light), and both are parked by the same
         // stopAll/teardown path above (trigger motors at zero; the light bar
-        // needs no parking — it is lit hardware state, not motion).
+        // needs no parking - it is lit hardware state, not motion).
         enet.onRumbleTriggers = { controllerNumber, left, right in
             events.rumbleTriggers(controller: controllerNumber, left: left, right: right)
         }
@@ -238,7 +238,7 @@ extension NativeBackend {
         // GCMotion on main, and the samples ride the EXISTING input batcher
         // back up (sendControllerMotion). The receive thread only forwards
         // the trio; ControllerMotion hops to main itself. streamActivated
-        // arms the sampler's uplink — the same quiesce discipline as the
+        // arms the sampler's uplink - the same quiesce discipline as the
         // haptics actuator's streamActivated above.
         ControllerMotion.shared.streamActivated(backend: self)
         enet.onSetMotionEvent = { controllerNumber, motionType, reportRateHz in
@@ -249,7 +249,7 @@ extension NativeBackend {
         // only forwards the mode + params; DualSenseHID does its IOKit OUTPUT
         // report write off-thread on its own serial path. Only DualSense pads
         // receive this (Sunshine extension). Parked by the same teardown path
-        // above — DualSenseHID resets the trigger blocks to "off" on the final
+        // above - DualSenseHID resets the trigger blocks to "off" on the final
         // release(), so a stream ending mid-effect can't strand a stiff trigger.
         enet.onSetAdaptiveTriggers = { controllerNumber, eventFlags, typeLeft, typeRight, left, right in
             events.setAdaptiveTriggers(controller: controllerNumber, eventFlags: eventFlags,
@@ -260,7 +260,7 @@ extension NativeBackend {
 
     /// FAST-START (mid-handshake, at SETUP-audio): construct the RtpAudioReceiver
     /// and start ONLY the burst-ping side (socket open + ping thread) so the host
-    /// has our ping — and our return UDP port — in hand by PLAY. This is the
+    /// has our ping - and our return UDP port - in hand by PLAY. This is the
     /// ordering fix for the ~2min audio-cold-start: moonlight opens the audio
     /// socket + starts the ping thread the instant SETUP-audio is parsed
     /// (notifyAudioPortNegotiationComplete), because Sunshine won't aim audio at us
@@ -307,11 +307,11 @@ extension NativeBackend {
     }
 
     /// RECEIVE (post-connect): bring up the audio RECEIVE side on the receiver that
-    /// startAudioPing already created mid-handshake — init the decoder/engine +
+    /// startAudioPing already created mid-handshake - init the decoder/engine +
     /// start the recv loop. If the early-ping path was skipped (no audio sink), the
     /// receiver doesn't exist; that's fine (audio off, but the video flow keeps the
     /// session alive). startReceive() is idempotent and will open the ping itself
-    /// if it somehow wasn't running. Best-effort — non-fatal.
+    /// if it somehow wasn't running. Best-effort - non-fatal.
     func startAudioReceive(
         handshake: RtspHandshakeResult, config: BackendStreamConfig,
         server: BackendServerInfo, host: NWEndpoint.Host
@@ -453,7 +453,7 @@ extension NativeConnectionEvents {
     /// control events into the haptics/light actuator and the motion sampler.
     /// All four are declared protocol REQUIREMENTS on ConnectionEvents
     /// (StreamingBackend.swift), so these implementations are reached through
-    /// the witness table even at an `any ConnectionEvents` call site — the
+    /// the witness table even at an `any ConnectionEvents` call site - the
     /// no-op defaults exist only to keep actuator-less conformers
     /// source-compatible. Lives here, beside the startVideoStage wiring that
     /// feeds it, rather than in the (size-capped) actuator file.
@@ -485,7 +485,7 @@ extension NativeConnectionEvents {
     /// matches DualSenseHID's reader; the singleton resolves the open device
     /// and merges these params with the current lightbar + rumble before
     /// writing (the 0x02/0x31 report is all-or-nothing). A no-op when the
-    /// raw-HID feature is off or the write is refused by the sandbox — adaptive
+    /// raw-HID feature is off or the write is refused by the sandbox - adaptive
     /// triggers simply don't engage, nothing else is affected.
     func setAdaptiveTriggers(controller: UInt16, eventFlags: UInt8,
                              typeLeft: UInt8, typeRight: UInt8,

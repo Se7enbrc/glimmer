@@ -45,7 +45,7 @@ repos:
         args: ["--fix", "--disable", "MD013", "MD029", "MD036", "MD041"]
         exclude: ^third_party/
 
-  # Prettier — yaml/markdown/json formatting.
+  # Prettier - yaml/markdown/json formatting.
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v4.0.0-alpha.8
     hooks:

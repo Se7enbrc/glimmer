@@ -8,35 +8,35 @@
 //  trace written batched OFF the hot path. See TelemetryExporter.swift for the
 //  gate/safety contract; this file is the latency half of that rig.
 //
-//  STAGES (all captured with a cheap monotonic read — `DispatchTime.now()` wraps
+//  STAGES (all captured with a cheap monotonic read - `DispatchTime.now()` wraps
 //  mach_absolute_time):
-//    * t_receive  — last packet of the frame arrived (RtpVideoQueue → the
+//    * t_receive  - last packet of the frame arrived (RtpVideoQueue → the
 //                   depacketizer's `firstPacketReceiveTimeUs`, already captured).
-//    * t_assemble — depacketizer completed the access unit (reassembleFrame, the
+//    * t_assemble - depacketizer completed the access unit (reassembleFrame, the
 //                   DecodeUnit's `enqueueTimeUs`, already captured).
-//    * t_submit   — handed to VTDecompressionSessionDecodeFrame (VideoDecoder).
-//    * t_output   — VT output callback produced a CVPixelBuffer (VideoDecoder).
-//    * t_present  — renderer.enqueue (FramePacer → VideoDecoder.presentFrame).
+//    * t_submit   - handed to VTDecompressionSessionDecodeFrame (VideoDecoder).
+//    * t_output   - VT output callback produced a CVPixelBuffer (VideoDecoder).
+//    * t_present  - renderer.enqueue (FramePacer → VideoDecoder.presentFrame).
 //  Deltas: receive→assemble, assemble→submit, submit→output (decode),
 //  output→present (pacing), and end-to-end receive→present.
 //
-//  HOT-PATH SAFETY + GATING (load-bearing — zero-overhead when OFF):
+//  HOT-PATH SAFETY + GATING (load-bearing - zero-overhead when OFF):
 //    * `FrameTimingTracker.shared` is nil unless the gate is on. Every stage call
-//      site is `if let tracker = FrameTimingTracker.shared { … }`, so when OFF the
-//      cost is a single nil-optional load — NO allocation, NO lock, NO map.
+//      site is `if let tracker = FrameTimingTracker.shared { ... }`, so when OFF the
+//      cost is a single nil-optional load - NO allocation, NO lock, NO map.
 //    * When ON, ONE bounded map (keyed by the frame's rtpTimestamp, which is the
-//      only frame identity that survives the VideoToolbox boundary — frameNumber
+//      only frame identity that survives the VideoToolbox boundary - frameNumber
 //      is lost once the sample's PTS is all VT propagates to its output callback)
-//      tracks in-flight frames. It is guarded by ONE os_unfair_lock — a new lock,
+//      tracks in-flight frames. It is guarded by ONE os_unfair_lock - a new lock,
 //      but NOT a hot-path lock on the proven decode/pace path: the existing
 //      StatsCollector / FramePacer / depacketizer locks are untouched, and this
 //      lock is only taken on the (already off-by-default) telemetry path.
 //    * The map is bounded: stale entries (a dropped / never-presented frame) are
 //      evicted in FIFO insertion order so a leak is impossible.
-//    * The histograms are fixed-bucket atomic counters — a stage record is a
+//    * The histograms are fixed-bucket atomic counters - a stage record is a
 //      branchless bucket find + one locked add. No per-frame allocation.
 //    * The per-frame NDJSON record is appended to an in-memory buffer and flushed
-//      by a ~250ms background timer — NEVER an fsync (or even a write) on the hot
+//      by a ~250ms background timer - NEVER an fsync (or even a write) on the hot
 //      path.
 //
 //  SECRET-FREE: every value here is a nanosecond delta or a frame index. Nothing
@@ -54,7 +54,7 @@ import os
 /// hot path AND more queryable: a record is a branchless bucket find + a single
 /// locked add (no sorted reservoir / live-quantile maintenance per frame), and
 /// Grafana derives p50/p95/p99 from the cumulative buckets with
-/// `histogram_quantile(0.95, rate(..._bucket[1m]))`. Cardinality stays low — five
+/// `histogram_quantile(0.95, rate(..._bucket[1m]))`. Cardinality stays low - five
 /// families, ~12 buckets each, one `{session}` label.
 ///
 /// `@unchecked Sendable`: every counter is its own `os_unfair_lock`-guarded
@@ -63,12 +63,12 @@ import os
 final class LatencyHistograms: @unchecked Sendable {
 
     /// One stage's cumulative histogram: per-bucket counts (Prometheus `le`
-    /// semantics — bucket[i] counts observations ≤ bounds[i]), plus running sum
+    /// semantics - bucket[i] counts observations ≤ bounds[i]), plus running sum
     /// (ms) and total count. One lock per stage keeps the five stages
     /// contention-free against each other.
     final class Stage: @unchecked Sendable {
         /// Upper bounds in MILLISECONDS. Chosen to span the realistic per-stage
-        /// range for 60–240fps streaming: sub-ms assemble/submit jitter through
+        /// range for 60-240fps streaming: sub-ms assemble/submit jitter through
         /// to multi-frame decode/pace stalls. The implicit `+Inf` bucket (count
         /// vs total) is emitted by the renderer.
         ///
@@ -76,8 +76,8 @@ final class LatencyHistograms: @unchecked Sendable {
         /// ~5-6ms, and the old [4,8,16] spacing left a 4→8→16 gap (a ~12ms-wide
         /// "blur" bucket) right across that range, so p50/p95/p99 had no real
         /// resolution exactly where the signal lives. The bounds below add
-        /// sub-ms and few-ms edges (0.1…6) so quantiles resolve to sub-ms / few-ms
-        /// precision, while the coarse tail (8…528) still captures multi-frame
+        /// sub-ms and few-ms edges (0.1...6) so quantiles resolve to sub-ms / few-ms
+        /// precision, while the coarse tail (8...528) still captures multi-frame
         /// stalls. boundsMs is read by both the Prometheus render and the NDJSON
         /// quantile estimator, so this single edit propagates to all consumers.
         static let boundsMs: [Double] = [
@@ -88,7 +88,7 @@ final class LatencyHistograms: @unchecked Sendable {
         /// input-to-photon). These span the realistic end-user latency budget:
         /// a few ms (LAN, light host encode) through tens of ms (host AV1
         /// two-pass encode) into the hundreds (a saturated link or a stalled
-        /// frame). Resolution is concentrated in the 5–60ms zone where "feels
+        /// frame). Resolution is concentrated in the 5-60ms zone where "feels
         /// great" turns into "feels laggy", with a coarse tail to 1056ms so a
         /// pathological stall still lands in a bucket rather than overflowing to
         /// +Inf with no shape.
@@ -182,7 +182,7 @@ final class LatencyHistograms: @unchecked Sendable {
     /// hundreds of ms). Fed once per matched request from the depacketizer.
     let idrRoundTrip = Stage(bounds: Stage.glassToGlassBoundsMs)
 
-    /// GLASS-TO-GLASS: the "how good is it" number — host capture+encode
+    /// GLASS-TO-GLASS: the "how good is it" number - host capture+encode
     /// (Sunshine `frameHostProcessingLatency`) + network transit (~RTT/2) + our
     /// pipeline (receive→present, the endToEnd stage). Computed per frame at
     /// present and recorded here so the exporter publishes p50/p95/p99 over time.
@@ -190,7 +190,7 @@ final class LatencyHistograms: @unchecked Sendable {
     /// can be tens of ms), so it gets its own coarse-tailed bound set below.
     let glassToGlass = Stage(bounds: Stage.glassToGlassBoundsMs)
 
-    /// INPUT-TO-PHOTON (estimate): a LOWER BOUND on felt input latency —
+    /// INPUT-TO-PHOTON (estimate): a LOWER BOUND on felt input latency -
     /// (next-presented-frame-time − last-input-sent-time). Labelled an estimate
     /// because the host doesn't mark which frame reflects an input. Same wide
     /// range as glass-to-glass (it includes the full host round trip plus the
@@ -211,7 +211,7 @@ final class LatencyHistograms: @unchecked Sendable {
     }
 
     /// Capture all stages into a plain value snapshot for the exporter to render.
-    /// Taken on the exporter's serial queue (1Hz) — never the hot path.
+    /// Taken on the exporter's serial queue (1Hz) - never the hot path.
     func snapshot() -> LatencyHistogramSnapshot {
         func stage(_ source: Stage) -> LatencyHistogramSnapshot.Stage {
             let captured = source.snapshot()
@@ -245,14 +245,14 @@ final class LatencyHistograms: @unchecked Sendable {
 /// instance: it is non-nil ONLY when telemetry is enabled, so the hot-path call
 /// sites pay a single optional load when off (no map, no lock, no allocation).
 ///
-/// KEYING — frames are keyed by `rtpTimestamp` (the host's 90kHz capture-clock
+/// KEYING - frames are keyed by `rtpTimestamp` (the host's 90kHz capture-clock
 /// PTS). This is the only identity that survives the VideoToolbox boundary: the
 /// frameNumber is dropped once the sample is built, and all VT propagates to its
 /// output callback is the sample's PTS (`CMTimeMake(rtpTimestamp, 90000)`), which
 /// the present path also carries on the CMSampleBuffer. For low-latency game
 /// streaming (no B-frames, strictly-advancing capture clock) the rtpTimestamp is
 /// effectively unique per frame. A rtpTimestamp of 0 (older Sunshine / defensive
-/// path) is treated as "untracked" — those frames simply get no latency record.
+/// path) is treated as "untracked" - those frames simply get no latency record.
 ///
 /// `@unchecked Sendable`: the map is guarded by one `os_unfair_lock`; the
 /// histograms + trace writer are themselves Sendable.
@@ -261,7 +261,7 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// The gate-checked singleton. `start()` installs it iff telemetry is on;
     /// `stop()` clears it. Read on the hot path as `FrameTimingTracker.shared`.
     /// `nonisolated(unsafe)`: written only at session start/teardown (single
-    /// writer, well-ordered against the reads), read everywhere — the same
+    /// writer, well-ordered against the reads), read everywhere - the same
     /// discipline the decoder's other `nonisolated(unsafe)` slots use.
     nonisolated(unsafe) static var shared: FrameTimingTracker?
 
@@ -299,7 +299,7 @@ final class FrameTimingTracker: @unchecked Sendable {
         let receiveNanos: UInt64
         let assembleNanos: UInt64
         /// On-the-wire frame size (bytes) + keyframe flag, captured at assemble so
-        /// the per-frame trace can carry size + IDR/P type — the signal that
+        /// the per-frame trace can carry size + IDR/P type - the signal that
         /// excludes / catches a big-frame or recurring-IDR spike on idle resume.
         let frameBytes: Int32
         let isIDR: Bool
@@ -313,24 +313,24 @@ final class FrameTimingTracker: @unchecked Sendable {
         var outputNanos: UInt64 = 0
     }
 
-    /// STARTUP WARMUP GATE (metric honesty — ingestion only). The histograms are
+    /// STARTUP WARMUP GATE (metric honesty - ingestion only). The histograms are
     /// CUMULATIVE session-lifetime (totalCount only grows, reset once at session
     /// start), so the bad first several seconds of encoder-ramp / link-onset frames
     /// stay baked into the g2g/o2p percentiles for as long as the cumulative tail
-    /// takes to age out — making the start-chug LOOK several times worse than it
+    /// takes to age out - making the start-chug LOOK several times worse than it
     /// FELT (felt percentiles recover quickly). So onset frames are DROPPED from
     /// histogram INGESTION for a short grace after the FIRST present (anchored
     /// there, not at tracker creation, so an idle gap before the stream doesn't
     /// consume the budget).
     /// MEASUREMENT-ONLY: pacer, jitter buffer, safeguards, freeze recovery, and the
-    /// per-frame NDJSON trace (still records onset frames) are ALL untouched — only
+    /// per-frame NDJSON trace (still records onset frames) are ALL untouched - only
     /// the cumulative `observe()` calls are skipped.
     /// (Module-internal, not private: the consume-once input-to-photon gate in
     /// TelemetryLatency+Composites.swift rides this same present-path lock.)
     let warmupLock = os_unfair_lock_t.allocate(capacity: 1)
     private var firstPresentNanos: UInt64 = 0
     /// Grace (ns) after the first present during which onset frames are excluded
-    /// from histogram ingestion. ~1.25s — covers encoder ramp + link onset, short
+    /// from histogram ingestion. ~1.25s - covers encoder ramp + link onset, short
     /// enough that steady-state samples dominate immediately after.
     private static let warmupGraceNanos: UInt64 = 1_250_000_000
 
@@ -346,12 +346,12 @@ final class FrameTimingTracker: @unchecked Sendable {
         return presentNanos &- firstPresentNanos < Self.warmupGraceNanos
     }
 
-    /// RESUME-PRESENT tag (metric honesty, ingestion-only — the warmup gate's
+    /// RESUME-PRESENT tag (metric honesty, ingestion-only - the warmup gate's
     /// sibling): armed at the un-suppress edge (`setPresentSuppressed`),
-    /// consumed by the NEXT present, which re-shows the retained frame — its
+    /// consumed by the NEXT present, which re-shows the retained frame - its
     /// o2p/g2g carries the DESIGNED hold time (a long resume hold otherwise
     /// polluted the percentiles as a fake spike). Tagged frames skip histogram
-    /// ingestion but still land in the trace with `resume:true` — recorded,
+    /// ingestion but still land in the trace with `resume:true` - recorded,
     /// just not averaged. Rides `warmupLock`; per-session by construction.
     private var resumePresentPending = false
     /// Most recent input stamp already CONSUMED by an input-to-photon
@@ -391,9 +391,9 @@ final class FrameTimingTracker: @unchecked Sendable {
 
     /// Stage t_receive + t_assemble. Called from the depacketizer the instant a
     /// frame's access unit is complete (VideoRtpReceiver.depacketizerDidAssemble-
-    /// Frame). Both timestamps are ALREADY captured upstream — `receiveNanos` is
+    /// Frame). Both timestamps are ALREADY captured upstream - `receiveNanos` is
     /// the frame's last/first-packet arrival (`firstPacketReceiveTimeUs`) and
-    /// `assembleNanos` is the reassemble instant (`enqueueTimeUs`) — so this adds
+    /// `assembleNanos` is the reassemble instant (`enqueueTimeUs`) - so this adds
     /// no new clock read, just a map insert. Establishes the entry the later
     /// stages look up by rtpTimestamp.
     func recordAssembled(rtpTimestamp: UInt32, frameIndex: Int32,
@@ -412,7 +412,7 @@ final class FrameTimingTracker: @unchecked Sendable {
             insertionOrder.append(rtpTimestamp)
         }
         inFlight[rtpTimestamp] = timing
-        // Bound the map: evict the stalest in-flight frame(s) — frames received
+        // Bound the map: evict the stalest in-flight frame(s) - frames received
         // but dropped before present, which would otherwise leak. Evictions
         // become frames-file DROP STUBS, emitted off the lock (emitDropStubs).
         var evicted: [(rtp: UInt32, timing: Timing)] = []
@@ -496,7 +496,7 @@ final class FrameTimingTracker: @unchecked Sendable {
             // decode delta, routed to the IDR or P histogram by this frame's type so
             // the slow full-intra IDR decode doesn't blur the fast P-frame distribution
             // (and an IDR-decode-cost spike on idle-resume stays legible). No extra
-            // clock read — reuses the value already computed above.
+            // clock read - reuses the value already computed above.
             if let value = submitToOutput {
                 if timing.isIDR { histograms.decodeIDR.observe(value) } else { histograms.decodeP.observe(value) }
             }
@@ -504,7 +504,7 @@ final class FrameTimingTracker: @unchecked Sendable {
 
         // GLASS-TO-GLASS (signal 1): host capture+encode + network transit
         // (~RTT/2) + our pipeline (receive→present == endToEnd). Each leg is
-        // independently optional — we sum only the legs we actually have so a
+        // independently optional - we sum only the legs we actually have so a
         // missing host-encode measurement (repeated frame) or a not-yet-known RTT
         // degrades the number rather than dropping it. The RTT read is the CURRENT
         // smoothed value (the host doesn't mark per-frame transit), taken from the
@@ -514,10 +514,10 @@ final class FrameTimingTracker: @unchecked Sendable {
         if !warmingUp, let value = glassToGlass { histograms.glassToGlass.observe(value) }
 
         // INPUT-TO-PHOTON estimate (signal 2): time from the last input batch
-        // we sent to the FIRST present after it — a lower bound on felt input
+        // we sent to the FIRST present after it - a lower bound on felt input
         // latency. The host doesn't tell us which frame reflects an input, so
         // this is explicitly an estimate; each input stamp records at most one
-        // observation (consume-once — see the Composites split), so an idle
+        // observation (consume-once - see the Composites split), so an idle
         // stream's static frames can't inflate the metric and a genuinely slow
         // outlier isn't capped away.
         let inputToPhoton = computeInputToPhoton(presentNanos: presentNanos)
@@ -545,7 +545,7 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// `P2State.resolveIdrArrival` computed. Feeds the histogram + an explicit
     /// per-frame trace event line (distinct from the per-frame latency lines, via
     /// the `event` key) so a reader greps the exact recovery beat. Off the proven
-    /// path — an IDR arrival is rare.
+    /// path - an IDR arrival is rare.
     func recordIdrRoundTrip(frameIndex: Int32, roundTripMs: Double) {
         guard roundTripMs.isFinite, roundTripMs >= 0 else { return }
         histograms.idrRoundTrip.observe(roundTripMs)
@@ -555,7 +555,7 @@ final class FrameTimingTracker: @unchecked Sendable {
     }
 
     // The COMPOSITE stage computations (glass-to-glass + the consume-once
-    // input-to-photon estimate) live in TelemetryLatency+Composites.swift —
+    // input-to-photon estimate) live in TelemetryLatency+Composites.swift -
     // topic split to keep this file under the length budget.
 
     /// Delta in milliseconds between two monotonic-nanosecond stamps, or nil if

@@ -28,18 +28,18 @@ extension VideoDecoder {
     ///
     /// `preferredDynamicRange` (macOS 26+ replacement for the older
     /// `wantsExtendedDynamicRangeContent` boolean):
-    ///   * `.high`     — engage full EDR. Used when the stream is 10-bit
+    ///   * `.high`     - engage full EDR. Used when the stream is 10-bit
     ///                   AND the host has signalled HDR mode. Per Apple's
     ///                   header, this is the right choice for "situations
     ///                   where the user is expected to be focused on the
-    ///                   media" — game streaming is exactly that.
-    ///   * `.standard` — SDR. Used for everything else.
+    ///                   media" - game streaming is exactly that.
+    ///   * `.standard` - SDR. Used for everything else.
     ///
     /// The layer reads the per-frame CGColorSpace off the CVPixelBuffer's
     /// `kCVImageBufferCGColorSpaceKey` attachment (set in
     /// `attachFallbackColorspaceIfNeeded` for untagged-bitstream hosts,
     /// otherwise propagated from the bitstream's VUI by VT). There is no
-    /// `colorspace` property on AVSampleBufferDisplayLayer itself —
+    /// `colorspace` property on AVSampleBufferDisplayLayer itself -
     /// moonlight-qt's vt_avsamplelayer.mm uses the same per-buffer path.
     @MainActor
     func configureLayerColorspace() {
@@ -56,8 +56,8 @@ extension VideoDecoder {
         layer.preferredDynamicRange = preferred
 
         // Also set the layer's own compositing colorspace. moonlight-qt's
-        // vt_avsamplelayer.mm doesn't do this — they rely solely on the
-        // per-buffer kCVImageBufferCGColorSpaceKey attachment — but on
+        // vt_avsamplelayer.mm doesn't do this - they rely solely on the
+        // per-buffer kCVImageBufferCGColorSpaceKey attachment - but on
         // macOS 26 the EDR-engagement heuristic also reads
         // layer.colorspace. Without it, even with preferredDynamicRange =
         // .high and PQ-tagged content arriving, macOS keeps
@@ -70,7 +70,7 @@ extension VideoDecoder {
         // KVC required: `CALayer.colorspace: CGColorSpace?` is a typed
         // property on the parent class, but Apple's Swift import surface
         // elides it for AVSampleBufferDisplayLayer (the subclass), so a
-        // direct `layer.colorspace = …` fails to compile. The Objective-C
+        // direct `layer.colorspace = ...` fails to compile. The Objective-C
         // runtime still has the setter (inherited and KVC-visible);
         // moonlight-qt reaches it from Objective-C++. We don't have an
         // Objective-C++ bridge for a single call site, so KVC stays until
@@ -124,10 +124,10 @@ extension VideoDecoder {
     /// so the OS's compositor sees identical input to what it gets from
     /// moonlight-qt.
     ///
-    /// Layout — all big-endian:
+    /// Layout - all big-endian:
     ///
     ///   MDCV (mastering-display-color-volume), 24 bytes:
-    ///     primaries[3]  (G, B, R order — 3 × { uint16 x, uint16 y })
+    ///     primaries[3]  (G, B, R order - 3 × { uint16 x, uint16 y })
     ///     whitePoint    ({ uint16 x, uint16 y })
     ///     luminance_max (uint32, in 1/10000-nit units → multiply nits × 10000)
     ///     luminance_min (uint32, already in 1/10000-nit units per Limelight.h)
@@ -149,7 +149,7 @@ extension VideoDecoder {
             return
         }
 
-        // Mastering display color volume — only meaningful if the host
+        // Mastering display color volume - only meaningful if the host
         // populated primaries. Sunshine fills these from the OS-reported
         // monitor EDID; GFE may leave them zeroed.
         if hdr.displayPrimariesRX != 0 && hdr.maxDisplayLuminance != 0 {
@@ -175,7 +175,7 @@ extension VideoDecoder {
             cachedMDCV = nil
         }
 
-        // Content light level — host may omit these even when MDCV is present
+        // Content light level - host may omit these even when MDCV is present
         // (GFE typically does). The OS will tonemap conservatively from MDCV
         // alone, which is still better than nothing.
         if hdr.maxContentLightLevel != 0 && hdr.maxFrameAverageLightLevel != 0 {
@@ -201,7 +201,7 @@ extension VideoDecoder {
     /// Returns the maximum EDR headroom the layer's current screen reports.
     /// 1.0 → SDR / HDR-off; > 1.0 → HDR-capable and currently in HDR mode.
     /// Used to emit a user-visible warning when an HDR stream is started
-    /// but the display isn't in HDR mode — we still engage the PQ pipeline
+    /// but the display isn't in HDR mode - we still engage the PQ pipeline
     /// (the OS tonemaps for us), the user just won't see the full bright-
     /// highlight effect.
     @MainActor
@@ -250,7 +250,7 @@ extension VideoDecoder {
         // 10-bit stream, the content IS PQ regardless of how the bitstream's
         // VUI / OBU happens to tag itself. Sunshine's encoder ships Main10 PQ
         // content with BT.709 tags in the VUI on a number of GPU/driver combos
-        // (known issue, never fixed upstream) — trusting the VUI here paints
+        // (known issue, never fixed upstream) - trusting the VUI here paints
         // PQ codes through an sRGB pipeline, which is exactly the "sandy grey,
         // washed out" look. moonlight-qt's `getFrameColorspace` consults the
         // host-HDR flag before the VUI for the same reason. When LiSetHdrMode
@@ -281,7 +281,7 @@ extension VideoDecoder {
 
         // Stream did NOT declare color (VUI / OBU color_description_present_flag
         // = 0) AND host hasn't engaged HDR. Use the negotiated stream format as
-        // the last source of truth — same moonlight-qt fallback for
+        // the last source of truth - same moonlight-qt fallback for
         // AVCOL_SPC_UNSPECIFIED + HDR off.
         if is10Bit {
             return "itur_2020"
@@ -291,7 +291,7 @@ extension VideoDecoder {
     }
 
     /// Create the CGColorSpace matching a derived-key string. Cached at the
-    /// call site via `lastColorSpace` so we don't re-allocate per frame —
+    /// call site via `lastColorSpace` so we don't re-allocate per frame -
     /// matches moonlight-qt's `m_ColorSpace` + `m_LastColorSpace` pattern.
     nonisolated func makeCGColorSpace(forKey key: String) -> CGColorSpace? {
         switch key {
@@ -373,7 +373,7 @@ extension VideoDecoder {
 
         // Attached CGColorSpace at this point should be the one we just set.
         // Apple returns the colorspace ref; we read its name (a CFString) so
-        // we can log the actual ID — e.g. "kCGColorSpaceITUR_2100_PQ".
+        // we can log the actual ID - e.g. "kCGColorSpaceITUR_2100_PQ".
         var attachedCSName = "absent"
         if let csAny = CVBufferCopyAttachment(
             pixelBuffer, kCVImageBufferCGColorSpaceKey, nil) {
@@ -420,7 +420,7 @@ extension VideoDecoder {
 
         // Re-probe the EDR headroom values at 1s, 3s, and 5s after the first
         // frame. macOS engages display HDR mode asynchronously in response
-        // to PQ-tagged content arriving at the layer — the first-frame
+        // to PQ-tagged content arriving at the layer - the first-frame
         // probe almost always reads 1.0 because the engagement hasn't
         // happened yet. If we still read 1.0 after 5s of streaming PQ
         // content into an EDR layer, the display is in SDR mode in System
@@ -490,7 +490,7 @@ extension VideoDecoder {
         }()
         // EDR headroom: 1.0 → display is in SDR; >1.0 → HDR is engaged.
         // This is the single most diagnostic line for "the panel looks
-        // washed out" — if this isn't > 1.0, no amount of pipeline
+        // washed out" - if this isn't > 1.0, no amount of pipeline
         // tagging will get the user inky blacks + 1000-nit highlights.
         let screen = layer?.delegate as? NSView
         let resolvedScreen = (screen?.window?.screen ?? NSScreen.main)
@@ -499,7 +499,7 @@ extension VideoDecoder {
         // The "potential" value is what the panel CAN do at peak HDR,
         // even when not currently engaged. If this is > 1.0 but
         // `maximumEDR` is 1.0, the display is HDR-capable but macOS
-        // hasn't bumped into HDR mode yet — usually because the layer
+        // hasn't bumped into HDR mode yet - usually because the layer
         // hasn't been compositing HDR-tagged content long enough OR
         // System Settings has "High Dynamic Range" turned off.
         let edrPotential: CGFloat =

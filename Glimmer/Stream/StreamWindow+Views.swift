@@ -30,7 +30,7 @@ final class KeyableWindow: NSWindow {
 /// A host bitstream at the panel's TRUE native resolution then renders
 /// into a too-short layer and `resizeAspect` letterboxes it left/right.
 /// Returning `screen.frame.size + safeAreaInsets.top` here makes AppKit
-/// resize the fullscreen content to cover the notch zone too — same
+/// resize the fullscreen content to cover the notch zone too - same
 /// behaviour SDL's FULLSCREEN_DESKTOP gives moonlight-qt for free.
 ///
 /// `coversNotch == false` returns the default safe-area size, matching

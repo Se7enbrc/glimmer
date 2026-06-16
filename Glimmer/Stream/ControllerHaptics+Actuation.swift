@@ -3,7 +3,7 @@
 //
 //  The actuation layer of ControllerHaptics: wire motor values → haptic
 //  localities → CHHapticEngine/player channels, plus the per-pad state types.
-//  Topic split from ControllerHaptics.swift (file-length budget) — the core
+//  Topic split from ControllerHaptics.swift (file-length budget) - the core
 //  file keeps the inboxes, gates, and registration; everything here runs on
 //  the actuator's serial `queue` (see the core file's THREADING note).
 //
@@ -19,15 +19,15 @@ extension ControllerHaptics {
     func apply(slot: UInt8, lowFreq: UInt16, highFreq: UInt16) {
         guard let pad = pads[slot] else { return }
         // Keep DualSenseHID's merged OUTPUT state current so an adaptive-trigger
-        // write re-emits the live rumble instead of zeroing it. Merge-only — the
+        // write re-emits the live rumble instead of zeroing it. Merge-only - the
         // motors themselves still ride GameController haptics below; this just
         // mirrors the latest value (16-bit wire → 8-bit report) for the merge.
         mirrorRumbleToHID(pad: pad, lowFreq: lowFreq, highFreq: highFreq)
         if lowFreq == 0 && highFreq == 0 {
-            // (0,0) idles whatever BODY players exist — the trigger localities
+            // (0,0) idles whatever BODY players exist - the trigger localities
             // are a separate wire channel, so zeroing them here would cut live
             // trigger rumble every time the body motors idle. It must never
-            // CREATE an engine — priming hardware to play silence — so it
+            // CREATE an engine - priming hardware to play silence - so it
             // bypasses the plan entirely.
             for (key, channel) in pad.engines where !Self.triggerLocalityKeys.contains(key) {
                 sendIntensity(0, to: channel, pad: pad, slot: slot, localityKey: key)
@@ -58,36 +58,36 @@ extension ControllerHaptics {
         // re-attach of the slot resolves fresh.
         guard let controller = pad.controller else { return nil }
         guard let haptics = controller.haptics else {
-            // Permanent for THIS pad object — haptics support is a hardware
+            // Permanent for THIS pad object - haptics support is a hardware
             // property, not a transient fault, so caching "unavailable" is
             // honest (a re-attach builds a new PadHaptics and re-probes).
-            Diag.info("controller \(slot) exposes no haptics — host rumble ignored", Self.logCategory)
+            Diag.info("controller \(slot) exposes no haptics - host rumble ignored", Self.logCategory)
             return .unavailable
         }
         let localities = haptics.supportedLocalities
         if localities.contains(.leftHandle) && localities.contains(.rightHandle) {
             // The wire's dual-motor model maps 1:1 onto per-handle engines:
             // low-frequency (heavy) motor → left handle, high-frequency motor
-            // → right handle — the physical layout of Xbox/DualSense pads.
+            // → right handle - the physical layout of Xbox/DualSense pads.
             return .splitHandles
         }
         // No per-handle engines: merge both motors onto the best whole-pad
         // locality. max() keeps the stronger motor's energy rather than
         // averaging it away.
         let merged: GCHapticsLocality = localities.contains(.handles) ? .handles : .all
-        Diag.info("controller \(slot) haptics lack per-handle localities — merging motors onto "
+        Diag.info("controller \(slot) haptics lack per-handle localities - merging motors onto "
             + "'\(merged.rawValue)'", Self.logCategory)
         return .single(merged)
     }
 
     /// Trigger rumble (SS_RUMBLE_TRIGGERS): each wire motor drives its own
     /// trigger locality through the same lazy engine/player machinery as the
-    /// body motors — setMotor handles zero (idle existing, never create) and
+    /// body motors - setMotor handles zero (idle existing, never create) and
     /// nonzero (lazy build) per locality.
     func applyTriggers(slot: UInt8, left: UInt16, right: UInt16) {
         guard let pad = pads[slot] else { return }
         if left == 0 && right == 0 {
-            // Idle existing trigger players only — never probe hardware or
+            // Idle existing trigger players only - never probe hardware or
             // build an engine to play silence (the body-(0,0) discipline).
             for key in Self.triggerLocalityKeys {
                 if let channel = pad.engines[key] {
@@ -99,7 +99,7 @@ extension ControllerHaptics {
         // Resolve trigger support once per pad on the first nonzero event (a
         // hardware property, the ActuationPlan discipline): we only ADVERTISE
         // LI_CCAP_TRIGGER_RUMBLE for pads whose haptics expose both trigger
-        // localities, but a host could send anyway — degrade quietly instead
+        // localities, but a host could send anyway - degrade quietly instead
         // of hammering createEngine retries for a locality that cannot exist.
         if pad.triggersSupported == nil {
             // nil controller = mid-detach; bail WITHOUT caching (resolvePlan's
@@ -109,7 +109,7 @@ extension ControllerHaptics {
             pad.triggersSupported = localities.contains(.leftTrigger)
                 && localities.contains(.rightTrigger)
             if pad.triggersSupported == false {
-                Diag.info("controller \(slot) haptics lack trigger localities — "
+                Diag.info("controller \(slot) haptics lack trigger localities - "
                     + "host trigger rumble ignored", Self.logCategory)
             }
         }
@@ -126,10 +126,10 @@ extension ControllerHaptics {
 
     /// Light bar (SET_RGB_LED) → GCDeviceLight. GCDeviceLight, like
     /// GCDeviceHaptics, carries no documented main-thread requirement (only
-    /// the GCController.controllers() registry does — the core file's
+    /// the GCController.controllers() registry does - the core file's
     /// threading note), so the write stays on the haptics queue: no main-time,
     /// and the non-Sendable GCColor never crosses a thread hop. Failable-quiet
-    /// by construction — a pad without a light (the cap is only advertised
+    /// by construction - a pad without a light (the cap is only advertised
     /// when gamepad.light != nil) just drops the event.
     func applyLight(slot: UInt8, red: UInt8, green: UInt8, blue: UInt8) {
         guard let pad = pads[slot], let light = pad.controller?.light else { return }
@@ -161,7 +161,7 @@ extension ControllerHaptics {
             sendIntensity(intensity, to: channel, pad: pad, slot: slot, localityKey: key)
             return
         }
-        // No live channel: a zero needs no engine — never create hardware
+        // No live channel: a zero needs no engine - never create hardware
         // state just to keep it idle. Nonzero → lazy build (first rumble, or
         // rebuild after a stop/reset/teardown), seeded with the target
         // intensity so there is no window at the wrong level.
@@ -181,29 +181,29 @@ extension ControllerHaptics {
                 atTime: CHHapticTimeImmediate)
         } catch {
             // Recoverable hiccup, not a fault: drop the channel so the next
-            // nonzero event lazily rebuilds it. INFO on purpose — haptics
+            // nonzero event lazily rebuilds it. INFO on purpose - haptics
             // self-heal and a warning would cry wolf in the diagnostics ring.
-            Diag.info("controller \(slot) haptics update failed (\(error)) — rebuilding on next event",
+            Diag.info("controller \(slot) haptics update failed (\(error)) - rebuilding on next event",
                       Self.logCategory)
             pad.engines[localityKey] = nil
             channel.engine.stop(completionHandler: nil)
         }
     }
 
-    /// Per-locality CHHapticEvent sharpness — the spectral half of the wire's
+    /// Per-locality CHHapticEvent sharpness - the spectral half of the wire's
     /// dual-motor model (intensity is the temporal half, and the ONLY
     /// parameter the upstream clients set: moonlight-ios HapticContext.m and
     /// SDL's SDL_mfijoystick.m both build their continuous event with
-    /// intensity alone, verified against both sources — so this is a
+    /// intensity alone, verified against both sources - so this is a
     /// deliberate step beyond upstream, not a port).
     ///
-    /// WHY: the wire's two motors are FREQUENCY classes — lowFreqRumble is the
+    /// WHY: the wire's two motors are FREQUENCY classes - lowFreqRumble is the
     /// heavy slow motor (left handle), highFreqRumble the light fast one
     /// (right handle). On pads with real ERM motors (Xbox) the OS routes each
     /// locality to its physical motor, so sharpness costs nothing. On a
     /// DualSense there are no rumble ERMs at all: the grips hold broadband
     /// VOICE-COIL actuators that SYNTHESIZE whatever band Core Haptics asks
-    /// for — and an event with no sharpness renders both wire motors at the
+    /// for - and an event with no sharpness renders both wire motors at the
     /// same default band, collapsing the wire's heavy-thump/light-buzz split
     /// into one homogeneous mid-band buzz (the "weak rumble" feel on a
     /// DualSense). Explicit per-locality sharpness restores the split along
@@ -212,7 +212,7 @@ extension ControllerHaptics {
         switch locality {
         case .leftHandle:
             // The wire's low-frequency (heavy) motor: deep, round thump. Not
-            // 0.0 — the very bottom of the band rolls off on small grip
+            // 0.0 - the very bottom of the band rolls off on small grip
             // actuators, trading punch for inaudible sub-band excursion.
             return 0.25
         case .rightHandle, .leftTrigger, .rightTrigger:
@@ -221,7 +221,7 @@ extension ControllerHaptics {
             return 0.75
         default:
             // Merged single-locality plan (.handles / .all) carries
-            // max(low, high) of BOTH motors — stay spectrally neutral.
+            // max(low, high) of BOTH motors - stay spectrally neutral.
             return 0.5
         }
     }
@@ -240,7 +240,7 @@ extension ControllerHaptics {
         }
         // Self-healing: Core Haptics stops engines on its own (controller
         // power management, system reclaim) and resets them after a haptics
-        // server hiccup. Either way this channel is dead — both handlers just
+        // server hiccup. Either way this channel is dead - both handlers just
         // drop it on the haptics queue (latest engine instance only, via the
         // identity check) and the NEXT nonzero rumble rebuilds lazily. The
         // handlers fire on a Core Haptics internal thread, so they capture
@@ -294,14 +294,14 @@ extension ControllerHaptics {
         }
     }
 
-    /// Drop a dead channel IF it is still the current one for its locality —
+    /// Drop a dead channel IF it is still the current one for its locality -
     /// a stop/reset notification for an engine we already replaced must not
     /// kill its successor.
     private func dropChannel(slot: UInt8, localityKey: String, engineID: ObjectIdentifier, why: String) {
         guard let pad = pads[slot], let channel = pad.engines[localityKey],
               ObjectIdentifier(channel.engine) == engineID else { return }
         pad.engines[localityKey] = nil
-        Diag.info("controller \(slot) haptic \(why) — rebuilding on next rumble", Self.logCategory)
+        Diag.info("controller \(slot) haptic \(why) - rebuilding on next rumble", Self.logCategory)
     }
 
     /// Park a pad's motors at zero and stop its engines. Idempotent and quiet
@@ -315,7 +315,7 @@ extension ControllerHaptics {
             // Park the motor at zero THEN stop: the explicit (0,0) is the
             // belt-and-braces guarantee that a stream ending mid-rumble can't
             // leave a motor running even if the engine stop defers
-            // internally. try? — an already-gone pad throws here, and that is
+            // internally. try? - an already-gone pad throws here, and that is
             // exactly the case where the motor is already dead.
             try? channel.player.sendParameters(
                 [CHHapticDynamicParameter(parameterID: .hapticIntensityControl,
@@ -330,7 +330,7 @@ extension ControllerHaptics {
 
     // MARK: - DualSense raw-HID merge mirror
 
-    /// True when this pad is a DualSense whose raw-HID reader is live — the only
+    /// True when this pad is a DualSense whose raw-HID reader is live - the only
     /// case where DualSenseHID owns an OUTPUT report and therefore needs the
     /// merged lightbar + rumble kept current. GameController's `.haptics` /
     /// `.light` access is thread-safe (the file's threading note), and the
@@ -357,7 +357,7 @@ extension ControllerHaptics {
     /// How a pad's two wire motors map onto its haptic localities. Resolved
     /// once per pad (on first nonzero rumble) because supportedLocalities is
     /// a hardware property. (Internal, not private: the core file's `pads`
-    /// map and registration construct these — the topic-split cost.)
+    /// map and registration construct these - the topic-split cost.)
     enum ActuationPlan {
         /// lowFreq → .leftHandle, highFreq → .rightHandle (two engines).
         case splitHandles
@@ -404,7 +404,7 @@ extension ControllerHaptics {
         var announcedTriggersActive = false
         var announcedLightActive = false
         /// Earliest uptime (ns) for the next engine-creation attempt after a
-        /// failure — the 1s backoff that keeps a failing pad cheap without
+        /// failure - the 1s backoff that keeps a failing pad cheap without
         /// ever giving up on it.
         var nextEngineAttemptNanos: UInt64 = 0
 

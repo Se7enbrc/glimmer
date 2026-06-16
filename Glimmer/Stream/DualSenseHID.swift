@@ -2,19 +2,19 @@
 //  DualSenseHID.swift
 //
 //  Raw-HID side-channel for the Sony DualSense, read over IOKit's
-//  IOHIDManager — exactly how moonlight-qt / SDL's HIDAPI driver does it.
+//  IOHIDManager - exactly how moonlight-qt / SDL's HIDAPI driver does it.
 //  macOS's GameController framework does NOT deliver the DualSense's centre
 //  buttons (Options ≡, Create/Share, Mute) to apps, so a controller-only exit
 //  chord and full button parity are impossible through GCController alone.
 //  This reads the raw input report alongside GameController (non-exclusive
-//  open — it never seizes the device, so GCController keeps everything it
+//  open - it never seizes the device, so GCController keeps everything it
 //  already provides: sticks, face, shoulders, triggers, touchpad, battery).
 //
 //  Surfaces only the three buttons GameController drops. Everything else stays
 //  on the GameController path.
 //
 //  REQUIRES the "Input Monitoring" privacy permission (TCC kTCCServiceListenEvent
-//  — it covers game controllers, not just keyboards) plus the
+//  - it covers game controllers, not just keyboards) plus the
 //  com.apple.security.device.usb / .bluetooth sandbox entitlements. This is
 //  Developer-ID-legal but NOT Mac-App-Store-compatible (device.usb is a hard
 //  App-Review reject). MAS-STRIP: a future Mac App Store target must remove
@@ -41,7 +41,7 @@ struct DualSenseExtraButtons: Equatable, Sendable {
 /// HID reader is live (confirmed via SDL/Linux hid-playstation). Callers prefer
 /// this whenever `DualSenseHID` is running.
 struct DualSenseBattery: Equatable, Sendable {
-    var percent: Int       // 0…100
+    var percent: Int       // 0...100
     var charging: Bool
 }
 
@@ -58,7 +58,7 @@ struct DualSenseOutputState: Equatable, Sendable {
     var lightG: UInt8 = 0
     var lightB: UInt8 = 0
     /// True once the host has sent a lightbar color this session. Until then we
-    /// must NOT assert LIGHTBAR_CONTROL_ENABLE in an output write — doing so
+    /// must NOT assert LIGHTBAR_CONTROL_ENABLE in an output write - doing so
     /// with the default (0,0,0) would blank a bar that gamecontrollerd/Sunshine
     /// already lit (the pre-first-color window an adaptive-trigger write hits).
     var lightSet: Bool = false
@@ -104,7 +104,7 @@ final class DualSenseHID: @unchecked Sendable {
     /// not per write (host re-arms triggers can arrive at frame rate).
     private var loggedWriteFailure = false
     /// Latch for the first successful OUTPUT write (proves the raw-HID write
-    /// path is permitted under the sandbox — the P1 open question).
+    /// path is permitted under the sandbox - the P1 open question).
     private var loggedWriteSuccess = false
 
     /// Serial queue for the IOKit OUTPUT-report writes. The host feedback
@@ -114,11 +114,11 @@ final class DualSenseHID: @unchecked Sendable {
     private let writeQueue = DispatchQueue(label: "io.ugfugl.Glimmer.dualsense-hid-write",
                                            qos: .userInitiated)
 
-    /// Called on the main queue whenever the decoded buttons change — lets the
+    /// Called on the main queue whenever the decoded buttons change - lets the
     /// input-test UI refresh. Set by the consumer; cleared on the last release.
     var onChange: (@MainActor () -> Void)?
 
-    /// Total raw input reports received since the manager opened — a live
+    /// Total raw input reports received since the manager opened - a live
     /// "is the device delivering anything?" signal for the input test. Zero
     /// while Input Monitoring is denied.
     private var reportCountLocked = 0
@@ -161,8 +161,8 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     /// Opt-in gate (mirrors MoonlightManager.rawHIDControllerEnabled). Read
-    /// from non-UI code (ControllerForwarder) so the raw-HID reader — and its
-    /// Input Monitoring prompt — only ever engage when the user has turned the
+    /// from non-UI code (ControllerForwarder) so the raw-HID reader - and its
+    /// Input Monitoring prompt - only ever engage when the user has turned the
     /// feature on in Settings.
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "rawHIDControllerEnabled") }
 
@@ -204,7 +204,7 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     private func start() {
-        // NOTE: we deliberately do NOT call IOHIDRequestAccess() here — it
+        // NOTE: we deliberately do NOT call IOHIDRequestAccess() here - it
         // BLOCKS the main thread while presenting the TCC prompt, which hung
         // the Troubleshooting pane. Permission is requested explicitly from the
         // enable flow / a "Grant" button instead. Opening without the grant
@@ -219,18 +219,18 @@ final class DualSenseHID: @unchecked Sendable {
         IOHIDManagerRegisterDeviceMatchingCallback(manager, Self.deviceMatched, ctx)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, Self.deviceRemoved, ctx)
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        // NON-exclusive (kIOHIDOptionsTypeNone): we never seize the pad — the
+        // NON-exclusive (kIOHIDOptionsTypeNone): we never seize the pad - the
         // open is shared with gamecontrollerd so GCController keeps everything
         // it already provides (sticks/face/triggers/touchpad/rumble/light), and
         // we read the centre buttons + battery alongside it. A non-exclusive
-        // open still permits IOHIDDeviceSetReport(Output) — the adaptive-trigger
-        // write path below — for an already-matched device under the USB/HID
+        // open still permits IOHIDDeviceSetReport(Output) - the adaptive-trigger
+        // write path below - for an already-matched device under the USB/HID
         // gamepad entitlement (degrades to a clean no-op if the sandbox refuses
         // the write; see writeOutputReport).
         let rc = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         // NOTICE (was INFO): the open-rc + Input-Monitoring state is the one fact
         // that tells "are the DualSense centre buttons / battery actually
-        // readable" — and it being INFO-only made the broken-quit-chord regression
+        // readable" - and it being INFO-only made the broken-quit-chord regression
         // un-diagnosable from shipped logs. Ship it.
         let monitoring = Self.accessGranted ? "granted"
             : (Self.accessDenied ? "DENIED" : "not-yet-determined")
@@ -238,13 +238,13 @@ final class DualSenseHID: @unchecked Sendable {
         let buttonsState = usable ? "available"
             : "UNAVAILABLE (reports won't deliver until Input Monitoring is granted)"
         Diag.notice("DualSense HID open rc=0x\(String(rc, radix: 16)) inputMonitoring=\(monitoring) "
-            + "— raw-HID centre buttons/battery \(buttonsState)", "Controller")
+            + "- raw-HID centre buttons/battery \(buttonsState)", "Controller")
     }
 
     private func stop() {
         // Best-effort: park the triggers (and re-emit current light/rumble) so
         // a stream ending mid-effect doesn't strand a stiff trigger on the pad.
-        // MUST run BEFORE IOHIDManagerClose — the SetReport needs the manager
+        // MUST run BEFORE IOHIDManagerClose - the SetReport needs the manager
         // (and the device's open) still live, and writeDevices still populated.
         resetTriggersBeforeClose()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
@@ -290,7 +290,7 @@ final class DualSenseHID: @unchecked Sendable {
         let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: bufLen)
         buf.initialize(repeating: 0, count: bufLen)
         deviceBuffers[key] = buf
-        // Stored as a strong Swift reference — ARC retains the bridged CF
+        // Stored as a strong Swift reference - ARC retains the bridged CF
         // object for the lifetime of the map entry, so a SetReport can't race
         // device deallocation. (The `key` opaque pointer is only an identity
         // token, NOT the retain; do not switch this value to Unmanaged.)
@@ -349,7 +349,7 @@ final class DualSenseHID: @unchecked Sendable {
         next.mute = (b2 & 0x04) != 0
 
         // Battery: the status byte sits 52 bytes past LX (SDL ps5 / Linux
-        // hid-playstation). Low nibble = level 0…10 (percent ≈ level*10+5),
+        // hid-playstation). Low nibble = level 0...10 (percent ≈ level*10+5),
         // high nibble = charge state (1 = charging, 2 = full). The simple
         // 10-byte BT report has no battery field, so guard on length and on
         // the 0x0C "not reporting" sentinel.
@@ -391,7 +391,7 @@ final class DualSenseHID: @unchecked Sendable {
     /// Apply a host SET_ADAPTIVE_TRIGGERS (0x5503) to the open DualSense. Only
     /// the trigger blocks whose `eventFlags` bit is set are updated (the other
     /// is left at its current state); `typeLeft`/`typeRight` are the
-    /// DualSense-native mode bytes and `left`/`right` are the 10 param bytes —
+    /// DualSense-native mode bytes and `left`/`right` are the 10 param bytes -
     /// passed straight through (moonlight-qt's shape). A no-op when no device is
     /// open or the write is refused.
     func setAdaptiveTriggers(eventFlags: UInt8, typeLeft: UInt8, typeRight: UInt8,
@@ -409,7 +409,7 @@ final class DualSenseHID: @unchecked Sendable {
 
     /// Feed the host's latest lightbar color into the merged output state
     /// (called by ControllerHaptics when raw-HID is live). Does NOT itself
-    /// write — the lightbar still rides GameController's GCDeviceLight; this
+    /// write - the lightbar still rides GameController's GCDeviceLight; this
     /// only keeps our merge current so an adaptive-trigger write re-emits the
     /// right color instead of blanking the bar.
     func setLightbarState(red: UInt8, green: UInt8, blue: UInt8) {
@@ -421,7 +421,7 @@ final class DualSenseHID: @unchecked Sendable {
 
     /// Feed the host's latest rumble pair into the merged output state (8-bit,
     /// already down-scaled from the 16-bit wire by the caller). Merge-only, like
-    /// setLightbarState — rumble itself still rides GameController haptics.
+    /// setLightbarState - rumble itself still rides GameController haptics.
     func setRumbleState(left: UInt8, right: UInt8) {
         lock.lock()
         outputState.rumbleLeft = left; outputState.rumbleRight = right
@@ -429,7 +429,7 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     /// Park the triggers to neutral and re-emit, called from stop() while the
-    /// device is still open. Best-effort — a refused write is fine, the pad
+    /// device is still open. Best-effort - a refused write is fine, the pad
     /// loses power on disconnect anyway.
     private func resetTriggersBeforeClose() {
         lock.lock()
@@ -444,8 +444,8 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     /// One trigger block = [mode][10 params], clamped to 11 bytes. Rejects the
-    /// 0xFC–0xFE debug/calibration modes (they can corrupt trigger state) by
-    /// neutralizing to "off" — defensive against a malformed host value.
+    /// 0xFC-0xFE debug/calibration modes (they can corrupt trigger state) by
+    /// neutralizing to "off" - defensive against a malformed host value.
     private static func triggerBlock(mode: UInt8, params: [UInt8]) -> [UInt8] {
         var block = [UInt8](repeating: 0, count: 11)
         guard mode < 0xFC else { return block } // 0x00 = off
@@ -474,18 +474,18 @@ final class DualSenseHID: @unchecked Sendable {
     /// The 47-byte DS5EffectsState payload (the report DATA after any report-ID
     /// / BT magic byte). Offsets are SDL's DS5EffectsState_t. We set the
     /// enable/valid flags for rumble + lightbar + the LED effect, and copy both
-    /// trigger blocks unconditionally (the device applies them when present —
+    /// trigger blocks unconditionally (the device applies them when present -
     /// there is no separate trigger valid-flag bit in SDL / mainline Linux).
     private static func effectsState(_ s: DualSenseOutputState) -> [UInt8] {
         var d = [UInt8](repeating: 0, count: 47)
-        // valid_flag0: COMPATIBLE_VIBRATION 0x01 | HAPTICS_SELECT 0x02 — enable
+        // valid_flag0: COMPATIBLE_VIBRATION 0x01 | HAPTICS_SELECT 0x02 - enable
         // the rumble motor bytes. (0,0) here is a harmless "motors off"; the
         // DualSense's CHHaptics voice-coil path is separate, so we never fight
         // the live rumble GameController drives.
         d[0] = 0x01 | 0x02
         d[2] = s.rumbleRight   // ucRumbleRight (high-freq)
         d[3] = s.rumbleLeft    // ucRumbleLeft  (low-freq)
-        // valid_flag1: LIGHTBAR_CONTROL_ENABLE 0x04 — ONLY when the host has set
+        // valid_flag1: LIGHTBAR_CONTROL_ENABLE 0x04 - ONLY when the host has set
         // a color this session. Asserting it with the default (0,0,0) would
         // blank a bar gamecontrollerd/Sunshine already lit before the first
         // SET_RGB_LED (see DualSenseOutputState.lightSet). Until then we leave
@@ -531,14 +531,14 @@ final class DualSenseHID: @unchecked Sendable {
         }
         if rc == kIOReturnSuccess {
             if !loggedWriteWasSuccessful() {
-                log.info("DualSense OUTPUT report write OK (transport=\(bluetooth ? "BT" : "USB", privacy: .public)) — adaptive triggers live")
+                log.info("DualSense OUTPUT report write OK (transport=\(bluetooth ? "BT" : "USB", privacy: .public)) - adaptive triggers live")
             }
         } else if !loggedWriteWasRefused() {
             // SAFETY no-op: a refused write (e.g. kIOReturnNotPermitted under the
             // sandbox, or an exclusive grab by gamecontrollerd) degrades to "no
-            // adaptive triggers". Everything else — the read path, buttons,
-            // battery — is unaffected. Logged once so the verdict is in the log.
-            log.error("DualSense OUTPUT report write refused rc=0x\(String(UInt32(bitPattern: rc), radix: 16), privacy: .public) — adaptive triggers disabled (degraded no-op)")
+            // adaptive triggers". Everything else - the read path, buttons,
+            // battery - is unaffected. Logged once so the verdict is in the log.
+            log.error("DualSense OUTPUT report write refused rc=0x\(String(UInt32(bitPattern: rc), radix: 16), privacy: .public) - adaptive triggers disabled (degraded no-op)")
         }
     }
 
@@ -562,7 +562,7 @@ final class DualSenseHID: @unchecked Sendable {
     /// the report-ID byte, then the report data up to (not including) the 4 CRC
     /// bytes. Standard IEEE 802.3 CRC32 (reflected, poly 0xEDB88320), the
     /// algorithm SDL/Linux use for the BT effects report. Computed on the fly
-    /// (no static table) — this runs at most a few times per second.
+    /// (no static table) - this runs at most a few times per second.
     private static func dualSenseBTCrc(reportID: UInt8, data: [UInt8]) -> UInt32 {
         var crc: UInt32 = 0xFFFF_FFFF
         func feed(_ byte: UInt8) {

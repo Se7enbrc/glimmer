@@ -73,7 +73,7 @@ extension NativeBackend {
             }
             return rest
         }
-        // host:port — strip the last :port.
+        // host:port - strip the last :port.
         if let colon = rest.lastIndex(of: ":") {
             return String(rest[rest.startIndex..<colon])
         }

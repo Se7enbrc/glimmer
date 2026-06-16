@@ -38,7 +38,7 @@ extension EnetControlChannel {
     /// One control-loop iteration: dead-peer detection, the two keepalives,
     /// retransmits, and the 1Hz health snapshot. Returns false when the loop
     /// should STOP (peer disconnected or declared dead). Holds stateLock only for
-    /// brief reads/writes and NEVER across a send — sends happen outside withState.
+    /// brief reads/writes and NEVER across a send - sends happen outside withState.
     func controlLoopTick(_ state: inout ControlLoopState) -> Bool {
         let dead = withState { disconnected }
         if dead {
@@ -52,7 +52,7 @@ extension EnetControlChannel {
         // reset our peer WITHOUT sending DISCONNECT/TERMINATION; if we have
         // reliable commands in flight and haven't seen a matched ACK for the full
         // ackSilenceDeadMs (= ENet's peer timeout), the peer is genuinely gone.
-        // A shorter window would kill a recoverable blip — moonlight rides those
+        // A shorter window would kill a recoverable blip - moonlight rides those
         // out by retransmitting, never self-terminating early, and so do we.
         let (sinceLastAck, unackedCount, oldestUnackedMs, rttMs, haveRtt) = withState {
             () -> (UInt32, Int, UInt32, Double, Bool) in
@@ -72,14 +72,14 @@ extension EnetControlChannel {
         if unackedCount > 0 && sinceLastAck >= Self.ackSilenceDeadMs {
             Diag.error("ENet peer silent: no ACK in \(sinceLastAck)ms with "
                 + "\(unackedCount) reliable command(s) outstanding "
-                + "(oldest \(oldestUnackedMs)ms) — host silently reset peer; terminating",
+                + "(oldest \(oldestUnackedMs)ms) - host silently reset peer; terminating",
                 Self.logCategory)
             withState { disconnected = true }
             onTerminated?(-1)
             return false
         }
 
-        // (A) app-level periodic ping every 100ms — the Sunshine stream keepalive
+        // (A) app-level periodic ping every 100ms - the Sunshine stream keepalive
         // that keeps video flowing.
         if now &- state.lastPeriodicPingMs >= Enet.periodicPingIntervalMs {
             sendPeriodicPing()
@@ -95,14 +95,14 @@ extension EnetControlChannel {
         // Drain coalesced IDR/RFI requests: at most ONE REQUEST_IDR (and one
         // RFI) per tick, no matter how many failed frames asked for one since
         // the last drain. This is moonlight's requestIdrFrameFunc dedicated-drain
-        // (ControlStream.c:1624-1640) collapsed onto the 20ms control tick — it
+        // (ControlStream.c:1624-1640) collapsed onto the 20ms control tick - it
         // turns the per-failed-frame IDR storm into one request per loss event.
         drainPendingRecoveryRequests()
 
         // Reliable retransmits (covers both ping types + IDR/RFI/LTR).
         checkRetransmit()
 
-        // (C) 1Hz health snapshot — the host-timeout fingerprint is
+        // (C) 1Hz health snapshot - the host-timeout fingerprint is
         // sentReliable.count climbing + oldestUnacked/sinceLastAck crossing
         // ~5000ms right before a stall. Lands in the in-app LogStore. DEBUG
         // (demoted from NOTICE, log diet): this exact data now rides every
@@ -121,19 +121,19 @@ extension EnetControlChannel {
 
     /// The persistent control loop NativeBackend runs after establishAndStart()
     /// returns "connected". Sustains the session by emitting BOTH keepalives:
-    ///   (A) the app-level periodic ping (encrypted 0x0200) every 100ms — the
+    ///   (A) the app-level periodic ping (encrypted 0x0200) every 100ms - the
     ///       Sunshine stream keepalive that keeps video flowing; and
     ///   (B) the transport-level ENet PING (0x85, ch 0xFF) every 500ms of no
-    ///       send — keeps the host's ENet peer from timing out.
+    ///       send - keeps the host's ENet peer from timing out.
     /// It also drives checkRetransmit() so reliable sends (including the pings)
     /// get ACKed/resent. Inbound datagrams continue to be handled by the
     /// existing receive loop (onDatagram). Bounded 20ms tick; cancellable via
     /// interrupt().
     ///
-    /// SYNCHRONOUS variant — run on a DEDICATED Thread (qos .userInteractive) by
+    /// SYNCHRONOUS variant - run on a DEDICATED Thread (qos .userInteractive) by
     /// NativeBackend, NOT on the Swift cooperative pool. The 20ms tick is a
     /// blocking Thread.sleep so the loop that must emit ACKs/keepalives cannot be
-    /// de-prioritized or starved behind high-QoS main-thread input — the moonlight
+    /// de-prioritized or starved behind high-QoS main-thread input - the moonlight
     /// LossStats + ControlRecv dedicated-thread guarantee.
     func runControlLoopSync() {
         var state = startControlLoop()
@@ -147,7 +147,7 @@ extension EnetControlChannel {
     /// (A) App-level periodic ping (lossStatsThreadFunc, ControlStream.c:1388).
     /// Payload built LE: BbPut16(4) then BbPut32(0) = [04 00 00 00 00 00 00 00].
     /// Encrypted control-V2 type 0x0200 on channel 0, RELIABLE (so RTT is
-    /// recomputed on its ACK). Fire-and-track — don't block the loop on its ACK.
+    /// recomputed on its ACK). Fire-and-track - don't block the loop on its ACK.
     func sendPeriodicPing() {
         let payload: [UInt8] = [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
         do {
@@ -161,10 +161,10 @@ extension EnetControlChannel {
 
     /// (B) Transport ENet PING (enet_peer_ping, peer.c:446): command
     /// PING|FLAG_ACKNOWLEDGE = 0x85, channel 0xFF, peer-counter relSeq, empty
-    /// body. RELIABLE — tracked in sentReliable for ACK/retransmit.
+    /// body. RELIABLE - tracked in sentReliable for ACK/retransmit.
     func sendEnetPing() {
         let relSeq: UInt16 = withState {
-            // 16-bit ENet reliable seq — wrap (&+), don't trap. The PING fires
+            // 16-bit ENet reliable seq - wrap (&+), don't trap. The PING fires
             // ~2/s, so plain + would overflow-crash after ~9h of streaming.
             peerOutgoingReliableSeq &+= 1
             return peerOutgoingReliableSeq
@@ -187,14 +187,14 @@ extension EnetControlChannel {
     }
 
     /// Resend any reliable command whose roundTripTimeout has elapsed (adaptive
-    /// base = clamp(srtt + 4*rttvar, 60…1000ms), 500ms until the first RTT sample,
+    /// base = clamp(srtt + 4*rttvar, 60...1000ms), 500ms until the first RTT sample,
     /// then exponential backoff), COALESCING the due resends into as few
     /// datagrams as possible (chunked under the MTU) instead of one datagram per
-    /// entry — the old one-datagram-per-entry behavior turned a transient backlog
+    /// entry - the old one-datagram-per-entry behavior turned a transient backlog
     /// into a retransmit storm that compounded the flood. Also adds max-attempt /
     /// age give-up eviction: an entry that has been resent ~10 times OR has been
     /// outstanding >= ~5000ms (host timeoutMinimum, protocol.c:1371-1379) means
-    /// the host has stopped ACKing us — declare the peer dead and fire
+    /// the host has stopped ACKing us - declare the peer dead and fire
     /// onTerminated(-1) ONCE rather than resending forever (converts the silent
     /// host-driven kill into an observable, in-app-logged termination).
     func checkRetransmit() {
@@ -222,7 +222,7 @@ extension EnetControlChannel {
         }
         var resends: [[UInt8]] = []
         // No early give-up. Like enet_protocol_check_timeouts (protocol.c:1371-1388)
-        // we keep retransmitting with backoff and NEVER self-evict here — the attempt
+        // we keep retransmitting with backoff and NEVER self-evict here - the attempt
         // count only caps the backoff, it does not tear down. The sole dead-peer
         // backstop is runControlLoop's ackSilenceDeadMs (= ENet's 10s peer timeout),
         // which is what lets a brief blip self-heal once UDP flows again.

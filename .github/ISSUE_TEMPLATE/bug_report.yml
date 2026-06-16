@@ -9,7 +9,7 @@ body:
         is telemetry-first: a session scorecard plus the session log usually
         localizes a streaming problem in minutes, where a prose description
         alone can take days. The telemetry is **opt-in, local-only, and carries
-        only performance numbers — never secrets, addresses, or input
+        only performance numbers - never secrets, addresses, or input
         contents.**
   - type: input
     id: version
@@ -70,9 +70,9 @@ body:
         2. Reproduce the problem in a stream. When it "feels bad", press
            **⌃B** to drop a timestamped bookmark into the telemetry.
         3. End the stream, then attach from `~/Library/Logs/Glimmer/`:
-           - `telemetry-session-<timestamp>.json` — the session scorecard
-           - `glimmer-<timestamp>.log` — the session log
-           - (optionally) `telemetry-<timestamp>.ndjson` — per-second metrics,
+           - `telemetry-session-<timestamp>.json` - the session scorecard
+           - `glimmer-<timestamp>.log` - the session log
+           - (optionally) `telemetry-<timestamp>.ndjson` - per-second metrics,
              if the file isn't too large to attach
       placeholder: Drag and drop the files here.
   - type: textarea

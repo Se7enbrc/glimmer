@@ -18,7 +18,7 @@ import Foundation
 /// between sections.
 ///
 /// Health is computed against the negotiated stream FPS / latency
-/// thresholds — see `StreamStatsSnapshot.rows(enabled:targetFps:)`. A row
+/// thresholds - see `StreamStatsSnapshot.rows(enabled:targetFps:)`. A row
 /// whose underlying data is missing (`nil` in the snapshot) still emits a
 /// neutral row with an em-dash value so the user sees that the metric
 /// exists but isn't measurable right now (e.g. RTT pre-ENet-connect).
@@ -36,7 +36,7 @@ public struct StatsRow: Sendable, Equatable {
         case controllerBattery
     }
 
-    /// Color state of the value text. `neutral` is "no threshold —
+    /// Color state of the value text. `neutral` is "no threshold -
     /// informational" (host FPS, bitrate, audio config) and renders
     /// identically to `healthy` today, but stays its own case so a future
     /// dim-treatment for purely-informational rows is a one-line change.
@@ -52,7 +52,7 @@ public struct StatsRow: Sendable, Equatable {
 
     public let kind: Kind
     /// Short, sentence-case label rendered on the left. "Host", "Latency",
-    /// "Drop rate" — not full prose. SF Pro Text in the overlay.
+    /// "Drop rate" - not full prose. SF Pro Text in the overlay.
     public let label: String
     /// Pre-formatted value string ("59.9 FPS", "12 ms ±3", "0.00 %",
     /// "Surround 5.1"). SF Mono in the overlay so digit widths align and
@@ -60,7 +60,7 @@ public struct StatsRow: Sendable, Equatable {
     public let value: String
     /// SF Symbol name (e.g. "display", "network", "bolt.horizontal").
     /// Rendered as a 12pt monochrome white CGImage and parked as the row's
-    /// icon-slot layer contents. `nil` leaves the icon slot empty — for
+    /// icon-slot layer contents. `nil` leaves the icon slot empty - for
     /// rows whose only honest glyph would mislead (no battery reading must
     /// not draw `battery.0`, which reads as battery-empty).
     public let symbolName: String?
@@ -82,7 +82,7 @@ public struct StatsRow: Sendable, Equatable {
 // MARK: - Stats overlay preset
 
 /// Which curated row set the stats overlay shows. `.minimal` is the
-/// at-a-glance default for fresh installs — the three numbers that answer
+/// at-a-glance default for fresh installs - the three numbers that answer
 /// "is my stream OK" (render fps / latency / bitrate) without covering
 /// gameplay. `.micro` adds the full framerate + network breakdown;
 /// `.extended` shows the pipeline-plus-network row set minus audio;
@@ -90,12 +90,12 @@ public struct StatsRow: Sendable, Equatable {
 ///
 /// Persisted to UserDefaults as the rawValue string so the choice survives
 /// launches. New installs default to `.minimal`. Case order is the
-/// Settings picker order — smallest set first.
+/// Settings picker order - smallest set first.
 public enum StatsOverlayPreset: String, CaseIterable, Codable, Sendable {
     case minimal, micro, extended, custom
 
     /// Human-readable label for the Settings picker. Subtitle (the
-    /// "N metrics — …" hint) lives in the SettingsView alongside the
+    /// "N metrics - ..." hint) lives in the SettingsView alongside the
     /// picker so the description and the picker line up.
     public var displayName: String {
         switch self {
@@ -111,21 +111,21 @@ public enum StatsOverlayPreset: String, CaseIterable, Codable, Sendable {
 /// constants so MoonlightManager and the SettingsView subtitle / checkbox
 /// code all reach the same values without duplicating the literals.
 public enum StatsOverlayDefaults {
-    /// Minimal preset — exactly three rows: am I getting frames (render
+    /// Minimal preset - exactly three rows: am I getting frames (render
     /// FPS), how late (latency), how heavy (bitrate). The fresh-install
     /// default; everything beyond these three is diagnostics, which
     /// Micro / Extended / Custom exist for.
     public static let minimalRows: Set<StatsRow.Kind> = [
         .renderFps, .latency, .bitrate
     ]
-    /// Micro preset — framerate + network + bitrate, the "what matters
+    /// Micro preset - framerate + network + bitrate, the "what matters
     /// at a glance" diagnostic subset.
     public static let microRows: Set<StatsRow.Kind> = [
         .hostFps, .renderFps, .networkFps,
         .latency, .jitter, .networkDrops,
         .bitrate
     ]
-    /// Every stream-side row. Mac vitals and audio are NOT in Extended —
+    /// Every stream-side row. Mac vitals and audio are NOT in Extended -
     /// they're host-Mac sidebar metrics rather than the game-streaming
     /// numbers Extended is for. Custom is the path to opt those in.
     public static let extendedRows: Set<StatsRow.Kind> =
@@ -144,11 +144,11 @@ public enum StatsOverlayDefaults {
 /// User-configurable thresholds that drive the row health colors (white →
 /// yellow → red). Persisted to UserDefaults via MoonlightManager. Defaults
 /// are calibrated to "when does this actually start to feel bad" rather
-/// than to rounding noise above a target — a 60Hz stream measuring 58fps
+/// than to rounding noise above a target - a 60Hz stream measuring 58fps
 /// is fine, a 60Hz stream measuring 29fps is unplayable.
 public struct StatsThresholds: Sendable, Equatable, Codable {
     /// Frame rate (FPS). Warn below the higher number, critical below the
-    /// lower one. Absolute values, NOT relative to target FPS — a user
+    /// lower one. Absolute values, NOT relative to target FPS - a user
     /// streaming a 30fps title still wants the same "below 30 = bad" line.
     public var fpsWarningBelow: Int
     public var fpsCriticalBelow: Int

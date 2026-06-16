@@ -4,7 +4,7 @@
 //  The decode hand-off: strip the 12-byte RTP header and hand the opus bytes
 //  to the sink, with the deferred AES-128-CBC path (plaintext on the live
 //  host) and its CommonCrypto no-padding helper. Split out of
-//  RtpAudioReceiver.swift — pure move, the FramePacer split idiom —
+//  RtpAudioReceiver.swift - pure move, the FramePacer split idiom -
 //  to keep that file under the length limit; the aesKey/avRiKeyId material
 //  stays declared on the receiver.
 //
@@ -19,13 +19,13 @@ extension RtpAudioReceiver {
     func decodePacket(_ packet: [UInt8]) {
         guard packet.count >= RtpAudioQueue.fixedRtpHeaderSize else { return }
         // AV-skew AUDIO half (`av_skew_ms`): the host-timeline RTP (BE bytes
-        // 4-7) of the packet about to be scheduled — the one-word store the
+        // 4-7) of the packet about to be scheduled - the one-word store the
         // deferred cross-stream derivation needed (the header is stripped
         // before the decoder, so this hand-off is the last place it exists).
-        // UNITS: this clock is NOT 48kHz samples — Sunshine advances it by
+        // UNITS: this clock is NOT 48kHz samples - Sunshine advances it by
         // packetDuration per packet (a 1 tick/ms millisecond clock); the
         // store's measured-rate snap owns the conversion (see AUDIO CLOCK
-        // UNITS on AudioVideoSkewStore — the /48 misread was a sawtooth/rebase
+        // UNITS on AudioVideoSkewStore - the /48 misread was a sawtooth/rebase
         // instrument break). One clock read + an unfair
         // lock at ~200Hz, the same always-live budget as the per-datagram
         // gap counter.
@@ -50,7 +50,7 @@ extension RtpAudioReceiver {
     /// AES-128-CBC decrypt one audio payload (AudioStream.c:178-219). IV =
     /// BE32(avRiKeyId &+ seq) in iv[0..3], iv[4..15] = 0. Key = remoteInputAesKey.
     /// No PKCS7 padding removal (the host pads to the block boundary and the
-    /// decrypted length is fed straight to opus). Deferred path — plaintext on the
+    /// decrypted length is fed straight to opus). Deferred path - plaintext on the
     /// live host. Returns nil on failure.
     private func decryptCbc(_ ciphertext: [UInt8], sequenceNumber seq: UInt16) -> [UInt8]? {
         guard aesKey.count == 16, !ciphertext.isEmpty else { return nil }
@@ -83,7 +83,7 @@ private enum AesCbc {
                     out.withUnsafeMutableBytes { outPtr in
                         CCCrypt(CCOperation(kCCDecrypt),
                                 CCAlgorithm(kCCAlgorithmAES),
-                                CCOptions(0),  // no kCCOptionPKCS7Padding — whole blocks
+                                CCOptions(0),  // no kCCOptionPKCS7Padding - whole blocks
                                 keyPtr.baseAddress, key.count,
                                 ivPtr.baseAddress,
                                 ctPtr.baseAddress, ciphertext.count,

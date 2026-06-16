@@ -4,7 +4,7 @@
 //  Read host-Mac vitals (battery, CPU, RAM) for the in-stream stats overlay.
 //  Built on the public sandbox-safe APIs: IOPS for battery, Mach
 //  `host_statistics`/`host_statistics64` for CPU + RAM. GPU usage is NOT
-//  surfaced here — the only path on macOS is IOReport/IOAccelerator
+//  surfaced here - the only path on macOS is IOReport/IOAccelerator
 //  registry walking, which is technically reachable from a sandboxed app
 //  but needs more careful entitlement / fallback work. Future: GPU.
 //
@@ -26,14 +26,14 @@ public struct MacSystemStatsSnapshot: Sendable, Equatable {
     /// CPU usage 0-100, sum across all cores normalized to 100% =
     /// "all cores fully busy". Activity Monitor's "User + System" line.
     public var cpuPercent: Double?
-    /// RAM usage 0-100. (active + wired + compressed) / total — matches
+    /// RAM usage 0-100. (active + wired + compressed) / total - matches
     /// Activity Monitor's "Memory Used" percentage.
     public var ramPercent: Double?
 }
 
 /// Sampler. Holds the previous CPU tick counts so each `snapshot()` call
 /// returns a *delta-based* CPU percent rather than a since-boot integral.
-/// Singleton-style — the stats timer in StreamSession is the only caller
+/// Singleton-style - the stats timer in StreamSession is the only caller
 /// per active stream session and we want CPU sampling to be continuous
 /// across snapshots, not reset every probe.
 @MainActor
@@ -67,7 +67,7 @@ public final class MacSystemStats {
 
     /// Walks IOPSCopyPowerSourcesInfo for the first source that has a
     /// percentage. Returns nil on Macs with no battery (Mac Studio, Mac
-    /// mini, Mac Pro) — the caller treats nil as "no row to render".
+    /// mini, Mac Pro) - the caller treats nil as "no row to render".
     private func batteryPercentSnapshot() -> Int? {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
@@ -167,7 +167,7 @@ public final class MacSystemStats {
                     + UInt64(stats.wire_count)
                     + UInt64(stats.compressor_page_count))
                     * UInt64(pageSize)
-        // Physical RAM via sysctl hw.memsize — gives total installed RAM
+        // Physical RAM via sysctl hw.memsize - gives total installed RAM
         // in bytes, the denominator for the percent calc.
         var totalRAM: UInt64 = 0
         var size = MemoryLayout<UInt64>.size

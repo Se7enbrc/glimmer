@@ -9,19 +9,19 @@
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md. The
 //  Reed-Solomon algorithm and GF math originate from the nanors project by
 //  Joseph Calderon (MIT License, Copyright (c) 2021 Joseph Calderon),
-//  including its vendored deps/obl scalar GF(256) routines — notice preserved
+//  including its vendored deps/obl scalar GF(256) routines - notice preserved
 //  in CREDITS.md as the MIT license requires.
 //
 //  WHY pure-Swift instead of vendoring the C: the actual algorithm is rs.c
 //  (~190 lines) + a 256-entry GF log/exp/inv table. The rest of nanors
 //  (rswrapper.c, oblas_lite.c SIMD multiversioning) exists only for multi-ISA
-//  SIMD dispatch we don't need — FEC runs only on packet loss, a few hundred
+//  SIMD dispatch we don't need - FEC runs only on packet loss, a few hundred
 //  ~1.1KB shards per frame, far below the per-frame budget for scalar GF mul.
 //  Keeping it in Swift avoids a new C target / pbxproj C-compile flags / the
 //  "clean wipes the C lib" gotcha, and keeps all native code under
 //  Glimmer/Stream/Native/ as the task mandates.
 //
-//  FIELD: GF(2^8) with polynomial 0x11D (285) — the standard AES/QR field.
+//  FIELD: GF(2^8) with polynomial 0x11D (285) - the standard AES/QR field.
 //  We GENERATE the log/exp/inv tables at first use from the polynomial; this
 //  yields byte-identical tables to nanors/deps/obl/gf2_8_tables.h (verified
 //  poly 285). gfMul(a,b) = (a==0||b==0) ? 0 : EXP[LOG[a]+LOG[b]] (EXP doubled
@@ -29,7 +29,7 @@
 //
 //  MATRIX: a ps×ds Cauchy matrix over GF(256): p[j*ds + i] = INV[(ps + i) ^ j]
 //  for parity row j in [0,ps), data col i in [0,ds). This is the EXACT
-//  generator from rs.c:98-102 — the single most load-bearing constant. Note the
+//  generator from rs.c:98-102 - the single most load-bearing constant. Note the
 //  base is (ps + i), NOT (ds + i): using the wrong base makes a non-invertible
 //  matrix and decode returns wrong bytes with NO error.
 
@@ -275,7 +275,7 @@ struct ReedSolomon {
             let coeff = GF256.inv[Int(pivot)]
             // C does `scal(wrk + x*W + x, u, W)` which intentionally overruns the
             // logical W×W matrix into harmless adjacent scratch (nanors allocates
-            // a larger buffer); we scale only the in-row remainder [x, W) — cols
+            // a larger buffer); we scale only the in-row remainder [x, W) - cols
             // [0, x) are already 0 so this is byte-identical for every value that
             // is ever read, without the out-of-bounds write.
             Self.scal(&wrk, x * unknowns + x, coeff, unknowns - x)

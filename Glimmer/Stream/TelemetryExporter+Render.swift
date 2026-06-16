@@ -7,7 +7,7 @@
 //  `prometheus(_:extras:)` entry point and the `PromBuilder` accumulator that
 //  render a `TelemetrySnapshot` into the Prometheus text exposition form. The
 //  metric-family sections live in TelemetryExporter+RenderVideo / +RenderNetwork /
-//  +RenderAudio / +RenderSystem / +RenderP2.swift (pure moves — they append to
+//  +RenderAudio / +RenderSystem / +RenderP2.swift (pure moves - they append to
 //  the same builder). Split out of TelemetryExporter.swift to keep each unit
 //  focused; see that file for the exporter, gate, counters, and snapshot type.
 //
@@ -27,17 +27,17 @@ import SystemConfiguration
 
 enum TelemetryRenderer {
 
-    /// This Mac's name — the `client` label on every emitted series (the box
+    /// This Mac's name - the `client` label on every emitted series (the box
     /// doing the watching). Paired with `host` (the Sunshine server we connect
     /// TO, per-session) so a multi-client rig splits both ways: which Mac, and
     /// which gaming PC. Reads the LocalHostName rather than the kernel hostname:
     /// a default macOS setup answers gethostname() with a generic "Mac", useless
-    /// across clients — and LocalHostName is the same source a metrics shipper
+    /// across clients - and LocalHostName is the same source a metrics shipper
     /// would bake into its labels, so the two always agree. Resolved ONCE on
     /// first render (a 1Hz utility-queue tick, never the hot path),
     /// `.local`-trimmed, pre-escaped for the exposition format so builders can
     /// splice it into a label set verbatim.
-    /// Raw LocalHostName (JSON/display use — the NDJSON `client` field escapes
+    /// Raw LocalHostName (JSON/display use - the NDJSON `client` field escapes
     /// it itself). `clientLabelValue` is the Prometheus-escaped form.
     static let clientNameRaw: String = {
         var name = (SCDynamicStoreCopyLocalHostName(nil) as String?)
@@ -60,7 +60,7 @@ enum TelemetryRenderer {
 
     /// Render the full Prometheus text body. One `# HELP`/`# TYPE` pair per
     /// metric family followed by the sample line(s). Nil snapshot fields are
-    /// omitted entirely (Prometheus has no "null" — an absent series is the
+    /// omitted entirely (Prometheus has no "null" - an absent series is the
     /// correct representation of "no data this tick"). The sidecar Extras carry
     /// the counters sampled alongside the snapshot on the same capture tick.
     static func prometheus(_ snap: TelemetrySnapshot, extras: TelemetrySnapshot.Extras) -> String {
@@ -85,7 +85,7 @@ enum TelemetryRenderer {
         promAudio(&builder, snap, extras)
         promWiFi(&builder, snap)
         // ENV-SIGNAL shadow state + the conditional-keepalive judge counters
-        // (pings_sent / live cadence) — rendered right after the radio family
+        // (pings_sent / live cadence) - rendered right after the radio family
         // they gate on (TelemetryExporter+RenderNetwork.swift).
         promEnvSignal(&builder, extras)
         // P2 SESSION-LIFECYCLE: handshake breakdown, reconnect/disconnect, IDR
@@ -125,9 +125,9 @@ enum TelemetryRenderer {
             out += "\(name)\(labels) \(value)\n"
         }
 
-        /// Emit one Prometheus histogram family: `_bucket{le=…}` for each finite
+        /// Emit one Prometheus histogram family: `_bucket{le=...}` for each finite
         /// bound plus the `+Inf` bucket, then `_sum` and `_count`. Buckets are
-        /// cumulative ("le" semantics) — the tracker already maintains them that
+        /// cumulative ("le" semantics) - the tracker already maintains them that
         /// way. Skipped entirely when count == 0 (no data → absent series).
         mutating func emitHistogram(
             _ name: String, _ help: String, stage: LatencyHistogramSnapshot.Stage
@@ -135,7 +135,7 @@ enum TelemetryRenderer {
             guard stage.hasObservations else { return }
             out += "# HELP \(name) \(help)\n# TYPE \(name) histogram\n"
             // Insert the `le` label into the shared label set:
-            // {session="…",client="…",host="…",le="…"}.
+            // {session="...",client="...",host="...",le="..."}.
             // Each stage carries its OWN bounds (fine for sub-stages, coarse for
             // the composite glass-to-glass / input-to-photon stages).
             let prefix = String(labels.dropLast())  // drop trailing '}'
@@ -148,8 +148,8 @@ enum TelemetryRenderer {
         }
 
         /// Emit a Prometheus INFO metric: a constant-1 gauge whose value carries
-        /// in its LABELS (the standard `_info` pattern — e.g.
-        /// `glimmer_build_info{commit="…",date="…"} 1`). Used for build
+        /// in its LABELS (the standard `_info` pattern - e.g.
+        /// `glimmer_build_info{commit="...",date="..."} 1`). Used for build
         /// attribution so a scrape ties every series to a build.
         mutating func emitInfo(_ name: String, _ help: String, labels infoLabels: [(String, String)]) {
             out += "# HELP \(name) \(help)\n# TYPE \(name) gauge\n"
@@ -179,8 +179,8 @@ enum TelemetryRenderer {
         }
     }
 
-    /// Estimate a quantile (0…1) from cumulative histogram buckets via linear
-    /// interpolation within the matching bucket — the same model Prometheus's
+    /// Estimate a quantile (0...1) from cumulative histogram buckets via linear
+    /// interpolation within the matching bucket - the same model Prometheus's
     /// `histogram_quantile` uses. Returns nil when the histogram is empty. Used
     /// ONLY for the per-second NDJSON snapshot's convenience p50/p95/p99 fields;
     /// the Prometheus side ships raw buckets so Grafana computes its own.

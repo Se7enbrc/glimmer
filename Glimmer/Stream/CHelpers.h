@@ -18,7 +18,7 @@
 // MARK: - Batched UDP receive (recvmsg_x)
 // `recvmsg_x` is Darwin's batched datagram receive (the macOS analogue of
 // Linux's recvmmsg; used internally for QUIC). It reads MANY datagrams in one
-// syscall — at 4K240 the video socket sees ~14k packets/s, and one recvfrom per
+// syscall - at 4K240 the video socket sees ~14k packets/s, and one recvfrom per
 // packet is a large share of process CPU (issue #24). The public SDK ships only
 // the syscall NUMBER, not a prototype or `struct msghdr_x`, so we declare both
 // here. We use a gl_-prefixed struct name so a future SDK that exposes the real

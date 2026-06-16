@@ -9,7 +9,7 @@
 //  (seed + live loss floor). Split out of TelemetryCounters.swift to keep that
 //  file under the length limit (pure move, same idiom as the FramePacer split).
 //  The stored gauge state (the locks + values) stays on the class in
-//  TelemetryCounters.swift — stored properties cannot live in extensions; the
+//  TelemetryCounters.swift - stored properties cannot live in extensions; the
 //  new stores below are self-locked top-level classes (the `AudioTtfContext`
 //  idiom) so they need no class storage.
 //
@@ -22,7 +22,7 @@ extension TelemetryCounters {
     // MARK: - Audio playout gauges + cold-start
 
     /// Publish the live AUDIO playout state (buffer fill + A/V sync drift). Called
-    /// off the hot path — the audio decode path stamps it under the lock it already
+    /// off the hot path - the audio decode path stamps it under the lock it already
     /// holds for the decode (no extra lock on the audio path).
     func setAudioState(_ state: AudioState) {
         os_unfair_lock_lock(audioStateLock); audioStateValue = state; os_unfair_lock_unlock(audioStateLock)
@@ -36,7 +36,7 @@ extension TelemetryCounters {
 
     /// Lower the windowed MIN buffer-fill if this sample is a new trough. Called
     /// from the audio playout completion path (under the audio meter lock there,
-    /// not this one — these are independent locks, no nesting). One compare + a
+    /// not this one - these are independent locks, no nesting). One compare + a
     /// conditional store; far below the 5ms audio budget.
     func noteAudioBufferFill(ms: Double) {
         os_unfair_lock_lock(audioStateLock)
@@ -71,15 +71,15 @@ extension TelemetryCounters {
     /// link) metric.
     ///
     /// The anchor is the P2 `connectStart`, stamped at the connect edge in
-    /// `StreamSession.start()` immediately after `resetForNewSession` — which
+    /// `StreamSession.start()` immediately after `resetForNewSession` - which
     /// now ALSO runs at that edge, BEFORE any receiver exists, so neither this
     /// gauge nor the socket-open fallback epoch can carry a stale prior-session
     /// value into a warm-host race anymore (the chimeric audio_ttf mechanism).
     /// Measuring from the session-lifecycle anchor ties TTF to the real session
-    /// start. NOTE: a big reading here is usually NOT an anchor bug — a ~40s
+    /// start. NOTE: a big reading here is usually NOT an anchor bug - a ~40s
     /// reading has been observed as REAL host-side cold-start audio delay (our
     /// pings flowed at the designed cadence the whole time). Host audio bring-up
-    /// is bimodal — warm ~0.3-1s, cold ~4.6-40s — and client-uncontrollable; this
+    /// is bimodal - warm ~0.3-1s, cold ~4.6-40s - and client-uncontrollable; this
     /// gauge makes that delay visible, it cannot shrink it. The audio-socket-
     /// open epoch is kept only as a fallback when the connect anchor is somehow
     /// unset.
@@ -111,10 +111,10 @@ extension TelemetryCounters {
 /// ~4.6-40s, host-side and client-uncontrollable); classifying every session
 /// makes the warm-host-luck confound machine-checkable instead of agent-argued.
 ///
-/// HOST-IDLE APPROXIMATION (data-first honesty — the field is best-effort):
+/// HOST-IDLE APPROXIMATION (data-first honesty - the field is best-effort):
 /// `host_idle_s` measures from a WALL-CLOCK stamp of when THIS CLIENT's
 /// previous session ended (`markStreamEnd()`, called at session teardown), not
-/// the host's true last packet — teardown trails the last packet by under a
+/// the host's true last packet - teardown trails the last packet by under a
 /// second, close enough for a covariate whose interesting scale is minutes.
 /// The stamp is PROCESS-LIFETIME only: after an app relaunch there is no prior
 /// stamp and `host_idle_s` is simply omitted (absent ≠ 0). And it cannot see
@@ -155,7 +155,7 @@ final class AudioTtfContext: @unchecked Sendable {
     deinit { lock.deallocate() }
 
     /// Stamp the stream-end instant. Called from session teardown (the source
-    /// site wires this); idempotence doesn't matter — last writer wins and a
+    /// site wires this); idempotence doesn't matter - last writer wins and a
     /// double teardown stamps the same instant twice.
     func markStreamEnd() {
         let now = Date().timeIntervalSinceReferenceDate
@@ -168,7 +168,7 @@ final class AudioTtfContext: @unchecked Sendable {
     /// cold-start gauge it travels with), deriving `host_idle_s` from the
     /// previous stream-end stamp. Returns the latched record so the event row
     /// emits exactly what the scorecard will report. Called once per session
-    /// from the audio receive path's TTF latch — never a hot path.
+    /// from the audio receive path's TTF latch - never a hot path.
     @discardableResult
     func latchClassifying(pingToRtpMs: Double?, startup: String?) -> Record {
         let now = Date().timeIntervalSinceReferenceDate
@@ -193,7 +193,7 @@ final class AudioTtfContext: @unchecked Sendable {
         return record
     }
 
-    /// Clear the per-session record but PRESERVE the last-stream-end stamp —
+    /// Clear the per-session record but PRESERVE the last-stream-end stamp -
     /// the stamp is the previous session's teardown instant, exactly what this
     /// session's `host_idle_s` measures from.
     func resetForNewSession() {
@@ -205,9 +205,9 @@ final class AudioTtfContext: @unchecked Sendable {
 
 /// The TRUE cross-stream A/V alignment meter the deferred `av_lag_est_ms`
 /// derivation comment (TelemetryExporter+RenderNDJSON) called for. Two hot-path
-/// one-word writes feed it — the last-PRESENTED video RTP (90kHz host capture
+/// one-word writes feed it - the last-PRESENTED video RTP (90kHz host capture
 /// clock, written at the renderer-enqueue site) and the last-SCHEDULED audio RTP
-/// (written at the audio decode hand-off) — and a 1Hz cold read derives
+/// (written at the audio decode hand-off) - and a 1Hz cold read derives
 ///   skew_ms = video_presented_pos − (audio_scheduled_pos − buffer_fill_ms)
 /// with SIGN CONVENTION: positive = AUDIO LATE (behind video). The buffer-fill
 /// term converts the schedule-head position to the PLAYHEAD position (the
@@ -215,7 +215,7 @@ final class AudioTtfContext: @unchecked Sendable {
 ///
 /// AUDIO CLOCK UNITS (a past instrument break): the audio
 /// RTP timestamp is NOT a 48kHz sample clock. Sunshine advances it by
-/// `packetDuration` per packet (stream.cpp) — 5 per 5ms packet — i.e. a
+/// `packetDuration` per packet (stream.cpp) - 5 per 5ms packet - i.e. a
 /// 1 tick/ms MILLISECOND clock. The old /48 misread made the audio half
 /// advance at 1000/48000 ≈ 2% of wall rate, so skew ramped at wall×(1−1/48)
 /// ≈ 979 ms/s to the 10s sanity guard and re-anchored on a 12s metronome
@@ -231,16 +231,16 @@ final class AudioTtfContext: @unchecked Sendable {
 /// an arbitrary offset), so both sides are measured from a PAIR-ANCHOR latched
 /// at the first derive tick where both streams are flowing. The host-side
 /// video-vs-audio capture offset at the anchor instant (≈ the video pipeline
-/// e2e, single-digit ms) rides along as a constant bias — the trend and the
+/// e2e, single-digit ms) rides along as a constant bias - the trend and the
 /// steps are the signal, the absolute is approximate. The anchor pair drops
-/// whenever either stream goes stale (>2s — present-suppressed/AFK windows,
+/// whenever either stream goes stale (>2s - present-suppressed/AFK windows,
 /// session teardown) or the sanity bound trips (an RTP discontinuity), and
-/// re-latches at the next tick where both flow — counted in `rebaseTotal`, so a
+/// re-latches at the next tick where both flow - counted in `rebaseTotal`, so a
 /// mid-session re-baseline is never a silent step. Never a permanent give-up:
 /// every dark state self-heals one tick after both streams resume.
 ///
 /// Self-locked (the `AudioTtfContext` idiom); the per-write cost is one clock
-/// read + an unfair lock + two stores at ≤240Hz video / 200Hz audio — the same
+/// read + an unfair lock + two stores at ≤240Hz video / 200Hz audio - the same
 /// always-live budget as the audio meter's per-packet accounting.
 final class AudioVideoSkewStore: @unchecked Sendable {
     static let shared = AudioVideoSkewStore()
@@ -252,8 +252,8 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// Sanity bound (ms) on a derived skew: beyond this the anchors are judged
     /// inconsistent (host RTP discontinuity) and the pair re-latches.
     static let sanityBoundMs: Double = 10_000
-    /// Signed bucket bounds (ms) for the session percentile accumulator —
-    /// resolution concentrated around the 0…150ms cushion range where the
+    /// Signed bucket bounds (ms) for the session percentile accumulator -
+    /// resolution concentrated around the 0...150ms cushion range where the
     /// lip-sync trade lives, with the ~125ms ITU annoyance threshold bracketed.
     static let bucketBoundsMs: [Double] = [
         -1000, -500, -250, -125, -90, -60, -40, -25, -10, 0,
@@ -262,14 +262,14 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// Video RTP is a 90kHz capture clock (RTP standard for video).
     static let videoRtpTicksPerMs = 90.0
     /// The two known audio RTP clock families: Sunshine's packet-duration
-    /// MILLISECOND clock (1 tick/ms — the live host, the default) and a true
-    /// 48kHz sample clock (48 ticks/ms — what the RTP header would suggest and
+    /// MILLISECOND clock (1 tick/ms - the live host, the default) and a true
+    /// 48kHz sample clock (48 ticks/ms - what the RTP header would suggest and
     /// what the old conversion wrongly assumed). The measured-rate snap picks
     /// between them; see the AUDIO CLOCK UNITS doc on the type.
     static let audioTicksPerMsCandidates: [Double] = [1.0, 48.0]
     /// Minimum audio-flow span before the measured advance rate is trusted to
     /// snap the clock family. At ~200 packets/s, 2s ≈ 400 packets; arrival
-    /// clumping on a jittery link distorts a 2s window by a few percent — the
+    /// clumping on a jittery link distorts a 2s window by a few percent - the
     /// candidate families are 4800% apart, so a mis-snap would take a clumping
     /// pathology no real link produces.
     static let audioRateCalibrationNanos: UInt64 = 2_000_000_000
@@ -287,14 +287,14 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     // Audio clock-family calibration: anchor of the first audio note (the
     // measured-rate baseline) + the resolved ticks/ms. Nominal 1.0 (the live
     // host's ms clock) until the first derive ≥2s of audio flow snaps it to
-    // the nearest candidate family — once, then latched for the session.
+    // the nearest candidate family - once, then latched for the session.
     private var audioRateAnchorRtp: UInt32 = 0
     private var audioRateAnchorNanos: UInt64 = 0
     private var audioTicksPerMs = 1.0
     private var audioRateResolved = false
     // Session accumulator (scorecard percentiles): bucket counts + exact
     // min/max/sum, plus an explicit OVERFLOW count for samples past the last
-    // bound so the quantile walk's rank space covers EVERY sample — the old
+    // bound so the quantile walk's rank space covers EVERY sample - the old
     // fall-through made overflow samples invisible to `cumulative` while still
     // counted in `rank`, which collapsed p50=p95=p99=max the moment a session
     // had any overflow mass (a broken-units session read one value four ways).
@@ -310,7 +310,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     deinit { lock.deallocate() }
 
     /// VIDEO half: the RTP timestamp of the frame that just reached the
-    /// renderer. Called from the present site (gate-on path only — the
+    /// renderer. Called from the present site (gate-on path only - the
     /// `FrameTimingTracker.shared` nil-check upstream keeps telemetry-off
     /// sessions zero-cost). 0 = untracked frame, ignored.
     func noteVideoPresented(rtp: UInt32) {
@@ -349,7 +349,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
 
     /// The 1Hz cold read: derive the current skew (ms, + = audio late), or nil
     /// when either stream is dark/stale or the pair is (re-)anchoring this
-    /// tick. `accumulate` feeds the session percentile accumulator — set it
+    /// tick. `accumulate` feeds the session percentile accumulator - set it
     /// from exactly ONE caller cadence (the NDJSON tick) so the scorecard
     /// can't double-count; other readers (Prometheus) derive without feeding.
     func deriveSkewMs(bufferFillMs: Double?, accumulate: Bool) -> Double? {
@@ -373,7 +373,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
             return nil // the anchor tick defines the epoch, measures nothing
         }
         // Wrap-safe modular distances on the two host capture clocks (90kHz
-        // video / the calibrated audio clock — see AUDIO CLOCK UNITS on the
+        // video / the calibrated audio clock - see AUDIO CLOCK UNITS on the
         // type); both monotone within any realistic session.
         let videoMs = Double(videoLastRtp &- videoAnchorRtp) / Self.videoRtpTicksPerMs
         let audioMs = Double(audioLastRtp &- audioAnchorRtp) / audioTicksPerMs
@@ -390,7 +390,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// once ≥2s of audio has flowed, measure ticks-per-ms against the wall
     /// clock and latch the nearest known family (ratio space, so the compare
     /// is symmetric around the 48x gap). Until it resolves, derives run on
-    /// the nominal ms clock — correct for the live Sunshine host from tick 1;
+    /// the nominal ms clock - correct for the live Sunshine host from tick 1;
     /// on a true-48kHz host the pre-snap derives blow the sanity bound and
     /// re-anchor for ≤2s, then the snap lands and the instrument self-heals
     /// (bounded recovery, never a permanent give-up). A zero/garbage measured
@@ -451,8 +451,8 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// Bucket-interpolated quantile. Lock already held; `sampleCount > 0`
     /// guaranteed by the caller. Clamped to the exact min/max so a single
     /// sample never reads as a bucket edge. The OVERFLOW tail is a real
-    /// bucket in the walk — [last bound, exact max] with `overflowCount`
-    /// mass — so a rank landing past the fixed bounds interpolates instead
+    /// bucket in the walk - [last bound, exact max] with `overflowCount`
+    /// mass - so a rank landing past the fixed bounds interpolates instead
     /// of pinning every quantile to the max (the degenerate-quantile half of
     /// a past av_skew break).
     private func quantileLocked(_ quantile: Double) -> Double {
@@ -515,13 +515,13 @@ final class AudioVideoSkewStore: @unchecked Sendable {
 /// limit-cycle fix): the seed the session started from (ridden by the
 /// `audio_ttf` event so every session self-describes its starting cushion) and
 /// the LIVE learned loss floor (1Hz `audio_cushion_floor_ms` field). Stored
-/// here — not on `AudioState` — so the exporter reads it without touching the
+/// here - not on `AudioState` - so the exporter reads it without touching the
 /// snapshot structs; written only on the rare seed/learn/decay edges.
 final class AudioCushionTelemetry: @unchecked Sendable {
     static let shared = AudioCushionTelemetry()
 
     /// One session's seed record, latched at audio-decoder init (last writer
-    /// wins — one audio init per session IS the session edge).
+    /// wins - one audio init per session IS the session edge).
     struct Seed: Sendable {
         let link: String
         let targetMs: Double

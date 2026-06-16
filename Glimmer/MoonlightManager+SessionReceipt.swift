@@ -4,13 +4,13 @@
 //  The end-of-stream session receipt: a small per-(host, mode) record stashed
 //  in UserDefaults when a session ends. Two readers: the launcher's "Stream
 //  ended" toast (the quiet "2h 12m · 12 ms median" line) and the Settings
-//  track's quality-guidance copy. Harness-independent by construction — every
+//  track's quality-guidance copy. Harness-independent by construction - every
 //  number rides an ALWAYS-LIVE surface (the ENet RTT EWMA via
 //  `StreamingBackend.estimatedRtt`, `StatsCollector`'s session byte total),
 //  never the gate-on telemetry rig, so removing the telemetry exporter
 //  cannot take this feature with it.
 //
-//  ── SHARED KEY CONTRACT (the Settings track reads this — keep in sync) ──
+//  ── SHARED KEY CONTRACT (the Settings track reads this - keep in sync) ──
 //
 //    Key:   "glimmer.lastSession.<hostId>.<width>x<height>@<hz>"
 //           e.g. "glimmer.lastSession.0123ABCD.2560x1440@120"
@@ -28,13 +28,13 @@
 //  experiments and failed launches, and would poison the guidance numbers.
 //
 //  Lifecycle (three writers, one rendezvous):
-//    1. `markStreamStart`  — MoonlightManager.stream(), arms the latch with
+//    1. `markStreamStart`  - MoonlightManager.stream(), arms the latch with
 //                            the session's identity (host + requested mode).
-//    2. `markSessionLive`  — first .connectionEstablished / .firstFrame edge,
+//    2. `markSessionLive`  - first .connectionEstablished / .firstFrame edge,
 //                            stamps the wall clock the duration counts from.
-//    3. `captureStreamEnd` — the ONE engine-side hook (StreamSession.stop(),
+//    3. `captureStreamEnd` - the ONE engine-side hook (StreamSession.stop(),
 //                            before the backend tears down), grabs RTT+bytes.
-//    4. `finalizeSession`  — MoonlightManager's teardown cleanup, builds the
+//    4. `finalizeSession`  - MoonlightManager's teardown cleanup, builds the
 //                            receipt, gates ≥ 5 min, writes the blob.
 //
 
@@ -46,12 +46,12 @@ import os
 /// One finished session's footprint. Codable shape IS the key contract above.
 struct SessionReceipt: Codable, Equatable {
     var durationSeconds: TimeInterval
-    /// The ENet control channel's RTT EWMA read at stream end — a smoothed
+    /// The ENet control channel's RTT EWMA read at stream end - a smoothed
     /// central estimate ("median-grade"), deliberately sourced from the
     /// always-live channel and never the gated latency rig.
     var medianRttMs: Double?
     /// Session-average video goodput: total received video bytes · 8 over the
-    /// live wall time. Includes idle/menu time — that's what "average" means.
+    /// live wall time. Includes idle/menu time - that's what "average" means.
     var avgGoodputMbps: Double?
     var width: Int
     var height: Int
@@ -83,7 +83,7 @@ struct SessionReceipt: Codable, Equatable {
 /// UserDefaults-backed stash + the cross-actor rendezvous for the numbers
 /// captured at the teardown edge. All statics are NSLock-guarded because the
 /// writers span the main actor (start/live/finalize) and the StreamSession
-/// actor (the end-of-stream capture) — same latch discipline as
+/// actor (the end-of-stream capture) - same latch discipline as
 /// `StreamRouteProbe.latchHost`.
 enum SessionReceiptStore {
 
@@ -107,7 +107,7 @@ enum SessionReceiptStore {
     nonisolated(unsafe) private static var endVideoBytes: UInt64?
     nonisolated(unsafe) private static var endedAt: Date?
 
-    /// The exact persisted-key contract — single source for both tracks.
+    /// The exact persisted-key contract - single source for both tracks.
     static func key(hostId: String, width: Int, height: Int, refreshHz: Int) -> String {
         "glimmer.lastSession.\(hostId).\(width)x\(height)@\(refreshHz)"
     }
@@ -124,7 +124,7 @@ enum SessionReceiptStore {
     }
 
     /// Stamp the wall clock the duration counts from. Latched ONCE per
-    /// session — `.connectionEstablished` and the `.firstFrame` promote path
+    /// session - `.connectionEstablished` and the `.firstFrame` promote path
     /// both call this, and reconnect-quality events must not restart it.
     static func markSessionLive() {
         lock.lock()
@@ -136,10 +136,10 @@ enum SessionReceiptStore {
 
     /// Capture the always-live end-of-session numbers. Called from
     /// `StreamSession.stop()` (the one engine-side hook) BEFORE the backend
-    /// tears down — `estimatedRtt()` dies with the connection, and the
+    /// tears down - `estimatedRtt()` dies with the connection, and the
     /// collector resets on the next session. `receivedBytes` has no accessor
     /// of its own, so we take the same unfair lock the collector's own
-    /// accessors take — a one-shot read at the teardown edge, never hot path.
+    /// accessors take - a one-shot read at the teardown edge, never hot path.
     static func captureStreamEnd(rttMs: Double?, collector: StatsCollector?) {
         var videoBytes: UInt64?
         if let collector {

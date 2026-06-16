@@ -13,16 +13,16 @@
 //    * ONE CHHapticEngine + ONE infinite continuous-event player per motor
 //      locality, created lazily on the first NONZERO rumble and kept for the
 //      pad's lifetime. Level changes are CHHapticDynamicParameter intensity
-//      updates on the long-lived player — at 135/s, rebuilding players would
+//      updates on the long-lived player - at 135/s, rebuilding players would
 //      churn the haptics server for no benefit.
 //    * Latest-wins delivery: the enet receive thread only deposits the newest
 //      (low, high) pair per pad and returns; a dedicated serial queue drains
-//      it. Rumble is pure latest-state — a backlog of stale intensities is
-//      worse than skipping straight to the newest — and the control channel's
+//      it. Rumble is pure latest-state - a backlog of stale intensities is
+//      worse than skipping straight to the newest - and the control channel's
 //      ACK path must never block on Core Haptics.
 //    * Every engine call is failable and QUIET (Diag.info, never warnings):
 //      engines stop/reset on their own (controller power management, system
-//      reclaim) and the recovery is always the same — drop the channel and
+//      reclaim) and the recovery is always the same - drop the channel and
 //      lazily rebuild on the next nonzero event. Dynamic, recovering, never a
 //      permanent give-up.
 //    * No stuck motors, ever: (0,0) from the host idles the players; stream
@@ -63,7 +63,7 @@ final class ControllerHaptics: @unchecked Sendable {
 
     /// One engine-creation attempt per second per pad while failing: at the
     /// wire's ~135 events/s an unguarded retry would hammer the haptics server
-    /// every ~7ms (controller asleep, resource exhaustion) — but the retry
+    /// every ~7ms (controller asleep, resource exhaustion) - but the retry
     /// never stops entirely, so a recovered pad resumes rumbling by itself.
     /// (Internal, not private: the +Actuation split reads it.)
     static let engineRetryNanos: UInt64 = 1_000_000_000
@@ -75,17 +75,17 @@ final class ControllerHaptics: @unchecked Sendable {
         [GCHapticsLocality.leftTrigger.rawValue, GCHapticsLocality.rightTrigger.rawValue]
 
     /// The actuation queue. .userInitiated, not .userInteractive: rumble is
-    /// feedback, not input — it must feel immediate but may never compete with
+    /// feedback, not input - it must feel immediate but may never compete with
     /// the enet ACK path or the render loop for scheduling. (Internal for the
     /// +Actuation split's engine stop/reset handler hops.)
     let queue = DispatchQueue(label: "io.ugfugl.Glimmer.haptics", qos: .userInitiated)
 
     /// Latest-wins inbox. Lock-guarded (NOT queue-confined) because the writer
-    /// is the enet receive thread, which deposits and leaves — one dictionary
+    /// is the enet receive thread, which deposits and leaves - one dictionary
     /// write + one flag read under a lock is the entire cost it ever pays.
     private let lock = NSLock()
     private var pendingBySlot: [UInt8: (low: UInt16, high: UInt16)] = [:]
-    /// Latest-wins trigger-motor inbox (SS_RUMBLE_TRIGGERS) — the
+    /// Latest-wins trigger-motor inbox (SS_RUMBLE_TRIGGERS) - the
     /// pendingBySlot contract, for the independent trigger wire channel.
     private var pendingTriggersBySlot: [UInt8: (left: UInt16, right: UInt16)] = [:]
     /// Latest-wins light-bar inbox (SET_RGB_LED), coalesced because games can
@@ -108,12 +108,12 @@ final class ControllerHaptics: @unchecked Sendable {
     private var suspended = false
     /// DEBOUNCE grace before a resign-active actually suspends. macOS resigns
     /// active for plenty of TRANSIENT reasons (a notification banner, Spotlight,
-    /// an OS dialog, a fat-fingered Cmd-Tab) — and a controller player is still
+    /// an OS dialog, a fat-fingered Cmd-Tab) - and a controller player is still
     /// playing THROUGH all of those, since they drive the game with the pad, not
     /// the Mac. Tearing the engines down on a sub-second focus blip just killed
     /// rumble mid-combat. So we wait this long after a resign before suspending; a
     /// didBecomeActive within the window cancels it. A REAL walk-away (sustained
-    /// background) still suspends and frees haptics resources — only the blips are
+    /// background) still suspends and frees haptics resources - only the blips are
     /// spared. Resume is never debounced (restore rumble at once).
     static let suspendGraceSeconds: TimeInterval = 4.0
     /// The pending debounced-suspend work item (queue-confined). Non-nil ==
@@ -122,7 +122,7 @@ final class ControllerHaptics: @unchecked Sendable {
     private var pendingSuspend: DispatchWorkItem?
     /// Stream-lifecycle gate, armed at init and on every stopAll(). A late
     /// event from a dying session must not re-spin motors AFTER the teardown
-    /// (0,0) — once the channel is dead nobody can deliver the next "off".
+    /// (0,0) - once the channel is dead nobody can deliver the next "off".
     /// startVideoStage lifts it via streamActivated() when it wires onRumble.
     private var quiesced = true
 
@@ -149,11 +149,11 @@ final class ControllerHaptics: @unchecked Sendable {
     // MARK: - Registration (ControllerForwarder, main thread)
 
     /// Map a forwarder slot to its pad. Registration alone never spins a
-    /// motor — engines are created lazily on the first nonzero rumble — so
+    /// motor - engines are created lazily on the first nonzero rumble - so
     /// it is safe to register pads that turn out to have no haptics at all.
     func register(slot: UInt8, controller: GCController) {
         // The box is built HERE, on the caller's thread, so the non-Sendable
-        // GCController itself never crosses into the @Sendable closure — only
+        // GCController itself never crosses into the @Sendable closure - only
         // the @unchecked Sendable box does (see PadHaptics for why that's ok).
         let pad = PadHaptics(controller: controller)
         queue.async { [weak self] in
@@ -186,12 +186,12 @@ final class ControllerHaptics: @unchecked Sendable {
     /// state, not inherited: the suspend flag is otherwise edge-driven
     /// (resign/become notifications), so a stream started while the app was
     /// ALREADY inactive at singleton init would inherit a stale "active" and
-    /// buzz a pad the user isn't holding — and the mirror-image stale would
+    /// buzz a pad the user isn't holding - and the mirror-image stale would
     /// gate a stream started active. The next notification keeps it
-    /// self-correcting either way (dynamic, recovering — never a latched
+    /// self-correcting either way (dynamic, recovering - never a latched
     /// give-up). The main hop is for NSApplication (MainActor); a rumble
     /// event landing during the hop drains against the still-armed quiesce
-    /// gate and is superseded by the next host event within a game frame —
+    /// gate and is superseded by the next host event within a game frame -
     /// the file's standing latest-wins discipline.
     func streamActivated() {
         DispatchQueue.main.async { [weak self] in
@@ -199,7 +199,7 @@ final class ControllerHaptics: @unchecked Sendable {
             let active = MainActor.assumeIsolated { NSApplication.shared.isActive }
             self.queue.async { [weak self] in
                 guard let self else { return }
-                // The measured-state seed is authoritative — drop any debounced
+                // The measured-state seed is authoritative - drop any debounced
                 // suspend still waiting out its grace so it can't fire a stale
                 // teardown into this fresh session.
                 self.pendingSuspend?.cancel()
@@ -217,7 +217,7 @@ final class ControllerHaptics: @unchecked Sendable {
     func stopAll(reason: String) {
         queue.async { [weak self] in
             guard let self else { return }
-            // Drop any debounced suspend in flight — the session is ending, so its
+            // Drop any debounced suspend in flight - the session is ending, so its
             // teardown is moot and must not fire into the next session.
             self.pendingSuspend?.cancel()
             self.pendingSuspend = nil
@@ -232,14 +232,14 @@ final class ControllerHaptics: @unchecked Sendable {
 
     /// Deposit the newest motor pair for a pad and return immediately.
     /// (0,0) is a real event (motors off) and flows like any other value.
-    /// (`rumble_events_total` is counted upstream at protocol dispatch —
-    /// EnetControlChannel.handleRumbleData, BEFORE any validity guard — so a
+    /// (`rumble_events_total` is counted upstream at protocol dispatch -
+    /// EnetControlChannel.handleRumbleData, BEFORE any validity guard - so a
     /// zero there proves the host sent nothing; it used to increment behind
     /// the slot guard below, which weakened that proof.)
     func setRumble(controllerNumber: UInt16, lowFreq: UInt16, highFreq: UInt16) {
         // The host echoes back the controllerNumber WE assigned (the
         // forwarder's 0..15 slot; Sunshine clamps to Enet.maxGamepads pads).
-        // Anything outside that range cannot be ours — drop it rather than
+        // Anything outside that range cannot be ours - drop it rather than
         // truncate into some other pad's motors, and COUNT the drop so the
         // receipt arithmetic stays provable postmortem:
         // deposited = rumble_events_total − rumble_dropped_invalid_total.
@@ -258,7 +258,7 @@ final class ControllerHaptics: @unchecked Sendable {
         }
     }
 
-    /// Deposit the newest trigger-motor pair for a pad (SS_RUMBLE_TRIGGERS) —
+    /// Deposit the newest trigger-motor pair for a pad (SS_RUMBLE_TRIGGERS) -
     /// the setRumble contract, for the trigger localities. (0,0) is a real
     /// event (triggers off) and flows like any other value.
     func setTriggerRumble(controllerNumber: UInt16, left: UInt16, right: UInt16) {
@@ -275,7 +275,7 @@ final class ControllerHaptics: @unchecked Sendable {
     }
 
     /// Deposit the newest light-bar color for a pad (SET_RGB_LED). Latest
-    /// wins, like rumble — a stale color is strictly worse than the newest.
+    /// wins, like rumble - a stale color is strictly worse than the newest.
     func setLight(controllerNumber: UInt16, red: UInt8, green: UInt8, blue: UInt8) {
         guard controllerNumber < UInt16(Enet.maxGamepads) else { return }
         let slot = UInt8(controllerNumber)
@@ -318,13 +318,13 @@ final class ControllerHaptics: @unchecked Sendable {
 
     // (apply / applyTriggers / applyLight, the locality plans, the engine
     // channel machinery, and the per-pad state types live in
-    // ControllerHaptics+Actuation.swift — the topic split.)
+    // ControllerHaptics+Actuation.swift - the topic split.)
 
     private func setSuspended(_ suspended: Bool) {
         queue.async { [weak self] in
             guard let self else { return }
             // Any fresh activation edge supersedes a still-pending debounced
-            // suspend — cancel it first so a quick resign→become can't strand a
+            // suspend - cancel it first so a quick resign→become can't strand a
             // teardown that fires AFTER the user is already back.
             self.pendingSuspend?.cancel()
             self.pendingSuspend = nil
@@ -334,7 +334,7 @@ final class ControllerHaptics: @unchecked Sendable {
                 self.applySuspended(false, why: "app became active")
                 return
             }
-            // DEBOUNCE the suspend — only tear down if the app stays inactive past
+            // DEBOUNCE the suspend - only tear down if the app stays inactive past
             // the grace window (a transient focus loss never reaches here).
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
@@ -357,8 +357,8 @@ final class ControllerHaptics: @unchecked Sendable {
         self.suspended = suspended
         Diag.info("rumble gate \(suspended ? "ON" : "off") (\(why))", Self.logCategory)
         // Resuming needs no action: the next host event re-actuates (and
-        // lazily rebuilds engines). Suspending tears engines down — not
-        // just idles them — so a backgrounded stream holds no haptics
+        // lazily rebuilds engines). Suspending tears engines down - not
+        // just idles them - so a backgrounded stream holds no haptics
         // server resources and cannot buzz a pad the user set down.
         guard suspended else { return }
         for (slot, pad) in pads {

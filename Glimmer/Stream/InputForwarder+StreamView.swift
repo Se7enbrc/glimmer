@@ -25,10 +25,10 @@ extension InputForwarder: StreamInputViewDelegate {
 
         // Quit hotkey on key-down only. Don't forward. This check happens
         // BEFORE the sys-key capture gate so a Cmd-bearing quit hotkey (the
-        // default ⌃⌘Q) keeps working even when capture is off — that's an
+        // default ⌃⌘Q) keeps working even when capture is off - that's an
         // intentional Glimmer-level intercept, not a forward to the host.
         if !event.isARepeat, quitHotkeyProvider().matches(event: event, modifiers: mods) {
-            log.info("Quit hotkey detected — invoking onQuitHotkey")
+            log.info("Quit hotkey detected - invoking onQuitHotkey")
             onQuitHotkey?()
             return true
         }
@@ -37,14 +37,14 @@ extension InputForwarder: StreamInputViewDelegate {
         // ordered BEFORE the sys-keys gate so a non-Cmd default (⌃⌥S) is
         // honoured regardless of `captureSysKeys`, and a Cmd-bearing custom
         // chord still works when the user has explicitly opted in to capture.
-        // Consumed — never forwarded to the host.
+        // Consumed - never forwarded to the host.
         if !event.isARepeat, statsHotkeyProvider().matches(event: event, modifiers: mods) {
-            log.info("Stats hotkey detected — invoking onStatsHotkey")
+            log.info("Stats hotkey detected - invoking onStatsHotkey")
             onStatsHotkey?()
             return true
         }
 
-        // Telemetry-bookmark chord (signal 4 — "that felt bad"). CLIENT-ONLY:
+        // Telemetry-bookmark chord (signal 4 - "that felt bad"). CLIENT-ONLY:
         // consumed here and NEVER forwarded to the host, exactly like the
         // quit/stats intercepts above (and the exit-chord interception this
         // mirrors). Ordered BEFORE the sys-keys gate so the non-Cmd default (⌃B)
@@ -53,38 +53,38 @@ extension InputForwarder: StreamInputViewDelegate {
         //
         // GATED on telemetry being ON: the chord is only intercepted (swallowed)
         // when there's a handler wired AND `TelemetryGate.isEnabled`. With
-        // telemetry OFF — the default for normal play — recording the marker
+        // telemetry OFF - the default for normal play - recording the marker
         // would be a no-op (`telemetryExporter` is nil), so swallowing ⌃B would
         // just EAT a keystroke the host should have seen. Letting it fall through
         // to the normal forward path below means ⌃B reaches the host like any
         // other key when there's no live telemetry to bookmark into.
         if !event.isARepeat, onBookmarkHotkey != nil, TelemetryGate.isEnabled,
            bookmarkHotkeyProvider().matches(event: event, modifiers: mods) {
-            log.info("Bookmark hotkey detected — invoking onBookmarkHotkey")
+            log.info("Bookmark hotkey detected - invoking onBookmarkHotkey")
             onBookmarkHotkey?()
             return true
         }
 
         // macOS Accessibility Zoom keyboard shortcuts. These are pure OS
-        // chords with no in-game meaning — if the user accidentally hits one
+        // chords with no in-game meaning - if the user accidentally hits one
         // mid-fight (especially ⌥⌘8, which is right next to ⌥⌘9 and ⌥⌘0 that
         // many games bind to ability slots), macOS slams a full-screen zoom
         // on top of the stream. Swallow them BEFORE the sys-keys gate so
         // they're consumed regardless of `captureSysKeys`. Returning `true`
         // from this delegate makes StreamInputView.keyDown skip the
         // `super.keyDown` call, which is what prevents macOS from seeing
-        // the event and engaging the zoom — verified by reading
+        // the event and engaging the zoom - verified by reading
         // StreamInputView.keyDown above, which only walks the responder
         // chain via super when the delegate signals it didn't consume.
         //
-        //   ⌥⌘8  — toggle Accessibility Zoom on/off
-        //   ⌥⌘=  — zoom in (also ⌥⌘+ on layouts where = needs shift)
-        //   ⌥⌘-  — zoom out
+        //   ⌥⌘8  - toggle Accessibility Zoom on/off
+        //   ⌥⌘=  - zoom in (also ⌥⌘+ on layouts where = needs shift)
+        //   ⌥⌘-  - zoom out
         let zoomChars: Set<String> = ["8", "=", "+", "-"]
         let isMacOSZoomChord = mods == [.command, .option]
             && zoomChars.contains(event.charactersIgnoringModifiers ?? "")
         if !event.isARepeat, isMacOSZoomChord {
-            // SECURITY: do not log the character — even on this code path
+            // SECURITY: do not log the character - even on this code path
             // (which only fires for ⌥⌘8/=/-/+), an attacker who can race a
             // key bind across this branch could observe arbitrary chars
             // in unified log otherwise. Log keyCode + mods, which are
@@ -103,7 +103,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // ⌘-Tab / ⌘-Space / ⌘-H / ⌘-Q etc. natively.
         //
         // Implementation note: `event.isARepeat` events fire while the user
-        // is holding a Cmd-letter combo. We let those fall through too — the
+        // is holding a Cmd-letter combo. We let those fall through too - the
         // responder chain has its own auto-repeat semantics for system
         // shortcuts and we don't want to double-fire.
         if mods.contains(.command), !captureSysKeys {
@@ -153,7 +153,7 @@ extension InputForwarder: StreamInputViewDelegate {
         guard isReady else { return }
 
         // Use the OS keyCode to figure out which side (L vs R) of the modifier
-        // changed — Win VK has separate codes for LSHIFT (0xA0) and RSHIFT
+        // changed - Win VK has separate codes for LSHIFT (0xA0) and RSHIFT
         // (0xA1), and games sometimes care.
         let modByte = Int8(bitPattern: modifierByte(from: mods))
         let isDown: (NSEvent.ModifierFlags) -> Bool = { mods.contains($0) }
@@ -173,8 +173,8 @@ extension InputForwarder: StreamInputViewDelegate {
         ]
 
         // Cmd is a macOS-specific modifier. When sys-key capture is off, we
-        // don't want the host to ever see VK_LWIN / VK_RWIN — not even as a
-        // bare modifier press — because that would still pop the host's
+        // don't want the host to ever see VK_LWIN / VK_RWIN - not even as a
+        // bare modifier press - because that would still pop the host's
         // Start menu on key-up. Suppress both left and right Cmd here. Other
         // modifiers (Ctrl → CTRL, Shift → SHIFT, Option → ALT) ARE forwarded
         // because they're not macOS-owned in the same way: most apps treat
@@ -219,7 +219,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // Coalesce queued mouseMoved events the way moonlight-qt does it
         // (SDL_PeepEvents drains all pending SDL_MOUSEMOTION events and
         // sums xrel/yrel into a single LiSendMouseMoveEvent). Without this
-        // the host receives one mouse event per macOS NSEvent — at ~120Hz
+        // the host receives one mouse event per macOS NSEvent - at ~120Hz
         // on ProMotion that's ~120 acceleration decisions per second
         // applied to tiny deltas, which feels twitchy / over-accelerated
         // compared to moonlight-qt's behaviour (host accel applied once
@@ -244,7 +244,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // NSEvent.deltaX/Y fallback (an event with no CGEvent backing), so
         // slow trackpad motion under 1px/event isn't rounded away.
         mouseResidualX += accumDx
-        mouseResidualY += accumDy  // macOS deltaY is down-positive — matches Windows VK input.
+        mouseResidualY += accumDy  // macOS deltaY is down-positive - matches Windows VK input.
         let dxInt = Int(mouseResidualX.rounded(.towardZero))
         let dyInt = Int(mouseResidualY.rounded(.towardZero))
         if dxInt != 0 || dyInt != 0 {
@@ -256,7 +256,7 @@ extension InputForwarder: StreamInputViewDelegate {
             record("LiSendMouseMoveEvent", rc)
         }
 
-        // Don't spam absolute position on every motion event — that's a
+        // Don't spam absolute position on every motion event - that's a
         // mode the host enters separately for Desktop apps. Most games want
         // relative-only and absolute updates compete with the relative
         // deltas, causing jitter. The mouseDown handlers below send a
@@ -264,7 +264,7 @@ extension InputForwarder: StreamInputViewDelegate {
 
         // No warp-to-centre here. Under the SDL associate-false model
         // (enterCapturedMode) the OS does not move the system cursor at all, so
-        // it can never reach a screen edge / hot corner — the per-motion
+        // it can never reach a screen edge / hot corner - the per-motion
         // warpCursorIfNearEdge defense (and the edge→centre reconciliation delta
         // it leaked, the P0 mouse-snap bug) is gone by construction. Deltas read
         // off kCGMouseEventDeltaX/Y are pure relative HID; nothing post-warp can
@@ -273,12 +273,12 @@ extension InputForwarder: StreamInputViewDelegate {
         // No per-motion cursor re-hide here. Steady-state invisibility over the
         // stream is owned by the transparent NSCursor in
         // `StreamInputView.cursorUpdate(with:)`, which AppKit re-invokes on every
-        // pointer motion over the view — so after ANY OS-initiated re-show
+        // pointer motion over the view - so after ANY OS-initiated re-show
         // (display/HDR/VRR reconfig, sleep-wake, HID attach) the very next motion
         // event re-applies the invisible image with ZERO flash. The old
         // net-neutral CGDisplayShowCursor→HideCursor reassert fired here on every
         // move and let the WindowServer (compositing on its own vsync, not our
-        // runloop turn) sample the cursor in the gap between the paired calls —
+        // runloop turn) sample the cursor in the gap between the paired calls -
         // that was the motion-correlated arrow flash. Deleted.
     }
 
@@ -300,12 +300,12 @@ extension InputForwarder: StreamInputViewDelegate {
         guard isReady else { return }
         // DEADZONE REMOVED. This handler
         // used to clamp each event's delta to ±1.0 line before the WHEEL_DELTA
-        // scale — a per-event magnitude cap added
+        // scale - a per-event magnitude cap added
         // because a third-party mouse driver's button-pan flooded synthetic scroll events
         // that the host's camera-zoom mapping amplified into wild zooming.
         // That cap punished legitimate input:
         // macOS scroll acceleration reports a fast wheel spin as multi-line
-        // deltas per event, which the clamp flattened to one line each — fast
+        // deltas per event, which the clamp flattened to one line each - fast
         // scrolling crawled no matter how hard the wheel was spun. Scroll now
         // passes through at its reported magnitude.
         //
@@ -314,8 +314,8 @@ extension InputForwarder: StreamInputViewDelegate {
         // (trackpads, Magic Mouse, smooth-scroll drivers) report PIXELS,
         // which would overshoot ~10× fed raw into the line-based WHEEL_DELTA
         // scale. SDL's macOS backend (SDL_cocoamouse.m) converts precise
-        // deltas at 0.1 pixels→lines — the exact values moonlight-qt's
-        // non-Darwin path forwards as preciseY * 120 — so use the same
+        // deltas at 0.1 pixels→lines - the exact values moonlight-qt's
+        // non-Darwin path forwards as preciseY * 120 - so use the same
         // factor. Sub-half-unit results round to zero and are skipped (the
         // wire can't carry them; the next event in a momentum tail carries
         // fresh magnitude, so nothing accumulates wrongly).
@@ -356,8 +356,8 @@ extension InputForwarder: StreamInputViewDelegate {
 }
 
 // MARK: - HotkeyChord matching
-// HotkeyChord is defined in MoonlightManager.swift — reused here so the user's
-// chosen combos (quit, stats, …) apply in-stream without a separate config
+// HotkeyChord is defined in MoonlightManager.swift - reused here so the user's
+// chosen combos (quit, stats, ...) apply in-stream without a separate config
 // path. One match function handles every chord-style hotkey we intercept.
 
 extension HotkeyChord {

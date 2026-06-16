@@ -72,7 +72,7 @@ extension StreamSession {
                 .idleDisplaySleepDisabled, .idleSystemSleepDisabled
             ],
             reason: "Glimmer is streaming")
-        // Release the assertion on any UNSUCCESSFUL exit from start() — an early
+        // Release the assertion on any UNSUCCESSFUL exit from start() - an early
         // throw (pairing failure, host unreachable) happens before stop() is
         // reachable, so without this the Mac would stay awake forever after a
         // failed connect. On success this is skipped and stop() owns the
@@ -92,14 +92,14 @@ extension StreamSession {
         self.network = network
         // Invalidate the per-session URLSession on any exit where stop() can't
         // own it. URLSession retains its delegate (and connection pool +
-        // queues) until explicitly invalidated, so a pre-bridge throw — the
+        // queues) until explicitly invalidated, so a pre-bridge throw - the
         // serverinfo fetch, the pairing check, or launchWithBusyRecovery below
-        // — that just dropped the actor leaked one ephemeral URLSession +
+        // - that just dropped the actor leaked one ephemeral URLSession +
         // TLSDelegate PER ATTEMPT, including every error-banner Retry against
         // a sleeping host. On the success path stop() owns the shutdown (and
         // nils `network`, making the helper a no-op); on the startConnection-
         // failure path stop() has already run inside connectBackend's catch,
-        // with the same result. shutdown() is invalidateAndCancel —
+        // with the same result. shutdown() is invalidateAndCancel -
         // idempotent, so the belt-and-braces overlap with stop() is harmless.
         defer { if !startHandedOff { shutdownOrphanedNetwork() } }
         serverInfo = try await network.fetchServerInfo()
@@ -132,7 +132,7 @@ extension StreamSession {
         // is a one-line question. requestedFps is what we tell Sunshine;
         // displayMaxFps is what macOS thinks the panel can do right now
         // (NSScreen.maximumFramesPerSecond reflects the panel's CURRENT
-        // refresh rate, not its capability — if the user has it at 120Hz
+        // refresh rate, not its capability - if the user has it at 120Hz
         // in System Settings → Displays, this reads 120 even on a 240Hz
         // panel). The stats overlay (⌃⌥S) reports the actual delivered
         // FPS once frames flow.
@@ -164,9 +164,9 @@ extension StreamSession {
         //
         // Lifetime safety net: the +1 retain pins the bridge for the whole
         // session even if every weak ref it holds nils out. If any step between
-        // publishBridge and a successful startConnection throws — which is not
+        // publishBridge and a successful startConnection throws - which is not
         // the case today, but would silently leak the bridge if a future edit
-        // slips a `try await` through this region — the defer below mops up.
+        // slips a `try await` through this region - the defer below mops up.
         // `lifecycleOK` flips to true once `stop()` (success or failure path)
         // has run, so the defer only fires on the throw-without-stop scenario.
         let bridge = publishBridge(setup: setup)
@@ -238,7 +238,7 @@ extension StreamSession {
     // MARK: Start helpers
 
     /// Shut down + drop the per-session NetworkClient when no stop() owns it
-    /// (the pre-bridge throw paths in start() — see the defer there). No-op
+    /// (the pre-bridge throw paths in start() - see the defer there). No-op
     /// when stop() already ran: it shuts the client down and nils the field.
     /// NetworkClient is an actor and this helper runs from a synchronous
     /// `defer`, so the shutdown hops into a detached task. Fire-and-forget is
@@ -284,11 +284,11 @@ extension StreamSession {
             bridge.eventContinuation = continuation
             continuation.onTermination = { [weak self] _ in
                 // The consumer's `for await` loop ended (or the stream was
-                // otherwise dropped) — NOT an explicit user quit. Attribute it
+                // otherwise dropped) - NOT an explicit user quit. Attribute it
                 // as `.consumerDropped` so a reason-less teardown of a healthy
                 // stream is distinguishable from a user quit in the scorecard.
-                // (If a concrete reason already latched — host terminate /
-                // watchdog / connect-fail — that one still wins; this only
+                // (If a concrete reason already latched - host terminate /
+                // watchdog / connect-fail - that one still wins; this only
                 // labels the otherwise-default case.)
                 Task { await self?.stop(cause: .consumerDropped) }
             }
@@ -337,7 +337,7 @@ extension StreamSession {
     /// Open the connect-flow signpost interval, anchor the connect telemetry,
     /// attach the native engine's Swift sinks, and start the connection. On
     /// startConnection failure this cancels the host session and tears the
-    /// session down (so the next attempt isn't blocked) before throwing — the
+    /// session down (so the next attempt isn't blocked) before throwing - the
     /// caller suppresses its leak-safety defer because stop() already released
     /// the bridge retain.
     func connectBackend(
@@ -353,7 +353,7 @@ extension StreamSession {
             appVersion: serverInfo.appVersion ?? "7.1.451.0",
             gfeVersion: serverInfo.gfeVersion ?? "3.23.0.74",
             rtspSessionUrl: launch.sessionURL,
-            // RAW SCM_* bitmask from /serverinfo — see the landmine note in
+            // RAW SCM_* bitmask from /serverinfo - see the landmine note in
             // StreamProtocol.SCM_*.
             serverCodecModeRaw: Int32(serverInfo.serverCodecModeRaw))
 
@@ -368,10 +368,10 @@ extension StreamSession {
             id: connectFlowSignpostID,
             "host=\(serverInfo.address, privacy: .public)")
 
-        // SESSION-SCOPED telemetry reset + P2 CONNECT-HANDSHAKE anchor HERE —
+        // SESSION-SCOPED telemetry reset + P2 CONNECT-HANDSHAKE anchor HERE -
         // before startConnection runs the handshake whose stage edges fill the
         // legs AND whose receivers latch the one-shot audio TTF (the exporter
-        // starts later; resetting there raced warm-host audio — see
+        // starts later; resetting there raced warm-host audio - see
         // anchorTelemetryConnectStart). The host address feeds the stream-route
         // probe (stream_link). Always-live; no-op-cheap off.
         // Latch the server name for the telemetry `host` label here, where
@@ -393,7 +393,7 @@ extension StreamSession {
         } catch {
             // startConnection failed (RTSP handshake, control connect, etc., or
             // the native backend's LI_ERR_UNSUPPORTED stub). We've already told
-            // the host to /launch, so it now thinks a session is active — clean
+            // the host to /launch, so it now thinks a session is active - clean
             // up so the next attempt isn't blocked.
             let code: Int32
             if case let StreamError.sessionFailed(failureCode) = error {
@@ -401,8 +401,8 @@ extension StreamSession {
             } else {
                 code = -1
             }
-            log.error("startConnection failed with \(code) — cancelling host session")
-            // On a RECONNECT attempt, DON'T run the full stop() — that would
+            log.error("startConnection failed with \(code) - cancelling host session")
+            // On a RECONNECT attempt, DON'T run the full stop() - that would
             // close the window, drop the decoder (blanking the frozen frame),
             // and finish the event stream (bouncing to the launcher), defeating
             // the whole stall→resume. Just cancel the failed launch on the host
@@ -413,7 +413,7 @@ extension StreamSession {
                 try? await network.cancel()
                 throw StreamError.sessionFailed(code)
             }
-            // P2 DISCONNECT REASON: the connection never reached established —
+            // P2 DISCONNECT REASON: the connection never reached established -
             // latch connect-failed before the teardown so the cause is attributed
             // to the handshake, not the host terminate that may follow.
             noteTelemetryDisconnect(.connectFailed)
@@ -434,14 +434,14 @@ extension StreamSession {
         // ACTOR RE-ENTRANCY: re-check the lifecycle flags after EVERY await in
         // here. start() holds the actor's executor synchronously through
         // backend.startConnection (a semaphore wait, up to 30s on a slow
-        // handshake), so a quit pressed mid-"Connecting…" enqueues stop()
-        // behind it — and that queued stop() lands at this function's FIRST
+        // handshake), so a quit pressed mid-"Connecting..." enqueues stop()
+        // behind it - and that queued stop() lands at this function's FIRST
         // suspension (actors are re-entrant at await boundaries). stop()
         // flips isStreaming/stopInProgress synchronously before its own first
         // await, so a guard evaluated ON the actor between awaits reliably
         // observes the teardown. Without these, the remainder of this
         // function re-armed repeating watchdog timers and built a whole
-        // TelemetryExporter AFTER stop() already ran — nothing ever stopped
+        // TelemetryExporter AFTER stop() already ran - nothing ever stopped
         // them again (the next stop() refuses on `guard isStreaming`), so the
         // timers and the exporter's port listener leaked for process
         // lifetime. Ordering for the steps that DO run is safe: each arm
@@ -449,7 +449,7 @@ extension StreamSession {
         // a stop() that starts after a passed guard enqueues its timer-
         // invalidation block BEHIND that arm block and sweeps it.
         guard isStreaming, !stopInProgress else { return }
-        // The stats-overlay update timer. 2 Hz is deliberate — text updates
+        // The stats-overlay update timer. 2 Hz is deliberate - text updates
         // faster than that are unreadable, and at this rate the per-tick cost
         // (one snapshot read, one RTT-estimate read, one CATextLayer string
         // assignment) is negligible. The timer is torn down at the very top of
@@ -463,7 +463,7 @@ extension StreamSession {
         // Present-path self-heal watchdog + NOTICE instrumentation. The frame
         // watchdog above gates on VT decode output, which is structurally blind
         // to a stall DOWNSTREAM of decode (a stopped CADisplayLink or a
-        // latched-false pacer `due` gate — the 4K240 HDR hard-freeze).
+        // latched-false pacer `due` gate - the 4K240 HDR hard-freeze).
         // These two cover that gap: the watchdog self-heals the present path so
         // it can never hard-freeze, and the metric timer logs the present/decode
         // liveness so a recurrence is pinpointed from the log alone.
@@ -472,7 +472,7 @@ extension StreamSession {
         await startPresentMetricTimer()
 
         // Opt-in telemetry exporter (default OFF; no-op + zero alloc off).
-        // Synchronous — no suspension between this guard and the build — so
+        // Synchronous - no suspension between this guard and the build - so
         // the exporter can never be constructed after a teardown that already
         // ran stopTelemetryExporter() (the leaked-listener / wedged-port /
         // two-exporter EnvSignal race class).

@@ -3,17 +3,17 @@
 //
 //  Controller battery, every direction it is consumed: the host uplink that
 //  makes LI_CCAP_BATTERY_STATE an honest advertisement (the
-//  LiSendControllerBatteryEvent path — the host mirrors the reading onto its
-//  emulated pad), and the local UI reads — stats-overlay row, menu-bar charm,
-//  controller-test badge — which all resolve through uiReading() below
+//  LiSendControllerBatteryEvent path - the host mirrors the reading onto its
+//  emulated pad), and the local UI reads - stats-overlay row, menu-bar charm,
+//  controller-test badge - which all resolve through uiReading() below
 //  (moved from ControllerForwarder so everything battery, including the
 //  sentinel honesty rules, lives in exactly one file and cannot drift).
 //
 //  PROTOCOL (verified against moonlight-common-c + Sunshine master):
-//   * Packet: SS_CONTROLLER_BATTERY_PACKET (Input.h), magic 0x55000007 — see
+//   * Packet: SS_CONTROLLER_BATTERY_PACKET (Input.h), magic 0x55000007 - see
 //     InputEncoder.controllerBattery for the byte layout.
 //   * Gate: LiSendControllerBatteryEvent (InputStream.c) checks ONLY
-//     `initialized` + IS_SUNSHINE — unlike touch/motion there is NO LI_FF_*
+//     `initialized` + IS_SUNSHINE - unlike touch/motion there is NO LI_FF_*
 //     feature-flag requirement, and Sunshine's handler (input.cpp) accepts
 //     the packet for any allocated pad without re-checking the advertised
 //     caps. Channel: CTRL_CHANNEL_GAMEPAD_BASE + controllerNumber, reliable.
@@ -23,13 +23,13 @@
 //
 //  CADENCE mirrors moonlight-ios ControllerSupport.m (the only upstream
 //  client on the GCDeviceBattery API): a 30-second poll with send-on-change
-//  suppression — battery moves glacially, and GCDeviceBattery is not
+//  suppression - battery moves glacially, and GCDeviceBattery is not
 //  documented KVO-compliant, so polling is the upstream-proven shape. One
 //  shared timer scans all pads (per-pad timers are the motion sampler's
 //  shape, needed there because the HOST tunes each sensor's rate; battery
 //  has one fixed client-chosen cadence). On top of the poll, every arrival
 //  announcement sends a baseline immediately, so the host never waits a poll
-//  period to learn the state — and since setReady(true) replays arrivals,
+//  period to learn the state - and since setReady(true) replays arrivals,
 //  each new stream session gets its own fresh baseline.
 //
 //  THREADING: all mutable state is MainActor-confined (GameController's home
@@ -49,7 +49,7 @@ final class ControllerBattery: @unchecked Sendable {
     static let shared = ControllerBattery()
     static let logCategory = "Controller"
 
-    /// Poll cadence — moonlight-ios's 30-second batteryTimer.
+    /// Poll cadence - moonlight-ios's 30-second batteryTimer.
     private static let pollSeconds: Double = 30
 
     // MARK: - MainActor-confined state
@@ -59,7 +59,7 @@ final class ControllerBattery: @unchecked Sendable {
     /// The live stream's input uplink. Battery is deliberately NOT a
     /// StreamingBackend requirement: NativeBackend is the only backend, and
     /// widening the protocol for a report only the native wire carries would
-    /// be ceremony — so the monitor binds to the native uplink directly (the
+    /// be ceremony - so the monitor binds to the native uplink directly (the
     /// one downcast lives in announce()). If a second backend ever appears,
     /// promote sendControllerBattery to a requirement like
     /// sendControllerMotion. Weak: the backend's lifetime belongs to
@@ -78,8 +78,8 @@ final class ControllerBattery: @unchecked Sendable {
     // MARK: - Registration (ControllerForwarder, main thread)
 
     /// Probe the pad for a battery and map `slot` for reporting. Returns the
-    /// LI_CCAP_BATTERY_STATE bit to ADVERTISE — 0 when the pad exposes no
-    /// GCDeviceBattery — so the cap promised is a cap delivered.
+    /// LI_CCAP_BATTERY_STATE bit to ADVERTISE - 0 when the pad exposes no
+    /// GCDeviceBattery - so the cap promised is a cap delivered.
     /// Registration alone sends nothing; reports start at announce() or the
     /// next poll tick.
     @MainActor
@@ -93,7 +93,7 @@ final class ControllerBattery: @unchecked Sendable {
             // (flaky BT battery exposure) vs every send failing. With this
             // and the report() failure breadcrumb, the next session answers.
             Diag.info("controller \(slot) exposes no battery "
-                + "(\(controller.vendorName ?? "Unknown")) — battery cap not advertised",
+                + "(\(controller.vendorName ?? "Unknown")) - battery cap not advertised",
                 Self.logCategory)
             return 0
         }
@@ -121,7 +121,7 @@ final class ControllerBattery: @unchecked Sendable {
     /// arrival event: the host learns the pad exists, then what its battery
     /// holds, without waiting up to a poll period. Clearing the suppression
     /// latch first guarantees the send even when the reading hasn't changed
-    /// since a previous session — a new host has seen none of them.
+    /// since a previous session - a new host has seen none of them.
     @MainActor
     func announce(slot: UInt8, backend: StreamingBackend?) {
         // Arm/refresh the uplink even when THIS pad has no battery; the
@@ -156,13 +156,13 @@ final class ControllerBattery: @unchecked Sendable {
     /// Read → map → duplicate-suppress → send one pad's reading. `lastSent`
     /// latches ONLY on a queued send (rc 0): a -2 between streams must not
     /// suppress the same reading from reaching the NEXT session (announce
-    /// clears the latch too — this is the belt to that braces).
+    /// clears the latch too - this is the belt to that braces).
     @MainActor
     private func report(slot: UInt8, pad: Pad) {
         guard let backend = uplink else { return }
         // Prefer the raw-HID battery for a DualSense whose HID reader is live:
         // opening the pad over raw HID puts it in enhanced-report mode, which
-        // makes gamecontrollerd drop the GCDeviceBattery field — `battery` goes
+        // makes gamecontrollerd drop the GCDeviceBattery field - `battery` goes
         // .unknown/nil exactly when DualSenseHID is running (see DualSenseHID's
         // header). DualSenseHID decodes a REAL level + charge state from the
         // status byte itself, so route that to the host when available and fall
@@ -176,7 +176,7 @@ final class ControllerBattery: @unchecked Sendable {
         guard rc == 0 else {
             // First failure per rc code (the InputForwarder.record discipline):
             // this path was fully silent, which left a whole session's missing
-            // battery reports unadjudicable — uplink failing vs pad never
+            // battery reports unadjudicable - uplink failing vs pad never
             // mapped. Once per code keeps a persistent -1 burst out of the ring.
             if !loggedReportFailureCodes.contains(rc) {
                 loggedReportFailureCodes.insert(rc)
@@ -188,12 +188,12 @@ final class ControllerBattery: @unchecked Sendable {
         pad.lastSent = reading
         if reading.state == UInt8(StreamProtocol.LI_BATTERY_STATE_UNKNOWN),
            reading.percentage == UInt8(StreamProtocol.LI_BATTERY_PERCENTAGE_UNKNOWN) {
-            // The no-data sentinel is NOT a reading — say so, instead of the
+            // The no-data sentinel is NOT a reading - say so, instead of the
             // old "battery reported: unknown 0%" that read like a real (and
             // alarming) empty battery. The wire still carries it (an honest
             // UNKNOWN/0xFF the host may mirror); real data arrives via
             // send-on-change at a later poll. Only truly level-less pads
-            // (Xbox over BT) land here now — an unknown STATE with a real
+            // (Xbox over BT) land here now - an unknown STATE with a real
             // level (DualSense: 0.95/.unknown) takes the other branch and
             // logs "unknown N%", percentage on the wire from the baseline.
             Diag.info("controller \(slot) battery: not reported", Self.logCategory)
@@ -211,7 +211,7 @@ final class ControllerBattery: @unchecked Sendable {
     /// decoded battery belongs to the DualSense the user is holding. The HID
     /// decode carries percent + charging directly, so map it straight onto the
     /// FULL/CHARGING/DISCHARGING states the wire wants (no .unknown-with-level
-    /// corner — the raw status byte always gives a real percent when present).
+    /// corner - the raw status byte always gives a real percent when present).
     @MainActor
     private func hidReading(for pad: Pad) -> (state: UInt8, percentage: UInt8)? {
         guard pad.controller?.extendedGamepad is GCDualSenseGamepad,
@@ -220,7 +220,7 @@ final class ControllerBattery: @unchecked Sendable {
         // `DualSenseBattery.charging` collapses the decode's "charging" (charge
         // nibble 0x01) and "full" (0x02) into one Bool, so a pad charging at
         // level 10 is indistinguishable from a full one. Report CHARGING for
-        // both rather than fabricate a FULL the pad may not have reached — the
+        // both rather than fabricate a FULL the pad may not have reached - the
         // percentage carries the real level, and DISCHARGING otherwise.
         let state: Int32 = hid.charging ? StreamProtocol.LI_BATTERY_STATE_CHARGING
                                         : StreamProtocol.LI_BATTERY_STATE_DISCHARGING
@@ -231,20 +231,20 @@ final class ControllerBattery: @unchecked Sendable {
     // MARK: - GCDeviceBattery → wire mapping
 
     /// State mapping is moonlight-ios ControllerSupport.m's: full/charging/
-    /// discharging map 1:1, anything else (including .unknown) is UNKNOWN —
+    /// discharging map 1:1, anything else (including .unknown) is UNKNOWN -
     /// GameController can't distinguish NOT_PRESENT/NOT_CHARGING.
     ///
     /// Percentage HONESTY: macOS reports "no battery data" as batteryState
-    /// .unknown + batteryLevel 0.0 — NOT the negative level the moonlight-ios
+    /// .unknown + batteryLevel 0.0 - NOT the negative level the moonlight-ios
     /// mapping guards (proven in session logs: every no-data pad printed
     /// "unknown 0%", never "?%", so 0 was going on the wire and Sunshine
     /// mirrored a false empty battery onto the emulated pad). But an UNKNOWN
     /// state does NOT condemn the level: a DualSense on this Mac was probed
-    /// at batteryLevel 0.95 with state .unknown — the OS knows the charge,
+    /// at batteryLevel 0.95 with state .unknown - the OS knows the charge,
     /// just not the charging direction. So state and percentage are judged
     /// independently: UNKNOWN state with a positive level sends the REAL
     /// percentage (the host UI can still show a number), and only UNKNOWN
-    /// with level <= 0 — indistinguishable from the no-data sentinel — sends
+    /// with level <= 0 - indistinguishable from the no-data sentinel - sends
     /// LI_BATTERY_PERCENTAGE_UNKNOWN. A genuine dying pad still reads
     /// honestly: discharging + 0.0 is a REAL (discharging, 0%) reading, and
     /// the negative-level guard stays as belt-and-braces for the documented
@@ -270,7 +270,7 @@ final class ControllerBattery: @unchecked Sendable {
 
     /// The ONE level-validity rule, shared by the wire mapping and the local
     /// UI mapping so the consumers can't drift apart:
-    ///  * known state: level >= 0 is real — discharging + 0.0 IS an empty
+    ///  * known state: level >= 0 is real - discharging + 0.0 IS an empty
     ///    battery; only the documented -1 "unreadable" sentinel is invalid.
     ///  * .unknown state: the level must be STRICTLY positive. .unknown + 0.0
     ///    is macOS's no-data shape (every Xbox BT pad, all session), and a
@@ -286,14 +286,14 @@ final class ControllerBattery: @unchecked Sendable {
 
     /// wireReading's local twin: the single honest source for every UI that
     /// shows controller battery (stats-overlay row, menu-bar charm,
-    /// controller-test badge). nil means render NOTHING — each UI's nil
+    /// controller-test badge). nil means render NOTHING - each UI's nil
     /// branch already exists (em-dash, hidden charm, "No battery info"),
     /// whereas the unguarded reads turned macOS's .unknown + 0.0 no-data
     /// sentinel into an alarming orange "0%".
     ///
     /// `charging` is nil for the UNKNOWN-state-with-real-level case (the
     /// DualSense 0.95/.unknown probe): the level deserves showing, but
-    /// claiming "Charging" or "On battery" would be invented — callers
+    /// claiming "Charging" or "On battery" would be invented - callers
     /// render the bare percentage with no charging adornment. Nothing here
     /// latches: every consumer re-reads on its own cadence (1Hz overlay
     /// tick, menu open, 30Hz test repaint), so the full reading appears the
@@ -346,10 +346,10 @@ final class ControllerBattery: @unchecked Sendable {
 extension NativeBackend {
     /// = LiSendControllerBatteryEvent (InputStream.c). Routes the report
     /// through the batcher's quiet pass-through (ordering preserved, no
-    /// input-activity stamp — a device report is not user input) on the
+    /// input-activity stamp - a device report is not user input) on the
     /// pad's gamepad channel, the C's channel choice. Deliberately NO
     /// feature-flag gate: unlike touch/motion, the C checks only
-    /// `initialized` (readyBatcher here) and IS_SUNSHINE (structural — this
+    /// `initialized` (readyBatcher here) and IS_SUNSHINE (structural - this
     /// wire only speaks Sunshine). Lives here, not NativeBackend+Input.swift,
     /// so the battery uplink reads end-to-end in this file.
     public func sendControllerBattery(num: UInt8, state: UInt8, percentage: UInt8) -> Int32 {
@@ -365,7 +365,7 @@ extension NativeBackend {
 extension InputForwarder {
     /// First attached controller's REAL battery reading as
     /// (percent 0...100, charging), or nil when none has one. `charging` nil
-    /// is the unknown-state-with-real-level case — the overlay's formatter
+    /// is the unknown-state-with-real-level case - the overlay's formatter
     /// already renders that as the bare "N %" with no "Charging"/"On
     /// battery" claim, exactly the honesty uiReading encodes. Pads carrying
     /// the no-data sentinel are SKIPPED rather than rendered as 0%, so a
@@ -373,7 +373,7 @@ extension InputForwarder {
     /// attached set rather than the global `GCController.controllers()`
     /// registry so we report the pad the stream is actually using. Lives
     /// here (moved from ControllerForwarder) so the overlay read and the
-    /// host uplink — the same GCDeviceBattery, two consumers — sit in one
+    /// host uplink - the same GCDeviceBattery, two consumers - sit in one
     /// file.
     func currentControllerBattery() -> (percent: Int, charging: Bool?)? {
         for state in attachedControllers.values {

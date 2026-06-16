@@ -1,10 +1,10 @@
 //
 //  AudioDecoder+CushionMemory.swift
 //
-//  The cushion LOSS FLOOR + per-host memory — the decay-limit-cycle fix.
+//  The cushion LOSS FLOOR + per-host memory - the decay-limit-cycle fix.
 //
 //  MEASURED FAULT (extended wifi testing): the 60s-quiet decay stepped the
-//  target down INTO the link's ambient loss floor, under-ran, re-ratcheted —
+//  target down INTO the link's ambient loss floor, under-ran, re-ratcheted -
 //  an audible blip every ~90s of clean play, the under-runs landing at targets
 //  the ladder had just walked down from the link's ~80ms equilibrium. A slow
 //  limit cycle: the exact disguised-oscillation the decay was meant to avoid,
@@ -12,34 +12,34 @@
 //  the ratchet re-derived what the previous session already knew.
 //
 //  THREE LAYERS, all evidence-keyed, all recovering (no permanent give-ups):
-//   (1) NEAR-MISS GATE — a decay step requires the quiet window's MIN fill to
+//   (1) NEAR-MISS GATE - a decay step requires the quiet window's MIN fill to
 //       have stayed a full step above empty. A trough that came within one
 //       step of empty is the same starvation evidence as an under-run, minus
-//       the audible event — it holds depth WITHOUT the user paying a blip.
-//   (2) LOSS FLOOR — an EWMA of the target at each under-run learns the level
+//       the audible event - it holds depth WITHOUT the user paying a blip.
+//   (2) LOSS FLOOR - an EWMA of the target at each under-run learns the level
 //       this link actually fails at; the decay never steps below floor + one
 //       step without the floor itself decaying first. JITTERY-LINK ARGUMENT:
-//       the floor adapts BOTH ways — fresh under-runs pull it up immediately
+//       the floor adapts BOTH ways - fresh under-runs pull it up immediately
 //       (evidence-weighted), and a slow ~10min quiet clock walks it down, so
 //       a genuinely improved link re-earns shallow cushions while a link that
 //       keeps proving its losses keeps its depth. Even a floor learned at the
 //       cap self-heals: each 10min clean window lowers it a step, unblocking
-//       the target decay — blocked states always have a clock running.
-//   (3) PER-HOST MEMORY — the learned target + floor persist in UserDefaults
+//       the target decay - blocked states always have a clock running.
+//   (3) PER-HOST MEMORY - the learned target + floor persist in UserDefaults
 //       keyed "host|link" and SEED the
 //       next session, so the cold pre-roll builds the depth this host+link
 //       needs instead of re-paying the first-minutes ratchet walk. The link
 //       is usually unknown at audio bring-up (the route probe feeds ~1-2s
 //       later), so the seed starts from the best available record and a
 //       one-shot resolve re-keys it when the route lands; if it never lands
-//       (telemetry off), learning continues under the init key — the
+//       (telemetry off), learning continues under the init key - the
 //       "host|unknown" bucket converges by the same machinery, just unsplit.
 //
 //  Decay ABOVE the floor is untouched: transient distress spikes still come
 //  back down at the same ~10ms/min. Zero host changes; everything here is
 //  client-side playout depth policy.
 //
-//  ALSO HERE (it guards the same cushion): the DRIFT MICRO-STRETCH — the
+//  ALSO HERE (it guards the same cushion): the DRIFT MICRO-STRETCH - the
 //  deterministic clock-skew repayment. See its own section below for the
 //  measured fault and the jittery-link argument.
 //
@@ -54,10 +54,10 @@ extension AudioDecoder {
     /// Quiet window (ns) with ZERO under-runs required per one-step DECAY of the
     /// adaptive cushion back toward the base. Deliberately asymmetric against the
     /// grow path (grow: one step per real under-run; decay: ~60 clean seconds per
-    /// step) so the target can't oscillate on a jittery link — recurring gaps hold
+    /// step) so the target can't oscillate on a jittery link - recurring gaps hold
     /// the depth, while a genuinely calm link walks back down at ~10ms/min.
     /// The step is additionally gated on the window's MIN fill (near-miss
-    /// evidence) and on the learned loss floor — the measured 90s decay→
+    /// evidence) and on the learned loss floor - the measured 90s decay→
     /// under-run→re-ratchet limit cycle this file exists to kill.
     static let playoutDecayQuietNanos: UInt64 = 60_000_000_000
     /// EWMA weight pulling the loss floor toward the target that just FAILED.
@@ -65,11 +65,11 @@ extension AudioDecoder {
     /// within 2 steps) without letting a single outlier own the floor.
     static let cushionFloorEwmaWeight: Double = 0.5
     /// Quiet window (ns) per one-step decay of the FLOOR itself (~10min). The
-    /// slow clock that lets an improved link re-earn shallow cushions — and
+    /// slow clock that lets an improved link re-earn shallow cushions - and
     /// the liveness guarantee for every floor-blocked decay.
     static let cushionFloorDecayQuietNanos: UInt64 = 600_000_000_000
     /// Near-miss margin (ms): the decay window's MIN fill must clear this
-    /// (one full step above empty) before a step down is allowed — a window
+    /// (one full step above empty) before a step down is allowed - a window
     /// that nearly drained proves the NEXT step down would under-run.
     static let cushionNearMissMarginMs: Double = AudioDecoder.playoutCushionStepMs
     /// Window (ns) the one-shot link resolve keeps trying after init before
@@ -77,7 +77,7 @@ extension AudioDecoder {
     /// telemetry is on; 120s covers a slow bring-up with margin).
     static let cushionLinkResolveWindowNanos: UInt64 = 120_000_000_000
     /// UserDefaults key prefix; full key = prefix + "host|link". Local-only
-    /// preference storage — the host never rides telemetry or logs.
+    /// preference storage - the host never rides telemetry or logs.
     static let cushionMemoryKeyPrefix = "audioCushionMemory."
 
     // MARK: - Persistence (UserDefaults, per host+link)
@@ -104,7 +104,7 @@ extension AudioDecoder {
         "\(cushionMemoryKeyPrefix)\(host)|\(link)"
     }
 
-    /// Adaptive-cushion cap (ms) for a WIFI/TUNNEL link — the runtime cap when
+    /// Adaptive-cushion cap (ms) for a WIFI/TUNNEL link - the runtime cap when
     /// `EnvSignalController.streamLink` is one of those. 300ms is deep enough that
     /// the grow ratchet can reach the depth a VPN's multi-hundred-ms gaps need
     /// instead of hard-stopping below it (the wired 150ms cap, `playoutCushionMaxMs`,
@@ -118,7 +118,7 @@ extension AudioDecoder {
     static let bufferOverrunCeilingSlackMs: Double = 40
     /// Over-run ceiling (ms) for STATIC-context callers (telemetry export); the
     /// runtime gate uses `effectiveOverrunCeilingMs`. The dogshit-link BACKSTOP,
-    /// not the steady-state governor — that is TRIM-TOWARD-TARGET
+    /// not the steady-state governor - that is TRIM-TOWARD-TARGET
     /// (`meterRegisterScheduleOrOverrun`). Sized to the deepest (tunnel) cap +
     /// slack so even that fits: 300+40=340ms.
     static let bufferOverrunCeilingMs: Double =
@@ -127,7 +127,7 @@ extension AudioDecoder {
     /// LINK-AWARE cushion cap (ms) for a resolved stream-link class. A wired NIC's
     /// delivery-gap envelope fits the 150ms wired cap; a wifi/tunnel link's is
     /// deeper, so it gets the 300ms cap. Unknown fails toward the deeper cap (same
-    /// deep-by-default bring-up policy as the seed — too shallow glitches, too deep
+    /// deep-by-default bring-up policy as the seed - too shallow glitches, too deep
     /// walks down through the trim).
     static func cushionMaxMs(forLink link: String) -> Double {
         link == "wired" ? playoutCushionMaxMs : playoutCushionMaxMsTunnel
@@ -141,7 +141,7 @@ extension AudioDecoder {
         // Clamp to the DEEPEST (tunnel) cap at load: a tunnel session legitimately
         // learns up to 300ms, and clamping that to the wired 150ms here would lose
         // it on reload. The runtime link-aware cap (`effectiveCushionMaxMs`) then
-        // governs — a wired session seeded deep walks back down through the trim.
+        // governs - a wired session seeded deep walks back down through the trim.
         let clampedTarget = min(max(target, playoutCushionBaseMs), playoutCushionMaxMsTunnel)
         let floor = (dict["floor_ms"] as? Double).flatMap { $0.isFinite ? $0 : nil } ?? 0
         return (clampedTarget, min(max(floor, 0), clampedTarget))
@@ -159,7 +159,7 @@ extension AudioDecoder {
     /// Resolve this session's seed: the init key's own record first; when the
     /// link is still unknown, BORROW the deepest of the link-split records
     /// (deep-by-default fails toward a few ms of extra audio latency that the
-    /// trim walks off in ~1s once the link resolves shallow — the alternative,
+    /// trim walks off in ~1s once the link resolves shallow - the alternative,
     /// shallow-by-default, fails toward audible blips).
     static func loadCushionSeed() -> CushionSeed {
         let host = StreamRouteProbe.currentLatchedHost ?? "unknown"
@@ -193,7 +193,7 @@ extension AudioDecoder {
             fromMemory: seed.fromMemory))
         Diag.notice(
             "audio cushion seed: target \(Int(seed.targetMs.rounded()))ms floor "
-            + "\(Int(seed.floorMs.rounded()))ms — link \(seed.link), "
+            + "\(Int(seed.floorMs.rounded()))ms - link \(seed.link), "
             + (seed.fromMemory ? "from per-host memory" : "defaults (no memory yet)"),
             "Stream")
     }
@@ -217,8 +217,8 @@ extension AudioDecoder {
 
     /// QUIET completion while elevated: arbitrate the two decay clocks.
     /// Floor decay first (the slow ~10min clock), then the target step gated
-    /// on (a) the elapsed quiet window, (b) the near-miss margin — a held
-    /// window consumes its evidence and starts a fresh one — and (c) the
+    /// on (a) the elapsed quiet window, (b) the near-miss margin - a held
+    /// window consumes its evidence and starts a fresh one - and (c) the
     /// floor cutoff, which leaves the window STANDING so the step fires the
     /// moment the floor's own decay unblocks it. Returns a memory write when
     /// anything moved; nil on the (overwhelmingly common) no-op.
@@ -234,7 +234,7 @@ extension AudioDecoder {
             let candidate = playoutTargetMs - Self.playoutCushionStepMs
             if quietWindowMinFillMs < Self.cushionNearMissMarginMs {
                 // NEAR-MISS HOLD: the window's trough proved the next step
-                // would starve — keep depth, pay nothing audible.
+                // would starve - keep depth, pay nothing audible.
                 quietSinceNanos = now
                 quietWindowMinFillMs = .infinity
             } else if learnedFloorMs > 0,
@@ -262,8 +262,8 @@ extension AudioDecoder {
     // MARK: - One-shot link resolve (the seed re-key)
 
     /// Re-key the cushion memory once the stream link is actually known. The
-    /// route probe feeds EnvSignal ~1-2s after the exporter starts — long
-    /// after the audio pre-roll primed on the init seed — so this swaps the
+    /// route probe feeds EnvSignal ~1-2s after the exporter starts - long
+    /// after the audio pre-roll primed on the init seed - so this swaps the
     /// MEMORY (and adopts the resolved link's record) without touching the
     /// standing fill: an upgrade materializes at the next re-prime (≤1 blip,
     /// the verification bar), a downgrade walks off through the trim. Called
@@ -275,7 +275,7 @@ extension AudioDecoder {
         guard !cushionLinkResolved else { audioMeterLock.unlock(); return }
         if now >= cushionLinkResolveDeadlineNanos {
             // Window over (telemetry off / probe dark): settle on the init
-            // key. Not a give-up — learning continues, and the floor's slow
+            // key. Not a give-up - learning continues, and the floor's slow
             // decay still walks any borrowed depth down if it was too deep.
             cushionLinkResolved = true
             audioMeterLock.unlock()
@@ -292,7 +292,7 @@ extension AudioDecoder {
 
         audioMeterLock.lock()
         // Re-check after the lock gap: the decode and completion threads both
-        // publish state, so two resolves can race here — first one wins.
+        // publish state, so two resolves can race here - first one wins.
         guard !cushionLinkResolved else { audioMeterLock.unlock(); return }
         cushionLinkResolved = true
         cushionSeedKey = key
@@ -316,7 +316,7 @@ extension AudioDecoder {
         } else if !cushionHadUnderrun {
             // No memory for the RESOLVED link and no real evidence yet this
             // session: drop the borrowed bring-up guess back to defaults so a
-            // wrong-link seed can't persist into this link's bucket — the
+            // wrong-link seed can't persist into this link's bucket - the
             // ladder re-learns this link from its own evidence (one blip
             // worst-case re-arms the floor immediately).
             playoutTargetMs = Self.playoutCushionBaseMs
@@ -330,7 +330,7 @@ extension AudioDecoder {
         audioMeterLock.unlock()
         AudioCushionTelemetry.shared.setFloorMs(floor)
         Diag.notice(
-            "audio cushion link resolved: \(link) — target \(Int(target.rounded()))ms "
+            "audio cushion link resolved: \(link) - target \(Int(target.rounded()))ms "
             + "floor \(Int(floor.rounded()))ms"
             + (stored != nil ? " (per-host memory adopted)" : " (no memory for this link yet)"),
             "Stream")
@@ -343,28 +343,28 @@ extension AudioDecoder {
     //  stretch, sawtoothing to −90..−140ms extremes; the post-learning
     //  under-runs each fired AT a sawtooth extreme, with spacing matching the
     //  drain math for a 40-80ms reservoir at 40ppm.
-    //  A deterministic drain, not link noise — the cushion ladder can only
+    //  A deterministic drain, not link noise - the cushion ladder can only
     //  stretch the period (deeper target → longer walk to empty), never fix
     //  it. The repayment: once the LONG-WINDOW accumulated drift proves a
     //  standing skew, insert one 5ms silence packet per 5ms of accrued skew
-    //  (~40µs/s at the measured 40ppm — one packet per ~2min, inaudible) so
+    //  (~40µs/s at the measured 40ppm - one packet per ~2min, inaudible) so
     //  the cushion holds its depth instead of walking to empty. Discrete
-    //  packet quanta in the trim machinery's idiom — threshold-armed,
-    //  rate-limited, standing down in distress windows — NOT a resampler:
+    //  packet quanta in the trim machinery's idiom - threshold-armed,
+    //  rate-limited, standing down in distress windows - NOT a resampler:
     //  no signal-path rework, no decoder state touched, and the cadence the
     //  steady-state trim already proved inaudible bounds this too.
     //
     //  JITTERY-LINK ARGUMENT (why this can't oscillate on a bursty link): the
-    //  key is the CUMULATIVE per-segment drift — an integral needing many
-    //  minutes of one-sided ppm-scale accrual to reach the arm point — never
+    //  key is the CUMULATIVE per-segment drift - an integral needing many
+    //  minutes of one-sided ppm-scale accrual to reach the arm point - never
     //  a short-window slope. Delivery jitter can only push that gauge
     //  POSITIVE (a late clump stalls `framesScheduled` while wall time runs;
     //  media the host hasn't sent cannot arrive early), so burst wobble moves
-    //  the residual AWAY from the arm point — and the threshold is 6× the
+    //  the residual AWAY from the arm point - and the threshold is 6× the
     //  5ms single-packet granularity besides. Corroboration gate: a stretch
     //  also requires the fill to actually sit a full step short of target, so
     //  a gauge gone haywire against a healthy cushion does nothing. And every
-    //  distress window disarms it outright — un-primed, drained, and the
+    //  distress window disarms it outright - un-primed, drained, and the
     //  post-(re)prime grace belong to the under-run/rebuild machinery, which
     //  keeps sole custody of recovery there.
 
@@ -374,16 +374,16 @@ extension AudioDecoder {
     /// cushion above empty until it does. Once armed, repayment tracks accrual
     /// step-for-step, so the residual rides just inside the threshold.
     static let driftStretchArmMs: Double = 30
-    /// One repayment quantum (ms) — exactly one packet, the same splice size
+    /// One repayment quantum (ms) - exactly one packet, the same splice size
     /// the steady-state trim already takes at a far higher allowed cadence.
     static let driftStretchStepMs: Double = 5
     /// Minimum spacing (ns) between stretches: bounds the worst case at one
-    /// packet per 30s (~167µs/s, +0.017% — far below audibility) even against
+    /// packet per 30s (~167µs/s, +0.017% - far below audibility) even against
     /// a haywire gauge; the measured 40ppm need is one per ~125s.
     static let driftStretchMinIntervalNanos: UInt64 = 30_000_000_000
 
     /// One micro-stretch check, on the decode path after each scheduled packet
-    /// (`stateLock` held by the caller — the schedule below stays serialized
+    /// (`stateLock` held by the caller - the schedule below stays serialized
     /// against `shutdown()`: the completion-handler-vs-shutdown discipline).
     /// Steady-state cost: one lock + a few compares; the clock read only runs
     /// past the cheap gates while the fill is actually short. Inserts at most
@@ -401,7 +401,7 @@ extension AudioDecoder {
         let rate = meterSampleRate
         let aheadFrames = framesScheduled &- framesPlayed
         let fillMs = Double(aheadFrames) / rate * 1000.0
-        // Corroboration gate — and the insert cap: fill ≤ target − step keeps
+        // Corroboration gate - and the insert cap: fill ≤ target − step keeps
         // post-insert fill ≤ target, a full hysteresis band below the trim, so
         // a stretch can never feed the very trim that would undo it.
         guard fillMs <= playoutTargetMs - Self.driftStretchStepMs else {
@@ -425,7 +425,7 @@ extension AudioDecoder {
             audioMeterLock.unlock()
             return
         }
-        // Claim the rate-limit slot before dropping the lock for the alloc —
+        // Claim the rate-limit slot before dropping the lock for the alloc -
         // re-entry inside the window is then impossible however the alloc
         // goes (a failed alloc simply retries a window later; self-healing,
         // and the under-run machinery still backstops a drain meanwhile).
@@ -436,7 +436,7 @@ extension AudioDecoder {
         guard frames > 0,
               let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return }
         silence.frameLength = frames
-        // Zero explicitly — AVAudioPCMBuffer does not guarantee zeroed memory,
+        // Zero explicitly - AVAudioPCMBuffer does not guarantee zeroed memory,
         // and "silence" must never be heap garbage (same rule as the backfill).
         if let channels = silence.floatChannelData {
             for channel in 0..<Int(format.channelCount) {
@@ -448,7 +448,7 @@ extension AudioDecoder {
         framesScheduled &+= stretchFrames
         // Keep the drift gauge RAW (the backfill idiom): the silence is media
         // the wall-time stream never delivered, so credit the segment's
-        // media-played reference — the gauge keeps showing the true skew slope
+        // media-played reference - the gauge keeps showing the true skew slope
         // (how later measurement verifies the skew is still there AND repaid),
         // while the ledger carries what has been repaid so far.
         driftAnchorFramesPlayed &+= stretchFrames
@@ -460,7 +460,7 @@ extension AudioDecoder {
         }
         Diag.notice(
             "audio drift micro-stretch +\(Int(Self.driftStretchStepMs))ms silence "
-            + "(\(Int(appliedMs.rounded()))ms repaid this segment) — segment clock skew "
+            + "(\(Int(appliedMs.rounded()))ms repaid this segment) - segment clock skew "
             + "\(Int(driftMs.rounded()))ms",
             "Stream")
     }

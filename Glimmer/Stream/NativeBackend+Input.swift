@@ -112,7 +112,7 @@ extension NativeBackend {
         let channel = gamepadChannel(Int(num))
         // Pass-through pair (flush pending merged state, then send both in order):
         // the Sunshine-only arrival packet + the mandatory fallback
-        // multiController(num, mask, 0, …) for hosts that don't support arrival
+        // multiController(num, mask, 0, ...) for hosts that don't support arrival
         // events (InputStream.c:1471).
         return batcher.passThroughPair(
             InputEncoder.controllerArrival(num: num, mask: mask, type: type,
@@ -131,7 +131,7 @@ extension NativeBackend {
     ) -> Int32 {
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
         // Protocol extension only supported by Sunshine when the feature flag is
-        // set (InputStream.c:1481) — else LI_ERR_UNSUPPORTED.
+        // set (InputStream.c:1481) - else LI_ERR_UNSUPPORTED.
         guard withState({ featureFlags }) & Self.ffControllerTouchEvents != 0 else {
             return StreamProtocol.LI_ERR_UNSUPPORTED
         }

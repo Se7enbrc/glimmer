@@ -11,7 +11,7 @@
 //  RECONNECT count + disconnect REASON (counter + ordinal gauge + info label),
 //  the IDR/RFI ROUND-TRIP counts + last RTT (the distribution rides the latency
 //  histogram in the main render), and the CORRUPTION/ARTIFACT heuristic (counter +
-//  per-second rate). All numbers/labels — no secrets.
+//  per-second rate). All numbers/labels - no secrets.
 //
 
 import Foundation
@@ -67,7 +67,7 @@ extension TelemetryRenderer {
 
     /// IDR ROUND-TRIP counts + last measured RTT (the distribution is the
     /// `glimmer_idr_round_trip_ms` histogram in the main render). EXPLICIT
-    /// REQUEST_IDR sends only — RFIs ride `glimmer_rfi_total` and don't arm
+    /// REQUEST_IDR sends only - RFIs ride `glimmer_rfi_total` and don't arm
     /// round-trips (conflating them made requests/matched unreadable).
     private static func promIdrRoundTrip(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         guard let idr = snap.idrRoundTrip else { return }
@@ -84,11 +84,11 @@ extension TelemetryRenderer {
     }
 
     /// CORRUPTION/ARTIFACT heuristic: the cheap white/purple-flash-class detector
-    /// (VT decode-status error / depacketizer discontinuity — no per-pixel scan).
+    /// (VT decode-status error / depacketizer discontinuity - no per-pixel scan).
     private static func promCorruption(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         builder.emitCounter("glimmer_corruption_heuristic_total",
                             "Corruption/artifact heuristic hits (VT decode-status error or "
-                            + "depacketizer discontinuity — the white/purple-flash class).",
+                            + "depacketizer discontinuity - the white/purple-flash class).",
                             snap.corruptionTotal)
         builder.emit("glimmer_corruption_heuristic_per_second",
                      "Corruption/artifact heuristic hits per second (spike = visible artifacting).",

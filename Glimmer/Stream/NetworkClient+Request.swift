@@ -32,7 +32,7 @@ extension NetworkClient {
     /// Workhorse. Builds the URL, attaches our uniqueid + a per-request UUID
     /// (matches GFE's expectation that every request has a unique nonce),
     /// optionally appends an unescaped query tail (for the backend's launch
-    /// params, which must NOT be URL-percent-encoded — they arrive already
+    /// params, which must NOT be URL-percent-encoded - they arrive already
     /// encoded).
     func rawRequest(path: String,
                     query: [String: String],
@@ -73,7 +73,7 @@ extension NetworkClient {
         guard var url = components.url else {
             throw StreamError.hostUnreachable("Failed to build URL for /\(path)")
         }
-        // Append the launch-params tail literally — it carries its own
+        // Append the launch-params tail literally - it carries its own
         // pre-encoded form and percent-encoding it again would break it.
         if let extra = extraQuery, !extra.isEmpty {
             let trimmed = extra.hasPrefix("&") ? extra : "&" + extra
@@ -96,7 +96,7 @@ extension NetworkClient {
         // we put on the same hat.
         req.setValue("Mozilla/5.0 (compatible; Moonlight/Glimmer)", forHTTPHeaderField: "User-Agent")
 
-        // SECURITY: redact the URL before logging — query string may carry
+        // SECURITY: redact the URL before logging - query string may carry
         // rikey/rikeyid/uuid/uniqueid (session AES key + per-request nonce)
         // which must not appear in unified log even at .debug level.
         log.debug("GET \(Self.redactedURL(url), privacy: .public)")
@@ -120,7 +120,7 @@ extension NetworkClient {
     /// Bridges URLSession's data-task API into async/await with a real timeout.
     /// We use `dataTask(with:completionHandler:)` rather than the async helper
     /// so the URLSession delegate's TLS challenge runs on the session's own
-    /// queue — the async helper short-circuits some delegate callbacks on
+    /// queue - the async helper short-circuits some delegate callbacks on
     /// older macOS releases.
     func performRequest(_ req: URLRequest) async throws -> (Data, URLResponse) {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(Data, URLResponse), Error>) in
@@ -154,7 +154,7 @@ extension NetworkClient {
 
     /// Parses `<root status_code="200">` and throws on anything else. The
     /// status code is sometimes returned as a 32-bit overflowing value on
-    /// quirky GFE 3.20.3 builds — we parse as UInt32 then narrow.
+    /// quirky GFE 3.20.3 builds - we parse as UInt32 then narrow.
     static func verifyStatus(_ xml: XMLNode) throws {
         guard let root = xml.firstChild(named: "root") else {
             throw StreamError.launchFailed("Response missing <root> element")
@@ -169,7 +169,7 @@ extension NetworkClient {
         if code == 200 { return }
 
         let message = root.attributes["status_message"] ?? "Status \(code)"
-        // 401 over HTTPS means "unpaired" — the caller (fetchServerInfo, the
+        // 401 over HTTPS means "unpaired" - the caller (fetchServerInfo, the
         // pairing handshake) knows how to recover, so we surface it through
         // hostUnreachable to trigger the HTTP fallback path.
         if code == 401 {
@@ -182,7 +182,7 @@ extension NetworkClient {
 
     /// Sunshine/GFE pack supported codecs into ServerCodecModeSupport as a
     /// bitfield. The values aren't documented anywhere except the moonlight
-    /// source — here they are, copied verbatim:
+    /// source - here they are, copied verbatim:
     ///   bit 0    : H.264 (always implicitly supported)
     ///   bit 8    : HEVC
     ///   bit 9    : HEVC Main10
@@ -203,26 +203,26 @@ extension NetworkClient {
     static let launchTimeout: TimeInterval = 20
     static let resumeTimeout: TimeInterval = 20
     /// Pairing requests block on host-side state that's gated on a HUMAN typing
-    /// the PIN into the host's pairing page — so the snappy 5s control timeout
+    /// the PIN into the host's pairing page - so the snappy 5s control timeout
     /// is far too short (the request fires the moment the code is shown, then
     /// waits for the user to read + type it). Moonlight uses a similarly long
     /// pairing window. 60s is comfortably human-scale.
     static let pairTimeout: TimeInterval = 60
 
     /// The literal `uniqueid` value sent on every request to the host. Must
-    /// match moonlight-qt exactly — see comment in `rawRequest`.
+    /// match moonlight-qt exactly - see comment in `rawRequest`.
     static let wireUniqueID = "0123456789ABCDEF"
 
     /// Per-request nonce. GFE uses a Qt UUID's raw 16 bytes hex-encoded; we
     /// match that exactly so packet captures look the same. Backed by
-    /// SecRandomCopyBytes — not Swift's UInt8.random, which uses a non-CSPRNG.
+    /// SecRandomCopyBytes - not Swift's UInt8.random, which uses a non-CSPRNG.
     static func requestNonce() -> String {
         let bytes = secureRandomBytes(16)
         return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
     /// Cryptographically-secure random bytes. The remote-input AES key + IV
-    /// flow through here — using anything weaker leaks input session entropy.
+    /// flow through here - using anything weaker leaks input session entropy.
     static func randomBytes(_ count: Int) -> Data {
         Data(secureRandomBytes(count))
     }

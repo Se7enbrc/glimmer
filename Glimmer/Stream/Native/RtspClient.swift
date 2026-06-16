@@ -13,7 +13,7 @@
 //  AND closes a socket for every request). TCP_NODELAY on. Connect retries on
 //  ECONNREFUSED every 500ms up to 10s (Sunshine 200-OKs /launch before the RTSP
 //  port is listening). The response is delimited by the SERVER CLOSING the
-//  connection (EOF) — there is no Content-Length framing on responses, so we
+//  connection (EOF) - there is no Content-Length framing on responses, so we
 //  read until isComplete.
 //
 //  ENCRYPTED RTSP: if the launch URL is rtspenc:// (Sunshine's default), every
@@ -21,7 +21,7 @@
 //  sequenceNumber BE, tag[16] } over AES-128-GCM with StreamConfig.remoteInputAesKey.
 //  IV is 12 bytes: seq little-endian in [0..3], then 'C''R' (client) outbound /
 //  'H''R' (host) inbound. Outbound seq increments per message from 1; inbound seq
-//  comes from each response header. Same TCP transport — only the payload is
+//  comes from each response header. Same TCP transport - only the payload is
 //  sealed/unsealed. Ported from RtspConnection.c sealRtspMessage/unsealRtspMessage.
 
 import Foundation
@@ -46,19 +46,19 @@ struct RtspHandshakeResult {
     /// ("PING") video ping. Captured verbatim (NOT hex/base64-decoded), and only
     /// if the header value is exactly 16 chars (else the host ignores it).
     var videoPingPayload: [UInt8] = []
-    /// Same for SETUP-audio — the 16-byte ping the RtpAudioReceiver sends.
+    /// Same for SETUP-audio - the 16-byte ping the RtpAudioReceiver sends.
     var audioPingPayload: [UInt8] = []
     /// The OPUS_MULTISTREAM config seed. Stereo default (sampleRate 48000,
     /// channelCount 2, streams 1, coupledStreams 1, mapping [0,1],
     /// samplesPerFrame 240). The RTSP SETUP-audio response carries NO explicit
     /// per-channel opus stream layout, so for surround the decoder derives the
     /// real {streams, coupledStreams, mapping} from the negotiated channel count
-    /// (the host encodes from the same table) — see
+    /// (the host encodes from the same table) - see
     /// `AudioDecoder.opusMultistreamConfig(forChannels:)`. This seed supplies
     /// sampleRate + samplesPerFrame for every tier.
     var opusConfig: OpusConfig = RtspHandshakeResult.defaultOpusConfig
 
-    /// Stereo default OPUS_MULTISTREAM config — the single source the struct
+    /// Stereo default OPUS_MULTISTREAM config - the single source the struct
     /// default and the fast-start audio ping (constructed mid-handshake, before
     /// opus is otherwise referenced) both use.
     static let defaultOpusConfig = OpusConfig(
@@ -67,7 +67,7 @@ struct RtspHandshakeResult {
     /// AudioPacketDuration in ms (5 default; SDP sends x-nv-aqos.packetDuration 5).
     var audioPacketDuration: Int = 5
     /// True iff the host negotiated AES-CBC audio (SS_ENC_AUDIO). Plaintext on
-    /// the live host (encEnabled=0) — deferred encrypted path.
+    /// the live host (encEnabled=0) - deferred encrypted path.
     var audioEncryption: Bool = false
 }
 
@@ -115,7 +115,7 @@ final class RtspClient: @unchecked Sendable {
     var sessionIdString = ""
     var hasSessionId = false
 
-    /// True when the launch URL is rtspenc:// — every message is AES-GCM sealed.
+    /// True when the launch URL is rtspenc:// - every message is AES-GCM sealed.
     let encryptedRtspEnabled: Bool
     /// Outbound GCM sequence number (pre-incremented per sealed message from 1).
     var encryptionSeq: UInt32 = 0
@@ -123,7 +123,7 @@ final class RtspClient: @unchecked Sendable {
     /// Invoked the instant SETUP-audio is parsed (audioPort + audioPingPayload
     /// known), BEFORE SETUP video / ANNOUNCE / PLAY. The pipeline uses this to
     /// open the audio socket + start the burst ping mid-handshake, mirroring
-    /// moonlight's notifyAudioPortNegotiationComplete() — Sunshine won't aim audio
+    /// moonlight's notifyAudioPortNegotiationComplete() - Sunshine won't aim audio
     /// at us (and GFE 3.22 won't even reply to PLAY) until it has seen a ping.
     /// Synchronous so the ping is provably running before the handshake proceeds.
     var onAudioPortNegotiated: ((_ audioPort: UInt16, _ pingPayload: [UInt8]) -> Void)?
@@ -341,7 +341,7 @@ final class RtspClient: @unchecked Sendable {
             })
         }
 
-        // 3) Receive until the server closes (isComplete) — EOF delimits.
+        // 3) Receive until the server closes (isComplete) - EOF delimits.
         var accumulated = Data()
         while true {
             let (chunk, isComplete) = try await receiveChunk(connection)
@@ -427,7 +427,7 @@ final class RtspClient: @unchecked Sendable {
             appVersionQuad: appVersionQuad,
             // RFI is advertised (maxNumReferenceFrames=0) only when the host
             // offered it (DESCRIBE SDP) AND our decoder supports it for the
-            // negotiated codec — the VideoSink's RFI capability bits.
+            // negotiated codec - the VideoSink's RFI capability bits.
             serverSupportsRfi: result.referenceFrameInvalidationSupported,
             decoderRfiCapabilities: VideoDecoder.rfiCapabilities)
         let sdpPayload = sdpBuilder.build()
@@ -458,15 +458,15 @@ final class RtspClient: @unchecked Sendable {
     /// `performHandshake`: SETUP audio (captures the Session id), SETUP video,
     /// then SETUP control (carries X-SS-Connect-Data + the control port).
     private func performSetupRounds(into result: inout RtspHandshakeResult) async throws {
-        // 3) SETUP audio (no Session on the first SETUP — capture it here).
+        // 3) SETUP audio (no Session on the first SETUP - capture it here).
         Diag.info("RTSP SETUP streamid=audio/0/0", Self.logCategory)
         let audioResp = try await transact(makeSetup("streamid=audio/0/0"))
         try check(audioResp, step: "SETUP audio")
         result.audioPort = parsePort(audioResp) ?? 48000
         result.audioPingPayload = parsePingPayload(audioResp)
 
-        // Fast-start: open the audio socket + start the burst ping NOW — before
-        // SETUP video / ANNOUNCE / PLAY — so the host has our ping (and our return
+        // Fast-start: open the audio socket + start the burst ping NOW - before
+        // SETUP video / ANNOUNCE / PLAY - so the host has our ping (and our return
         // port) in hand by PLAY and can aim audio immediately. moonlight calls
         // notifyAudioPortNegotiationComplete() at exactly this point
         // (RtspConnection.c:1212). The callback is best-effort: a ping failure

@@ -19,7 +19,7 @@ extension IdentityManager {
         let defaults = UserDefaults.standard
 
         // -----------------------------------------------------------------
-        // Step 1 — file-store fast path.
+        // Step 1 - file-store fast path.
         // -----------------------------------------------------------------
         if defaults.integer(forKey: Self.fileStorageFlag) >= Self.fileStorageVersion {
             if let identity = try loadFromFileStore() {
@@ -27,15 +27,15 @@ extension IdentityManager {
                 log.info("Loaded identity from file store")
                 return identity
             }
-            // Flag set but file missing — user wiped Application Support,
+            // Flag set but file missing - user wiped Application Support,
             // disk error, whatever. Fall through to regen below. The flag
             // stays set; the regen path writes to the file store and the
             // flag remains accurate.
-            log.error("identityFileStorageVersion flag set but file store is empty — regenerating")
+            log.error("identityFileStorageVersion flag set but file store is empty - regenerating")
         }
 
         // -----------------------------------------------------------------
-        // Step 2 — legacy-keychain migration (the keychain-era build's three generic-password
+        // Step 2 - legacy-keychain migration (the keychain-era build's three generic-password
         // items at service "io.ugfugl.Glimmer.identity").
         //
         // We do this BEFORE the UserDefaults branch because if the
@@ -57,7 +57,7 @@ extension IdentityManager {
         }
 
         // -----------------------------------------------------------------
-        // Step 3 — original UserDefaults plaintext (the earliest builds).
+        // Step 3 - original UserDefaults plaintext (the earliest builds).
         //
         // If the legacy-keychain-only flag is set, the keychain-era build already wiped
         // UserDefaults so this branch can't help. Skip it.
@@ -79,9 +79,9 @@ extension IdentityManager {
         }
 
         // -----------------------------------------------------------------
-        // Step 4 — moonlight-qt cross-app migration. QSettings stores PEMs
+        // Step 4 - moonlight-qt cross-app migration. QSettings stores PEMs
         // as Data, not String, so we read both shapes. After a successful
-        // adoption the source plist's PEM material is wiped — see
+        // adoption the source plist's PEM material is wiped - see
         // `wipeMoonlightQtIdentityPlist` below for the threat model.
         // -----------------------------------------------------------------
         let needsMigration = (storedCert?.isEmpty ?? true) || (storedKey?.isEmpty ?? true)
@@ -125,9 +125,9 @@ extension IdentityManager {
         }
 
         // -----------------------------------------------------------------
-        // Step 5 — fresh install. Generate, file-store, done.
+        // Step 5 - fresh install. Generate, file-store, done.
         // -----------------------------------------------------------------
-        log.info("No existing client identity — generating a new one (file store)")
+        log.info("No existing client identity - generating a new one (file store)")
         let (certPEM, keyPEM) = try generateKeyPairAndCert()
         let uid: String
         if let stored = storedID, !stored.isEmpty {
@@ -153,7 +153,7 @@ extension IdentityManager {
         let uniqueID: String?
     }
 
-    /// Step 4 helper — read the cert/key (and optional uniqueID) PEMs out of
+    /// Step 4 helper - read the cert/key (and optional uniqueID) PEMs out of
     /// the moonlight-qt UserDefaults suite. QSettings persists PEMs as either
     /// String or Data, so we read both shapes. Returns nil when the suite is
     /// unreadable or doesn't carry a usable cert+key pair.
@@ -186,7 +186,7 @@ extension IdentityManager {
     // MARK: File store (current backend)
 
     /// Read all three components out of the file store. Returns nil if any of
-    /// them is missing — caller treats that as "fall through to next source".
+    /// them is missing - caller treats that as "fall through to next source".
     /// IO errors throw so a real read failure surfaces instead of silently
     /// triggering a destructive regen.
     func loadFromFileStore() throws -> Identity? {
@@ -207,7 +207,7 @@ extension IdentityManager {
            !stored.isEmpty {
             uid = stored
         } else {
-            // Unique ID file missing or empty — synthesise a fresh one and
+            // Unique ID file missing or empty - synthesise a fresh one and
             // persist it so subsequent loads are stable. This shouldn't
             // normally happen (we always write all three together), but
             // disk truncation / partial restore could theoretically leave
@@ -215,7 +215,7 @@ extension IdentityManager {
             uid = try generateUniqueID()
             let uidBytes = Data(uid.utf8)
             try FileIdentityStore.write(uidBytes, account: Self.accountUID)
-            log.info("File store missing uniqueID — synthesised and wrote a fresh one")
+            log.info("File store missing uniqueID - synthesised and wrote a fresh one")
         }
         return Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
     }
@@ -282,7 +282,7 @@ extension IdentityManager {
 
     /// Best-effort delete of the three legacy generic-password items. Called
     /// after a successful migration to the file store. Safe to call multiple
-    /// times — SecItemDelete on a missing item returns `errSecItemNotFound`
+    /// times - SecItemDelete on a missing item returns `errSecItemNotFound`
     /// which we treat as success.
     func deleteLegacyKeychainItems() {
         for account in [Self.accountCert, Self.accountKey, Self.accountUID] {
@@ -299,7 +299,7 @@ extension IdentityManager {
     // MARK: UserDefaults plaintext cleanup
 
     /// Remove any plaintext PEMs left in UserDefaults. The uniqueID is
-    /// wiped too — once we're in file-store mode the only authoritative copy
+    /// wiped too - once we're in file-store mode the only authoritative copy
     /// lives on disk. Idempotent: removing missing keys is a no-op.
     func wipeUserDefaultsPlaintext() {
         let defaults = UserDefaults.standard
@@ -318,14 +318,14 @@ extension IdentityManager {
     // the `key` field of its UserDefaults suite (QSettings writes it as
     // Data, hex-decoded PEM). The plist lives at
     //   ~/Library/Preferences/com.moonlight-stream.Moonlight.plist
-    // with default mode 0644 — readable by any process running as the
+    // with default mode 0644 - readable by any process running as the
     // same UID. That's a long-lived RSA-2048 private key sitting there
     // forever even after Glimmer has migrated it into our mode-0600 file
     // store.
     //
     // After a successful migration we wipe `certificate` and `key` from
     // the source plist. We do NOT touch `uniqueid`, `hosts.*`, or any
-    // other moonlight-qt state — only the PEM material — so users who
+    // other moonlight-qt state - only the PEM material - so users who
     // still use moonlight-qt alongside Glimmer keep their host list
     // intact. (The next time they pair from moonlight-qt itself, qt will
     // regenerate its own identity.)
@@ -350,7 +350,7 @@ extension IdentityManager {
     func wipeMoonlightQtIdentityPlist() {
         guard let mq = UserDefaults(suiteName: Self.moonlightQtSuiteName) else {
             // Suite unreadable (sandbox without the temporary-exception, or
-            // CFPreferences misconfig). Not an error per se — just nothing
+            // CFPreferences misconfig). Not an error per se - just nothing
             // to wipe from our point of view.
             log.info("moonlight-qt suite not readable; nothing to wipe")
             return
@@ -384,7 +384,7 @@ extension IdentityManager {
             return
         }
         // Only wipe if the file store has the canonical identity already
-        // — never wipe a source we haven't superseded. The file-storage
+        // - never wipe a source we haven't superseded. The file-storage
         // flag is the proof of that.
         guard defaults.integer(forKey: Self.fileStorageFlag) >= Self.fileStorageVersion else {
             return
@@ -395,6 +395,6 @@ extension IdentityManager {
     // MARK: Unique ID
 
     /// 32-hex-char GUID. moonlight-qt uses 64-bit base-16 (so up to 16 chars);
-    /// we hand back a full 16-byte (128-bit) ID instead — wider is fine, the
+    /// we hand back a full 16-byte (128-bit) ID instead - wider is fine, the
     /// host treats it as an opaque string.
 }

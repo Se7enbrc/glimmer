@@ -4,8 +4,8 @@
 //  The PROMETHEUS render for the VIDEO-PIPELINE metric families: frame/decode
 //  rates, pacing, drops, display refresh, frame size/type, the pipeline event
 //  counters, the per-stage latency histograms, the live decode state, and the
-//  present/display health. Split from TelemetryExporter+Render.swift — pure
-//  move, same file-split idiom as the FramePacer split — to keep that file
+//  present/display health. Split from TelemetryExporter+Render.swift - pure
+//  move, same file-split idiom as the FramePacer split - to keep that file
 //  under the length budget. Each section appends to the SAME `PromBuilder`
 //  (declared there) so the body stays one document; the naming conventions
 //  live in that file's header.
@@ -77,14 +77,14 @@ extension TelemetryRenderer {
         builder.emitCounter("glimmer_drops_suppressed_total",
                             "Frames dropped-to-newest while presentation was suppressed (designed).",
                             extras.suppressedDropTotal)
-        // The 0/1 context gauge for the counter above — which samples were taken
+        // The 0/1 context gauge for the counter above - which samples were taken
         // in suppressed mode. Same Extras sample as the NDJSON present_suppressed.
         builder.emit("glimmer_present_suppressed",
                      "1 while presentation is deliberately suppressed (window backgrounded/"
                      + "occluded), else 0.",
                      extras.presentSuppressed ? 1 : 0)
-        // The THIRD hidden-window state — decode stopped entirely after ~2s of
-        // continuous suppression — and its quiet drops, so a gated zero-decode
+        // The THIRD hidden-window state - decode stopped entirely after ~2s of
+        // continuous suppression - and its quiet drops, so a gated zero-decode
         // span never reads as a decode wedge. Same Extras sample as the NDJSON
         // decode_gated / drops_decode_gated_total.
         builder.emitCounter("glimmer_drops_decode_gated_total",
@@ -114,7 +114,7 @@ extension TelemetryRenderer {
                      snap.refreshChanged ? 1 : 0)
     }
 
-    /// Frame size + type — avg/max bytes + %IDR. Positively excludes (or catches)
+    /// Frame size + type - avg/max bytes + %IDR. Positively excludes (or catches)
     /// the big-frame / recurring-IDR hypothesis behind the idle-resume spike.
     static func promFrameSize(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         builder.emit("glimmer_frame_bytes_avg", "Average network-delivered frame size this window, bytes.",
@@ -143,7 +143,7 @@ extension TelemetryRenderer {
     }
 
     /// Per-stage latency HISTOGRAMS (_bucket/_sum/_count). Real Prometheus
-    /// histograms — chosen over pre-computed _p50/_p95/_p99 gauges because they're
+    /// histograms - chosen over pre-computed _p50/_p95/_p99 gauges because they're
     /// BOTH lower-overhead on the hot path (a record is a branchless bucket find +
     /// one atomic add, no live-quantile reservoir per frame) AND fully queryable:
     /// Grafana derives any quantile across any window with
@@ -178,7 +178,7 @@ extension TelemetryRenderer {
         // Input-to-photon ESTIMATE (signal 2): first-present-after-input −
         // input-sent, consume-once per input stamp (see TelemetryLatency+
         // Composites). A lower bound on felt input latency (the host doesn't
-        // mark which frame reflects an input) — the help text says estimate so
+        // mark which frame reflects an input) - the help text says estimate so
         // a reader can't misread it as measured. UNCAPPED up to the ~1s
         // plausibility ceiling; an earlier 38ms freshness cap pinned max/p99 at
         // the cap itself.
@@ -187,7 +187,7 @@ extension TelemetryRenderer {
             "Input-to-photon latency ESTIMATE histogram (first present after an input, "
             + "one observation per input stamp), ms.",
             stage: histograms.inputToPhoton)
-        // DECODE time split by frame type (signal: DECODE) — the submit→output
+        // DECODE time split by frame type (signal: DECODE) - the submit→output
         // decode delta bucketed separately for IDR keyframes vs P-frames, so the
         // slow full-intra IDR doesn't blur the fast P-frame distribution.
         builder.emitHistogram(
@@ -198,7 +198,7 @@ extension TelemetryRenderer {
             "glimmer_decode_time_p_ms",
             "Decode time (submit→VT-output) for P-frames, ms.",
             stage: histograms.decodeP)
-        // IDR ROUND-TRIP (signal: IDR-RTT) — explicit request-sent → matching
+        // IDR ROUND-TRIP (signal: IDR-RTT) - explicit request-sent → matching
         // IDR/recovery frame arrived (both client-side; RFIs don't arm, see
         // EnetControlChannel+Send). The distribution; the counts + last RTT
         // are in the P2 lifecycle section.
@@ -227,7 +227,7 @@ extension TelemetryRenderer {
         // pixel format + colorspace + hw-decode at a glance.
         builder.emitInfo(
             "glimmer_decode_state_info",
-            "Live decode state — codec, pixel format, bit depth, colorspace, hw-decode (value always 1).",
+            "Live decode state - codec, pixel format, bit depth, colorspace, hw-decode (value always 1).",
             labels: [("codec", state.codec),
                      ("pixel_format", state.pixelFormat),
                      ("bit_depth", String(state.bitDepth)),

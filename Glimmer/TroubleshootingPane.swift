@@ -2,10 +2,10 @@
 //  TroubleshootingPane.swift
 //
 //  Settings → Troubleshooting. A live controller input test (the diagnostic
-//  for "controller input dies after Cmd-Tab" — it reads GameController
+//  for "controller input dies after Cmd-Tab" - it reads GameController
 //  directly, so if signals stay live here but not in-stream, the stream's
 //  forwarding is the culprit), a battery readout, and an in-app log viewer
-//  (Sunshine-style — read the app's own unified-log entries without leaving
+//  (Sunshine-style - read the app's own unified-log entries without leaving
 //  the app).
 //
 
@@ -21,7 +21,7 @@ struct TroubleshootingPane: View {
             // The "Extra DualSense buttons" raw-HID control now lives in
             // Settings → Input (alongside the mouse + controller-quit settings),
             // so all raw input shares one home. Troubleshooting keeps the live
-            // input TEST + logs — the diagnostics, not the settings.
+            // input TEST + logs - the diagnostics, not the settings.
             Section {
                 ControllerInputTest()
             } header: {
@@ -29,7 +29,7 @@ struct TroubleshootingPane: View {
             } footer: {
                 Text("Reads the controller directly through macOS. If a signal "
                     + "lights up here but not in a stream, the issue is in how "
-                    + "the stream forwards it — try this view right after a "
+                    + "the stream forwards it - try this view right after a "
                     + "Cmd-Tab to confirm input is still live.")
             }
 
@@ -57,7 +57,7 @@ struct RawHIDControl: View {
     /// "Working" = reports are actually arriving. The TCC check
     /// (IOHIDCheckAccess) can read not-granted even while reports flow, which
     /// made this say "waiting for permission" when input was clearly working.
-    /// Polled into @State by a timer (NOT a TimelineView wrapping the buttons —
+    /// Polled into @State by a timer (NOT a TimelineView wrapping the buttons -
     /// that recreated the Buttons + their accessibility modifiers every second
     /// and triggered a SwiftUI view-graph use-after-free). With @State the
     /// buttons are stable; the view only re-renders when `working` flips.
@@ -72,7 +72,7 @@ struct RawHIDControl: View {
         if moonlight.rawHIDControllerEnabled {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label(working ? "On" : "On — waiting for permission",
+                    Label(working ? "On" : "On - waiting for permission",
                           systemImage: working ? "checkmark.circle.fill" : "hourglass")
                         .foregroundStyle(working ? .green : .secondary)
                     Spacer()
@@ -83,7 +83,7 @@ struct RawHIDControl: View {
             .onAppear { working = currentlyWorking }
             .onReceive(poll) { _ in working = currentlyWorking }
         } else {
-            Button("Enable…") { showExplain = true }
+            Button("Enable...") { showExplain = true }
                 .alert("Enable enhanced DualSense buttons?", isPresented: $showExplain) {
                     Button("Enable") { enable() }
                     Button("Cancel", role: .cancel) {}
@@ -94,7 +94,7 @@ struct RawHIDControl: View {
     }
 
     /// Friendly "you're one toggle away" card. We don't try to programmatically
-    /// re-request (it silently no-ops once macOS has a stale/denied entry —
+    /// re-request (it silently no-ops once macOS has a stale/denied entry -
     /// common with unsigned dev builds); we just hand the user straight to the
     /// right System Settings pane.
     private var permissionCard: some View {
@@ -102,9 +102,9 @@ struct RawHIDControl: View {
             Image(systemName: "gamecontroller")
                 .font(.title3).foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("One more step — turn on Input Monitoring").fontWeight(.medium)
+                Text("One more step - turn on Input Monitoring").fontWeight(.medium)
                 Text("Flip **Glimmer** on under Input Monitoring, then **quit & reopen** "
-                    + "Glimmer — macOS only applies the change on relaunch.")
+                    + "Glimmer - macOS only applies the change on relaunch.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -123,7 +123,7 @@ struct RawHIDControl: View {
     }
 
     /// IOHIDRequestAccess is the ONLY call that adds Glimmer to the Input
-    /// Monitoring list (IOHIDCheckAccess never registers it — confirmed via
+    /// Monitoring list (IOHIDCheckAccess never registers it - confirmed via
     /// OpenEmu/Karabiner). It also prompts when state is unknown. We then
     /// deep-link so the user can flip the toggle if it's still off.
     ///
@@ -131,7 +131,7 @@ struct RawHIDControl: View {
     /// ~2s while it presents/resolves the TCC prompt, so we run it off the main
     /// thread and only hop back to main to open System Settings. This is the
     /// ONE sanctioned entry point for the permission request + Settings deep
-    /// link — it fires only from this explicit "Open Settings" button, never
+    /// link - it fires only from this explicit "Open Settings" button, never
     /// automatically on controller connect.
     static func registerAndOpen() {
         DispatchQueue.global(qos: .userInitiated).async {

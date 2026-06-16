@@ -17,7 +17,7 @@ private enum AboutLink {
     static let license = "https://www.gnu.org/licenses/gpl-3.0.html"
     static let sunshine = "https://github.com/LizardByte/Sunshine"
     static let moonlight = "https://github.com/moonlight-stream"
-    /// The support link — the donate row reads this one constant and nothing
+    /// The support link - the donate row reads this one constant and nothing
     /// else. Mirrors the repo's FUNDING.yml (Ko-fi).
     static let donate = "https://ko-fi.com/ugfuglio"
 }
@@ -26,7 +26,7 @@ struct AboutPane: View {
     @Environment(MoonlightManager.self) private var moonlight
 
     var body: some View {
-        // First-party utility tone — see System Settings ▸ About, Disk
+        // First-party utility tone - see System Settings ▸ About, Disk
         // Utility ▸ About, Activity Monitor ▸ About: app name + plain
         // description + version + credits. No marketing voice, no
         // exclamation marks, no comparisons to other products. The credo
@@ -53,7 +53,7 @@ struct AboutPane: View {
                         Text("Stream your gaming PC to this Mac.")
                             .font(.title3)
                             .foregroundStyle(.secondary)
-                        // The credo. One line, no elaboration — it is the
+                        // The credo. One line, no elaboration - it is the
                         // project's bar, not a slogan to be decorated.
                         Text("Highest fidelity. Lowest resources. Rock stable.")
                             .font(.callout)
@@ -64,12 +64,12 @@ struct AboutPane: View {
                             .foregroundStyle(.tertiary)
                             // Hidden reveal for the Diagnostics pane. Option-
                             // clicking the version line toggles the
-                            // `showDiagnostics` UserDefault — a deliberate,
+                            // `showDiagnostics` UserDefault - a deliberate,
                             // undiscoverable gesture so normal users never trip
                             // it, but a power user (or a bug report) can surface
                             // the debug/tuning wires. The Telemetry toggle lives
                             // INSIDE Diagnostics, so it can't gate its own
-                            // reveal — hence this separate gesture-driven flag.
+                            // reveal - hence this separate gesture-driven flag.
                             .gesture(
                                 TapGesture()
                                     .modifiers(.option)
@@ -87,8 +87,8 @@ struct AboutPane: View {
             }
             Section("Acknowledgements") {
                 Text("Built for Sunshine, the open-source game-streaming host. Glimmer "
-                    + "speaks the Moonlight protocol — itself carrying NVIDIA GameStream "
-                    + "forward — and the transport is ported from moonlight-common-c, "
+                    + "speaks the Moonlight protocol - itself carrying NVIDIA GameStream "
+                    + "forward - and the transport is ported from moonlight-common-c, "
                     + "with respect. Full credits in CREDITS.md.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -125,10 +125,10 @@ struct AboutPane: View {
         .formStyle(.grouped)
     }
 
-    /// "1.2.3 (45)" — short marketing version + build number, matching
+    /// "1.2.3 (45)" - short marketing version + build number, matching
     /// what System Settings ▸ General ▸ About shows for first-party apps.
     private var versionString: String {
-        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
         if let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String, !build.isEmpty, build != short {
             return "\(short) (\(build))"
         }

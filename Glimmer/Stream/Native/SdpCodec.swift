@@ -14,7 +14,7 @@
 //  control stream id "streamid=control/13/0"). We only build the TCP + 7.1.431+
 //  branches.
 //
-//  WIRE FORMAT (exact bytes — off-by-one here = silent host rejection):
+//  WIRE FORMAT (exact bytes - off-by-one here = silent host rejection):
 //   Request line:  "<COMMAND> <target> RTSP/1.0\r\n"
 //   Option line:   "<name>: <content>\r\n"               (colon-SPACE)
 //   Blank line:    "\r\n"
@@ -75,7 +75,7 @@ struct RtspMessage {
         // Find the "\r\n\r\n" boundary that ends the headers.
         let crlfcrlf = Data([0x0D, 0x0A, 0x0D, 0x0A])
         guard let boundary = data.range(of: crlfcrlf) else {
-            // No header terminator — try to parse what we have as header-only.
+            // No header terminator - try to parse what we have as header-only.
             return parseHeaderBlock(data, payload: nil)
         }
         let headerData = data.subdata(in: data.startIndex..<boundary.lowerBound)
@@ -120,7 +120,7 @@ struct RtspMessage {
 
 // MARK: - SDP parsing (DESCRIBE response)
 
-/// Loose SDP attribute scanning that mirrors the C substring sniffing — NOT a
+/// Loose SDP attribute scanning that mirrors the C substring sniffing - NOT a
 /// strict SDP parser, on purpose (Sunshine labels HEVC as H264 MIME, so codec
 /// detection relies on payload substrings).
 enum SdpScan {
@@ -161,11 +161,11 @@ enum SdpScan {
 /// Reference-frame invalidation (RFI) is advertised when BOTH the host
 /// supports it (DESCRIBE SDP `x-nv-video[0].refPicInvalidation`) AND our
 /// decoder supports it for the negotiated codec (the sink's CAPABILITY_*
-/// bits) — see `referenceFrameInvalidationActive`. That gate drives
+/// bits) - see `referenceFrameInvalidationActive`. That gate drives
 /// maxNumReferenceFrames (0 = host may keep older good refs for an RFI
 /// recovery; 1 = single ref ⇒ every loss recovery is a full IDR). YUV444 and
 /// the codec block follow the negotiated format; video/audio encryption stays
-/// disabled (encryptionFlags=0) — only control-V2 may auto-enable, which is
+/// disabled (encryptionFlags=0) - only control-V2 may auto-enable, which is
 /// the CONTROL stream's concern.
 struct SdpBuilder {
     let config: BackendStreamConfig
@@ -186,7 +186,7 @@ struct SdpBuilder {
     /// Host RFI support, parsed from the DESCRIBE SDP
     /// (`x-nv-video[0].refPicInvalidation` ⇒ ReferenceFrameInvalidationSupported).
     /// Defaulted false so a host that never offered RFI degrades to full-IDR
-    /// recovery (today's behavior) — no breakage.
+    /// recovery (today's behavior) - no breakage.
     var serverSupportsRfi: Bool = false
     /// Our decoder's RFI capability bits (VideoSink.capabilities:
     /// CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC/HEVC/AV1). Matched against
@@ -239,7 +239,7 @@ struct SdpBuilder {
         // codec the negotiator actually settled on: it only lands a YUV444
         // VIDEO_FORMAT (HEVC RExt / AV1 High 4:4:4) when the host OFFERED it
         // AND we PROBED hardware decode for it (RtspClient.negotiate +
-        // VideoFormats.probedSupported). So this attribute is purely derived —
+        // VideoFormats.probedSupported). So this attribute is purely derived -
         // 4:4:4 is never forced; it engages only on a negotiated 4:4:4 format.
         let is444 = negotiatedVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_YUV444 != 0
         attrs.append(("x-ss-video[0].chromaSamplingType", is444 ? "1" : "0"))
@@ -266,7 +266,7 @@ struct SdpBuilder {
         // framesWithInvalidRefThreshold "0" is the moonlight-common-c default,
         // set UNCONDITIONALLY (SdpGenerator.c). 0 = the host imposes no ceiling
         // on how many frames may still reference an invalidated frame while an
-        // RFI recovery is outstanding — i.e. it keeps shipping P-frames against
+        // RFI recovery is outstanding - i.e. it keeps shipping P-frames against
         // the older good reference instead of stalling on a full IDR. A
         // non-zero value would cap that tolerance and force an IDR sooner,
         // which is the opposite of the lossy-link win RFI buys, so "0" stays.
@@ -274,7 +274,7 @@ struct SdpBuilder {
 
         // adjustedBitrate = bitrate * 0.80, remote -=500 if >500, cap 200000.
         // The cap is the ceiling Sunshine VQOS can ever climb to. It was 100 Mbps
-        // — which silently truncated the abundant-link, high-res case (4K@240 wire
+        // - which silently truncated the abundant-link, high-res case (4K@240 wire
         // ~105 Mbps and 5K/6K@120 push past 125 Mbps configured → ×0.80 ≥ 100 Mbps,
         // clipped) exactly where quality should be highest. Raised to 200 Mbps to
         // match QualityCalculator's own ceiling; the host simply won't use more
@@ -289,13 +289,13 @@ struct SdpBuilder {
         attrs.append(("x-nv-video[0].initialPeakBitrateKbps", "\(adjustedBitrate)"))
         // Give Sunshine's host-side VQOS a RANGE to adapt within instead of
         // pinning min==max (which left it no room to drop bitrate when it
-        // detects loss — the bandwidth estimator could only hold or stall). The
+        // detects loss - the bandwidth estimator could only hold or stall). The
         // floor is half the peak, never below 10 Mbps, so the host can step the
         // encoder down under sustained loss and recover frame delivery rather
         // than shipping a fixed rate into a degraded path. This is host-driven
-        // ABR only — there is no client→host bitrate message in this profile, so
+        // ABR only - there is no client→host bitrate message in this profile, so
         // the client never drives the rate; we just widen the advertised window.
-        // min(…, adjustedBitrate) keeps the floor at/below the peak even for a
+        // min(..., adjustedBitrate) keeps the floor at/below the peak even for a
         // very low configured bitrate (where 10 Mbps could otherwise exceed it
         // and invert the range).
         let minBitrate = min(max(10_000, adjustedBitrate / 2), adjustedBitrate)
@@ -351,7 +351,7 @@ struct SdpBuilder {
         attrs.append(("x-nv-video[0].dynamicRangeMode", is10bit ? "1" : "0"))
         // maxNumReferenceFrames "0" when RFI is active ⇒ the host keeps multiple
         // reference frames so a loss can be recovered with a post-invalidation
-        // RFI frame (header type 4/5) instead of a full IDR — the wire signal by
+        // RFI frame (header type 4/5) instead of a full IDR - the wire signal by
         // which the host learns the client accepts RFI recovery (there is no
         // separate "client supports RFI" attribute; this IS it, SdpGenerator.c).
         // "1" restricts the host to a single reference ⇒ EVERY loss recovery is
@@ -368,7 +368,7 @@ struct SdpBuilder {
         attrs.append(("x-nv-audio.surround.enable", audioChannelCount > 2 ? "1" : "0"))
 
         // q[0]>=7 audio quality + packet duration. AudioQuality "1" requests
-        // Sunshine's HIGH opus tier (~256 kbps stereo) instead of "0" (~96 kbps) —
+        // Sunshine's HIGH opus tier (~256 kbps stereo) instead of "0" (~96 kbps) -
         // there's no bandwidth reason to ship low-bitrate audio, and the link-aware
         // cushion already absorbs the slightly larger packets on a bad link.
         attrs.append(("x-nv-audio.surround.AudioQuality", "1"))
@@ -384,11 +384,11 @@ struct SdpBuilder {
         sdp += "o=android 0 \(rtspClientVersion) IN \(addrFamilyToken) \(urlSafeAddr)\r\n"
         sdp += "s=NVIDIA Streaming Client\r\n"
         for (name, value) in attrs {
-            // "a=<name>:<value> \r\n" — trailing SPACE before CRLF is real.
+            // "a=<name>:<value> \r\n" - trailing SPACE before CRLF is real.
             sdp += "a=\(name):\(value) \r\n"
         }
         sdp += "t=0 0\r\n"
-        // "m=video <port>  \r\n" — TWO spaces before CRLF.
+        // "m=video <port>  \r\n" - TWO spaces before CRLF.
         sdp += "m=video \(videoPort)  \r\n"
 
         return Data(sdp.utf8)

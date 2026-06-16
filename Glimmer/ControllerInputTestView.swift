@@ -12,7 +12,7 @@ import SwiftUI
 
 /// Drives a live view of connected controllers. macOS's GameController
 /// framework only refreshes an element's polled value once an app has
-/// registered a value-changed handler on that controller — passive polling
+/// registered a value-changed handler on that controller - passive polling
 /// reads nothing (which is why this test showed a controller but no button
 /// reaction). This monitor registers a lightweight handler that bumps
 /// `revision` to refresh the SwiftUI view, and tears it down on disappear. It
@@ -21,7 +21,7 @@ import SwiftUI
 @MainActor @Observable
 final class ControllerMonitor {
     private(set) var revision = 0
-    /// Live count of GameController value-changed callbacks — the diagnostic
+    /// Live count of GameController value-changed callbacks - the diagnostic
     /// for "does GameController deliver input to us in this context at all?"
     private(set) var gcEventCount = 0
     private var observers: [NSObjectProtocol] = []
@@ -33,8 +33,8 @@ final class ControllerMonitor {
 
     func start() {
         GCController.startWirelessControllerDiscovery {}
-        // Receive controller input even though the Settings window — not a
-        // game window — is key. Without this, GameController appears to deliver
+        // Receive controller input even though the Settings window - not a
+        // game window - is key. Without this, GameController appears to deliver
         // nothing to a non-game foreground context (GC events stay 0).
         GCController.shouldMonitorBackgroundEvents = true
         let nc = NotificationCenter.default
@@ -44,7 +44,7 @@ final class ControllerMonitor {
             })
         }
         // Raw-HID side-channel for the DualSense center buttons (Options /
-        // Create / Mute) that GameController doesn't deliver — same source the
+        // Create / Mute) that GameController doesn't deliver - same source the
         // stream uses. ONLY when the user has opted in (gates the Input
         // Monitoring prompt). Refresh the view when they change.
         if DualSenseHID.isEnabled {
@@ -94,7 +94,7 @@ struct ControllerInputTest: View {
         // value-changed handler firing re-renders this view (which then reads
         // the now-live element values).
         // Poll on a 30 Hz timeline so the chips reflect live element state.
-        // (Input IS arriving — the counters prove it — but a revision-based
+        // (Input IS arriving - the counters prove it - but a revision-based
         // re-render wasn't repainting the chips; a timeline is reliable.)
         TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
             let pads = GCController.controllers()
@@ -122,7 +122,7 @@ struct ControllerInputTest: View {
 
     /// Live "is anything arriving?" readout (re-read by the parent timeline).
     /// GameController events count value-changed callbacks; HID reports count
-    /// raw DualSense reports — so if a chip never lights you can still see
+    /// raw DualSense reports - so if a chip never lights you can still see
     /// whether input is reaching the app at all.
     private var diagnosticLine: some View {
         let gc = monitor?.gcEventCount ?? 0
@@ -140,7 +140,7 @@ struct ControllerInputTest: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text("No controller connected").fontWeight(.medium)
-                Text("Pair a controller over Bluetooth or plug it in — it'll "
+                Text("Pair a controller over Bluetooth or plug it in - it'll "
                     + "appear here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -155,7 +155,7 @@ private struct ControllerCard: View {
     let pad: GCController
     /// Changes every TimelineView tick. `pad` is a stable object reference, so
     /// without a value-typed input that actually changes, SwiftUI considers
-    /// this view unchanged and skips re-evaluating `body` — the chips would
+    /// this view unchanged and skips re-evaluating `body` - the chips would
     /// never repaint even as the controller state changes. Reading `tick` in
     /// `body` ties the repaint to the timeline.
     let tick: Date
@@ -215,11 +215,11 @@ private struct ControllerCard: View {
     }
 
     /// Prefer the HID-decoded battery (GameController's `battery` goes nil while
-    /// the raw-HID reader is open — see DualSenseBattery); fall back to
+    /// the raw-HID reader is open - see DualSenseBattery); fall back to
     /// GameController when raw HID isn't running. The fallback resolves
     /// through ControllerBattery.uiReading: macOS's .unknown + 0.0 no-data
-    /// sentinel (Xbox over BT) becomes nil — "No battery info", not the old
-    /// alarming orange "0%" — while an unknown STATE with a real level
+    /// sentinel (Xbox over BT) becomes nil - "No battery info", not the old
+    /// alarming orange "0%" - while an unknown STATE with a real level
     /// (DualSense: 0.95/.unknown) keeps its percentage with charging nil.
     /// The 30Hz repaint re-reads, so a reading that materialises appears.
     private var batteryReading: (percent: Int, charging: Bool?)? {
@@ -296,7 +296,7 @@ private struct FlowChips: View {
 
 private struct StickPad: View {
     let label: String
-    // Live axis values (not the GCControllerDirectionPad object — passing the
+    // Live axis values (not the GCControllerDirectionPad object - passing the
     // object made SwiftUI skip re-rendering on stick motion, so the dot only
     // moved when `clicked` flipped).
     let x: Float
@@ -389,7 +389,7 @@ private struct TouchpadView: View {
 
 private struct BatteryBadge: View {
     /// `charging` nil = the level is real but the charge DIRECTION is
-    /// unknown (DualSense reads 0.95/.unknown on macOS) — render the bare
+    /// unknown (DualSense reads 0.95/.unknown on macOS) - render the bare
     /// number with no glyph and no orange: the fill glyph and the low-battery
     /// alarm both assert "not charging", which we don't know. A pad that may
     /// well be docked must not scream empty; the truthful claim is just the

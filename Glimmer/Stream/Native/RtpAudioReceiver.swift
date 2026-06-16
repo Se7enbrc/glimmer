@@ -6,30 +6,30 @@
 //  BOTH the periodic ping (sendto host:audioPort) and RTP receive (recvfrom from
 //  ANY source). The host sources audio RTP from a port != audioPort and aims it
 //  at the ping's UDP source port, so a *connected* NWConnection would silently
-//  drop audio — exactly the bug VideoRtpReceiver was built to avoid. This MIRRORS
+//  drop audio - exactly the bug VideoRtpReceiver was built to avoid. This MIRRORS
 //  VideoRtpReceiver's socket/ping pattern. Source: AudioStream.c
 //  (AudioReceiveThreadProc + AudioPingThreadProc) + RtpAudioQueue.c.
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
 //  PING (AudioStream.c:38-65): send a 20-byte SS_PING
-//  { payload[16] + sequenceNumber (UInt32 BE) } — the fast-start burst first,
+//  { payload[16] + sequenceNumber (UInt32 BE) } - the fast-start burst first,
 //  then the CONDITIONAL steady cadence (EnvSignalController.steadyPingInterval
-//  — 75ms Wi-Fi-doze keepalive / 500ms relaxed; upstream pings a flat
-//  500ms) — payload =
+//  - 75ms Wi-Fi-doze keepalive / 500ms relaxed; upstream pings a flat
+//  500ms) - payload =
 //  the 16 raw bytes from the SETUP-audio X-SS-Ping-Payload header. seq starts
 //  at 1, incremented BEFORE each send. If no payload captured (legacy GFE), send the 4-byte "PING"
 //  { 0x50,0x49,0x4E,0x47 }. The host won't reply to RTSP PLAY (GFE 3.22) and
-//  won't aim audio at us until it has received a ping — so ping + receive MUST
+//  won't aim audio at us until it has received a ping - so ping + receive MUST
 //  share one socket.
 //
 //  RECEIVE (AudioStream.c:239-383): drop runt packets (< 12 bytes); byteswap
 //  the RTP header BE→host; feed the queue; dispatch the queue result to the
 //  decoder. Where the C drops a fixed first-500ms of audio (GFE buffers samples
-//  before the client is ready), we run a backlog-aware startup gate instead —
+//  before the client is ready), we run a backlog-aware startup gate instead -
 //  Sunshine paces audio live from seq ~0, so the fixed drop cost half a second
 //  of LIVE audio per session (see the gate state docs below). For our SDP
-//  (encEnabled=0) audio is PLAINTEXT — no AES-CBC decrypt. (Encryption support
+//  (encEnabled=0) audio is PLAINTEXT - no AES-CBC decrypt. (Encryption support
 //  is deferred; see the host constraints.)
 //
 //  Teardown is bounded: recvfrom blocks with a 100ms SO_RCVTIMEO so the loop
@@ -38,15 +38,15 @@
 //
 //  Code map (this type is split across same-module extension files)
 //  ----------------------------------------------------------------
-//    * RtpAudioReceiver.swift             — the class decl, stored state, the
+//    * RtpAudioReceiver.swift             - the class decl, stored state, the
 //                                           StartupPacing enum, init, lifecycle,
 //                                           and the receive loop / datagram path.
-//    * RtpAudioReceiver+Socket.swift      — the unconnected-UDP socket bring-up.
-//    * RtpAudioReceiver+Ping.swift        — the burst→steady keepalive thread.
-//    * RtpAudioReceiver+StartupGate.swift — the backlog-aware startup gate.
-//    * RtpAudioReceiver+Decrypt.swift     — the decode hand-off + AES-CBC path.
-//    * RtpAudioReceiver+Events.swift      — the audio_ttf / audio_pending rows.
-//    * RtpAudioReceiver+Telemetry.swift   — the per-window receive-quality fold.
+//    * RtpAudioReceiver+Socket.swift      - the unconnected-UDP socket bring-up.
+//    * RtpAudioReceiver+Ping.swift        - the burst→steady keepalive thread.
+//    * RtpAudioReceiver+StartupGate.swift - the backlog-aware startup gate.
+//    * RtpAudioReceiver+Decrypt.swift     - the decode hand-off + AES-CBC path.
+//    * RtpAudioReceiver+Events.swift      - the audio_ttf / audio_pending rows.
+//    * RtpAudioReceiver+Telemetry.swift   - the per-window receive-quality fold.
 
 import Foundation
 import Network
@@ -77,7 +77,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     // Access note: many members below are module-internal (not private) so the
     // same-module split files (+Socket / +Ping / +StartupGate / +Decrypt /
-    // +Events / +Telemetry — see the code map above) can reach them. The
+    // +Events / +Telemetry - see the code map above) can reach them. The
     // threading contracts are unchanged: each field's docs say which thread
     // owns it.
 
@@ -97,12 +97,12 @@ final class RtpAudioReceiver: @unchecked Sendable {
     weak var sink: NativeAudioSink?
 
     /// Dedicated high-priority queue for the RTP receive loop. `.userInteractive`
-    /// so recvfrom is never starved behind default-QoS work — the same
+    /// so recvfrom is never starved behind default-QoS work - the same
     /// scheduler-starvation bug the video path hit and fixed (see
     /// VideoRtpReceiver.recvQueue). A default-QoS queue (the prior value) let
     /// the receive loop get preempted under load for 70-215ms at a time, which
     /// let the kernel socket buffer back up and serviced the 5ms audio packets
-    /// in bursts — draining the playout cushion (audible gap), then slamming the
+    /// in bursts - draining the playout cushion (audible gap), then slamming the
     /// catch-up clump into the playout trim gates (audible crackle).
     private let recvQueue = DispatchQueue(
         label: "io.ugfugl.Glimmer.audiortp", qos: .userInteractive)
@@ -127,12 +127,12 @@ final class RtpAudioReceiver: @unchecked Sendable {
     // pre-buffers samples before the client is ready. Sunshine never front-loads:
     // audio arrives at real-time pace from seq ~0 (proven on this host's session
     // data), so the fixed drop was throwing away half a second of LIVE audio
-    // every session — over half the <1s time-to-first-audio budget. Instead we
+    // every session - over half the <1s time-to-first-audio budget. Instead we
     // MEASURE the first window's arrival pacing: a live source can only deliver
     // ~1x real time (one packetDuration of audio per packetDuration of wall
     // clock), so ≥2x sustained across ~100ms proves a flushed backlog (a
     // GFE-style host pre-buffer, or our own SO_RCVBUF holding early-start
-    // arrivals) — and only then do we drop, and only the measured stale excess,
+    // arrivals) - and only then do we drop, and only the measured stale excess,
     // keeping the decision window's worth (already decoded) as the playout
     // cushion. Cost on the hot path: integer counts per packet plus a clock
     // read only at the window edges (and per packet during a burst drain,
@@ -142,24 +142,24 @@ final class RtpAudioReceiver: @unchecked Sendable {
         /// the proven norm, and withholding live audio is exactly the cost this
         /// gate removes) while counting the arrival pacing.
         case measuring
-        /// Burst verdict: a backlog is flushing — discard decodes until the
+        /// Burst verdict: a backlog is flushing - discard decodes until the
         /// backlog-ahead estimate stops growing (the live edge).
         case draining
         /// Verdict latched (one-shot); the gate is a single compare per packet.
         case decided
     }
     var startupPacing: StartupPacing = .measuring
-    /// Data (type-97) packets since the first one — arrived audio-ms is this ×
+    /// Data (type-97) packets since the first one - arrived audio-ms is this ×
     /// `audioPacketDuration`. FEC datagrams carry no audio-ms and are never
     /// counted (under loss the pacing estimate then reads LOW, biasing toward
-    /// the paced verdict — the safe direction: nothing gets dropped).
+    /// the paced verdict - the safe direction: nothing gets dropped).
     var startupDataPackets = 0
-    /// Monotonic stamp of the first data packet — the pacing clock's zero.
+    /// Monotonic stamp of the first data packet - the pacing clock's zero.
     var startupFirstDataNanos: UInt64 = 0
     /// Backlog-ahead estimate (arrived-audio-ms − elapsed-ms) at the previous
     /// drain packet; the drain stops the moment this stops growing.
     var startupPrevAheadMs = 0.0
-    /// Queue outputs the drain discarded at the decode hand-off — the verdict
+    /// Queue outputs the drain discarded at the decode hand-off - the verdict
     /// log's and audio_ttf's dropped_ms is this × `audioPacketDuration`.
     var startupDroppedPackets = 0
     /// Latched verdict, kept for the audio_ttf event fields.
@@ -167,13 +167,13 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     // --- P1 AUDIO telemetry: ~1s metrics window (Track B, opt-in). The audio
     // receive-quality totals are folded into the always-live `TelemetryCounters`
-    // once per window — NOT per packet — so the hot per-datagram path stays a
+    // once per window - NOT per packet - so the hot per-datagram path stays a
     // straight decode. We read RtpAudioQueue's cumulative `Stats` (which it
     // already maintains) and publish the per-window DELTAS, exactly mirroring how
     // the video receive path batches its receive-quality totals. All touched only
     // on recvQueue (single receive thread), so no lock is needed here. The flush
     // logic lives in RtpAudioReceiver+Telemetry.swift (extensions can't hold stored
-    // state, so the fields stay here `internal` while the method moves out — which
+    // state, so the fields stay here `internal` while the method moves out - which
     // keeps this file under the SwiftLint length limit, like the video split). ---
     var audioMetricsWindowStartNanos: UInt64 = 0
     static let audioMetricsWindowNanos: UInt64 = 1_000_000_000  // 1s
@@ -182,7 +182,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     var lastFlushedAudioPackets: UInt32 = 0
     var lastFlushedFecRecovered: UInt32 = 0
     /// Unrecovered audio-loss this window, counted as the PLC placeholders the
-    /// queue emits for missing data shards FEC couldn't recover — the precise
+    /// queue emits for missing data shards FEC couldn't recover - the precise
     /// audible-gap count (one per data packet the user won't hear). Folded into the
     /// loss total each window, then zeroed.
     var audioLostInWindow: Int = 0
@@ -210,7 +210,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     /// Cross-thread first-RTP latch for the silent-audio probe: SET on the first
     /// audio RTP datagram (any type). `receivedDataFromPeer` carries the same
-    /// fact but is confined to `recvQueue` — which the blocking receive loop
+    /// fact but is confined to `recvQueue` - which the blocking receive loop
     /// occupies for the whole session, so the probe can't hop there to read it.
     let firstRtpReceived = ManagedAtomicFlag()
     /// `audio_ttf` event fields stashed at the first-DATAGRAM latch and emitted
@@ -218,7 +218,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// both honest TTF spans plus the gate's verdict. recvQueue-confined.
     var firstRtpPingToRtpMs: Double?
     var firstRtpPings: UInt64 = 0
-    /// Consecutive ping sendto() failures — for STREAK-EDGE logging only (first
+    /// Consecutive ping sendto() failures - for STREAK-EDGE logging only (first
     /// failure + recovery, never per packet). Owned by the ping thread.
     var pingSendFailureStreak = 0
 
@@ -226,8 +226,8 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     /// Startup-pacing decision window: enough audio-ms that a PACED flow through
     /// this link's clumpy radio (routine 40-110ms coalesced deliveries) still
-    /// averages out to ~1x — a live source only EMITS ~100ms of audio in 100ms
-    /// no matter how delivery clumps — while a real backlog flush lands the
+    /// averages out to ~1x - a live source only EMITS ~100ms of audio in 100ms
+    /// no matter how delivery clumps - while a real backlog flush lands the
     /// whole window in a few ms. Small enough that the kept window doubles as a
     /// healthy playout cushion (between the decoder's 30ms base and 150ms cap).
     private static let startupDecisionWindowMs = 100
@@ -236,12 +236,12 @@ final class RtpAudioReceiver: @unchecked Sendable {
     let startupDecisionPackets: Int
     /// Burst-verdict floor for the measured rate (arrived-audio-ms ÷
     /// elapsed-wall-ms) across the decision window. A live source physically
-    /// cannot sustain >1x — clumpy radio delivery re-times packets WITHIN the
-    /// window but cannot mint extra audio-ms across it — so ≥2x sustained
+    /// cannot sustain >1x - clumpy radio delivery re-times packets WITHIN the
+    /// window but cannot mint extra audio-ms across it - so ≥2x sustained
     /// means at least half the window pre-existed it: a backlog. The worst
     /// misread (a delivery clump landing exactly at audio start) costs a few
     /// ms of drain overshoot (see updateStartupPacing), never a permanent
-    /// give-up — the gate latches and gets out of the way either way.
+    /// give-up - the gate latches and gets out of the way either way.
     static let startupBurstRateFloor = 2.0
 
     // Audio ping cadence (the fast-start burst). moonlight sends a steady 500ms
@@ -250,7 +250,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     // then settle to the steady keepalive (Sunshine times out if it stops).
     // The steady tail is CONDITIONAL: the loop wakes at the fast quantum
     // (steadyIntervalSec = UdpPinger.steadyPingIntervalSeconds, the 75ms
-    // Wi-Fi-doze keepalive — WHY/VERDICT/COST live on that dial) and gates
+    // Wi-Fi-doze keepalive - WHY/VERDICT/COST live on that dial) and gates
     // each send on EnvSignalController.steadyPingInterval(), which relaxes to
     // UdpPinger.relaxedPingIntervalSeconds (500ms, upstream's rate) on a
     // confirmed-wired route or active-input clear wifi play. The burst stays
@@ -262,10 +262,10 @@ final class RtpAudioReceiver: @unchecked Sendable {
     static let steadyIntervalSec = UdpPinger.steadyPingIntervalSeconds
 
     /// Silent-audio probe delay: how long after the receive path comes up (the
-    /// post-connect bring-up, when video is starting — the closest
+    /// post-connect bring-up, when video is starting - the closest
     /// receiver-visible proxy for "video started") before flagging that no audio
     /// RTP has arrived. Host cold-start audio bring-up of 4-40s is the observed
-    /// norm; the probe only makes the silence VISIBLE — the ping loop keeps
+    /// norm; the probe only makes the silence VISIBLE - the ping loop keeps
     /// retrying regardless (it never gives up).
     static let audioPendingProbeSeconds = 3.0
 
@@ -324,12 +324,12 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// FAST-START phase (mid-handshake): open the socket + start the burst-ping
     /// loop. Mirrors moonlight's notifyAudioPortNegotiationComplete(), which opens
     /// the audio socket and starts the ping thread the instant SETUP-audio is
-    /// parsed — BEFORE PLAY — because Sunshine won't aim audio at us (GFE 3.22
+    /// parsed - BEFORE PLAY - because Sunshine won't aim audio at us (GFE 3.22
     /// won't even reply to PLAY) until it has received a ping. Needs only
     /// host/audioPort/pingPayload, all known at SETUP-audio time. Idempotent.
     ///
     /// We may receive audio before startReceive() opens the recv loop; that's
-    /// fine — the kernel buffers it in SO_RCVBUF, and when the recv loop drains
+    /// fine - the kernel buffers it in SO_RCVBUF, and when the recv loop drains
     /// that buffer back-to-back the startup gate reads it as a BURST and drops
     /// the stale excess (the fixed 500ms drop this replaced handled at most
     /// 500ms of such backlog; the gate handles any depth).
@@ -388,7 +388,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         interrupted.set()
         // Stamp the stream-end instant for the NEXT session's `host_idle_s`
         // covariate (the warm/cold TTF classification): this teardown trails the
-        // last audio packet by well under a second — close enough for a covariate
+        // last audio packet by well under a second - close enough for a covariate
         // whose interesting scale is minutes. The stamp deliberately survives
         // `resetForNewSession` (it anchors the next session's measurement);
         // last-writer-wins, so a repeated stop() harmlessly re-stamps.
@@ -426,7 +426,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
                     let err = errno
                     if err == EAGAIN || err == EWOULDBLOCK || err == EINTR {
                         // Poll timeout (100ms of recv silence): same quiet-socket
-                        // proof as above — whatever arrives NEXT is delayed LIVE
+                        // proof as above - whatever arrives NEXT is delayed LIVE
                         // audio (a radio-coalesced clump), not a host backlog,
                         // and must not be eaten by the startup gate.
                         self.resolveStartupPacingOnIdle()
@@ -439,7 +439,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     }
 
     private func handleDatagram(_ buf: [UInt8], count: Int) {
-        // Per-socket GAP-EVENT accumulation first (before the runt check — a runt
+        // Per-socket GAP-EVENT accumulation first (before the runt check - a runt
         // is still a socket arrival, and the counters measure the ARRIVAL process).
         noteAudioArrivalGap()
 
@@ -452,7 +452,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
             receivedDataFromPeer = true
             firstRtpReceived.set()
             // Time-to-first-packet metric: how long from the first ping until the
-            // host aimed audio at us, and how many pings it took. Target <1s —
+            // host aimed audio at us, and how many pings it took. Target <1s -
             // met on warm reconnects (~284ms), but a COLD host takes 4-40s to
             // bring its audio pipeline up (host-side; the ping cadence never
             // pauses), so over-target reads are expected and flagged by the
@@ -475,8 +475,8 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
         // Backlog-aware startup gate (replaces the C's fixed 500ms drop,
         // AudioStream.c:312-318): classify the first window's arrivals as PACED
-        // (live — decode everything, withhold nothing) or BURST (a flushed
-        // backlog — drain the stale excess). Either way this datagram still
+        // (live - decode everything, withhold nothing) or BURST (a flushed
+        // backlog - drain the stale excess). Either way this datagram still
         // feeds the queue below, so sequence/FEC/stats bookkeeping stays
         // coherent (an early return here would read to the queue as a giant
         // loss gap and churn the FEC/PLC machinery when feeding resumed); the
@@ -501,7 +501,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
         if !loggedFirstPacket {
             loggedFirstPacket = true
-            // P1 AUDIO cold-start: record the first DECODED audio RTP instant —
+            // P1 AUDIO cold-start: record the first DECODED audio RTP instant -
             // the exporter surfaces (this − the stream-start anchor) as the
             // time-to-first-audio gauge. Always-live; read only when telemetry
             // on. With the backlog-aware gate the first arrival IS the first
@@ -521,7 +521,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         flushAudioMetricsIfDue()
         switch result {
         case .handleNow:
-            // In-order fast path: decode this packet immediately — unless the
+            // In-order fast path: decode this packet immediately - unless the
             // startup gate marked it stale (burst drain), in which case the
             // queue bookkeeping above already ran and only the listener-facing
             // decode is withheld.
@@ -535,7 +535,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
             // whole batch shares this datagram's startup-gate verdict: queue
             // outputs lag the newest arrival by at most the small OOS window,
             // so the verdict-boundary error is a packet or two of extra
-            // cushion — noise next to the decoder's trim machinery.
+            // cushion - noise next to the decoder's trim machinery.
             while let queued = queue.getQueuedPacket() {
                 switch queued {
                 case .bytes(let bytes):
@@ -547,7 +547,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
                 case .lostPlaceholder:
                     // P1 AUDIO: an unrecovered missing data shard. Count the
                     // wire loss either way (it happened; a single integer add
-                    // on the receive thread, no lock) — but only conceal a gap
+                    // on the receive thread, no lock) - but only conceal a gap
                     // the user will actually hear: during a startup drain the
                     // surrounding audio is being discarded, so PLC would just
                     // synthesize filler into a timeline nobody plays. Dropped
@@ -566,13 +566,13 @@ final class RtpAudioReceiver: @unchecked Sendable {
         }
     }
 
-    /// Per-socket GAP-EVENT accumulation — the AUDIO leg of the 20/50/100ms
+    /// Per-socket GAP-EVENT accumulation - the AUDIO leg of the 20/50/100ms
     /// family (cumulative: a 100ms gap counts in all three). The video socket
     /// already tracked inter-arrival gaps; this completes the trio so "all
     /// sockets gapped together" (NIC doze) vs "one path stalled" is a single
     /// NDJSON-row query instead of a three-source manual cross-correlation.
     /// Cost per datagram (~200/s at 5ms packets): one monotonic clock read +
-    /// one compare — far below the 5ms audio budget (the ~1s metrics fold pays
+    /// one compare - far below the 5ms audio budget (the ~1s metrics fold pays
     /// its own read; merging the two would mean restructuring its call
     /// signature for a ~40ns saving). The counters' locked add fires only on a
     /// >20ms gap, i.e. only after the socket just sat idle that long.

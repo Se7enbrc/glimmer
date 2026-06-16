@@ -19,7 +19,7 @@
 //    - multiController: latest state per gamepad slot; a buttonFlags CHANGE ends
 //      the batch (flush the slot first) so the host sees the exact axes present
 //      at the press edge (InputStream.c:1048-1059).
-//    - controller motion: latest sample per (slot, sensor) — moonlight's
+//    - controller motion: latest sample per (slot, sensor) - moonlight's
 //      currentGamepadSensorState. A superseded sample is replaced, never
 //      queued; see updateMotion for the reliability deviation note.
 //    - keyboard / mouse button / scroll / hscroll / controller arrival /
@@ -30,21 +30,21 @@
 //    - controller battery: same pass-through ordering, but via the REPORT
 //      variant that skips the input-activity stamp (a device report, not input).
 //
-//  Mouse / sticks / triggers / buttons / keyboard / scroll stay RELIABLE —
+//  Mouse / sticks / triggers / buttons / keyboard / scroll stay RELIABLE -
 //  moonlight ships those reliable (the "TODO: send unreliable once we have
 //  delayed retransmit" comments at InputStream.c:740-741, 805, 1075 confirm
 //  reliable is the shipping behavior); the cure for their flood is the RATE,
 //  not the reliability flag. Controller MOTION (gyro/accel), however, ships
-//  UNRELIABLE to match current upstream (InputStream.c:525-534) — a superseded
+//  UNRELIABLE to match current upstream (InputStream.c:525-534) - a superseded
 //  sensor sample is worthless, so a lost one is harmless and must never
-//  HOL-block the reliable stream — EXCEPT a gyro null (0,0,0), which stays
+//  HOL-block the reliable stream - EXCEPT a gyro null (0,0,0), which stays
 //  RELIABLE so the "sensors stopped" state survives loss. See updateMotion /
 //  flushLocked for the gyro-null special case.
 //
 //  Threading: a single serial DispatchQueue owns ALL merge state and a single
 //  1ms repeating DispatchSourceTimer drives flush(). Every public method hops
 //  onto that queue, so no extra locking is needed. The EnetControlChannel is
-//  held weakly — when the connection tears down (stop/interrupt) the batcher is
+//  held weakly - when the connection tears down (stop/interrupt) the batcher is
 //  released and the timer cancelled.
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
@@ -59,17 +59,17 @@ enum InputBatcherResult {
     static let notReady: Int32 = -2
 }
 
-/// MOUSE_BATCHING_INTERVAL_MS (InputStream.c:43) — flush cadence.
+/// MOUSE_BATCHING_INTERVAL_MS (InputStream.c:43) - flush cadence.
 final class InputBatcher: @unchecked Sendable {
     private static let logCategory = "NativeConnection"
 
-    /// Flush cadence — MOUSE_BATCHING_INTERVAL_MS = 1ms (InputStream.c:43).
+    /// Flush cadence - MOUSE_BATCHING_INTERVAL_MS = 1ms (InputStream.c:43).
     private static let batchIntervalNs: UInt64 = 1_000_000
 
     private weak var enet: EnetControlChannel?
 
     // QoS .userInteractive so the merge/flush context isn't a default-QoS queue
-    // starved behind high-QoS main-thread UI/input — it carries latency-sensitive
+    // starved behind high-QoS main-thread UI/input - it carries latency-sensitive
     // input toward the wire.
     private let queue = DispatchQueue(label: "io.ugfugl.Glimmer.inputBatcher", qos: .userInteractive)
     private var timer: DispatchSourceTimer?
@@ -82,7 +82,7 @@ final class InputBatcher: @unchecked Sendable {
     private var relMouseDY: Int = 0
     private var relMouseDirty = false
 
-    /// currentAbsoluteMouseState (InputStream.c:93) — latest-only.
+    /// currentAbsoluteMouseState (InputStream.c:93) - latest-only.
     private var absMouseX: Int16 = 0
     private var absMouseY: Int16 = 0
     private var absMouseRefW: Int16 = 0
@@ -104,7 +104,7 @@ final class InputBatcher: @unchecked Sendable {
                                                count: Enet.maxGamepads)
 
     /// currentGamepadSensorState[MAX_GAMEPADS][MAX_MOTION_EVENTS]
-    /// (InputStream.c) — latest motion sample per (slot, sensor), flattened to
+    /// (InputStream.c) - latest motion sample per (slot, sensor), flattened to
     /// slot * motionTypeCount + (LI_MOTION_TYPE_* - 1).
     private struct MotionSlot {
         var x: Float = 0
@@ -112,12 +112,12 @@ final class InputBatcher: @unchecked Sendable {
         var z: Float = 0
         var dirty = false
     }
-    /// MAX_MOTION_EVENTS (InputStream.c) — accel + gyro.
+    /// MAX_MOTION_EVENTS (InputStream.c) - accel + gyro.
     private static let motionTypeCount = 2
     private var motionStates = [MotionSlot](repeating: MotionSlot(),
                                             count: Enet.maxGamepads * motionTypeCount)
-    /// Dirty-slot count, so the 1ms flush pays ONE integer compare — not a
-    /// 32-slot scan — when the host never enabled motion (zero-overhead-off).
+    /// Dirty-slot count, so the 1ms flush pays ONE integer compare - not a
+    /// 32-slot scan - when the host never enabled motion (zero-overhead-off).
     private var motionDirtyCount = 0
 
     init(enet: EnetControlChannel) {
@@ -160,7 +160,7 @@ final class InputBatcher: @unchecked Sendable {
         return InputBatcherResult.ok
     }
 
-    /// LiSendMousePositionEvent (InputStream.c:437-467) — latest-only.
+    /// LiSendMousePositionEvent (InputStream.c:437-467) - latest-only.
     func setAbsMouse(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
         guard enet != nil else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
@@ -207,19 +207,19 @@ final class InputBatcher: @unchecked Sendable {
     }
 
     /// LiSendControllerMotionEvent (InputStream.c): overwrite the
-    /// (slot, sensor) latest sample in place — moonlight's
+    /// (slot, sensor) latest sample in place - moonlight's
     /// currentGamepadSensorState batching. The host-rate sampler
     /// (ControllerMotion) bounds the CALL rate; this merge plus the
     /// sendBacklogged skip bound the WIRE rate, so motion can never starve
     /// the receive/ACK chain (the 1ms-coalescing lesson).
     ///
     /// Deliberately does NOT bump the input-activity telemetry the other
-    /// producers feed: motion is host-solicited sensor flow, not user input —
+    /// producers feed: motion is host-solicited sensor flow, not user input -
     /// counting it would make an idle-hands stream look input-active and
     /// break the idle/active counters' honesty.
     ///
     /// RELIABILITY (matches current upstream): motion ships UNRELIABLE
-    /// (enetPacketFlags = 0, InputStream.c:525-534) — a superseded sensor
+    /// (enetPacketFlags = 0, InputStream.c:525-534) - a superseded sensor
     /// sample is worthless, so dropping a lost one is correct and it must
     /// never HOL-block or back up the reliable stream. The one EXCEPTION is a
     /// GYRO null (0,0,0), which ships RELIABLE so the "sensors stopped" state
@@ -231,7 +231,7 @@ final class InputBatcher: @unchecked Sendable {
         guard enet != nil else { return InputBatcherResult.notReady }
         // LI_MOTION_TYPE_* is 1-based (ACCEL=1, GYRO=2); anything else has no
         // state slot (the LC_ASSERT in LiSendControllerMotionEvent, folded
-        // into -1 — no caller distinguishes the C's -3 here).
+        // into -1 - no caller distinguishes the C's -3 here).
         let typeIndex = Int(motionType) - 1
         guard typeIndex >= 0, typeIndex < Self.motionTypeCount else {
             return InputBatcherResult.sendFailed
@@ -273,8 +273,8 @@ final class InputBatcher: @unchecked Sendable {
     }
 
     /// Pass-through for host-facing device REPORTS that are not user input
-    /// (controller battery). Same ordering contract as passThrough — drain the
-    /// pending merged state, then send — but deliberately does NOT bump
+    /// (controller battery). Same ordering contract as passThrough - drain the
+    /// pending merged state, then send - but deliberately does NOT bump
     /// inputEventsTotal/noteInputEvent: a battery report on its ~30s cadence
     /// would otherwise mark an idle-hands stream input-active and break the
     /// idle/active counters' honesty (the updateMotion rule).
@@ -304,7 +304,7 @@ final class InputBatcher: @unchecked Sendable {
         return InputBatcherResult.ok
     }
 
-    // MARK: - Flush (timer tick) — runs on `queue`
+    // MARK: - Flush (timer tick) - runs on `queue`
 
     /// Timer entry point. Identical body to flushLocked(); kept separate so the
     /// pass-through path can flush inline without re-entering the timer handler.
@@ -318,20 +318,20 @@ final class InputBatcher: @unchecked Sendable {
     /// BACKPRESSURE: skip the merged-state drains this tick and leave them dirty
     /// whenever EITHER backpressure signal is asserted:
     ///   - `sendBacklogged`: the LOCAL outbound send count is over the cap (the
-    ///     radio is draining slowly) — keys on NWConnection send-completion.
+    ///     radio is draining slowly) - keys on NWConnection send-completion.
     ///   - `reliableBacklogged`: the count of un-ACKed reliable commands is over
     ///     the cap, i.e. the HOST has stopped draining our reliable backlog. This
     ///     is the mouse-spin fix: `sendBacklogged` alone drains fast even under
     ///     loss (it's local send-completion, not host ACK), so it never reflects
     ///     the host falling behind. Without this gate, reliable mouse-move commands
     ///     pile into a HOL-blocked reliable stream that the host later burst-applies
-    ///     — the "view spins until it recovers" failure. This mirrors moonlight's
+    ///     - the "view spins until it recovers" failure. This mirrors moonlight's
     ///     10ms ack-wait (sendMessageEnet, ControlStream.c:787-789).
-    /// The state is latest-only — the running mouse delta keeps accumulating and
-    /// the controller/abs-mouse/motion slots keep their newest values — so the next
+    /// The state is latest-only - the running mouse delta keeps accumulating and
+    /// the controller/abs-mouse/motion slots keep their newest values - so the next
     /// tick sends the freshest merged state instead of backing up the wire ahead of
     /// inbound ACK processing. Edge pass-through events (keyboard/buttons/scroll/
-    /// arrival/touch) are NOT gated by either signal — they are discrete, not
+    /// arrival/touch) are NOT gated by either signal - they are discrete, not
     /// latest-state, so they must not drop.
     private func flushLocked() {
         guard let enet else { return }
@@ -389,11 +389,11 @@ final class InputBatcher: @unchecked Sendable {
             flushController(slot)
         }
 
-        // (4) Motion: latest sample per dirty (slot, sensor) — moonlight's
+        // (4) Motion: latest sample per dirty (slot, sensor) - moonlight's
         //     currentGamepadSensorState drain. The integer guard keeps a
         //     motion-less session at zero cost here.
         //
-        //     Sent UNRELIABLE (current upstream InputStream.c:525-534) — a
+        //     Sent UNRELIABLE (current upstream InputStream.c:525-534) - a
         //     superseded sensor sample is worthless, so losing one is harmless and
         //     must never HOL-block or back up the reliable stream. EXCEPTION: a
         //     GYRO null (0,0,0) ships RELIABLE so the "sensors stopped" state can't

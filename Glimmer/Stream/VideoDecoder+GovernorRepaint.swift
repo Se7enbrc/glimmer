@@ -15,7 +15,7 @@ extension VideoDecoder {
 
     /// GOVERNOR REPAINT (tick-deficit degraded mode): re-enqueue a copy of the
     /// most recently presented frame so the compositor sees a live layer while
-    /// CADisplayLink callbacks are collapsed — the suspected lock-in spiral is
+    /// CADisplayLink callbacks are collapsed - the suspected lock-in spiral is
     /// "our commits stop → the frame-rate governor classifies the layer static
     /// → holds the throttled rate". Same pixels, so nothing visibly changes.
     ///
@@ -24,19 +24,19 @@ extension VideoDecoder {
     /// frame, and routing it through `presentFrame` would inflate fps_rendered /
     /// the present-latency stages during exactly the windows where the degraded
     /// mode's verification contract is renders==received. No drop counting, no
-    /// IDR, no FrameTimingTracker stage — invisible to telemetry by design.
+    /// IDR, no FrameTimingTracker stage - invisible to telemetry by design.
     /// Called from the pacer's `onDeficitRepaint` on the pacing queue, already
     /// rate-limited to stream cadence and gated on ≥2 intervals of real-release
     /// silence (FramePacer.maybeRepaintForGovernor).
     nonisolated func repaintFrameForGovernor(_ sampleBuffer: CMSampleBuffer) {
-        // Same teardown/readiness gates as presentFrame — a failed or
+        // Same teardown/readiness gates as presentFrame - a failed or
         // backpressured renderer drops the repaint silently (best-effort:
         // the off-tick release path is the load-bearing failsafe; this only
         // feeds the governor's activity heuristic).
         guard isStreaming, let layer = displayLayer else { return }
         let renderer = layer.sampleBufferRenderer
         guard renderer.status != .failed, renderer.isReadyForMoreMediaData else { return }
-        // Copy the sample buffer (shares the pixel buffer — no pixel copy) so
+        // Copy the sample buffer (shares the pixel buffer - no pixel copy) so
         // the renderer gets a distinct enqueue object rather than the exact
         // instance it already consumed, and mark it display-immediately so its
         // already-shown PTS can't read as stale.

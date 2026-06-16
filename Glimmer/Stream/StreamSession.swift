@@ -8,14 +8,14 @@
 //  Threading model:
 //   - Public API is actor-isolated.
 //   - Backend callbacks fire on the native backend's receive threads. We
-//     marshal each one back into the actor via Task { await self.handle… }.
-//   - Video frame submission stays off the actor for latency reasons —
+//     marshal each one back into the actor via Task { await self.handle... }.
+//   - Video frame submission stays off the actor for latency reasons -
 //     VideoDecoder owns its own internal queue.
 //
-//  Callback bridging — read this before adding callbacks:
+//  Callback bridging - read this before adding callbacks:
 //   The native backend calls back into us on its RTP/control receive threads.
-//   Rather than maintain three independent "active X" globals — one per
-//   subsystem — we route every callback through a single `StreamBridgeContext`
+//   Rather than maintain three independent "active X" globals - one per
+//   subsystem - we route every callback through a single `StreamBridgeContext`
 //   instance:
 //     * `Unmanaged.passRetained(bridge).toOpaque()` produces the opaque pointer
 //       retained for the connection lifetime, so context-aware callbacks
@@ -24,7 +24,7 @@
 //       on dealloc so context-less callbacks can find the bridge.
 //     * The bridge holds *weak* references to the session and each subsystem.
 //       If a subsystem is torn down, the weak ref nils out and the callback
-//       no-ops — no UAF, no order dependency.
+//       no-ops - no UAF, no order dependency.
 //   The bridge is released in `stop()` only after the backend has stopped
 //   (which drains the receive threads), making it impossible for a backend
 //   thread to dereference a freed Swift object.
@@ -52,7 +52,7 @@ public actor StreamSession {
         // would cross actor boundaries.
         let win = self.window
         await MainActor.run {
-            // First bring the app forward — makeKeyAndOrderFront only makes a
+            // First bring the app forward - makeKeyAndOrderFront only makes a
             // window key if its app is active, and the menubar/launcher click
             // that drives this path may have left a different app frontmost.
             NSApp.activate()
@@ -64,7 +64,7 @@ public actor StreamSession {
             // ordering the stream window front from an already-active app can
             // resolve key status synchronously without posting a fresh
             // notification), so the cursor-hide latch that didBecomeKey
-            // re-engages was being skipped — leaving the macOS cursor drawn
+            // re-engages was being skipped - leaving the macOS cursor drawn
             // over the fullscreen stream. `reengageForeground()` is the same
             // method the didBecomeKey observer calls, so both return paths are
             // now identical; it is idempotent (the cursor-hide latch is capped
@@ -87,7 +87,7 @@ public actor StreamSession {
     /// native engine (`NativeBackend`) is the only implementation.
     ///
     /// `var`, not `let`: a SILENT RECONNECT (see StreamSession+Reconnect.swift)
-    /// swaps in a FRESH `NativeBackend` after the old one's connection died —
+    /// swaps in a FRESH `NativeBackend` after the old one's connection died -
     /// `NativeBackend` carries one-shot connection state (and `interrupt()`
     /// latches permanently), so re-`startConnection` requires a new instance.
     /// The swap is actor-isolated; the InputForwarder + VideoDecoder are
@@ -118,7 +118,7 @@ public actor StreamSession {
     nonisolated(unsafe) var statsOverlayTimer: Timer?
 
     /// 1 Hz watchdog. Gates on `VideoDecoder.secondsSinceLastDecodedFrame()`
-    /// — "did the user see a frame?" — NOT byte reception. A host sending
+    /// - "did the user see a frame?" - NOT byte reception. A host sending
     /// packets we can't decode (corrupt bitstream, missing IDR, AV1-on-
     /// no-AV1-hardware) is the user-reported "black screen, no error"
     /// case; a reception-gated watchdog would silently keep the session
@@ -131,7 +131,7 @@ public actor StreamSession {
     ///     → log a public-privacy diagnostic so the "no frames" symptom
     ///     surfaces in the unified log before teardown.
     ///
-    /// The protocol's own keepalive can take 10–30s to declare a dead
+    /// The protocol's own keepalive can take 10-30s to declare a dead
     /// connection; this fast-paths "host crashed / network dropped /
     /// Sunshine restarted" so the user gets back to the launcher quickly.
     ///
@@ -144,7 +144,7 @@ public actor StreamSession {
     /// been silent for this long, the host is presumed gone or the bit-
     /// stream is unrecoverable, either way we tear down.
     static let frameWatchdogTimeout: Double = 10.0
-    /// "Reception healthy, decode silent" — at this threshold we log a
+    /// "Reception healthy, decode silent" - at this threshold we log a
     /// public-privacy diagnostic line so the user-visible "black screen"
     /// symptom shows up in the unified log with actionable detail
     /// ("bytes received but no decoded output") before the harder
@@ -170,7 +170,7 @@ public actor StreamSession {
     /// fix for "stream freezes when the host's desktop switches (Windows
     /// sign-in / secure desktop) and stays frozen until you manually reconnect"
     /// (#20): the host pauses video across the switch and needs a keyframe
-    /// request to resume — nothing else fires one when reception simply stops.
+    /// request to resume - nothing else fires one when reception simply stops.
     /// We nudge from here up to `frameWatchdogTimeout` (the give-up), matching
     /// moonlight's recover-then-terminate behavior. Below the soft/hard
     /// thresholds so recovery is attempted BEFORE either logs/tears down.
@@ -183,14 +183,14 @@ public actor StreamSession {
 
     /// ENet ACK-silence below which the control link is UNAMBIGUOUSLY alive, so
     /// a video stall is the host pausing the encoder (a Windows sign-in /
-    /// secure-desktop transition — Sunshine can't capture the secure desktop —
+    /// secure-desktop transition - Sunshine can't capture the secure desktop -
     /// or a mode switch), NOT a dead connection. The control loop pings every
     /// 100ms and the host ACKs each one, so a live link reads single-digit-ms
     /// here; 5s is half ENet's `ackSilenceDeadMs` (10s) dead-peer timeout and
     /// never occurs on a healthy link. When `enetHealth().sinceLastAckMs` is
     /// under this, the frame watchdog HOLDS instead of tearing down: it keeps
     /// requesting IDRs and waits for the desktop to return, matching moonlight,
-    /// which terminates on connection loss — not on a video stall alone (#20).
+    /// which terminates on connection loss - not on a video stall alone (#20).
     /// Teardown for a genuinely-gone host is owned by ENet's own dead-peer
     /// detection (`EnetControlChannel+ControlLoop`, `onTerminated(-1)`).
     static let enetAliveHoldThresholdMs: UInt32 = 5000
@@ -200,19 +200,19 @@ public actor StreamSession {
     /// `nonisolated(unsafe)` rationale as `didLogDecodeOnlyStall`.
     nonisolated(unsafe) var didLogWatchdogHold = false
 
-    // MARK: - Silent reconnect (host closed a live session — see +Reconnect)
+    // MARK: - Silent reconnect (host closed a live session - see +Reconnect)
 
     /// The host TERMINATION code that means "the server tore THIS session down"
     /// (NVST_DISCONN_SERVER_TERMINATED_CLOSED). Sunshine sends it when its
     /// process restarts across a Windows lock / secure-desktop transition (it
-    /// comes back in ~3s) — and a brief network blip surfaces the same way. When
+    /// comes back in ~3s) - and a brief network blip surfaces the same way. When
     /// we'd already reached a LIVE state, this is recoverable: hold the frozen
     /// frame and silently re-establish, rather than bouncing to the launcher.
     /// Stored signed (the inbound parser hands us a signed Int32).
     static let recoverableTerminationCode: Int32 = Int32(bitPattern: 0x80030023)
-    /// Bound the reconnect episode: at most this many attempts…
+    /// Bound the reconnect episode: at most this many attempts...
     static let reconnectAttemptCap = 5
-    /// …and at most this long wall-clock before we give up and tear down.
+    /// ...and at most this long wall-clock before we give up and tear down.
     static let reconnectWindowSeconds: TimeInterval = 30.0
 
     /// True once this session reached a LIVE state (`.connectionEstablished`).
@@ -236,8 +236,8 @@ public actor StreamSession {
 
     /// Present-path self-heal watchdog. Runs at 20 Hz on the main run loop,
     /// INDEPENDENT of the decode-output watchdog above (which is structurally
-    /// blind to a stall downstream of VT — a stopped CADisplayLink or a
-    /// latched-false `due` gate — because `recordDecodedFrame()` keeps
+    /// blind to a stall downstream of VT - a stopped CADisplayLink or a
+    /// latched-false `due` gate - because `recordDecodedFrame()` keeps
     /// advancing while the screen is frozen). This watchdog gates on the
     /// pacer's PRESENT-side liveness (last tick + last release + queue depth)
     /// and escalates recovery so the present path can never hard-freeze.
@@ -261,17 +261,17 @@ public actor StreamSession {
     /// Wall-clock when the present path first looked stalled this episode, so the
     /// give-up threshold measures from stall onset, not from last escalation.
     nonisolated(unsafe) var presentStallSince: CFAbsoluteTime?
-    /// Highest recovery stage (0–3) attempted this episode (each runs once).
+    /// Highest recovery stage (0-3) attempted this episode (each runs once).
     nonisolated(unsafe) var lastPresentRecoveryStage = 0
     /// Wall-clock when stage-3 give-up dropped us to direct enqueue (nil while
     /// paced). While set, the watchdog waits for a healthy window before rebuild.
     nonisolated(unsafe) var pacingDisabledSince: CFAbsoluteTime?
-    /// Count of stage-3 give-ups this session. DIAGNOSTIC ONLY — no budget, gates
+    /// Count of stage-3 give-ups this session. DIAGNOSTIC ONLY - no budget, gates
     /// nothing (the watchdog never permanently disables anything).
     nonisolated(unsafe) var pacingGiveUpCount = 0
     /// Wall-clock when the DIRECT (no-pacer) present path first looked frozen
     /// (decode healthy, present clock stalled); nil while healthy or paced.
-    /// Latches one recovery per episode — see `tickDirectPresentWatchdog`. The
+    /// Latches one recovery per episode - see `tickDirectPresentWatchdog`. The
     /// detector the direct path lacked.
     nonisolated(unsafe) var directPresentStallSince: CFAbsoluteTime?
     /// Wall-clock when the watchdog armed (start, or a re-enable). The startup-
@@ -295,7 +295,7 @@ public actor StreamSession {
 
     // OSSignpost interval state for the connection-flow timing. We open
     // this right before startConnection and close it from
-    // `handleConnectionEdge(.connectionEstablished)` — the first stable-
+    // `handleConnectionEdge(.connectionEstablished)` - the first stable-
     // connection callback. If the connection fails before that callback fires,
     // the `stop()` teardown path closes it with an outcome=aborted message so
     // the Instruments timeline never shows a runaway-open interval.
@@ -305,13 +305,13 @@ public actor StreamSession {
     // Power-management + App-Nap-suppression assertion held for the lifetime of
     // a session. Two distinct jobs, both via the one `beginActivity` token:
     //
-    //  1) KEEP-AWAKE — `.idleDisplaySleepDisabled` + `.idleSystemSleepDisabled`
+    //  1) KEEP-AWAKE - `.idleDisplaySleepDisabled` + `.idleSystemSleepDisabled`
     //     keep the Mac (and its display) from dimming/sleeping mid-stream. A game
     //     stream is video the user is watching, but to the OS there's no LOCAL
     //     input/HID activity, so without these the screen dims and sleeps minutes
     //     into a controller-only session.
     //
-    //  2) DEFEAT APP NAP — this is the part the two `*SleepDisabled` flags do NOT
+    //  2) DEFEAT APP NAP - this is the part the two `*SleepDisabled` flags do NOT
     //     do. Per Apple's NSActivityOptions semantics, App Nap is only suppressed
     //     by `.userInitiated` (or `.background` + `.latencyCritical`); the sleep
     //     flags alone keep the screen lit while STILL permitting App Nap to
@@ -337,7 +337,7 @@ public actor StreamSession {
     // Set the moment stop() begins so re-entrant calls (e.g. quit hotkey +
     // connectionTerminated firing back-to-back, or AsyncStream onTermination
     // racing the explicit stop) early-out before re-entering teardown. The
-    // existing `isStreaming` guard is necessary but not sufficient — the
+    // existing `isStreaming` guard is necessary but not sufficient - the
     // first call flips it to false, but the entire teardown is async, so a
     // second call can sneak past it while the backend stop / decoder
     // teardown are still in flight.

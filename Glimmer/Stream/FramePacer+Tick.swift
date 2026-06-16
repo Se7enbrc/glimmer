@@ -29,7 +29,7 @@ extension FramePacer {
 
     /// Ceiling for a plausible realized tick delta (seconds). Above this the
     /// gap is a link suspension (backgrounded window), a rebuild, or a stale
-    /// cross-instance timestamp — not panel cadence — and folding it in would
+    /// cross-instance timestamp - not panel cadence - and folding it in would
     /// poison the window's min-Hz with a nonsense sub-Hz reading. 0.5s sits far
     /// above the slowest panel idle cadence (ProMotion's 24Hz ≈ 42ms) yet below
     /// any suspension-scale gap.
@@ -42,7 +42,7 @@ extension FramePacer {
     /// so nothing on the present path runs on the main actor.
     @MainActor
     func handleTick(_ link: CADisplayLink) {
-        // The link's realized cadence — refresh-agnostic. `duration` is the
+        // The link's realized cadence - refresh-agnostic. `duration` is the
         // nominal vsync interval; `targetTimestamp` is when the frame we
         // present THIS tick will actually scan out. We pace toward
         // targetTimestamp so a frame lands on the right vsync, not the one
@@ -55,26 +55,26 @@ extension FramePacer {
         let vsyncInterval = link.duration > 0 ? link.duration : (1.0 / 60.0)
 
         // Present-side liveness: stamp that the LINK is alive on the main run
-        // loop. This is the clock the watchdog's "link dead" trip gates on — a
+        // loop. This is the clock the watchdog's "link dead" trip gates on - a
         // stopped link (same-screen HDR/VRR mode switch) freezes this value
         // even though VT keeps decoding. Cheap: one lock + two stores.
         //
         // ALSO accumulate the REALIZED cadence for the display-refresh telemetry
         // (ProMotion ramp-down detector + callback-miss visibility): deltas of
-        // successive callbacks' targetTimestamps, NOT the nominal `duration` —
+        // successive callbacks' targetTimestamps, NOT the nominal `duration` -
         // the nominal interval reads a constant rated Hz even while callbacks
         // skip, while a missed callback stretches the realized delta, so the
         // per-window min/avg/max expose the tick deficit. The refresh-CHANGE
         // edge stays on the NOMINAL interval (the panel-cadence ramp signal) so
         // it doesn't fire on every skipped tick. Min/avg/max over the 1Hz
-        // exporter window — all cheap arithmetic under the lock we already take
+        // exporter window - all cheap arithmetic under the lock we already take
         // here. A "refresh changed" signpost is emitted off-lock below so a
         // profile run marks the ramp edge.
         //
         // The realized delta is NaN until the second tick, can step NEGATIVE
         // across a link rebuild (the new link's targetTimestamp can sit behind
-        // the old one's — that timebase is discontinuous across rebuilds), and
-        // is suspension-sized after a backgrounded window — the bounds below
+        // the old one's - that timebase is discontinuous across rebuilds), and
+        // is suspension-sized after a backgrounded window - the bounds below
         // exclude all three.
         let realizedInterval = target - Self.lastTickTargetTimestamp
         Self.lastTickTargetTimestamp = target
@@ -105,8 +105,8 @@ extension FramePacer {
         if vsyncInterval.isFinite, vsyncInterval > 0 {
             // Refresh-change edge: compare the NOMINAL derived Hz against the
             // previous tick's. A >1Hz delta (well above vsync-timing noise)
-            // flags a real panel-cadence change — the ProMotion ramp 120↔24, a
-            // 60↔120 switch, etc. — without firing on realized skip noise.
+            // flags a real panel-cadence change - the ProMotion ramp 120↔24, a
+            // 60↔120 switch, etc. - without firing on realized skip noise.
             if lastRefreshIntervalSeconds.isFinite {
                 let prevHz = 1.0 / lastRefreshIntervalSeconds
                 let nowHz = 1.0 / vsyncInterval
@@ -121,8 +121,8 @@ extension FramePacer {
         }
         // Tick-deficit service: roll the realized-rate window when due and
         // advance the deficit / floor-violation / warm-handover machines off
-        // the MEASURED rates (FramePacer+TickDeficit.swift). Cheap — a couple
-        // of compares on most ticks, the full roll at most 4×/s — and it rides
+        // the MEASURED rates (FramePacer+TickDeficit.swift). Cheap - a couple
+        // of compares on most ticks, the full roll at most 4×/s - and it rides
         // the lock we already hold. Events (engage/disengage/NOTICE) are
         // emitted off-lock below.
         let deficitEvents = serviceTickDeficitLocked(now: hostNow)
@@ -139,8 +139,8 @@ extension FramePacer {
         // FIX #1 (re-apply): the present-callback floor is seeded at install from
         // the CONFIGURED fps, but the true cadence is learned from PTS deltas once
         // frames flow (a configured-vs-actual mismatch, or a mid-stream fps change
-        // like 60→120). Re-pin the floor from the refined cadence here — on the
-        // main actor, where the link lives — when it has drifted past the
+        // like 60→120). Re-pin the floor from the refined cadence here - on the
+        // main actor, where the link lives - when it has drifted past the
         // hysteresis. Cheap: only touches the link object on a real change.
         reapplyPreferredRangeIfNeeded(refinedIntervalSeconds: refinedIntervalSeconds)
 
@@ -156,7 +156,7 @@ extension FramePacer {
 /// `@objc` shim that forwards the CADisplayLink callback into a Swift closure.
 /// CADisplayLink retains its target, so keeping the proxy separate from
 /// `FramePacer` (which `VideoDecoder` retains) avoids a retain cycle and keeps
-/// the selector signature trivial. Lives on the main actor — the link fires on
+/// the selector signature trivial. Lives on the main actor - the link fires on
 /// the run loop it's added to (`.main`). Declared here with the tick handler it
 /// forwards to (moved out of FramePacer.swift for the length limit).
 @MainActor

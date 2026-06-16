@@ -7,26 +7,26 @@
 //  live here, all built on the SAME always-live-counter / 1Hz-read discipline as
 //  the rest of the rig (see TelemetryCounters.swift for the gate/safety contract):
 //
-//    * CONNECT-HANDSHAKE breakdown — per-stage timing of the connect sequence
+//    * CONNECT-HANDSHAKE breakdown - per-stage timing of the connect sequence
 //      (RTSP → pairing/auth → ENet connect → first video frame), captured once
 //      per session from the stage events the engine already fires, emitted to the
 //      Prometheus body + the NDJSON (as an event line) + the session report.
-//    * RECONNECT count + disconnect REASON — a monotonic reconnect counter and
+//    * RECONNECT count + disconnect REASON - a monotonic reconnect counter and
 //      the last terminate reason as an enum ordinal, captured at the
 //      connection-terminated edge (always-live integer/enum store, off any hot
-//      path — a terminate is the rarest event there is).
-//    * IDR/RFI ROUND-TRIP — time from our requestIdrFrame/RFI SEND to the
+//      path - a terminate is the rarest event there is).
+//    * IDR/RFI ROUND-TRIP - time from our requestIdrFrame/RFI SEND to the
 //      resulting IDR/recovery frame ARRIVING. Both ends are client-side: we stamp
 //      the send instant (gate-on only) and measure the delta when the IDR lands,
 //      feeding a histogram + the per-frame trace.
-//    * CORRUPTION/ARTIFACT heuristic — a cheap, sampled corruption counter
+//    * CORRUPTION/ARTIFACT heuristic - a cheap, sampled corruption counter
 //      derived from signals the engine ALREADY computes (VT decode-status error /
 //      FrameDropped bit, depacketizer discontinuity). NO per-pixel scan; the
 //      detector is a hot-path-safe integer add at an already-rare event site.
 //
 //  GATING + HOT-PATH SAFETY (load-bearing): the counters/enum stores are
 //  unconditional sub-µs integer/enum writes at already-rare lifecycle/recovery
-//  sites (a connect stage edge, a terminate, an IDR request) — gating them would
+//  sites (a connect stage edge, a terminate, an IDR request) - gating them would
 //  buy nothing. The IDR-RTT SEND stamp is taken only when the latency tracker
 //  exists (gate-on), so the OFF path pays one optional load. The handshake-stage
 //  capture is a small map keyed by stage name, only touched on the (rare) stage
@@ -34,7 +34,7 @@
 //  proven hot-path lock.
 //
 //  SECRET-FREE: every value is a millisecond duration, an integer count, an enum
-//  ordinal, or a fixed stage label — nothing that could carry a secret/host id.
+//  ordinal, or a fixed stage label - nothing that could carry a secret/host id.
 //
 
 import Foundation
@@ -42,7 +42,7 @@ import os
 
 // MARK: - Disconnect reason
 
-/// Why a streaming session ended — a small CLOSED enum so the terminate cause is
+/// Why a streaming session ended - a small CLOSED enum so the terminate cause is
 /// a queryable ordinal/label rather than free text. Mapped from the engine's
 /// terminate path: a clean stop, a host-initiated terminate with the moonlight
 /// error code, a watchdog teardown (frame/present stall), or unknown. The exporter
@@ -64,7 +64,7 @@ enum DisconnectReason: Int, Sendable {
     /// The event-stream consumer was dropped (its `for await` loop ended /
     /// the AsyncStream's onTermination fired) rather than the user explicitly
     /// quitting. Distinct from `userStopped` so a reason-less teardown on a
-    /// HEALTHY stream is no longer silently attributed to the user — the prior
+    /// HEALTHY stream is no longer silently attributed to the user - the prior
     /// behaviour masked exactly this case (a dropped consumer reading as
     /// "user_stopped" in the scorecard).
     case consumerDropped = 6
@@ -87,19 +87,19 @@ enum DisconnectReason: Int, Sendable {
 /// One session's CONNECT-HANDSHAKE breakdown: the per-stage durations (ms) of the
 /// connect sequence, all measured connect-relative from the SAME monotonic anchor
 /// the exporter uses, so the stages line up on the timeline. Each leg is optional
-/// — a stage that never fired (a path that aborts early) is simply absent rather
+/// - a stage that never fired (a path that aborts early) is simply absent rather
 /// than guessed. Assembled on the exporter queue from the always-live
 /// `HandshakeTimeline`; never the hot path.
 struct HandshakeBreakdown: Sendable {
     /// RTSP/SDP handshake duration (name-resolution start → RTSP-handshake done).
     var rtspMs: Double?
-    /// Pairing/auth leg (control-crypto + control-V2 negotiation) — the gap from
+    /// Pairing/auth leg (control-crypto + control-V2 negotiation) - the gap from
     /// RTSP-done to ENet-connect start, which is where the per-session AES/auth
     /// material is set up before the control socket opens.
     var pairingMs: Double?
     /// ENet control-channel connect (ENET_CONNECT → START_A → START_B ACKed).
     var enetConnectMs: Double?
-    /// Time from connection-established to the FIRST decoded video frame — the
+    /// Time from connection-established to the FIRST decoded video frame - the
     /// "black screen until pixels" leg the user actually feels.
     var firstFrameMs: Double?
     /// Total: connect start → first decoded video frame (the whole cold open).
@@ -157,7 +157,7 @@ extension TelemetryCounters {
         private var enetStartNanos: UInt64 = 0
         private var establishedNanos: UInt64 = 0
         private var firstFrameNanos: UInt64 = 0
-        /// How many connection-established edges this run has seen — 1 after the
+        /// How many connection-established edges this run has seen - 1 after the
         /// initial connect, ≥2 after a reconnect. Drives the reconnect signal.
         private var establishedCount: Int = 0
 
@@ -249,7 +249,7 @@ extension TelemetryCounters {
         }
         /// Resolve the pending IDR request against an arriving IDR/recovery frame.
         /// Returns the round-trip (ms) if a request was outstanding, else nil (an
-        /// unsolicited IDR — the host's own keyframe cadence — isn't a round-trip).
+        /// unsolicited IDR - the host's own keyframe cadence - isn't a round-trip).
         func resolveIdrArrival(_ now: UInt64) -> Double? {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             let pending = idrRequestPendingNanos

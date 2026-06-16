@@ -5,8 +5,8 @@
 //  refresh-window telemetry snapshots + the single link-bind path
 //  (`installLink`). Split out of FramePacer.swift to keep that file under the
 //  length limit; these are the recovery escalations the external watchdog
-//  (StreamSession) drives — rebind/rebuild the link, force a release,
-//  direct-drain, drop-to-newest, clear — plus the consistent state reads it
+//  (StreamSession) drives - rebind/rebuild the link, force a release,
+//  direct-drain, drop-to-newest, clear - plus the consistent state reads it
 //  gates on. The nested snapshot types (`LivenessSnapshot`,
 //  `RefreshWindowSnapshot`) are declared here with the methods that build them.
 //
@@ -37,30 +37,30 @@ extension FramePacer {
         let depth: Int
         /// Whether the pacer is between start() and stop().
         let running: Bool
-        /// Cumulative tick count since start() — the instrumentation derives a
+        /// Cumulative tick count since start() - the instrumentation derives a
         /// ticks/sec rate by differencing against the previous window's value.
         let totalTicks: UInt64
-        /// Cumulative release count since start() — same, for presents/sec.
+        /// Cumulative release count since start() - same, for presents/sec.
         let totalReleases: UInt64
-        /// Learned stream frame interval (seconds) — surfaced so the
+        /// Learned stream frame interval (seconds) - surfaced so the
         /// instrumentation can show what cadence the gate is pacing against.
         let streamFrameIntervalSeconds: Double
-        /// Current jitter-driven adaptive target depth (1 on a clean link —
-        /// passthrough rest state — up to `maxTargetDepth` under sustained
-        /// MEASURED jitter) — surfaced so the metric line shows how deep the
+        /// Current jitter-driven adaptive target depth (1 on a clean link -
+        /// passthrough rest state - up to `maxTargetDepth` under sustained
+        /// MEASURED jitter) - surfaced so the metric line shows how deep the
         /// adaptive buffer is currently riding.
         let adaptiveTargetDepth: Int
         /// MEASURED realized tick/release rates from the pacer's own rolling
         /// ~250ms window (FramePacer+TickDeficit.swift), `.nan` until the first
-        /// window completes. The watchdog's tick-deficit trip keys on these —
-        /// measured, never inferred — so a partial-rate tick collapse (13–58
+        /// window completes. The watchdog's tick-deficit trip keys on these -
+        /// measured, never inferred - so a partial-rate tick collapse (13-58
         /// ticks/s against a 120fps stream) is finally visible to it.
         let recentTicksPerSecond: Double
         let recentReleasesPerSecond: Double
         /// How long (seconds) the measured tick rate has been in deficit
         /// against `expectedTickHz` (hysteresis: enter <0.5×, clear ≥0.8×).
         /// 0 when healthy. The watchdog trips on this SUSTAINED, with the
-        /// release rate also collapsed — i.e. only when the in-pacer degraded
+        /// release rate also collapsed - i.e. only when the in-pacer degraded
         /// mode did NOT keep frames flowing.
         let tickDeficitSeconds: Double
         /// What the tick rate SHOULD be: min(stream Hz, nominal panel Hz).
@@ -71,14 +71,14 @@ extension FramePacer {
         /// Consecutive pacer-path releases the RENDERER refused (willPresent
         /// false), 0 after any successful present. A high streak alongside a
         /// stale release clock means the gate is releasing fine and the
-        /// renderer is the wedged organ (the renderer-refusal class) — the
+        /// renderer is the wedged organ (the renderer-refusal class) - the
         /// ladder reaches for the flush instead of cadence/link medicine.
         let presentRejectStreak: Int
     }
 
     /// Per-second display-refresh telemetry: the realized vsync cadence over the
     /// window SINCE THE LAST CALL (min/avg/max derived refresh Hz) plus whether a
-    /// refresh CHANGE was seen in that window. RESET-ON-READ — so it must be
+    /// refresh CHANGE was seen in that window. RESET-ON-READ - so it must be
     /// called by exactly ONE consumer at the publish cadence (the 1Hz exporter),
     /// NOT the 20Hz watchdog or 2Hz metric timer (which use the non-destructive
     /// `livenessSnapshot`). All nil when no tick landed this window (link idle /
@@ -98,14 +98,14 @@ extension FramePacer {
     func installLink(on view: NSView) {
         // `NSView.displayLink(target:selector:)` (macOS 14+) creates a link
         // tied to the display the view is currently on and tracks it as the
-        // view moves between screens — exactly the binding moonlight-qt builds
+        // view moves between screens - exactly the binding moonlight-qt builds
         // by hand with CVDisplayLinkCreateWithCGDisplay against the window's
         // NSScreen. We add it to the main run loop in the common modes so it
         // keeps firing during tracking loops / modal-ish UI beats.
         // Reset the cadence base BEFORE the new link starts ticking, so the
         // first tick on the new (possibly discontinuous) timebase re-seeds
         // `lastPresentMediaTime` from this link's clock instead of comparing
-        // against a stale value from the old link — the negative-`sinceLast`
+        // against a stale value from the old link - the negative-`sinceLast`
         // wedge that hard-froze the stream. See `resetCadenceBaseLocked`.
         os_unfair_lock_lock(&lock)
         resetCadenceBaseLocked()
@@ -115,18 +115,18 @@ extension FramePacer {
             self?.handleTick(link)
         }
         let link = view.displayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
-        // FIX #1 — FORBID macOS from throttling the PRESENT CALLBACK below stream
+        // FIX #1 - FORBID macOS from throttling the PRESENT CALLBACK below stream
         // cadence on a static/AFK layer. Without a floor, macOS slows the
         // CADisplayLink callback on a flat layer (NOT a ProMotion display
-        // ramp-down — the panel stayed 120Hz; it is the CALLBACK being
+        // ramp-down - the panel stayed 120Hz; it is the CALLBACK being
         // throttled), so received frames pile in the pacer FIFO to the cap and
         // late-drop (on a lossy wifi link: drops_presentation_late = 38% of all
         // frames, fps_rendered→0 while decode tracked received). Pinning the link
         // to the STREAM cadence keeps the present callback firing at least once
         // per stream frame even on a static scene, so queued frames keep
-        // presenting and the pile-up can't form. The floor is ADVISORY — the
+        // presenting and the pile-up can't form. The floor is ADVISORY - the
         // battery/ProMotion governor demonstrably overrides it (measured on a
-        // battery + ProMotion panel) — which is why the tick-deficit
+        // battery + ProMotion panel) - which is why the tick-deficit
         // degraded mode exists as the failsafe.
         //
         // We still read the realized cadence per tick from targetTimestamp, so a
@@ -134,7 +134,7 @@ extension FramePacer {
         // CLAMP the floor to min(streamHz, panelMaxHz): on a sub-stream-fps panel
         // (e.g. 60Hz external + 120fps stream) the panel physically cannot tick
         // at streamHz, so requesting that floor is impossible and would be
-        // ignored / mis-honored — the floor must never exceed the panel max.
+        // ignored / mis-honored - the floor must never exceed the panel max.
         let panelMax = Self.panelMaxHz(for: view)
         let range = Self.preferredRange(
             forStreamIntervalSeconds: self.streamFrameIntervalSeconds,
@@ -158,19 +158,19 @@ extension FramePacer {
         self.boundScreenSignature = Self.screenSignature(for: view)
         // Diag/LogStore breadcrumb (postmortem-visible, unlike the os_log-only
         // lines, which never reach the glimmer-*.log file sink): every link
-        // (re)bind — session start, screen change, watchdog rebuild — lands in
+        // (re)bind - session start, screen change, watchdog rebuild - lands in
         // the session log with the exact range applied, so a collapse onset can
         // finally be correlated with a (re)bind/re-pin.
         Diag.info(
             // `preferred` is optional in the Swift interface; we always set it,
             // so the 0 fallback can't appear in practice.
-            "FramePacer link installed — floor=\(Double(range.minimum))Hz "
+            "FramePacer link installed - floor=\(Double(range.minimum))Hz "
             + "preferred=\(Double(range.preferred ?? 0))Hz max=\(Double(range.maximum))Hz "
             + "(panelMax=\(panelMax)Hz)",
             "Stream.Pacer")
     }
 
-    /// Rebind the link to a new screen — the stream window moved to another
+    /// Rebind the link to a new screen - the stream window moved to another
     /// display, or came back from display sleep. A CADisplayLink from
     /// `NSView.displayLink` follows the view's window automatically in most
     /// cases, but a hard screen change (and the sleep/wake transition where the
@@ -185,7 +185,7 @@ extension FramePacer {
         guard isRunning, let view = boundView else { return }
         // MATERIAL-CHANGE GATE: macOS posts screen-parameter notifications
         // ~1/s on a ProMotion panel (VRR housekeeping) with nothing actually
-        // changed — 785 unconditional rebinds in a ~12-minute wifi run,
+        // changed - 785 unconditional rebinds in a ~12-minute wifi run,
         // each one resetting the cadence base the due-gate paces against (a
         // standing micro-judder source, invisible until the (re)bind
         // breadcrumbs landed). Rebind only when the screen identity, panel
@@ -202,7 +202,7 @@ extension FramePacer {
     }
 
     /// Compact identity of the screen `view` is on: display ID | panel max |
-    /// backing scale. The three things whose change makes a rebind MATERIAL —
+    /// backing scale. The three things whose change makes a rebind MATERIAL -
     /// anything else arriving via screen-parameter notifications is VRR/HDR
     /// housekeeping the bound link already follows. Falls back to "none" when
     /// the view has no window/screen yet, which never equals a real signature,
@@ -215,7 +215,7 @@ extension FramePacer {
         return "\(displayID)|\(screen.maximumFramesPerSecond)|\(screen.backingScaleFactor)"
     }
 
-    /// Force-rebuild the CADisplayLink — the present-path watchdog's recovery
+    /// Force-rebuild the CADisplayLink - the present-path watchdog's recovery
     /// action when the link has stopped ticking (a same-screen 240Hz HDR/VRR
     /// mode switch that posted no `didChangeScreen`, so `screenDidChange` never
     /// fired). Same path as `screenDidChange` but logs a self-heal cause so the
@@ -264,7 +264,7 @@ extension FramePacer {
     /// One-shot consistent read of the present-side liveness state. ALSO rolls
     /// the realized-rate window when one is due: the 20Hz watchdog calls this
     /// continuously, so the tick-deficit measurement keeps advancing even when
-    /// the CADisplayLink has stopped ticking entirely — the one caller that is
+    /// the CADisplayLink has stopped ticking entirely - the one caller that is
     /// guaranteed alive during the exact failure this machinery measures.
     func livenessSnapshot() -> LivenessSnapshot {
         let now = CFAbsoluteTimeGetCurrent()
@@ -289,14 +289,14 @@ extension FramePacer {
             presentRejectStreak: presentRejectStreak)
         os_unfair_lock_unlock(&lock)
         // Emit breadcrumbs / reconcile the off-tick timer OFF the lock (LogStore
-        // takes its own lock; timer ops dispatch) — same discipline as handleTick.
+        // takes its own lock; timer ops dispatch) - same discipline as handleTick.
         handleTickDeficitEvents(events)
         return snapshot
     }
 
     /// Escalation step the watchdog can take BEFORE rebuilding the link: re-anchor
     /// the cadence base ON the live grid so the next tick releases the head. Cheap
-    /// and non-destructive — if ticks are still arriving (the gate is merely
+    /// and non-destructive - if ticks are still arriving (the gate is merely
     /// latched), this drains the wedge next vsync without a link rebuild. On-grid
     /// (not `.nan`, which re-latches a backoff-reseed wedge → this poke a no-op);
     /// the helper falls back to `.nan` if the link is gone. Returns the poke depth.
@@ -318,7 +318,7 @@ extension FramePacer {
     }
 
     /// Last-resort drain when the LINK itself is dead (no ticks arriving), so
-    /// `forceReleaseNextTick` can't help — there will be no "next tick". Pushes
+    /// `forceReleaseNextTick` can't help - there will be no "next tick". Pushes
     /// the freshest queued frame straight through `willPresent`, bypassing the
     /// due gate, off the pacing queue. Keeps the screen alive while the link is
     /// rebuilt. Returns true if a frame was pushed.
@@ -332,7 +332,7 @@ extension FramePacer {
             return false
         }
         // Present the FRESHEST frame (queue tail, hostPTS-ordered) and discard
-        // the rest — a real-time stream wants the newest pixels, not a backlog.
+        // the rest - a real-time stream wants the newest pixels, not a backlog.
         freshest = queue.removeLast()
         stale = queue.map { $0.sampleBuffer }
         queue.removeAll(keepingCapacity: true)
@@ -355,13 +355,13 @@ extension FramePacer {
         guard let entry = freshest, let willPresent else { return false }
         let presented = willPresent(entry.sampleBuffer)
         if presented {
-            // A drained frame IS a successful present — it must reset the
+            // A drained frame IS a successful present - it must reset the
             // reject streak (the consecutive-only invariant the ladder's
             // 8-streak jitter-proofing rests on) and stamp the freshness
             // bookkeeping, same as every other present site.
             noteFramePresented(entry.sampleBuffer)
         } else {
-            // Even the watchdog's direct drain died at the renderer — strong
+            // Even the watchdog's direct drain died at the renderer - strong
             // confirmation for the reject-streak verdict (noteGateReleaseRejected).
             noteGateReleaseRejected()
         }
@@ -376,7 +376,7 @@ extension FramePacer {
     /// of the stale backlog is dropped. The dropped frames count as benign
     /// late-drops (telemetry stays measurable); no IDR is requested. Returns the
     /// number of stale frames discarded. Distinct from `drainHeadDirectly`, which
-    /// PRESENTS the freshest frame (wrong while suppressed — nothing should hit a
+    /// PRESENTS the freshest frame (wrong while suppressed - nothing should hit a
     /// hidden layer) and from `clearQueue`, which empties it entirely.
     @discardableResult
     func dropToNewest(reason: String) -> Int {
@@ -402,7 +402,7 @@ extension FramePacer {
     /// stale backlog from the suppressed period is dropped so the present path
     /// repaints from the fresh IDR the caller requests rather than draining old
     /// frames first. Dropped frames count as benign late-drops. Distinct from
-    /// `stop()` (which also invalidates the link / tears the pacer down) — this
+    /// `stop()` (which also invalidates the link / tears the pacer down) - this
     /// keeps the pacer live, only the queue is cleared.
     @discardableResult
     func clearQueue(reason: String) -> Int {
@@ -436,14 +436,14 @@ extension FramePacer {
 
     /// Post-unlock starvation diagnostics: the negative-`sinceLast` warning (with the
     /// depth proving frames were queued) plus the self-heal breadcrumb. Side-effect
-    /// only — kept off `releaseDueFrame`'s body (FramePacer+DueGate.swift).
+    /// only - kept off `releaseDueFrame`'s body (FramePacer+DueGate.swift).
     func emitStarvationDiagnostics(
         shouldLog: Bool, forcedSelfHeal: Bool, snapshot snap: StarvationSnapshot
     ) {
         if shouldLog {
             log.warning(
                 // swiftlint:disable:next line_length
-                "FramePacer starved: \(snap.streak, privacy: .public) ticks with frames queued (depth=\(snap.depth, privacy: .public)) and nothing released — sinceLast=\(snap.sinceLastMs, privacy: .public)ms targetTimestamp=\(snap.targetTimestamp, privacy: .public) lastPresentMediaTime=\(snap.lastPresent, privacy: .public) streamInterval=\(snap.intervalMs, privacy: .public)ms")
+                "FramePacer starved: \(snap.streak, privacy: .public) ticks with frames queued (depth=\(snap.depth, privacy: .public)) and nothing released - sinceLast=\(snap.sinceLastMs, privacy: .public)ms targetTimestamp=\(snap.targetTimestamp, privacy: .public) lastPresentMediaTime=\(snap.lastPresent, privacy: .public) streamInterval=\(snap.intervalMs, privacy: .public)ms")
             OSSignposter.render.emitEvent(
                 "PacerStarved",
                 "depth=\(snap.depth, privacy: .public) sinceLastMs=\(snap.sinceLastMs, privacy: .public)")

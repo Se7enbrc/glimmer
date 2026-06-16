@@ -15,7 +15,7 @@ extension MoonlightManager {
 
     /// Cancel any in-flight chip poller and spin up a fresh one for the
     /// currently selected host. Single source of truth for the chip's
-    /// background work — `selectHost`, `bootstrap`, `appDidBecomeActive`,
+    /// background work - `selectHost`, `bootstrap`, `appDidBecomeActive`,
     /// and the stream-end cleanup all funnel through here.
     ///
     /// The poll loop fires:
@@ -28,22 +28,22 @@ extension MoonlightManager {
     /// grid continuously while on the launcher regardless of window focus, and
     /// so do we: the chip is just as visible when Glimmer's window sits behind
     /// another app, and the old `NSApp.isActive` gate left it stranded on
-    /// "Checking…" the moment the user clicked away (the resign-active handler
+    /// "Checking..." the moment the user clicked away (the resign-active handler
     /// cancelled the loop, then the last sample aged past `HostLiveStatus.stale`
     /// and the chip reverted). A TCP probe + one `/serverinfo` every 10s is
-    /// negligible chatter — the cost the gate saved was never worth a chip that
+    /// negligible chatter - the cost the gate saved was never worth a chip that
     /// lies whenever Glimmer isn't frontmost. We still pause for the two cases
     /// that genuinely warrant it: an active stream (the engine owns RTT) and no
     /// host selected.
     ///
-    /// We deliberately don't fan out across multiple hosts — only the
+    /// We deliberately don't fan out across multiple hosts - only the
     /// selected one is on screen. Background hosts get a stale chip; no
     /// problem, the moment the user switches to them this method re-fires.
     func restartHostStatusPolling(afterStream: Bool = false) {
         hostStatusTask?.cancel()
         hostStatusTask = nil
 
-        // Don't poll while a stream is up — the engine has its own RTT
+        // Don't poll while a stream is up - the engine has its own RTT
         // metric, and concurrent /serverinfo calls would tag along with the
         // pairing TLS session and confuse Sunshine's logs.
         guard !isStreaming else { return }
@@ -76,7 +76,7 @@ extension MoonlightManager {
             }
             while !Task.isCancelled {
                 await self?.pollHostStatusOnce(for: pollHostID)
-                // Sleep in small slices so cancellation is responsive — a
+                // Sleep in small slices so cancellation is responsive - a
                 // single 10s sleep would block stream-start by up to that
                 // long before the cancel propagates.
                 let interval = Self.hostStatusPollSeconds
@@ -93,14 +93,14 @@ extension MoonlightManager {
 
     /// Publish the chip state for a TCP-unreachable probe, with hysteresis so a
     /// transient miss can't flap the chip. A single timed-out 2 s probe is NOT
-    /// proof of anything — Wi-Fi blips, a momentarily busy host, or the
+    /// proof of anything - Wi-Fi blips, a momentarily busy host, or the
     /// post-stream `/cancel` HTTP blip drop one probe on a perfectly awake box.
     /// So a sub-threshold miss publishes NOTHING: the chip HOLDS its last-good
-    /// status ("Ready · 12 ms") instead of blanking to "Checking…", and the
+    /// status ("Ready · 12 ms") instead of blanking to "Checking...", and the
     /// next poll (~10 s) either refreshes it or accrues another strike. Only
     /// once `asleepProbeThreshold` CONSECUTIVE probes have missed do we assert
     /// `.asleep`. (If polling were to stop entirely, the chip's own
-    /// `HostLiveStatus.stale` age-out still falls back to "Checking…" — the
+    /// `HostLiveStatus.stale` age-out still falls back to "Checking..." - the
     /// honest "we genuinely don't know anymore" path.)
     func publishUnreachable(hostID: String, expectedHostID: String) async {
         let streak: Int = await MainActor.run { [weak self] in
@@ -108,7 +108,7 @@ extension MoonlightManager {
             self.hostUnreachableStreak += 1
             return self.hostUnreachableStreak
         }
-        // Hold last-good until the host is confirmed unreachable — no flap.
+        // Hold last-good until the host is confirmed unreachable - no flap.
         guard streak >= Self.asleepProbeThreshold else { return }
         await publishLiveStatus(HostLiveStatus(
             hostID: hostID,
@@ -121,7 +121,7 @@ extension MoonlightManager {
 
     /// Single poll cycle: TCP-probe the host for an RTT, then if reachable
     /// pull /serverinfo to learn idle-vs-busy. Publishes a `HostLiveStatus`
-    /// for the UI to consume — but only if `expectedHostID` still matches
+    /// for the UI to consume - but only if `expectedHostID` still matches
     /// the currently-selected host (the user might've switched PCs while
     /// the network call was in flight; we don't want late results painting
     /// the wrong machine's status onto the chip).
@@ -138,7 +138,7 @@ extension MoonlightManager {
         guard let snap = snapshot else { return }
 
         // Step 1: TCP probe to host's HTTP port. This is the cheapest signal
-        // we have for "is the box answering on the network" — if this fails
+        // we have for "is the box answering on the network" - if this fails
         // there's no point in trying /serverinfo (which would tack on TLS +
         // a longer timeout). It also gives us a free RTT for the chip.
         let probe = await HostReachability.measureRTT(
@@ -160,7 +160,7 @@ extension MoonlightManager {
             await MainActor.run { [weak self] in self?.hostUnreachableStreak = 0 }
             // Step 2: now that we know the host is up, ask /serverinfo who
             // it is and whether it's busy. We do this on a fresh
-            // NetworkClient per poll — the client is cheap to construct,
+            // NetworkClient per poll - the client is cheap to construct,
             // and reusing one across polls would let stale URLSession
             // connections age in the background.
             let client = NetworkClient(server: snap.info)
@@ -196,7 +196,7 @@ extension MoonlightManager {
                 if Task.isCancelled { return }
                 // TLS pin mismatch is its own UX (the existing
                 // "trust new cert" path in Settings → PCs handles it). Keep
-                // the chip quiet rather than yelling "Asleep" — the host
+                // the chip quiet rather than yelling "Asleep" - the host
                 // is plainly reachable, the trust relationship just broke.
                 let state: HostLiveStatus.State
                 if case .hostUnreachable(let detail) = err,
@@ -204,7 +204,7 @@ extension MoonlightManager {
                     state = .certMismatch
                 } else {
                     // /serverinfo failed for some other reason (timeout, 5xx)
-                    // but TCP succeeded — fall back to "idle with RTT"
+                    // but TCP succeeded - fall back to "idle with RTT"
                     // rather than penalise a working host for a transient
                     // HTTP hiccup. Spec calls this "treat as Ready".
                     state = .idle

@@ -24,7 +24,7 @@ public struct StreamConfig: Sendable {
     public var bitrateKbps: Int
     /// Video packet size on the wire (UDP payload, before FEC framing).
     /// moonlight-common-c documents the default as "use 1024 if unsure" but
-    /// that's a conservative remote-streaming value — on a LAN where MTU is
+    /// that's a conservative remote-streaming value - on a LAN where MTU is
     /// 1500 we can pack ~30% more video data into each packet, which
     /// measurably reduces jitter (fewer fragments per frame, fewer reassembly
     /// stalls under RTT variance). moonlight-qt ships 1392 as the LAN
@@ -33,7 +33,7 @@ public struct StreamConfig: Sendable {
     /// On a REMOTE session the SDP builder clamps the value it ADVERTISES to
     /// the host back to 1024 (`SdpBuilder.build`, the `streamingRemotely`
     /// branch) so a full RTP packet fits inside common VPN path MTUs
-    /// (WireGuard/Tailscale ~1280-1420) after tunnel encapsulation — mirroring
+    /// (WireGuard/Tailscale ~1280-1420) after tunnel encapsulation - mirroring
     /// moonlight-common-c's STREAM_CFG_AUTO Internet cap, which this Swift port
     /// applies at SDP-build time rather than mutating this field. This stored
     /// value is the LAN default and is unchanged; only the advertised number is
@@ -48,7 +48,7 @@ public struct StreamConfig: Sendable {
     /// AVAudioEngine.
     public var audio: AudioConfig = .bestForCurrentOutput()
     /// Default to whatever VideoToolbox actually reports as hardware-decodable
-    /// on this machine — see `VideoFormats.probedSupported`. Callers can
+    /// on this machine - see `VideoFormats.probedSupported`. Callers can
     /// override (tests pin a specific set; the picker UI may downgrade based
     /// on user preference) but the safe default is "advertise only what we
     /// can decode," so the host's RTSP codec negotiation never picks a
@@ -67,9 +67,9 @@ public struct StreamConfig: Sendable {
     public var encryption: EncryptionPreference = .all
 
     /// When true, system-level keyboard combos that use the macOS Cmd key
-    /// (⌘-Tab, ⌘-Space, ⌘-Q, ⌘-`, ⌘-H, ⌘-M, …) are forwarded to the host as
+    /// (⌘-Tab, ⌘-Space, ⌘-Q, ⌘-`, ⌘-H, ⌘-M, ...) are forwarded to the host as
     /// VK_LWIN / VK_RWIN chords instead of being handled by macOS. Off by
-    /// default — most users want ⌘-Tab to still switch macOS apps even while
+    /// default - most users want ⌘-Tab to still switch macOS apps even while
     /// a game stream is up, and ⌘-Q to still quit Glimmer. Mirrors
     /// moonlight-qt's `captureSysKeysMode` preference.
     ///
@@ -149,7 +149,7 @@ public enum AudioConfig: Sendable {
     /// Pick the richest channel layout the system's current default output
     /// device can render natively, falling back to stereo if we can't tell.
     /// Sunshine/GFE will downmix on the host side if they don't support
-    /// the requested config, so requesting more than we need is safe — but
+    /// the requested config, so requesting more than we need is safe - but
     /// requesting more than the local hardware supports invites a chain of
     /// AVAudioEngine downmixes that can blur the front-stage. Probe the
     /// CoreAudio default-output device once at startup and pick the
@@ -163,8 +163,8 @@ public enum AudioConfig: Sendable {
 
     /// Query the CoreAudio default-output device's stream channel count.
     /// Returns 2 on any probe failure (safest fallback). Run on startup
-    /// rather than per-stream so the cost — a small handful of AudioHAL
-    /// property reads — doesn't sit on the stream-start critical path.
+    /// rather than per-stream so the cost - a small handful of AudioHAL
+    /// property reads - doesn't sit on the stream-start critical path.
     private static func currentDefaultOutputChannelCount() -> Int {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -224,7 +224,7 @@ public struct VideoFormats: OptionSet, Sendable {
     /// capabilities, NOT from a hardcoded "we support everything" set.
     /// Negotiating against a fictional capability set is the standing
     /// "host sends us AV1 we can't decode" bug on Intel Macs (no AV1 HW
-    /// decode) — the host accepted the AV1 bit, started encoding AV1, and
+    /// decode) - the host accepted the AV1 bit, started encoding AV1, and
     /// VTDecompressionSessionCreate immediately failed, killing the
     /// session. Probing up front means the host never picks a format we
     /// can't handle.
@@ -232,7 +232,7 @@ public struct VideoFormats: OptionSet, Sendable {
     /// Apple Silicon (M3+ on Mac) supports the full {AV1 Main8/Main10,
     /// HEVC Main/Main10, H.264 High} matrix. Intel + earlier M-series lack
     /// AV1 HW decode and fall back to {HEVC Main/Main10, H.264 High}. The
-    /// probe is the source of truth — anything Apple ships in a future
+    /// probe is the source of truth - anything Apple ships in a future
     /// chip generation lights up automatically without a code change.
     public static let probedSupported: VideoFormats = probeSupported()
 
@@ -243,11 +243,11 @@ public struct VideoFormats: OptionSet, Sendable {
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_H264) {
             out.insert(.h264)
         } else {
-            log.warning("VT reports no HW H.264 decode — this Mac is unsupported")
+            log.warning("VT reports no HW H.264 decode - this Mac is unsupported")
         }
         // 4:4:4 chroma is a separate decode capability from 4:2:0: the HEVC
         // Range Extensions (RExt) and AV1 High 4:4:4 profiles need the wider
-        // chroma path, which Apple's VT only exposes on Apple Silicon SoCs —
+        // chroma path, which Apple's VT only exposes on Apple Silicon SoCs -
         // Intel Macs (and the rare pre-Apple-Silicon HEVC SoC) decode 4:2:0
         // only and would CHOKE on a 4:4:4 bitstream the host happily encoded.
         // VTIsHardwareDecodeSupported returns a single per-codec bit and does
@@ -257,7 +257,7 @@ public struct VideoFormats: OptionSet, Sendable {
         let appleSilicon = isAppleSilicon()
         // HEVC Main / Main10: SoC HEVC decoder on Macs since ~2017.
         // Apple's VTIsHardwareDecodeSupported doesn't distinguish Main8 from
-        // Main10 — the same VT capability covers both. We advertise Main10
+        // Main10 - the same VT capability covers both. We advertise Main10
         // whenever HEVC is available; the 10-bit path is what unlocks HDR.
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) {
             out.insert(.hevc)
@@ -362,8 +362,8 @@ public struct ServerInfo: Sendable {
     ///      via `MoonlightManager.nativeServerInfo`. Same trust level as
     ///      (1) because that's how it landed in storage.
     ///   3. A `<PlainCert>` value picked up during an unpaired
-    ///      /serverinfo call. INFORMATIONAL ONLY — not bound as a pin.
-    ///      Suitable for UI display ("here's the host's fingerprint —
+    ///      /serverinfo call. INFORMATIONAL ONLY - not bound as a pin.
+    ///      Suitable for UI display ("here's the host's fingerprint -
     ///      compare to the one on your host machine") but never trusted
     ///      to authenticate a subsequent TLS handshake. See C2 in the
     ///      security audit.
@@ -377,7 +377,7 @@ public struct ServerInfo: Sendable {
     /// `GfeVersion` in its `/serverinfo` response for compatibility, so a
     /// non-empty `gfeVersion` does NOT prove real GFE. moonlight-qt
     /// distinguishes by looking at `<state>` for the substring "MJOLNIR"
-    /// (NVIDIA's internal codename) — Sunshine's `<state>` is
+    /// (NVIDIA's internal codename) - Sunshine's `<state>` is
     /// "SUNSHINE_SERVER_FREE" / "_BUSY" instead. This field gates the
     /// GFE-only `fps>60 → fps=0` workaround in the launch query; applying
     /// that workaround to Sunshine makes Sunshine fall back to safe SDR
@@ -386,7 +386,7 @@ public struct ServerInfo: Sendable {
     public var maxLumaPixelsHEVC: Int = 0       // HEVC capability hint
     public var serverCodecSupport: VideoFormats = []  // server-supported formats (decoded into our VIDEO_FORMAT_* bitmask for our own use)
     /// Raw `ServerCodecModeSupport` integer from /serverinfo, in
-    /// moonlight-common-c's SCM_* bit layout — completely different from our
+    /// moonlight-common-c's SCM_* bit layout - completely different from our
     /// VIDEO_FORMAT_* layout (e.g. SCM_AV1_MAIN10 = 0x20000 vs
     /// VIDEO_FORMAT_AV1_MAIN10 = 0x2000). Must be passed through verbatim to
     /// `STREAM_CONFIGURATION.serverCodecModeSupport` or the RTSP negotiation
@@ -412,7 +412,7 @@ public enum StreamEvent: Sendable {
     case stageFailed(name: String, errorCode: Int32)
     case connectionEstablished
     /// First decoded/rendered video frame for this session. Ground-truth
-    /// proof the stream is LIVE — frames are flowing — independent of the
+    /// proof the stream is LIVE - frames are flowing - independent of the
     /// one-shot `.connectionEstablished` edge. The UI promotes
     /// connecting→streaming on EITHER signal, so a missed/torn established
     /// edge can never leave the launcher stuck at "Connecting" while video
@@ -424,17 +424,17 @@ public enum StreamEvent: Sendable {
     /// The host closed a LIVE session with a recoverable code (e.g. Sunshine's
     /// process restarting across a Windows lock / secure-desktop transition, or
     /// a brief network blip) and we're silently re-establishing underneath the
-    /// frozen last frame. The UI shows "Reconnecting…" over the held frame
+    /// frozen last frame. The UI shows "Reconnecting..." over the held frame
     /// rather than bouncing to the launcher. Paired with `.reconnected` /
     /// (on give-up) `.connectionTerminated`.
     case reconnecting
-    /// A silent reconnect succeeded — the stream resumed in place. The UI
+    /// A silent reconnect succeeded - the stream resumed in place. The UI
     /// returns to the streaming state; the fresh `.connectionEstablished` /
     /// `.firstFrame` edges also promote the phase, so this is belt-and-braces.
     case reconnected
     case connectionStatus(ConnectionQuality)
     /// Raised when the *host* signals an HDR-mode change via
-    /// `LiSetHdrMode`. Indicates intent, not effective output state — a host
+    /// `LiSetHdrMode`. Indicates intent, not effective output state - a host
     /// can claim HDR on an 8-bit stream and we'll refuse to engage the PQ
     /// pipeline. Use `.hdrActive` for the effective signal the UI should
     /// reflect.
@@ -474,7 +474,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         // its signature failed verification (the MITM-detected branch
         // also throws .pairingRejected). The internal log distinguishes;
         // the surface does not.
-        case .pairingRejected: return "Pairing failed — try again."
+        case .pairingRejected: return "Pairing failed - try again."
         case .launchFailed(let reason): return "Couldn't launch app: \(reason)"
         case .sessionFailed(let code): return "Streaming session ended (code \(code))."
         case .decoderFailed(let reason): return "Video decoder failed: \(reason)"

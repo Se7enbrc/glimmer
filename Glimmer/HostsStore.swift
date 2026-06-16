@@ -21,7 +21,7 @@ extension MoonlightManager {
     /// own state. Subsequent launches read directly from Glimmer's
     /// UserDefaults.
     ///
-    /// The moonlight-qt install does not have to be present — we're just
+    /// The moonlight-qt install does not have to be present - we're just
     /// reading a plist that may or may not exist. Safe to call on every
     /// launch; the flag short-circuits after the first successful pass.
     func migrateFromMoonlightQtIfNeeded() {
@@ -273,7 +273,7 @@ extension MoonlightManager {
     // MARK: - Unpair / cert recovery
 
     /// Drop a paired host from local storage. This is the user-visible
-    /// inverse of `pair(hostnameOrIP:pin:)` — we wipe the UserDefaults
+    /// inverse of `pair(hostnameOrIP:pin:)` - we wipe the UserDefaults
     /// entries that `loadHosts` reads, plus any pinned cert keyed by
     /// uniqueId, plus the per-host last-connected timestamp. We do NOT call
     /// the host's `/unpair` endpoint here: the host treats our client cert
@@ -283,7 +283,7 @@ extension MoonlightManager {
     /// Forget a host and leave the client in a fully clean state for it.
     /// Deliberately idempotent / bulletproof: every cleanup keyed by the host
     /// id runs UNCONDITIONALLY (pinned cert, last-connected, selection), and we
-    /// wipe ALL matching UserDefaults slots, not just the first — so a partial,
+    /// wipe ALL matching UserDefaults slots, not just the first - so a partial,
     /// duplicated, or corrupt record (e.g. left over from the namespace
     /// migration) still ends up gone. Safe to call repeatedly; a no-op once the
     /// host is already clean.
@@ -322,7 +322,7 @@ extension MoonlightManager {
                     defaults.removeObject(forKey: "\(prefix).\(key)")
                 }
                 // Leave the hole; `loadHosts` skips empty slots and other
-                // hosts' indices stay stable. (No break — wipe duplicates too.)
+                // hosts' indices stay stable. (No break - wipe duplicates too.)
             }
         }
 

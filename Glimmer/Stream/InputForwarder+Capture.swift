@@ -39,13 +39,13 @@ extension InputForwarder {
     //     reconciliation event landed in the motion pipeline.
     //   * Under associate-false the OS STOPS moving the on-screen cursor. There
     //     is therefore no edge to warp from, no warp at all, and no
-    //     reconciliation delta to suppress — the entire bug CLASS is structurally
+    //     reconciliation delta to suppress - the entire bug CLASS is structurally
     //     gone. This is exactly what moonlight-qt/SDL do (SDL_cocoamouse).
     //   * The two reasons the prior associate-false attempt was abandoned no
-    //     longer apply: (a) "the cursor freezes visibly" — it's hidden by
+    //     longer apply: (a) "the cursor freezes visibly" - it's hidden by
     //     CGDisplayHideCursor, so there is no visible pointer to freeze; the
     //     user only ever sees in-game aim driven by relative deltas. (b) "the OS
-    //     stops reporting deltas" — that was true of NSEvent.deltaX/Y, but we
+    //     stops reporting deltas" - that was true of NSEvent.deltaX/Y, but we
     //     read kCGMouseEventDeltaX/Y off the CGEvent layer (mouseDelta(from:)),
     //     which stays valid AND becomes pure accel-free HID under associate-false
     //     (the exact field SDL reads in relative mode).
@@ -56,13 +56,13 @@ extension InputForwarder {
     // Gesture suppression (unchanged, still needed under associate-false):
     //   * Trackpad gesture family (pinch/.magnify, smart-zoom/.smartMagnify,
     //     three-finger-swipe/.swipe, .rotate): the NSEvent local monitor below
-    //     consumes them for our key stream window. Sufficient on its own —
+    //     consumes them for our key stream window. Sufficient on its own -
     //     these dispatch through AppKit, so returning nil stops the default
     //     zoom/swipe handlers.
     //   * macOS Accessibility "Smart Zoom" keyboard chords (⌥⌘8/=/-): swallowed
     //     in streamView(_:handleKeyDown:) (InputForwarder+StreamView.swift).
     //   * Hot corners (Mission Control etc.): under associate-false the OS does
-    //     not move the cursor, so it can never reach a corner — the warp's old
+    //     not move the cursor, so it can never reach a corner - the warp's old
     //     job is gone entirely (warpCursorIfNearEdge deleted).
     //   * Ctrl+scroll Accessibility Zoom: this is interlocked at the
     //     WindowServer/SkyLight layer BELOW NSEvent dispatch, so neither the
@@ -71,7 +71,7 @@ extension InputForwarder {
     //     documented non-freezing replacement remains the kCGAnnotatedSession-
     //     EventTap escalation scoped in the diagnostic-tap comment below (a
     //     session-scoped CGEventTap consuming control+scrollWheel for our PID,
-    //     needs Accessibility permission). Not installed yet — gated behind the
+    //     needs Accessibility permission). Not installed yet - gated behind the
     //     diagnostic.
 
     func installFocusObservers(for window: NSWindow) {
@@ -84,7 +84,7 @@ extension InputForwarder {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.enterCapturedMode()
-                // Snap all controller axes/buttons to live state on refocus —
+                // Snap all controller axes/buttons to live state on refocus -
                 // GCController's value-changed handler doesn't re-fire for an
                 // input held across the focus loss, so without this a stick
                 // held while Cmd-Tabbing back reads as centered until nudged.
@@ -97,7 +97,7 @@ extension InputForwarder {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 // Release cursor when the user Cmd-Tabs away or the system
-                // grabs focus for a sheet. We do NOT raise keys here — the
+                // grabs focus for a sheet. We do NOT raise keys here - the
                 // window-resign path can be a transient (e.g. notification
                 // banner) and we want held game keys to survive it. The
                 // gate against orphan modifiers is in detach().
@@ -115,11 +115,11 @@ extension InputForwarder {
     /// Engage relative-aim mode (SDL_SetRelativeMouseMode(true) on macOS).
     /// DISASSOCIATES the cursor from the pointing device via
     /// `CGAssociateMouseAndMouseCursorPosition(false)` so the OS stops physically
-    /// moving the on-screen cursor — which is what makes the in-game aim
+    /// moving the on-screen cursor - which is what makes the in-game aim
     /// impossible to snap to an edge/corner (no cursor travel ⇒ no edge ⇒ no
     /// warp ⇒ no warp-reconciliation delta). The cursor is already invisible
     /// (StreamWindow owns `CGDisplayHideCursor`), so there is no visible pointer
-    /// to "freeze". kCGMouseEventDeltaX/Y — the field `mouseDelta(from:)` reads —
+    /// to "freeze". kCGMouseEventDeltaX/Y - the field `mouseDelta(from:)` reads -
     /// stays valid and becomes pure accel-free HID under associate-false (the
     /// exact field SDL reads in relative mode); only NSEvent.deltaX/Y goes silent,
     /// and we don't use it. Resets the sub-pixel residual so the first post-focus
@@ -130,7 +130,7 @@ extension InputForwarder {
         mouseResidualY = 0
         // Disassociate: the OS stops moving the system cursor; HID motion still
         // arrives as relative deltas on the CGEvent layer. The return value is
-        // a CGError; on the (vanishingly unlikely) failure we still proceed —
+        // a CGError; on the (vanishingly unlikely) failure we still proceed -
         // the worst case degrades to the OS moving an already-hidden cursor, not
         // a crash, and the next focus cycle retries.
         CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
@@ -139,7 +139,7 @@ extension InputForwarder {
         // instead of merging them. The manual delta-summing coalescer in
         // streamView(_:handleMouseMoved:) sums these now-more-numerous events
         // into the same 1ms batch, so host acceleration still applies once per
-        // batch (no twitchiness) — we just feed it finer-grained, more accurate
+        // batch (no twitchiness) - we just feed it finer-grained, more accurate
         // deltas. Save the prior global value so we restore it on disengage and
         // stay polite to the rest of the system. Only save once (first engage):
         // a re-entrant guard above already returns early, but the save is
@@ -155,7 +155,7 @@ extension InputForwarder {
     /// Disengage relative-aim mode. RE-ASSOCIATES the cursor with the pointing
     /// device (`CGAssociateMouseAndMouseCursorPosition(true)`) so Cmd-Tab /
     /// teardown restores a normal, OS-controlled pointer. This is the guaranteed
-    /// `true` that pairs with every `false` from `enterCapturedMode()` — it runs
+    /// `true` that pairs with every `false` from `enterCapturedMode()` - it runs
     /// from the window's resign-key hook and from `detach()`. Visibility is owned
     /// by StreamWindow's resign-key / close path, so we deliberately do NOT show
     /// the cursor here; we only restore association.
@@ -180,13 +180,13 @@ extension InputForwarder {
         guard gestureSuppressionMonitor == nil else { return }
         // Zoom-inducing gestures only. A broader mask (`.gesture`,
         // `.beginGesture`, `.endGesture`, `.pressure`) catches raw
-        // trackpad pan/scroll data on laptops with no external mouse —
+        // trackpad pan/scroll data on laptops with no external mouse -
         // killing cursor + scroll because the OS synthesises mouseMoved
         // events from that gesture stream. Truly-zoom-triggering types:
-        //   .magnify        — two-finger pinch (live)
-        //   .smartMagnify   — two-finger double-tap "smart zoom"
-        //   .swipe          — three-finger swipe (legacy)
-        //   .rotate         — two-finger rotate (no game meaning over a stream)
+        //   .magnify        - two-finger pinch (live)
+        //   .smartMagnify   - two-finger double-tap "smart zoom"
+        //   .swipe          - three-finger swipe (legacy)
+        //   .rotate         - two-finger rotate (no game meaning over a stream)
         let mask: NSEvent.EventTypeMask = [
             .magnify, .smartMagnify, .swipe, .rotate
         ]
@@ -216,7 +216,7 @@ extension InputForwarder {
     //
     // The bug we're chasing: macOS zooms into the stream during intense D4
     // input. Ctrl+scroll has been ruled out. We don't yet know which event
-    // type fires immediately before zoom — could be a gesture phase event,
+    // type fires immediately before zoom - could be a gesture phase event,
     // a systemDefined media-key subtype, a hover-text trigger, the
     // accessibility-zoom chord (⌥⌘8 / ⌥⌘= / ⌥⌘-), or pointer-shake.
     //
@@ -245,14 +245,14 @@ extension InputForwarder {
     //   4. Tears down in detach() via CGEventTapEnable(false) +
     //      CFMachPortInvalidate.
     // CGEventTap requires Accessibility permission (user prompts on first
-    // run) — a UX cost we don't pay until the diagnostic confirms we need
+    // run) - a UX cost we don't pay until the diagnostic confirms we need
     // the tap.
 
     func installDiagnosticMonitors() {
         guard diagnosticLocalMonitor == nil else { return }
 
         // Constraint: this monitor must touch ONLY NSEvent primitives
-        // documented as valid for every event type — type raw, modifier
+        // documented as valid for every event type - type raw, modifier
         // mask, raw subtype-or-zero. Type-specific accessors
         // (`event.window`, `event.chars`, `scrollingDeltaX`,
         // `magnification`, etc.) throw on the wrong event type, and at
@@ -273,7 +273,7 @@ extension InputForwarder {
             .systemDefined, .appKitDefined, .applicationDefined,
             .tabletProximity,
             .directTouch
-            // .mouseMoved / .*Dragged deliberately excluded — they fire at
+            // .mouseMoved / .*Dragged deliberately excluded - they fire at
             // ProMotion rates and we already handle motion in the regular
             // path. Logging them here would just flood the buffer.
         ]
@@ -282,7 +282,7 @@ extension InputForwarder {
             self?.logDiagnosticEvent(event)
             return event   // pass-through; suppression is the other monitor's job
         }
-        log.info("Diagnostic event monitor armed (safe mode) — logs every input event for zoom-trigger diagnosis")
+        log.info("Diagnostic event monitor armed (safe mode) - logs every input event for zoom-trigger diagnosis")
     }
 
     func removeDiagnosticMonitors() {
@@ -296,7 +296,7 @@ extension InputForwarder {
     /// Crash-proof minimal version. Only touches NSEvent properties that
     /// are documented to return valid (possibly zero) values for every
     /// event type. Specifically NO `event.window`, no `charactersIgnoring-
-    /// Modifiers`, no `scrollingDeltaX`, no `magnification` — all of those
+    /// Modifiers`, no `scrollingDeltaX`, no `magnification` - all of those
     /// throw on the wrong event type and the OSLog formatter's lazy eval
     /// turns a single bad access into a process-killing crash mid-stream.
     func logDiagnosticEvent(_ event: NSEvent) {
@@ -331,7 +331,7 @@ extension InputForwarder {
         // For scrollWheel events specifically, also log the magnitude so we
         // can tell real-user scroll input from micro-deltas (free-spin
         // wheels, tilt-wheel side-clicks, the host's own scroll-injection).
-        // scrollingDeltaX/Y are safe for the scrollWheel type — they only
+        // scrollingDeltaX/Y are safe for the scrollWheel type - they only
         // crash when read on non-scroll events. We gate on type explicitly.
         var scrollX: Double = 0
         var scrollY: Double = 0
@@ -339,14 +339,14 @@ extension InputForwarder {
             scrollX = Double(event.scrollingDeltaX)
             scrollY = Double(event.scrollingDeltaY)
         }
-        // Identify the event SOURCE — hardware HID device, third-party
+        // Identify the event SOURCE - hardware HID device, third-party
         // injected (BetterMouse, MOS, Karabiner, LinearMouse, etc.), or
         // Apple's own software cursor. This is the only way to tell a
         // "real" wheel tick from a synthetic scroll injected by a userland
         // mouse driver. CGEvent.source.sourceStateID returns one of:
-        //   .hidSystemState (0)        — hardware HID (mouse / trackpad)
-        //   .combinedSessionState (1)  — combined session events
-        //   .privateState (anything else) — userland-injected synthetic
+        //   .hidSystemState (0)        - hardware HID (mouse / trackpad)
+        //   .combinedSessionState (1)  - combined session events
+        //   .privateState (anything else) - userland-injected synthetic
         var srcID: String = "-"
         if type == .scrollWheel, let cg = event.cgEvent {
             // PID of the process that posted the event. 0 = OS, ours = us,
@@ -367,7 +367,7 @@ extension InputForwarder {
     /// formatter stays a simple data map rather than a giant switch.
     /// `.mouseCancelled` (macOS 26+) and any future-added cases are absent
     /// here and fall through to the raw-value fallback in
-    /// `diagnosticEventTypeName(_:)` — keeping us exhaustive on the current
+    /// `diagnosticEventTypeName(_:)` - keeping us exhaustive on the current
     /// SDK without churning the table every time AppKit gains an event type.
     private static let diagnosticEventTypeNames: [NSEvent.EventType: String] = [
         .leftMouseDown: "leftMouseDown",

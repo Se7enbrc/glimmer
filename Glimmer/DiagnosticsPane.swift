@@ -4,14 +4,14 @@
 //  Settings → Diagnostics. The single hideable home for the debug/tuning wires.
 //  HIDDEN by default (gated on `MoonlightManager.showDiagnostics`, which the
 //  sidebar consults) and only revealed by an option-click on the version line in
-//  About — normal users never see this. It houses:
+//  About - normal users never see this. It houses:
 //    * the Telemetry opt-in toggle (the gate `TelemetryGate.isEnabled` reads at
-//      stream start) — applies on the NEXT stream;
-//    * the telemetry-bookmark chord (⌃B), shown for discoverability — it's the
+//      stream start) - applies on the NEXT stream;
+//    * the telemetry-bookmark chord (⌃B), shown for discoverability - it's the
 //      client-only "that felt bad" marker, intercepted ONLY while telemetry is on;
 //    * a status line: where the telemetry log dir lives + the Grafana
 //      port-forward command for the optional local dashboard rig (NOT part of
-//      this repo — see docs/PROFILING.md, "Opt-in telemetry + the local
+//      this repo - see docs/PROFILING.md, "Opt-in telemetry + the local
 //      dashboard rig").
 //
 //  Nothing here changes streaming behaviour; it's all observation/opt-in.
@@ -24,8 +24,8 @@ struct DiagnosticsPane: View {
     @Environment(MoonlightManager.self) private var moonlight
 
     /// DEBUG opt-in for the per-session Diag FILE sink (`SessionLogFileSink`).
-    /// The file mirrors INFO+ by default (testing measured 30–105k lines/hr
-    /// with debug included — the log-diet fix); this key lets a deep-dive
+    /// The file mirrors INFO+ by default (testing measured 30-105k lines/hr
+    /// with debug included - the log-diet fix); this key lets a deep-dive
     /// session opt the file back into everything. The in-app ring and os_log
     /// always carry every level regardless. Resolved at session start, like
     /// the telemetry gate.
@@ -33,7 +33,7 @@ struct DiagnosticsPane: View {
 
     /// One-line surface for the OPTIONAL local dashboard rig (a
     /// Prometheus/Grafana stack). The rig is deliberately not part of this
-    /// repository and nothing in the app depends on it — the NDJSON +
+    /// repository and nothing in the app depends on it - the NDJSON +
     /// scorecard files in the telemetry log dir are the portable artifacts.
     /// Public-facing description: docs/PROFILING.md, "Opt-in telemetry + the
     /// local dashboard rig". The whole pane is already debug-gated (hidden
@@ -42,7 +42,7 @@ struct DiagnosticsPane: View {
     private let grafanaPortForward =
         "kubectl -n glimmer-telemetry port-forward svc/grafana 3000:3000"
 
-    /// `~/Library/Logs/Glimmer` — the SAME directory the telemetry NDJSON writer
+    /// `~/Library/Logs/Glimmer` - the SAME directory the telemetry NDJSON writer
     /// and the per-session Diag log sink use (see TelemetryExporter.openNDJSONFile
     /// + LogStore). Resolved live so it shows the real per-user path.
     private var telemetryLogDir: URL {
@@ -51,7 +51,7 @@ struct DiagnosticsPane: View {
     }
 
     var body: some View {
-        // @Bindable shim — surfaces $moonlight.x bindings from the @Observable
+        // @Bindable shim - surfaces $moonlight.x bindings from the @Observable
         // environment value (matches the other Settings panes).
         @Bindable var moonlight = moonlight
         Form {
@@ -96,8 +96,8 @@ struct DiagnosticsPane: View {
                 }
                 Text("Press \(HotkeyChord.defaultBookmark.displayString) during a "
                     + "stream when it \u{201C}feels bad\u{201D} to drop a "
-                    + "timestamped marker into the telemetry. Client-only — never "
-                    + "sent to the host — and intercepted only while telemetry is "
+                    + "timestamped marker into the telemetry. Client-only - never "
+                    + "sent to the host - and intercepted only while telemetry is "
                     + "on; otherwise the keystroke passes straight through.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)

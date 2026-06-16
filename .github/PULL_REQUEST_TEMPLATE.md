@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing! Please read docs/CONTRIBUTING.md first — it covers
+Thanks for contributing! Please read docs/CONTRIBUTING.md first - it covers
 setup, build (`make`), lint posture, the Swift 6 concurrency rules, and the
 commit-message conventions this repo uses.
 -->
@@ -13,7 +13,7 @@ commit-message conventions this repo uses.
 <!--
 How did you check it works? `make app` + a real stream against a Sunshine host
 is the bar for engine changes; for streaming-quality changes, telemetry
-numbers (before/after) are the house currency — see docs/PROFILING.md.
+numbers (before/after) are the house currency - see docs/PROFILING.md.
 -->
 
 ## Checklist

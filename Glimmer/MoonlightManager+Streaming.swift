@@ -61,7 +61,7 @@ extension MoonlightManager {
     /// UserDefaults key for the NAME of the last app launched on a host.
     /// Distinct from `glimmer.lastConnected.<id>` (a DATE, stamped at stream
     /// END): "what did I play here" is true from the moment a launch begins,
-    /// so the name stamps at START — see the write in `stream(app:on:)`.
+    /// so the name stamps at START - see the write in `stream(app:on:)`.
     static func lastPlayedAppKey(for hostId: String) -> String {
         "glimmer.lastPlayedApp.\(hostId)"
     }
@@ -72,7 +72,7 @@ extension MoonlightManager {
     /// the readiness chip uses; the host-id guard in `publishLiveStatus`
     /// already scopes the snapshot to this host). Otherwise the name stamped
     /// at the last stream start, as long as it's still in the applist. nil
-    /// when neither is known — the button falls back to "Connect".
+    /// when neither is known - the button falls back to "Connect".
     var resumableAppName: String? {
         guard let host = selectedHost else { return nil }
         if let live = hostLiveStatus,
@@ -88,7 +88,7 @@ extension MoonlightManager {
         return nil
     }
 
-    /// What the hero button actually launches — the resume target when known,
+    /// What the hero button actually launches - the resume target when known,
     /// else the configured default app. The AppIconsRow accent ring follows
     /// this so the ring can never disagree with the button's verb.
     var heroTargetAppName: String {
@@ -142,7 +142,7 @@ extension MoonlightManager {
             serverName: host.displayName
         )
         // PinnedCertStore.load handles file-store + UserDefaults migration
-        // transparently — file wins, UserDefaults fallback migrates
+        // transparently - file wins, UserDefaults fallback migrates
         // forward + cleans up.
         let persistedPin = PinnedCertStore.load(forHostID: host.id)
         if persistedPin == nil {
@@ -156,7 +156,7 @@ extension MoonlightManager {
             // didn't cover.
             log.error(
                 """
-                No pinned cert for host id=\(host.id, privacy: .public) — stream will fall to TOFU. \
+                No pinned cert for host id=\(host.id, privacy: .public) - stream will fall to TOFU. \
                 Check that host.id matches server.uniqueId (the host's `<uniqueid>` from /serverinfo).
                 """
             )
@@ -177,17 +177,17 @@ extension MoonlightManager {
         // old host-side session, and the old session's teardown then clobbers
         // isStreaming/streamPhase out from under the new one. The UI disables
         // its launch surfaces while a session exists, but a double-click can
-        // land before SwiftUI re-renders — this guard is the actual wall.
+        // land before SwiftUI re-renders - this guard is the actual wall.
         guard !isStreaming else {
-            Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName)) — a session is already in flight", "Stream")
+            Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName)) - a session is already in flight", "Stream")
             return
         }
         Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
-        streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
+        streamPhase = .connecting(stage: "Connecting to \(host.displayName)...")
         nativeStreamError = nil
         nativeHDRActive = false
         // Re-arm the disconnect toast for back-to-back cycles: if the
-        // previous session's toast is still inside its 2–4 s hold, dropping
+        // previous session's toast is still inside its 2-4 s hold, dropping
         // the flag here unmounts it (cancelling its hold task) so the NEXT
         // stream end mounts a fresh toast with a full hold, instead of the
         // new toast inheriting the old one's residual timer.
@@ -200,13 +200,13 @@ extension MoonlightManager {
         Self.connectCapsuleShown = false
         Self.connectCancelRequested = false
         // NB: the "last played" timestamp is intentionally NOT written here.
-        // It records when the stream ENDED, not when it started — writing it
+        // It records when the stream ENDED, not when it started - writing it
         // on start made the launcher's "last played N ago" label tick from
         // the moment a (possibly still-live) session began. The write now
         // lives in the single teardown cleanup site below, gated on
         // `wasStreaming` so it only stamps real sessions.
         isStreaming = true
-        // Cancel the chip poller while the stream is up — the native
+        // Cancel the chip poller while the stream is up - the native
         // engine reports its own RTT to the stats overlay, and polling
         // /serverinfo concurrently with the RTSP handshake confuses both
         // Sunshine's logs and our own latency story.
@@ -233,7 +233,7 @@ extension MoonlightManager {
         //
         // Seed the session-scoped stats-overlay state from the user's
         // persisted preference. The in-stream hotkey toggles this value
-        // but intentionally does not write back to UserDefaults — see the
+        // but intentionally does not write back to UserDefaults - see the
         // doc on `statsHotkey`.
         let initialStatsOverlay = showStreamStats
 
@@ -246,7 +246,7 @@ extension MoonlightManager {
             do {
                 // Provider closures (rather than captured values) so the user
                 // can edit either hotkey in Settings while a stream is live
-                // and the change takes effect on the next keyDown — no need
+                // and the change takes effect on the next keyDown - no need
                 // to restart the stream to see a new chord work. `self` is
                 // captured weakly to avoid a cycle with the session.
                 let events = try await session.start(
@@ -254,7 +254,7 @@ extension MoonlightManager {
                     quitHotkeyProvider: { [weak self] in self?.quitHotkey ?? .defaultQuit },
                     statsHotkeyProvider: { [weak self] in self?.statsHotkey ?? .defaultStats },
                     // Telemetry-bookmark chord (signal 4). Fixed default ⌃B for
-                    // now — client-only, consumed in the input path, never
+                    // now - client-only, consumed in the input path, never
                     // forwarded to the host. (Made user-configurable later if
                     // desired, alongside quit/stats in Settings.)
                     bookmarkHotkeyProvider: { .defaultBookmark },
@@ -283,7 +283,7 @@ extension MoonlightManager {
                     }
                 )
                 for await event in events {
-                    // Pass the SESSION's host, not selectedHost: ⌘1–⌘9 / the
+                    // Pass the SESSION's host, not selectedHost: ⌘1-⌘9 / the
                     // toolbar pill can re-select mid-flight, and failure copy
                     // resolved at event time would then blame the wrong PC.
                     await MainActor.run { self.handleNativeEvent(event, host: host) }
@@ -299,26 +299,26 @@ extension MoonlightManager {
 
     /// The single teardown cleanup for stream(app:on:). Main-actor by class
     /// isolation; named so the entry path stays readable and the cleanup
-    /// stays one site — never duplicate any of this elsewhere (a second
+    /// stays one site - never duplicate any of this elsewhere (a second
     /// "cleanup" is how zombie state is made).
     private func cleanupAfterStream(host: MoonlightHost, caughtError: Error?) {
         if caughtError != nil, Self.connectCancelRequested {
-            // The user cancelled this connect from the capsule —
+            // The user cancelled this connect from the capsule -
             // start()'s throw is the teardown ARRIVING, not a failure
             // to report. A red "couldn't reach" banner here would
             // contradict a deliberate, successful cancel.
-            self.log.info("Connect cancelled by user — suppressing the failure banner")
+            self.log.info("Connect cancelled by user - suppressing the failure banner")
             self.nativeStreamError = nil
         } else if let caughtError {
             let hostName = host.displayName
-            // One human sentence — never splice the raw NSError tail
-            // ("The request timed out", domain codes, …) into the
+            // One human sentence - never splice the raw NSError tail
+            // ("The request timed out", domain codes, ...) into the
             // banner. The technical detail goes to the log; the user
             // gets an actionable line. StreamError already carries
             // user-facing copy and is handled on its own path.
             let localized = (caughtError as NSError).localizedDescription
             self.log.error("Stream start failed for \(hostName, privacy: .public): \(localized, privacy: .public)")
-            // Diag too — the os.Logger line above never reaches the in-app
+            // Diag too - the os.Logger line above never reaches the in-app
             // log viewer or the Diag file, which made pre-flight failures
             // (the only line naming the real cause) invisible in every
             // pasted log. One line, ERROR level, same redaction rules.
@@ -326,7 +326,7 @@ extension MoonlightManager {
             // HONEST banner: only show the "make sure it's awake" copy
             // for a GENUINE reach failure (host off / not on the
             // network). A pairing or launch failure means the host
-            // demonstrably answered — telling the user it's "asleep"
+            // demonstrably answered - telling the user it's "asleep"
             // there is a false negative that sends them chasing the
             // wrong problem. Reserve the asleep guidance for the
             // unreachable / never-established cases; surface the real
@@ -344,7 +344,7 @@ extension MoonlightManager {
         self.isStreaming = false
         self.nativeStreamBackgrounded = false
         self.nativeSession = nil
-        // Disconnect beat (#3) — surface the "Stream ended" toast on
+        // Disconnect beat (#3) - surface the "Stream ended" toast on
         // the launcher only when we actually had a live session.
         // Skipping the toast on the connection-failure path (where
         // wasStreaming is true but the user already sees a
@@ -356,17 +356,17 @@ extension MoonlightManager {
             // Build + stash the session receipt BEFORE the toast flag
             // flips so the toast's first render already carries its
             // quiet line. nil for short (<5 min) sessions and dead
-            // connects — the toast stays a single line for those.
+            // connects - the toast stays a single line for those.
             self.lastSessionReceipt = SessionReceiptStore.finalizeSession()
-            // One INFO either way — in testing the receipt write was
+            // One INFO either way - in testing the receipt write was
             // log-silent (stash vs skip was indistinguishable in any
             // artifact), so adjudicating the ≥5-min gate took a
             // UserDefaults spelunk. One grep now.
             if let receipt = self.lastSessionReceipt {
-                Diag.info("Session receipt stashed — \(receipt.summaryLine) · "
+                Diag.info("Session receipt stashed - \(receipt.summaryLine) · "
                     + "\(receipt.width)x\(receipt.height)@\(receipt.refreshHz)", "Stream")
             } else {
-                Diag.info("Session receipt skipped — never went live or under the "
+                Diag.info("Session receipt skipped - never went live or under the "
                     + "5-minute stash threshold", "Stream")
             }
             self.streamEndedToastVisible = true
@@ -374,7 +374,7 @@ extension MoonlightManager {
             // not the start time. This is the value HostsStore reads
             // back into `MoonlightHost.lastConnected` for both the
             // launcher's "last played N ago" label and most-recent-host
-            // ordering — writing it at end keeps this host most-recent
+            // ordering - writing it at end keeps this host most-recent
             // while making the relative-time label read time-since-end.
             // Always a past instant, so the relative-time label can
             // never go stale/negative while the next stream is live.
@@ -406,7 +406,7 @@ extension MoonlightManager {
 
     /// Map a start()-throw error to an honest user-facing banner. The
     /// "asleep / make sure it's awake" copy is reserved for a GENUINE reach
-    /// failure (host off / not on the network / handshake never completed) —
+    /// failure (host off / not on the network / handshake never completed) -
     /// it must never be shown for a pairing or launch failure, where the host
     /// demonstrably answered. Static so it has no actor state and is trivially
     /// unit-testable.
@@ -414,13 +414,13 @@ extension MoonlightManager {
         guard let streamError = error as? StreamError else {
             // Non-StreamError (NSError from the HTTP/TLS layer, URLSession
             // timeout, DNS failure) on the start path almost always means the
-            // host never answered — the reach-failure copy is correct.
+            // host never answered - the reach-failure copy is correct.
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
         }
         switch streamError {
         case .hostUnreachable(let detail):
             // The network layer crafts user-facing guidance for the cases it
-            // can prove (cert mismatch / not-paired disambiguation) — dropping
+            // can prove (cert mismatch / not-paired disambiguation) - dropping
             // that for generic "is it awake" copy buries the real fix.
             if detail.contains("cert") {
                 return detail
@@ -431,11 +431,11 @@ extension MoonlightManager {
             // establishment → asleep guidance is honest.
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
         case .pairingFailed(let detail) where detail.contains("recognize this Mac"):
-            // The not-paired disambiguation (NetworkClient.fetchServerInfo) —
+            // The not-paired disambiguation (NetworkClient.fetchServerInfo) -
             // its message is already the actionable sentence.
             return "\(hostName) answered but doesn't recognize this Mac. Pair (again) from Settings → PCs."
         case .pairingFailed, .pairingRejected:
-            // The host answered but pairing failed — point the user at the
+            // The host answered but pairing failed - point the user at the
             // real fix, not at the power switch.
             return "Couldn't pair with \(hostName). Re-pair from Settings → PCs."
         case .launchFailed:
@@ -444,7 +444,7 @@ extension MoonlightManager {
             return "Couldn't start the video decoder for \(hostName)."
         case .audioFailed:
             // Audio is non-fatal to the visual stream, but if start() threw on
-            // it the session never came up — keep the message about the host.
+            // it the session never came up - keep the message about the host.
             return "Couldn't start audio for \(hostName)."
         case .crypto:
             return "A security error stopped the connection to \(hostName)."
@@ -452,18 +452,18 @@ extension MoonlightManager {
     }
 
     /// Handle one engine event for the session streaming `host`. The host is
-    /// the SESSION's host captured at stream() entry — never `selectedHost`,
-    /// which the ⌘1–⌘9 shortcuts and the toolbar pill can re-point mid-flight
+    /// the SESSION's host captured at stream() entry - never `selectedHost`,
+    /// which the ⌘1-⌘9 shortcuts and the toolbar pill can re-point mid-flight
     /// (failure copy resolved at event time then names the wrong machine).
     func handleNativeEvent(_ event: StreamEvent, host: MoonlightHost) {
         // Stage names are engineering jargon ("Starting RTSP handshake"). Keep
-        // them in logs but show the user a friendly "Connecting to <host>…"
+        // them in logs but show the user a friendly "Connecting to <host>..."
         // through the whole handshake.
-        let connecting = "Connecting to \(host.displayName)…"
+        let connecting = "Connecting to \(host.displayName)..."
         switch event {
         case .stageStarting:
-            // Don't let a late stage event repaint "Connecting…" over the
-            // "Cancelling…" the user's cancel click just earned.
+            // Don't let a late stage event repaint "Connecting..." over the
+            // "Cancelling..." the user's cancel click just earned.
             if !Self.connectCancelRequested { streamPhase = .connecting(stage: connecting) }
         case .stageComplete:              break
         case .stageFailed:
@@ -473,13 +473,13 @@ extension MoonlightManager {
             logConnectHoldAdjudication()
             // Receipt wall-clock starts at the LIVE edge (not the click) so
             // "2h 12m" measures time actually streaming, not handshake.
-            // Latched once inside the store — repeat edges are no-ops.
+            // Latched once inside the store - repeat edges are no-ops.
             SessionReceiptStore.markSessionLive()
         case .firstFrame:
             // Ground-truth liveness: a decoded/rendered frame proves the
             // stream is up regardless of whether the one-shot
             // .connectionEstablished edge was delivered. Promote ONLY out of a
-            // connecting phase — never override a teardown that has already
+            // connecting phase - never override a teardown that has already
             // moved us to .idle/.error (a late first-frame yield racing stop()
             // must not resurrect the streaming phase). This is the
             // belt-and-suspenders fix for "stuck on Connecting while video is
@@ -488,7 +488,7 @@ extension MoonlightManager {
             if case .connecting = streamPhase {
                 streamPhase = .streaming
                 logConnectHoldAdjudication()
-                // Same live-edge stamp as .connectionEstablished — whichever
+                // Same live-edge stamp as .connectionEstablished - whichever
                 // edge arrives first starts the receipt clock (store-latched).
                 SessionReceiptStore.markSessionLive()
             }
@@ -501,23 +501,23 @@ extension MoonlightManager {
         case .reconnecting:
             // The host closed a live session (it likely restarted across a
             // lock/desktop transition) and the engine is silently re-establishing
-            // under the frozen last frame. Show "Reconnecting…" — DON'T go .idle,
+            // under the frozen last frame. Show "Reconnecting..." - DON'T go .idle,
             // which would tear the hero card back to the launcher; the stream
             // window stays up holding the frame. Resolves on .reconnected or, if
             // the engine gives up, a real .connectionTerminated.
-            streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)…")
+            streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)...")
         case .reconnected:
             // Resumed in place. (The fresh .connectionEstablished / .firstFrame
             // edges also promote the phase, so this is belt-and-braces.)
             streamPhase = .streaming
         case .connectionStatus(let quality):
-            // .good / .degraded both leave us in the streaming phase —
+            // .good / .degraded both leave us in the streaming phase -
             // the stats overlay carries the real-time network signal,
             // and there's no other user-visible surface for "network is
             // slow" copy that distinguishing them would feed.
             _ = quality
             streamPhase = .streaming
-        case .hdrModeChanged: break  // intent signal only — see .hdrActive
+        case .hdrModeChanged: break  // intent signal only - see .hdrActive
         case .hdrActive(let active): nativeHDRActive = active
         case .log: break
         }
@@ -526,7 +526,7 @@ extension MoonlightManager {
     // MARK: - Connect cancel + connect-hold adjudication
 
     // Static (type-level) storage: extensions can't add instance properties,
-    // and these are single-session scratch by construction — the re-entrancy
+    // and these are single-session scratch by construction - the re-entrancy
     // guard in stream() means at most one connect is ever in flight. All
     // three inherit the class's @MainActor isolation.
 
@@ -538,35 +538,35 @@ extension MoonlightManager {
 
     /// Whether the 400 ms-held connecting capsule actually mounted for the
     /// in-flight connect. Ground truth reported by ConnectSurface at the flip
-    /// — not inferred from the span, which would assume the launcher was
+    /// - not inferred from the span, which would assume the launcher was
     /// frontmost and the hold task uncancelled.
     private static var connectCapsuleShown = false
 
     /// True once the user cancelled the in-flight connect. Read by the
     /// teardown cleanup to suppress the failure banner (a deliberate cancel
     /// is not a failure) and by `.stageStarting` to keep a late stage event
-    /// from repainting over "Cancelling…". Reset at every stream() entry.
+    /// from repainting over "Cancelling...". Reset at every stream() entry.
     private static var connectCancelRequested = false
 
     /// ConnectSurface calls this when its 400 ms hold elapses and the
-    /// connecting capsule mounts — the "shown" half of the adjudication line.
+    /// connecting capsule mounts - the "shown" half of the adjudication line.
     func noteConnectCapsuleShown() {
         Self.connectCapsuleShown = true
     }
 
-    /// Abort an in-flight connect — the connecting capsule's click action
+    /// Abort an in-flight connect - the connecting capsule's click action
     /// (and its ⎋ shortcut). Routes through the SESSION's own teardown so
     /// there is exactly ONE cleanup site: stop() interrupts the handshake,
     /// start() returns or throws, and the single cleanup in stream()'s Task
-    /// drains state back to idle. We only repaint the visible stage here —
-    /// never isStreaming/streamPhase-to-idle directly — because faking the
+    /// drains state back to idle. We only repaint the visible stage here -
+    /// never isStreaming/streamPhase-to-idle directly - because faking the
     /// end state from a second site is how zombie sessions are made.
     func cancelConnect() {
         guard case .connecting = streamPhase, let session = nativeSession else { return }
         guard !Self.connectCancelRequested else { return }  // one stop() is plenty (it's idempotent anyway)
         Self.connectCancelRequested = true
-        Diag.notice("User cancelled connect — stopping the in-flight session", "Stream")
-        streamPhase = .connecting(stage: "Cancelling…")
+        Diag.notice("User cancelled connect - stopping the in-flight session", "Stream")
+        streamPhase = .connecting(stage: "Cancelling...")
         Task { await session.stop() }
     }
 
@@ -582,13 +582,13 @@ extension MoonlightManager {
         let spanMs = Int(Date().timeIntervalSince(clicked) * 1000)
         let capsule = Self.connectCapsuleShown
             ? "capsule shown" : "capsule suppressed (established inside the hold)"
-        Diag.info("Connect hold — click→established \(spanMs) ms · \(capsule)", "Stream")
+        Diag.info("Connect hold - click→established \(spanMs) ms · \(capsule)", "Stream")
     }
 
     // MARK: - Stream-ended toast copy
 
     /// Display line for the stream-ended toast. `summaryLine`'s integer
-    /// rounding renders a sub-millisecond wired median as "0 ms median" —
+    /// rounding renders a sub-millisecond wired median as "0 ms median" -
     /// which reads like a broken measurement when it's actually the best
     /// number the link can post. Present those as "<1 ms median"; everything
     /// else passes through unchanged.
@@ -597,7 +597,7 @@ extension MoonlightManager {
         guard let rtt = receipt.medianRttMs, Int(rtt.rounded()) < 1 else {
             return receipt.summaryLine
         }
-        // The duration is always summaryLine's first " · " segment — reuse it
+        // The duration is always summaryLine's first " · " segment - reuse it
         // so the duration formatting stays single-sourced in SessionReceipt.
         let duration = receipt.summaryLine.components(separatedBy: " · ").first
             ?? receipt.summaryLine

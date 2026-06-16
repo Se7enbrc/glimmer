@@ -15,7 +15,7 @@ extension StreamSession {
     // MARK: - Teardown
 
     /// Public teardown entry point. Attributes the teardown to a genuine user
-    /// quit (`.userStopped`) — the public API is the quit hotkey / Cmd-Q /
+    /// quit (`.userStopped`) - the public API is the quit hotkey / Cmd-Q /
     /// window-close path. Internal callers that know a more specific cause go
     /// through `stop(cause:)` (which this forwards to). `DisconnectReason` is
     /// an internal type, so it can't appear in a `public` signature's default
@@ -52,7 +52,7 @@ extension StreamSession {
         Diag.notice("Stream session stopping (cause: \(cause.label))", "Stream")
 
         // SESSION RECEIPT (the one engine-side hook): capture the end-of-
-        // session numbers BEFORE anything tears down — estimatedRtt() reads
+        // session numbers BEFORE anything tears down - estimatedRtt() reads
         // the ENet control channel's always-live EWMA, which dies with the
         // connection, and the collector's byte total resets on the next
         // session. The UI side (MoonlightManager's teardown cleanup)
@@ -63,7 +63,7 @@ extension StreamSession {
             collector: videoDecoder?.statsCollector)
 
         // P2 DISCONNECT REASON: this teardown path is the generic "session is
-        // ending" beat. Latch the caller's `cause` — but the latch keeps the
+        // ending" beat. Latch the caller's `cause` - but the latch keeps the
         // FIRST concrete reason (P2State.setDisconnectReason), so a host
         // terminate (.hostError/.hostClosedClean from connectionTerminated), a
         // watchdog stall, or a connect failure already latched at their own sites
@@ -87,7 +87,7 @@ extension StreamSession {
             connectFlowState = nil
         }
 
-        // Teardown order — load-bearing.
+        // Teardown order - load-bearing.
         //
         // The bridge holds *weak* references to every subsystem, so a
         // callback fired against a freed weak ref no-ops; ordering is
@@ -95,10 +95,10 @@ extension StreamSession {
         // backend's receive threads before dropping the AVAudio engine and the
         // AVSampleBufferDisplayLayer:
         //
-        //   1. backend.stopConnection() — synchronous; blocks until the
+        //   1. backend.stopConnection() - synchronous; blocks until the
         //      receive/decode/control threads have exited. After this
         //      returns no further callbacks can fire.
-        //   2. network.cancel() — tell the host the session is over so
+        //   2. network.cancel() - tell the host the session is over so
         //      the next /launch isn't blocked by an orphan session
         //      record.
         //   3. MainActor teardowns: input.detach(), videoDecoder.teardown(),
@@ -115,7 +115,7 @@ extension StreamSession {
         //    only safe while the connection is up.
         //
         // Capture `window` into a local so the MainActor.run closure
-        // doesn't reach into the actor's isolated state — Swift 6 strict
+        // doesn't reach into the actor's isolated state - Swift 6 strict
         // concurrency rejects `self.window` from a non-actor closure even
         // when the closure hops to MainActor.
         let winForOverlay = self.window
@@ -144,7 +144,7 @@ extension StreamSession {
             try? await net.cancel()
             // Invalidate the per-session URLSession now that its last request
             // (the /cancel above) has completed. URLSession retains its
-            // delegate — and its connection pool + dispatch queues — until
+            // delegate - and its connection pool + dispatch queues - until
             // explicitly invalidated, so just dropping the reference below
             // leaked one ephemeral URLSession + TLSDelegate per session for
             // process lifetime. Same contract HostStatusPoller already honors
@@ -174,7 +174,7 @@ extension StreamSession {
         audioDecoder.shutdown()
 
         // 5. Release the bridge. The bridge held weak refs to everything so
-        //    nil'ing our own field doesn't drop the retain — the
+        //    nil'ing our own field doesn't drop the retain - the
         //    passRetained(bridge) in start() did. Match it here.
         if StreamBridgeContext.current === self.bridge {
             StreamBridgeContext.current = nil
@@ -183,7 +183,7 @@ extension StreamSession {
             Unmanaged<StreamBridgeContext>.fromOpaque(ptr).release()
         }
         bridgePtr = nil
-        // Finish the event stream BEFORE we drop the bridge — once
+        // Finish the event stream BEFORE we drop the bridge - once
         // bridge.eventContinuation goes nil, any final yields from C-thread
         // callbacks become no-ops. finish() signals end-of-stream to the
         // consumer's `for await` loop, which is how MoonlightManager learns
@@ -216,7 +216,7 @@ extension StreamSession {
     // Always renegotiate via `/cancel + /launch` on a user-initiated Stream
     // click. Calling `/resume` on `currentgame == ourAppID` preserves the
     // host-side STREAM_CONFIGURATION (resolution, FPS, HDR mode, codec
-    // set) — which breaks the multi-device flow: start a 4K@240 stream
+    // set) - which breaks the multi-device flow: start a 4K@240 stream
     // from the desktop, walk to the laptop, hit Stream → host /resumes
     // 4K@240, ignoring the 1920x1200@120 the laptop requested.
     //
@@ -237,7 +237,7 @@ extension StreamSession {
         }
 
         // Wait for the host's `currentgame` to drop to 0, meaning Sunshine
-        // has actually torn down the session — INCLUDING running the app's
+        // has actually torn down the session - INCLUDING running the app's
         // Undo command (e.g. QRes.exe /X:3840 /Y:2160 /R:240 on Windows
         // hosts that swap display resolution per stream). If we just /cancel
         // and immediately /launch, the host can race Undo against Do: the
@@ -252,7 +252,7 @@ extension StreamSession {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if let info = try? await network.fetchServerInfo(),
                    info.currentGameID == 0 {
-                    log.info("Host idle — Undo command completed")
+                    log.info("Host idle - Undo command completed")
                     return
                 }
             }
@@ -262,10 +262,10 @@ extension StreamSession {
         func tryCancelThenLaunch() async throws -> LaunchResponse {
             log.info("→ /cancel then /launch (forced renegotiation)")
             try? await network.cancel()
-            // Sunshine's Undo command on Windows hosts can take 1–3s
+            // Sunshine's Undo command on Windows hosts can take 1-3s
             // (QRes.exe is synchronous; some user configs include a sleep
             // for display-driver settle time). 5s ceiling is generous but
-            // bounded — we'd rather wait than land on the wrong resolution.
+            // bounded - we'd rather wait than land on the wrong resolution.
             await waitForHostIdle(maxWait: 5)
             return try await network.launch(appID: appID, config: config)
         }
@@ -283,7 +283,7 @@ extension StreamSession {
             // Recovery: race between hint and actual host state. One more
             // cancel + launch covers the "we thought idle but host had an
             // orphan" and the "cancel raced" cases. We deliberately do NOT
-            // fall back to /resume here — that's the bug we're closing.
+            // fall back to /resume here - that's the bug we're closing.
             if let r = try? await tryCancelThenLaunch() { return r }
             throw first
         }

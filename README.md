@@ -1,7 +1,7 @@
 # Glimmer
 
 Mac-native game-streaming client. Speaks the GameStream/Sunshine protocol
-end-to-end in a from-scratch native Swift engine — no linked C library. (The
+end-to-end in a from-scratch native Swift engine - no linked C library. (The
 transport was ported from `moonlight-common-c`; see [CREDITS.md](CREDITS.md).)
 
 ## What it does
@@ -33,7 +33,7 @@ to Applications. From then on it updates itself (Sparkle).
 
 ### Homebrew
 
-A Homebrew cask (`brew install --cask glimmer`) is planned — not yet available.
+A Homebrew cask (`brew install --cask glimmer`) is planned - not yet available.
 
 ### From source
 
@@ -56,7 +56,7 @@ make uninstall  # remove Glimmer.app
 ```
 
 The streaming engine is pure Swift under `Glimmer/Stream/`, built directly by
-the app target — there is no separate native library or submodule. See
+the app target - there is no separate native library or submodule. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layout.
 
 ## Why this exists
@@ -64,10 +64,10 @@ the app target — there is no separate native library or submodule. See
 [Moonlight](https://github.com/moonlight-stream/moonlight-qt) on macOS is a Qt6
 port of a multi-platform C++ codebase. It works, but it lives downstream of
 every Qt quirk and presents a UI that doesn't match the rest of the OS. Glimmer
-is a from-scratch native Swift client — its streaming transport was ported from
+is a from-scratch native Swift client - its streaming transport was ported from
 `moonlight-common-c` (GPLv3; see [CREDITS.md](CREDITS.md)) and it owns its own
 video / audio / input pipeline through VideoToolbox + AVAudioEngine, running
-entirely in-process — no helper daemon, no external player, no linked C library.
+entirely in-process - no helper daemon, no external player, no linked C library.
 
 On first launch Glimmer migrates paired hosts and the RSA client identity from a
 prior moonlight-qt install (if one exists) so the user keeps their hosts without

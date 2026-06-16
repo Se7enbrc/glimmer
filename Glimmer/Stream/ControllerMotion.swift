@@ -3,7 +3,7 @@
 //
 //  Host-solicited controller motion (gyro/accel) uplink: the host's
 //  SET_MOTION_EVENT (0x5501) enables per-pad sensor reporting at a requested
-//  rate, and we answer with SS_CONTROLLER_MOTION input packets — the
+//  rate, and we answer with SS_CONTROLLER_MOTION input packets - the
 //  LiSendControllerMotionEvent path the LI_CCAP_ACCEL/GYRO caps promise.
 //
 //  PROTOCOL (verified against moonlight-common-c + Sunshine master):
@@ -12,37 +12,37 @@
 //     ControlStream.c parses the identical order (BbGet16/BbGet16/BbGet8,
 //     BYTE_ORDER_LITTLE). reportRateHz == 0 means STOP
 //     (ConnListenerSetMotionEventState, Limelight.h).
-//   * Uplink: SS_CONTROLLER_MOTION_PACKET (Input.h) — see
+//   * Uplink: SS_CONTROLLER_MOTION_PACKET (Input.h) - see
 //     InputEncoder.controllerMotion for the byte layout. Units per
 //     Limelight.h: ACCEL in m/s^2 INCLUSIVE of gravity, GYRO in deg/s; axes
 //     follow SDL's sensor convention (+X right, +Y up, +Z toward the player).
 //   * GCMotion → wire mapping mirrors moonlight-ios ControllerSupport.m (the
 //     only upstream client on this exact API):
-//       accel = motion.acceleration * -9.80665 on ALL axes — GameController
+//       accel = motion.acceleration * -9.80665 on ALL axes - GameController
 //         reports gravity-inclusive acceleration in G with gravity DOWN at
 //         rest, SDL wants the reaction-force convention (+Y ≈ +9.81 at rest),
 //         so one global sign flip doubles as the G → m/s^2 scale;
-//       gyro  = (rot.x, rot.z, -rot.y) * 57.2957795 — rad/s → deg/s with the
+//       gyro  = (rot.x, rot.z, -rot.y) * 57.2957795 - rad/s → deg/s with the
 //         y/z swap moonlight-ios ships.
 //
 //  SAMPLING: one main-queue DispatchSourceTimer per (pad, sensor) at the
 //  host-requested rate (capped), reading the live GCMotion values and
-//  duplicate-suppressing — moonlight-ios's exact architecture (NSTimer at
+//  duplicate-suppressing - moonlight-ios's exact architecture (NSTimer at
 //  1/reportRateHz + memcmp skip). No new send path or thread: every sample
 //  rides NativeBackend.sendControllerMotion → InputBatcher.updateMotion, the
 //  same 1ms merge/flush (latest-wins + the sendBacklogged gate) as all other
 //  input, so motion can never starve the ACK chain the way raw per-event
 //  sends once did.
 //
-//  ZERO WORK WHEN OFF: registration stores only a weak pad ref — no handler,
+//  ZERO WORK WHEN OFF: registration stores only a weak pad ref - no handler,
 //  no timer, no sensorsActive flip until the host's first nonzero 0x5501.
 //  Disable is host rate=0, pad detach, or stream teardown; each cancels the
-//  timers, and halting an ACTIVE gyro also sends one (0,0,0) null sample —
+//  timers, and halting an ACTIVE gyro also sends one (0,0,0) null sample -
 //  the special value ControlStream.c blesses for exactly this client-side
 //  halt, so the host's virtual pad can't hold a stale rotation forever.
 //
 //  THREADING: all mutable state is MainActor-confined (GameController's home
-//  isolation in this codebase — the forwarder treats the framework as
+//  isolation in this codebase - the forwarder treats the framework as
 //  main-domain). setMotionEventState/streamActivated/stopAll arrive on the
 //  enet receive thread / pipeline executor and hop to main first.
 //
@@ -78,7 +78,7 @@ final class ControllerMotion: @unchecked Sendable {
 
     /// slot (the forwarder's 0..15 controllerNumber) → sampling state.
     @MainActor private var pads: [UInt8: Pad] = [:]
-    /// The live stream's input uplink; nil = no stream (the quiesce gate — a
+    /// The live stream's input uplink; nil = no stream (the quiesce gate - a
     /// timer tick with no uplink samples nothing, mirroring the haptics
     /// actuator's quiesced flag). Weak: the backend's lifetime belongs to
     /// StreamSession, not to this singleton.
@@ -89,7 +89,7 @@ final class ControllerMotion: @unchecked Sendable {
     // MARK: - Registration (ControllerForwarder, main thread)
 
     /// Probe the pad's IMU and map `slot` for host motion enables. Returns
-    /// the LI_CCAP_ACCEL/GYRO bits to ADVERTISE — gated per sensor (the
+    /// the LI_CCAP_ACCEL/GYRO bits to ADVERTISE - gated per sensor (the
     /// moonlight-ios timer gates: hasGravityAndUserAcceleration for accel,
     /// hasRotationRate for gyro), not a blanket "motion != nil", so the caps
     /// we promise are caps we can deliver. Registration alone starts no
@@ -134,10 +134,10 @@ final class ControllerMotion: @unchecked Sendable {
 
     /// Stream over: halt all sampling and drop the uplink. Fired by
     /// EnetControlChannel.onTeardown on EVERY stream-end path (user stop,
-    /// watchdog, host TERMINATION) — the ControllerHaptics.stopAll
+    /// watchdog, host TERMINATION) - the ControllerHaptics.stopAll
     /// discipline. The gyro nulls halt() attempts are best-effort here: by
     /// teardown the batcher is usually gone and sendControllerMotion returns
-    /// -2, which is fine — so is the host. Pads stay registered (the
+    /// -2, which is fine - so is the host. Pads stay registered (the
     /// forwarder owns that lifetime); only the sampling state resets.
     func stopAll(reason: String) {
         DispatchQueue.main.async { [weak self] in
@@ -199,7 +199,7 @@ final class ControllerMotion: @unchecked Sendable {
         }
 
         // The caps gate means the host only asks for sensors we advertised,
-        // but a pad detaching mid-flight reads nil here — then don't start.
+        // but a pad detaching mid-flight reads nil here - then don't start.
         guard pad.controller?.motion != nil else { return }
         setSensorsActive(pad, true)
         let timer = DispatchSource.makeTimerSource(queue: .main)
@@ -220,7 +220,7 @@ final class ControllerMotion: @unchecked Sendable {
     /// One timer tick: read the live GCMotion values, convert to the wire's
     /// SDL convention, duplicate-suppress, and hand the sample to the input
     /// batcher via the backend. Runs on MAIN (GameController's home
-    /// isolation; the moonlight-ios timers do the same) — a handful of
+    /// isolation; the moonlight-ios timers do the same) - a handful of
     /// multiplies and one queue hop, microseconds even at the 200Hz cap.
     @MainActor
     private func sample(slot: UInt8, motionType: UInt8) {
@@ -244,7 +244,7 @@ final class ControllerMotion: @unchecked Sendable {
                      Float(r.y) * -Self.degPerRad)
         }
         // Duplicate suppression (the moonlight-ios memcmp skip): an unchanged
-        // read is wire noise — a resting pad would otherwise stream constants.
+        // read is wire noise - a resting pad would otherwise stream constants.
         if let last = pad.lastSample[idx], last == value { return }
         pad.lastSample[idx] = value
         _ = backend.sendControllerMotion(num: slot, motionType: motionType,
@@ -254,9 +254,9 @@ final class ControllerMotion: @unchecked Sendable {
     // MARK: - Halt helpers (main)
 
     /// Stop both sensors' timers for `pad`. An ACTIVE gyro also emits one
-    /// (0,0,0) null sample if the uplink is still alive — ControlStream.c
+    /// (0,0,0) null sample if the uplink is still alive - ControlStream.c
     /// reserves exactly that value so clients can "reliably set the gyro to
-    /// a null state when sensor events are halted due to … client-side
+    /// a null state when sensor events are halted due to ... client-side
     /// constraints" (and our reliable-only wire guarantees its delivery).
     /// Accel needs no null: a stale gravity vector just reads as a pad at
     /// rest.
@@ -300,7 +300,7 @@ final class ControllerMotion: @unchecked Sendable {
     // MARK: - Per-pad state
 
     /// Per-pad sampling state. Constructed and mutated exclusively on the
-    /// main actor — unlike ControllerHaptics' queue-owned box, motion never
+    /// main actor - unlike ControllerHaptics' queue-owned box, motion never
     /// leaves GameController's main-domain, so no Sendable box is needed.
     @MainActor
     private final class Pad {
@@ -323,7 +323,7 @@ final class ControllerMotion: @unchecked Sendable {
 
 extension NativeBackend {
     /// = LiSendControllerMotionEvent (InputStream.c). Hands the sample to the
-    /// InputBatcher's latest-wins merge on the pad's sensor channel —
+    /// InputBatcher's latest-wins merge on the pad's sensor channel -
     /// moonlight's currentGamepadSensorState batching, where a superseded
     /// sample is replaced, never queued. Gated on the same Sunshine feature
     /// flag as controller touch: LiSendControllerMotionEvent checks

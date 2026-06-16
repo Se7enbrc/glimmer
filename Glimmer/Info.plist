@@ -40,7 +40,7 @@
 	     (37 points at the top). Default behaviour keeps the 37pt notch
 	     zone reserved even in fullscreen, which means our stream-window
 	     content layer would be 3024×1890 on a 14" MBP instead of the
-	     panel's true 3024×1964 — and the host's bitstream at 3024×1964
+	     panel's true 3024×1964 - and the host's bitstream at 3024×1964
 	     gets letterboxed left/right because of the aspect mismatch
 	     (1.540 vs 1.6). moonlight-qt avoids this implicitly via SDL's
 	     FULLSCREEN_DESKTOP path, which composes its own window-layer
@@ -50,7 +50,7 @@
 	<!-- Local-network privacy (macOS 15+). Without these, the OS denies the
 	     local-network access mDNS/Bonjour discovery needs and host discovery
 	     silently fails on first run. NSBonjourServices must list every service
-	     type the app browses — Discovery.swift browses _nvstream._tcp (GFE)
+	     type the app browses - Discovery.swift browses _nvstream._tcp (GFE)
 	     and _nvstream-tcp._tcp (Sunshine). -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Glimmer finds and connects to your gaming PCs on your local network.</string>
@@ -70,7 +70,7 @@
 	     appcast on the glimmer repo's GitHub Pages site; SUPublicEDKey is the
 	     ed25519 PUBLIC key (private key lives in the signing creds file, used by
 	     `make release-publish`). SUEnableInstallerLauncherService is REQUIRED
-	     under the App Sandbox so the installer XPC can launch — paired with the
+	     under the App Sandbox so the installer XPC can launch - paired with the
 	     mach-lookup exception in Glimmer.entitlements. Daily background checks;
 	     the user is prompted before an update installs (Sparkle default). -->
 	<key>SUFeedURL</key>

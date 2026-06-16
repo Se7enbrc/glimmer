@@ -8,7 +8,7 @@
 //
 //  Why AVSampleBufferDisplayLayer and not CAMetalLayer
 //  ---------------------------------------------------
-//  We tried — three times — to get correct HDR out of a CAMetalLayer driven
+//  We tried - three times - to get correct HDR out of a CAMetalLayer driven
 //  by a custom MSL fragment shader doing BT.2020 NCL YUV→RGB + range
 //  scaling. On the a 4K@240 HDR1000 panel, every variant landed somewhere
 //  on the same wrong axis: overbright midtones, washed highlights, milky
@@ -46,13 +46,13 @@
 //    None of that is acceptable for a game-streaming client where Esc is a
 //    game input and the user genuinely wants the host to own the screen.
 //
-//  What we do instead — same approach SDL's `SDL_WINDOW_FULLSCREEN_DESKTOP`
+//  What we do instead - same approach SDL's `SDL_WINDOW_FULLSCREEN_DESKTOP`
 //  takes on macOS, which moonlight-qt selects on this platform:
 //
 //    • Borderless window sized to the target NSScreen's full frame.
 //    • Window level kept at `.normal` (same as SDL FULLSCREEN_DESKTOP).
-//      `CGShieldingWindowLevel()` looks attractive — chrome can't paint
-//      above it — but it's the screen-lock / screensaver level, and
+//      `CGShieldingWindowLevel()` looks attractive - chrome can't paint
+//      above it - but it's the screen-lock / screensaver level, and
 //      AppKit lets a window become first responder at that level while
 //      silently dropping `sendEvent:` key delivery, so hotkeys (quit,
 //      stats) stop firing in-stream. The
@@ -81,7 +81,7 @@ public final class StreamWindow {
     ///
     /// `var`, not `let`: the AVSampleBufferVideoRenderer can latch
     /// `.status == .failed` (the 4K240 HDR hard-freeze) and a bare
-    /// `flush()` does not always clear it — a hard-failed renderer needs a fresh
+    /// `flush()` does not always clear it - a hard-failed renderer needs a fresh
     /// layer. `rebuildDisplayLayer()` swaps in a new one so the present-path
     /// self-heal can recover a wedge that flush alone can't. Mutated on the main
     /// actor only.
@@ -96,7 +96,7 @@ public final class StreamWindow {
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen
-    /// (`NSView.displayLink(target:selector:)`, macOS 14+) — the link must be
+    /// (`NSView.displayLink(target:selector:)`, macOS 14+) - the link must be
     /// driven off the display the stream window actually lives on, and the
     /// view tracks that display as the window moves between screens.
     public var streamContentView: NSView { displayView }
@@ -105,7 +105,7 @@ public final class StreamWindow {
     /// through `setCursorHidden(_:)`, which drives `CGDisplayHideCursor` /
     /// `CGDisplayShowCursor` idempotently off this flag so the (counted)
     /// display-hide latch is never pushed above 1 and never left negative.
-    /// InputForwarder must NEVER touch cursor visibility — it only owns
+    /// InputForwarder must NEVER touch cursor visibility - it only owns
     /// relative-aim engagement (`isMouseCaptured`).
     var didHideCursor = false
 
@@ -118,14 +118,14 @@ public final class StreamWindow {
     var keyObservers: [NSObjectProtocol] = []
     /// Observers registered on `NSWorkspace.shared.notificationCenter` (a
     /// DIFFERENT center than `NotificationCenter.default`). Tracked separately
-    /// so `close()` removes them from the correct center — removing a workspace
+    /// so `close()` removes them from the correct center - removing a workspace
     /// observer from the default center is a silent no-op and leaks it. Used
     /// for the display-wake observer that rebinds the pacer's CADisplayLink.
     var workspaceObservers: [NSObjectProtocol] = []
     /// Path B's ONE-SHOT `didEnterFullScreenNotification` token (safe-area /
     /// Space-based fullscreen only; nil on the borderless covering path). The
     /// happy path consumes it inside its own closure the moment AppKit posts
-    /// the enter notification — but a session that tears down first (a
+    /// the enter notification - but a session that tears down first (a
     /// connect-fail inside the ~1s Space-enter animation, or the dropped-
     /// notification quirk show()'s 1.5s backstop exists for) never fires it.
     /// Stored here, not in a closure-local box, so `close()` can sweep it:
@@ -149,7 +149,7 @@ public final class StreamWindow {
     /// notch reserve), so a bitstream at the panel's true native
     /// resolution renders 1:1 without letterboxing. When `false`, AppKit's
     /// default safe-area-trimmed framing is used and a host bitstream
-    /// taller than the trimmed framebuffer letterboxes left/right — the
+    /// taller than the trimmed framebuffer letterboxes left/right - the
     /// classic "panel-native stream content in safe-area fullscreen
     /// window" symptom. moonlight-qt exposes the same choice as a
     /// per-host preference.
@@ -162,7 +162,7 @@ public final class StreamWindow {
     public var onBackgroundedChanged: (@MainActor (Bool) -> Void)?
 
     /// Called when the stream window moves to a different display (or its
-    /// backing display's properties change — refresh rate, wake from sleep).
+    /// backing display's properties change - refresh rate, wake from sleep).
     /// The session owner wires this to `VideoDecoder.pacingScreenDidChange()`
     /// so the FramePacer rebinds its CADisplayLink to the new screen's true
     /// vsync cadence; presenting on a stale link after a 60↔120Hz display swap
@@ -172,7 +172,7 @@ public final class StreamWindow {
     /// Set by `show()` and cleared by the first-frame fade-in. Guards
     /// the fade-in animation against being re-fired on subsequent first-
     /// frame events (e.g. a mid-stream resolution change that flushes the
-    /// decoder and produces a new "first" frame — the window is already
+    /// decoder and produces a new "first" frame - the window is already
     /// visible, no fade needed).
     var awaitingFirstFrameFadeIn = false
 
@@ -186,14 +186,14 @@ public final class StreamWindow {
     var streamingWindowLevel: NSWindow.Level?
 
     /// Monotonically-incrementing token used to debounce sub-second key blips
-    /// on the borderless stream window. A transient app activation — most
+    /// on the borderless stream window. A transient app activation - most
     /// notably a DualSense/HID controller connecting over Bluetooth mid-stream
-    /// — makes the WindowServer briefly flutter key status away from our
+    /// - makes the WindowServer briefly flutter key status away from our
     /// borderless window and post `didResignKeyNotification`, then snap key
     /// back within a frame (`didBecomeKeyNotification`). The naive
     /// resign-handler `orderOut`'d the stream window synchronously, which
     /// uncovered the still-alive (merely dimmed) launcher window for one frame
-    /// — a blank/dark flash over the stream on every mid-stream controller
+    /// - a blank/dark flash over the stream on every mid-stream controller
     /// connect. The resign handler now defers its teardown and bails if this
     /// token changed (a becomeKey landed) or the app never actually
     /// deactivated. Bumped by BOTH observers so the later event always wins.
@@ -212,7 +212,7 @@ public final class StreamWindow {
     /// (Historical note: we used to drive this off `didEnterFullScreenNotification`
     /// because `toggleFullScreen` was async and reset the responder chain
     /// as part of its Space transition. We no longer go through Space-based
-    /// fullscreen, so there's no async transition and no responder reset —
+    /// fullscreen, so there's no async transition and no responder reset -
     /// we fire this synchronously once the window is up.)
     public var onDidBecomeReadyForInput: (@MainActor () -> Void)?
 
@@ -220,7 +220,7 @@ public final class StreamWindow {
         // Pick the screen the user is *currently* on at construction time.
         // StreamSession constructs us right when the user clicks "Stream",
         // so NSScreen.main reflects the display the launcher window was on
-        // — i.e. the display the user is actually looking at. If they later
+        // - i.e. the display the user is actually looking at. If they later
         // drag a multi-monitor setup around mid-stream, we deliberately do
         // not follow; the stream picks the screen once and stays there for
         // the duration of the session.
@@ -252,12 +252,12 @@ public final class StreamWindow {
         // moonlight-qt rides on for its borderless cover on macOS.
         //
         // We *tried* `NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))`
-        // — the level the system uses for the screen-lock window. It is
+        // - the level the system uses for the screen-lock window. It is
         // indeed above all chrome. But it has a fatal flaw for an interactive
         // app: AppKit will mark a window at that level as `isKeyWindow = true`
         // and `firstResponder` will point at our StreamInputView, yet
         // `sendEvent:` silently drops keyDown/keyUp delivery. The window
-        // becomes a one-way visual surface — mouse hover works (it's
+        // becomes a one-way visual surface - mouse hover works (it's
         // position-based), but the user's quit / stats hotkeys never fire.
         //
         // The right gate for hiding the menu bar + Dock is
@@ -266,11 +266,11 @@ public final class StreamWindow {
         // over our content while those options are set, even at `.normal`.
         // If a future macOS release decides to paint chrome over us anyway,
         // bump to `.mainMenu` (one above the menu bar's level, still inside
-        // AppKit's event-routable range) — never to shielding level.
+        // AppKit's event-routable range) - never to shielding level.
         window.level = .normal
 
         // Collection behavior:
-        //   .fullScreenPrimary — declare we're a primary fullscreen window so
+        //   .fullScreenPrimary - declare we're a primary fullscreen window so
         //                        `toggleFullScreen:` puts us into a Space-
         //                        based fullscreen. This is REQUIRED for
         //                        macOS to engage display HDR mode on the
@@ -285,7 +285,7 @@ public final class StreamWindow {
         //                        moonlight-qt uses SDL_WINDOW_FULLSCREEN_-
         //                        DESKTOP which on macOS is exactly this:
         //                        toggleFullScreen + Space.
-        //   .stationary        — don't get tossed into a different Space
+        //   .stationary        - don't get tossed into a different Space
         //                        when Mission Control reflows windows.
         window.collectionBehavior = [.fullScreenPrimary, .stationary]
         window.backgroundColor = .black
@@ -300,13 +300,13 @@ public final class StreamWindow {
         // Apple TV+ and Netflix's macOS playback windows. If a user wants
         // to record their stream they can use the host PC's own recording
         // tools, where the underlying stream is unencrypted bytes the host
-        // owns — Glimmer is not the right place to expose that.
+        // owns - Glimmer is not the right place to expose that.
         window.sharingType = .none
 
         let view = DisplayContainerView(frame: screen.frame)
 
         // ---- AVSampleBufferDisplayLayer setup (parallels moonlight-qt's
-        // vt_avsamplelayer.mm — `m_StreamView.layer = m_DisplayLayer;
+        // vt_avsamplelayer.mm - `m_StreamView.layer = m_DisplayLayer;
         // m_StreamView.wantsLayer = YES;`).
         //
         // CRITICAL for HDR: we make the AVSampleBufferDisplayLayer the
@@ -318,7 +318,7 @@ public final class StreamWindow {
         // path direct from the layer to the window surface.
         //
         // moonlight-qt sets `videoGravity = AVLayerVideoGravityResizeAspect`
-        // — letterboxes rather than crops to fill. Matches what we want for
+        // - letterboxes rather than crops to fill. Matches what we want for
         // streaming a 16:9 host onto a 16:9 panel (the common case) while
         // gracefully handling odd aspect ratios on multi-monitor setups.
         // It also marks the layer opaque so the compositor can skip blending
@@ -328,16 +328,16 @@ public final class StreamWindow {
         view.wantsLayer = true
         window.contentView = view
 
-        // Stats overlay — sublayer of the display layer, positioned in the
+        // Stats overlay - sublayer of the display layer, positioned in the
         // top-left with a fixed inset. We attach it as a sublayer rather than
         // a sibling because AVSampleBufferDisplayLayer is the view's root
-        // layer (a precondition for HDR-correct compositing — see the long
+        // layer (a precondition for HDR-correct compositing - see the long
         // comment near `view.layer = layer` above). CALayer's sublayer
         // contract lets us stack arbitrary content on top, and the OS
         // composites the overlay's sRGB text against the layer's HDR
         // contents correctly.
         //
-        // Created hidden — StreamSession's overlay timer toggles
+        // Created hidden - StreamSession's overlay timer toggles
         // `isHidden` from `VideoDecoder.statsOverlayEnabled` and pushes
         // text updates at 4 Hz (the FPS rows stay on a ~1s average; the
         // latency rows refresh live each tick).
@@ -366,7 +366,7 @@ public final class StreamWindow {
     /// Build a fresh AVSampleBufferDisplayLayer configured exactly as the
     /// HDR-correct root-layer path requires (see the long comment at the top of
     /// this file). Factored out so `init` and `rebuildDisplayLayer()` produce
-    /// byte-for-byte identical layers — the rebuild must not subtly differ from
+    /// byte-for-byte identical layers - the rebuild must not subtly differ from
     /// the original or HDR engagement could regress after a recovery.
     private static func makeDisplayLayer(frame: CGRect) -> AVSampleBufferDisplayLayer {
         let layer = AVSampleBufferDisplayLayer()
@@ -379,7 +379,7 @@ public final class StreamWindow {
     /// Rebuild the display layer from scratch and swap it in as the view's root
     /// layer. The last-resort present-path self-heal: the
     /// AVSampleBufferVideoRenderer can latch `.status == .failed` (a 4K240 HDR panel
-    /// 4K240 HDR hard-freeze) and stay failed after a bare `flush()` — a
+    /// 4K240 HDR hard-freeze) and stay failed after a bare `flush()` - a
     /// hard-failed renderer only clears with a fresh layer. We create a new
     /// AVSampleBufferDisplayLayer, re-attach the stats overlay sublayer, swap it
     /// in as the view's ROOT layer (preserving the EDR-direct compositing
@@ -388,7 +388,7 @@ public final class StreamWindow {
     /// Runs on the main actor (the only place that touches AppKit layers). The
     /// decoder snapshots `displayLayer` into a local before each enqueue, so a
     /// concurrent present on the pacer/decode queue keeps operating on the OLD
-    /// layer until it picks up the new reference — race-safe by construction.
+    /// layer until it picks up the new reference - race-safe by construction.
     @discardableResult
     public func rebuildDisplayLayer() -> AVSampleBufferDisplayLayer {
         let view = displayView
@@ -397,7 +397,7 @@ public final class StreamWindow {
         // the swap, so the overlay keeps compositing above the video. attach()
         // re-parents it (addSublayer removes it from any prior superlayer).
         statsOverlay.attach(to: fresh)
-        // Swap as the view's root layer — same construction as init so the
+        // Swap as the view's root layer - same construction as init so the
         // EDR-direct path is preserved (root layer, not a sublayer of a backing
         // layer). wantsLayer stays true.
         view.layer = fresh
@@ -410,7 +410,7 @@ public final class StreamWindow {
     /// Animate the window from invisible (alphaValue 0) to fully visible
     /// over 350ms using the same ease-in-out timing macOS uses for app
     /// activation. Called by the session owner when VideoDecoder produces
-    /// its first decoded frame. Idempotent — only runs once per show()
+    /// its first decoded frame. Idempotent - only runs once per show()
     /// (guarded by `awaitingFirstFrameFadeIn`), so mid-stream re-fires of
     /// the first-frame event (resolution change, decoder flush) don't
     /// re-animate an already-visible window.
@@ -423,13 +423,13 @@ public final class StreamWindow {
         // ~20). We DEFER hiding them via `NSApp.presentationOptions` until
         // AFTER the fade completes: setting those flags is instant in the
         // compositor, so doing it at fade-start leaves a one-vsync window
-        // where the bars are gone but the window is still at ~0 alpha —
+        // where the bars are gone but the window is still at ~0 alpha -
         // that's the "bare-desktop flash" the user was seeing. Post-fade
         // the flags become a no-op user-side because the now-opaque
         // window is already covering everything they hide.
         let win = window
         let cover = coversNotch
-        // Under Reduce Motion, snap to visible instead of the 350ms fade —
+        // Under Reduce Motion, snap to visible instead of the 350ms fade -
         // the fade is exactly the kind of large-surface opacity ramp the
         // setting exists to suppress. We still defer presentationOptions to
         // after alpha is set so the menu bar / Dock never visibly vanish
@@ -446,7 +446,7 @@ public final class StreamWindow {
             win.animator().alphaValue = 1.0
         }, completionHandler: {
             // runAnimationGroup delivers the completion on the main run loop,
-            // so we are already on the MainActor — assumeIsolated bridges the
+            // so we are already on the MainActor - assumeIsolated bridges the
             // SDK's non-isolated @Sendable handler back to MainActor state.
             MainActor.assumeIsolated { self.applyPresentationOptions(coversNotch: cover) }
         })
@@ -454,7 +454,7 @@ public final class StreamWindow {
 
     /// Hide/auto-hide the menu bar + Dock once the stream window is opaque.
     /// Extracted from `fadeInOnFirstFrame` so the fade completion handler
-    /// captures no non-Sendable closure — the handler runs on the main run
+    /// captures no non-Sendable closure - the handler runs on the main run
     /// loop, so MainActor isolation is sound.
     private func applyPresentationOptions(coversNotch cover: Bool) {
         if cover {
@@ -472,13 +472,13 @@ public final class StreamWindow {
         // 1. Display-layer flush is DEFERRED to the fade completion (step 5).
         //    Flushing here (removingDisplayedImage) blanks the layer before the
         //    fade runs, so the user only ever sees an already-empty window fade
-        //    out — imperceptible. Keeping the last decoded frame on screen
+        //    out - imperceptible. Keeping the last decoded frame on screen
         //    until the fade finishes makes the fade-out land on the actual
         //    stream content, mirroring the first-frame fade-in.
 
         // 2. Restore the cursor. `setCursorHidden(false)` is idempotent and
         //    drives the counted CGDisplay latch strictly off `didHideCursor`,
-        //    so this brings the count back to exactly 0 — never negative. The
+        //    so this brings the count back to exactly 0 - never negative. The
         //    old unconditional belt-and-braces `NSCursor.unhide()` is gone:
         //    with the latch capped at 1 by the single-owner helper it could
         //    only ever over-show and corrupt the count, which is the very
@@ -491,7 +491,7 @@ public final class StreamWindow {
             NotificationCenter.default.removeObserver(token)
         }
         keyObservers.removeAll()
-        // Workspace observers live on NSWorkspace's own notification center —
+        // Workspace observers live on NSWorkspace's own notification center -
         // remove them from THAT center, not the default one.
         let wsnc = NSWorkspace.shared.notificationCenter
         for token in workspaceObservers {
@@ -500,7 +500,7 @@ public final class StreamWindow {
         workspaceObservers.removeAll()
         // Path B's one-shot didEnterFullScreen token: consumed by its own
         // closure on the happy path, but a session that ends before AppKit
-        // posts the enter notification leaves it registered — sweep it here.
+        // posts the enter notification leaves it registered - sweep it here.
         if let token = enterFullScreenObserver {
             NotificationCenter.default.removeObserver(token)
             enterFullScreenObserver = nil
@@ -509,7 +509,7 @@ public final class StreamWindow {
         // 3. Restore the app's presentation options BEFORE orderOut'ing the
         //    window. Order matters: if we orderOut first, the user briefly
         //    sees their desktop with the menu bar/Dock still hidden as
-        //    AppKit catches up — a flash of "what happened to my menu bar".
+        //    AppKit catches up - a flash of "what happened to my menu bar".
         //    Restoring first means by the time the window disappears, the
         //    chrome is already back.
         if let saved = previousPresentationOptions {
@@ -529,14 +529,14 @@ public final class StreamWindow {
 
         // 5. Drop first responder, fade out, orderOut. Fading instead of a
         //    hard orderOut gives the user a 250ms acknowledgement that the
-        //    stream ended — without the fade the window snaps off and the
+        //    stream ended - without the fade the window snaps off and the
         //    launcher snaps in, which reads as a crash. Apple's first-party
         //    fullscreen surfaces (Apple TV's playback window, QuickTime's
         //    presentation mode) all fade on exit.
         window.makeFirstResponder(nil)
         let win = window
 
-        // Under Reduce Motion, snap instead of the 250ms opacity ramp — same
+        // Under Reduce Motion, snap instead of the 250ms opacity ramp - same
         // policy as the first-frame fade-in (a large-surface opacity animation
         // is exactly what Reduce Motion asks us to drop).
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -551,7 +551,7 @@ public final class StreamWindow {
             win.animator().alphaValue = 0.0
         }, completionHandler: {
             // runAnimationGroup delivers the completion on the main run loop,
-            // so we are already on the MainActor — assumeIsolated bridges the
+            // so we are already on the MainActor - assumeIsolated bridges the
             // SDK's non-isolated @Sendable handler back to MainActor state.
             MainActor.assumeIsolated { self.finishClose() }
         })
@@ -559,7 +559,7 @@ public final class StreamWindow {
 
     /// Final teardown step, run once the close fade has finished (or
     /// immediately under Reduce Motion). Extracted from `close()` so the fade
-    /// completion handler captures no non-Sendable closure — it runs on the
+    /// completion handler captures no non-Sendable closure - it runs on the
     /// main run loop, so MainActor isolation is sound.
     ///
     /// Hands off to the launcher only AFTER the stream has faded out. Doing it
@@ -573,7 +573,7 @@ public final class StreamWindow {
         displayLayer.sampleBufferRenderer.flush(removingDisplayedImage: true) { }
         window.orderOut(nil)
         // Reset alphaValue so a future show() of this window isn't
-        // invisible (defensive — close() is currently the last call).
+        // invisible (defensive - close() is currently the last call).
         window.alphaValue = 1.0
         NSApp.activate()
         if let main = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" || $0.title == "Glimmer" }) {

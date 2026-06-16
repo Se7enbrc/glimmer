@@ -2,15 +2,15 @@
 //  RtpAudioQueue+Fec.swift
 //
 //  The FEC machinery half of the audio FEC-block reassembly state machine,
-//  split from RtpAudioQueue.swift — pure move, same idiom as the RtpVideoQueue
-//  and FramePacer splits — to keep each file under the SwiftLint
+//  split from RtpAudioQueue.swift - pure move, same idiom as the RtpVideoQueue
+//  and FramePacer splits - to keep each file under the SwiftLint
 //  length limit. Ports the block lookup/creation path (getFecBlockForRtpPacket:
 //  key synthesis from data packets, AUDIO_FEC_HEADER parsing/validation from
 //  parity packets, the size-mismatch streak escape hatch) and the Reed-Solomon
 //  recovery step (completeFecBlock).
 //
 //  These run on the SAME single receive thread as the queue/reorder core in
-//  RtpAudioQueue.swift — the split is purely textual (a Swift extension can
+//  RtpAudioQueue.swift - the split is purely textual (a Swift extension can
 //  only reach non-private members, which is why the queue's touched state is
 //  `internal` rather than `private`; see the visibility note atop
 //  RtpAudioQueue.swift). No isolation, ordering, locking, or behavioral
@@ -22,7 +22,7 @@ import Foundation
 extension RtpAudioQueue {
     // MARK: - Block lookup / creation (getFecBlockForRtpPacket, :195-397)
 
-    /// The FEC-header fields that key a block — either synthesized from an audio
+    /// The FEC-header fields that key a block - either synthesized from an audio
     /// data packet or parsed from an explicit AUDIO_FEC_HEADER.
     private struct FecBlockKey {
         let payloadType: UInt8
@@ -89,12 +89,12 @@ extension RtpAudioQueue {
 
         // FEC blocks MUST start on a dataShards boundary (:267-278). A violation
         // is a structural layout difference (not a transient fault), so the
-        // escape hatch stays — but it must flip LOUDLY, never silently.
+        // escape hatch stays - but it must flip LOUDLY, never silently.
         if baseSeqNum % UInt16(Self.dataShards) != 0 {
             stats.packetCountFecInvalid += 1
             incompatibleServer = true
             Diag.notice("NativeAudio FEC DISABLED for this session: parity block base seq "
-                + "\(baseSeqNum) is not \(Self.dataShards)-aligned — host violates the FEC-block "
+                + "\(baseSeqNum) is not \(Self.dataShards)-aligned - host violates the FEC-block "
                 + "invariant. Audio continues WITHOUT FEC (data straight through, parity dropped, "
                 + "lost packets fall to PLC).", Self.cat)
             return nil
@@ -144,7 +144,7 @@ extension RtpAudioQueue {
         for (i, existing) in blocks.enumerated() {
             if existing.fecHeader.baseSequenceNumber == fecBlockBaseSeqNum {
                 // Block size must match to safely copy shards (:311-321). On a
-                // mismatch, drop THIS contribution and count it — do NOT flip
+                // mismatch, drop THIS contribution and count it - do NOT flip
                 // incompatibleServer on first contact (the C does, but here that
                 // one-strike flip silently killed audio FEC for a whole session
                 // off a single odd block). The streak below keeps the GFE-era
@@ -158,21 +158,21 @@ extension RtpAudioQueue {
                     if !loggedSizeMismatch {
                         loggedSizeMismatch = true
                         Diag.warn("NativeAudio FEC block-size mismatch: block \(existing.blockSize)B "
-                            + "vs packet \(blockSize)B (base seq \(fecBlockBaseSeqNum)) — dropping this "
+                            + "vs packet \(blockSize)B (base seq \(fecBlockBaseSeqNum)) - dropping this "
                             + "contribution (logged once; volume in audio_fec_mismatch_total)", Self.cat)
                     }
                     sizeMismatchStreak += 1
                     if sizeMismatchStreak >= Self.sizeMismatchStreakLimit {
                         incompatibleServer = true
                         Diag.notice("NativeAudio FEC DISABLED for this session: "
-                            + "\(sizeMismatchStreak) consecutive block-size mismatches — the host's "
+                            + "\(sizeMismatchStreak) consecutive block-size mismatches - the host's "
                             + "AUDIO_FEC_HEADER layout looks incompatible (GFE-era?). Audio continues "
                             + "WITHOUT FEC: data passes straight through, parity is dropped, lost "
                             + "packets fall to PLC.", Self.cat)
                     }
                     return nil
                 }
-                // Sizes agree — direct counter-evidence of a compatible layout;
+                // Sizes agree - direct counter-evidence of a compatible layout;
                 // the safeguard RECOVERS rather than ratcheting toward the kill.
                 sizeMismatchStreak = 0
                 // Don't return a completed block (:324).

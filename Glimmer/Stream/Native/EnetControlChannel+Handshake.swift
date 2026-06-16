@@ -2,7 +2,7 @@
 //  EnetControlChannel+Handshake.swift
 //
 //  The CONNECT → VERIFY_CONNECT → ACK handshake and the reliable START_A /
-//  START_B sends that follow it — everything establishAndStart() drives to reach
+//  START_B sends that follow it - everything establishAndStart() drives to reach
 //  "connected". Split out of EnetControlChannel.swift to keep each unit focused;
 //  see that file for the shared stored state and wire facts.
 //
@@ -60,7 +60,7 @@ extension EnetControlChannel {
             throw EnetError.socketFailure("invalid control port \(port)")
         }
         let conn = NWConnection(host: host, port: nwPort, using: params)
-        setConnection(conn) // locked write — see connLock
+        setConnection(conn) // locked write - see connLock
 
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let resumed = ManagedAtomicFlag()
@@ -143,10 +143,10 @@ extension EnetControlChannel {
     /// always measured against the most-recent send of a reliable command.
     ///
     /// `recordRtt: false` keeps the wire byte-identical (the SENT_TIME flag +
-    /// token still go out — wire fact: SENT_TIME is set on any datagram carrying
+    /// token still go out - wire fact: SENT_TIME is set on any datagram carrying
     /// an ack-flagged or ACK command) but skips the local RTT stamp. Used by the
     /// ACK emission path: the host never echoes an ACK datagram's token back, so
-    /// recording it only loads `localSentByToken` with dead weight — at rumble
+    /// recording it only loads `localSentByToken` with dead weight - at rumble
     /// rates (~135 ACKs/s) enough to permanently exceed the cap and degrade
     /// every send into a full-map sweep (see recordLocalSent).
     func wrapDatagram(commands: [[UInt8]], sentTime: Bool,
@@ -165,7 +165,7 @@ extension EnetControlChannel {
             withState {
                 let nowMs = monotonicMs
                 // Truncate to the low 16 bits the SAME way serviceTimeMs does
-                // (truncatingIfNeeded — never traps on long uptime).
+                // (truncatingIfNeeded - never traps on long uptime).
                 let token = UInt16(truncatingIfNeeded: Int64(nowMs))
                 out.u16BE(token)
                 if recordRtt {
@@ -214,7 +214,7 @@ extension EnetControlChannel {
             return
         }
 
-        // Strict validation — any mismatch zombies the peer in the C code.
+        // Strict validation - any mismatch zombies the peer in the C code.
         if channelCount < 1 || channelCount > 255
             || throttleInterval != Enet.packetThrottleInterval
             || throttleAccel != Enet.packetThrottleAcceleration
@@ -236,7 +236,7 @@ extension EnetControlChannel {
         let beforeRemove = sentReliable.count
         sentReliable.removeAll { $0.channelID == 0xFF && $0.reliableSequenceNumber == 1 }
         // Mirror sentReliable.count: decrement by however many were removed (the
-        // implicitly-ACKed CONNECT — normally exactly one).
+        // implicitly-ACKed CONNECT - normally exactly one).
         for _ in 0..<(beforeRemove - sentReliable.count) { unackedReliables.decrement() }
         connected = true
         stateLock.unlock()

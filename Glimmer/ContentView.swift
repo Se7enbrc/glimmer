@@ -17,7 +17,7 @@ struct MainWindow: View {
             }
         }
         // One-time proactive offer when a DualSense is connected (see
-        // maybeOfferRawHID) — explains the feature before macOS's Input
+        // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
         .alert("Enable enhanced DualSense buttons?", isPresented: $moonlight.showRawHIDPrompt) {
             Button("Enable") { moonlight.enableRawHIDFromPrompt() }
@@ -27,19 +27,19 @@ struct MainWindow: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {
-            // Disconnect-beat toast — a brief, calm acknowledgement after a
+            // Disconnect-beat toast - a brief, calm acknowledgement after a
             // stream ends instead of the launcher just snapping back.
             StreamEndedToast()
                 .padding(.top, 16)
         }
         .background {
-            // ⌘1–⌘9 host switching (multi-PC households only) — invisible,
+            // ⌘1-⌘9 host switching (multi-PC households only) - invisible,
             // window-scoped. See HostSwitchShortcuts for why hidden buttons
             // beat toolbar-menu shortcuts or app-level .commands here.
             HostSwitchShortcuts()
         }
         // Unpairing the LAST PC swaps ConnectSurface out for the empty state,
-        // which merely CANCELS its route-monitor task — cancellation never
+        // which merely CANCELS its route-monitor task - cancellation never
         // runs monitor(nil), leaving the parked UDP socket watching the
         // forgotten host's route until quit. Key on emptiness; release it
         // (selectedHost is nil here → monitor(address: nil), the teardown).
@@ -69,11 +69,11 @@ struct MainWindow: View {
     }
 }
 
-/// Invisible ⌘1–⌘9 host-switch shortcuts, mounted behind the launcher when
+/// Invisible ⌘1-⌘9 host-switch shortcuts, mounted behind the launcher when
 /// more than one PC is paired. Zero-size transparent buttons are the reliable
 /// window-scoped registration here: toolbar-Menu items only exist while the
 /// menu is open (shortcuts never register), and app-level `.commands` would
-/// also fire from Settings. Capped at nine — ⌘0 reads as "reset".
+/// also fire from Settings. Capped at nine - ⌘0 reads as "reset".
 private struct HostSwitchShortcuts: View {
     @Environment(MoonlightManager.self) private var moonlight
 
@@ -98,11 +98,11 @@ private struct ConnectSurface: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// True while we're between "user pressed Stream" and "stream window
-    /// fades in" — the RAW connecting edge. `streamPhase == .connecting` is
-    /// the whole condition (`isStreaming` must NOT be a guard — it flips at
+    /// fades in" - the RAW connecting edge. `streamPhase == .connecting` is
+    /// the whole condition (`isStreaming` must NOT be a guard - it flips at
     /// stream() ENTRY as the in-flight flag, and guarding on it made the
     /// connecting UI unreachable dead code: a stuck connect showed nothing).
-    /// Suppressed while the stream window is just hiding in the background —
+    /// Suppressed while the stream window is just hiding in the background -
     /// the StreamButton's "Back to stream" role owns that affordance.
     private var isConnecting: Bool {
         guard case .connecting = moonlight.streamPhase else { return false }
@@ -112,17 +112,17 @@ private struct ConnectSurface: View {
 
     /// The VISIBLE connecting state, held back 400 ms behind the raw edge
     /// (the `.task(id: isConnecting)` below). A fast LAN connect comes up
-    /// inside the hold and shows NOTHING — no spinner flash, no button morph
-    /// — while a genuinely slow path gets the calm single-capsule treatment.
+    /// inside the hold and shows NOTHING - no spinner flash, no button morph
+    /// - while a genuinely slow path gets the calm single-capsule treatment.
     @State private var showsConnectingUI = false
 
     /// True once the stream is established and the fullscreen window is
-    /// taking over — Glimmer's window fades down so the handoff doesn't
+    /// taking over - Glimmer's window fades down so the handoff doesn't
     /// strobe two competing surfaces. NOT true while backgrounded (the
     /// launcher is the foreground surface then) and NOT during CONNECTING:
     /// `isStreaming` flips at stream() ENTRY, so without that exemption the
     /// `!isHandedOff` guard below unmounted the StreamButton for the whole
-    /// handshake — the .connecting capsule was unreachable dead code and a
+    /// handshake - the .connecting capsule was unreachable dead code and a
     /// stuck connect stranded the user on a dimmed, button-less launcher.
     /// Handoff (and the dim) now begin at the live edge, as documented.
     private var isHandedOff: Bool {
@@ -143,13 +143,13 @@ private struct ConnectSurface: View {
                 .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: showsConnectingUI)
 
             // Spec chips stay put during connect. The StreamButton below
-            // morphs into the calm "Connecting to <host>… / stage" capsule —
+            // morphs into the calm "Connecting to <host>... / stage" capsule -
             // the ONE connecting surface (a separate phase line would flash
             // duplicate affordances on fast connects).
             SpecChipsRow()
 
             // Hide the StreamButton entirely while the stream window owns
-            // the foreground — a disabled "Streaming…" button would just
+            // the foreground - a disabled "Streaming..." button would just
             // duplicate the stream window's presence and compete for visual
             // weight against the dimmed hero. (Connecting is NOT handed off,
             // so the capsule below stays mounted through the handshake.)
@@ -182,13 +182,13 @@ private struct ConnectSurface: View {
             if !Task.isCancelled {
                 showsConnectingUI = true
                 // Ground truth for the connect-hold adjudication INFO at the
-                // live edge ("capsule shown" vs "suppressed") — reported from
+                // live edge ("capsule shown" vs "suppressed") - reported from
                 // the actual flip, not inferred from the span.
                 moonlight.noteConnectCapsuleShown()
             }
         }
         // Keep the route glyph pointed at the selected host's CURRENT
-        // address — keyed on the resolved address, NOT selectedHost?.id:
+        // address - keyed on the resolved address, NOT selectedHost?.id:
         // re-pairing after a DHCP move rewrites the address under the SAME
         // uuid, so an id-keyed task never re-fired (glyph watched a dead IP).
         .task(id: moonlight.selectedHostRouteAddress) {
@@ -201,7 +201,7 @@ private struct ConnectSurface: View {
 /// "Ready" now lives on the HostHero `ReadinessChip` (alongside RTT and the
 /// live host state), so the footer just shows the last-played hint to avoid
 /// repeating the same word twice in a single glance. The host's reported
-/// version, when known, shows here as a footnote-weight breadcrumb — Apple's
+/// version, when known, shows here as a footnote-weight breadcrumb - Apple's
 /// first-party pattern (System Settings → About) of surfacing version subtly.
 private struct ContextFooter: View {
     @Environment(MoonlightManager.self) private var moonlight
@@ -211,17 +211,17 @@ private struct ContextFooter: View {
         let parts: [String] = {
             var segments: [String] = []
             // `lastPlayedDescription` is already lowercase at the source
-            // (see Host.swift) — sentence-case relative-time per macOS HIG.
+            // (see Host.swift) - sentence-case relative-time per macOS HIG.
             if let lp = host?.lastPlayedDescription { segments.append(lp) }
             if let version = moonlight.hostLiveStatus?.sunshineVersion,
                !version.isEmpty, host != nil {
-                // Leading Major.Minor.Patch of /serverinfo's appversion —
+                // Leading Major.Minor.Patch of /serverinfo's appversion -
                 // both products emit a long GFE-shaped string ("7.1.431.0").
                 let short = version.split(separator: ".").prefix(3).joined(separator: ".")
                 // Product-NEUTRAL copy, deliberately: GFE hosts report this
                 // field too, and nothing the launcher holds can prove which
                 // product sent it (Sunshine mimics GFE's appversion and
-                // GfeVersion; the one discriminator — "MJOLNIR" in <state> —
+                // GfeVersion; the one discriminator - "MJOLNIR" in <state> -
                 // is stream-side and never persisted). "Sunshine <ver>"
                 // mislabeled every GFE host, so brand neither.
                 segments.append("host version \(short)")
@@ -264,7 +264,7 @@ private struct ConnectBanner: View {
                         moonlight.nativeStreamError = nil
                         // The hero verb's target, NOT streamDefaultApp(): the
                         // failed launch stamped lastPlayedApp at start, so the
-                        // hero above still reads "Resume <app>" — a Retry that
+                        // hero above still reads "Resume <app>" - a Retry that
                         // launched the default app would contradict it.
                         moonlight.streamHeroApp()
                     }
@@ -275,7 +275,7 @@ private struct ConnectBanner: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 // Liquid Glass floating-panel chrome with the red stroke on
-                // top — the stroke is the load-bearing severity affordance.
+                // top - the stroke is the load-bearing severity affordance.
                 .glassEffect(
                     .regular.tint(Color.red.opacity(0.12)),
                     in: .rect(cornerRadius: 12)
@@ -291,7 +291,7 @@ private struct ConnectBanner: View {
     }
 }
 
-/// Combined toolbar pill — host dropdown left, Settings gear right, grouped
+/// Combined toolbar pill - host dropdown left, Settings gear right, grouped
 /// via `ControlGroup`, which picks up the macOS 26 Liquid Glass toolbar
 /// material and renders one segmented pill with a hairline divider.
 private struct HostAndSettingsPill: View {
@@ -333,7 +333,7 @@ private struct HostAndSettingsPill: View {
 }
 
 /// Three-stop accent gradient shared by the hero card (ContentView) and the
-/// Stream button (ContentViewSubviews) — internal, not file-private — so the
+/// Stream button (ContentViewSubviews) - internal, not file-private - so the
 /// two surfaces read as a matched pair. Top-left lifts toward white,
 /// bottom-right deepens toward black; opacities stay low so the Liquid Glass
 /// material dominates and the accent reads as a tint rather than a fill.
@@ -358,7 +358,7 @@ private struct HostHero: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             // Background: Liquid Glass with a host-stable accent tint (hue
-            // stable per name) — multi-PC households get visual continuity
+            // stable per name) - multi-PC households get visual continuity
             // per machine while the OS handles refraction / EDR composition.
             // `.regular.tint(...)` keeps the translucent material reading
             // correctly across light + dark mode without hardcoded RGB fights.
@@ -369,7 +369,7 @@ private struct HostHero: View {
                     in: .rect(cornerRadius: 26)
                 )
                 .overlay {
-                    // Faint top-edge gloss — softened so the accent reads
+                    // Faint top-edge gloss - softened so the accent reads
                     // as material rather than a neon border.
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .stroke(
@@ -397,7 +397,7 @@ private struct HostHero: View {
                     .foregroundStyle(.white.opacity(0.92))
                     .shadow(color: .black.opacity(0.30), radius: 10, x: 0, y: 2)
                     // No pulse: while a stream is foreground the hero is
-                    // occluded — a pulse would burn CPU on unseen pixels.
+                    // occluded - a pulse would burn CPU on unseen pixels.
 
                 Text(host?.displayName ?? "No PC selected")
                     .font(.system(size: 34, weight: .bold))
@@ -405,7 +405,7 @@ private struct HostHero: View {
                     .foregroundStyle(.primary)
                 // No last-played line here: ContextFooter is its single
                 // source (both read glimmer.lastConnected, stamped at stream
-                // END — the hero copy used to duplicate it AND disagree).
+                // END - the hero copy used to duplicate it AND disagree).
 
                 if let host, !host.apps.isEmpty {
                     AppIconsRow(apps: host.apps, host: host)
@@ -453,9 +453,9 @@ struct MenuBarContent: View {
             // Icon-forward, sectioned layout within `.menu`-style MenuBarExtra
             // constraints (system NSMenu: Labels show their SF Symbol,
             // Sections render titled groups, custom materials are NOT
-            // honoured — lean on iconography + structure, not glass). Item
+            // honoured - lean on iconography + structure, not glass). Item
             // order: navigational ("Open Glimmer") FIRST, then stream actions,
-            // then app-wide (Settings / Quit) — Apple's first-party agent
+            // then app-wide (Settings / Quit) - Apple's first-party agent
             // pattern (Time Machine, Bluetooth).
             Button {
                 openWindow(id: "main")
@@ -498,7 +498,7 @@ struct MenuBarContent: View {
                 }
             }
 
-            // Controller battery charm — shown whenever a pad reporting battery
+            // Controller battery charm - shown whenever a pad reporting battery
             // is connected to the Mac (sampled on menu open).
             if let battery = moonlight.menuBarControllerBattery {
                 Section("Controller") {
@@ -515,19 +515,19 @@ struct MenuBarContent: View {
                 openSettings()
                 activate()
             } label: {
-                Label("Settings…", systemImage: "gearshape")
+                Label("Settings...", systemImage: "gearshape")
             }
             .keyboardShortcut(",")
 
             #if canImport(Sparkle)
             // The menu-bar dropdown is the reliable surface for the accessory
-            // (no-window) case, where the app menu's "Check for Updates…" isn't
+            // (no-window) case, where the app menu's "Check for Updates..." isn't
             // visible. `activate()` brings Glimmer forward so Sparkle's panel shows.
             Button {
                 UpdaterController.shared.updater.checkForUpdates()
                 activate()
             } label: {
-                Label("Check for Updates…", systemImage: "arrow.triangle.2.circlepath")
+                Label("Check for Updates...", systemImage: "arrow.triangle.2.circlepath")
             }
             #endif
 
@@ -542,7 +542,7 @@ struct MenuBarContent: View {
 
     private func activate() {
         // NSApp.activate() is the macOS 14+ replacement for
-        // activate(ignoringOtherApps:) — the OS decides foreground policy
+        // activate(ignoringOtherApps:) - the OS decides foreground policy
         // system-side now, so the "ignoringOtherApps: true" knob is gone.
         NSApp.activate()
     }
@@ -578,11 +578,11 @@ private struct HostContextMenu: ViewModifier {
                     draftName = host.customName ?? ""
                     showRename = true
                 } label: {
-                    Label("Rename…", systemImage: "pencil")
+                    Label("Rename...", systemImage: "pencil")
                 }
                 // Per-host codec cap. Automatic negotiates AV1 → HEVC → H.264
                 // against what this host's encoder supports, so the override
-                // exists only for the host whose preferred codec misbehaves —
+                // exists only for the host whose preferred codec misbehaves -
                 // hence a submenu here, not a Quality-pane item.
                 Picker(selection: $codecPref) {
                     ForEach(HostCodecPreference.allCases) { pref in
@@ -599,7 +599,7 @@ private struct HostContextMenu: ViewModifier {
                 Button(role: .destructive) {
                     showUnpairConfirm = true
                 } label: {
-                    Label("Unpair…", systemImage: "minus.circle")
+                    Label("Unpair...", systemImage: "minus.circle")
                 }
             }
             .alert("Rename \(host.name)", isPresented: $showRename) {
@@ -610,7 +610,7 @@ private struct HostContextMenu: ViewModifier {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("Shown in the launcher and PC list. Leave empty (or “Use default name”) to show the PC’s own hostname.")
+                Text("Shown in the launcher and PC list. Leave empty (or 'Use default name') to show the PC's own hostname.")
             }
             .confirmationDialog(
                 "Unpair \(host.displayName)?",

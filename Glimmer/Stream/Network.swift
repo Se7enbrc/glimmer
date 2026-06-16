@@ -21,7 +21,7 @@
 //    * URLSession instead of QNetworkAccessManager. Means we do the TLS
 //      identity dance through URLSessionDelegate, not QSslConfiguration.
 //    * Trust-on-first-use: the very first /serverinfo call goes over plain
-//      HTTP, pulls the host cert out of the response (well — out of the next
+//      HTTP, pulls the host cert out of the response (well - out of the next
 //      HTTPS handshake), pins it, and from then on we refuse to talk HTTPS to
 //      anything that doesn't present *exactly* that cert. This is the same
 //      model moonlight-qt uses; it does NOT do PKI validation, on purpose
@@ -39,14 +39,14 @@ import os.log
 // MARK: - Host reachability (cheap TCP probe)
 
 /// Lightweight reachability probe for the readiness chip on the main window.
-/// Distinct from `NetworkClient.fetchServerInfo()` — we don't want to drive a
+/// Distinct from `NetworkClient.fetchServerInfo()` - we don't want to drive a
 /// full HTTP/TLS roundtrip just to colour a pill. A bare TCP connect to the
 /// host's HTTP port (47989) is enough to tell "host is awake & answering on
 /// the network" and gives us a useful RTT proxy as a side effect.
 ///
 /// The measurement is the wall-clock time between `connection.start()` and
 /// the connection transitioning to `.ready`. On a LAN this is dominated by
-/// the TCP handshake — one round trip — so it's a serviceable RTT for the
+/// the TCP handshake - one round trip - so it's a serviceable RTT for the
 /// "12 ms" subtitle on the chip. We don't claim ICMP-level precision.
 public enum HostReachability {
     public enum Outcome: Sendable, Equatable {
@@ -55,7 +55,7 @@ public enum HostReachability {
     }
 
     /// Open a TCP connection to `host:port`, time how long it takes to reach
-    /// `.ready`, cancel it, and return the result. Never throws — failures
+    /// `.ready`, cancel it, and return the result. Never throws - failures
     /// fold into `.unreachable` because the caller (a status pill poller)
     /// doesn't need to distinguish refused-vs-timed-out.
     ///
@@ -71,7 +71,7 @@ public enum HostReachability {
         }
         // Tighter TCP knobs so a dead host folds to .unreachable in seconds
         // rather than the kernel's default ~75s SYN retry budget. We don't
-        // need fancy features (no fast-open, no keep-alive) — this connection
+        // need fancy features (no fast-open, no keep-alive) - this connection
         // exists for one handshake and dies.
         let tcp = NWProtocolTCP.Options()
         tcp.connectionTimeout = max(1, timeoutMs / 1000)
@@ -88,7 +88,7 @@ public enum HostReachability {
 
         // Wrap the state-update callback in a continuation so the caller gets a
         // clean async result. `Once` guards against the (rare) case where
-        // multiple terminal states fire — e.g. `.failed` after `.cancelled` —
+        // multiple terminal states fire - e.g. `.failed` after `.cancelled` -
         // which would otherwise resume the continuation twice and trap.
         let outcome: Outcome = await withCheckedContinuation { cont in
             let once = OnceResumer(cont: cont)
@@ -105,7 +105,7 @@ public enum HostReachability {
                     // Waiting means we couldn't form the connection (host
                     // refused / unreachable / firewalled). The Network
                     // framework will keep retrying indefinitely; we don't
-                    // care — treat as unreachable and tear down.
+                    // care - treat as unreachable and tear down.
                     once.resume(with: .unreachable)
                     conn.cancel()
                 default:
@@ -147,7 +147,7 @@ public enum HostReachability {
 
 // MARK: - Public data types
 
-/// One entry from /applist. The host returns a flat list of these — Desktop,
+/// One entry from /applist. The host returns a flat list of these - Desktop,
 /// Steam Big Picture, and one per game it knows about.
 public struct HostApp: Sendable, Identifiable {
     public let id: Int
@@ -181,7 +181,7 @@ public struct LaunchResponse: Sendable {
 // MARK: - XMLNode
 
 /// Minimal XML tree node. We deliberately don't model namespaces, CDATA, or
-/// processing instructions — the GameStream protocol uses none of them. The
+/// processing instructions - the GameStream protocol uses none of them. The
 /// shape is exactly what callers need: a name, optional text content, a flat
 /// attribute dictionary, and ordered children.
 public struct XMLNode: Sendable {
@@ -252,7 +252,7 @@ public actor NetworkClient {
 
     // MARK: State
 
-    /// The host we're talking to. Mutated as we learn things — the HTTPS port
+    /// The host we're talking to. Mutated as we learn things - the HTTPS port
     /// can come from /serverinfo, and the server cert is pinned on first
     /// successful HTTPS handshake.
     var server: ServerInfo
@@ -265,7 +265,7 @@ public actor NetworkClient {
     var clientKeyPEM: String?
 
     /// The 32-hex client uniqueid generated by IdentityManager. We *load* it
-    /// for identity-prep symmetry, but we don't send it on the wire — see
+    /// for identity-prep symmetry, but we don't send it on the wire - see
     /// the comment above `Self.wireUniqueID`.
     var clientUniqueID: String?
 
@@ -282,7 +282,7 @@ public actor NetworkClient {
     /// URLSession + its delegate. Held as instance state so we can share a
     /// connection pool across requests. The delegate is a class because that's
     /// what URLSession requires; it's `Sendable` because it's stateless past
-    /// init — every callback reads the credential from immutable storage.
+    /// init - every callback reads the credential from immutable storage.
     let session: URLSession
     let delegate: TLSDelegate
 
@@ -296,7 +296,7 @@ public actor NetworkClient {
 
         // Pre-seed the pinned cert from any previously persisted PEM. This is
         // what makes "I paired with this host yesterday" survive an app
-        // restart — the caller pulled the PEM from disk and stuffed it onto
+        // restart - the caller pulled the PEM from disk and stuffed it onto
         // ServerInfo before constructing us.
         if let pem = server.serverCertPEM,
            let cert = Self.parsePEMCertificate(pem) {
@@ -338,7 +338,7 @@ public actor NetworkClient {
     /// its private key (the RSA-signature step in /pair's pairingsecret
     /// round-trip). Any cert installed via this entry point is treated as
     /// fully validated and is what subsequent HTTPS connections must
-    /// match. This is the ONE write path for the pin — `fetchServerInfo`
+    /// match. This is the ONE write path for the pin - `fetchServerInfo`
     /// no longer auto-pins.
     ///
     /// Returns the parsed SecCertificate so the caller can also persist
@@ -380,7 +380,7 @@ public actor NetworkClient {
         try await ensureIdentityLoaded()
         if let id = clientIdentity { return id }
 
-        // Identity setup happens at install time in IdentityManager — see
+        // Identity setup happens at install time in IdentityManager - see
         // IdentityManager.secIdentity(). It builds the SecIdentity inside
         // Glimmer's own keychain so the user never sees a "wants to sign"
         // prompt. We just borrow it here.
@@ -430,7 +430,7 @@ public actor NetworkClient {
     }
 
     /// Flatten the immediate-child element names + brief text of an XML node
-    /// for diagnostic logging. Doesn't recurse — just enough to see whether
+    /// for diagnostic logging. Doesn't recurse - just enough to see whether
     /// the field we expected is there under a different name.
     static func dumpXML(_ node: XMLNode) -> String {
         var entries: [String] = []
@@ -493,7 +493,7 @@ public actor NetworkClient {
     /// Same shape as `dumpXML`, but every child whose tag name matches
     /// `sensitiveQueryKeys` has its body replaced with `<redacted>` so
     /// gcmkey / gcmkeyid (echoed by Sunshine on /launch /resume) never
-    /// reach the log. We still preserve the tag name itself — that's
+    /// reach the log. We still preserve the tag name itself - that's
     /// the data point we actually need for the "field renamed?" diff.
     static func dumpXMLRedacted(_ node: XMLNode) -> String {
         var entries: [String] = []

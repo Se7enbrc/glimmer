@@ -4,28 +4,28 @@
 //  The one-shot SESSION REPORT (signal 5b) for the opt-in telemetry exporter: a
 //  single glanceable scorecard written next to the per-second NDJSON when a stream
 //  stops.
-//  It answers "how was THIS run?" in one file — duration, the p50/p95/p99 of every
+//  It answers "how was THIS run?" in one file - duration, the p50/p95/p99 of every
 //  latency stage (incl. the headline glass-to-glass + the input-to-photon
 //  estimate), fps stats, event counts (rfi/idr/loss/freeze/recovery/stall/
 //  overflow/bookmark), the worst 1s windows, peak pacing depth, and the build SHA
 //  so a run is attributable to a build for regression tracking.
 //
 //  Two pieces live here:
-//    * `SessionAggregate` — the running per-tick rollup the exporter folds each
+//    * `SessionAggregate` - the running per-tick rollup the exporter folds each
 //      1Hz snapshot into (fps min/avg/max, peak depth, worst windows), GATE-
 //      AWARE (D4): each tick is classified active/gated/bring-up/resume and
 //      the headline numbers cover ACTIVE seconds only (see the type doc). The
 //      raw session-wide latency percentiles still come from the cumulative
 //      histograms at stop (lossless); the aggregate additionally stitches an
 //      ACTIVE-seconds histogram out of the per-tick deltas for the headline.
-//    * `SessionReport` — assembled at stop from the aggregate + the final
+//    * `SessionReport` - assembled at stop from the aggregate + the final
 //      histograms + the counters, and rendered to JSON by hand (same
 //      integer/decimal discipline as the rest of the exporter; nil fields
 //      omitted).
 //
 //  GATING + SAFETY: this is built/used only on the gate-on path (the exporter
 //  that owns it exists only when telemetry is opt-in ON). The accumulation runs
-//  on the exporter's serial queue per 1Hz tick — never a hot path. Secret-free:
+//  on the exporter's serial queue per 1Hz tick - never a hot path. Secret-free:
 //  every field is a performance number, an event count, the opaque session id,
 //  or the build SHA/date.
 //
@@ -45,7 +45,7 @@ import Foundation
 /// and a cold-open bring-up era polluted the cumulative percentiles for minutes
 /// after behavior normalized. The raw all-session values stay under
 /// explicitly-named `*_raw` keys (with the worst second's segment tag), so
-/// nothing is hidden — it is labeled.
+/// nothing is hidden - it is labeled.
 struct SessionAggregate {
 
     /// One 1Hz tick's segment. Priority order is the classification order:
@@ -60,7 +60,7 @@ struct SessionAggregate {
     }
 
     /// Bring-up era: connect-relative seconds treated as cold-open settling
-    /// (game load / encoder ramp / cushion ratchet — content legitimately
+    /// (game load / encoder ramp / cushion ratchet - content legitimately
     /// wild, not stream quality).
     static let bringUpSeconds = 10.0
     /// Resume corridor: seconds after an un-gate/un-suppress edge during
@@ -95,7 +95,7 @@ struct SessionAggregate {
     var renderedFpsRaw = Stat()
 
     /// Peak pacing-queue depth seen across the whole session (the deepest the
-    /// jitter buffer ever rode) — a latency-creep tell the live gauge misses.
+    /// jitter buffer ever rode) - a latency-creep tell the live gauge misses.
     var peakPacingDepth: Int = 0
 
     // ---- Worst single 1s windows (the transient that defined the run) ----
@@ -103,13 +103,13 @@ struct SessionAggregate {
     // session, with the segment it landed in (a raw worst tagged `gated` or
     // `resume` is the instrument seeing a designed window, not the stream).
     /// Worst per-tick mean present-cadence error (ms) + the connect-relative
-    /// second it happened on — the hitch a user feels, and exactly when.
+    /// second it happened on - the hitch a user feels, and exactly when.
     var worstPresentCadenceErrorMs: Double?
     var worstPresentCadenceErrorAtSeconds: Double?
     var worstPresentCadenceErrorRawMs: Double?
     var worstPresentCadenceErrorRawAtSeconds: Double?
     var worstPresentCadenceErrorRawSegment: TickSegment?
-    /// Worst per-tick glass-to-glass p95 (ms) + when — the second the headline
+    /// Worst per-tick glass-to-glass p95 (ms) + when - the second the headline
     /// "how good is it" number was at its worst.
     var worstGlassToGlassP95Ms: Double?
     var worstGlassToGlassP95AtSeconds: Double?
@@ -117,24 +117,24 @@ struct SessionAggregate {
     var worstGlassToGlassP95RawAtSeconds: Double?
     var worstGlassToGlassP95RawSegment: TickSegment?
 
-    /// How many 1Hz ticks were folded in — a sanity/coverage count.
+    /// How many 1Hz ticks were folded in - a sanity/coverage count.
     var tickCount: Int = 0
     // ---- Per-segment second counts (ticks ≈ seconds at the 1Hz cadence) ----
     var activeTicks = 0
     var gatedTicks = 0
     var bringUpTicks = 0
     var resumeTicks = 0
-    /// Previous tick's hidden (suppressed-or-gated) state — the edge detector
+    /// Previous tick's hidden (suppressed-or-gated) state - the edge detector
     /// that arms the resume corridor.
     private var prevTickHidden = false
     /// Connect-relative end of the live resume corridor, nil when none.
     private var resumeCorridorUntilSeconds: Double?
 
     // ---- ACTIVE-seconds latency accumulation ----
-    /// Cumulative histogram snapshot from the PREVIOUS tick — the baseline the
+    /// Cumulative histogram snapshot from the PREVIOUS tick - the baseline the
     /// per-tick delta is sliced against.
     private var prevLatencyCumulative: LatencyHistogramSnapshot?
-    /// Sum of the per-tick histogram deltas folded on ACTIVE ticks only — the
+    /// Sum of the per-tick histogram deltas folded on ACTIVE ticks only - the
     /// scorecard's headline percentile source. The cumulative histograms stay
     /// the raw truth (`latency_raw`); this is the same data minus the
     /// gated/bring-up/resume seconds that polluted the cold-open reads.
@@ -187,7 +187,7 @@ struct SessionAggregate {
 
     // ---- ENV-SIGNAL shadow-session judge inputs ----
     /// Ticks (~seconds) spent in each env state (index = the state ordinal:
-    /// clear/caution/distress) + the final transition count — "how long was
+    /// clear/caution/distress) + the final transition count - "how long was
     /// each state, and how often did it move" is the scorecard half of
     /// judging the shadow state machine against felt events.
     var envStateSeconds = [Int](repeating: 0, count: 3)
@@ -232,7 +232,7 @@ struct SessionAggregate {
         }
         // Worst glass-to-glass: use the per-tick p95 from the histogram so a
         // single bad second stands out (the cumulative session p95 would smear
-        // it). Cheap — the histogram snapshot is already on the snapshot.
+        // it). Cheap - the histogram snapshot is already on the snapshot.
         if let histograms = snap.latencyHistograms,
            let p95 = TelemetryRenderer.histogramQuantile(0.95, stage: histograms.glassToGlass) {
             if p95 > (worstGlassToGlassP95RawMs ?? -1) {
@@ -263,7 +263,7 @@ struct SessionReport {
     let counters: TelemetryCounters
 
     /// Render the report as a single pretty-ish JSON object (hand-built so field
-    /// order is stable + readable, and nil fields are simply omitted — same
+    /// order is stable + readable, and nil fields are simply omitted - same
     /// discipline as the NDJSON renderer). One file, one glance.
     func renderJSON() -> String {
         var top: [String] = []
@@ -288,7 +288,7 @@ struct SessionReport {
         top.append("\"events\":\(eventsObject())")
         top.append("\"worst_windows\":\(worstWindowsObject())")
         // P2 SESSION-LIFECYCLE: the connect-handshake breakdown + the disconnect
-        // reason — the "how did this run open and why did it end" line.
+        // reason - the "how did this run open and why did it end" line.
         top.append("\"handshake\":\(handshakeObject())")
         top.append("\"lifecycle\":\(lifecycleObject())")
         // AUDIO-TTF: the cold-start span + warm/cold classification + the
@@ -296,13 +296,13 @@ struct SessionReport {
         // report files instead of re-parsing event rows.
         top.append("\"audio_ttf\":\(audioTtfObject())")
         // A/V SKEW percentiles (SIGN: + = audio late/behind video), from the
-        // 1Hz pair-anchored RTP derivation — the lip-sync cost the adaptive
+        // 1Hz pair-anchored RTP derivation - the lip-sync cost the adaptive
         // cushion silently trades; the cushion-ceiling policy reads THIS line.
         top.append("\"av_skew_ms\":\(avSkewObject())")
-        // Per-TYPE ignored-control totals — durable here (the teardown Diag
+        // Per-TYPE ignored-control totals - durable here (the teardown Diag
         // NOTICE is lossy: a crash or a still-running session loses it).
         top.append("\"ctrl_ignored_by_type\":\(ctrlIgnoredByTypeObject())")
-        // ENV-SIGNAL shadow scorecard: seconds-in-state + transition count —
+        // ENV-SIGNAL shadow scorecard: seconds-in-state + transition count -
         // the per-session judge for the state machine (DISTRESS seconds are
         // EXCLUDED from present-path quality reads, never added).
         top.append("\"env\":\(envObject())")
@@ -311,7 +311,7 @@ struct SessionReport {
 
     // MARK: - Sub-objects
 
-    /// Per-segment second counts (D4) — the denominators that make the
+    /// Per-segment second counts (D4) - the denominators that make the
     /// headline-vs-raw split legible at a glance: a session that was 90%
     /// gated AFK self-describes as such on the first line.
     private func segmentsObject() -> String {
@@ -341,7 +341,7 @@ struct SessionReport {
         return "{" + entries.joined(separator: ",") + "}"
     }
 
-    /// p50/p95/p99 per latency stage from the given snapshot — called with the
+    /// p50/p95/p99 per latency stage from the given snapshot - called with the
     /// ACTIVE-seconds accumulation for the headline `latency` key (basis under
     /// `latency_basis`; falls back to cumulative for a session too short to
     /// have any active seconds) and with the FINAL cumulative histograms for
@@ -381,7 +381,7 @@ struct SessionReport {
         return "{" + entries.joined(separator: ",") + "}"
     }
 
-    /// P2 CONNECT-HANDSHAKE breakdown — per-stage cold-open timing (ms). Read off
+    /// P2 CONNECT-HANDSHAKE breakdown - per-stage cold-open timing (ms). Read off
     /// the always-live `p2` state captured during the handshake. nil legs omitted.
     private func handshakeObject() -> String {
         let breakdown = counters.p2.handshakeBreakdown()
@@ -397,7 +397,7 @@ struct SessionReport {
         return "{" + parts.joined(separator: ",") + "}"
     }
 
-    /// P2 lifecycle summary — the disconnect reason (ordinal + label), the
+    /// P2 lifecycle summary - the disconnect reason (ordinal + label), the
     /// reconnect count, and the IDR round-trip request/matched tally
     /// (EXPLICIT IDRs only; RFIs ride `events.rfi`).
     private func lifecycleObject() -> String {
@@ -479,7 +479,7 @@ struct SessionReport {
         return "{" + entries.joined(separator: ",") + "}"
     }
 
-    /// Final monotonic event counts — the run's tally of every notable event,
+    /// Final monotonic event counts - the run's tally of every notable event,
     /// including the user's "that felt bad" bookmark presses.
     private func eventsObject() -> String {
         let pairs: [(String, UInt64)] = [
@@ -493,7 +493,7 @@ struct SessionReport {
             ("bookmark", counters.bookmarkTotal.value),
             // P1 NETWORK session tallies: the run's on-the-wire receive-quality
             // totals (all from the RTP seq of packets WE received) + the reliable
-            // retransmit count — the "how was the link this run" line.
+            // retransmit count - the "how was the link this run" line.
             ("pre_fec_packets_lost", counters.videoPacketsLostPreFecTotal.value),
             ("packets_out_of_order", counters.videoPacketsOutOfOrderTotal.value),
             ("packets_duplicate", counters.videoPacketsDuplicateTotal.value),
@@ -523,7 +523,7 @@ struct SessionReport {
             ("rumble_dropped_invalid", counters.rumbleDroppedInvalidTotal.value),
             // P1 AUDIO session tallies (the other stream): the run's on-the-wire
             // audio loss + FEC recovery (+ mismatch-dropped blocks) + the output
-            // under-run/over-run/designed-trim counts — the "how was audio this
+            // under-run/over-run/designed-trim counts - the "how was audio this
             // run" line alongside the video tallies.
             ("audio_packets", counters.audioPacketsTotal.value),
             ("audio_packets_lost", counters.audioPacketsLostTotal.value),
@@ -541,7 +541,7 @@ struct SessionReport {
         return "{" + entries.joined(separator: ",") + "}"
     }
 
-    /// The worst single 1s windows + the connect-relative second they hit — jump
+    /// The worst single 1s windows + the connect-relative second they hit - jump
     /// straight to the moment the run was at its worst. Headline entries cover
     /// ACTIVE seconds; the `*_raw` siblings cover every second and carry the
     /// worst second's segment, so a 41s "worst cadence" that was really an AFK

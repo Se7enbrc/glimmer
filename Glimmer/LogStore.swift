@@ -4,10 +4,10 @@
 //  In-app ring buffer for a Sunshine-style troubleshooting log.
 //
 //  Why not just read os_log? `OSLogStore(scope: .currentProcessIdentifier)` is
-//  not reliably readable from inside the App Sandbox on this platform — the
+//  not reliably readable from inside the App Sandbox on this platform - the
 //  Troubleshooting log viewer came up empty even though os_log was emitting.
 //  So the canonical troubleshooting record is THIS in-memory ring buffer, which
-//  the viewer reads directly. Every entry is ALSO mirrored to os_log (.public —
+//  the viewer reads directly. Every entry is ALSO mirrored to os_log (.public -
 //  callers pass already-redacted strings, same discipline as the rest of the
 //  app) so Console.app and `log stream` keep working for live debugging.
 //
@@ -92,11 +92,11 @@ final class LogStore: @unchecked Sendable {
 
         // Third sink (gate-checked, default OFF): when telemetry/debug is enabled
         // for a streaming session, ALSO mirror the line to a per-session text file
-        // so the rich os_log/Diag record — not just the telemetry NDJSON — is
+        // so the rich os_log/Diag record - not just the telemetry NDJSON - is
         // persisted and shippable into a remote log sink. The
         // append is a single optional load when off (no file, no lock, no
         // allocation) and, when on, only pushes a pre-rendered line into an
-        // in-memory buffer drained by a background timer — never an I/O (or fsync)
+        // in-memory buffer drained by a background timer - never an I/O (or fsync)
         // on the producing thread, so a slow disk can never serialise a hot-path
         // logger against the file. Mirrors the FrameTraceWriter discipline.
         if let sink = SessionLogFileSink.shared {
@@ -131,22 +131,22 @@ enum Diag {
 /// on `LogStore.log` (after the in-memory ring buffer and os_log): it persists the
 /// rich runtime log to `~/Library/Logs/Glimmer/glimmer-<ISO8601>.log` (which, in
 /// the App Sandbox, resolves to the container's
-/// `Data/Library/Logs/Glimmer` — the SAME directory the telemetry NDJSON writer
+/// `Data/Library/Logs/Glimmer` - the SAME directory the telemetry NDJSON writer
 /// uses, so a log shipper can mount one folder and tail both `*.log`
 /// and `*.ndjson`).
 ///
-/// GATING + HOT-PATH SAFETY (load-bearing — same contract as the telemetry rig):
+/// GATING + HOT-PATH SAFETY (load-bearing - same contract as the telemetry rig):
 ///   * `SessionLogFileSink.shared` is nil unless the telemetry/debug gate is on
 ///     and a session installed it. Every `LogStore.log` call pays a single
-///     nil-optional load when off — NO file, NO lock, NO allocation.
+///     nil-optional load when off - NO file, NO lock, NO allocation.
 ///   * LEVEL THRESHOLD (log diet): the file mirrors INFO+ by default. Testing
-///     measured 30–105k lines/hr in this file — 76% of one wireless run's log
-///     was a single per-ACK DEBUG pattern — burying the real signal
+///     measured 30-105k lines/hr in this file - 76% of one wireless run's log
+///     was a single per-ACK DEBUG pattern - burying the real signal
 ///     (underrun edges, env transitions, breadcrumbs) that postmortems grep
 ///     for. The RING BUFFER and os_log still carry EVERY level (live debugging
 ///     loses nothing); only the durable per-session file is dieted. DEBUG
 ///     opt-in via the Diagnostics-pane defaults key `diagFileLogDebug`,
-///     resolved ONCE at install — the TelemetryGate read-at-session-start
+///     resolved ONCE at install - the TelemetryGate read-at-session-start
 ///     discipline, so a mid-session flip can't tear one file's level.
 ///   * When ON, the producing thread only formats one line and pushes it into an
 ///     in-memory buffer under a short `os_unfair_lock`. NEVER an I/O on the
@@ -196,7 +196,7 @@ final class SessionLogFileSink: @unchecked Sendable {
     // ---- Instance state (only exists when enabled) ----
 
     private static let flushInterval: DispatchTimeInterval = .milliseconds(250)
-    /// ~10k lines at ~120 bytes/line ≈ 1.2MB — far past one flush interval's worth
+    /// ~10k lines at ~120 bytes/line ≈ 1.2MB - far past one flush interval's worth
     /// of log lines; overflow drops the OLDEST pending (stalest diagnostic data is
     /// the right thing to lose) and is logged once.
     private static let maxPendingLines = 10_000
@@ -212,12 +212,12 @@ final class SessionLogFileSink: @unchecked Sendable {
 
     /// Minimum level mirrored to the FILE (see the LEVEL THRESHOLD note in the
     /// type doc). Immutable after init so the producing-thread check is a plain
-    /// load + compare — no lock, no defaults read on the logging path.
+    /// load + compare - no lock, no defaults read on the logging path.
     private let minimumLevel: LogLevel
 
     private let lineFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        // Millisecond wall-clock — same precision as the in-app viewer's
+        // Millisecond wall-clock - same precision as the in-app viewer's
         // `timeString`, so a line in the file reads identically to one on screen.
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
         return formatter
@@ -282,10 +282,10 @@ final class SessionLogFileSink: @unchecked Sendable {
     }
 
     /// Producing-thread side: format one line and push it into the buffer under a
-    /// short lock. No I/O here. Bounded — drops oldest on overflow.
+    /// short lock. No I/O here. Bounded - drops oldest on overflow.
     func append(level: LogLevel, category: String, message: String) {
         // Level gate BEFORE formatting: a sub-threshold line costs one compare,
-        // not a DateFormatter render — the per-ACK-class flood must not pay
+        // not a DateFormatter render - the per-ACK-class flood must not pay
         // string-building just to be discarded.
         guard level >= minimumLevel else { return }
         let line = "\(lineFormatter.string(from: Date()))  \(level.label.uppercased())  [\(category)]  \(message)"
@@ -311,7 +311,7 @@ final class SessionLogFileSink: @unchecked Sendable {
         os_unfair_lock_unlock(bufferLock)
 
         if overflowed {
-            log.error("Diag file sink buffer overflowed (disk too slow?) — oldest lines dropped")
+            log.error("Diag file sink buffer overflowed (disk too slow?) - oldest lines dropped")
         }
         guard !batch.isEmpty, let fileHandle else { return }
         let blob = batch.joined(separator: "\n") + "\n"

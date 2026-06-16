@@ -8,12 +8,12 @@
 //  final HTTPS liveness check; each round mixes AES-128-ECB symmetric crypto
 //  (keyed off the PIN the user types into the host UI) with RSA signatures over our
 //  long-lived client cert. If any step deviates by a single byte the host
-//  silently rejects us, so the comments below are unusually thorough —
+//  silently rejects us, so the comments below are unusually thorough -
 //  this is the kind of code where "it didn't work" debug sessions are
 //  measured in hours.
 //
 //  All hex on the wire is uppercase. All AES operations use 16-byte blocks
-//  with padding explicitly disabled — moonlight's protocol is raw ECB on
+//  with padding explicitly disabled - moonlight's protocol is raw ECB on
 //  pre-sized buffers, not the higher-level CBC/CTR shapes you'd expect.
 //
 
@@ -41,13 +41,13 @@ public actor PairingClient {
     /// Walk the full PIN handshake. On success the returned `ServerInfo` has
     /// `pairStatus = .paired` and `serverCertPEM` populated with the host's
     /// pinned certificate. On failure we always send `/unpair` to the host
-    /// before throwing — leaving a half-paired state on the host side trips
+    /// before throwing - leaving a half-paired state on the host side trips
     /// "Already pairing" errors on retry.
     public func pair(pin: String) async throws -> ServerInfo {
         do {
             return try await runPairingFlow(pin: pin)
         } catch {
-            // Best-effort cleanup. Swallow any error from unpair — we're
+            // Best-effort cleanup. Swallow any error from unpair - we're
             // already in the failure path and the original error is what
             // the caller cares about.
             await sendUnpair()
@@ -92,7 +92,7 @@ public actor PairingClient {
         // Gen 7+ (GFE 3.x and all Sunshine builds) uses SHA-256 with a
         // 32-byte hash. Older GFE used SHA-1 + 20 bytes. We sniff the major
         // version from server.appVersion ("7.1.431.0" -> 7). If we don't have
-        // a version string yet, assume modern — Sunshine never advertises a
+        // a version string yet, assume modern - Sunshine never advertises a
         // version field shape consistent with old GFE.
         // ---------------------------------------------------------------
         let useSha256 = parseMajorVersion(server.appVersion) >= 7 || server.appVersion == nil
@@ -104,7 +104,7 @@ public actor PairingClient {
         //
         // We send a fresh 16-byte salt + our PEM cert (hex-encoded). The host
         // replies with paired=1 + plaincert=<host cert hex>. From this point
-        // on we treat that cert as the host's identity — it's pinned for all
+        // on we treat that cert as the host's identity - it's pinned for all
         // subsequent TLS verification until pairing finishes (or fails).
         // ---------------------------------------------------------------
         let salt = try Self.randomBytes(16)
@@ -120,7 +120,7 @@ public actor PairingClient {
         // ---------------------------------------------------------------
         // Step 2: derive the AES key from the salt + PIN.
         //
-        // Identity owns the SHA-256(salt || pin)[0..16] computation — keeping
+        // Identity owns the SHA-256(salt || pin)[0..16] computation - keeping
         // it there means both sides of the codebase (us + the discovery flow,
         // if it ever needs to verify) hash the PIN identically.
         // ---------------------------------------------------------------
@@ -187,7 +187,7 @@ public actor PairingClient {
         // Host sends back its random 16-byte serverSecret followed by an RSA
         // signature over (serverSecret || serverCert) using its private key.
         // We:
-        //   a) RSA-verify the sig against the host cert's public key — this
+        //   a) RSA-verify the sig against the host cert's public key - this
         //      is the MITM check.
         //   b) Recompute hash(ourClientChallenge || hostCertSig || serverSecret)
         //      and compare to `serverResponseHash` from step 4. Mismatch
@@ -196,7 +196,7 @@ public actor PairingClient {
         // ---------------------------------------------------------------
         // Step 5 verification: (a) RSA-verify the host's signature over a value
         // we picked (MITM check) and (b) confirm the user typed the right PIN.
-        // Both failures collapse to `.pairingRejected` — see the helper.
+        // Both failures collapse to `.pairingRejected` - see the helper.
         try verifyHostProof(
             serverChallengeRespXml: serverChallengeRespXml,
             randomChallenge: randomChallenge,
@@ -206,7 +206,7 @@ public actor PairingClient {
         )
 
         // ---------------------------------------------------------------
-        // IN-MEMORY PIN ONLY — DO NOT PERSIST YET.
+        // IN-MEMORY PIN ONLY - DO NOT PERSIST YET.
         //
         // We've now (a) RSA-verified the host's signature over a value
         // we picked, which proves the host holds the private key matching
@@ -218,7 +218,7 @@ public actor PairingClient {
         //
         // SECURITY (#11): the PERSISTED pin (PinnedCertStore.store(...))
         // does NOT happen here. It happens AFTER step 7
-        // (HTTPS pairchallenge) returns paired=1 — at which point the
+        // (HTTPS pairchallenge) returns paired=1 - at which point the
         // host has proven, over a TLS handshake gated by THIS exact
         // cert, that it can speak the moonlight protocol with our
         // client cert in its allowlist. If a mid-handshake hijacker
@@ -242,12 +242,12 @@ public actor PairingClient {
             signpostID: pairingSignpostID
         )
 
-        // Success — persist into the ServerInfo we hand back.
+        // Success - persist into the ServerInfo we hand back.
         server.serverCertPEM = serverCertPEM
         server.pairStatus = .paired
 
         // ---------------------------------------------------------------
-        // PERSISTED PIN COMMIT — SECURITY-CRITICAL LATE COMMIT.
+        // PERSISTED PIN COMMIT - SECURITY-CRITICAL LATE COMMIT.
         // SECURITY (#11): this block MUST stay at the very bottom of the
         // pair flow, AFTER step 7 (HTTPS pairchallenge) has returned a
         // paired=1 over a TLS handshake gated by the in-memory pin set
@@ -256,7 +256,7 @@ public actor PairingClient {
         // attacker who survives the symmetric crypto rounds but loses
         // step 6 / step 7 must NOT leave a persisted pin behind.
         // Do not refactor this block above the step 7
-        // `verifyResponseStatus` / `paired=="1"` checks — if you're
+        // `verifyResponseStatus` / `paired=="1"` checks - if you're
         // considering moving it, you're reopening exactly the bug this
         // comment is here to prevent.
         // ---------------------------------------------------------------
@@ -264,7 +264,7 @@ public actor PairingClient {
         // Keyed by the host's UUID so a fresh process launch can re-load
         // the pin without re-pairing. The host UUID (not the user's) is
         // the right key because moonlight-qt identifies hosts by
-        // uniqueId — this aligns with how the rest of Glimmer looks up
+        // uniqueId - this aligns with how the rest of Glimmer looks up
         // paired hosts. We store the PEM (not the raw SecCertificate)
         // for forward-compat: PEM survives keychain wipes, OS
         // migrations, and Time Machine restores in a way that
@@ -273,9 +273,9 @@ public actor PairingClient {
         //
         // If the host's cert ever rotates (Sunshine reinstall, OS reset)
         // the user lands on the `NetworkClient.fetchServerInfo` pin-mismatch
-        // error which directs them to Settings → PCs → … → "Trust new cert
+        // error which directs them to Settings → PCs → ... → "Trust new cert
         // and re-pair". That action wipes the pin and reopens the
-        // PairSheet — the next successful run through this function
+        // PairSheet - the next successful run through this function
         // overwrites the persisted PEM with the new one.
         persistPinnedCert(serverCertPEM: serverCertPEM)
 
@@ -308,7 +308,7 @@ public actor PairingClient {
               !plainCertHex.isEmpty,
               let serverCertBytes = Data(hex: plainCertHex) else {
             // Empty plaincert means the host is mid-pair with someone else.
-            // Mirror moonlight's behaviour — kick its state machine and bail.
+            // Mirror moonlight's behaviour - kick its state machine and bail.
             throw StreamError.pairingFailed(
                 "getservercert: plaincert missing (host is likely already pairing with another client)")
         }
@@ -383,7 +383,7 @@ public actor PairingClient {
     /// Step 6 (clientpairingsecret): send our clientSecret plus an RSA signature
     /// over it using our private key; the host verifies with the public key it
     /// already has (from our cert in step 1). Step 7 (HTTPS pairchallenge): the
-    /// final liveness check over TLS — by now the host has our cert in its
+    /// final liveness check over TLS - by now the host has our cert in its
     /// allowlist; this call confirms it. A TLS failure here means we never got
     /// fully added on the host side. Both rounds throw on a non-`paired=1` reply.
     private func completeClientPairing(
@@ -438,7 +438,7 @@ public actor PairingClient {
         let challengeRespHash = try Self.digest(challengeRespPayload, sha256: useSha256)
 
         // Pad the hash up to 32 bytes so AES sees an even block multiple.
-        // moonlight does the same `resize(32)` after hashing — the extra
+        // moonlight does the same `resize(32)` after hashing - the extra
         // zero bytes are part of the protocol, not just an alignment quirk.
         var paddedHash = challengeRespHash
         if paddedHash.count < 32 {
@@ -486,7 +486,7 @@ public actor PairingClient {
         guard sigOK else {
             log.error(
                 """
-                Pairing rejected (host signature failed verification — \
+                Pairing rejected (host signature failed verification - \
                 possible MITM at \(self.server.address, privacy: .private(mask: .hash)))
                 """
             )
@@ -501,13 +501,13 @@ public actor PairingClient {
         let expectedResponseHash = try Self.digest(expectedResponse, sha256: useSha256)
 
         guard expectedResponseHash == Data(serverResponseHash) else {
-            // Wrong PIN — same external surface as the MITM branch so an
+            // Wrong PIN - same external surface as the MITM branch so an
             // attacker can't distinguish "you typed the wrong digit" from
             // "your cert didn't sign right." Internal log carries the
             // distinction at `.private`.
             log.error(
                 """
-                Pairing rejected (response-hash mismatch — \
+                Pairing rejected (response-hash mismatch - \
                 wrong PIN typed at \(self.server.address, privacy: .private(mask: .hash)))
                 """
             )
@@ -525,7 +525,7 @@ public actor PairingClient {
     /// only the next-launch pin is lost, so we log loudly and continue.
     private func persistPinnedCert(serverCertPEM: String) {
         guard !self.server.uniqueId.isEmpty else {
-            log.error("No host uniqueId on ServerInfo at pairing-success — cannot persist pin; cert will need re-pairing on next launch")
+            log.error("No host uniqueId on ServerInfo at pairing-success - cannot persist pin; cert will need re-pairing on next launch")
             return
         }
         // SECURITY (#4 + #9): persist into the file-backed
@@ -538,7 +538,7 @@ public actor PairingClient {
                                       forHostID: self.server.uniqueId)
             log.info("Persisted pinned host cert (file-store) for host id=\(self.server.uniqueId, privacy: .public)")
         } catch {
-            // Storage failure should not abort a successful pair —
+            // Storage failure should not abort a successful pair -
             // the cert is still good for THIS process (it's in
             // memory on NetworkClient), the user just won't be
             // pinned on the next launch. Log loudly so the failure

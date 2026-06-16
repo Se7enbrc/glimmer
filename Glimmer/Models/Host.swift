@@ -27,7 +27,7 @@ struct MoonlightHost: Identifiable, Hashable {
     // Future: populate from /serverinfo's `<mac>` field when present.
     // Sunshine exposes the host's primary NIC MAC; GFE 3.x exposes it
     // as `<mac>` too. Wiring this through HostsStore + the discovery /
-    // serverinfo paths is out of scope for the UX polish pass — the
+    // serverinfo paths is out of scope for the UX polish pass - the
     // field is here so the ConnectBanner's "Wake on LAN" affordance
     // can ship conditional today and light up automatically when the
     // backend populates this.
@@ -39,7 +39,7 @@ struct MoonlightHost: Identifiable, Hashable {
         guard let last = lastConnected else { return nil }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        // Lowercased — macOS HIG sentence-case convention for
+        // Lowercased - macOS HIG sentence-case convention for
         // relative-time strings in secondary/footnote contexts. Apple's
         // own Time Machine and Photos do "last opened 2 hours ago", not
         // "Last opened 2 Hours Ago". Producing it lowercase at the source
@@ -120,7 +120,7 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     }
 
     /// Default quit chord: ⌃⌥Q. Cmd is deliberately not in the default
-    /// because ⌃⌘Q is macOS's system-reserved Lock Screen shortcut — the
+    /// because ⌃⌘Q is macOS's system-reserved Lock Screen shortcut - the
     /// OS intercepts it before any app sees the keyDown. ⌃⌥Q is short,
     /// memorable, not OS-reserved, and carries no `.command` flag so the
     /// `captureSysKeys` gate (which only strips Cmd-bearing keystrokes)
@@ -130,7 +130,7 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     /// Default stats-overlay chord: ⌃⌥S. Chosen because:
     ///   * It doesn't collide with `defaultQuit` (⌃⌘Q).
     ///   * It carries no `.command` modifier, so it's intercepted BEFORE the
-    ///     sys-keys-capture gate in InputForwarder — which means it fires
+    ///     sys-keys-capture gate in InputForwarder - which means it fires
     ///     whether or not the user has enabled the ⌘-forwarding toggle in
     ///     Shortcuts ("Use ⌘ shortcuts inside the game"). A Cmd-bearing
     ///     default would silently fail when capture was off.
@@ -138,11 +138,11 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     ///     the host side that some users have muscle memory for.
     public static let defaultStats = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "s")
 
-    /// Default telemetry-bookmark chord: ⌃B ("B" for Bookmark). Client-only —
+    /// Default telemetry-bookmark chord: ⌃B ("B" for Bookmark). Client-only -
     /// NEVER forwarded to the host. Pressed during a stream to flag "that felt
     /// bad" (signal 4): writes a timestamped jank marker into the telemetry so a
     /// review jumps straight to the moment. Deliberately the SIMPLE two-key ⌃B
-    /// (dropped the ⌥ from the old ⌃⌥B) — the moment to mark is mid-jank, when a
+    /// (dropped the ⌥ from the old ⌃⌥B) - the moment to mark is mid-jank, when a
     /// fumbled three-key chord is exactly what you don't want:
     ///   * No `.command`, so it's intercepted BEFORE the sys-keys-capture gate
     ///     and fires whether or not the user forwards macOS shortcuts.
@@ -254,14 +254,14 @@ public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
 //
 // Swift's `String.hashValue` is intentionally randomized per process (it's
 // seeded from a per-launch nonce as a defence against hash-flooding attacks
-// on dictionaries). Anything we use for stable visual identity — per-host
+// on dictionaries). Anything we use for stable visual identity - per-host
 // tint colour, monogram chip background, anywhere we'd want "Tower" to read
-// as the same blue every time the user opens the app — has to use a
+// as the same blue every time the user opens the app - has to use a
 // deterministic hash instead.
 //
 // FNV-1a-64 chosen because:
 //   * Short to implement (~10 lines, no SipHash table or external dep).
-//   * Determinism is the only requirement — we don't need cryptographic
+//   * Determinism is the only requirement - we don't need cryptographic
 //     hashing or even strong avalanche; we just need "same input → same
 //     output across launches".
 //   * 64-bit output is wider than we need (we mod by colors.count, ~12),
@@ -269,7 +269,7 @@ public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
 //     between similarly-named hosts ("Tower" vs "Tower 2").
 extension String {
     /// FNV-1a 64-bit hash of this string's UTF-8 bytes. Deterministic
-    /// across process launches — unlike `hashValue`, which Swift seeds
+    /// across process launches - unlike `hashValue`, which Swift seeds
     /// from a per-process nonce.
     func deterministicHash() -> UInt64 {
         var h: UInt64 = 0xcbf2_9ce4_8422_2325  // FNV offset basis
@@ -287,7 +287,7 @@ extension String {
 /// HostHero readiness chip. Refreshed by a low-frequency poller that runs
 /// only while the main window is foreground, a host is selected, and we're
 /// NOT actively streaming (during a stream the engine's own RTT estimator
-/// drives the stats overlay — polling /serverinfo on top of that is noise).
+/// drives the stats overlay - polling /serverinfo on top of that is noise).
 struct HostLiveStatus: Equatable {
     enum State: Equatable {
         /// First poll hasn't completed yet; chip shows the generic
@@ -298,14 +298,14 @@ struct HostLiveStatus: Equatable {
         /// Host is busy streaming an app we know the name of.
         case streamingApp(name: String)
         /// Host is busy streaming an app whose ID isn't in our cached
-        /// applist (uncommon — usually means the user added a new game
+        /// applist (uncommon - usually means the user added a new game
         /// on the host and hasn't refreshed the pairing).
         case streamingUnknownApp(id: Int)
         /// /serverinfo failed AND the TCP probe failed. The PC is most
         /// likely powered off or asleep.
         case asleep
         /// HTTPS-only mode, cert pin failed. We deliberately do NOT
-        /// downgrade this to "asleep" — the existing error UI handles it
+        /// downgrade this to "asleep" - the existing error UI handles it
         /// with a "trust new cert" path; we just stay quiet on the chip.
         case certMismatch
     }
@@ -315,12 +315,12 @@ struct HostLiveStatus: Equatable {
     var hostID: String
     var state: State
     /// Time-to-TCP-ready in ms. Only meaningful when `state` resolved via
-    /// the TCP probe — i.e. anything other than `.unknown` / `.certMismatch`.
+    /// the TCP probe - i.e. anything other than `.unknown` / `.certMismatch`.
     var rttMs: Int?
     /// Host's reported version (Sunshine/GFE). Surfaced opt-in as a footnote.
     var sunshineVersion: String?
     /// When this snapshot was captured. Used to age out a stale
-    /// "Streaming X" reading if the host stops answering — we don't want
+    /// "Streaming X" reading if the host stops answering - we don't want
     /// the chip lying about a half-hour-old session.
     var capturedAt: Date
 

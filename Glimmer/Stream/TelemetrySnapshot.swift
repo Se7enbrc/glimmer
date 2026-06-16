@@ -2,7 +2,7 @@
 //  TelemetrySnapshot.swift
 //
 //  The value types the opt-in telemetry exporter assembles + renders: the
-//  per-second `TelemetrySnapshot` (every field a performance number — nothing
+//  per-second `TelemetrySnapshot` (every field a performance number - nothing
 //  that could carry a secret/host identity) and the `TelemetrySource` Sendable
 //  reader closures the session wires from the live engine. Split out of
 //  TelemetryExporter.swift to keep that unit focused on the listener/timer/file
@@ -15,12 +15,12 @@ import Foundation
 
 /// One fully-resolved 1Hz telemetry sample. Plain value type: built on the
 /// exporter's serial queue, rendered to both Prometheus text and NDJSON. Every
-/// field is a performance number — there is intentionally nothing here that
+/// field is a performance number - there is intentionally nothing here that
 /// could carry a secret/host identity.
 struct TelemetrySnapshot: Sendable {
     /// Opaque per-session id (random hex), so a scraper can tell sessions apart.
     var sessionId: String = ""
-    /// Seconds since stream connect — makes the INITIAL-CONNECTION phase visible
+    /// Seconds since stream connect - makes the INITIAL-CONNECTION phase visible
     /// (the first samples land at sub-second offsets before frames flow).
     var sinceConnectSeconds: Double = 0
     /// Wall-clock at capture (ISO8601), for the NDJSON timeline.
@@ -56,7 +56,7 @@ struct TelemetrySnapshot: Sendable {
     /// Monotonic stale-frame repeat total (one per running pacer tick that
     /// presented no new frame). The exporter derives `staleRepeatsPerSecond`.
     var staleFrameRepeatTotal: UInt64 = 0
-    /// Stale-frame repeats per second this window — a SPIKE while fps≈refresh is a
+    /// Stale-frame repeats per second this window - a SPIKE while fps≈refresh is a
     /// real micro-judder (at fps<refresh a steady rate is the normal cadence).
     var staleRepeatsPerSecond: Double?
 
@@ -80,25 +80,25 @@ struct TelemetrySnapshot: Sendable {
     var rttMs: Double?
     var rttVarianceMs: Double?
 
-    // network — P1 receive-quality (derived from the RTP seq/arrival of packets
+    // network - P1 receive-quality (derived from the RTP seq/arrival of packets
     // WE receive; no host tool). Loss/OOO/dup are per-second RATES the exporter
     // derives from monotonic-total deltas; goodput is the measured received
     // bitrate vs the negotiated ceiling; the gap distribution is the microburst
     // detector. All nil until the receive path has flushed its first ~2s window.
-    /// Pre-FEC packet-loss rate this window (lost / expected), 0…1.
+    /// Pre-FEC packet-loss rate this window (lost / expected), 0...1.
     var preFecLossRate: Double?
-    /// Out-of-order (reorder) rate this window (reordered / received), 0…1.
+    /// Out-of-order (reorder) rate this window (reordered / received), 0...1.
     var outOfOrderRate: Double?
-    /// Duplicate rate this window (duplicates / received), 0…1.
+    /// Duplicate rate this window (duplicates / received), 0...1.
     var duplicateRate: Double?
-    /// Measured received goodput (Mbps) — bytes/s into the pipeline this window.
+    /// Measured received goodput (Mbps) - bytes/s into the pipeline this window.
     var goodputMbps: Double?
-    /// Negotiated stream bitrate ceiling (Mbps) — the goodput baseline.
+    /// Negotiated stream bitrate ceiling (Mbps) - the goodput baseline.
     var negotiatedBitrateMbps: Double?
-    /// Received goodput as a fraction of the negotiated ceiling (0…1+), so a dip
+    /// Received goodput as a fraction of the negotiated ceiling (0...1+), so a dip
     /// well below 1 (static scene) vs a saturation near 1 is one glanceable gauge.
     var goodputUtilization: Double?
-    /// Inter-packet-gap distribution (µs): p50/p95 + max. The microburst tell —
+    /// Inter-packet-gap distribution (µs): p50/p95 + max. The microburst tell -
     /// a tight p50 with a fat p95/max means the host (or radio) delivers in bursts.
     var packetGapP50Us: Double?
     var packetGapP95Us: Double?
@@ -109,7 +109,7 @@ struct TelemetrySnapshot: Sendable {
     var enetOldestUnackedMs: UInt32?
     var enetSinceLastAckMs: UInt32?
     /// Reliable-channel retransmits this session (monotonic). A short-window
-    /// `increase()` is the climb that precedes a control-stream stall — pairs with
+    /// `increase()` is the climb that precedes a control-stream stall - pairs with
     /// the oldest-unacked trend (enetOldestUnackedMs) to bracket a wedge.
     var enetRetransmitTotal: UInt64 = 0
 
@@ -131,7 +131,7 @@ struct TelemetrySnapshot: Sendable {
     /// transient is auto-correlatable instead of hand-reconstructed.
     var inputIdleToActiveTotal: UInt64 = 0
     /// Milliseconds since the last input event. Climbs while idle, snaps to ~0 on
-    /// resume — pairs with the edge counter to bracket the idle window.
+    /// resume - pairs with the edge counter to bracket the idle window.
     var timeSinceLastInputMs: Double?
 
     // display refresh / cadence (ProMotion ramp-down detector)
@@ -139,7 +139,7 @@ struct TelemetrySnapshot: Sendable {
     var refreshAvgHz: Double?
     var refreshMaxHz: Double?
     /// 1 on a tick window where the realized refresh CHANGED (the ProMotion ramp
-    /// edge), else 0 — emitted as a gauge so a Grafana marker lines up with the
+    /// edge), else 0 - emitted as a gauge so a Grafana marker lines up with the
     /// idle-resume transient.
     var refreshChanged: Bool = false
 
@@ -154,7 +154,7 @@ struct TelemetrySnapshot: Sendable {
     var idrFramePercent: Double?
 
     // thermal + power (throttling)
-    /// ProcessInfo.thermalState as an ordinal 0…3 (nominal/fair/serious/critical)
+    /// ProcessInfo.thermalState as an ordinal 0...3 (nominal/fair/serious/critical)
     /// so it plots as a gauge and a threshold alert is trivial.
     var thermalState: Int?
     var lowPowerModeEnabled: Bool?
@@ -187,7 +187,7 @@ struct TelemetrySnapshot: Sendable {
     var bookmarkTotal: UInt64 = 0
 
     // Per-stage latency histograms. Captured from the FrameTimingTracker's
-    // cumulative atomic buckets (one snapshot/tick on the exporter queue — never
+    // cumulative atomic buckets (one snapshot/tick on the exporter queue - never
     // per-frame on the hot path). Prometheus emits these as _bucket/_sum/_count
     // so Grafana derives p50/p95/p99 with histogram_quantile; the per-second
     // NDJSON snapshot carries pre-computed p50/p95/p99 per stage for a quick tail.
@@ -204,7 +204,7 @@ struct TelemetrySnapshot: Sendable {
     var wifi: WiFiSnapshot?
 
     // Build attribution (signal 5a). Compile-time constants from the generated
-    // BuildInfo — the git SHA + build date stamped at `make app`, emitted as a
+    // BuildInfo - the git SHA + build date stamped at `make app`, emitted as a
     // Prometheus info label + an NDJSON header field so every metric is
     // attributable to a build. Session-constant; the exporter fills these from
     // BuildInfo each tick (cheap string copies).
@@ -224,14 +224,14 @@ struct TelemetrySnapshot: Sendable {
     var audio: AudioSnapshot?
 
     // P2 SESSION-LIFECYCLE signals (all read off the always-live counters /
-    // `TelemetryCounters.p2` on the exporter's 1Hz queue — never a hot path).
+    // `TelemetryCounters.p2` on the exporter's 1Hz queue - never a hot path).
     //
     /// CONNECT-HANDSHAKE breakdown: per-stage connect timing. Carried on EVERY
     /// tick once complete so a scrape always sees it, but emitted as a one-shot
     /// explicit NDJSON EVENT line exactly once (see the exporter). nil before any
     /// stage has fired.
     var handshake: HandshakeBreakdown?
-    /// Reconnect count this run (monotonic) — a second-or-later established edge.
+    /// Reconnect count this run (monotonic) - a second-or-later established edge.
     var reconnectTotal: UInt64 = 0
     /// Latest disconnect reason (the live default is `.none` until a terminate).
     var disconnectReason: DisconnectReason = .none
@@ -245,10 +245,10 @@ struct TelemetrySnapshot: Sendable {
 
 // MARK: - Audio snapshot
 
-/// One tick's AUDIO telemetry (signal: AUDIO — the other stream alongside the
+/// One tick's AUDIO telemetry (signal: AUDIO - the other stream alongside the
 /// video signals above). Plain value type assembled on the exporter queue from
 /// `TelemetryCounters`' always-live audio totals + the published playout state.
-/// Every field is a performance number — nothing that could carry a secret.
+/// Every field is a performance number - nothing that could carry a secret.
 ///
 /// The RATES (pkts/s, loss, FEC recovery) are derived by the exporter from
 /// deltas of the monotonic totals against the audio-packets delta, mirroring how
@@ -264,16 +264,16 @@ struct AudioSnapshot: Sendable {
     var fecRecoveredTotal: UInt64 = 0
     /// Audio packets accepted per second this window (derived from the delta).
     var packetsPerSecond: Double?
-    /// Unrecovered audio-loss rate this window (lost / expected), 0…1.
+    /// Unrecovered audio-loss rate this window (lost / expected), 0...1.
     var lossRate: Double?
     /// Audio FEC-recovery rate this window (recovered / (recovered + accepted)),
-    /// 0…1 — how much on-the-wire loss FEC papered over (the lossy-link story).
+    /// 0...1 - how much on-the-wire loss FEC papered over (the lossy-link story).
     var fecRecoveryRate: Double?
 
     // ---- Output / playout health ----
-    /// Decoded audio buffered ahead of the playhead (ms) — the buffer level/fill.
+    /// Decoded audio buffered ahead of the playhead (ms) - the buffer level/fill.
     var bufferFillMs: Double?
-    /// Windowed MINIMUM buffer fill this tick (ms) — the trough of the
+    /// Windowed MINIMUM buffer fill this tick (ms) - the trough of the
     /// scheduled-ahead backlog, reset-on-read. The 1Hz `bufferFillMs` gauge can
     /// miss the instantaneous low that precedes an under-run; this is the field that
     /// proves the buffer is (or is no longer) draining toward 0. Post-fix it should
@@ -281,15 +281,15 @@ struct AudioSnapshot: Sendable {
     /// drift and justifies a deeper adaptive cushion. nil when no trough this tick.
     var bufferFillMinMs: Double?
     /// Playout RE-PRIME count this session (monotonic): each full drain that forced
-    /// the cushion to be re-pre-rolled — the only place the fixed cushion can still
+    /// the cushion to be re-pre-rolled - the only place the fixed cushion can still
     /// gap, so it's countable alongside the under-run total.
     var rePrimeTotal: UInt64 = 0
     /// Output under-runs this session (player drained → audible gap), monotonic.
     var underrunTotal: UInt64 = 0
-    /// Output over-runs this session (decoded buffer dropped — backlog too deep),
+    /// Output over-runs this session (decoded buffer dropped - backlog too deep),
     /// monotonic.
     var overrunTotal: UInt64 = 0
-    /// Under-runs per second this window (derived from the delta) — the audible-
+    /// Under-runs per second this window (derived from the delta) - the audible-
     /// glitch RATE, the headline output-health number.
     var underrunsPerSecond: Double?
     /// Over-runs per second this window (derived from the delta).
@@ -300,7 +300,7 @@ struct AudioSnapshot: Sendable {
     /// CLOCK (net of the buffer cushion), NOT a cross-stream A/V delta.
     /// + = audio media played behind wall time (device clock slow), − = ahead.
     var audioClockDriftMs: Double?
-    /// Time from stream start to first decoded audio (ms) — the cold-start metric
+    /// Time from stream start to first decoded audio (ms) - the cold-start metric
     /// (the known ~5-7s-on-lossy-link issue). One-shot; constant once measured.
     var firstPacketMs: Double?
 }
@@ -311,12 +311,12 @@ struct AudioSnapshot: Sendable {
 /// so the exporter never reaches back into actor-isolated session state. The
 /// session wires these from the live StatsCollector / backend / decoder / pacer.
 /// The video-stats provider returns the SAME `StreamStatsSnapshot` the overlay
-/// uses (one StatsCollector read, its existing lock — no second hot-path lock).
+/// uses (one StatsCollector read, its existing lock - no second hot-path lock).
 struct TelemetrySource: Sendable {
     /// Reads `StatsCollector.snapshot()` (decode/pacing/drop counters). NOTE:
     /// `snapshot()` slides the collector's FPS window on each call, so when BOTH
     /// the overlay timer and the exporter are on (both 1Hz) each gets ~half the
-    /// frames over ~half the wall-time — the per-second RATES stay correct, only
+    /// frames over ~half the wall-time - the per-second RATES stay correct, only
     /// the averaging window halves (acceptable noise for a diagnostic). Reuses
     /// the collector's existing lock; no second hot-path lock is introduced.
     var videoStats: @Sendable () -> StreamStatsSnapshot

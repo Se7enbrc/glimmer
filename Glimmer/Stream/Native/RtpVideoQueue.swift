@@ -32,7 +32,7 @@ final class RtpVideoQueue {
     // extension (split out to keep each file under the SwiftLint length limit),
     // and a Swift extension in a separate file can only reach non-private members.
     // Everything stays touched ONLY on the single receive thread, so the relaxed
-    // visibility changes no isolation guarantee — same contract as the
+    // visibility changes no isolation guarantee - same contract as the
     // RtpVideoQueue+ReceiveQuality.swift split.
     static let cat = "NativeVideo"
 
@@ -113,7 +113,7 @@ final class RtpVideoQueue {
     //
     // On a reordering link the tail/EOF data shards of frame N frequently arrive
     // AFTER the SOF of frame N+1 (cross-frame reordering). Declaring loss the
-    // instant N+1 starts — as the unmodified port does — fires a false-loss RFI
+    // instant N+1 starts - as the unmodified port does - fires a false-loss RFI
     // even though N's late shards are microseconds away and FEC could still
     // complete it. We mirror moonlight's receivedOosData signal ("this link
     // reorders") and, ONLY while it's set, hold the just-arrived next-frame
@@ -136,7 +136,7 @@ final class RtpVideoQueue {
     /// Bounded cross-frame reorder window: how long (wall-clock from the current
     /// frame's first receive) we hold an incomplete frame before declaring loss
     /// when the next frame's first packet arrives. 24ms ≈ 2.7 frame intervals at
-    /// 114fps — widened from 12ms so the OBSERVED ~22ms cross-frame jitter spikes
+    /// 114fps - widened from 12ms so the OBSERVED ~22ms cross-frame jitter spikes
     /// (which exceeded the old 12ms window and generated false-loss RFI clusters,
     /// rfi_total +20) no longer fall outside the window. Still well under the
     /// worst-case 56ms jitter envelope, and the right-sized FramePacer absorbs the
@@ -147,7 +147,7 @@ final class RtpVideoQueue {
     /// This is the BASELINE (steady-state) value. PROACTIVE FEC headroom (#3): on a
     /// SUSTAINED degradation trend the `fecHeadroom` controller widens the live
     /// window in bounded steps (up to 48ms) so the host's existing parity gets more
-    /// time to complete a marginal frame via FEC BEFORE it tips into unrecoverable —
+    /// time to complete a marginal frame via FEC BEFORE it tips into unrecoverable -
     /// then relaxes back to this baseline when the link clears. The live value is
     /// read via `reorderWindowUs` below; this constant is the controller's floor.
     /// (See FecHeadroomController.swift for the full safety contract.)
@@ -172,7 +172,7 @@ final class RtpVideoQueue {
     /// ~2s window is a single cheap lock far off the per-datagram path.
     private var lastRetransmitTotalSnapshot: UInt64 = 0
     /// Unrecoverable-frame total snapshotted at the last window flush, so the FEC
-    /// headroom controller's LOSS axis (#25) sees the per-WINDOW delta — the
+    /// headroom controller's LOSS axis (#25) sees the per-WINDOW delta - the
     /// reactive loss signal alongside this window's `fecRecoveredFramesInWindow`.
     /// Same single-cheap-lock-per-2s-window cost as the retransmit snapshot above.
     private var lastUnrecoverableTotalSnapshot: UInt64 = 0
@@ -204,14 +204,14 @@ final class RtpVideoQueue {
 
     // --- P1 NETWORK receive-quality accumulators (Track B, opt-in telemetry).
     // All derived purely from the RTP sequence numbers + arrival times of packets
-    // WE receive — no host tool — and folded into the always-live TelemetryCounters
+    // WE receive - no host tool - and folded into the always-live TelemetryCounters
     // in the same ~2s window that already flushes the totals above. The hot
     // per-datagram path gains only a few integer compares + a histogram bump (no
     // lock, no alloc, no clock read beyond the receiveTimeUs jitter already reads).
     //
     // Internal (not private) so the accumulation methods can live in the focused
     // RtpVideoQueue+ReceiveQuality.swift extension (extensions can't hold stored
-    // state, so the fields stay here while the logic moves out — which keeps this
+    // state, so the fields stay here while the logic moves out - which keeps this
     // file's type body from growing past the SwiftLint limit). Same isolation as
     // the rest of the queue: all touched only on the single receive thread.
     //
@@ -222,7 +222,7 @@ final class RtpVideoQueue {
     var haveSeqBaseline = false
     /// Per-window receive-quality tallies (flushed + zeroed in maybeLogMetrics).
     /// `windowLostPreFec` adds the gap (forward jump − 1) each time the highest seq
-    /// grows — counted BEFORE FEC, so it is the true on-the-wire loss the host
+    /// grows - counted BEFORE FEC, so it is the true on-the-wire loss the host
     /// can't see for us. The exporter derives the loss RATE as
     /// lost / (lost + received) (received = the videoPacketsTotal delta), i.e.
     /// lost / expected, without a separate expected counter.
@@ -230,7 +230,7 @@ final class RtpVideoQueue {
     var windowOutOfOrder = 0
     var windowDuplicate = 0
     /// CROSS-WINDOW reorder credit (metric honesty). A reorder that fills a gap
-    /// counted as loss should UNCOUNT one loss slot — but the gap and its filling
+    /// counted as loss should UNCOUNT one loss slot - but the gap and its filling
     /// reorder often straddle a maybeLogMetrics window boundary (the forward jump
     /// lands at the tail of one ~2s window, the late packet arrives at the head of
     /// the next), so a same-window-only decrement loses the credit and the reorder
@@ -259,7 +259,7 @@ final class RtpVideoQueue {
     // datagrams, plus the running max. The exporter reads p50/p95 (estimated from
     // the cumulative buckets) + max once per 1Hz tick. Histogram-not-reservoir for
     // the same reason the latency rig uses one: a record is a branchless bucket
-    // find + an integer bump — no per-packet allocation or sort on the hot path. ---
+    // find + an integer bump - no per-packet allocation or sort on the hot path. ---
     var lastArrivalUs: UInt64 = 0
     var haveLastArrival = false
     var gapBuckets = [Int](repeating: 0, count: RtpVideoQueue.gapBoundsUs.count + 1)
@@ -316,7 +316,7 @@ final class RtpVideoQueue {
     @discardableResult
     func dispatchDatagram(_ datagram: [UInt8], receiveTimeUs: UInt64,
                           isReplay: Bool) -> AddResult {
-        // minSize = sizeof(RTP_PACKET) = 12 (no enc header — plaintext).
+        // minSize = sizeof(RTP_PACKET) = 12 (no enc header - plaintext).
         guard datagram.count >= Self.FIXED_RTP_HEADER_SIZE else { return .rejected }
 
         let header = datagram[0]
@@ -345,7 +345,7 @@ final class RtpVideoQueue {
         // the current frame's reorder window may have elapsed before this
         // datagram arrived. Flush the deferred next-frame packet first if the
         // window is up, so loss is declared no later than reorderWindowUs after
-        // the current frame's first receive — bounding the worst-case hold.
+        // the current frame's first receive - bounding the worst-case hold.
         // (Skipped on a replay: the replay IS the flush, and the slot is already
         // cleared, so this would be a redundant no-op.)
         if !isReplay {
@@ -401,7 +401,7 @@ final class RtpVideoQueue {
         // DEBUG (demoted from INFO, log diet): every number here already rides
         // the telemetry NDJSON per row (recv_jitter_ms / fec_recovery_rate /
         // packets_per_second), so at INFO this ~2s line only padded the session
-        // file — thousands of copies in one measured session log. Ring/os_log
+        // file - thousands of copies in one measured session log. Ring/os_log
         // keep it for live debugging; the file sink takes INFO+ by default.
         Diag.debug("NativeVideo METRIC recv-jitter=\(jitterMs)ms fec-recovery-rate=\(fecPct)% "
             + "(\(fecRecoveredFramesInWindow)/\(framesInWindow) frames) pkts/s=\(ppsStr)", Self.cat)
@@ -409,7 +409,7 @@ final class RtpVideoQueue {
         // Feed the opt-in telemetry exporter. Monotonic window deltas (so the
         // exporter derives pkts/s + fec-recovery-rate from total-deltas) plus the
         // live smoothed-jitter gauge. These are batched here (~2s) rather than
-        // per-packet so the hot receive path adds nothing — the increments are
+        // per-packet so the hot receive path adds nothing - the increments are
         // off the per-datagram path. Always live; the exporter only reads them
         // when telemetry is on.
         let counters = TelemetryCounters.shared
@@ -438,14 +438,14 @@ final class RtpVideoQueue {
         }
 
         // PROACTIVE FEC headroom (#3): step the reorder-hold window on a SUSTAINED
-        // trend in the three receive-side health signals — the recv-jitter we just
+        // trend in the three receive-side health signals - the recv-jitter we just
         // smoothed, this window's genuine reorders, and the per-WINDOW ENet
         // reliable-retransmit delta. The retransmit counter is incremented on the
         // control thread; we snapshot its monotonic total once per ~2s window here
         // and hand the controller the delta so it sees a trend, not the lifetime
         // total. Driving the controller from this ~2s window (NOT the per-datagram
         // path) keeps the hot path untouched. Conservative + bounded + hysteretic
-        // (see FecHeadroomController) — and it changes only a LOCAL wait, sending
+        // (see FecHeadroomController) - and it changes only a LOCAL wait, sending
         // nothing on the wire, so it can never worsen a marginal link. Done BEFORE
         // the window accumulators reset below so `windowOutOfOrder` still holds this
         // window's value.
@@ -455,7 +455,7 @@ final class RtpVideoQueue {
         lastRetransmitTotalSnapshot = retransmitTotalNow
         // INCREMENT 1: when the reconciler is enabled, CONSUME the unified
         // jitter→headroom decision EnvSignalController publishes (one short
-        // controller-lock pull off this ~2s window — NEVER the per-datagram path)
+        // controller-lock pull off this ~2s window - NEVER the per-datagram path)
         // instead of self-deciding from raw jitter, so this controller and the
         // FramePacer adaptive depth walk off ONE shared level. The HARD FLOORS are
         // unchanged: the live `reorderWindowUs` still caps at `maxHoldUs` (48ms),
@@ -473,12 +473,12 @@ final class RtpVideoQueue {
                                                       retransmits: retransmitDelta)
         }
         // LOSS AXIS (#25): drive the SEPARATE loss accumulator off this window's
-        // direct loss evidence — frames the host's parity recovered
+        // direct loss evidence - frames the host's parity recovered
         // (`fecRecoveredFramesInWindow`) and frames that went unrecoverable (a
         // per-window delta off the monotonic total). Runs every window regardless
         // of the reconciler (orthogonal to the jitter axis) and BEFORE the window
         // accumulators reset below, so `fecRecoveredFramesInWindow` still holds
-        // this window's count. It widens the reorder-hold ONLY — never the pacer.
+        // this window's count. It widens the reorder-hold ONLY - never the pacer.
         let unrecoverableTotalNow = counters.unrecoverableFrameTotal.value
         let unrecoverableDelta = unrecoverableTotalNow >= lastUnrecoverableTotalSnapshot
             ? Int(unrecoverableTotalNow - lastUnrecoverableTotalSnapshot) : 0

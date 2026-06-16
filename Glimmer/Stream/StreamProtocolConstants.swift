@@ -82,7 +82,7 @@ public enum StreamProtocol {
     public static let CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC: Int32 = 0x4
     public static let CAPABILITY_REFERENCE_FRAME_INVALIDATION_AV1: Int32 = 0x40
 
-    // MARK: Server codec-mode support — RAW SCM_* bitmask (Limelight.h:506-515)
+    // MARK: Server codec-mode support - RAW SCM_* bitmask (Limelight.h:506-515)
     //
     // *** LANDMINE *** This is a DIFFERENT bit layout from VIDEO_FORMAT_*.
     // e.g. SCM_AV1_MAIN10 (0x20000) vs VIDEO_FORMAT_AV1_MAIN10 (0x2000).
@@ -200,7 +200,7 @@ public enum StreamProtocol {
 //
 // Values match Connection.c STAGE_* (Limelight.h:373-385).
 public enum StreamStageNames {
-    /// 0 STAGE_NONE … 12 STAGE_MAX. Index == the stage int.
+    /// 0 STAGE_NONE ... 12 STAGE_MAX. Index == the stage int.
     public static let table: [String] = [
         "none",                              // 0  STAGE_NONE
         "platform initialization",           // 1  STAGE_PLATFORM_INIT

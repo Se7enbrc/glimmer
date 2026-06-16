@@ -1,7 +1,7 @@
 //
 //  MoonlightManager+Audio.swift
 //
-//  "Mute the Mac while streaming" — captures the default output device's
+//  "Mute the Mac while streaming" - captures the default output device's
 //  virtual main volume on stream start, drops it to zero, and restores it on
 //  stop. CoreAudio (sandbox-legal on Developer-ID + Mac App Store) rather than
 //  the osascript shell-out the App Sandbox blocks. Split out of
@@ -15,7 +15,7 @@ import Foundation
 extension MoonlightManager {
     // Capture the system output level on stream start, drop it to zero, and
     // restore it on stop. Backed by CoreAudio (see systemVolume/setSystemVolume)
-    // rather than `osascript`, which the App Sandbox blocks — the shell-out
+    // rather than `osascript`, which the App Sandbox blocks - the shell-out
     // path was a silent no-op in the shipping build.
     //
     // `prePausedMacVolume` non-nil is the did-mute LATCH: it is set exactly
@@ -24,8 +24,8 @@ extension MoonlightManager {
     // in between.
     func muteMac() {
         // Capture once: if a previous mute is still latched (capture present,
-        // restore not yet run), the CURRENT level is the 0 we set — not the
-        // user's volume — and overwriting would destroy the only copy of it.
+        // restore not yet run), the CURRENT level is the 0 we set - not the
+        // user's volume - and overwriting would destroy the only copy of it.
         if prePausedMacVolume == nil { prePausedMacVolume = systemVolume() }
         setSystemVolume(0)
     }
@@ -56,7 +56,7 @@ extension MoonlightManager {
     // shell-out, which the App Sandbox blocks (Process exec of
     // /usr/bin/osascript is denied), making the mute feature a silent no-op.
     // CoreAudio property access on the default output device is sandbox-legal
-    // on BOTH distribution paths — Developer-ID DMG and the Mac App Store.
+    // on BOTH distribution paths - Developer-ID DMG and the Mac App Store.
     private func defaultOutputDeviceID() -> AudioObjectID? {
         var deviceID = AudioObjectID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)

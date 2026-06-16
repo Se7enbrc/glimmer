@@ -2,14 +2,14 @@
 //  EnetControlChannel.swift
 //
 //  A focused, single-peer, client-only ENet subset over NWConnection(UDP) for
-//  the Moonlight CONTROL channel. NOT a full ENet port — only what is needed to
+//  the Moonlight CONTROL channel. NOT a full ENet port - only what is needed to
 //  reach "connected": the CONNECT handshake, VERIFY_CONNECT validation + ACK,
 //  and reliable SEND_RELIABLE for START_A / START_B (encrypted control-V2).
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md. Source:
 //  vendored enet (protocol.h / host.c / protocol.c) + ControlStream.c. The
 //  enet protocol logic originates from the enet project by Lee Salzman
-//  (MIT License, Copyright (c) 2002-2024 Lee Salzman) — notice preserved in
+//  (MIT License, Copyright (c) 2002-2024 Lee Salzman) - notice preserved in
 //  CREDITS.md as the MIT license requires.
 //
 //  WIRE FACTS (all confirmed against the C source):
@@ -21,7 +21,7 @@
 //     datagram carrying an ack-flagged or ACK command.
 //   - peerID field packs: low 12 bits peer id, bits 12-13 sessionID, bits 14-15
 //     flags. Session bits are OR'd in only AFTER outgoingPeerID < 0xFFF (i.e.
-//     only after VERIFY_CONNECT) — NOT on the CONNECT we send.
+//     only after VERIFY_CONNECT) - NOT on the CONNECT we send.
 //   - CommandHeader: u8 command (low 4 bits number, bit7 ACK, bit6 UNSEQ),
 //     u8 channelID, u16 reliableSequenceNumber (BE).
 //   - reliableSequenceNumber is PER-CHANNEL, pre-incremented: first reliable on
@@ -38,7 +38,7 @@
 import Foundation
 import Network
 
-// (ENet wire primitives — constants, errors, byte writer/reader, SentReliable —
+// (ENet wire primitives - constants, errors, byte writer/reader, SentReliable -
 // live in EnetWire.swift.)
 
 // MARK: - ENet control channel
@@ -60,7 +60,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// the only writer of lastAckRecvMs + the only place sentReliable drains).
     /// QoS .userInteractive so ACK processing is never de-prioritized behind
     /// main-thread UI/input. Critically it does NOT carry outbound sends anymore
-    /// (see sendQueue) — that is the primary fix for the all-stream wedge.
+    /// (see sendQueue) - that is the primary fix for the all-stream wedge.
     let queue = DispatchQueue(label: "io.ugfugl.Glimmer.enet", qos: .userInteractive)
     /// Dedicated outbound-send queue. Every connection.send hops here so a
     /// controller-driven send storm can NEVER block the receive/ACK chain on
@@ -69,7 +69,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// order. Mirrors moonlight's separate InputSend pthread vs ControlRecv.
     let sendQueue = DispatchQueue(label: "io.ugfugl.Glimmer.enet.send", qos: .userInteractive)
 
-    /// Guards `connection` — the same discipline as RtspClient.connLock for the
+    /// Guards `connection` - the same discipline as RtspClient.connLock for the
     /// identical "set on the async pipeline, cancelled from another thread"
     /// shape. The var is written on the connect pipeline (openSocket), read by
     /// sendDatagram from the 20ms control-loop thread / the 1ms input-flush
@@ -77,7 +77,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// on the teardown context. Swift class-reference loads are NOT atomic: an
     /// unguarded load-then-retain races close()'s store(nil)+release, and on
     /// every session end (where the 50Hz keepalive + input flush overlap the
-    /// teardown) the release can land inside the reader's load→retain window —
+    /// teardown) the release can land inside the reader's load→retain window -
     /// a use-after-free. Every access goes through the locked accessors below.
     private let connLock = NSLock()
     private var connection: NWConnection?
@@ -85,7 +85,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// Locked read: the strong reference is retained UNDER connLock, so a
     /// concurrent close() either hasn't nil'd yet (we get the live connection
     /// and our retain keeps it valid for the send) or already has (we get nil
-    /// and the caller drops the datagram — correct during teardown).
+    /// and the caller drops the datagram - correct during teardown).
     func currentConnection() -> NWConnection? {
         connLock.lock(); defer { connLock.unlock() }
         return connection
@@ -111,10 +111,10 @@ final class EnetControlChannel: @unchecked Sendable {
     /// ControlStream.c:787-789). Incremented before each connection.send,
     /// decremented in its contentProcessed completion. The InputBatcher consults
     /// `sendBacklogged` and drops/merges latest-state input instead of enqueuing
-    /// when the radio is draining slowly — input is latest-state, so a superseded
+    /// when the radio is draining slowly - input is latest-state, so a superseded
     /// controller frame is correctly discarded rather than backing up the queue.
     let inFlightSends = AtomicCounter()
-    /// Backlog threshold. Keepalives/handshake/ACKs are never gated by this — only
+    /// Backlog threshold. Keepalives/handshake/ACKs are never gated by this - only
     /// the high-rate input flush path checks it. Small so input can't outrun the
     /// wire on the single connection.
     static let maxInFlightSends = 8
@@ -124,7 +124,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// superseded latest-state frame instead of enqueuing another datagram.
     var sendBacklogged: Bool { inFlightSends.value >= Self.maxInFlightSends }
 
-    /// Count of reliable commands sent but not yet ACKed — mirrors
+    /// Count of reliable commands sent but not yet ACKed - mirrors
     /// `sentReliable.count`, maintained lock-free at every append/remove site. No
     /// longer the backpressure trigger (see `reliableBacklogged`); kept as a cheap
     /// host-keeping-up signal for telemetry.
@@ -134,10 +134,10 @@ final class EnetControlChannel: @unchecked Sendable {
     /// is DO-NO-HARM on a stable link. `inFlightSends` keys only on local
     /// NWConnection send-completion (drains fast even under loss), so it never
     /// reflects the host falling behind. The first cut gated on a fixed un-ACKed
-    /// COUNT (≥6) — but on a stable link the natural in-flight count is rate×RTT,
+    /// COUNT (≥6) - but on a stable link the natural in-flight count is rate×RTT,
     /// so a fast input stream on a low-but-nonzero-RTT LAN (e.g. 5ms) could brush
     /// that cap with NO actual problem: a false throttle on a perfect link. The
-    /// gate is now purely evidence-based — the host is "behind" ONLY when it has
+    /// gate is now purely evidence-based - the host is "behind" ONLY when it has
     /// gone ACK-SILENT for longer than a few RTTs WHILE reliables are outstanding.
     /// On a clean link ACKs return within ~one RTT, so this can never fire
     /// regardless of latency; it engages only when the host genuinely stops
@@ -148,14 +148,14 @@ final class EnetControlChannel: @unchecked Sendable {
     /// Floor for the ACK-silence threshold (when multiple·RTT is below it on a
     /// sub-10ms LAN): never throttle under this much silence.
     static let backpressureAckSilenceFloorMs: UInt32 = 30
-    /// "Behind" at this many RTTs of ACK silence — 3× normal ack latency is the
+    /// "Behind" at this many RTTs of ACK silence - 3× normal ack latency is the
     /// host genuinely not keeping up, not just normal in-flight.
     static let backpressureRttMultiple: UInt32 = 3
 
     /// True when the host has stopped draining our reliable backlog (ACK-silent for
     /// > max(floor, multiple·RTT) with reliables outstanding). The InputBatcher
     /// flush coalesces the merged-state drain while this is set. RTT-relative, so a
-    /// stable link — wired OR a higher-RTT-but-clean link — never trips it.
+    /// stable link - wired OR a higher-RTT-but-clean link - never trips it.
     var reliableBacklogged: Bool { reliableBackloggedFlag }
 
     // Peer state (mirrors the C ENetPeer subset).
@@ -174,7 +174,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// unreliable on a channel = 1). Mirrors enet_peer_setup_outgoing_command:
     /// SEND_UNRELIABLE stamps the channel's CURRENT (not incremented) reliable seq
     /// plus this pre-incremented counter, and ENet zeroes this counter whenever a
-    /// reliable command goes out on the channel (peer.c:658) — sendEncryptedControl
+    /// reliable command goes out on the channel (peer.c:658) - sendEncryptedControl
     /// resets the matching entry to 0 on every reliable send.
     var channelOutgoingUnreliableSeq: [UInt8: UInt16] = [:]
 
@@ -189,8 +189,8 @@ final class EnetControlChannel: @unchecked Sendable {
     // ControlStream.c:1624-1640): N sets between two drains collapse into ONE wire
     // REQUEST_IDR, and a pending IDR flushes any queued RFIs (LiRequestIdrFrame
     // ControlStream.c:415-422 → freeBasicLbqList(referenceFrameControlQueue)).
-    // Without this, every failed frame fires its own reliable wire IDR — the
-    // 890,891,892… "decoder requested IDR" storm that amplifies loss.
+    // Without this, every failed frame fires its own reliable wire IDR - the
+    // 890,891,892... "decoder requested IDR" storm that amplifies loss.
     //
     // Glimmer's drain point is the existing 20ms control-loop tick (controlLoopTick
     // → drainPendingRecoveryRequests). `requestIdrFrame()` and
@@ -209,17 +209,17 @@ final class EnetControlChannel: @unchecked Sendable {
     /// whole span anyway, and one packet beats per-frame spam).
     var pendingRfi: (from: Int, to: Int)?
 
-    /// currentEnetSequenceNumber (ControlStream.c) — monotonic from 0. GLOBAL
+    /// currentEnetSequenceNumber (ControlStream.c) - monotonic from 0. GLOBAL
     /// across ALL encrypted control sends; must increment under stateLock to
     /// avoid GCM nonce reuse.
     var enetSeq: UInt32 = 0
 
-    /// Last time (ms) we SENT any datagram — drives the proactive ENet ping.
+    /// Last time (ms) we SENT any datagram - drives the proactive ENet ping.
     var lastSendMs: UInt32 = 0
 
     /// First-0x010b breadcrumb latch: handleRumbleData logs the first host
     /// rumble's ctl/low/high values once per SESSION (the channel is built per
-    /// stream) — rumble runs at ~135/s during combat so per-event logging
+    /// stream) - rumble runs at ~135/s during combat so per-event logging
     /// would evict the diagnostic ring, but the one sighting proves the wire
     /// layout postmortem (0x010b cost a whole investigation because nothing
     /// ever logged its bytes). Confined to `queue` (the receive callback
@@ -232,17 +232,17 @@ final class EnetControlChannel: @unchecked Sendable {
     /// ring if a game re-arms the trigger effect at frame rate.
     var loggedFirstAdaptiveTriggers = false
 
-    /// Per-channel HIGHEST-DISPATCHED inbound reliable sequence number — the
+    /// Per-channel HIGHEST-DISPATCHED inbound reliable sequence number - the
     /// receive-side half of ENet's per-channel reliable bookkeeping this subset
     /// was missing. The host sends ALL control messages (rumble, triggers, LED,
     /// motion, HDR, termination) as SEND_RELIABLE on channel 0 and relies on
     /// real enet's ordered, exactly-once delivery; without this map a host
     /// retransmission (lost client ACK) or UDP reordering dispatched stale
-    /// state AFTER its supersessor — e.g. a retransmitted rumble(x,y) landing
+    /// state AFTER its supersessor - e.g. a retransmitted rumble(x,y) landing
     /// after the burst-ending motors-off and latching the pad buzzing until
     /// the next host event. Every current consumer is latest-wins, so "ACK
     /// everything, dispatch only strictly-newer" (drop stale/duplicate) is the
-    /// correct subset — we delay no message and never give up, we only refuse
+    /// correct subset - we delay no message and never give up, we only refuse
     /// to resurrect superseded state. Confined to `queue` (the receive
     /// callback chain, the sole inbound-dispatch context), so no lock.
     var lastDispatchedInboundRelSeq: [UInt8: UInt16] = [:]
@@ -256,7 +256,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// First "reliable received in a datagram WITHOUT the SENT_TIME header flag"
     /// breadcrumb latch. We now ACK these (we used to silently skip the ACK,
     /// which left the host retransmitting until its ~10s ENet peer-timeout fired
-    /// and it tore the session down — the lock-screen / secure-desktop disconnect:
+    /// and it tore the session down - the lock-screen / secure-desktop disconnect:
     /// Sunshine emits a control message across the transition in a datagram that
     /// omits SENT_TIME). One NOTICE per session confirms the path actually
     /// occurs on this host so the fix is verifiable from a single repro log.
@@ -275,8 +275,8 @@ final class EnetControlChannel: @unchecked Sendable {
 
     /// ENet peer RTT estimate (ms) + variance, EWMA-updated on every matched ACK.
     /// FRACTIONAL ms (Double): the round trip is measured from a HIGH-RES LOCAL
-    /// monotonic clock — we stamp `localSentByToken` when sending a SENT_TIME
-    /// datagram and difference it against `monotonicMs` on the echoed ack — NOT
+    /// monotonic clock - we stamp `localSentByToken` when sending a SENT_TIME
+    /// datagram and difference it against `monotonicMs` on the echoed ack - NOT
     /// from the 16-bit-ms wire `sentTime` token (which quantizes to whole ms and
     /// loses all sub-ms signal). The wire token is used ONLY as the match key.
     /// Seeded to ENet's default until the first sample; surfaced via estimatedRtt()
@@ -288,7 +288,7 @@ final class EnetControlChannel: @unchecked Sendable {
 
     /// HIGH-RES local send instants (fractional ms on the monotonic `monotonicMs`
     /// clock), keyed by the 16-bit wire `sentTime` token we stamped on the
-    /// datagram. Populated in `wrapDatagram` (SENT_TIME branch, recordRtt only —
+    /// datagram. Populated in `wrapDatagram` (SENT_TIME branch, recordRtt only -
     /// outbound ACK datagrams carry the wire token but are never echoed back, so
     /// they don't record), consumed + the entry removed in `handleAcknowledge`
     /// when the host echoes the token back. Recorded tokens are pings + reliable
@@ -301,7 +301,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// Eviction horizon (ms) for `localSentByToken`. Far beyond any plausible RTT
     /// (the dead-peer envelope is 10s) yet short enough that a never-acked token
     /// is reclaimed promptly. The wire token wraps every ~65s, so this is also
-    /// comfortably under one wrap period — a stale entry is gone before its token
+    /// comfortably under one wrap period - a stale entry is gone before its token
     /// value could be reused.
     static let localSentTtlMs: Double = 5000
     /// Hard cap on `localSentByToken` so a pathological never-acking peer cannot
@@ -326,7 +326,7 @@ final class EnetControlChannel: @unchecked Sendable {
         if localSentByToken.count >= Self.localSentMaxEntries {
             localSentByToken = localSentByToken.filter { now - $0.value < Self.localSentTtlMs }
             // The TTL filter alone cannot converge when every survivor is
-            // young — e.g. an ack stall on a fading link while input keeps
+            // young - e.g. an ack stall on a fading link while input keeps
             // flushing every ms fills the map with sub-TTL entries, and the
             // old code then re-ran the full filter on EVERY send (an O(n)
             // scan + realloc under stateLock, on the latency-critical input
@@ -335,7 +335,7 @@ final class EnetControlChannel: @unchecked Sendable {
             // the RTT estimator recovers the moment acks resume, and one
             // eviction buys at least cap/2 sweep-free sends (amortized, not
             // per-send). Dropping the oldest stamps only forfeits RTT samples
-            // a recovering link would have superseded anyway — never a
+            // a recovering link would have superseded anyway - never a
             // permanent loss of the measurement.
             if localSentByToken.count >= Self.localSentMaxEntries {
                 let newestHalf = localSentByToken
@@ -353,7 +353,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// `oldestUnackedMs` / `sinceLastAckMs` cross ~5s right before a stall, so
     /// surfacing them to the telemetry exporter makes the INITIAL-CONNECTION and
     /// pre-stall phases visible. One lock-guarded read so the trio is mutually
-    /// consistent. Cheap — three integer reads under the existing stateLock.
+    /// consistent. Cheap - three integer reads under the existing stateLock.
     func health() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32) {
         let now = serviceTimeMs
         return withState {
@@ -363,8 +363,8 @@ final class EnetControlChannel: @unchecked Sendable {
     }
 
     /// Silence window (ms) of no matched ACK (with reliable outstanding) before we
-    /// treat the peer as dead. Set to ENet's OWN peer timeout — moonlight uses
-    /// enet_peer_timeout(peer, 2, 10000, 10000) (ControlStream.c:1837) — so a brief
+    /// treat the peer as dead. Set to ENet's OWN peer timeout - moonlight uses
+    /// enet_peer_timeout(peer, 2, 10000, 10000) (ControlStream.c:1837) - so a brief
     /// network blip (e.g. BT/Wi-Fi 2.4GHz coexistence while a controller connects)
     /// self-heals by retransmitting instead of tearing down. Like moonlight we have
     /// NO earlier give-up: a transient stall must never self-terminate inside this
@@ -382,14 +382,14 @@ final class EnetControlChannel: @unchecked Sendable {
     /// Fired (on CHANGE only) when the host signals HDR mode (0x010e).
     var onHdrMode: ((Bool) -> Void)?
     /// Fired for EVERY host SS_RUMBLE_DATA (0x010b): (controllerNumber,
-    /// lowFreqMotor, highFreqMotor), raw 0...65535 wire units — (0,0) means
+    /// lowFreqMotor, highFreqMotor), raw 0...65535 wire units - (0,0) means
     /// "motors off" and MUST be delivered too. Called on the receive thread at
     /// up to ~135/s during gameplay, so the consumer MUST hop off it
     /// (ControllerHaptics does a latest-wins coalesce onto its own serial
     /// queue); ACK processing can never be made to wait on Core Haptics.
     var onRumble: ((UInt16, UInt16, UInt16) -> Void)?
     /// Fired for EVERY host SS_RUMBLE_TRIGGERS (0x5500): (controllerNumber,
-    /// leftTriggerMotor, rightTriggerMotor), raw 0...65535 wire units — (0,0)
+    /// leftTriggerMotor, rightTriggerMotor), raw 0...65535 wire units - (0,0)
     /// means "trigger motors off" and MUST be delivered too. Same threading
     /// contract as onRumble: called on the receive thread, so the consumer
     /// hops off it (ControllerHaptics' latest-wins coalesce).
@@ -400,22 +400,22 @@ final class EnetControlChannel: @unchecked Sendable {
     /// this thread exactly like rumble.
     var onSetRgbLed: ((UInt16, UInt8, UInt8, UInt8) -> Void)?
     /// Fired for EVERY host SET_MOTION_EVENT (0x5501): (controllerNumber,
-    /// motionType LI_MOTION_TYPE_*, reportRateHz — 0 means stop). Rare state
+    /// motionType LI_MOTION_TYPE_*, reportRateHz - 0 means stop). Rare state
     /// changes (a per-sensor open/close when a game grabs the IMU), not a
     /// per-frame flood, but the threading contract is rumble's anyway: called
     /// on the receive thread, and the consumer (ControllerMotion) hops to
     /// main before touching GameController sensors.
     var onSetMotionEvent: ((UInt16, UInt8, UInt16) -> Void)?
     /// Fired for EVERY host SET_ADAPTIVE_TRIGGERS (0x5503): (controllerNumber,
-    /// eventFlags — DS_EFFECT_RIGHT_TRIGGER 0x04 / DS_EFFECT_LEFT_TRIGGER 0x08
-    /// bitset for which trigger blocks are present, typeLeft/typeRight — the
-    /// DualSense-native mode bytes, left/right — 10-byte param arrays each).
+    /// eventFlags - DS_EFFECT_RIGHT_TRIGGER 0x04 / DS_EFFECT_LEFT_TRIGGER 0x08
+    /// bitset for which trigger blocks are present, typeLeft/typeRight - the
+    /// DualSense-native mode bytes, left/right - 10-byte param arrays each).
     /// Same threading contract as onRumble: called on the receive thread, so
     /// the consumer hops off it (DualSenseHID does its IOKit write on its own
     /// serial path). Only sent to DualSense pads (Sunshine extension).
     var onSetAdaptiveTriggers: ((UInt16, UInt8, UInt8, UInt8, [UInt8], [UInt8]) -> Void)?
     /// Fired AT MOST ONCE when the channel tears down (interrupt()/close(),
-    /// whichever lands first — see fireTeardownOnce). Covers every stream-end
+    /// whichever lands first - see fireTeardownOnce). Covers every stream-end
     /// path: user stop, watchdog teardown, and host TERMINATION (which funnels
     /// into stopConnection → close()). Sole consumer today parks all controller
     /// rumble motors at (0,0): the host's own "motors off" event can no longer
@@ -431,7 +431,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// Per-type counts of inbound control messages we receive but don't
     /// dispatch (lock-guarded). Key presence = that type's first sighting was
     /// already logged, so handleInboundControl logs each type ONCE (the same
-    /// transition-gating discipline as lastHdrEnabled) — before rumble (0x010b)
+    /// transition-gating discipline as lastHdrEnabled) - before rumble (0x010b)
     /// grew a real dispatch it arrived here at up to ~135/s during combat, and
     /// logging every datagram evicted the 2000-entry diagnostic ring down to
     /// ~90s of coverage; any future undispatched type could flood identically.
@@ -441,7 +441,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// Most recent HDR mastering metadata the host announced, if any.
     func hdrMetadata() -> HdrMetadata? { withState { lastHdrMetadata } }
 
-    /// Scoped lock helper — `NSLock.lock()/unlock()` are unavailable from async
+    /// Scoped lock helper - `NSLock.lock()/unlock()` are unavailable from async
     /// contexts under Swift 6, so async functions use this synchronous closure.
     func withState<T>(_ body: () -> T) -> T {
         stateLock.lock(); defer { stateLock.unlock() }
@@ -463,7 +463,7 @@ final class EnetControlChannel: @unchecked Sendable {
     func interrupt() {
         interrupted.set()
         // Locked read, cancel outside the lock (RtspClient.interrupt's
-        // discipline). interrupt() deliberately does NOT nil the var — close()
+        // discipline). interrupt() deliberately does NOT nil the var - close()
         // owns the final take-and-nil.
         currentConnection()?.cancel()
         logIgnoredControlTotals()
@@ -527,7 +527,7 @@ final class EnetControlChannel: @unchecked Sendable {
         interrupted.set()
         // Atomic take-and-nil under connLock, then cancel outside it: a racing
         // sendDatagram either retained the connection before we took it (its
-        // send lands on a cancelled-but-alive object — harmless) or reads nil
+        // send lands on a cancelled-but-alive object - harmless) or reads nil
         // and drops the datagram. The unguarded cancel+nil this replaces gave
         // the 50Hz control loop and 1ms input flush a use-after-free window on
         // every teardown.
@@ -541,8 +541,8 @@ final class EnetControlChannel: @unchecked Sendable {
     /// Sink for per-frame FEC status reports produced by the video FEC path
     /// (RtpVideoQueue → VideoRtpReceiver). Intentionally a no-op: moonlight only
     /// sends FEC status on actual loss/abandonment, and the Sunshine wire type for
-    /// it (0x5502) COLLIDES with IDX_SET_RGB_LED — sending it would be misread by
-    /// the host — so Glimmer never emits it. The session keepalive is the periodic
+    /// it (0x5502) COLLIDES with IDX_SET_RGB_LED - sending it would be misread by
+    /// the host - so Glimmer never emits it. The session keepalive is the periodic
     /// ping + transport PING (see the control loop), which is what keeps video
     /// flowing. Kept (rather than removed) because NativeBackend wires it as the
     /// FEC status sink; must NEVER block the calling video thread.

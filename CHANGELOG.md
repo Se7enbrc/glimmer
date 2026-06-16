@@ -1,36 +1,36 @@
 # Changelog
 
-## 2026.6.6 — 2026-06-16
+## 2026.6.6 - 2026-06-16
 
-Auto-update validation release — no functional changes vs 2026.6.5; cut to
+Auto-update validation release - no functional changes vs 2026.6.5; cut to
 exercise the Sparkle in-place update path. (Build stamp `20260617` so it sorts
 strictly after 2026.6.5's same-day `20260616`.)
 
-## 2026.6.5 — 2026-06-16
+## 2026.6.5 - 2026-06-16
 
 Self-updating, plus a wifi smoothness fix for bursty links.
 
 ### Updates
 
 - **Glimmer now updates itself.** Built-in auto-update (Sparkle): a daily
-  background check plus a "Check for Updates…" item in both the app menu and the
-  menu-bar dropdown. Updates are EdDSA-signed and notarized. This first
+  background check plus a "Check for Updates..." item in both the app menu and
+  the menu-bar dropdown. Updates are EdDSA-signed and notarized. This first
   auto-update-capable build is installed manually; every release after it
   updates in place. Background checks run only on release builds, and an update
-  is offered only when a strictly-newer release exists — local/dev builds are
+  is offered only when a strictly-newer release exists - local/dev builds are
   never nagged.
 
 ### Streaming
 
 - **Smoother playback through brief wifi delivery gaps.** When a >50ms gap
   drains the frame buffer on a bursty link, the bunched catch-up now plays
-  _through_ instead of being discarded — killing the ~20% frame-drop and the
+  _through_ instead of being discarded - killing the ~20% frame-drop and the
   persistent stutter that trailed each gap. Sparse gaps were already fine; this
   fixes the sustained-burst case.
 
-## 2026.6.4 — 2026-06-13
+## 2026.6.4 - 2026-06-13
 
-Input resilience on lossy links (driven by play-testing on a lossy 25–50ms link
+Input resilience on lossy links (driven by play-testing on a lossy 25-50ms link
 with real packet loss), matching Moonlight's input posture.
 
 ### Input
@@ -39,15 +39,15 @@ with real packet loss), matching Moonlight's input posture.
   used to pile up behind a dropped packet and the host would burst-apply the
   backlog after you'd already stopped turning. The merged-input flush now backs
   off on the count of un-ACKed reliable commands (the host falling behind), not
-  just the local socket queue — so a stall coalesces into a single catch-up
+  just the local socket queue - so a stall coalesces into a single catch-up
   instead of a spin. Mirrors Moonlight's 10ms ack-wait. Relative mouse stays
   reliable (no dropped motion).
 - **Controller motion (gyro/accel) now ships unreliable**, matching current
-  Moonlight — a superseded sensor sample is worthless, so a lost one is dropped
+  Moonlight - a superseded sensor sample is worthless, so a lost one is dropped
   rather than retransmitted and never head-of-line-blocks the reliable input
   stream. A null gyro (0,0,0) stays reliable so "sensors stopped" can't be lost.
 
-## 2026.6.3 — 2026-06-13
+## 2026.6.3 - 2026-06-13
 
 Host-resilience release: survive a Windows lock/sign-in, stream to non-AV1
 hosts, ship as a self-contained app, and opt-in performance telemetry.
@@ -55,14 +55,14 @@ hosts, ship as a self-contained app, and opt-in performance telemetry.
 ### Streaming
 
 - **Survive a Windows lock / sign-in transition.** When the host (Sunshine)
-  restarts its capture across a secure-desktop switch — or a brief network blip
-  drops the link — the stream now holds the last frame and silently reconnects
+  restarts its capture across a secure-desktop switch - or a brief network blip
+  drops the link - the stream now holds the last frame and silently reconnects
   in place, resuming when the desktop returns, instead of dropping to the
   launcher and freezing. Generalizes to short blips, not just lock screens.
   (#20)
 - **HEVC (and H.264) hosts supported.** Native HEVC/H.264 depacketization
   alongside AV1, with an intelligent AV1 → HEVC → H.264 default and a per-host
-  codec override — so a non-AV1 GPU (e.g. an RTX 3080) streams cleanly. (#19)
+  codec override - so a non-AV1 GPU (e.g. an RTX 3080) streams cleanly. (#19)
 - **Lower 4K240 receive overhead.** Batched UDP receive via Darwin's `recvmsg_x`
   cuts the per-packet syscall floor at high frame rates. (#24)
 
@@ -81,9 +81,9 @@ hosts, ship as a self-contained app, and opt-in performance telemetry.
 
 ### Fixes
 
-- Host-status chip no longer flaps to "Checking…" on a transient miss, and now
-  polls continuously regardless of window focus (it used to stick on "Checking…"
-  whenever Glimmer wasn't frontmost).
+- Host-status chip no longer flaps to "Checking..." on a transient miss, and now
+  polls continuously regardless of window focus (it used to stick on
+  "Checking..." whenever Glimmer wasn't frontmost).
 - Resolved-host mDNS name no longer keeps an interface-zone suffix that broke
   pairing. (#21)
 
@@ -91,12 +91,12 @@ hosts, ship as a self-contained app, and opt-in performance telemetry.
 
 - Headless, self-healing Developer ID signing via a dedicated keychain
   (credentials pulled from 1Password), so `make dist` / `make install` never
-  prompt — from any session.
+  prompt - from any session.
 
-## 2026.6.2 — 2026-06-11
+## 2026.6.2 - 2026-06-11
 
 The convergence release: three telemetry-driven engineering passes, a
-pre-release adversarial bug hunt (36 confirmed findings, 8 release blockers —
+pre-release adversarial bug hunt (36 confirmed findings, 8 release blockers -
 all fixed), and the first original visual identity.
 
 ### Streaming engine
@@ -118,7 +118,7 @@ all fixed), and the first original visual identity.
 
 - Rumble implemented (host events → per-locality Core Haptics with proper
   sharpness), trigger rumble, RGB lightbar, motion (gyro/accel uplink), battery
-  reporting — every advertised capability now backed by code
+  reporting - every advertised capability now backed by code
 - Clean teardown of raw-HID/haptics/motion/battery registrations; quit chord
   gains its promised hold; cursor re-hides on Dock-click refocus
 
@@ -137,7 +137,7 @@ all fixed), and the first original visual identity.
   (self-bootstrapping preflight); CI workflow; docs rewritten for the pure-Swift
   architecture
 
-## 2026.6.1 — 2026-06-05
+## 2026.6.1 - 2026-06-05
 
 ### The Swift-native streaming engine is now the engine
 
@@ -157,10 +157,10 @@ all fixed), and the first original visual identity.
 ### License
 
 - **Relicensed MIT → GPLv3.** The native engine is a port of GPLv3
-  `moonlight-common-c` — a derivative work — so Glimmer ships under the same
+  `moonlight-common-c` - a derivative work - so Glimmer ships under the same
   license as the code it was ported from. See `LICENSE` and `CREDITS.md`.
 
-## 2026.6.0 — 2026-06-01
+## 2026.6.0 - 2026-06-01
 
 ### Pairing
 
@@ -177,7 +177,7 @@ all fixed), and the first original visual identity.
 ### Pairing & PC management UX
 
 - New discover-first pairing flow: the "Pair a new PC" sheet shows PCs found on
-  your network — pick one and pairing starts as the code appears, then the sheet
+  your network - pick one and pairing starts as the code appears, then the sheet
   closes itself on success and floats above other windows while open. A manual
   address entry remains for networks where discovery is quiet.
 - Right-click a PC (in the launcher or in Settings → PCs) to **Rename** or
@@ -192,11 +192,11 @@ all fixed), and the first original visual identity.
   name + release tag), so a release is a one-line bump instead of editing the
   version in several places.
 
-## 2026.5.3 — 2026-05-30
+## 2026.5.3 - 2026-05-30
 
 ### Streaming
 
-- The Mac (and its display) now stays awake for the whole stream — a power
+- The Mac (and its display) now stays awake for the whole stream - a power
   assertion is held for the session lifetime so the screen no longer dims or
   sleeps mid-game during controller-only sessions.
 - Quality preset defaults to **Match my display** (panel-native resolution +
@@ -204,7 +204,7 @@ all fixed), and the first original visual identity.
 
 ### Launcher / Settings
 
-- Fixed the duplicate "last played" line in the host hero — the footer below the
+- Fixed the duplicate "last played" line in the host hero - the footer below the
   Stream button is now the single source (the hero copy could show a stale or
   over-fresh value).
 - Toggling "Launch minimized" no longer dismisses the Settings window.
@@ -215,7 +215,7 @@ all fixed), and the first original visual identity.
   copyright, security contact). Note: the new sandbox container means paired
   hosts and login-item approval must be set up once on upgrade.
 
-## 2026.5.2 — 2026-05-28
+## 2026.5.2 - 2026-05-28
 
 Ultra-premium polish pass: correctness, accessibility, and reliability.
 
@@ -232,7 +232,7 @@ Ultra-premium polish pass: correctness, accessibility, and reliability.
   order-racing unstructured `Task`, so the decoder can't get stuck in PQ on an
   SDR stream.
 - Stream errors now always show a human-readable message. `StreamError` gained
-  `LocalizedError` conformance — previously some paths surfaced the generic "The
+  `LocalizedError` conformance - previously some paths surfaced the generic "The
   operation couldn't be completed. (Glimmer.StreamError error 0.)".
 
 ### Accessibility
@@ -249,7 +249,7 @@ Ultra-premium polish pass: correctness, accessibility, and reliability.
 
 ### UX / quality
 
-- Default quality preset is now Smooth (1440p-capped) rather than panel-native —
+- Default quality preset is now Smooth (1440p-capped) rather than panel-native -
   a smoother first stream over typical Wi-Fi.
 - Bitrate budgeting no longer saturates at 4K; 5K/6K displays get a correctly
   scaled bitrate instead of ~half the bits per pixel.
@@ -265,7 +265,7 @@ Ultra-premium polish pass: correctness, accessibility, and reliability.
 - Added local-network usage description + Bonjour service declarations so host
   discovery works under the macOS 15+ local-network privacy gate.
 
-## 2026.5.1 — 2026-05-27
+## 2026.5.1 - 2026-05-27
 
 Polish release covering reliability, performance, security hardening, and a
 launcher rebuild. ~95 commits since 2026.5.0.
@@ -298,7 +298,7 @@ launcher rebuild. ~95 commits since 2026.5.0.
   bitstream (chroma subsampling, bit depth, profile, tier), not hardcoded 4:2:0
   Main.
 - SCM bitmask sent to the host is now built from `VTIsHardwareDecodeSupported`
-  probes at type-load time — Intel Macs no longer advertise AV1 they can't
+  probes at type-load time - Intel Macs no longer advertise AV1 they can't
   decode.
 - VUI override only when the bitstream is untagged; tagged streams have their
   color metadata respected, with the original `(10-bit + hdrEnabled) → PQ`
@@ -316,7 +316,7 @@ launcher rebuild. ~95 commits since 2026.5.0.
 - `_EnableTemporalProcessing` flag dropped from VT decode (~8 ms saved at 120
   Hz). LAN `packetSize` 1024 → 1392. PTS sourced from `du.rtpTimestamp` (90 kHz
   host clock) instead of `mach_absolute_time()`.
-- Stats overlay 1 Hz cadence with 1 s rolling window — no more ±1 fps jitter at
+- Stats overlay 1 Hz cadence with 1 s rolling window - no more ±1 fps jitter at
   60 Hz.
 - `LiRequestIdrFrame` no longer wrapped in `Task.detached` (drop a scheduler hop
   from the enqueue hot path).
@@ -332,7 +332,7 @@ launcher rebuild. ~95 commits since 2026.5.0.
 - Pinned host certs moved out of `UserDefaults` to mode-0600 files at
   `~/Library/Containers/.../Library/Application Support/Glimmer/PinnedHosts/<UUID>.pem`.
   `cfprefsd` is shared across same-UID processes; a mode-0600 file is not.
-- Pin commit timing fixed — only happens AFTER the final pairchallenge
+- Pin commit timing fixed - only happens AFTER the final pairchallenge
   validates. Pin storage key normalized to the host's serverinfo UUID so fresh
   pairs aren't going through TOFU.
 - Pairing failure errors collapsed to a uniform "Pairing failed" surface;
@@ -345,7 +345,7 @@ launcher rebuild. ~95 commits since 2026.5.0.
   including passwords to the unified log at `.public`).
 - Session keys (`rikey` / `rikeyid` / `gcmkey` / `gcmkeyid`) and host UUIDs
   redacted from URL log lines via a shared helper.
-- `FingerprintCompareSheet` for cert-change re-pair flow — side-by-side SHA-256
+- `FingerprintCompareSheet` for cert-change re-pair flow - side-by-side SHA-256
   fingerprints with copy buttons, mono diff highlighting, secure- channel
   verification hint, destructive-styled accept button.
 
@@ -357,14 +357,14 @@ launcher rebuild. ~95 commits since 2026.5.0.
   the fade-completion handler so the menu bar / Dock never visibly vanish ahead
   of the window becoming opaque. No more letterbox flash mid-connection.
 - Stream window now correctly restores `presentationOptions` on `didResignKey`
-  (Cmd-Tab away, click launcher) and re-applies on `didBecomeKey` — eliminates
+  (Cmd-Tab away, click launcher) and re-applies on `didBecomeKey` - eliminates
   the "launcher floating on a letterboxed desktop" bug where menu bar + Dock
   stayed hidden after Cmd-Tab.
 - Disconnect: 250 ms `alphaValue` fade-out + "Stream ended" toast in the
   launcher.
 - Dock-click while streaming routes straight back to the stream window
   (`applicationShouldHandleReopen`).
-- HDR override restored over VUI tags for `(10-bit + hdrEnabled)` — Sunshine HDR
+- HDR override restored over VUI tags for `(10-bit + hdrEnabled)` - Sunshine HDR
   streams tagged BT.709 no longer render washed-out.
 
 ### Stats overlay
@@ -374,24 +374,24 @@ launcher rebuild. ~95 commits since 2026.5.0.
   groups. One `CATextLayer` per row with attributed strings; diff-update only
   changed rows per 1 Hz tick.
 - Three presets: **Micro** (Host / Render / Network FPS, Latency, Jitter, Drops,
-  Bitrate — the at-a-glance set), **Extended** (every stream-side metric),
+  Bitrate - the at-a-glance set), **Extended** (every stream-side metric),
   **Custom** (per-row checkboxes grouped by section in Settings → Streaming).
 - **Color thresholds are user-configurable.** Settings → Streaming → Color
   thresholds. Per-metric warn + critical pairs with steppers and a
   Restore-defaults button. New defaults tuned to "when does this actually feel
-  bad" — FPS <60 warn / <30 crit (absolute), latency >50ms / >100ms,
+  bad" - FPS <60 warn / <30 crit (absolute), latency >50ms / >100ms,
   jitter >10ms / >25ms, drops >0.5% / >2%. Live-applied during a stream on the
   next 1 Hz tick.
 - New **Mac** section (Custom-only opt-ins): Mac CPU, Mac RAM, Mac battery (% +
   charging glyph from `battery.0/25/50/75/100/100.bolt`). Sampled via
   `host_statistics` (Mach), `host_statistics64`, `sysctl hw.memsize`, and
-  IOPowerSources — sandbox-safe APIs only.
+  IOPowerSources - sandbox-safe APIs only.
 - Jitter row surfaced separately from RTT variance (same underlying value today,
   ready for a future plumbed-through RTP inter-arrival jitter signal).
 - Stats overlay corner picker moved to Settings (mouse events during a stream
   belong to the host; right-click on the overlay layer wasn't viable).
 - Configuration (preset picker, position, per-row toggles) is editable even when
-  the overlay is off — preconfigure without flipping the display toggle.
+  the overlay is off - preconfigure without flipping the display toggle.
 - Renderer-backpressure drops surface as a `(+N RB)` suffix on the Decoder drops
   row when non-zero; healthy streams stay uncluttered.
 
@@ -406,28 +406,28 @@ launcher rebuild. ~95 commits since 2026.5.0.
   hosts collapses to a standalone gear so Settings stays reachable.
 - Three-state menu bar icon: `moon.stars` (idle) / `play.fill` (streaming) /
   `exclamationmark.triangle.fill` (error).
-- App icon at 16/32 pt got a dedicated small-size render path — silhouette
+- App icon at 16/32 pt got a dedicated small-size render path - silhouette
   readable at Finder list-view / About-pane / Dock small sizes.
 - Connect state machine tightened: "Choose a PC" CTA when no host is selected;
   StreamButton hides entirely while the stream is foreground (vs. disabled
-  "Streaming…"); connecting subtext sourced from the C-side stage strings.
-- Host tint colors now deterministic via FNV-1a — same host shows the same hue
+  "Streaming..."); connecting subtext sourced from the C-side stage strings.
+- Host tint colors now deterministic via FNV-1a - same host shows the same hue
   every launch (Swift's `hashValue` randomizes per process).
 - Marketing tagline replaced with a plain utility-app description.
-- "Trust new cert and re-pair…" affordance renamed to "Compare fingerprints…"
-  and routed through the new comparison sheet.
+- "Trust new cert and re-pair..." affordance renamed to "Compare
+  fingerprints..." and routed through the new comparison sheet.
 
 ### Controller
 
 - **Controller quit chord** in Settings → Shortcuts. Hold the configured combo
-  on the gamepad to quit the stream — fires the same path as the keyboard
+  on the gamepad to quit the stream - fires the same path as the keyboard
   hotkey. Presets: L1+R1, L1+R1+L2+R2, L3+R3, Select+Start, Home/Guide. Default
   `None` so the keyboard chord stays primary.
 
 ### App lifecycle
 
 - **Launch minimized** toggle in Settings → General. Uses SwiftUI's
-  `defaultLaunchBehavior(.suppressed)` so the main window doesn't auto-show —
+  `defaultLaunchBehavior(.suppressed)` so the main window doesn't auto-show -
   only the menu bar charm. Reopen via Dock click or the menu bar's "Open
   Glimmer" entry.
 - Dead `quitChord` / `statsChord` locals in `stream(app:on:)` cleaned up.
@@ -457,9 +457,9 @@ launcher rebuild. ~95 commits since 2026.5.0.
 
 ### Bug fixes
 
-- Controller battery row removed entirely — `GCController.battery` reports
+- Controller battery row removed entirely - `GCController.battery` reports
   `.unknown` for most attached pads on macOS (wired DualShock 4, several MFi
-  pads), leaving the row showing `—` indefinitely. Net signal was negative.
+  pads), leaving the row showing `-` indefinitely. Net signal was negative.
 - Pre-existing dead code purged: `StreamSession.interrupt()`, `HostPickerBar`,
   `StreamSpecLine`, unused `configError`, `Discovery` (unwired mDNS browser),
   `if win.firstResponder == nil { }` empty block, `@available(macOS 13.0, *)`

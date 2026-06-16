@@ -21,8 +21,8 @@ extension StreamSession {
     /// connection is up and the decoder/backend are live.
     func startTelemetryExporter(decoder: VideoDecoder, serverName: String) {
         // Diag file sink is opened earlier, at the connect-start anchor (see
-        // anchorTelemetryConnectStart), so the RTSP/ENet handshake — including
-        // the `RTSP negotiated codec=…` line — is captured in the file and
+        // anchorTelemetryConnectStart), so the RTSP/ENet handshake - including
+        // the `RTSP negotiated codec=...` line - is captured in the file and
         // shipped with the rest of the logs. This call is a no-op backstop
         // (startIfEnabled is idempotent) for any path that reaches the exporter
         // without having gone through the anchor.
@@ -48,27 +48,27 @@ extension StreamSession {
             displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() })
 
         guard let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: serverName) else {
-            // Gate off — the default. Nothing allocated, nothing started.
+            // Gate off - the default. Nothing allocated, nothing started.
             return
         }
         self.telemetryExporter = exporter
         exporter.start()
         // Discoverability (signal 4): log the bookmark chord on stream start so the
-        // user knows how to flag jank. Logged only when telemetry is ON — that's
+        // user knows how to flag jank. Logged only when telemetry is ON - that's
         // when a bookmark is actionable (it writes into the live telemetry). The
-        // default ⌃B is the simple two-key chord (vs the quit/stats ⌃⌥ family) —
+        // default ⌃B is the simple two-key chord (vs the quit/stats ⌃⌥ family) -
         // easy to hit mid-jank; the displayString renders the glyphs.
         Diag.notice("Telemetry bookmark chord = \(HotkeyChord.defaultBookmark.displayString) "
-            + "— press it any time the stream \"feels bad\" to drop a timestamped jank "
+            + "- press it any time the stream \"feels bad\" to drop a timestamped jank "
             + "marker (client-only; never sent to the host).", TelemetryExporter.logCategory)
     }
 
     /// Reset ALL session-scoped telemetry state + anchor the P2 CONNECT-HANDSHAKE
-    /// timeline, at the connect START edge — BEFORE `startConnection` spins the
+    /// timeline, at the connect START edge - BEFORE `startConnection` spins the
     /// receivers up. The reset lives HERE, not in the exporter's `start()`
     /// (which runs only once the connection is established): a warm host's
     /// audio latches its one-shot TTF mid-handshake, so an exporter-time reset
-    /// ran AFTER the latch — wiping the fresh record from the scorecard while
+    /// ran AFTER the latch - wiping the fresh record from the scorecard while
     /// the pre-reset latch had already served the PRIOR session's values into
     /// the event row (the chimeric byte-identical connect_to_decoded_ms).
     /// Resetting at this edge makes every one-shot latch (audio TTF, first-
@@ -78,15 +78,15 @@ extension StreamSession {
     /// (one connect).
     func anchorTelemetryConnectStart(hostAddress: String) {
         TelemetryCounters.shared.resetForNewSession()
-        // Open the Diag file sink HERE — at connect-start, before
-        // startConnection runs the RTSP/ENet handshake — so the handshake and
-        // the `RTSP negotiated codec=…` line land in the file and get shipped.
+        // Open the Diag file sink HERE - at connect-start, before
+        // startConnection runs the RTSP/ENet handshake - so the handshake and
+        // the `RTSP negotiated codec=...` line land in the file and get shipped.
         // Previously it opened with the exporter (post-connect), so the entire
         // negotiation phase was missing from shipped logs. Same opt-in gate;
         // idempotent; torn down in stopTelemetryExporter.
         SessionLogFileSink.startIfEnabled(enabled: TelemetryGate.isEnabled)
         // Pre-start EVENT pen: anything still buffered belongs to a dead
-        // session — forget it so this session's exporter can't flush it.
+        // session - forget it so this session's exporter can't flush it.
         TelemetryExporter.resetPreStartEventBuffer()
         // Latch the host for the stream-route probe (stream_link/stream_if):
         // the exporter is built long after the address is known, so the
@@ -108,7 +108,7 @@ extension StreamSession {
 
     /// Record a "that felt bad" telemetry bookmark (signal 4). Actor-isolated so
     /// the `onBookmarkHotkey` closure can read the actor-isolated exporter via a
-    /// `Task` hop. No-op when telemetry is off (`telemetryExporter` is nil) — the
+    /// `Task` hop. No-op when telemetry is off (`telemetryExporter` is nil) - the
     /// chord is still consumed in the input path, it simply records nothing.
     func recordTelemetryBookmark() {
         telemetryExporter?.recordBookmark()

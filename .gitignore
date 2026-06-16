@@ -95,7 +95,7 @@ iOSInjectionProject/
 # macOS
 .DS_Store
 
-# Build-stamped attribution constant — regenerated on every `make app` by
+# Build-stamped attribution constant - regenerated on every `make app` by
 # scripts/generate-build-info.sh (git SHA + build date). Build output, not source.
 Glimmer/BuildInfo.generated.swift
 
@@ -103,7 +103,7 @@ Glimmer/BuildInfo.generated.swift
 # Generated/spun up on demand, torn down when done, never shipped.
 debug-env/
 
-# Local-only telemetry-rig client (your private Prometheus/Loki endpoints) — an
+# Local-only telemetry-rig client (your private Prometheus/Loki endpoints) - an
 # optional extension point for `make enable-telem`, never committed. BYO.
 scripts/telem-client.sh
 

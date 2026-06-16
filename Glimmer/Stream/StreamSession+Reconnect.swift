@@ -2,8 +2,8 @@
 //  StreamSession+Reconnect.swift
 //
 //  Silent reconnect-as-stall. When the host closes a LIVE session with a
-//  recoverable code — Sunshine's process restarting across a Windows lock /
-//  secure-desktop transition (it returns in ~3s), or a brief network blip —
+//  recoverable code - Sunshine's process restarting across a Windows lock /
+//  secure-desktop transition (it returns in ~3s), or a brief network blip -
 //  we DON'T bounce to the launcher and DON'T sit through the watchdog's 10s
 //  freeze-then-teardown. Instead we hold the frozen last frame on screen and
 //  silently re-establish the connection underneath it, resuming in place when
@@ -13,7 +13,7 @@
 //  This is possible because the frozen frame survives a connection teardown:
 //  backend.stopConnection() runs the decoder's sink stop()/cleanup() (which
 //  only invalidate the VideoToolbox session + param sets), but NOT
-//  VideoDecoder.teardown() or StreamWindow.close() — so the
+//  VideoDecoder.teardown() or StreamWindow.close() - so the
 //  AVSampleBufferDisplayLayer keeps its last image until a fresh setup() +
 //  IDR repaints over it. We keep the window, decoder, input forwarder, the
 //  retained bridge, StreamBridgeContext.current, and the event stream alive
@@ -30,7 +30,7 @@ extension StreamSession {
     /// `NativeBackend.connectionTerminated`). Classifies recoverable-vs-fatal and
     /// either drives a silent reconnect episode or tears down as before.
     func handleHostTerminate(code: Int32) async {
-        // The uplink is dead the instant the host closed — pause input so we
+        // The uplink is dead the instant the host closed - pause input so we
         // don't spew sends at a gone backend. It re-arms on the next
         // `.connectionEstablished` (handleConnectionEdge → setReady(true)).
         let inp = input
@@ -39,14 +39,14 @@ extension StreamSession {
         // Nothing to recover if the user is already tearing down, or we're not
         // (or no longer) the live session.
         guard isStreaming, !stopInProgress else { return }
-        // An episode is already being driven — its retry loop owns the outcome.
+        // An episode is already being driven - its retry loop owns the outcome.
         // A re-terminate fired by the dead/old backend (or a failed reconnect
         // attempt) must not start a second episode.
         guard !isReconnecting else { return }
 
         // Recoverable iff the host sent the "server terminated this session"
         // code AND we'd already reached a live state. A terminate before first
-        // live edge is a failed connect, not an interruption — fall through to
+        // live edge is a failed connect, not an interruption - fall through to
         // the original teardown so the launcher shows the honest failure.
         let recoverable = code == Self.recoverableTerminationCode && reachedLiveState
         guard recoverable else {
@@ -69,7 +69,7 @@ extension StreamSession {
         bridge?.eventContinuation?.yield(.reconnecting)
         Diag.notice(
             "Host closed the live stream (code 0x\(String(UInt32(bitPattern: code), radix: 16))) "
-            + "— reconnecting in place, holding the last frame (the host likely restarted "
+            + "- reconnecting in place, holding the last frame (the host likely restarted "
             + "across a lock/desktop transition).",
             "Stream")
 
@@ -83,12 +83,12 @@ extension StreamSession {
             let delayMs = UInt64(min(reconnectAttempts, 3)) * 800
             try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
             if !isStreaming || stopInProgress { break }
-            Diag.notice("reconnect attempt \(reconnectAttempts)/\(Self.reconnectAttemptCap)…", "Stream")
+            Diag.notice("reconnect attempt \(reconnectAttempts)/\(Self.reconnectAttemptCap)...", "Stream")
             if await reconnectInPlace() {
                 isReconnecting = false
                 reconnectAttempts = 0
                 bridge?.eventContinuation?.yield(.reconnected)
-                Diag.notice("reconnected — stream resumed in place", "Stream")
+                Diag.notice("reconnected - stream resumed in place", "Stream")
                 // Re-arm the stall latches so a later stall logs/recovers fresh.
                 didLogDecodeOnlyStall = false
                 didAttemptStallRecovery = false
@@ -102,7 +102,7 @@ extension StreamSession {
         isReconnecting = false
         guard isStreaming, !stopInProgress else { return }
         Diag.error(
-            "reconnect exhausted after \(reconnectAttempts) attempt(s) — tearing down",
+            "reconnect exhausted after \(reconnectAttempts) attempt(s) - tearing down",
             "Stream")
         bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
         await stop(cause: .hostError)
@@ -110,7 +110,7 @@ extension StreamSession {
 
     /// One reconnect attempt: tear down ONLY the dead connection, swap in a fresh
     /// backend, re-point input/decoder at it, and re-run the handshake +
-    /// /launch + startConnection against the (restarted) host — all while the
+    /// /launch + startConnection against the (restarted) host - all while the
     /// window, decoder, frozen frame, bridge, and event stream stay alive.
     /// Returns true once the connection is back up.
     private func reconnectInPlace() async -> Bool {
@@ -120,7 +120,7 @@ extension StreamSession {
               let appID = reconnectAppID,
               let win = window, let inp = input, let dec = videoDecoder else { return false }
 
-        // 1. Bring the dead connection fully down (idempotent — onTerminated
+        // 1. Bring the dead connection fully down (idempotent - onTerminated
         //    already called stopConnection). Keeps the window/decoder/frozen
         //    frame, the bridge + event stream, and StreamBridgeContext.current.
         await teardownConnectionForReconnect()
@@ -147,7 +147,7 @@ extension StreamSession {
             let backendConfig = makeBackendConfig(config: config, launch: launch)
             // duringReconnect: connectBackend's failure path must NOT run the
             // full stop() (that would blank the frozen frame + bounce to the
-            // launcher) — it cancels the failed launch and throws so we retry.
+            // launcher) - it cancels the failed launch and throws so we retry.
             try await connectBackend(
                 serverInfo: serverInfo, launch: launch, backendConfig: backendConfig,
                 setup: (win, inp, dec), network: net, duringReconnect: true)
@@ -166,10 +166,10 @@ extension StreamSession {
 
     /// Connection-only teardown for a reconnect: bring the backend connection
     /// down and drop the NetworkClient WITHOUT the things `stop()` does that
-    /// would end the session — no event-stream finish, no bridge release, no
+    /// would end the session - no event-stream finish, no bridge release, no
     /// `StreamBridgeContext.current` clear, no window close, no decoder teardown,
     /// no power-assertion end, and crucially NO `/cancel` (the host session is
-    /// already gone; a /cancel could race the host's freshly-restarted one —
+    /// already gone; a /cancel could race the host's freshly-restarted one -
     /// launchWithBusyRecovery does the proper /cancel+/launch on the new client).
     private func teardownConnectionForReconnect() async {
         backend.stopConnection()

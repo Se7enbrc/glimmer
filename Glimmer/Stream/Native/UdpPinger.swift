@@ -4,7 +4,7 @@
 //  Fire-and-forget UDP stream pinger for the Swift-native backend. Binds a
 //  wildcard ephemeral UNCONNECTED UDP socket and sends a 20-byte SS_PING
 //  { payload[16] + sequenceNumber (UInt32 BE) } to host:port at the steady
-//  keepalive cadence (75ms fast / 500ms relaxed, conditional — a deliberate,
+//  keepalive cadence (75ms fast / 500ms relaxed, conditional - a deliberate,
 //  validated deviation from upstream's flat 500ms; see the verdict on
 //  steadyPingIntervalSeconds below), or the legacy
 //  4-byte "PING" when no payload was negotiated. Source: AudioStream.c
@@ -14,7 +14,7 @@
 //
 //  WHY THIS EXISTS: Sunshine encodes ONE combined A/V media session and won't
 //  push ANY video RTP until it has received BOTH the video AND the audio stream
-//  pings (AudioStream.c:90-110 — "It will not reply to our RTSP PLAY request
+//  pings (AudioStream.c:90-110 - "It will not reply to our RTSP PLAY request
 //  until the audio ping has been received."). The native video path was sending
 //  only the video ping (on its receive socket), so the host withheld video. This
 //  pinger supplies the missing AUDIO ping. It is send-only (we don't receive
@@ -39,20 +39,20 @@ final class UdpPinger: @unchecked Sendable {
     // WHY: a Wi-Fi NIC can show routine ~40-110ms INBOUND delivery gaps
     // (measured packet_gap_max_us in the tens of ms, p99 ~100ms, on a large
     // fraction of active seconds) that are demonstrably absent while input
-    // traffic flows (the blip probability drops sharply as input rate rises) —
+    // traffic flows (the blip probability drops sharply as input rate rises) -
     // a NIC power-save signature, proven radio-level by appearing
     // simultaneously on the video, audio, and ENet sockets. A denser UPLINK
     // keepalive holds the radio out of its sleep window the same way input
     // traffic demonstrably does.
     //
-    // VERDICT: KEEP — validated on an input-idle wifi route against a
+    // VERDICT: KEEP - validated on an input-idle wifi route against a
     // 500ms-cadence baseline (judged by packet_gap_p95/max percentiles): the
     // idle doze tail >100ms was eliminated and length-matched P(gap>50ms) fell
     // several-fold. A PHY confound was rebutted (signal strength was no better
     // on the validating run, so the improvement is not radio conditions). Do
     // not "clean up" this constant back to 0.5 without re-running that
     // comparison.
-    // REFINEMENT SHIPPED (not a revert): the cadence is now CONDITIONAL —
+    // REFINEMENT SHIPPED (not a revert): the cadence is now CONDITIONAL -
     // the live loops gate each send on EnvSignalController.steadyPingInterval()
     // (75ms only on a wifi stream route while input-idle or under link
     // caution; `relaxedPingIntervalSeconds` on a confirmed-wired route or
@@ -64,33 +64,33 @@ final class UdpPinger: @unchecked Sendable {
     // pings_sent_*_total counters + keepalive_interval_ms in the telemetry.
     //
     // COST: ~13.3 tiny 20-byte datagrams/s of uplink per ping loop (~270 B/s,
-    // up from 2/s — ~11/s extra each; ~27/s ≈ ~540 B/s total on the wire
-    // across the two adopting loops) — negligible airtime. Protocol-safe:
+    // up from 2/s - ~11/s extra each; ~27/s ≈ ~540 B/s total on the wire
+    // across the two adopting loops) - negligible airtime. Protocol-safe:
     // Sunshine only times the session out when pings STOP (ping_timeout,
-    // default 10s — verified in Sunshine src/config.cpp); a denser cadence is
+    // default 10s - verified in Sunshine src/config.cpp); a denser cadence is
     // just read and discarded.
     // STREAM-TIME cadence ONLY: connect-time fast-start ping behavior
     // (RtpAudioReceiver's 80ms burst) is untouched, and no timeout math
     // anywhere derives from this value.
     //
-    // WIRING NOTE: the ping loop below is currently dormant — the live
+    // WIRING NOTE: the ping loop below is currently dormant - the live
     // steady-state keepalives run on VideoRtpReceiver's and RtpAudioReceiver's
     // own ping threads (this class's audio-ping role moved into
     // RtpAudioReceiver; see NativeBackend.audioReceiver's doc). This constant
     // is the FAST cadence dial AND both live loops' wake quantum: each loop
-    // wakes at this interval (exactly the pre-conditional wake rate — no new
+    // wakes at this interval (exactly the pre-conditional wake rate - no new
     // thread cost) and gates the SEND on the live conditional interval, so a
     // cadence flip takes effect within one quantum. RtpAudioReceiver's
     // connect-time fast-start burst stays on its own cadence by design.
     static let steadyPingIntervalSeconds: TimeInterval = 0.075
 
-    // The RELAXED cadence — upstream moonlight-common-c's stock 500ms
+    // The RELAXED cadence - upstream moonlight-common-c's stock 500ms
     // keepalive (AudioStream.c/VideoStream.c ping threads), i.e. the rate
     // proven sufficient for session liveness wherever NIC doze is not in
     // play. Used by EnvSignalController.steadyPingInterval() for confirmed-
     // wired routes and active-input CLEAR wifi play. Protocol-safe by the
     // same argument as the fast dial: Sunshine only times the session out
-    // when pings STOP (ping_timeout, default 10s) — 500ms is 20x inside it.
+    // when pings STOP (ping_timeout, default 10s) - 500ms is 20x inside it.
     static let relaxedPingIntervalSeconds: TimeInterval = 0.5
 
     private let host: NWEndpoint.Host

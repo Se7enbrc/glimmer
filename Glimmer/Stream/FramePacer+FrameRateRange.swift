@@ -16,7 +16,7 @@ extension FramePacer {
     /// Hz deadband before the present-callback floor is re-pinned from the
     /// SMOOTHED refined cadence. Widened 5→8 after a wired-link run:
     /// bimodal game content flipped the PTS-median floor 169.81↔175.27Hz
-    /// (5.46Hz apart — just past the old 5Hz band) at 12–28 re-pins/s for
+    /// (5.46Hz apart - just past the old 5Hz band) at 12-28 re-pins/s for
     /// ~68k log lines. 8Hz swallows that wobble class outright; a real fps
     /// change (60→120, 240→60) still blows past it within a few ticks.
     static let frameRateReapplyHysteresisHz = 8.0
@@ -27,7 +27,7 @@ extension FramePacer {
     /// than the deadband (game render-rate duty-cycling, e.g. 170↔186) into a
     /// stable midpoint instead of flapping the floor between the extremes,
     /// while a genuine fps change crosses the 8Hz deadband in tens of ms. The
-    /// due gate keeps pacing from the RAW median — only the advisory floor is
+    /// due gate keeps pacing from the RAW median - only the advisory floor is
     /// smoothed, so this can never delay or judder an actual present.
     static let refinedFloorEwmaAlpha = 0.05
 
@@ -37,18 +37,18 @@ extension FramePacer {
     /// one layer down). A re-pin deferred by the dwell lands when it expires
     /// if the drift persists; a too-low floor in the meantime only permits
     /// static-scene callback throttling for ≤2s (preferred=panelMax still
-    /// asks for the full grid), and a too-high floor stays ≤panelMax — both
+    /// asks for the full grid), and a too-high floor stays ≤panelMax - both
     /// harmless on any link, jittery or clean.
     static let frameRateRePinMinDwellSeconds = 2.0
 
     /// Canonical content cadences the Diag mirror rounds to before its dedupe
     /// compare (on a wired-link run the PTS-median cadence legitimately
     /// mode-hopped 66↔92↔144↔240Hz, so the EWMA was mid-transition at almost
-    /// every dwell expiry and the raw ≥8Hz compare passed nearly every re-pin —
+    /// every dwell expiry and the raw ≥8Hz compare passed nearly every re-pin -
     /// 3,427 mirror lines = 91.5% of an otherwise 319-line session log).
     /// Rounding collapses the EWMA's transit points onto the mode endpoints,
     /// so the file logs once per CONTENT-MODE change instead of once per
-    /// dwell. Advisory-floor telemetry only — pacing never reads this.
+    /// dwell. Advisory-floor telemetry only - pacing never reads this.
     static let contentModesHz: [Double] = [24, 30, 48, 60, 72, 90, 120, 144, 165, 240]
 
     /// The nearest canonical content mode for a floor value (pass-through for
@@ -66,28 +66,28 @@ extension FramePacer {
     /// where cadence is stable.
     ///
     /// RE-PIN STORM FIX (a wired-link run: 97,772 re-pin lines = 78% of
-    /// the log — two distinct branches, two medicines):
+    /// the log - two distinct branches, two medicines):
     ///  1. CLAMP-BEFORE-COMPARE: the old code compared the UNCLAMPED refined
     ///     cadence against `appliedFloorHz`, but applied/stored floors are
     ///     clamped to min(streamHz, panelMax). The PTS median legitimately
     ///     overshoots true content rate on bursty bring-up arrival (read
-    ///     247.9–248.6Hz vs fps_received max 241), so whenever refined >
+    ///     247.9-248.6Hz vs fps_received max 241), so whenever refined >
     ///     panelMax + deadband the compare could NEVER settle → a re-pin every
     ///     tick at exactly 240/s (29,132 lines, ~121 cumulative seconds of
     ///     CADisplayLink range writes). Clamping the candidate FIRST makes the
     ///     overshoot benign: 248 clamps to 240, equals the applied floor, done.
     ///  2. EWMA + wider deadband + min-dwell for the bimodal-wobble churn (the
-    ///     other ~68k lines) — see the constants above.
+    ///     other ~68k lines) - see the constants above.
     ///
     /// The due-gate cadence base is deliberately NOT touched on a re-pin: a
     /// range write does not make the link's targetTimestamp timebase
     /// discontinuous (the due gate's defensive clamp + starvation failsafe own
     /// real discontinuities), and re-anchoring here would inject a forced
-    /// early release per re-pin — a periodic judder source on wobbly cadence.
+    /// early release per re-pin - a periodic judder source on wobbly cadence.
     @MainActor
     func reapplyPreferredRangeIfNeeded(refinedIntervalSeconds: Double) {
         guard let link = displayLink, let view = boundView else { return }
-        // Item-9 'link installed' replay — one optional load + identity compare
+        // Item-9 'link installed' replay - one optional load + identity compare
         // per tick in the steady state; see the helper for the WHY.
         replayLinkInstalledBreadcrumbIfNeeded(link: link, view: view)
         guard refinedIntervalSeconds.isFinite, refinedIntervalSeconds > 0 else { return }
@@ -104,7 +104,7 @@ extension FramePacer {
            abs(refinedFloorEwmaHz - appliedFloorHz) < Self.frameRateReapplyHysteresisHz {
             return
         }
-        // CLAMP BEFORE COMPARE — branch 1 of the storm fix (see the doc above).
+        // CLAMP BEFORE COMPARE - branch 1 of the storm fix (see the doc above).
         let panelMax = Self.panelMaxHz(for: view)
         let candidateFloorHz = min(refinedFloorEwmaHz, panelMax)
         if appliedFloorHz.isFinite,
@@ -125,7 +125,7 @@ extension FramePacer {
         appliedFloorHz = Double(range.minimum)
         lastFloorRePinAt = now
         // Mirror under the lock for the off-main floor-violation detector
-        // (FramePacer+TickDeficit.swift) — same dual-write as installLink.
+        // (FramePacer+TickDeficit.swift) - same dual-write as installLink.
         os_unfair_lock_lock(&lock)
         pinnedFloorHz = Double(range.minimum)
         os_unfair_lock_unlock(&lock)
@@ -138,7 +138,7 @@ extension FramePacer {
             "FramePacer re-pinned present-callback floor to \(self.appliedFloorHz, privacy: .public)Hz (refined cadence \(refinedFloorHz, privacy: .public)Hz, smoothed \(self.refinedFloorEwmaHz, privacy: .public)Hz)")
         // Diag/LogStore mirror, demoted to ONCE PER CONTENT-MODE CHANGE: the
         // floor is ROUNDED to the nearest canonical mode before the ≥deadband
-        // compare (see `contentModesHz` — the raw compare passed nearly every
+        // compare (see `contentModesHz` - the raw compare passed nearly every
         // dwell because the EWMA was mid-transition between legitimate modes,
         // 91.5% of one session log). `lastDiagMirroredFloorHz`
         // therefore stores the MODE, not the exact floor; the exact floor
@@ -158,8 +158,8 @@ extension FramePacer {
 
     /// One-shot 'link installed' replay into the per-session Diag FILE sink.
     /// The real install breadcrumb (installLink, FramePacer+Recovery.swift)
-    /// fires when the stream window first shows — BEFORE StreamSession's
-    /// telemetry wiring installs `SessionLogFileSink` — so an affected
+    /// fires when the stream window first shows - BEFORE StreamSession's
+    /// telemetry wiring installs `SessionLogFileSink` - so an affected
     /// session's glimmer-*.log carried ZERO 'link installed' lines and the item-9
     /// verification clause (the floor a session started from) was un-greppable
     /// postmortem. Re-emit the LIVE link's range once per file-sink install
@@ -174,7 +174,7 @@ extension FramePacer {
         Self.lastReplayedLogSinkID = sinkID
         let range = link.preferredFrameRateRange
         Diag.info(
-            "FramePacer link installed — floor=\(Double(range.minimum))Hz "
+            "FramePacer link installed - floor=\(Double(range.minimum))Hz "
             + "preferred=\(Double(range.preferred ?? 0))Hz max=\(Double(range.maximum))Hz "
             + "(panelMax=\(Self.panelMaxHz(for: view))Hz) [replayed at session-log start]",
             "Stream.Pacer")
@@ -202,18 +202,18 @@ extension FramePacer {
     ///
     /// EXPERIMENT(preferred=panelMax): `preferred` is the PANEL MAX, not the
     /// floor. With preferred==minimum==streamHz (~170 on a 240Hz panel), macOS
-    /// quantized the callback grid down to exact panel DIVISORS — sustained
-    /// 119.996Hz / 79.997Hz callback seconds on a wired 4K240 session — so the
+    /// quantized the callback grid down to exact panel DIVISORS - sustained
+    /// 119.996Hz / 79.997Hz callback seconds on a wired 4K240 session - so the
     /// pacer ran a 170fps stream against a 120Hz-effective grid: standing depth
     /// 3-4 and the o2p p99 tail (~4.8% of frames waited ≥2 vsyncs). Asking for
     /// the full grid (preferred=240) while keeping the anti-throttle floor
-    /// (minimum=min(streamHz,panelMax)) costs nothing on the release side — the
+    /// (minimum=min(streamHz,panelMax)) costs nothing on the release side - the
     /// due gate already caps at one frame per stream interval, so faster
     /// callbacks only align releases more finely, never release more frames.
     /// JUDGED BY the next wired 240Hz session's realized-tick telemetry
     /// (refresh_min / pacer_ticks_per_s): if the 119.996/79.997Hz callback
     /// seconds vanish, divisor quantization is confirmed; if they persist, the
-    /// co-suspect is main-thread tick latency — instrument that next. The same
+    /// co-suspect is main-thread tick latency - instrument that next. The same
     /// change doubles as the battery-governor probe (AC vs battery on the
     /// internal panel): a governor that quantizes down from `preferred` may
     /// hold a higher callback rate when preferred reads the panel max.

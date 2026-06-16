@@ -4,7 +4,7 @@
 //  The per-section snapshot fills the 1Hz `capture()` tick drives, in tick
 //  order: P1 AUDIO (the other stream), P2 SESSION-LIFECYCLE (+ the one-shot
 //  handshake EVENT line), P1 PRESENT/DISPLAY, P1 RESOURCE (P-vs-E-core), and
-//  the Track-A auxiliary signals. Split from TelemetryExporter+Capture.swift —
+//  the Track-A auxiliary signals. Split from TelemetryExporter+Capture.swift -
 //  pure move (the FramePacer-split idiom) to keep that file under the
 //  file-length budget; the timer, `capture()` itself, and the network/rate
 //  derivation stay there, and the Extras sidecar + cross-tick baselines live
@@ -22,10 +22,10 @@ extension TelemetryExporter {
 
     /// Fill the P1 AUDIO block (the other stream): the monotonic receive +
     /// playout totals, the per-second rates derived from this tick's deltas, the
-    /// published playout STATE (buffer fill + A/V sync drift — read once by
+    /// published playout STATE (buffer fill + A/V sync drift - read once by
     /// `capture()` and passed in, shared with the Extras fill so one tick's
     /// fill and playout-target fields come from one stamp), and the one-shot
-    /// cold-start first-packet time. On the exporter queue — never a hot path. The
+    /// cold-start first-packet time. On the exporter queue - never a hot path. The
     /// rates use the same delta-over-interval model as the video receive-quality +
     /// stale-repeat rates; each rate is emitted only when its denominator is
     /// non-zero so a silent (no-audio) tick doesn't publish a 0/0.
@@ -54,7 +54,7 @@ extension TelemetryExporter {
                 // Same fold-time model as the video pkts/s: the audio receive
                 // totals fold once per ~1s audio-metrics window, which BEATS
                 // against this 1Hz tick (0 on some ticks, two windows on
-                // others) — divide by the true inter-fold interval instead.
+                // others) - divide by the true inter-fold interval instead.
                 if packetsDelta > 0, let foldedAt = Self.captureBaselines.audioPacketsCapturedAt {
                     let foldDt =
                         Double(now.uptimeNanoseconds &- foldedAt.uptimeNanoseconds) / 1_000_000_000.0
@@ -71,7 +71,7 @@ extension TelemetryExporter {
                 if fecBase > 0 { audio.fecRecoveryRate = Double(recoveredDelta) / Double(fecBase) }
             }
         }
-        // Fold-time baseline for audio pkts/s — stamped when the totals moved
+        // Fold-time baseline for audio pkts/s - stamped when the totals moved
         // (or on the first tick), mirroring the video baseline in `fillRates`.
         if packetsTotal != prevAudioPacketsTotal || Self.captureBaselines.audioPacketsCapturedAt == nil {
             Self.captureBaselines.audioPacketsCapturedAt = now
@@ -92,7 +92,7 @@ extension TelemetryExporter {
         }
         // Windowed MIN buffer-fill: pulled (and reset) directly off its own
         // reset-on-read window so each tick's min covers only that window's troughs
-        // — the field that proves the cushion holds above 0 (or quantifies a residual
+        // - the field that proves the cushion holds above 0 (or quantifies a residual
         // drain). Independent of the last-writer-wins state gauge above.
         audio.bufferFillMinMs = counters.takeAudioBufferFillMinMs()
         audio.firstPacketMs = counters.audioFirstPacketMs
@@ -108,12 +108,12 @@ extension TelemetryExporter {
 
     /// Fill the P2 SESSION-LIFECYCLE block (handshake breakdown + reconnect /
     /// disconnect reason + IDR round-trip + corruption), and emit the one-shot
-    /// handshake EVENT line. On the exporter queue — never a hot path. The
+    /// handshake EVENT line. On the exporter queue - never a hot path. The
     /// corruption per-second rate uses the same delta-over-interval model as the
     /// other event rates.
     func fillSessionLifecycle(into snap: inout TelemetrySnapshot, now: DispatchTime) {
         let p2 = counters.p2
-        // Handshake breakdown — carried on every tick once any stage has fired so a
+        // Handshake breakdown - carried on every tick once any stage has fired so a
         // scrape always sees the latest legs (and the session report reads it too).
         let handshake = p2.handshakeBreakdown()
         if handshake.rtspMs != nil || handshake.enetConnectMs != nil
@@ -155,7 +155,7 @@ extension TelemetryExporter {
 
     /// One-shot CONFIG/DIAL breadcrumb EVENT (`event:"config"`), written as the
     /// FIRST line of every session NDJSON so sessions are self-describing: the
-    /// live values of the dials that have to be known to read the data — ping
+    /// live values of the dials that have to be known to read the data - ping
     /// cadence (the 75ms-keepalive misread happened precisely because the
     /// cadence lived only in a code comment), the audio cushion targets, and
     /// the input idle-gap. Extend this list whenever a new experiment dial
@@ -173,7 +173,7 @@ extension TelemetryExporter {
             "\"keepalive_fast_ping_ms\":\(Int(UdpPinger.steadyPingIntervalSeconds * 1000))",
             "\"keepalive_relaxed_ping_ms\":\(Int(UdpPinger.relaxedPingIntervalSeconds * 1000))",
             "\"keepalive_conditional\":true",
-            // The keepalive's OWN input-idle gate (1.0s radio constant) — NOT
+            // The keepalive's OWN input-idle gate (1.0s radio constant) - NOT
             // the 2s telemetry idle-gap exported below as input_idle_gap_s.
             // Exporting only the 2s key once cost a full false-positive analysis
             // round-trip (a data-only judge misread hundreds of ticks as
@@ -181,7 +181,7 @@ extension TelemetryExporter {
             // self-describe the real decision table.
             "\"keepalive_idle_gap_s\":"
                 + TelemetryRenderer.jsonNumber(EnvSignalController.keepaliveIdleSeconds),
-            // Caution/distress force the fast cadence regardless of input —
+            // Caution/distress force the fast cadence regardless of input -
             // the override clause of the same table (EnvSignalController.
             // steadyPingInterval), flagged so fast-while-active windows
             // self-explain.
@@ -201,7 +201,7 @@ extension TelemetryExporter {
     /// Render the one-shot CONNECT-HANDSHAKE breakdown as an explicit NDJSON EVENT
     /// object (`event:"handshake"`), distinct from the per-second sample lines so a
     /// reader/grep finds the cold-open breakdown instantly. Numbers only, nil legs
-    /// omitted — same discipline as the rest of the exporter.
+    /// omitted - same discipline as the rest of the exporter.
     private func renderHandshakeEvent(_ breakdown: HandshakeBreakdown) -> String {
         var fields: [String] = [
             "\"ts\":\"\(isoFormatter.string(from: Date()))\"",
@@ -223,7 +223,7 @@ extension TelemetryExporter {
     /// Fill the P1 PRESENT/DISPLAY block: read + reset the DISPLAY sampler's
     /// EDR-headroom trend window (min/avg/max) and carry the latest discrete state
     /// (HDR-engaged / screen / ProMotion). On the exporter queue (the sampler runs
-    /// its own main-queue timer; this is just the lock-guarded read) — never a hot
+    /// its own main-queue timer; this is just the lock-guarded read) - never a hot
     /// path. RESET-ON-READ, so this is the sampler window's only consumer.
     func fillDisplayTelemetry(into snap: inout TelemetrySnapshot) {
         let displaySnap = display.snapshotAndReset()
@@ -237,7 +237,7 @@ extension TelemetryExporter {
     /// per-thread CPU/QoS/name view + memory footprint + AC/battery (per-process,
     /// `ResourceTelemetry.sample()`), and the SoC P-cluster vs E-cluster active
     /// residency (system, via the `IOReportSampler` delta). Both read on the
-    /// exporter's 1Hz queue — never a hot path. The first tick with a per-thread
+    /// exporter's 1Hz queue - never a hot path. The first tick with a per-thread
     /// sample also runs the one-shot QoS AUDIT (logged once) so a hot-path-thread
     /// demotion off the P-core tier surfaces immediately. The cluster residency is
     /// nil on the FIRST tick (the sampler needs two samples to delta) and stays nil
@@ -246,7 +246,7 @@ extension TelemetryExporter {
         let resource = ResourceTelemetry.sample()
         snap.resource = resource
         // One-shot QoS audit on the first tick we have a per-thread sample. Off any
-        // hot path (exporter queue); observational only — it changes no scheduling.
+        // hot path (exporter queue); observational only - it changes no scheduling.
         if !qosAuditDone, !resource.threads.isEmpty {
             qosAuditDone = true
             QoSAudit.runAndLog(resource, category: Self.logCategory)
@@ -260,21 +260,21 @@ extension TelemetryExporter {
     /// the thermal/power state. Split out of `capture()` so each stays focused; all
     /// reads happen here on the exporter queue (never the hot path).
     func fillAuxiliarySignals(into snap: inout TelemetrySnapshot, stats: StreamStatsSnapshot) {
-        // Host encode-latency trend (min/avg/max) — already collected for the
+        // Host encode-latency trend (min/avg/max) - already collected for the
         // overlay; surfacing it over time makes the host's idle-ramp visible (a
         // big slow encode on the first frame after the scene was static).
         snap.hostEncodeLatencyMinMs = stats.minHostProcessingLatencyMs
         snap.hostEncodeLatencyAvgMs = stats.avgHostProcessingLatencyMs
         snap.hostEncodeLatencyMaxMs = stats.maxHostProcessingLatencyMs
 
-        // Frame size + type — avg/max bytes + %IDR for the big-frame / recurring-
+        // Frame size + type - avg/max bytes + %IDR for the big-frame / recurring-
         // IDR hypothesis (a resume that fires a large IDR shows here).
         snap.avgFrameBytes = stats.avgFrameBytes
         snap.maxFrameBytes = stats.maxFrameBytes
         snap.idrFramePercent = stats.idrFramePercent
 
         // Input idle→active edge + time-since-last-input (the resume-after-idle
-        // correlator). Both read off the always-live input gauge — no hot-path
+        // correlator). Both read off the always-live input gauge - no hot-path
         // cost; the read happens here on the exporter queue.
         snap.inputIdleToActiveTotal = counters.inputIdleToActiveTotal.value
         snap.timeSinceLastInputMs = counters.timeSinceLastInputMs()
@@ -288,9 +288,9 @@ extension TelemetryExporter {
             snap.refreshChanged = refresh.changed
         }
 
-        // Thermal + power state — cheap ProcessInfo reads (no allocation, no
+        // Thermal + power state - cheap ProcessInfo reads (no allocation, no
         // syscall storm) that catch throttling correlating with a spike. Thermal
-        // state is mapped to a 0…3 ordinal (see ProcessMetrics.thermalOrdinal).
+        // state is mapped to a 0...3 ordinal (see ProcessMetrics.thermalOrdinal).
         let processInfo = ProcessInfo.processInfo
         snap.thermalState = ProcessMetrics.thermalOrdinal(processInfo.thermalState)
         snap.lowPowerModeEnabled = processInfo.isLowPowerModeEnabled

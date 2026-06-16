@@ -81,7 +81,7 @@ public actor HostDiscovery {
                 let key = name
                 // Resolve the Bonjour service to a concrete host:port via
                 // NWConnection. We start a TCP connection at the service
-                // endpoint — Network.framework's name resolver walks DNS-SD
+                // endpoint - Network.framework's name resolver walks DNS-SD
                 // PTR → SRV → A/AAAA for us, and once the connection lands
                 // in `.ready` its `currentPath?.remoteEndpoint` is a
                 // `.hostPort(host:port:)` carrying the actual numeric
@@ -106,7 +106,7 @@ public actor HostDiscovery {
     }
 
     /// Spin up a short-lived `NWConnection` whose only job is to drive the
-    /// service endpoint through resolution. We never send data — once the
+    /// service endpoint through resolution. We never send data - once the
     /// path is ready (or the attempt fails) we extract host:port from the
     /// resolved remote endpoint, cache the result, and cancel the connection.
     private func startResolve(name: String, endpoint: NWEndpoint) {
@@ -162,7 +162,7 @@ public actor HostDiscovery {
     /// Drop the interface-zone suffix Network appends to a resolved address
     /// (e.g. `192.0.2.10%en0`). The zone is an interface hint that's noise
     /// for a routable address and breaks the HTTP/TLS host parsing downstream
-    /// (pairing dialed the literal `…%en0` and failed — issue #21). It is
+    /// (pairing dialed the literal `...%en0` and failed - issue #21). It is
     /// REQUIRED for IPv6 link-local (fe80::/10) to connect at all, so keep it
     /// there; strip it everywhere else.
     static func canonicalHost(_ raw: String, ipv6: Bool) -> String {

@@ -9,7 +9,7 @@
 //  reportFinalFrameFecStatus (the per-frame QoS feedback Sunshine wants).
 //
 //  These run on the SAME single receive thread as the add path in
-//  RtpVideoQueue.swift — the split is purely textual (a Swift extension can only
+//  RtpVideoQueue.swift - the split is purely textual (a Swift extension can only
 //  reach non-private members, which is why the queue's touched state is `internal`
 //  rather than `private`; see the visibility note atop RtpVideoQueue.swift). No
 //  isolation, ordering, or locking contract changes.
@@ -102,7 +102,7 @@ extension RtpVideoQueue {
     /// log the recovery (first one at notice level), and emit the per-frame FEC
     /// status the host's QoS eval expects (RtpVideoQueue.c:331-345).
     private func logFecRecovery() {
-        // This frame needed Reed-Solomon recovery — count it once for the
+        // This frame needed Reed-Solomon recovery - count it once for the
         // periodic FEC-recovery-rate metric (latched; tallied at submit time).
         currentFrameNeededFec = true
         let recovered = bufferDataPackets - receivedDataPackets

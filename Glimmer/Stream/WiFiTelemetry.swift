@@ -5,32 +5,32 @@
 //  (`WiFiTelemetry`) and the stream-ROUTE probe (`StreamRouteProbe`). Two
 //  different questions, kept side by side because conflating them is an easy
 //  and costly mistake:
-//    * wifi_* fields = "what is the associated Wi-Fi radio doing?" — RSSI,
+//    * wifi_* fields = "what is the associated Wi-Fi radio doing?" - RSSI,
 //      negotiated tx/PHY rate, noise floor, channel/band labels. These describe
 //      the RADIO, whether or not the stream rides it.
 //    * stream_link / stream_if = "which interface do the stream's packets
-//      actually traverse?" — a kernel-routing probe. A docked laptop streams
+//      actually traverse?" - a kernel-routing probe. A docked laptop streams
 //      over Thunderbolt Ethernet while STAYING associated to its AP, so
 //      wifi_link:"wifi" on every row of a wired session is truthful about the
 //      radio yet dead wrong as a route label (route identity would otherwise
 //      have to be reconstructed post-hoc from RTT physics). stream_link is the
-//      field that GATES the env-signal adaptive layer — radio evidence arms only
+//      field that GATES the env-signal adaptive layer - radio evidence arms only
 //      when the stream really is on the radio.
 //
-//  GATING + HOT-PATH SAFETY (load-bearing — see TelemetryExporter.swift):
-//    * Sampled ONLY on the exporter's ~1Hz capture tick, on its serial queue —
+//  GATING + HOT-PATH SAFETY (load-bearing - see TelemetryExporter.swift):
+//    * Sampled ONLY on the exporter's ~1Hz capture tick, on its serial queue -
 //      NEVER the hot path. There is no per-frame and no per-packet cost.
 //    * When telemetry is off (default), the exporter never exists, so this is
 //      never constructed and never called: zero overhead.
 //    * `CWWiFiClient.shared()` + one `interface()` read per tick is a cheap
-//      framework call (no scan triggered — we read the CURRENT association, never
+//      framework call (no scan triggered - we read the CURRENT association, never
 //      `scanForNetworks`, which WOULD disrupt the link). Wrapped so any CoreWLAN
 //      hiccup degrades to "no sample" rather than affecting the stream.
 //
 //  WIRED HANDLING: on Ethernet (or any host with no associated Wi-Fi interface)
 //  there is no radio to report, so we emit a clear `wired`/`unassociated` STATE
 //  (an enum the renderer turns into a single `glimmer_wifi_link_state` gauge + a
-//  `link="wired"` label) and omit the RSSI/rate/noise gauges entirely — an absent
+//  `link="wired"` label) and omit the RSSI/rate/noise gauges entirely - an absent
 //  signal series is the honest representation of "there is no radio here", and the
 //  state gauge means a dashboard can still distinguish "wired" from "telemetry
 //  off". This is what lets a reader say "the link was fine, the regression is
@@ -38,7 +38,7 @@
 //
 //  SECRET-FREE: RSSI/rate/noise are radio physics; SSID/channel/band are the
 //  user's OWN network identity on their OWN machine, carried only in the local
-//  opt-in diagnostics (same trust boundary as the rest of the rig — local,
+//  opt-in diagnostics (same trust boundary as the rest of the rig - local,
 //  single-user, ephemeral). No host credentials, keys, or pairing material.
 //
 
@@ -52,19 +52,19 @@ import Darwin
 /// fields are nil in the `wired`/`unassociated` states (no radio to report).
 struct WiFiSnapshot: Sendable {
 
-    /// Why the radio fields may be absent — turned into a single
+    /// Why the radio fields may be absent - turned into a single
     /// `glimmer_wifi_link_state` gauge (ordinal) + a `link` label so a dashboard
     /// can tell "wired" apart from "telemetry never sampled". NOTE this is the
-    /// ASSOCIATION state of the default Wi-Fi interface, NOT the stream route —
+    /// ASSOCIATION state of the default Wi-Fi interface, NOT the stream route -
     /// `associated` on a docked laptop streaming over Ethernet is truthful
     /// about the radio. The route lives in `stream_link` (StreamRouteProbe).
     enum LinkState: Int, Sendable {
         /// An associated Wi-Fi interface with live RSSI/rate/noise.
         case associated = 0
         /// A Wi-Fi interface exists but isn't associated to an AP (between
-        /// networks, radio off) — no usable RSSI/rate.
+        /// networks, radio off) - no usable RSSI/rate.
         case unassociated = 1
-        /// No Wi-Fi interface at all — the host is on Ethernet (or has no Wi-Fi
+        /// No Wi-Fi interface at all - the host is on Ethernet (or has no Wi-Fi
         /// hardware). The streaming path is wired; the radio is irrelevant.
         case wired = 2
 
@@ -81,11 +81,11 @@ struct WiFiSnapshot: Sendable {
 
     // ---- Radio physics (nil unless `associated`) ----
     /// Received signal strength, dBm (negative; closer to 0 = stronger). The
-    /// headline "how good is the radio" number — a sag here that lines up with a
+    /// headline "how good is the radio" number - a sag here that lines up with a
     /// stream hitch points the finger at the link, not the pipeline.
     var rssiDbm: Int?
     /// Negotiated PHY / transmit rate, Mbps. The ceiling the radio is currently
-    /// willing to clock at — drops here precede the bitrate the host can sustain.
+    /// willing to clock at - drops here precede the bitrate the host can sustain.
     var txRateMbps: Double?
     /// Noise floor, dBm (negative). RSSI − noise is the effective SNR; a rising
     /// noise floor (interference) degrades throughput even at a steady RSSI.
@@ -93,12 +93,12 @@ struct WiFiSnapshot: Sendable {
 
     // ---- Labels (nil when unavailable) ----
     /// The associated network name. nil on macOS 14+ without Location
-    /// authorization (the OS gates SSID behind location) — the band/channel still
+    /// authorization (the OS gates SSID behind location) - the band/channel still
     /// resolve, so we degrade to those rather than failing the whole sample.
     var ssid: String?
     /// Channel number on the current band.
     var channel: Int?
-    /// "2.4GHz" / "5GHz" / "6GHz" — the band label, the single most useful split
+    /// "2.4GHz" / "5GHz" / "6GHz" - the band label, the single most useful split
     /// for a quick "is this the congested 2.4 radio" read.
     var band: String?
 }
@@ -114,7 +114,7 @@ final class WiFiTelemetry: @unchecked Sendable {
 
     private let client = CWWiFiClient.shared()
 
-    /// Capture one radio sample. Reads the CURRENT association only — never
+    /// Capture one radio sample. Reads the CURRENT association only - never
     /// triggers a scan (which would disrupt the link). Any CoreWLAN failure or a
     /// missing interface degrades to a `wired`/`unassociated` state, so a probe
     /// hiccup can never affect the stream.
@@ -126,7 +126,7 @@ final class WiFiTelemetry: @unchecked Sendable {
         }
 
         // An interface with no SSID *and* no usable rate is "present but not
-        // associated" — between networks or radio disabled. An ASSOCIATED radio
+        // associated" - between networks or radio disabled. An ASSOCIATED radio
         // while STREAMING over Ethernet is the common docked-laptop case: this
         // sampler keeps reporting the radio truthfully (it IS associated), and
         // `StreamRouteProbe` is what says which interface the stream rides.
@@ -147,7 +147,7 @@ final class WiFiTelemetry: @unchecked Sendable {
         let noise = interface.noiseMeasurement()
         snap.noiseDbm = noise != 0 ? noise : nil
 
-        // SSID is nil on macOS 14+ without Location authorization — that's fine,
+        // SSID is nil on macOS 14+ without Location authorization - that's fine,
         // the band/channel still resolve and carry the AP identity we need most.
         snap.ssid = interface.ssid()
         if let channel = interface.wlanChannel() {
@@ -178,16 +178,16 @@ final class WiFiTelemetry: @unchecked Sendable {
 struct StreamRouteSnapshot: Sendable {
     /// "wired" | "wifi" | "tunnel" | "unknown". `unknown` = the probe could not
     /// resolve a route (no host latched, sockaddr build failed, or no interface
-    /// matched) — absent knowledge stays labelled as such, never guessed.
+    /// matched) - absent knowledge stays labelled as such, never guessed.
     var linkLabel: String = "unknown"
-    /// BSD interface name the route resolved to ("en0", "en12", "utun4"…), nil
+    /// BSD interface name the route resolved to ("en0", "en12", "utun4"...), nil
     /// when the probe failed. Carried so a hot-undock ("en12 vanished") is
     /// attributable from the NDJSON alone.
     var interfaceName: String?
 }
 
 /// Probes the route the stream's UDP packets actually take: a throwaway
-/// connected UDP socket to the host (connect() on UDP sends NOTHING — it only
+/// connected UDP socket to the host (connect() on UDP sends NOTHING - it only
 /// asks the kernel to bind a route) → `getsockname()` for the kernel-chosen
 /// local address → `getifaddrs()` match → interface name → classify via
 /// `CWWiFiClient.interfaceNames()` (utun*/ipsec* → tunnel, awdl*/llw* → the
@@ -196,7 +196,7 @@ struct StreamRouteSnapshot: Sendable {
 /// `route_change` EVENT row + Diag NOTICE on every classification flip.
 ///
 /// GATING + HOT-PATH SAFETY (the WiFiTelemetry contract): constructed ONLY by
-/// the exporter (gate-on path), all probing on its own utility queue — never a
+/// the exporter (gate-on path), all probing on its own utility queue - never a
 /// hot path, a handful of cheap syscalls per probe, no DNS (the host address is
 /// the IP literal RTSP already resolved; a hostname degrades to `unknown` with
 /// a NOTICE rather than a blocking lookup). The always-live cost when telemetry
@@ -207,7 +207,7 @@ final class StreamRouteProbe: @unchecked Sendable {
     //
     // The exporter is constructed long after the session knows its host, and
     // threading the address through TelemetrySource just for this would touch
-    // every construction site — so the connect edge latches it here instead
+    // every construction site - so the connect edge latches it here instead
     // (the `FrameTimingTracker.shared` install/clear discipline: one writer at
     // a rare lifecycle edge, read once at exporter construction).
     nonisolated(unsafe) private static var latchedHost: String?
@@ -221,7 +221,7 @@ final class StreamRouteProbe: @unchecked Sendable {
 
     /// The host latched for the session being connected (nil before the first
     /// connect this process run). Read by the audio cushion memory at decoder
-    /// init — the host half of its per-host+link UserDefaults seed key. The
+    /// init - the host half of its per-host+link UserDefaults seed key. The
     /// value stays LOCAL (preferences key only); it never rides telemetry or
     /// logs (the secret-free contract).
     static var currentLatchedHost: String? {
@@ -246,7 +246,7 @@ final class StreamRouteProbe: @unchecked Sendable {
     private var loggedFailure = false
 
     /// The host's sockaddr, resolved ONCE at construction from the latched IP
-    /// literal (no DNS, ever — see the class doc). nil = probe can't run.
+    /// literal (no DNS, ever - see the class doc). nil = probe can't run.
     private var destAddr: sockaddr_storage?
     private var destLen: socklen_t = 0
     private var family: Int32 = AF_INET
@@ -279,7 +279,7 @@ final class StreamRouteProbe: @unchecked Sendable {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] _ in
             // Path changes fire for ANY route-table event (dock/undock, VPN up,
-            // Wi-Fi join) — re-probe each time; the change-detection below
+            // Wi-Fi join) - re-probe each time; the change-detection below
             // dedupes, so a same-route update costs a few syscalls and no row.
             self?.probeAndPublish()
         }
@@ -295,7 +295,7 @@ final class StreamRouteProbe: @unchecked Sendable {
 
     /// The latest route snapshot for this capture tick. Lock-guarded read; if
     /// the sample has gone stale (missed path callback) a revalidation is
-    /// SCHEDULED on the probe queue — never run inline on the exporter tick.
+    /// SCHEDULED on the probe queue - never run inline on the exporter tick.
     func current() -> StreamRouteSnapshot {
         stateLock.lock()
         let snap = snapshot
@@ -322,7 +322,7 @@ final class StreamRouteProbe: @unchecked Sendable {
 
         let ifLabel = fresh.interfaceName ?? "?"
         if isFirst {
-            // First-sample NOTICE (success or failure) — the sensor-honesty
+            // First-sample NOTICE (success or failure) - the sensor-honesty
             // contract every sampler ships with.
             Diag.notice("Stream route probe: \(fresh.linkLabel) via \(ifLabel)",
                         TelemetryExporter.logCategory)
@@ -360,7 +360,7 @@ final class StreamRouteProbe: @unchecked Sendable {
         }
         guard connected else {
             // EHOSTUNREACH/ENETDOWN here is itself signal: the route to the
-            // host is GONE (mid-undock window) — honest answer is unknown.
+            // host is GONE (mid-undock window) - honest answer is unknown.
             noteFailureOnce("connect() errno \(errno)")
             return nil
         }
@@ -388,7 +388,7 @@ final class StreamRouteProbe: @unchecked Sendable {
         loggedFailure = true
         stateLock.unlock()
         guard !logged else { return }
-        Diag.notice("Stream route probe unavailable — \(stage); stream_link=unknown "
+        Diag.notice("Stream route probe unavailable - \(stage); stream_link=unknown "
             + "(radio fields unaffected)", TelemetryExporter.logCategory)
     }
 
@@ -432,7 +432,7 @@ final class StreamRouteProbe: @unchecked Sendable {
     /// Interface name → link class. CoreWLAN owns the wifi answer (it lists the
     /// WLAN interfaces by name); awdl/llw are the same radio's P2P/low-latency
     /// faces; utun/ipsec/ppp are tunnels (a Tailscale path reads "tunnel",
-    /// honestly — the radio underneath is NOT what the kernel routed to).
+    /// honestly - the radio underneath is NOT what the kernel routed to).
     /// Everything else that routes (en*, bridge*) is wired.
     private static func classify(interfaceName: String?) -> String {
         guard let name = interfaceName else { return "unknown" }

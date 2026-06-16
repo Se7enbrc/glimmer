@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# generate-build-info.sh — stamp the git commit SHA + build date into a generated
+# generate-build-info.sh - stamp the git commit SHA + build date into a generated
 # Swift constant so every telemetry session/metric is attributable to a build
 # (regression tracking).
 #
@@ -11,7 +11,7 @@
 # Swift to recompile the (unchanged) generated unit.
 #
 # The SHA is the short (12-char) HEAD with a "-dirty" suffix when the worktree
-# has uncommitted changes — so a metric never silently claims a clean build it
+# has uncommitted changes - so a metric never silently claims a clean build it
 # wasn't. Outside a git checkout (a source tarball) it falls back to "unknown".
 #
 # Secret-free by construction: a commit SHA + an ISO date carry nothing sensitive
@@ -40,7 +40,7 @@ contents="$(cat <<EOF
 //
 //  BuildInfo.generated.swift
 //
-//  GENERATED — do not edit. Written by scripts/generate-build-info.sh on each
+//  GENERATED - do not edit. Written by scripts/generate-build-info.sh on each
 //  \`make app\`. Stamps the git commit SHA + build date so every telemetry
 //  session/metric is attributable to a build (regression tracking). Secret-free:
 //  a commit SHA + an ISO date carry nothing sensitive.
@@ -56,7 +56,7 @@ enum BuildInfo {
 EOF
 )"
 
-# Only rewrite when the SHA changed — the date alone changing every build would
+# Only rewrite when the SHA changed - the date alone changing every build would
 # needlessly recompile, so we compare on the commit line only.
 if [ -f "$OUT" ] && grep -q "static let commit = \"$commit\"" "$OUT"; then
     exit 0

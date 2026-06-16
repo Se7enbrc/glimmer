@@ -3,12 +3,12 @@
 //
 //  P1 DECODE-side telemetry capture for the opt-in exporter, split out of
 //  VideoDecoder+Session.swift so that file stays under the length budget and
-//  focused on the VT session lifecycle. These are CAPTURE-ONLY helpers — they add
+//  focused on the VT session lifecycle. These are CAPTURE-ONLY helpers - they add
 //  no behavior to the decode path; they only publish what the session already
 //  knows (HW-decode confirmation, pixel format, bit depth, colorspace) to the
 //  always-live `TelemetryCounters` for the exporter to read at 1Hz.
 //
-//  GATING + HOT-PATH SAFETY (load-bearing — see TelemetryExporter.swift): the
+//  GATING + HOT-PATH SAFETY (load-bearing - see TelemetryExporter.swift): the
 //  recreate counter is an always-live integer add at the already-rare VT-create
 //  site; the state PUBLISH is gated on `FrameTimingTracker.shared != nil` (the
 //  gate-on sentinel) so the OFF path pays only that one optional load. Both call
@@ -28,7 +28,7 @@ extension VideoDecoder {
     /// VT propagates this PTS verbatim to the output callback and the pacer carries
     /// it on the CMSampleBuffer, so it is the frame-identity key the latency
     /// tracker uses across the VideoToolbox boundary. Returns 0 for an invalid PTS
-    /// (older Sunshine / defensive path) — which the tracker treats as "untracked".
+    /// (older Sunshine / defensive path) - which the tracker treats as "untracked".
     /// Lives here because the latency telemetry rig is its only purpose.
     nonisolated static func rtpTimestamp(from pts: CMTime) -> UInt32 {
         guard pts.isValid, pts.isNumeric else { return 0 }
@@ -45,17 +45,17 @@ extension VideoDecoder {
 
     /// P2 CORRUPTION/ARTIFACT heuristic (signal: quality). Count a corruption hit
     /// when VT returns a decode-STATUS error (badDataErr / kVTVideoDecoderBadDataErr)
-    /// — VT judged the bitstream hosed, the cheap, already-computed tell for the
+    /// - VT judged the bitstream hosed, the cheap, already-computed tell for the
     /// white/purple-flash class with NO per-pixel scan. The benign info-only
     /// `frameDropped` bit (VT skipped a frame to keep up) is deliberately NOT
-    /// counted — only a true decode-status error. Always-live integer add at this
+    /// counted - only a true decode-status error. Always-live integer add at this
     /// already-rare site (a healthy stream never hits it); off the per-frame budget.
     nonisolated static func noteCorruptionIfDecodeError(status: OSStatus) {
         guard status != noErr else { return }
         TelemetryCounters.shared.corruptionHeuristicTotal.increment()
     }
 
-    /// P2 CONNECT-HANDSHAKE: stamp the FIRST decoded-frame instant — the close of
+    /// P2 CONNECT-HANDSHAKE: stamp the FIRST decoded-frame instant - the close of
     /// the "established → pixels" leg + the whole cold-open total. Always-live
     /// (idempotent in P2State); off the per-frame path (the caller fires this
     /// exactly once per session, behind its own first-frame latch).
@@ -78,7 +78,7 @@ extension VideoDecoder {
 
     /// Publish the live DECODE state (HW-decode confirmation + pixel format + bit
     /// depth + colorspace). Reads the HW-accelerated-decoder property back from the
-    /// live session — VT only resolves it after create — so a silent software
+    /// live session - VT only resolves it after create - so a silent software
     /// fallback (an OS/driver regression past our hardware REQUIRE) is surfaced
     /// rather than assumed. The colorspace key reflects the last one the decode
     /// path derived; it is refreshed on a colorspace change in `enqueueDecodedFrame`.

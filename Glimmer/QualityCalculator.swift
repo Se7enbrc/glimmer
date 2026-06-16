@@ -17,12 +17,12 @@ extension MoonlightManager {
 
     /// Compute smart defaults from the current display.
     ///
-    /// Returns the PANEL NATIVE resolution — the actual pixel grid the display
+    /// Returns the PANEL NATIVE resolution - the actual pixel grid the display
     /// hardware has, not the framebuffer the user is currently rendering at.
     ///
     /// We get panel native by querying CGDisplayCopyAllDisplayModes with no
     /// options. Without `kCGDisplayShowDuplicateLowResolutionModes`, macOS only
-    /// returns modes the panel really supports — it omits the synthetic
+    /// returns modes the panel really supports - it omits the synthetic
     /// upscaled HiDPI virtual modes (the "Looks like Larger Text" frame sizes
     /// that render above panel native and downsample). The largest pixelWidth
     /// from that list is panel native.
@@ -31,13 +31,13 @@ extension MoonlightManager {
         let fps = screen.maximumFramesPerSecond > 0 ? screen.maximumFramesPerSecond : 60
 
         // Send the panel's actual pixel-native dimensions verbatim. The
-        // host is responsible for being able to accept them — modern
+        // host is responsible for being able to accept them - modern
         // Sunshine + VDD setups (e.g. MTT's VDD) can register the Mac
         // panel modes (3024×1964 for 14" MBP, 3456×2234 for 16" MBP,
         // 2880×1864 for 15" MBA, etc.) as supported display modes, and
         // QRes / Windows OS will then accept them. A previous round here
         // tried to snap to a 16:9/16:10 standard preset on the assumption
-        // that the host would reject non-standard modes — that turned out
+        // that the host would reject non-standard modes - that turned out
         // to make the host think a 14" MBP was a 13" MBA (snapped to
         // 2560×1600). The honest answer is: send what the user is
         // actually running. If a stricter host rejects, that's a host-
@@ -58,12 +58,12 @@ extension MoonlightManager {
                 // `kDisplayModeNativeFlag` in IOKit
                 // (IOKit/graphics/IOGraphicsTypesPrivate.h). The flag is
                 // declared "private" but has been stable since macOS 10.6
-                // — moonlight-qt and most third-party display utilities
+                // - moonlight-qt and most third-party display utilities
                 // (Lunar, BetterDisplay, etc.) use it. This is the only
                 // public-ish way to ask Core Graphics "what mode does the
                 // panel actually want to run at." Picking by max pixel
                 // area lands on whatever zoomed framebuffer the user
-                // happens to be in, which is wrong — that mode upscales
+                // happens to be in, which is wrong - that mode upscales
                 // / downscales against the panel.
                 let kDisplayModeNativeFlag: UInt32 = 0x02000000
                 let nativeMatches = usable.filter { ($0.ioFlags & kDisplayModeNativeFlag) != 0 }
@@ -72,7 +72,7 @@ extension MoonlightManager {
                 }
                 // No native flag found (older OS / external panel without
                 // EDID-derived preferred-mode info). Fall back to the
-                // smallest 2x retina mode — that's typically the panel's
+                // smallest 2x retina mode - that's typically the panel's
                 // default "looks like" preset on a Mac.
                 let retinaModes = usable.filter { $0.pixelWidth == $0.width * 2 }
                 if let smallest = retinaModes.min(by: { ($0.pixelWidth * $0.pixelHeight) < ($1.pixelWidth * $1.pixelHeight) }),
@@ -114,9 +114,9 @@ extension MoonlightManager {
         if pixels >= lastEntry.0 {
             // Above 4K (5K/6K Apple panels): extrapolate off the 4K anchor by
             // pixel ratio, mildly discounted (^0.9) for codec efficiency at
-            // higher resolution — mirroring the sub-linear fps curve below.
+            // higher resolution - mirroring the sub-linear fps curve below.
             // Clamping flat at the 4K factor gave a 5K (14.7 Mpx) or 6K (20 Mpx)
-            // stream the same budget as 4K (8.3 Mpx) — roughly half the bits per
+            // stream the same budget as 4K (8.3 Mpx) - roughly half the bits per
             // pixel, which reads as smeared detail and banding on exactly the
             // high-end Macs most likely to drive these resolutions. The 200 Mbps
             // clamp at the end of this function still bounds the largest panels.
@@ -175,13 +175,13 @@ extension MoonlightManager {
 
     /// Harness-measured recommendation anchors. Provenance (wired
     /// measurements, telemetry NDJSON):
-    ///   * 3024×1964@120 (MBP 14″ panel) — measured p95 66 Mbps of the 67.2
+    ///   * 3024×1964@120 (MBP 14″ panel) - measured p95 66 Mbps of the 67.2
     ///     encoder budget (84 wire × 0.8). The 84 default is correct;
     ///     recommend 85.
-    ///   * 4K@120 — measured ~66 Mbps avg / 86 p95 → +20% headroom ≈ 100.
-    ///   * 4K@240 — measured p95 ~87 Mbps → +20% headroom ≈ 105.
+    ///   * 4K@120 - measured ~66 Mbps avg / 86 p95 → +20% headroom ≈ 100.
+    ///   * 4K@240 - measured p95 ~87 Mbps → +20% headroom ≈ 105.
     /// Modes between/outside the anchors scale by the Moonlight formula
-    /// curve (`bitrateKbps`) re-anchored to these measured points — see
+    /// curve (`bitrateKbps`) re-anchored to these measured points - see
     /// `recommendedBitrateMbps`. Sorted ascending by pixel-rate.
     static let measuredBitrateAnchors: [MeasuredBitrateAnchor] = [
         MeasuredBitrateAnchor(width: 3024, height: 1964, fps: 120, recommendedMbps: 85),
@@ -196,7 +196,7 @@ extension MoonlightManager {
     /// (85 / 100 / 105); below the smallest anchor the formula already
     /// matches measurement (ratio ≈ 1), and above the largest we hold the
     /// last ratio rather than extrapolate a trend we never measured.
-    /// Snapped to a 5 Mbps grid — these read as "~105", not false precision.
+    /// Snapped to a 5 Mbps grid - these read as "~105", not false precision.
     func recommendedBitrateMbps(width: Int, height: Int, fps: Int) -> Int {
         let formulaMbps = Double(bitrateKbps(width: width, height: height, fps: fps, preset: .matchDisplay)) / 1000.0
         let points = Self.measuredBitrateAnchors.map { anchor -> (pixelRate: Double, ratio: Double) in
@@ -231,19 +231,19 @@ extension MoonlightManager {
 
     /// The honest learned sentence for the bitrate control, or nil when
     /// there is nothing worth saying. Rides the end-of-stream receipt the
-    /// main window stashes per host+mode (`SessionReceiptStore` — ALWAYS-LIVE
+    /// main window stashes per host+mode (`SessionReceiptStore` - ALWAYS-LIVE
     /// surfaces only, no telemetry-exporter dependency). Speaks ONLY when a
-    /// ≥5-minute session's average goodput pressed the encoder budget —
+    /// ≥5-minute session's average goodput pressed the encoder budget -
     /// ≥ ~90% of wire × 0.8 (the FEC share never reaches the encoder). The
     /// receipt carries the session average, not a p95, and the average
-    /// includes menu/idle time — so an average at the ceiling is an even
+    /// includes menu/idle time - so an average at the ceiling is an even
     /// stronger "raise it" signal. A session comfortably under budget proves
     /// nothing about the ceiling, so it stays silent rather than imply the
     /// current setting is "right".
     ///
     /// `wireBudgetMbps` is the budget the user is configuring right now (the
     /// slider value the sentence renders under), not the one the session ran
-    /// with — the receipt doesn't carry its bitrate, and "does my last
+    /// with - the receipt doesn't carry its bitrate, and "does my last
     /// session fit the budget I'm looking at" is the question being asked.
     func learnedBitrateAdvice(
         hostID: String?, width: Int, height: Int, fps: Int, wireBudgetMbps: Int
@@ -257,7 +257,7 @@ extension MoonlightManager {
         guard encoderBudgetMbps > 0, avgMbps >= encoderBudgetMbps * 0.9 else { return nil }
         let mode = "\(Self.resolutionLabel(width: width, height: height))·\(fps)"
         return "Your recent \(mode) sessions used all of the \(Int(encoderBudgetMbps.rounded())) Mbps "
-            + "budget — raising it will improve heavy scenes."
+            + "budget - raising it will improve heavy scenes."
     }
 
     // MARK: - Effective config + persistence

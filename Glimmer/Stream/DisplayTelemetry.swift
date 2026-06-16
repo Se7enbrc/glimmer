@@ -9,11 +9,11 @@
 //  probes (NSScreen / AVSampleBufferDisplayLayer), so they CANNOT be read on the
 //  exporter's background queue the way the Wi-Fi sampler is.
 //
-//  GATING + HOT-PATH SAFETY (load-bearing — see TelemetryExporter.swift):
+//  GATING + HOT-PATH SAFETY (load-bearing - see TelemetryExporter.swift):
 //    * The MAIN-actor sampler timer is constructed ONLY on the gate-on path (the
 //      exporter builds it in `start()` after the gate check). When telemetry is
 //      off (default) nothing here is constructed, scheduled, or read: zero cost.
-//    * The sampler fires at ~1Hz on the MAIN run loop (NOT a hot path — the decode
+//    * The sampler fires at ~1Hz on the MAIN run loop (NOT a hot path - the decode
 //      queue, the pacer's serial queue, and the receive thread are all untouched).
 //      Each tick is a handful of cheap NSScreen / layer property reads.
 //    * The accumulator is lock-guarded so the background exporter queue can read a
@@ -36,7 +36,7 @@ struct DisplayProbe: Sendable {
     /// much headroom. The number that proves the panel is (or isn't) in HDR.
     var edrHeadroom: Double
     /// True iff HDR is active end-to-end (host signalled HDR + 10-bit stream + the
-    /// layer is in the PQ colorspace) — the decoder's own `isHDRActive`.
+    /// layer is in the PQ colorspace) - the decoder's own `isHDRActive`.
     var hdrEngaged: Bool
     /// The compositing screen's localized name (e.g. a display name). A label so a
     /// multi-display session is attributable to the panel actually showing it.
@@ -45,7 +45,7 @@ struct DisplayProbe: Sendable {
     /// (`NSScreen.maximumFramesPerSecond` > 60). Pairs with the pacer's realized
     /// refresh-Hz window to tell "panel can't do 120" from "panel ramped down".
     var proMotionCapable: Bool
-    /// The panel's advertised maximum refresh (Hz) — the ProMotion ceiling, so a
+    /// The panel's advertised maximum refresh (Hz) - the ProMotion ceiling, so a
     /// realized refresh well under it (the pacer's `refresh_min_hz`) reads as a
     /// genuine ramp-down rather than a slow panel.
     var maxRefreshHz: Int
@@ -74,7 +74,7 @@ final class DisplayTelemetry: @unchecked Sendable {
     private var edrSamples: UInt64 = 0
     private var edrMin: Double = .nan
     private var edrMax: Double = .nan
-    /// Latest discrete state (last-writer-wins across the window — these change
+    /// Latest discrete state (last-writer-wins across the window - these change
     /// rarely, so the most-recent sample is the right gauge). nil before the first
     /// successful probe.
     private var latestState: DisplayProbe?
@@ -124,7 +124,7 @@ final class DisplayTelemetry: @unchecked Sendable {
 
     /// Read + RESET the EDR trend window, returning it plus the latest discrete
     /// state. Called once per ~1Hz tick by the exporter on its serial queue (the
-    /// only consumer — the window resets on read like the pacer's refresh window).
+    /// only consumer - the window resets on read like the pacer's refresh window).
     /// nil min/avg/max when no probe landed this window (layer not bound yet).
     func snapshotAndReset() -> DisplayTelemetrySnapshot {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }

@@ -6,7 +6,7 @@
 //  input-to-photon estimate, and the time-since-last-input read. Split out of
 //  TelemetryCounters.swift to keep that file under the length limit (pure move,
 //  same idiom as the FramePacer split). The stored state (the lock,
-//  the stamp, `idleGapSeconds`) stays on the class in TelemetryCounters.swift —
+//  the stamp, `idleGapSeconds`) stays on the class in TelemetryCounters.swift -
 //  stored properties cannot live in extensions.
 //
 
@@ -42,7 +42,7 @@ extension TelemetryCounters {
     /// input-to-photon estimate (signal 2): one short lock, only on the gate-on
     /// telemetry path (the tracker that reads it doesn't exist when off). This is
     /// the SAME stamp `noteInputEvent()` already writes from the InputBatcher
-    /// producers — so input-to-photon adds NO new input-side write, only this
+    /// producers - so input-to-photon adds NO new input-side write, only this
     /// present-side read.
     var lastInputNanos: UInt64? {
         os_unfair_lock_lock(inputLock)
@@ -64,12 +64,12 @@ extension TelemetryCounters {
     }
 }
 
-/// Last host-RUMBLE receipt instant — the input stamp's rumble sibling. Stamped
+/// Last host-RUMBLE receipt instant - the input stamp's rumble sibling. Stamped
 /// at protocol dispatch (EnetControlChannel.handleRumbleData, ~135/s during
-/// active rumble — a sub-µs locked store) and read at the controller-detach
+/// active rumble - a sub-µs locked store) and read at the controller-detach
 /// edge so the detach-context breadcrumb carries last-rumble age: the single
 /// number that splits a mid-rumble radio drop (age ~seconds) from pad idle
-/// auto-sleep (age ~minutes) — observed Bluetooth drops needed a manual
+/// auto-sleep (age ~minutes) - observed Bluetooth drops needed a manual
 /// three-file join to recover it. Always-live like the counters; self-locked
 /// (the `P2State` idiom) so the control path never touches another gauge's lock.
 final class RumbleActivity: @unchecked Sendable {
@@ -91,7 +91,7 @@ final class RumbleActivity: @unchecked Sendable {
     }
 
     /// Milliseconds since the last host-rumble receipt, or nil if none yet this
-    /// session. Read at the (rare) detach edge — never a hot path.
+    /// session. Read at the (rare) detach edge - never a hot path.
     func ageMs() -> Double? {
         os_unfair_lock_lock(lock)
         let last = lastRumbleNanos

@@ -19,7 +19,7 @@ extension NetworkClient {
     // Threat model (C2): once we've pinned a host cert we MUST NOT silently
     // re-bind it on TLS failure. The original implementation fell back from
     // HTTPS to plain HTTP on any TLS error and accepted whatever cert the
-    // host presented on the next handshake — which gave a same-LAN attacker
+    // host presented on the next handshake - which gave a same-LAN attacker
     // a free MITM whenever they could induce one TLS connection to fail
     // (TCP reset, ARP spoof, captive-portal injection, etc).
     //
@@ -33,7 +33,7 @@ extension NetworkClient {
     //                              loud `hostUnreachable` to the UI. No
     //                              automatic re-pin. A user who legitimately
     //                              rotated their host cert must unpair + re-
-    //                              pair explicitly — that's a deliberate
+    //                              pair explicitly - that's a deliberate
     //                              friction, the alternative is "the on-path
     //                              attacker rotates it for them".
 
@@ -44,7 +44,7 @@ extension NetworkClient {
         var fetchedOverPaired = false   // implicit pair-proof: HTTPS succeeded
         if pinnedHostCert != nil {
             // Pinned. HTTPS only. Any TLS failure here is either a real
-            // outage or a possible MITM — we don't try to disambiguate,
+            // outage or a possible MITM - we don't try to disambiguate,
             // we just refuse and ask the user to re-pair if their host
             // genuinely rotated. See StreamError message below.
             do {
@@ -57,16 +57,16 @@ extension NetworkClient {
                 fetchedOverPaired = true
             } catch let err as StreamError {
                 if case .hostUnreachable(let detail) = err {
-                    log.error("HTTPS to pinned host failed (\(detail, privacy: .public)) — refusing HTTP fallback to preserve cert pin")
+                    log.error("HTTPS to pinned host failed (\(detail, privacy: .public)) - refusing HTTP fallback to preserve cert pin")
                     // Disambiguate before blaming the network: a READ-ONLY
-                    // plain-HTTP probe (the pin is NEVER rebound from it —
+                    // plain-HTTP probe (the pin is NEVER rebound from it -
                     // the C2 contract above stands). Three outcomes:
                     //   * host answers, PairStatus=0 → the host is up but
                     //     doesn't know THIS client (typical after a migrated
                     //     srvcert seeded the pin while pairing was never done
                     //     by Glimmer, or a host-side re-install dropped us).
                     //     Mutual TLS then fails in ~150ms and used to surface
-                    //     as "couldn't reach / is it awake" — dishonest.
+                    //     as "couldn't reach / is it awake" - dishonest.
                     //   * host answers, PairStatus=1 → genuine cert weirdness;
                     //     keep the loud mismatch message.
                     //   * probe also fails → host genuinely unreachable.
@@ -78,11 +78,11 @@ extension NetworkClient {
                        (try? Self.verifyStatus(probe)) != nil {
                         if (probe.int(forChild: "PairStatus") ?? 0) == 0 {
                             throw StreamError.pairingFailed(
-                                "Host answered but doesn't recognize this Mac — pair (again) from Settings → PCs."
+                                "Host answered but doesn't recognize this Mac - pair (again) from Settings → PCs."
                             )
                         }
                         throw StreamError.hostUnreachable(
-                            "Host cert mismatch — possible MITM. Settings → PCs → … → Trust new cert and re-pair."
+                            "Host cert mismatch - possible MITM. Settings → PCs → ... → Trust new cert and re-pair."
                         )
                     }
                     throw StreamError.hostUnreachable(detail)
@@ -90,7 +90,7 @@ extension NetworkClient {
                 throw err
             }
         } else {
-            // No pin yet — this is either a fresh /serverinfo discovery
+            // No pin yet - this is either a fresh /serverinfo discovery
             // before pairing, or a fully unpaired flow (the user is about
             // to type a PIN into the host UI). HTTP is acceptable here
             // because there's nothing to pin yet; the real cert capture
@@ -119,7 +119,7 @@ extension NetworkClient {
             server.serverName = name
         }
         // Host's stable GUID. GFE + Sunshine both emit it as `<uniqueid>` in
-        // the /serverinfo XML — it's the host-side equivalent of the client
+        // the /serverinfo XML - it's the host-side equivalent of the client
         // uniqueid (different value, same semantic). We pick it up here so
         // downstream code (pinned-cert storage key, host-record key) can use
         // a stable token instead of the network address. Falls through to
@@ -146,7 +146,7 @@ extension NetworkClient {
         if let pairFlag = xml.int(forChild: "PairStatus") {
             server.pairStatus = (pairFlag == 1) ? .paired : .unpaired
         }
-        // Successful mutual-TLS handshake is itself proof of pairing — the host
+        // Successful mutual-TLS handshake is itself proof of pairing - the host
         // wouldn't have accepted our client cert if our identity weren't in
         // its allowlist. Some Sunshine builds omit <PairStatus> from the HTTPS
         // response (or return 0 even when paired); don't be fooled.
@@ -174,12 +174,12 @@ extension NetworkClient {
         // unpinned host. That used to be the path a same-LAN attacker
         // could ride to silently pin their own cert as the host's. The
         // real pin gets set by Pairing.swift's `runPairingFlow` once the
-        // user has typed a PIN that the *real* host can prove it knows —
+        // user has typed a PIN that the *real* host can prove it knows -
         // the host's plaincert at that point is authenticated by the RSA
         // signature step. Only THEN is the cert worth pinning.
         //
         // We still expose the host cert opportunistically on ServerInfo so
-        // a future "show fingerprint to user" UI has something to render —
+        // a future "show fingerprint to user" UI has something to render -
         // but it does not become a pin until pairing succeeds.
         if pinnedHostCert == nil {
             if let pemFromXML = xml.string(forChild: "PlainCert"), !pemFromXML.isEmpty {
@@ -205,7 +205,7 @@ extension NetworkClient {
                   let id = Int(idStr) else { return nil }
             let title = app.string(forChild: "AppTitle") ?? "App \(id)"
             let hdr   = app.bool(forChild: "IsHdrSupported") ?? false
-            // Sunshine's "IsHiddenGame" is GFE's "IsAppCollectorGame" — both
+            // Sunshine's "IsHiddenGame" is GFE's "IsAppCollectorGame" - both
             // mean "don't surface this in the picker unless the user has
             // unhidden it". Treat either as "hidden".
             let hidden = (app.bool(forChild: "IsHiddenGame")
@@ -222,7 +222,7 @@ extension NetworkClient {
     }
 
     public func resume(config: StreamConfig) async throws -> LaunchResponse {
-        // /resume doesn't take an appid — the host knows what game is paused.
+        // /resume doesn't take an appid - the host knows what game is paused.
         try await runLaunchLike(verb: "resume", appID: nil, config: config)
     }
 
@@ -239,7 +239,7 @@ extension NetworkClient {
         let riKeyHex = riKey.map { String(format: "%02x", $0) }.joined()
         let riKeyID = Self.bigEndianInt32(from: riKeyIV)
 
-        // HDR signaling — only attach the static-metadata bag if the client
+        // HDR signaling - only attach the static-metadata bag if the client
         // actually intends to negotiate a 10-bit format. Without this, GFE
         // 3.22+ will refuse to enable HDR even on a 10-bit-capable host.
         let supports10bit = !config.videoFormats
@@ -253,7 +253,7 @@ extension NetworkClient {
         // GFE >60fps SOPS quirk: feeding real GFE a value >60 makes it pick
         // 720p60 instead of the resolution we asked for. Sunshine, which
         // pretends to be GFE in /serverinfo for compatibility, does NOT have
-        // this bug — and crucially, sending fps=0 to Sunshine makes it
+        // this bug - and crucially, sending fps=0 to Sunshine makes it
         // misinterpret the request and fall back to safe SDR 8-bit defaults,
         // which silently kills HDR negotiation. Gate the workaround on the
         // MJOLNIR-detected `isRealGFE` flag instead of any-non-empty
@@ -309,7 +309,7 @@ extension NetworkClient {
         // Dump the launch response so we can see what HDR-related fields the
         // host echoed back. Sunshine returns gcmkey, gcmkeyid, sessionUrl0
         // etc. SECURITY: gcmkey + gcmkeyid are the AES key + key-id the host
-        // expects us to use on the control channel — never log their values.
+        // expects us to use on the control channel - never log their values.
         // `Self.dumpXMLRedacted` swaps the body for `<redacted>` on a
         // hard-coded set of sensitive tags. The remaining tag names + values
         // are still useful for diagnosing the "HDR field went missing" case
@@ -327,7 +327,7 @@ extension NetworkClient {
             throw StreamError.launchFailed("Host did not return an RTSP session URL")
         }
 
-        // gcmkey / gcmkeyid aren't always present on GFE — only Sunshine
+        // gcmkey / gcmkeyid aren't always present on GFE - only Sunshine
         // sends them. If absent we fall back to the rikey, which is what the
         // C++ client does (it uses the same key for both channels).
         let gcmKey: Data

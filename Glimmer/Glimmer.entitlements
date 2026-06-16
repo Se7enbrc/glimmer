@@ -4,16 +4,16 @@
 <dict>
 	<!-- MAS FOLLOW-UP (distribution: Developer-ID DMG now, Mac App Store later).
 	     Two keys below are valid for Developer-ID but are hard Mac App Store
-	     rejections — remove them before any MAS submission:
-	       1. com.apple.security.cs.disable-library-validation — needed today so
+	     rejections - remove them before any MAS submission:
+	       1. com.apple.security.cs.disable-library-validation - needed today so
 	          the adhoc-embedded openssl@3 / libopus dylibs (scripts/embed-dylibs.sh)
 	          load. For MAS: sign the embedded dylibs with the team identity and
 	          drop this key.
-	       2. com.apple.security.temporary-exception.shared-preference.read-write —
+	       2. com.apple.security.temporary-exception.shared-preference.read-write -
 	          one-shot migration of the old moonlight-qt defaults. temporary-
 	          exception entitlements are Developer-ID only; remove for MAS.
 	     The osascript mute no-op is already fixed (now CoreAudio, sandbox-legal
-	     on both paths) — see MoonlightManager.systemVolume / setSystemVolume. -->
+	     on both paths) - see MoonlightManager.systemVolume / setSystemVolume. -->
 	<!-- App Sandbox: contain Glimmer's process so a compromise can't read
 	     the user's home directory, run arbitrary IPC, or write outside
 	     ~/Library/Containers/io.ugfugl.Glimmer/. Pairs with Hardened
@@ -29,7 +29,7 @@
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 
-	<!-- We connect to GameStream / Sunshine hosts over LAN — mandatory. -->
+	<!-- We connect to GameStream / Sunshine hosts over LAN - mandatory. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
 
@@ -57,7 +57,7 @@
 	     framework refuses to deliver (see DualSenseHID.swift / issue #7). Also
 	     requires the user-granted "Input Monitoring" privacy permission at
 	     runtime. MAS-STRIP: com.apple.security.device.usb is a hard App Store
-	     reject — a future Mac App Store target must remove these two keys and
+	     reject - a future Mac App Store target must remove these two keys and
 	     DualSenseHID.swift (GameController-only fallback). -->
 	<key>com.apple.security.device.usb</key>
 	<true/>
@@ -88,7 +88,7 @@
 	     <bundle-id>-spks / -spki. codesign (the Makefile `sign` target) does NOT
 	     expand $(PRODUCT_BUNDLE_IDENTIFIER) in entitlements, so they're written
 	     literally. MAS-STRIP: temporary-exception entitlements are Developer-ID
-	     only — remove before any Mac App Store submission. -->
+	     only - remove before any Mac App Store submission. -->
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
 		<string>io.ugfugl.Glimmer-spks</string>

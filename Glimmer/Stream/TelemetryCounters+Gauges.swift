@@ -7,7 +7,7 @@
 //  Split out of TelemetryCounters.swift to keep that file under the length
 //  limit (pure move, same idiom as the FramePacer split). The stored
 //  gauge state (the locks + values) stays on the class in
-//  TelemetryCounters.swift — stored properties cannot live in extensions.
+//  TelemetryCounters.swift - stored properties cannot live in extensions.
 //
 
 import Foundation
@@ -17,26 +17,26 @@ extension TelemetryCounters {
 
     // MARK: - Decode / packet-gap / jitter / RTT / present-suppression gauges
 
-    /// Live DECODE-side STATE (signal: DECODE) — what VideoToolbox is actually
+    /// Live DECODE-side STATE (signal: DECODE) - what VideoToolbox is actually
     /// producing right now: the HW-accelerated-decoder confirmation, the live
     /// pixel format (FourCC string) + bit depth, and the effective colorspace key.
     /// Published off the hot path (the decode queue stamps it when the VT session
-    /// is created / the colorspace changes — both already-rare sites) and read at
+    /// is created / the colorspace changes - both already-rare sites) and read at
     /// 1Hz by the exporter. A plain value struct behind an unfair lock:
     /// last-writer-wins is correct for a 1Hz-sampled state gauge, and the lock
     /// keeps the multi-field read tear-free. nil before the first decoded frame.
     /// (Type lives here with its accessors; the lock + value storage stay on the
-    /// class in TelemetryCounters.swift — stored properties can't move.)
+    /// class in TelemetryCounters.swift - stored properties can't move.)
     struct DecodeState: Sendable {
         /// True iff VT confirmed it is using a HARDWARE-accelerated decoder
         /// (the `kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder`
         /// property read back from the live session). We REQUIRE hardware at
-        /// session-create, so this should always be true — surfacing it makes a
+        /// session-create, so this should always be true - surfacing it makes a
         /// silent software-fallback (an OS/driver regression) immediately visible.
         var hwDecode: Bool
         /// Negotiated video codec ("av1" / "hevc" / "h264"), derived from the
         /// stream format mask. The label that lets a multi-host capture answer
-        /// "did this session actually go AV1?" — HEVC Main10 and AV1 Main10 are
+        /// "did this session actually go AV1?" - HEVC Main10 and AV1 Main10 are
         /// otherwise indistinguishable on bit-depth/colorspace/pixel-format
         /// (issue #23).
         var codec: String
@@ -51,7 +51,7 @@ extension TelemetryCounters {
         var colorSpaceKey: String
     }
 
-    /// Publish the live DECODE state. Called off the hot path — the decode queue
+    /// Publish the live DECODE state. Called off the hot path - the decode queue
     /// stamps it at VT-session create and on a colorspace change (both rare).
     func setDecodeState(_ state: DecodeState) {
         os_unfair_lock_lock(decodeStateLock); decodeStateValue = state; os_unfair_lock_unlock(decodeStateLock)
@@ -64,7 +64,7 @@ extension TelemetryCounters {
     }
 
     /// Publish the latest inter-packet-gap distribution. Called once per ~2s
-    /// receive-metrics window by the RTP path — never the hot per-datagram path.
+    /// receive-metrics window by the RTP path - never the hot per-datagram path.
     func setPacketGap(_ gap: PacketGapSnapshot) {
         os_unfair_lock_lock(gapLock); packetGapValue = gap; os_unfair_lock_unlock(gapLock)
     }
@@ -84,7 +84,7 @@ extension TelemetryCounters {
     }
 
     /// Refresh the live RTT gauge (ms). Called once per ~1Hz telemetry tick by
-    /// the exporter — never the hot path.
+    /// the exporter - never the hot path.
     func setRttMs(_ ms: Double) {
         os_unfair_lock_lock(rttLock); rttMsValue = ms; os_unfair_lock_unlock(rttLock)
     }
@@ -97,10 +97,10 @@ extension TelemetryCounters {
     }
 
     /// Set/clear the present-suppression gauge. Called at the suppression edges
-    /// (backgrounded/occluded ↔ visible) by the present path — never per frame.
+    /// (backgrounded/occluded ↔ visible) by the present path - never per frame.
     /// The CLEAR edge also arms the latency rig's resume-present tag: the first
     /// present after un-suppress re-shows the retained frame, whose hold time
-    /// (362.5ms session max) is a DESIGNED wait, not pipeline latency — tagging
+    /// (362.5ms session max) is a DESIGNED wait, not pipeline latency - tagging
     /// it keeps the o2p/g2g percentile feeds honest. Gate-checked single
     /// optional load when telemetry is off; at the connect-edge reset the
     /// tracker is already gone (stopped at prior teardown), so a reset-time
@@ -122,7 +122,7 @@ extension TelemetryCounters {
     }
 
     /// Set/clear the decode-gate gauge. Called at the gate's engage/lift edges
-    /// by VideoDecoder (already-rare sites, never per frame) — the mirror of
+    /// by VideoDecoder (already-rare sites, never per frame) - the mirror of
     /// `setPresentSuppressed` for the third hidden-window state.
     func setDecodeGated(_ gated: Bool) {
         os_unfair_lock_lock(decodeGatedLock)
@@ -142,7 +142,7 @@ extension TelemetryCounters {
     /// aggregate `ctrlIgnoredTotal` AND the per-type tally together so the two
     /// can never skew. EnetControlChannel swaps its bare
     /// `ctrlIgnoredTotal.increment()` for this. A small-dict hash add on the
-    /// low-rate control path — not the video/audio datagram path.
+    /// low-rate control path - not the video/audio datagram path.
     func noteCtrlIgnored(type: UInt16) {
         ctrlIgnoredTotal.increment()
         ctrlIgnoredPerType.increment(type: type)
@@ -152,14 +152,14 @@ extension TelemetryCounters {
 /// Per-TYPE tallies of ignored inbound CONTROL datagrams, keyed by the control
 /// type word. DURABILITY is the point: the per-type totals previously lived
 /// only in one teardown Diag NOTICE, which a crash or a still-running session
-/// loses — here the session scorecard reads them at stop. Bounded
+/// loses - here the session scorecard reads them at stop. Bounded
 /// (`maxTrackedTypes`) so an unknown-type flood can't grow the map: overflow
 /// types still count in the aggregate `ctrlIgnoredTotal`, they just don't gain
 /// a per-type key (distinct types per session is ~1-3 in practice). Self-locked
 /// like `P2State` so the rare control-path writes stay off every other
 /// counter's lock.
 final class CtrlIgnoredPerType: @unchecked Sendable {
-    /// Cap on distinct tracked types — far above the observed 1-3, small enough
+    /// Cap on distinct tracked types - far above the observed 1-3, small enough
     /// that a hostile/buggy host spraying fresh type words can't grow the map.
     static let maxTrackedTypes = 16
 

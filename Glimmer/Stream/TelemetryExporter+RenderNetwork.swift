@@ -4,8 +4,8 @@
 //  The PROMETHEUS render for the NETWORK metric families: transport health
 //  (jitter / RTT / FEC / ENet reliable-channel), the P1 receive-quality block
 //  (pre-FEC loss, reordering, goodput, inter-packet gaps), and the Wi-Fi radio
-//  gauges. Split from TelemetryExporter+Render.swift — pure move, same
-//  file-split idiom as the FramePacer split — to keep that file under the length
+//  gauges. Split from TelemetryExporter+Render.swift - pure move, same
+//  file-split idiom as the FramePacer split - to keep that file under the length
 //  budget. Each section appends to the SAME `PromBuilder` (declared there) so
 //  the body stays one document.
 //
@@ -43,7 +43,7 @@ extension TelemetryRenderer {
     }
 
     /// Per-socket inter-arrival GAP-EVENT counter families (video/audio/ENet ×
-    /// 20/50/100ms): the honest link-health signal — the jitter EWMA and the
+    /// 20/50/100ms): the honest link-health signal - the jitter EWMA and the
     /// windowed gap gauges are blind to rare 40-110ms blips, so these COUNT
     /// them. All three sockets emit from this one network section (not the
     /// audio family) so every socket is present from t=0 and the NIC-doze
@@ -75,7 +75,7 @@ extension TelemetryRenderer {
 
     /// P1 NETWORK receive-quality: pre-FEC loss / out-of-order / duplicate rates,
     /// received goodput vs the negotiated ceiling, and the inter-packet-gap
-    /// distribution (microburst detector) — all derived purely from the RTP
+    /// distribution (microburst detector) - all derived purely from the RTP
     /// seq/arrival of packets WE receive (no host tool).
     private static func promReceiveQuality(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         builder.emit("glimmer_net_pre_fec_loss_rate",
@@ -105,7 +105,7 @@ extension TelemetryRenderer {
 
     /// ENV-SIGNAL shadow state + the conditional-keepalive judge family: the
     /// CLEAR/CAUTION/DISTRESS ordinal (with its label), the transition count,
-    /// the LIVE keepalive cadence, and the per-socket pings_sent counters —
+    /// the LIVE keepalive cadence, and the per-socket pings_sent counters -
     /// the counters that make a keepalive-cadence change judgeable from data.
     /// Absent before the controller's first fed tick.
     static func promEnvSignal(
@@ -114,7 +114,7 @@ extension TelemetryRenderer {
         if let ordinal = extras.envStateOrdinal {
             builder.emitLabeled(
                 "glimmer_env_state",
-                "Env-signal link state ordinal (0 clear, 1 caution, 2 distress) — SHADOW mode.",
+                "Env-signal link state ordinal (0 clear, 1 caution, 2 distress) - SHADOW mode.",
                 Double(ordinal), labels: [("state", extras.envStateLabel ?? "unknown")])
         }
         if let changes = extras.envStateChangesTotal {
@@ -137,7 +137,7 @@ extension TelemetryRenderer {
     /// Wi-Fi radio (signal 3): RSSI / PHY tx-rate / noise gauges with ssid+band
     /// labels, plus a link-state gauge so a dashboard tells associated-Wi-Fi from
     /// wired/unassociated. On Ethernet the radio gauges are absent (no radio) and
-    /// only the link-state gauge is emitted — the honest "there is no radio here".
+    /// only the link-state gauge is emitted - the honest "there is no radio here".
     static func promWiFi(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         guard let wifi = snap.wifi else { return }
         // link-state is always emitted (even wired) so "wired" is distinguishable
@@ -146,7 +146,7 @@ extension TelemetryRenderer {
             "glimmer_wifi_link_state",
             "Wi-Fi link state ordinal (0 associated, 1 unassociated, 2 wired).",
             Double(wifi.linkState.rawValue), labels: [("link", wifi.linkState.label)])
-        // Radio physics carry ssid+band labels (both omitted when unknown — e.g.
+        // Radio physics carry ssid+band labels (both omitted when unknown - e.g.
         // SSID needs Location auth on macOS 14+, band resolves regardless).
         var labels: [(String, String)] = []
         if let ssid = wifi.ssid { labels.append(("ssid", ssid)) }

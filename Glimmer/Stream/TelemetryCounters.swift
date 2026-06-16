@@ -14,14 +14,14 @@
 //
 //  Code map (this type is split across same-module extension files)
 //  ----------------------------------------------------------------
-//    * TelemetryCounters.swift             — the class decl, the Counter type,
+//    * TelemetryCounters.swift             - the class decl, the Counter type,
 //                                            every stored counter + gauge field,
 //                                            init/deinit, and the session reset.
-//    * TelemetryCounters+Gauges.swift      — decode / packet-gap / jitter / RTT /
+//    * TelemetryCounters+Gauges.swift      - decode / packet-gap / jitter / RTT /
 //                                            present-suppression gauge accessors.
-//    * TelemetryCounters+AudioGauges.swift — audio playout gauges + cold-start.
-//    * TelemetryCounters+InputActivity.swift — input stamp + idle-edge reads.
-//    * TelemetrySessionEvents.swift        — the P2 lifecycle state + accessors.
+//    * TelemetryCounters+AudioGauges.swift - audio playout gauges + cold-start.
+//    * TelemetryCounters+InputActivity.swift - input stamp + idle-edge reads.
+//    * TelemetrySessionEvents.swift        - the P2 lifecycle state + accessors.
 //
 
 import Foundation
@@ -35,7 +35,7 @@ import os
 /// All `OSAllocatedUnfairLock`-free: each counter is its own atomic so an
 /// increment is a single locked add with no cross-counter contention. These are
 /// ALWAYS live (not gated) because the increments are unconditional integer adds
-/// at already-rare sites — gating them would buy nothing and risk a skew between
+/// at already-rare sites - gating them would buy nothing and risk a skew between
 /// the gate and the site. The exporter snapshots them; when the exporter is off,
 /// nothing reads them and they simply accumulate harmlessly.
 ///
@@ -45,7 +45,7 @@ import os
 final class TelemetryCounters: @unchecked Sendable {
     static let shared = TelemetryCounters()
 
-    /// One monotonic counter. NSLock-guarded UInt64 — matches the codebase's
+    /// One monotonic counter. NSLock-guarded UInt64 - matches the codebase's
     /// existing AtomicCounter style; the few inc/read sites are not a tight inner
     /// loop (per loss event / per frame, never per packet on the hot path).
     final class Counter: @unchecked Sendable {
@@ -83,7 +83,7 @@ final class TelemetryCounters: @unchecked Sendable {
     // ---- P1 NETWORK receive-path totals (the exporter derives the per-second
     //      pre-FEC loss / out-of-order / duplicate RATES from deltas of these
     //      monotonic totals against `videoPacketsTotal`). All derived purely from
-    //      the RTP sequence numbers of packets WE receive — no host tool. These
+    //      the RTP sequence numbers of packets WE receive - no host tool. These
     //      are batched into the SAME ~2s receive-metrics window that already feeds
     //      the totals above, so the hot per-datagram path adds only a handful of
     //      integer compares (no lock, no alloc). ----
@@ -99,18 +99,18 @@ final class TelemetryCounters: @unchecked Sendable {
 
     // ---- P1 NETWORK ENet reliable-channel retransmit total. Incremented in
     //      checkRetransmit each time a reliable command's round-trip timeout
-    //      elapses and it is resent — the climb that precedes a control-stream
+    //      elapses and it is resent - the climb that precedes a control-stream
     //      stall (paired with the already-surfaced oldest-unacked trend from
     //      enetHealth()). Always-live integer add at the already-rare retransmit
     //      site (sub-2Hz under a healthy link). ----
     let enetRetransmitTotal = Counter()
 
     /// Unknown inbound CONTROL datagrams ignored (already ACKed + decrypted,
-    /// then discarded — e.g. SET_RGB_LED 0x5502, advertised on light-bar pads
+    /// then discarded - e.g. SET_RGB_LED 0x5502, advertised on light-bar pads
     /// but unimplemented). The Diag log suppresses repeats per type so a flood
     /// can't evict the diagnostic ring; this total preserves the VOLUME signal
     /// those suppressed lines would have carried. RE-BASELINE NOTE: host rumble
-    /// (0x010b) was promoted out of this counter when it grew a dispatch — it
+    /// (0x010b) was promoted out of this counter when it grew a dispatch - it
     /// alone ran ~135/s during active rumble, so cross-session comparisons
     /// spanning that change must not read the drop as a host behavior change.
     /// Always-live integer add on the inbound control path.
@@ -120,12 +120,12 @@ final class TelemetryCounters: @unchecked Sendable {
     //      × thresholds (20/50/100ms). The honest link-health signal and the
     //      keepalive judge: the recv-jitter EWMA and the windowed gap gauges
     //      are provably blind to rare 40-110ms blips (a 100ms gap is 1/10200
-    //      of a 2s window at ~5,100 pkts/s — only the gauge-overwritten max
+    //      of a 2s window at ~5,100 pkts/s - only the gauge-overwritten max
     //      ever sees it, and a max can't COUNT). PER SOCKET so "all sockets
     //      gapped together" (NIC doze) vs "one path stalled" is one row query.
     //      Source sites fold these off the per-datagram path (video buckets
     //      >20ms gaps per ~2s window; audio compares last-arrival; the ENet
-    //      leg counts reliable-ACK DELAYS — idle-proof, sees idle doze). ----
+    //      leg counts reliable-ACK DELAYS - idle-proof, sees idle doze). ----
     let videoGapOver20msTotal = Counter()
     let videoGapOver50msTotal = Counter()
     let videoGapOver100msTotal = Counter()
@@ -137,7 +137,7 @@ final class TelemetryCounters: @unchecked Sendable {
     let enetGapOver100msTotal = Counter()
 
     /// Host RUMBLE (0x010b) events RECEIVED at protocol dispatch, BEFORE any
-    /// validity guard (handleRumbleData) — a zero proves the host sent nothing.
+    /// validity guard (handleRumbleData) - a zero proves the host sent nothing.
     /// ~135/s active; no longer in `ctrlIgnoredTotal` (re-baseline note there).
     let rumbleEventTotal = Counter()
     /// Truncated / slot-out-of-range RUMBLE drops: deposited = events − dropped,
@@ -147,7 +147,7 @@ final class TelemetryCounters: @unchecked Sendable {
     /// Idle→active input EDGE markers: incremented the first time an input event
     /// arrives after `idleGapSeconds` of input silence. This is the single signal
     /// that makes a "resume controlling after idle" auto-correlatable with the
-    /// latency transient — instead of hand-reconstructing it from the events/s
+    /// latency transient - instead of hand-reconstructing it from the events/s
     /// rate. The exporter emits this as a counter; an `increase()` over a
     /// short window marks the exact resume beat. Always-live like the other input
     /// counters (the increment site is the already-rare edge case).
@@ -159,13 +159,13 @@ final class TelemetryCounters: @unchecked Sendable {
     /// over a short window marks the exact instant the user felt the hitch, so a
     /// review jumps straight to it instead of scrubbing the whole capture. The
     /// chord ALSO writes an explicit event line into the NDJSON + the Diag log
-    /// (with the connect-relative time) — see TelemetryExporter.recordBookmark.
+    /// (with the connect-relative time) - see TelemetryExporter.recordBookmark.
     /// Always-live like the other counters (the press is a rare, deliberate act).
     let bookmarkTotal = Counter()
 
     // ---- P2 SESSION-LIFECYCLE event counters (the lifecycle/recovery/quality
     //      signals). All always-live integer adds at already-rare sites (a
-    //      reconnect, an IDR request/arrival, a corrupt-frame heuristic hit) — far
+    //      reconnect, an IDR request/arrival, a corrupt-frame heuristic hit) - far
     //      below any hot-path budget; see TelemetrySessionEvents.swift. ----
     //
     /// RECONNECT count (signal: lifecycle): incremented each time a session
@@ -174,7 +174,7 @@ final class TelemetryCounters: @unchecked Sendable {
     let reconnectTotal = Counter()
     /// EXPLICIT REQUEST_IDR sends that started a round-trip measurement
     /// (signal: IDR-RTT). RE-BASELINE NOTE: RFI sends no longer arm round-trips
-    /// (they ride `rfiTotal`) — conflating them made the pair unreadable (RFI
+    /// (they ride `rfiTotal`) - conflating them made the pair unreadable (RFI
     /// stamps were mostly superseded mid-burst, so a scorecard read far more
     /// requests than matches). Now it pairs with `idrRoundTripMatchedTotal` as a
     /// true did-the-host-honor-us ratio.
@@ -184,8 +184,8 @@ final class TelemetryCounters: @unchecked Sendable {
     /// view; the round-trip distribution rides the latency histogram.
     let idrRoundTripMatchedTotal = Counter()
     /// CORRUPTION/ARTIFACT heuristic hits (signal: quality). Bumped at the cheap,
-    /// already-computed corruption tells — a VT decode-status error / FrameDropped
-    /// output, or a depacketizer discontinuity that orphaned the reference chain —
+    /// already-computed corruption tells - a VT decode-status error / FrameDropped
+    /// output, or a depacketizer discontinuity that orphaned the reference chain -
     /// NOT a per-pixel scan. A short-window `increase()` brackets the white/purple
     /// flash class without any hot-path cost beyond an integer add.
     let corruptionHeuristicTotal = Counter()
@@ -193,7 +193,7 @@ final class TelemetryCounters: @unchecked Sendable {
     // ---- P1 DECODE/PRESENT event counters ----
     //
     /// VTDecompressionSession (re)creates this session (signal: DECODE). Bumped
-    /// each time `ensureDecompressionSession` actually builds a fresh session —
+    /// each time `ensureDecompressionSession` actually builds a fresh session -
     /// the first create plus every mid-stream rebuild (a param-set change:
     /// resolution / codec profile / colorspace switch, or a teardown→recreate).
     /// A short-window `increase()` brackets a decoder reset that correlates with
@@ -202,7 +202,7 @@ final class TelemetryCounters: @unchecked Sendable {
     let decoderRecreateTotal = Counter()
 
     /// Stale-frame REPEAT count (signal: PRESENT). Bumped on each pacer tick that
-    /// fires but presents NO new frame because none was due — the layer re-shows
+    /// fires but presents NO new frame because none was due - the layer re-shows
     /// the last frame. This is the INVISIBLE stutter: at fps<refresh it is the
     /// normal cadence (60-on-120 repeats every other tick), but a SPIKE in the
     /// per-second rate while fps≈refresh is a real micro-judder (the pacer held a
@@ -218,8 +218,8 @@ final class TelemetryCounters: @unchecked Sendable {
     /// per-tick trim), so the over-target short-circuit forced the head out to keep
     /// the backlog draining. Zero in steady state (clean link rests at depth 1,
     /// passthrough; a grown wifi buffer drains via the normal due logic). A SPIKE in
-    /// the per-second rate is the no-network present-stall signature — the depth
-    /// controller over-draining then re-growing and the due gate self-oscillating —
+    /// the per-second rate is the no-network present-stall signature - the depth
+    /// controller over-draining then re-growing and the due gate self-oscillating -
     /// caught and broken here instead of decaying to the starvation failsafe. The
     /// exporter derives an over-target/sec rate from this monotonic total. Counted
     /// on the pacer's serial queue, so the increment sees no cross-queue race;
@@ -229,7 +229,7 @@ final class TelemetryCounters: @unchecked Sendable {
     /// Frames dropped-to-NEWEST while presentation is SUPPRESSED (signal:
     /// PRESENT): the window is backgrounded/occluded, the display link is
     /// deliberately suspended, and the pacer keeps only the newest frame ready
-    /// for an instant resume. These are DESIGNED drops — counting them here
+    /// for an instant resume. These are DESIGNED drops - counting them here
     /// keeps `drops_presentation_late` meaning what it says (frames the pacer
     /// genuinely failed to present in time) instead of carrying ~120/s of
     /// suppressed-mode noise. Incremented on the pacer's submit path while the
@@ -239,14 +239,14 @@ final class TelemetryCounters: @unchecked Sendable {
     /// Frames dropped WITHOUT decode while the DECODE GATE is engaged (stage 2
     /// of hidden-window handling: after ~2s of continuous suppression the
     /// decoder stops decoding entirely). Distinct from `suppressedDropTotal`
-    /// (decoded, then dropped-to-newest) so a gated span — fps_decoded=0,
-    /// drops_suppressed flat — is distinguishable from a genuine decode wedge.
+    /// (decoded, then dropped-to-newest) so a gated span - fps_decoded=0,
+    /// drops_suppressed flat - is distinguishable from a genuine decode wedge.
     /// VideoDecoder increments on its quiet-drop path; always-live integer add.
     let decodeGatedDropTotal = Counter()
 
     // ---- P1 AUDIO receive-path + playout totals (the OTHER stream) ----
     //
-    // All derived purely from the audio RTP we receive + the audio output path —
+    // All derived purely from the audio RTP we receive + the audio output path -
     // no host tool. The RECEIVE totals are folded once per ~1s audio-metrics
     // window by RtpAudioReceiver (off the per-datagram path, exactly like the
     // video receive-quality totals), so the audio recv thread gains only a few
@@ -261,19 +261,19 @@ final class TelemetryCounters: @unchecked Sendable {
     /// from deltas of this against the loss/recovered totals below.
     let audioPacketsTotal = Counter()
     /// Audio packets the host sent that never arrived AND could not be recovered by
-    /// FEC — the genuine on-the-wire audio loss the user would hear as a gap
+    /// FEC - the genuine on-the-wire audio loss the user would hear as a gap
     /// (RtpAudioQueue's `packetCountFecFailed` shards). The exporter derives the
     /// unrecovered-audio-loss rate from this delta over the expected delta.
     let audioPacketsLostTotal = Counter()
     /// Audio packets RECOVERED by Reed-Solomon FEC this session (RtpAudioQueue's
     /// `packetCountFecRecovered`). Paired with the loss total it shows how much of
     /// the on-the-wire loss FEC papered over (the audio analogue of the video FEC
-    /// recovery rate) — the known lossy-link audio-quality story.
+    /// recovery rate) - the known lossy-link audio-quality story.
     let audioFecRecoveredTotal = Counter()
     /// Audio FEC blocks dropped on a BLOCK-SIZE MISMATCH (the parity-keyed and
     /// data-keyed sizes disagree): the block is discarded and COUNTED here
     /// instead of silently (and permanently) latching the incompatible-server
-    /// flag — the mismatch stays visible and the next block gets a fresh shot.
+    /// flag - the mismatch stays visible and the next block gets a fresh shot.
     /// Always-live integer add at the already-rare mismatch site.
     let audioFecMismatchTotal = Counter()
     /// Audio output buffer UNDER-RUNs this session: the player drained its
@@ -283,12 +283,12 @@ final class TelemetryCounters: @unchecked Sendable {
     let audioUnderrunTotal = Counter()
     /// Audio output buffer OVER-RUNs this session: a decoded buffer was dropped
     /// because the scheduled-ahead backlog already exceeded the safety CEILING
-    /// (the worst-case-link backstop). CEILING-BACKSTOP ONLY — the designed
+    /// (the worst-case-link backstop). CEILING-BACKSTOP ONLY - the designed
     /// playout-target trims count in `audioTrimTotal` below, so this stays a
     /// pathology signal a regression read can trust. Bumped on the decode path
     /// before scheduling. Always-live integer add.
     let audioOverrunTotal = Counter()
-    /// Audio playout TRIMs this session: DESIGNED playout-backlog trims — 5ms
+    /// Audio playout TRIMs this session: DESIGNED playout-backlog trims - 5ms
     /// decoded packets chopped on the schedule path to walk the backlog back down
     /// to the playout target (the post-gap catch-up clump). Split from
     /// `audioOverrunTotal` so designed trims and the ceiling backstop can never
@@ -303,7 +303,7 @@ final class TelemetryCounters: @unchecked Sendable {
     // last-input instant (so the exporter can derive `time_since_last_input_ms`)
     // and, when the gap since the previous event exceeds `idleGapSeconds`, counts
     // an idle→active transition. Cost is one lock + a couple of stores per input
-    // event — far below the per-input budget, and input is human-rate (≤ ~kHz),
+    // event - far below the per-input budget, and input is human-rate (≤ ~kHz),
     // not a multi-kHz packet path. Unconditional (not gated) for the same reason
     // the counters are: the increment is cheap and the exporter simply ignores it
     // when off.
@@ -316,14 +316,14 @@ final class TelemetryCounters: @unchecked Sendable {
     /// Gap (seconds) of input silence after which the next event is an idle→active
     /// edge. 2s comfortably exceeds normal inter-event spacing during active play
     /// (sub-100ms) yet is short enough to catch a genuine "stepped away, came
-    /// back" resume — the exact motivating bug.
+    /// back" resume - the exact motivating bug.
     static let idleGapSeconds: Double = 2.0
 
     // Module-internal (not private) so the gauge accessors in
     // TelemetryCounters+Gauges.swift can reach these.
     //
     /// Live smoothed recv-jitter gauge (ms), written by the RTP receive path.
-    /// A plain Double behind an unfair lock — last-writer-wins is fine for a
+    /// A plain Double behind an unfair lock - last-writer-wins is fine for a
     /// gauge sampled at 1Hz against a multi-kHz writer.
     let jitterLock = os_unfair_lock_t.allocate(capacity: 1)
     var recvJitterMsValue: Double = 0
@@ -334,12 +334,12 @@ final class TelemetryCounters: @unchecked Sendable {
     /// Live smoothed network RTT gauge (ms), refreshed once per ~1Hz telemetry
     /// tick by the exporter from the ENet ping estimate. Read on the present hot
     /// path by the per-frame glass-to-glass computation as `~RTT/2` for the
-    /// network-transit leg — the host doesn't tell us per-frame transit, so the
+    /// network-transit leg - the host doesn't tell us per-frame transit, so the
     /// CURRENT smoothed RTT is the best estimate the inputs allow. A single
     /// `Double` behind an unfair lock: a stale read (the tick that just updated
     /// it vs. a present mid-tick) is harmless for an estimate, and the lock keeps
     /// the read tear-free. 0 = "no RTT yet" (glass-to-glass omits the transit leg
-    /// rather than guessing). The lock is on the telemetry path only — when the
+    /// rather than guessing). The lock is on the telemetry path only - when the
     /// gate is off the tracker that reads it doesn't exist, so the present hot
     /// path never touches it.
     let rttLock = os_unfair_lock_t.allocate(capacity: 1)
@@ -350,19 +350,19 @@ final class TelemetryCounters: @unchecked Sendable {
     //
     /// PRESENT-SUPPRESSION gauge (0/1): true while presentation is deliberately
     /// suppressed (window backgrounded/occluded → display link suspended). Set/
-    /// cleared at the suppression EDGES by the present path — already-rare sites,
-    /// never per frame — and read at 1Hz by the exporter, so the per-second
+    /// cleared at the suppression EDGES by the present path - already-rare sites,
+    /// never per frame - and read at 1Hz by the exporter, so the per-second
     /// record shows WHICH samples were captured in suppressed mode (the context
     /// `suppressedDropTotal` counts under, and the "silent transition" the
     /// os.Logger-only edges used to hide from the NDJSON). A plain Bool behind an
-    /// unfair lock — same last-writer-wins discipline as the other gauges.
+    /// unfair lock - same last-writer-wins discipline as the other gauges.
     let presentSuppressedLock = os_unfair_lock_t.allocate(capacity: 1)
     var presentSuppressedValue = false
 
     /// DECODE-GATE gauge (0/1): true while the decode gate is engaged (the
-    /// THIRD hidden-window state — after ~2s of continuous suppression decode
-    /// stops entirely). Set/cleared at the engage/lift EDGES by VideoDecoder —
-    /// already-rare sites, never per frame — and read at 1Hz by the exporter,
+    /// THIRD hidden-window state - after ~2s of continuous suppression decode
+    /// stops entirely). Set/cleared at the engage/lift EDGES by VideoDecoder -
+    /// already-rare sites, never per frame - and read at 1Hz by the exporter,
     /// so a zero-decode span self-labels as gated (vs wedged) on the same row
     /// that carries `presentSuppressedValue`. Same last-writer-wins discipline
     /// as the suppression gauge it extends.
@@ -372,11 +372,11 @@ final class TelemetryCounters: @unchecked Sendable {
     /// Live inter-packet-gap distribution (microseconds) for the microburst
     /// detector. Written once per ~2s receive-metrics window by the RTP path
     /// (computed there off the per-datagram arrival times it ALREADY reads for
-    /// jitter, so the hot path gains only a min/max/running-sum update — no clock
+    /// jitter, so the hot path gains only a min/max/running-sum update - no clock
     /// read, no alloc) and read at 1Hz by the exporter. A plain value struct behind
     /// an unfair lock: last-writer-wins is fine for a gauge sampled at 1Hz against
     /// the 2s window writer. p95 is an approximation (a 16-bucket log-spaced
-    /// histogram, see the writer) — exact enough to spot a microburst, far cheaper
+    /// histogram, see the writer) - exact enough to spot a microburst, far cheaper
     /// than a per-packet reservoir on the receive path.
     struct PacketGapSnapshot: Sendable {
         var p50Us: Double
@@ -390,20 +390,20 @@ final class TelemetryCounters: @unchecked Sendable {
 
     // Live DECODE-side STATE gauge storage; the `DecodeState` value type +
     // its doc live with the accessors in TelemetryCounters+Gauges.swift
-    // (moved there to keep this file under the length budget — pure move).
+    // (moved there to keep this file under the length budget - pure move).
     // Module-internal (not private) so those accessors can reach these.
     let decodeStateLock = os_unfair_lock_t.allocate(capacity: 1)
     var decodeStateValue: DecodeState?
 
-    /// Host-RUMBLE receipt stamp (the last 0x010b receipt instant) — the detach-
+    /// Host-RUMBLE receipt stamp (the last 0x010b receipt instant) - the detach-
     /// context breadcrumb's rumble-age source (ControllerForwarder.detach).
     /// Self-locked holder (the `P2State` idiom), defined in
     /// TelemetryCounters+InputActivity.swift next to its input-age sibling.
     let rumbleActivity = RumbleActivity()
 
-    /// Live AUDIO playout STATE (signal: AUDIO — the other stream). What the audio
+    /// Live AUDIO playout STATE (signal: AUDIO - the other stream). What the audio
     /// output path is doing right now: how much decoded audio is scheduled ahead of
-    /// the playhead (the buffer level / fill), and the A/V SYNC DRIFT — how far the
+    /// the playhead (the buffer level / fill), and the A/V SYNC DRIFT - how far the
     /// audio presentation clock has slipped from the video present clock over time.
     /// Published off the hot path (the audio decode path stamps it under the lock it
     /// already holds, ~200Hz at 5ms packets) and read at 1Hz by the exporter. A
@@ -419,7 +419,7 @@ final class TelemetryCounters: @unchecked Sendable {
         /// ADAPTIVE PLAYOUT TARGET (ms): the cushion the playout path is
         /// currently steering `bufferFillMs` toward. Fill vs target is the
         /// cushion judge (base 30 / cap 150 / ceiling 190): a fill hugging a
-        /// flat ceiling is only legible against this — target re-pinned at the
+        /// flat ceiling is only legible against this - target re-pinned at the
         /// cap through minutes of calm play = the decay is broken (the old
         /// disguised-permanent-give-up failure mode), target ratcheting up
         /// under gaps then decaying toward base = designed behavior. nil until
@@ -427,7 +427,7 @@ final class TelemetryCounters: @unchecked Sendable {
         var playoutTargetMs: Double?
         /// AUDIO CLOCK DRIFT (ms): the audio playout clock's slip vs WALL CLOCK,
         /// signed and net of the steady buffer cushion. This is audio-clock-vs-
-        /// wall-clock drift — NOT a true cross-stream A/V delta (it never compares
+        /// wall-clock drift - NOT a true cross-stream A/V delta (it never compares
         /// against the video present clock). ~0 = the audio device clock is
         /// tracking real time; POSITIVE = audio media has played BEHIND wall time
         /// (the device clock is slow / it's draining late), NEGATIVE = ahead.
@@ -435,14 +435,14 @@ final class TelemetryCounters: @unchecked Sendable {
         /// start, so a steady cushion reads ~0 and only a genuine clock-domain
         /// slip trends over time. nil until audio has begun playing.
         var audioClockDriftMs: Double?
-        /// Windowed MINIMUM buffer fill (ms) since the exporter last read it — the
+        /// Windowed MINIMUM buffer fill (ms) since the exporter last read it - the
         /// trough of the scheduled-ahead backlog. The 1Hz `bufferFillMs` gauge is
         /// last-writer-wins and can miss the instantaneous low that precedes an
         /// under-run; this min is the field that PROVES the buffer is (or is no
         /// longer) draining toward 0. RESET-ON-READ by the exporter. nil when no
         /// trough was sampled this window.
         var bufferFillMinMs: Double?
-        /// RE-PRIME count this session (monotonic): pre-roll RE-ARM edges — the
+        /// RE-PRIME count this session (monotonic): pre-roll RE-ARM edges - the
         /// state machine dropping back to un-primed after a full drain. NOT a
         /// count of paused wall-time pre-rolls: the node keeps playing across a
         /// re-arm and the cushion rebuilds via the post-gap catch-up clump (see
@@ -469,7 +469,7 @@ final class TelemetryCounters: @unchecked Sendable {
     /// AUDIO first-packet time (ms): time from SESSION START (the P2 `connectStart`
     /// anchor, stamped at the connect edge and preserved across the exporter reset)
     /// to the first decoded audio packet. The known ~5-7s-on-lossy-link cold-start
-    /// metric — surfaced here as a one-shot gauge so a dashboard/report shows it
+    /// metric - surfaced here as a one-shot gauge so a dashboard/report shows it
     /// per session. Written once by the audio receive path; 0 = not yet measured.
     let audioFirstPacketLock = os_unfair_lock_t.allocate(capacity: 1)
     var audioFirstPacketMsValue: Double = 0
@@ -486,13 +486,13 @@ final class TelemetryCounters: @unchecked Sendable {
     /// last-stream-end stamp DELIBERATELY survives `resetForNewSession`.
     let audioTtf = AudioTtfContext()
     /// Per-TYPE ignored-control tallies (bounded). Self-locked, defined in
-    /// TelemetryCounters+Gauges.swift — durable here (the teardown Diag NOTICE
+    /// TelemetryCounters+Gauges.swift - durable here (the teardown Diag NOTICE
     /// is lossy) so the session scorecard can render the per-type breakdown.
     let ctrlIgnoredPerType = CtrlIgnoredPerType()
     /// FALLBACK monotonic `DispatchTime` anchor (nanoseconds) for the audio
     /// cold-start metric: stamped when the audio receiver opens its socket
     /// (mid-handshake). Used ONLY when the P2 `connectStart` session anchor is
-    /// unset — `recordAudioFirstPacket` prefers `connectStart` (the true session
+    /// unset - `recordAudioFirstPacket` prefers `connectStart` (the true session
     /// epoch). Historical wart now fixed: `resetForNewSession` used to run at
     /// exporter start, AFTER `startPing`, wiping this into a stale prior-session
     /// value on reconnect; the reset now happens at the CONNECT edge, before any
@@ -527,12 +527,12 @@ final class TelemetryCounters: @unchecked Sendable {
     // TelemetryCounters+InputActivity.swift.
 
     /// Reset everything. Called at the CONNECT-START edge
-    /// (`StreamSession.anchorTelemetryConnectStart`) — BEFORE the receivers spin
-    /// up, NOT at exporter start — so a warm host's mid-handshake one-shot
+    /// (`StreamSession.anchorTelemetryConnectStart`) - BEFORE the receivers spin
+    /// up, NOT at exporter start - so a warm host's mid-handshake one-shot
     /// latches (audio TTF/first-packet) can never race the reset and serve a
     /// prior session's values (the chimeric audio_ttf). (Prometheus counters are
     /// nominally never reset, but a per-session diagnostic view wants per-session
-    /// totals — a scrape across a session boundary just sees a counter reset,
+    /// totals - a scrape across a session boundary just sees a counter reset,
     /// which Prometheus handles.)
     func resetForNewSession() {
         for counter in [rfiTotal, idrRequestedTotal, backlogOverflowTotal,

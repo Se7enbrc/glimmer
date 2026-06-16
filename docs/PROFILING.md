@@ -18,7 +18,7 @@ make release && make install
 # CPU hotspots only:
 make profile
 
-# Per-frame signpost timeline — this is the one you usually want:
+# Per-frame signpost timeline - this is the one you usually want:
 make profile-signposts
 ```
 
@@ -50,7 +50,7 @@ verify):
 | `Stream.Window`       | `Glimmer/Stream/StreamWindow.swift`                            |
 
 OSSignpost categories are different (they live on the same subsystem but a
-separate axis — see `Glimmer/Stream/Signposts.swift`):
+separate axis - see `Glimmer/Stream/Signposts.swift`):
 
 | Signpost category | Path                                                   |
 | ----------------- | ------------------------------------------------------ |
@@ -124,7 +124,7 @@ categories partition by area.
 | `Stream.Render`  | `EnqueueFrame` (per frame) | `RendererFailed`                                                                                     | `VideoDecoder.swift`                         |
 | `Stream.Network` | `ConnectFlow` (per stream) | `StageStarting/Complete/Failed`, `ConnectionEstablished`, `ConnectionTerminated`, `ConnectionStatus` | `StreamSession.swift`                        |
 | `Stream.Pairing` | `PairingFlow` (per pair)   | `PairingStep` (one per handshake round)                                                              | `Pairing.swift`                              |
-| `Stream.Audio`   | `AudioFrame` (per packet)  | —                                                                                                    | `AudioDecoder.swift`                         |
+| `Stream.Audio`   | `AudioFrame` (per packet)  | -                                                                                                    | `AudioDecoder.swift`                         |
 
 The interval state for `DecodeFrame` threads through `StatsCollector` so submit
 (on the engine's receive thread) and complete (on the VT output callback's
@@ -134,7 +134,7 @@ success or by `stop()` on failure (with `outcome=aborted` so the Instruments
 timeline never shows a runaway-open interval). FIFO eviction inside
 `StatsCollector` closes any orphan interval.
 
-## Scenarios — which tool, what to look at
+## Scenarios - which tool, what to look at
 
 ### "Stream feels laggy"
 
@@ -151,16 +151,16 @@ Targets at 4K@60 AV1 HDR on high-end Apple Silicon (M-series Pro/Max):
 | `DecodeFrame` duration  | 16.6 ms       | < 8 ms     |
 | `EnqueueFrame` duration | 16.6 ms       | < 1 ms     |
 
-If `DecodeFrame` p99 > ~10 ms, GPU is the bottleneck — switch to the **Metal
+If `DecodeFrame` p99 > ~10 ms, GPU is the bottleneck - switch to the **Metal
 System Trace** template. If `EnqueueFrame` is slow, the
-`AVSampleBufferDisplayLayer` pipeline is doing more work than it should — look
+`AVSampleBufferDisplayLayer` pipeline is doing more work than it should - look
 at the format-description rebuild path in `enqueueDecodedFrame`.
 
 ### "CPU spinning / fans ramping during a stream"
 
 `make profile`. Time Profiler shows wall-clock CPU. Look for any frame on the
 call tree under `Glimmer/Stream/*` that isn't VT, opus, or the Foundation
-networking stack — those are the expected heavyweights. Targets:
+networking stack - those are the expected heavyweights. Targets:
 
 | Metric                           | Target                      |
 | -------------------------------- | --------------------------- |
@@ -175,15 +175,15 @@ stats-snapshot timer are the usual suspects.
 **Stream.Decode** and look for **FrameDropped** events. Each one carries a
 `reason` payload:
 
-- `vt_status_error` — VideoToolbox failed inline (bitstream issue).
-- `vt_info_dropped` — VT signalled `kVTDecodeInfo_FrameDropped` (decoder threw
+- `vt_status_error` - VideoToolbox failed inline (bitstream issue).
+- `vt_info_dropped` - VT signalled `kVTDecodeInfo_FrameDropped` (decoder threw
   the frame away after submit, usually queue overflow).
-- `no_image_buffer` — VT returned `noErr` but no pixel buffer (rare; should
+- `no_image_buffer` - VT returned `noErr` but no pixel buffer (rare; should
   prompt a bug report).
 
 If `FrameDropped` events cluster near `IDRRequested` events, the host encoder is
 the upstream cause, not us. If they cluster near `RendererFailed`,
-`AVSampleBufferDisplayLayer` rejected a sample — typically an HDR-metadata
+`AVSampleBufferDisplayLayer` rejected a sample - typically an HDR-metadata
 mid-stream change or a corrupt sample.
 
 ### "Decode is slow on some streams but not others"
@@ -202,7 +202,7 @@ Inside it:
 
 - `StageStarting` / `StageComplete` for each connection stage
   (`name resolution`, `RTSP handshake`, `control stream initialization`,
-  `video stream initialization`, … — see `StreamStageNames.table` in
+  `video stream initialization`, ... - see `StreamStageNames.table` in
   `StreamProtocolConstants.swift`).
 - `StageFailed` if any stage hard-fails.
 
@@ -224,7 +224,7 @@ never fired is where the host hung.
 interval is one opus packet (typically 5 ms of audio at 200 Hz). If the interval
 duration is consistently >5 ms the opus decoder is the bottleneck (very unusual
 on Apple Silicon). If the intervals are sparse (visible gaps) the audio receive
-thread is starving — switch to the **Stream.Network** category and check for
+thread is starving - switch to the **Stream.Network** category and check for
 `ConnectionStatus` events showing poor RTT.
 
 ## Opt-in telemetry + the local dashboard rig
@@ -233,24 +233,24 @@ Beyond Instruments, Glimmer has an opt-in telemetry exporter (Settings → About
 option-click the version line to reveal the Diagnostics pane). When enabled, a
 stream writes to `~/Library/Logs/Glimmer/`:
 
-- `telemetry-<timestamp>.ndjson` — per-second stream metrics;
-- `telemetry-session-<timestamp>.json` — a one-shot session scorecard;
-- `glimmer-<timestamp>.log` — a richer per-session diagnostic log.
+- `telemetry-<timestamp>.ndjson` - per-second stream metrics;
+- `telemetry-session-<timestamp>.json` - a one-shot session scorecard;
+- `glimmer-<timestamp>.log` - a richer per-session diagnostic log.
 
 Press **⌃⌥B** during a stream to drop a timestamped "that felt bad" bookmark
 into the telemetry. All of it is local-only and carries performance numbers,
-never secrets — these are the artifacts the bug-report template asks for.
+never secrets - these are the artifacts the bug-report template asks for.
 
 The Diagnostics pane also surfaces a Grafana port-forward command. That points
 at an **optional, maintainer-local dashboard rig** (Prometheus + Grafana + Loki
-on a local k8s cluster, living in a gitignored `debug-env/` directory) — it is
+on a local k8s cluster, living in a gitignored `debug-env/` directory) - it is
 deliberately **not part of this repository** and nothing in the app depends on
 it. The NDJSON + scorecard files above are the portable, self-contained way to
 analyze a session.
 
 ## Other Instruments templates worth knowing
 
-Not wrapped in Makefile targets — open Instruments and pick the template.
+Not wrapped in Makefile targets - open Instruments and pick the template.
 
 ### Metal System Trace
 
@@ -268,7 +268,7 @@ transition).
 ### Network
 
 For raw socket throughput. The Glimmer signposts don't measure bytes/sec
-directly — that goes into the stats overlay. Use the Network template if you
+directly - that goes into the stats overlay. Use the Network template if you
 suspect TCP retransmissions or socket-buffer starvation.
 
 ## VideoToolbox diagnostics
@@ -276,27 +276,27 @@ suspect TCP retransmissions or socket-buffer starvation.
 - **Real-time hint.** `kVTDecompressionPropertyKey_RealTime = true` is set on
   the session so VT prefers latency over peak quality.
 - **No temporal processing.** No B-frames in the GameStream / Sunshine output,
-  so VT's temporal-processing path is irrelevant — frames decode in arrival
+  so VT's temporal-processing path is irrelevant - frames decode in arrival
   order.
 - **Decode failures.** `DecodeFrame` interval close payload includes outcome
   (`ok` / `dropped` / `abandoned`). A submitDecodeUnit that returns
   `DR_NEED_IDR` triggers `LiRequestIdrFrame()` and shows as an `IDRRequested`
-  event with `trigger=…` (`bitstream_failed`, `renderer_failed`, etc.).
+  event with `trigger=...` (`bitstream_failed`, `renderer_failed`, etc.).
 
-## Network diagnostics — packet loss vs decode failure
+## Network diagnostics - packet loss vs decode failure
 
 The split between "the bits never arrived" and "the bits arrived but VT rejected
 them" matters for triage:
 
-- **Bytes received but no decoded output** — host stream issue. Either the host
+- **Bytes received but no decoded output** - host stream issue. Either the host
   encoder produced a bitstream VT can't accept (mid-stream SPS/PPS change
   without a fresh IDR; AV1 sequence header malformed), or the FEC layer
   recovered the bytes but their content is bad. Surfaces as `FrameDropped` with
   `reason=vt_status_error`.
-- **Bytes not received** — network issue. Surfaces as `ConnectionStatus` events
-  with `status != 0` (the engine's poor-connection signal — typically high RTT +
+- **Bytes not received** - network issue. Surfaces as `ConnectionStatus` events
+  with `status != 0` (the engine's poor-connection signal - typically high RTT +
   packet loss).
-- **Renderer rejection mid-stream** — the layer's
+- **Renderer rejection mid-stream** - the layer's
   `AVSampleBufferVideoRenderer.status` latched `.failed`. Surfaces as a
   `RendererFailed` signpost event + log line at `.warning`, and is recovered by
   a flush + `LiRequestIdrFrame()`.
@@ -310,7 +310,7 @@ previously received at least one frame, the session tears down with
 `StreamEvent.connectionTerminated(errorCode: -1)`. The log line reads:
 
 ```
-Frame watchdog tripped — no frame in <N>s; tearing down
+Frame watchdog tripped - no frame in <N>s; tearing down
 ```
 
 This fast-paths the common "host crashed / network dropped / Sunshine restarted"
@@ -319,7 +319,7 @@ connection.
 
 ## Build configuration
 
-- **Debug** uses `-Onone` + overflow checks. Don't profile with it — numbers are
+- **Debug** uses `-Onone` + overflow checks. Don't profile with it - numbers are
   2-5× worse than production.
 - **Release** is what users see: `-O`, no debug asserts, dSYMs preserved.
 - `DEBUG_INFORMATION_FORMAT = dwarf-with-dsym` is set on Release so Time
@@ -384,7 +384,7 @@ OSSignposter.decode.emitEvent("YourEvent",
                               "reason=\(reason, privacy: .public)")
 ```
 
-Pick the closest existing category rather than adding a new one — fewer
+Pick the closest existing category rather than adding a new one - fewer
 categories means simpler filter UX in Instruments. If the work crosses a thread
 boundary, thread the `OSSignpostIntervalState` through whatever data structure
 already crosses that boundary (see `StatsCollector` for the reference

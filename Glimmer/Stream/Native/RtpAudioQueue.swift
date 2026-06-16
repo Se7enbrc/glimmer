@@ -14,7 +14,7 @@
 //  12-byte RTP header.
 //
 //  FLOW: `addPacket` returns one of:
-//   - .handleNow   : the in-order fast path — decode this packet immediately.
+//   - .handleNow   : the in-order fast path - decode this packet immediately.
 //   - .packetReady : drain via `getQueuedPacket()` in a loop until nil.
 //   - .none        : packet consumed/duplicate/rejected; nothing to decode now.
 //  `getQueuedPacket()` returns either assembled RTP-packet bytes (12-byte header
@@ -26,12 +26,12 @@
 //  seq), `incompatibleServer` is set and ALL data packets are passed straight
 //  through (HANDLE_NOW), FEC packets dropped. A block-SIZE mismatch is NOT a
 //  one-strike kill: a single mismatched block is dropped (counted + warned
-//  once) and only a sustained streak — every contact mismatching — flips
+//  once) and only a sustained streak - every contact mismatching - flips
 //  `incompatibleServer`, loudly. Every flip logs what was disabled and why;
 //  the old silent first-contact flip killed audio FEC for an entire session.
 //
 //  THREADING: single-receive-thread access (RtpAudioReceiver's serial queue), so
-//  this class needs no internal locking — exactly like the C single receive
+//  this class needs no internal locking - exactly like the C single receive
 //  thread. It is a reference type so the block list can be mutated in place.
 
 import Foundation
@@ -40,7 +40,7 @@ import Foundation
 /// RTPQ_RET_* return codes (RtpAudioQueue.h) collapsed to the cases the receiver
 /// actually branches on.
 enum RtpaResult {
-    /// In-order data packet — decode it immediately (RTPQ_RET_HANDLE_NOW).
+    /// In-order data packet - decode it immediately (RTPQ_RET_HANDLE_NOW).
     case handleNow
     /// One or more packets are ready; drain via getQueuedPacket (RTPQ_RET_PACKET_READY).
     case packetReady
@@ -52,7 +52,7 @@ enum RtpaResult {
 enum RtpaQueuedPacket {
     /// Assembled RTP packet: 12-byte RTP header + opus payload bytes.
     case bytes([UInt8])
-    /// An unrecovered gap — the caller must perform packet-loss concealment.
+    /// An unrecovered gap - the caller must perform packet-loss concealment.
     case lostPlaceholder
 }
 
@@ -63,14 +63,14 @@ final class RtpAudioQueue {
     // RtpAudioQueue+Fec.swift extension (split out to keep each file under the
     // SwiftLint length limit), and a Swift extension in a separate file can only
     // reach non-private members. Everything stays touched ONLY on the single
-    // receive thread, so the relaxed visibility changes no isolation guarantee —
+    // receive thread, so the relaxed visibility changes no isolation guarantee -
     // same contract as the RtpVideoQueue splits.
 
     // Constants (RtpAudioQueue.h:18-20, plus the OOS wait).
     static let dataShards = 4         // RTPA_DATA_SHARDS
     static let fecShards = 2          // RTPA_FEC_SHARDS
     static let totalShards = 6        // RTPA_TOTAL_SHARDS
-    /// OOS give-up SLACK floor (ms) — the wired figure (RTPQ_OOS_WAIT_TIME_MS).
+    /// OOS give-up SLACK floor (ms) - the wired figure (RTPQ_OOS_WAIT_TIME_MS).
     /// Late-but-arriving shards on a wired NIC land within a few ms, so the LAN
     /// figure is right there; `oosWaitTimeMs` scales UP from here on a jittery
     /// link (see below).
@@ -83,7 +83,7 @@ final class RtpAudioQueue {
 
     static let fixedRtpHeaderSize = 12   // sizeof(RTP_PACKET)
     /// sizeof(AUDIO_FEC_HEADER): fecShardIndex(1) + payloadType(1) + baseSeq(2)
-    /// + baseTs(4) + ssrc(4) = 12 — `parsedFecBlockKey` reads all 12 bytes. (A
+    /// + baseTs(4) + ssrc(4) = 12 - `parsedFecBlockKey` reads all 12 bytes. (A
     /// prior value of 8 skewed the parity blockSize/offset by 4 bytes, so the
     /// first parity packet to meet a live block "mismatched" and killed FEC.)
     static let audioFecHeaderSize = 12
@@ -158,7 +158,7 @@ final class RtpAudioQueue {
     /// once per packet (the totals carry the volume).
     var loggedSizeMismatch = false
 
-    /// Diag category — shared with RtpAudioReceiver so the queue's (rare) FEC
+    /// Diag category - shared with RtpAudioReceiver so the queue's (rare) FEC
     /// compatibility lines co-locate with the receiver's in the log.
     static let cat = "NativeAudio"
 
@@ -168,8 +168,8 @@ final class RtpAudioQueue {
 
     /// OOS give-up SLACK (ms) added past the block's own playout duration before a
     /// missing shard is conceded to PLC. LINK-SCALED, not a magic constant: the
-    /// audio receive path has no clean per-stream jitter signal of its own, so —
-    /// like the cushion seed (AudioDecoder+CushionMemory.swift:134) — it scales off
+    /// audio receive path has no clean per-stream jitter signal of its own, so -
+    /// like the cushion seed (AudioDecoder+CushionMemory.swift:134) - it scales off
     /// the resolved stream-link class. A wired NIC delivers late shards within a
     /// few ms (keep the ~10ms LAN floor); a wifi/tunnel link delivers them 25-50ms
     /// behind, so a too-short window gives up on shards that WOULD have arrived and
@@ -183,7 +183,7 @@ final class RtpAudioQueue {
         case "wifi", "tunnel":
             return Self.oosWaitTimeMaxMs
         default:
-            // Route unknown: fail toward the safer (wider) window — a few extra ms
+            // Route unknown: fail toward the safer (wider) window - a few extra ms
             // of audio latency is non-critical; a too-tight window glitches.
             return Self.oosWaitTimeMaxMs
         }
@@ -270,7 +270,7 @@ final class RtpAudioQueue {
                 block.marks[pos] = 0
                 block.dataShardsReceived += 1
             } else {
-                // Duplicate packet — reject (:595-598).
+                // Duplicate packet - reject (:595-598).
                 return .none
             }
 
@@ -300,7 +300,7 @@ final class RtpAudioQueue {
                 block.marks[markIdx] = 0
                 block.fecShardsReceived += 1
             } else {
-                // Duplicate packet — reject (:634-637).
+                // Duplicate packet - reject (:634-637).
                 return .none
             }
         } else {
@@ -328,7 +328,7 @@ final class RtpAudioQueue {
         if let head = blocks.first, head.allowDiscontinuity {
             let idx = head.nextDataPacketIndex
             if idx < Self.dataShards && head.marks[idx] != 0 {
-                // This packet is missing — emit a PLC placeholder.
+                // This packet is missing - emit a PLC placeholder.
                 head.nextDataPacketIndex += 1
                 nextRtpSequenceNumber = nextRtpSequenceNumber &+ 1
 
@@ -386,7 +386,7 @@ final class RtpAudioQueue {
         guard let head = blocks.first else { return }
 
         // If the packet we're waiting on precedes the earliest block, a whole
-        // earlier block was lost — resync forward without discontinuity (:528-532).
+        // earlier block was lost - resync forward without discontinuity (:528-532).
         if Self.isBefore16(nextRtpSequenceNumber, head.fecHeader.baseSequenceNumber) {
             nextRtpSequenceNumber = head.fecHeader.baseSequenceNumber
             oldestRtpBaseSequenceNumber = head.fecHeader.baseSequenceNumber

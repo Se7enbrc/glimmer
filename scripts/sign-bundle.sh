@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# sign-bundle.sh — inside-out codesign of Glimmer.app. NO `--deep`.
+# sign-bundle.sh - inside-out codesign of Glimmer.app. NO `--deep`.
 #
 # `--deep` is the wrong tool here: it re-signs nested code (Sparkle's framework +
 # its Updater.app / Autoupdate / Installer.xpc / Downloader.xpc, and the Login
 # Helper) with the MAIN app's `--entitlements`, clobbering each component's own
 # entitlements. Verified 2026-06: it stamped Glimmer's device.usb / bluetooth /
-# moonlight shared-preference exceptions onto Sparkle's Downloader.xpc — junk for
+# moonlight shared-preference exceptions onto Sparkle's Downloader.xpc - junk for
 # a downloader, and exactly what breaks the sandboxed installer XPC at runtime.
 # Apple deprecated `--deep` for distribution for the same reason.
 #
@@ -58,7 +58,7 @@ if [ -d "$HELPER" ]; then
 	if [ -f "$HELPER_ENT" ]; then
 		codesign --force --options runtime $TS $KCF --sign "$ID" --entitlements "$HELPER_ENT" "$HELPER"
 	else
-		echo "  WARN: $HELPER_ENT not found — preserving the helper's existing entitlements" >&2
+		echo "  WARN: $HELPER_ENT not found - preserving the helper's existing entitlements" >&2
 		sign_pres "$HELPER"
 	fi
 fi

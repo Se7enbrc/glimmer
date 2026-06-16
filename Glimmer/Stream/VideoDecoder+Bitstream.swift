@@ -107,14 +107,14 @@ extension VideoDecoder {
         // from the AV1 sequence header OBU's `color_config` block (AV1 spec
         // §5.5.1, §5.5.2). We parse them out of the first SEQUENCE_HEADER_OBU
         // in the bitstream so 4:4:4 (HIGH8_444 / HIGH10_444) streams describe
-        // themselves correctly to VT — hardcoding 4:2:0 here silently breaks
+        // themselves correctly to VT - hardcoding 4:2:0 here silently breaks
         // any future 4:4:4 path.
         //
         // Parser is intentionally minimal: it walks OBU headers (with optional
         // extension byte + leb128 size), finds the SEQUENCE_HEADER_OBU
         // (type=1), and bit-reads enough of §5.5.1 to recover the eight
         // av1C-relevant fields. If parsing fails we fall back to the
-        // negotiated-format hint (Main8/Main10, 4:2:0) — VT's HW AV1 decoder
+        // negotiated-format hint (Main8/Main10, 4:2:0) - VT's HW AV1 decoder
         // re-derives the truth from the OBU at decode time, so a mis-tagged
         // av1C is recoverable for Main; the parser fail-safe just keeps the
         // pre-fix behavior on edge-case bitstreams.
@@ -294,7 +294,7 @@ extension VideoDecoder {
         }
 
         // Attach the host's rtpTimestamp (90kHz units, per H.264/HEVC/AV1
-        // RTP standard — see DECODE_UNIT.rtpTimestamp in Limelight.h, and
+        // RTP standard - see DECODE_UNIT.rtpTimestamp in Limelight.h, and
         // the spec note that CMTimeMake((int64_t)du->rtpTimestamp, 90000)
         // is the canonical conversion). VT propagates this onto the output
         // callback's presentationTimeStamp argument so the downstream

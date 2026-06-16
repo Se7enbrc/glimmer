@@ -9,7 +9,7 @@
 //  The per-section fills `capture()` drives (audio / session-lifecycle / display /
 //  resource / auxiliary signals) live in TelemetryExporter+CaptureSections.swift,
 //  and the Extras sidecar + cross-tick rate baselines in
-//  TelemetryExporter+CaptureExtras.swift — pure moves so every file stays under
+//  TelemetryExporter+CaptureExtras.swift - pure moves so every file stays under
 //  the file-length budget.
 //
 //  EVERYTHING here runs on the exporter's serial `workQueue` (never a hot path):
@@ -26,13 +26,13 @@ extension TelemetryExporter {
     // MARK: - Capture
 
     func startCaptureTimer() {
-        // Fresh cross-tick rate baselines for this session — the same
+        // Fresh cross-tick rate baselines for this session - the same
         // per-session lifetime as the exporter's stored prev*-totals (which
         // reset by being instance state on a fresh exporter). On `workQueue`
         // (called from `start()`), same confinement as the capture below.
         Self.captureBaselines = CaptureBaselines()
         let timer = DispatchSource.makeTimerSource(queue: workQueue)
-        // 1s cadence with a generous leeway — telemetry is diagnostic, not
+        // 1s cadence with a generous leeway - telemetry is diagnostic, not
         // realtime, and the leeway lets the OS coalesce the wakeup.
         timer.schedule(deadline: .now() + 1.0, repeating: 1.0, leeway: .milliseconds(100))
         timer.setEventHandler { [weak self] in self?.capture() }
@@ -61,7 +61,7 @@ extension TelemetryExporter {
         snap.renderedFps = stats.renderedFps
 
         // StatsCollector tracks an EMA of decode wall-clock, not a per-frame
-        // histogram (true percentiles would need hot-path timing — avoided). We
+        // histogram (true percentiles would need hot-path timing - avoided). We
         // surface the EMA as p50 and derive p95/max as conservative multiples.
         snap.decodeP50Ms = stats.avgDecodeTimeMs
         snap.decodeP95Ms = stats.avgDecodeTimeMs.map { $0 * 1.5 }
@@ -101,7 +101,7 @@ extension TelemetryExporter {
         // P1 RESOURCE (P-vs-E-core visibility): the per-thread CPU/QoS view +
         // memory footprint + AC/battery (per-process), and the P-cluster vs
         // E-cluster active residency (system, via IOReport). Both on this 1Hz
-        // queue — never a hot path. Includes the one-shot QoS audit (logged once).
+        // queue - never a hot path. Includes the one-shot QoS audit (logged once).
         fillResource(into: &snap)
 
         snap.rfiTotal = counters.rfiTotal.value
@@ -117,14 +117,14 @@ extension TelemetryExporter {
 
         // P1 DECODE state (HW-decode + pixel format + bit depth + colorspace) +
         // PRESENT/DISPLAY (EDR trend + HDR/screen/ProMotion). Both read off the
-        // already-batched gauges/samplers on this queue — no hot-path cost.
+        // already-batched gauges/samplers on this queue - no hot-path cost.
         snap.decodeState = counters.decodeState
         fillDisplayTelemetry(into: &snap)
 
         // P1 AUDIO (the other stream): receive-quality (loss/FEC), output health
         // (buffer fill / under-run / over-run), A/V sync drift, and the cold-start
         // first-packet time. All read off the always-live audio counters/gauges the
-        // audio receive + output path batches into — no hot-path cost; the per-second
+        // audio receive + output path batches into - no hot-path cost; the per-second
         // rates are derived from the totals here on the exporter queue. The playout
         // STATE gauge is read ONCE here and shared with the Extras fill below, so
         // one tick's fill and playout-target fields come from one stamp.
@@ -134,18 +134,18 @@ extension TelemetryExporter {
         // P2 SESSION-LIFECYCLE signals: handshake breakdown, reconnect count +
         // disconnect reason, IDR/RFI round-trip counts + last RTT, and the
         // corruption-heuristic total + per-second rate. All read off the always-live
-        // counters / `TelemetryCounters.p2` here on the exporter queue — never a hot
+        // counters / `TelemetryCounters.p2` here on the exporter queue - never a hot
         // path. Also emits the one-shot handshake breakdown EVENT line.
         fillSessionLifecycle(into: &snap, now: now)
 
         // Per-stage latency histograms: one cumulative snapshot per tick off the
-        // tracker's atomic buckets (no hot-path cost — the increments happen at
+        // tracker's atomic buckets (no hot-path cost - the increments happen at
         // present; this is just a read on the exporter queue). Carries the
         // glass-to-glass + input-to-photon composite stages too.
         snap.latencyHistograms = FrameTimingTracker.shared?.histograms.snapshot()
 
         // Wi-Fi radio (signal 3): one CoreWLAN read on this queue. Reads the
-        // current association only — never a scan — so it cannot disturb the link.
+        // current association only - never a scan - so it cannot disturb the link.
         snap.wifi = wifi.sample()
 
         // Build attribution (signal 5a): the compile-time git SHA + build date.
@@ -163,7 +163,7 @@ extension TelemetryExporter {
         // ROLLING 60s latency window: fold this tick's cumulative bucket
         // snapshot into the per-session ring and carry the windowed difference
         // for the NDJSON `_60s` percentile fields. The cumulative fields stay
-        // (session-lifetime truth; a dashboard rate()s the raw buckets itself) —
+        // (session-lifetime truth; a dashboard rate()s the raw buckets itself) -
         // the pair disambiguates "was bad" vs "is bad", which a cumulative-only
         // view gets wrong.
         if let histograms = snap.latencyHistograms {
@@ -178,12 +178,12 @@ extension TelemetryExporter {
         EnvSignalController.shared.observeCaptureTick(route: extras.streamRoute, wifi: snap.wifi)
         fillEnvSignal(into: &extras, now: now)
 
-        // Fold this tick into the running session aggregate (signal 5b) — fps
+        // Fold this tick into the running session aggregate (signal 5b) - fps
         // min/avg/max, peak depth, worst windows. Done on `workQueue`, off any
         // hot path. GATE-AWARE: the tick is classified first (gated/
         // bring-up/resume/active, off the same suppression+gate gauges this
         // row already carries) so the scorecard's headline numbers cover
-        // ACTIVE seconds only — an AFK decode-gate window (fps-min 0, long worst
+        // ACTIVE seconds only - an AFK decode-gate window (fps-min 0, long worst
         // cadence) and the bring-up era would otherwise pollute the cumulative
         // percentiles. Raw stays under `*_raw`.
         let segment = sessionAggregate.classifyTick(
@@ -205,7 +205,7 @@ extension TelemetryExporter {
         // Advance the shared tick baseline LAST: every per-second section above
         // (video rates, audio rates, lifecycle, extras) derives its dt from the
         // PREVIOUS tick's time, so advancing it mid-capture (inside one section)
-        // zeroes the dt every later section sees — exactly the bug that left the
+        // zeroes the dt every later section sees - exactly the bug that left the
         // audio and corruption per-second rates permanently unemitted.
         prevCaptureTime = now
 
@@ -225,7 +225,7 @@ extension TelemetryExporter {
         snap.rttMs = rtt?.rttMs
         snap.rttVarianceMs = rtt?.varianceMs
         // P1 receive-quality: goodput vs negotiated (both already on the same
-        // StatsCollector snapshot the overlay reads — one read, no second lock) and
+        // StatsCollector snapshot the overlay reads - one read, no second lock) and
         // the inter-packet-gap distribution gauge the receive path publishes ~2s.
         snap.goodputMbps = stats.measuredBitrateMbps
         snap.negotiatedBitrateMbps = stats.negotiatedBitrateMbps
@@ -274,7 +274,7 @@ extension TelemetryExporter {
                 // dt: the receive path folds its totals once per ~2s metrics
                 // window while this capture ticks at 1Hz, so delta-over-tick-dt
                 // read 2x the true wire rate on fold ticks and 0 between them.
-                // Emitted only on a fold tick — absent, not a false 0, between.
+                // Emitted only on a fold tick - absent, not a false 0, between.
                 if packetsDelta > 0, let foldedAt = Self.captureBaselines.videoPacketsCapturedAt {
                     let foldDt =
                         Double(now.uptimeNanoseconds &- foldedAt.uptimeNanoseconds) / 1_000_000_000.0
@@ -324,7 +324,7 @@ extension TelemetryExporter {
     /// received + lost == the packets the host actually sent); out-of-order and
     /// duplicate are over the received packets. Each rate is emitted only when its
     /// denominator is non-zero so a silent tick doesn't publish a 0/0. On the
-    /// exporter queue — never the hot path.
+    /// exporter queue - never the hot path.
     private func fillReceiveQualityRates(
         into snap: inout TelemetrySnapshot,
         packetsDelta: UInt64, preFecLostDelta: UInt64,

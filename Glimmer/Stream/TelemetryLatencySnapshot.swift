@@ -2,7 +2,7 @@
 //  TelemetryLatencySnapshot.swift
 //
 //  The plain value type the latency rig hands to the renderers: one tick's
-//  snapshot of every per-stage latency histogram — plus the ROLLING 60s window
+//  snapshot of every per-stage latency histogram - plus the ROLLING 60s window
 //  derived from a ring of those snapshots (the "is bad" view next to the
 //  cumulative "was bad" one). Split out of TelemetryLatency.swift so that file
 //  stays under the length budget and focused on the live atomic histograms +
@@ -19,7 +19,7 @@ import Foundation
 struct LatencyHistogramSnapshot: Sendable {
     struct Stage: Sendable {
         var buckets: [UInt64]
-        /// The bucket upper bounds (ms) THIS stage was recorded against — carried
+        /// The bucket upper bounds (ms) THIS stage was recorded against - carried
         /// on the snapshot so the Prometheus render + NDJSON quantile estimator
         /// use the matching bounds (fine for sub-stages, coarse for the composite
         /// glass-to-glass / input-to-photon / idr-round-trip stages) without a
@@ -29,7 +29,7 @@ struct LatencyHistogramSnapshot: Sendable {
         /// Total observations (rendered as Prometheus `_count`). Named
         /// `observationCount` rather than `count` so a "no data this tick" check
         /// doesn't trip SwiftLint's `empty_count` rule, which flags any property
-        /// literally named `count` compared to zero — a false positive here since
+        /// literally named `count` compared to zero - a false positive here since
         /// this is a numeric total, not a collection size.
         var observationCount: UInt64
         /// True iff this stage observed at least one frame this session.
@@ -64,10 +64,10 @@ struct LatencyHistogramSnapshot: Sendable {
 /// windows can't help.
 ///
 /// MEMORY-BOUND + ZERO-COST-OFF: exactly `windowTicks` snapshots (~10 stages ×
-/// ~20 UInt64 buckets each, ≈ 100KB worst case — the bounds arrays are shared
+/// ~20 UInt64 buckets each, ≈ 100KB worst case - the bounds arrays are shared
 /// CoW references), owned by the exporter's per-session `CaptureBaselines`.
 /// Confined to the exporter's serial `workQueue` (no lock needed), and when
-/// telemetry is off the exporter — and therefore this ring — never exists.
+/// telemetry is off the exporter - and therefore this ring - never exists.
 final class LatencyRollingWindow {
     /// Window span in capture ticks (1Hz capture → seconds).
     static let windowTicks = 60
@@ -95,7 +95,7 @@ final class LatencyRollingWindow {
     /// histogram of just the observations between them, so the result feeds
     /// the existing `histogramQuantile` estimator unchanged. (Internal, not
     /// private: the scorecard's ACTIVE-seconds accumulator reuses it to slice
-    /// per-tick deltas out of the cumulative stream — see SessionAggregate.)
+    /// per-tick deltas out of the cumulative stream - see SessionAggregate.)
     static func difference(
         _ current: LatencyHistogramSnapshot, minus old: LatencyHistogramSnapshot
     ) -> LatencyHistogramSnapshot {
@@ -103,7 +103,7 @@ final class LatencyRollingWindow {
             _ current: LatencyHistogramSnapshot.Stage, _ old: LatencyHistogramSnapshot.Stage
         ) -> LatencyHistogramSnapshot.Stage {
             // A mismatched bucket count can only mean the stage was rebuilt
-            // mid-session (doesn't happen today) — fall back to cumulative
+            // mid-session (doesn't happen today) - fall back to cumulative
             // rather than subtract across different bounds.
             guard current.buckets.count == old.buckets.count else { return current }
             var buckets = current.buckets
@@ -131,10 +131,10 @@ final class LatencyRollingWindow {
             idrRoundTrip: stage(current.idrRoundTrip, old.idrRoundTrip))
     }
 
-    /// Bucket-wise SUM of two cumulative snapshots — `difference`'s inverse,
+    /// Bucket-wise SUM of two cumulative snapshots - `difference`'s inverse,
     /// used by the scorecard's ACTIVE-seconds accumulator to stitch per-tick
     /// deltas back into one histogram covering only the active seconds. A
-    /// mismatched bucket count (a mid-session stage rebuild — doesn't happen
+    /// mismatched bucket count (a mid-session stage rebuild - doesn't happen
     /// today) keeps the accumulated side rather than adding across bounds.
     static func sum(
         _ accumulated: LatencyHistogramSnapshot, plus delta: LatencyHistogramSnapshot

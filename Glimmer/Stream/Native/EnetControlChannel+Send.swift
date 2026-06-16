@@ -13,7 +13,7 @@ extension EnetControlChannel {
     /// Submit one datagram to the wire. The actual connection.send is hopped onto
     /// the dedicated sendQueue so it can NEVER serialize ahead of (and starve) the
     /// inbound receive/ACK callback running on `queue`. stateLock is NEVER held
-    /// across this call — callers always invoke it OUTSIDE their withState blocks,
+    /// across this call - callers always invoke it OUTSIDE their withState blocks,
     /// matching moonlight's "release the mutex before any blocking op" invariant.
     /// In-flight backpressure: count up before the send, down in its completion,
     /// so the input flush path can back off via `sendBacklogged`.
@@ -21,7 +21,7 @@ extension EnetControlChannel {
         withState { lastSendMs = serviceTimeMs }
         // Locked read (see connLock): retains the connection under the lock so
         // close()'s concurrent take-and-nil can never free it mid-load. nil
-        // here means teardown already took it — drop the datagram.
+        // here means teardown already took it - drop the datagram.
         let conn = currentConnection()
         inFlightSends.increment()
         let counter = inFlightSends
@@ -57,7 +57,7 @@ extension EnetControlChannel {
     /// Send one already-built plaintext NV_INPUT_HEADER+body as control-V2 input
     /// data, sealed identically to `sendInputPacket` but emitted as an ENet
     /// SEND_UNRELIABLE command (no ACK, no retransmit). Used for controller motion
-    /// (gyro/accel) — a superseded sensor sample is worthless, so losing one is
+    /// (gyro/accel) - a superseded sensor sample is worthless, so losing one is
     /// harmless and we must NOT let it HOL-block or back up the reliable stream.
     /// Matches current upstream InputStream.c:525-534 (motion ships unreliable).
     /// Returns false if the seal/send failed.
@@ -77,13 +77,13 @@ extension EnetControlChannel {
 
     // MARK: - Public client→host control (IDR / RFI / LTR)
 
-    /// Request an IDR frame — COALESCED. Mirrors LiRequestIdrFrame
+    /// Request an IDR frame - COALESCED. Mirrors LiRequestIdrFrame
     /// (ControlStream.c:415-422): level-triggered, and a pending IDR supersedes
     /// (flushes) any queued RFI since a full IDR recovers the whole span. This
     /// only SETS state; the actual wire REQUEST_IDR is sent AT MOST ONCE per
     /// control-loop drain (drainPendingRecoveryRequests), so the per-failed-frame
     /// IDR storm collapses to one packet per loss event. Safe to call from any
-    /// thread (depacketizer/decoder/watchdog) — it just takes stateLock.
+    /// thread (depacketizer/decoder/watchdog) - it just takes stateLock.
     func requestIdrFrame() {
         withState {
             idrPending = true
@@ -93,7 +93,7 @@ extension EnetControlChannel {
         }
     }
 
-    /// Invalidate reference frames (RFI) — COALESCED. Mirrors
+    /// Invalidate reference frames (RFI) - COALESCED. Mirrors
     /// queueFrameInvalidationTuple (ControlStream.c:388-410): only SETS the
     /// pending window; the wire RFI is sent at most once per control-loop drain.
     /// If an IDR is already pending it supersedes the RFI (the IDR recovers the
@@ -112,7 +112,7 @@ extension EnetControlChannel {
     }
 
     /// Drain the coalesced IDR/RFI requests onto the wire. Called once per
-    /// control-loop tick (controlLoopTick) on the loop's dedicated thread —
+    /// control-loop tick (controlLoopTick) on the loop's dedicated thread -
     /// the single drain point that mirrors moonlight's requestIdrFrameFunc
     /// (ControlStream.c:1624-1640). Sends AT MOST ONE REQUEST_IDR and AT MOST
     /// ONE RFI per tick; an IDR supersedes a same-tick RFI. stateLock is taken
@@ -175,12 +175,12 @@ extension EnetControlChannel {
         }
     }
 
-    /// Arm a P2 IDR ROUND-TRIP measurement (signal: IDR-RTT) — EXPLICIT
+    /// Arm a P2 IDR ROUND-TRIP measurement (signal: IDR-RTT) - EXPLICIT
     /// REQUEST_IDR sends only (RFIs don't arm; see sendRfiNow). Stamps the
     /// send instant + bumps the request counter so the receive side can compute
     /// request→arrival when the matching IDR/recovery frame lands. GATED on the
     /// latency tracker existing (gate-on) so the OFF path pays a single optional
-    /// load — the resolve side is gated the same way, so off they stay perfectly
+    /// load - the resolve side is gated the same way, so off they stay perfectly
     /// paired and cost nothing. Off any hot path (an IDR send is rare).
     private func armIdrRoundTrip() {
         guard FrameTimingTracker.shared != nil else { return }
@@ -219,7 +219,7 @@ extension EnetControlChannel {
             enetSeq += 1
             // ENet reliable sequence numbers are 16-bit and WRAP (the vendored C
             // does `++` on a u16, which wraps silently); the receiver compares
-            // with wraparound arithmetic. Must use &+ — plain + traps on overflow
+            // with wraparound arithmetic. Must use &+ - plain + traps on overflow
             // after 65535 reliable sends on a channel (the mouse channel hits this
             // in ~20min of play → arithmetic-overflow crash on the input path).
             let next = (channelOutgoingReliableSeq[channel] ?? 0) &+ 1
@@ -274,11 +274,11 @@ extension EnetControlChannel {
     /// Seal `type`+`payload` as a control-V2 message and send it as an ENet
     /// SEND_UNRELIABLE command on `channel`. Mirrors `sendEncryptedControl`
     /// EXACTLY for the encryption (same `crypto.seal`, same globally-monotonic
-    /// `enetSeq` GCM nonce — NEVER reused across reliable AND unreliable), but:
+    /// `enetSeq` GCM nonce - NEVER reused across reliable AND unreliable), but:
     ///   (a) emits the 0x07 SEND_UNRELIABLE command (no ACKNOWLEDGE flag) carrying
     ///       the channel's CURRENT reliable seq (NOT incremented) + a pre-
     ///       incremented per-channel unreliable seq;
-    ///   (b) does NOT append to sentReliable and does NOT touch unackedReliables —
+    ///   (b) does NOT append to sentReliable and does NOT touch unackedReliables -
     ///       an unreliable command is never ACKed or retransmitted;
     ///   (c) does NOT reset the unreliable counter (only a RELIABLE send zeroes it,
     ///       per enet_peer_setup_outgoing_command / peer.c:658).

@@ -28,7 +28,7 @@ extension FramePacer {
     /// the buffer (so the starvation failsafe doesn't count this tick), and
     /// whether this release was FORCED by the over-target short-circuit (a genuine
     /// drainable backlog above the adaptive target that the due gate would
-    /// otherwise have latched not-due — the no-network present-stall fix). The
+    /// otherwise have latched not-due - the no-network present-stall fix). The
     /// last flag drives only observability; it never alters the present itself.
     struct DueGateResult {
         let toPresent: Entry?
@@ -54,10 +54,10 @@ extension FramePacer {
     /// the stream grid, ONE interval BEHIND the live link's `targetTimestamp` (must
     /// be FINITE; falls back to the `.nan` reset otherwise). Call under the lock.
     /// The `.nan` reset releases ONE frame next tick then re-seeds the base to
-    /// `targetTimestamp` — AHEAD of the queued frames' grid — so the due-gate
+    /// `targetTimestamp` - AHEAD of the queued frames' grid - so the due-gate
     /// RE-LATCHES not-due (the ~1-release-per-8-ticks limp). Anchoring one interval
     /// behind makes `sinceLast ≈ streamFrameIntervalSeconds >= interval - slack`, so
-    /// the next queued frame is DUE and STAYS due — flow resumes next vsync with no
+    /// the next queued frame is DUE and STAYS due - flow resumes next vsync with no
     /// link rebuild or 5s pacer re-enable wait. Used by backoff reseed + failsafe.
     func anchorCadenceBaseOnGridLocked(targetTimestamp: CFTimeInterval) {
         guard targetTimestamp.isFinite else {
@@ -72,12 +72,12 @@ extension FramePacer {
     /// When the head frame is HOPELESSLY late (> `presentBackoffLatenessIntervals`
     /// stream intervals) AND a fresher frame is queued behind it, collapse the FIFO
     /// to its single newest frame, re-anchor the cadence base on-grid, and return
-    /// it for immediate present — killing the busy-spin where the present path
-    /// churns doomed late frames every tick (on a lossy wifi link: 80–96% CPU,
+    /// it for immediate present - killing the busy-spin where the present path
+    /// churns doomed late frames every tick (on a lossy wifi link: 80-96% CPU,
     /// fps_rendered→0). We require a finite POSITIVE lateness; a negative / absurd
     /// `sinceLast` is a timebase discontinuity owned by the due-gate's defensive
     /// clamp, not this path. Returns nil on a normally-paced / jitter-buffered
-    /// stream, whose head is never this late. MUTATES queue — caller holds the lock.
+    /// stream, whose head is never this late. MUTATES queue - caller holds the lock.
     func takeBackoffNewestLocked(targetTimestamp: CFTimeInterval) -> BackoffBeat? {
         guard queue.count > 1, lastPresentMediaTime.isFinite else { return nil }
         let sinceLast = targetTimestamp - lastPresentMediaTime
@@ -92,7 +92,7 @@ extension FramePacer {
         // Re-anchor ON the grid, NOT at `targetTimestamp`: parking the base at
         // `targetTimestamp` put it ≈one vsync AHEAD of fresh frames → the due-gate
         // latched not-due → a hard wedge (observed on a lossy wifi link). See
-        // `anchorCadenceBaseOnGridLocked`. Clear the streak — we are presenting.
+        // `anchorCadenceBaseOnGridLocked`. Clear the streak - we are presenting.
         anchorCadenceBaseOnGridLocked(targetTimestamp: targetTimestamp)
         starvedTickStreak = 0
         return BackoffBeat(newest: newest, droppedCount: droppedCount)
@@ -102,7 +102,7 @@ extension FramePacer {
     /// a frame ACTUALLY reached the renderer. The release clock is what the
     /// watchdog's "present wedged" trip gates on; the retained sample buffer is
     /// the one the layer is now displaying, so holding it costs no extra surface.
-    /// Takes the lock itself — call OFF the lock, right after a true
+    /// Takes the lock itself - call OFF the lock, right after a true
     /// `willPresent` return. Shared by the due-gate release, the backoff beat,
     /// and the warm-handover direct present.
     func noteFramePresented(_ sampleBuffer: CMSampleBuffer) {
@@ -118,15 +118,15 @@ extension FramePacer {
     /// The due gate's missing bookkeeping behind the wired-link present wedge:
     /// a dequeue that dies at the renderer is neither a release (the
     /// release clock rightly stays stale) nor a gate wedge (`toPresent` was
-    /// non-nil, so the starvation failsafe rightly stays disarmed) — it is a
+    /// non-nil, so the starvation failsafe rightly stays disarmed) - it is a
     /// RENDERER fault, and without this streak the episode was indistinguishable
     /// from a latched gate, so the watchdog spent its cheap stages on cadence/
     /// link medicine that a latched `isReadyForMoreMediaData` survives (the
     /// in-ladder rebuild changed nothing; only the stage-3 flush cured it).
     /// Consecutive-only: any successful present resets it (noteFramePresented),
-    /// so healthy transient backpressure — Apple's "a single late vsync can
+    /// so healthy transient backpressure - Apple's "a single late vsync can
     /// flip the flag for one frame" class, and anything wifi jitter can cause
-    /// upstream — can never accumulate toward the ladder's threshold.
+    /// upstream - can never accumulate toward the ladder's threshold.
     func noteGateReleaseRejected() {
         os_unfair_lock_lock(&lock)
         presentRejectStreak += 1
@@ -137,7 +137,7 @@ extension FramePacer {
     /// Called OFF the lock (caller already unlocked). Counts the dropped backlog
     /// as presentation-late drops and stamps the release liveness clocks so the
     /// watchdog sees the catch-up. A backoff beat discards already-decoded frames
-    /// from the present queue (reference chain intact), so it requests NO IDR —
+    /// from the present queue (reference chain intact), so it requests NO IDR -
     /// see the removed `onSustainedLag` hook on `FramePacer`.
     func presentBackoffAndYield(_ beat: BackoffBeat) {
         for _ in 0..<beat.droppedCount { stats.recordPresentationLateDrop() }
@@ -149,7 +149,7 @@ extension FramePacer {
         if willPresent(beat.newest.sampleBuffer) {
             noteFramePresented(beat.newest.sampleBuffer)
         } else {
-            // The renderer refused the freshest frame too — feed the reject
+            // The renderer refused the freshest frame too - feed the reject
             // streak so a latched-unready renderer steers the ladder to the
             // flush (see noteGateReleaseRejected).
             noteGateReleaseRejected()
@@ -162,7 +162,7 @@ extension FramePacer {
     /// frame), every tick at fps>refresh (the trim already dropped the backlog). A
     /// half-vsync of slack avoids the fps≈refresh 1.5x judder; the
     /// grow-without-a-hitch gate tightens that slack only while filling toward a
-    /// raised adaptive target. MUTATES queue state — caller must hold the lock.
+    /// raised adaptive target. MUTATES queue state - caller must hold the lock.
     func dequeueDueFrameLocked(
         targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, effectiveTarget: Int
     ) -> DueGateResult {
@@ -175,7 +175,7 @@ extension FramePacer {
         // GROW-WITHOUT-A-HITCH gate. When the adaptive target has risen above the
         // current depth (the link just got jittery, or we're filling the baseline
         // after a flush), hold one extra frame so the buffer DEEPENS out of the
-        // slack a clean link provides — at zero added per-frame latency, because we
+        // slack a clean link provides - at zero added per-frame latency, because we
         // only ever hold back a frame that is BARELY due (within the half-vsync
         // slack). A genuinely overdue frame always releases, so this can never
         // starve the present path. fps<refresh idle ticks (head not due at all) are
@@ -184,7 +184,7 @@ extension FramePacer {
         let belowTarget = queue.count <= effectiveTarget
         if lastPresentMediaTime.isFinite {
             let sinceLast = targetTimestamp - lastPresentMediaTime
-            // DEFENSIVE CLAMP — the heart of the freeze fix on the gate.
+            // DEFENSIVE CLAMP - the heart of the freeze fix on the gate.
             // `targetTimestamp` and `lastPresentMediaTime` must share the
             // CADisplayLink's timebase, but that timebase goes DISCONTINUOUS across
             // a link rebuild / display-mode switch / VRR retrain / sleep-wake. When
@@ -197,7 +197,7 @@ extension FramePacer {
             if !sinceLast.isFinite || sinceLast < 0 || sinceLast > 1.0 {
                 due = true
             } else if !belowTarget {
-                // OVER-TARGET SHORT-CIRCUIT — the no-network present-stall fix.
+                // OVER-TARGET SHORT-CIRCUIT - the no-network present-stall fix.
                 // The per-tick trim in `releaseDueFrame` already drop-to-newested
                 // the FIFO down to at most `effectiveTarget + 1`, so reaching here
                 // with `queue.count > effectiveTarget` means a genuine drainable
@@ -205,13 +205,13 @@ extension FramePacer {
                 // the trim. On a PRISTINE link the due gate could still latch
                 // not-due against it (the cadence base drifts a hair, or the depth
                 // controller over-drains then re-grows and self-oscillates), so a
-                // decoded-but-unpresented frame piled up while the head was held —
+                // decoded-but-unpresented frame piled up while the head was held -
                 // fps_rendered sagged toward ~43 and the 8-tick failsafe was too
                 // slow to break it (measured across several episodes, incl. a
                 // ~1s freeze). When there is real backlog over target,
                 // HOLDING is always wrong: force the head out NOW so the backlog
                 // ALWAYS drains. This is strictly additive and only fires above
-                // the adaptive target — the passthrough / jitter-buffer path
+                // the adaptive target - the passthrough / jitter-buffer path
                 // (`belowTarget`, i.e. depth <= target) still uses the normal due
                 // logic below and is wholly untouched, so the clean-link rest
                 // state and the grown wifi buffer both behave exactly as before.
@@ -279,13 +279,13 @@ extension FramePacer {
         // INCREMENT 1: refresh the reconciler's desired target BEFORE taking the
         // pacer lock (the refresh briefly takes the controller's lock; doing it
         // here keeps the pacer from ever holding two locks). The grow/decay math
-        // below — under the pacer lock — then reads only the pulled snapshot.
+        // below - under the pacer lock - then reads only the pulled snapshot.
         refreshReconciledTarget()
 
         os_unfair_lock_lock(&lock)
         // `!warmingUp`: during a warm handover the queue is empty by design
         // (submits direct-present until the rebuilt link proves healthy ticks
-        // — FramePacer+TickDeficit.swift), so a tick here has nothing to do.
+        // - FramePacer+TickDeficit.swift), so a tick here has nothing to do.
         // Bailing keeps the priming span from polluting the depth samples and
         // stale-repeat counter while real frames are demonstrably flowing.
         guard running, !warmingUp else {
@@ -302,29 +302,29 @@ extension FramePacer {
         // (moonlight drops to stay current): a static scene yields tiny P-frames
         // that VT/FEC drains in BUNCHES, so a motion RESUME after idle lands
         // several frames inside one vsync window while we release only 1/vsync.
-        // Trimming each tick absorbs the burst by DROPPING-TO-NEWEST — present the
-        // freshest frame, discard the stale intermediate ones — so
-        // output_to_present returns to ~1–2 vsyncs within a frame or two.
+        // Trimming each tick absorbs the burst by DROPPING-TO-NEWEST - present the
+        // freshest frame, discard the stale intermediate ones - so
+        // output_to_present returns to ~1-2 vsyncs within a frame or two.
         //
         // The OLD lenient policy relaxed the ceiling to the hard cap (6) whenever
-        // ANY recent depth sample sat at/below target (almost always true — the
+        // ANY recent depth sample sat at/below target (almost always true - the
         // queue dips to <=1 on quiet beats), so a burst filled to 6 and RODE the
         // cap: a standing ~50ms output_to_present that came/went with motion
         // (on a lossy wifi link: o2p clustered at exactly 5x/6x the 8.33ms vsync,
-        // decode flat ~1.5–3ms). The minimal +1 slack still tolerates benign 1↔2
+        // decode flat ~1.5-3ms). The minimal +1 slack still tolerates benign 1↔2
         // cadence oscillation (fps≈refresh, a frame landing a hair early) without
         // trimming every other tick → no judder / no spurious late-drops on a
         // steady stream; only a 2-deep-or-more standing build trims.
         //
         // ADAPTIVE-JITTER SAFEGUARD: `effectiveTarget` is `decayTargetLocked()`,
-        // the GROWN adaptive target — 1 on a clean link, climbing toward the cap
+        // the GROWN adaptive target - 1 on a clean link, climbing toward the cap
         // under real measured RFC-3550 reorder jitter. The ceiling rises WITH it
         // (wifi at target 5 ⇒ trim only above 6), so the trim NEVER drops below
         // the adaptive target: the wifi jitter buffer still fills and holds as
         // designed; only latency ABOVE the (correct, possibly grown) target sheds.
         let effectiveTarget = decayTargetLocked()
         // POST-GAP LENIENCY: in gap-recovery the trim ceiling rises to the cap so the
-        // bunched catch-up plays THROUGH (drained 1/vsync) instead of trim-to-newest —
+        // bunched catch-up plays THROUGH (drained 1/vsync) instead of trim-to-newest -
         // the discard that cost ~20% of frames on a gappy link; otherwise it stays at
         // `effectiveTarget + 1`. Gated on a real empty-tick streak so ordinary motion-
         // bunches still trim tight. Zero standing latency. See `gapAwareTrimLocked`.
@@ -334,7 +334,7 @@ extension FramePacer {
         trimmed = gapTrimmed
 
         // Snapshot the post-trim depth for the per-tick depth telemetry
-        // (pacing_depth / pacing_depth_max) — the signal the diagnosis keys on to
+        // (pacing_depth / pacing_depth_max) - the signal the diagnosis keys on to
         // re-measure this fix.
         sampledDepth = queue.count
 
@@ -371,7 +371,7 @@ extension FramePacer {
         // grow-without-a-hitch gate tightens that slack only while filling a target.
         //
         // `heldForGrowth` is true when this tick deliberately withheld a barely-due
-        // head to grow the buffer (not a genuine wedge) — it keeps the starvation
+        // head to grow the buffer (not a genuine wedge) - it keeps the starvation
         // failsafe from mistaking an intentional one-tick hold for a latched-false
         // gate. The full decision lives in `dequeueDueFrameLocked` to keep this
         // function within complexity limits.
@@ -393,8 +393,8 @@ extension FramePacer {
         // non-empty, the `due` gate is wedged (or the cadence base is poisoned).
         // Count the streak; once it crosses a few vsyncs' worth, log the diagnosis
         // and re-anchor the cadence base ON the live grid so the head is DUE next
-        // tick — breaking a latched-false `due` before the external watchdog fires.
-        // A deliberate one-tick grow-hold is NOT a wedge — exclude it so the
+        // tick - breaking a latched-false `due` before the external watchdog fires.
+        // A deliberate one-tick grow-hold is NOT a wedge - exclude it so the
         // failsafe only ever fires on a genuinely latched-false gate.
         let wedgedThisTick = !queue.isEmpty && toPresent == nil && !heldForGrowth
         var sinceLastForLog: CFTimeInterval = .nan
@@ -456,7 +456,7 @@ extension FramePacer {
         // A trim drops already-decoded CMSampleBuffers from the present queue
         // (the VT decoder already produced them; the reference chain is intact),
         // so a keyframe can't fix it and would only blur/refocus at 4K240. The
-        // pacer therefore NO LONGER escalates a laggy beat to an IDR — the old
+        // pacer therefore NO LONGER escalates a laggy beat to an IDR - the old
         // `onSustainedLag` hook is gone. Trimming-to-newest is the correct
         // low-latency behavior and we keep counting every trimmed frame as a
         // presentation-late drop above (load-bearing telemetry); we just don't
@@ -467,7 +467,7 @@ extension FramePacer {
 
         // Hand the frame to the owner's present path. `willPresent`
         // (VideoDecoder.presentFrame) owns the renderer-status / backpressure
-        // policy AND the actual `renderer.enqueue` — the pacer deliberately
+        // policy AND the actual `renderer.enqueue` - the pacer deliberately
         // does NOT enqueue itself, so there's a single enqueue site and the
         // pacer stays decoupled from the layer's failure handling. A false
         // return means the frame was dropped at the renderer (failed / not
@@ -475,17 +475,17 @@ extension FramePacer {
         guard let willPresent else { return }
         let presented = willPresent(entry.sampleBuffer)
         guard presented else {
-            // The gate did its job — the RENDERER refused the frame (failed /
+            // The gate did its job - the RENDERER refused the frame (failed /
             // not ready). Count the consecutive-reject streak: this is the
             // wedge signature the renderer-refusal incident proved invisible
-            // (releases 0/s, ticks healthy, depth 1, survived a link rebuild) —
+            // (releases 0/s, ticks healthy, depth 1, survived a link rebuild) -
             // the measured escape the recovery ladder keys the flush on.
             noteGateReleaseRejected()
             return
         }
 
         // Present-side liveness: a frame ACTUALLY reached the renderer. This is
-        // the clock the watchdog's "present wedged" trip gates on — the single
+        // the clock the watchdog's "present wedged" trip gates on - the single
         // number that proves the screen is being updated, distinct from the
         // decode-output clock the old watchdog was blind to. Stamp it (plus the
         // tick-deficit repaint source) before the cadence metric so the
@@ -495,7 +495,7 @@ extension FramePacer {
         // Present-cadence metric (only for frames that actually reached the
         // renderer): how far this present landed from the ideal grid. We
         // measure present-vs-PTS as the delta between the realized inter-present
-        // wall-clock and the stream's frame interval — a smooth stream lands
+        // wall-clock and the stream's frame interval - a smooth stream lands
         // near zero; jitter shows as spread.
         let presentDelta = lastPresentInterPresentDelta()
         stats.recordPresent(cadenceErrorMs: presentDelta * 1000.0)
@@ -511,7 +511,7 @@ extension FramePacer {
     }
 
     /// Bump the stale-frame REPEAT counter (signal: PRESENT) when a running tick
-    /// presented no new frame — the layer re-shows the last one (the invisible
+    /// presented no new frame - the layer re-shows the last one (the invisible
     /// stutter). Kept off `releaseDueFrame` so its branch doesn't grow that
     /// already-large function. Always-live sub-µs integer add; the exporter
     /// derives a repeats/sec rate from the monotonic total.
@@ -524,7 +524,7 @@ extension FramePacer {
     /// GENUINE drainable backlog (one frame above the adaptive target that survived
     /// the per-tick trim) and the short-circuit forced the head out instead.
     /// Bumps the monotonic per-second counter (exactly like the stale-repeat
-    /// counter — a SPIKE in its rate is the over-drain↔re-grow oscillation), and
+    /// counter - a SPIKE in its rate is the over-drain↔re-grow oscillation), and
     /// tracks a consecutive streak under the lock so a one-shot signpost can
     /// bracket a sustained episode; a normally-due release (`released && !forced`)
     /// clears the streak so it measures only the oscillation, never steady state.
@@ -540,7 +540,7 @@ extension FramePacer {
             overTargetReleaseStreak += 1
             streakSnapshot = overTargetReleaseStreak
             // Signpost once, when the streak first crosses the starvation log
-            // threshold — a sustained over-target episode is the same
+            // threshold - a sustained over-target episode is the same
             // self-oscillation signature, surfaced before it could ever reach the
             // failsafe (which it now never will, since we force the release).
             shouldSignpost = overTargetReleaseStreak == FramePacer.starvationLogTicks
