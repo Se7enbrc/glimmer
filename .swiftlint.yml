@@ -1,0 +1,167 @@
+# SwiftLint configuration for Glimmer.
+# Goal: guardrails, not gatekeeping. Tuned so the current tree passes with
+# warnings only, no errors. Tighten over time as the codebase improves.
+
+included:
+  - Glimmer
+  # scripts/ is build-time tooling (icon generators, not product code) — not
+  # subject to the product lint bar.
+
+excluded:
+  - third_party
+  - build
+  - .build
+  - patches
+  - node_modules
+  - docs
+
+# Disabled: handled by pre-commit's trailing-whitespace hook, or we have
+# legitimate uses (todo/fixme markers for tracked work).
+disabled_rules:
+  - trailing_whitespace
+  - todo
+
+# Opt-in rules that catch real bugs / improve readability without being
+# pedantic.
+opt_in_rules:
+  - closure_spacing
+  - empty_count
+  - empty_string
+  - implicit_return
+  # unused_import is an analyzer rule (requires `swiftlint analyze` with
+  # compiler args) — leaving it out of the lint pass.
+  - vertical_whitespace_closing_braces
+  - redundant_nil_coalescing
+  - convenience_type
+  - first_where
+  - last_where
+  - sorted_first_last
+  - toggle_bool
+  - contains_over_first_not_nil
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - empty_collection_literal
+  - flatmap_over_map_reduce
+  - reduce_into
+  - yoda_condition
+  - identical_operands
+  - overridden_super_call
+  - prohibited_super_call
+  - fatal_error_message
+  - force_unwrapping # warning only, see below
+
+# Line length: matches what the codebase actually uses. Some os_log format
+# strings exceed 220 cols and can't reasonably be split — keep error generous.
+line_length:
+  warning: 140
+  error: 280
+  ignores_urls: true
+  ignores_comments: true
+  ignores_function_declarations: true
+
+# VideoDecoder has long functions (decoder dispatch). Warn, don't break.
+function_body_length:
+  warning: 80
+  error: 250
+
+function_parameter_count:
+  warning: 7
+  error: 12
+
+# Post-split largest type is Network's NetworkClient class around 900 lines.
+# Warning at 600 surfaces grow-back, error well above the largest current
+# type with headroom.
+type_body_length:
+  warning: 600
+  error: 1500
+
+# Post-split file_length: warning at 600 (top of the green zone for a
+# focused module), error at 1500 — ~23% headroom over the current largest
+# file (Network.swift at 1219). VideoDecoder, InputForwarder, and
+# MoonlightManager are all under 1200 after the splits.
+file_length:
+  warning: 600
+  error: 1500
+
+# InputForwarder's vk-mapping switch tops 100 — that's a flat dispatch table,
+# not real complexity. Warn early; only error on truly egregious.
+cyclomatic_complexity:
+  warning: 15
+  error: 120
+
+# Tuple returns like (host, port, certPEM) are common in this codebase; warn
+# but don't block. Push past 5 and it's a real code smell.
+large_tuple:
+  warning: 3
+  error: 5
+
+nesting:
+  type_level:
+    warning: 3
+  function_level:
+    warning: 5
+
+identifier_name:
+  # C-FFI callbacks use names like `c_start`, `c_decodeAndPlaySample` and we
+  # mirror C constants verbatim (`COLORSPACE_REC_601`). Allow underscores.
+  allowed_symbols: ["_"]
+  validates_start_with_lowercase: warning
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 50
+    error: 80
+  excluded:
+    - id
+    - i
+    - j
+    - k
+    - x
+    - y
+    - z
+    - w
+    - h
+    - r
+    - g
+    - b
+    - a
+    - dx
+    - dy
+    - vk # virtual-key
+    - fd # file descriptor
+    - ip # ip address
+    - to
+    - up
+
+type_name:
+  min_length:
+    warning: 3
+    error: 2
+  max_length:
+    warning: 50
+    error: 60
+
+# Force-unwrapping is a warning, not an error. Some places (OpenGL-style
+# boilerplate, known-good cached lookups) it's the right call.
+force_unwrapping:
+  severity: warning
+
+force_cast:
+  severity: warning
+
+force_try:
+  severity: warning
+
+# Custom rules.
+custom_rules:
+  no_coauthor_trailer:
+    name: "No Co-Authored-By trailer"
+    regex: "Co-Authored-By:"
+    message: "Do not embed Co-Authored-By trailers in source files."
+    severity: error
+  no_claude_attribution:
+    name: "No Claude attribution"
+    regex: "Generated with .*Claude"
+    message: "Do not embed Claude attribution in source files."
+    severity: error

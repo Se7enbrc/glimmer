@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a streaming, pairing, input, or UI problem.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Glimmer's debugging culture
+        is telemetry-first: a session scorecard plus the session log usually
+        localizes a streaming problem in minutes, where a prose description
+        alone can take days. The telemetry is **opt-in, local-only, and carries
+        only performance numbers — never secrets, addresses, or input
+        contents.**
+  - type: input
+    id: version
+    attributes:
+      label: Glimmer version
+      description:
+        Menu bar → About, or `defaults read
+        /Applications/Glimmer.app/Contents/Info CFBundleShortVersionString`
+      placeholder: "2026.6.1 (20260605)"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Mac + macOS version
+      placeholder: 'MacBook Pro 14", macOS 26.x'
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host (Sunshine/GFE version + OS + GPU)
+      placeholder: "Sunshine 7.1.431, Windows 11, RTX 4080"
+    validations:
+      required: true
+  - type: dropdown
+    id: link
+    attributes:
+      label: Network link between Mac and host
+      options:
+        - Wired Ethernet (both ends)
+        - Wi-Fi (Mac) → wired host
+        - Wi-Fi both ends
+        - VPN / tailnet / remote
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description:
+        What did you do, what did you expect, what happened instead? Rough
+        timestamps help.
+    validations:
+      required: true
+  - type: textarea
+    id: telemetry
+    attributes:
+      label: Telemetry scorecard + session log
+      description: |
+        For streaming-quality issues (stutter, freezes, audio dropouts, input
+        lag) please attach the session artifacts:
+
+        1. Enable telemetry: Settings → About → **option-click the version
+           line** to reveal the Diagnostics pane → turn on **Performance
+           telemetry** (applies on the next stream).
+        2. Reproduce the problem in a stream. When it "feels bad", press
+           **⌃B** to drop a timestamped bookmark into the telemetry.
+        3. End the stream, then attach from `~/Library/Logs/Glimmer/`:
+           - `telemetry-session-<timestamp>.json` — the session scorecard
+           - `glimmer-<timestamp>.log` — the session log
+           - (optionally) `telemetry-<timestamp>.ndjson` — per-second metrics,
+             if the file isn't too large to attach
+      placeholder: Drag and drop the files here.
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description:
+        Display setup (resolution / refresh / HDR), controller model, settings
+        that differ from defaults, etc.

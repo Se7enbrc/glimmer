@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<!-- Asset-catalog-managed AppIcon. Without CFBundleIconName the Dock
+	     falls back to the static AppIcon.icns (no light/dark variants);
+	     with it macOS reads the appearance-aware AppIcon from Assets.car
+	     and theme-snaps the icon like first-party Tahoe apps. -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 ugfugl.io. All rights reserved.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Glimmer</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<!-- Tell AppKit not to wrap notched MacBook panels in safe-area
+	     compatibility mode. With this set to false, fullscreen NSWindows
+	     can cover the entire physical panel including the notch zone
+	     (37 points at the top). Default behaviour keeps the 37pt notch
+	     zone reserved even in fullscreen, which means our stream-window
+	     content layer would be 3024×1890 on a 14" MBP instead of the
+	     panel's true 3024×1964 — and the host's bitstream at 3024×1964
+	     gets letterboxed left/right because of the aspect mismatch
+	     (1.540 vs 1.6). moonlight-qt avoids this implicitly via SDL's
+	     FULLSCREEN_DESKTOP path, which composes its own window-layer
+	     hierarchy that fills the full panel. -->
+	<key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
+	<false/>
+	<!-- Local-network privacy (macOS 15+). Without these, the OS denies the
+	     local-network access mDNS/Bonjour discovery needs and host discovery
+	     silently fails on first run. NSBonjourServices must list every service
+	     type the app browses — Discovery.swift browses _nvstream._tcp (GFE)
+	     and _nvstream-tcp._tcp (Sunshine). -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Glimmer finds and connects to your gaming PCs on your local network.</string>
+	<!-- Input Monitoring (kIOHIDRequestTypeListenEvent). REQUIRED for the
+	     permission API to behave: without this key IOHIDCheckAccess /
+	     IOHIDRequestAccess return denied even when the user HAS granted the
+	     app in System Settings (Apple DTS forum 809431). Covers raw-HID
+	     controller reads (DualSense) and raw mouse input. -->
+	<key>NSInputMonitoringUsageDescription</key>
+	<string>Glimmer reads game controllers and raw mouse motion so your input reaches the gaming PC accurately.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_nvstream._tcp</string>
+		<string>_nvstream-tcp._tcp</string>
+	</array>
+	<!-- Sparkle auto-update (Developer-ID, sandboxed). SUFeedURL is the public
+	     appcast on the glimmer repo's GitHub Pages site; SUPublicEDKey is the
+	     ed25519 PUBLIC key (private key lives in the signing creds file, used by
+	     `make release-publish`). SUEnableInstallerLauncherService is REQUIRED
+	     under the App Sandbox so the installer XPC can launch — paired with the
+	     mach-lookup exception in Glimmer.entitlements. Daily background checks;
+	     the user is prompted before an update installs (Sparkle default). -->
+	<key>SUFeedURL</key>
+	<string>https://se7enbrc.github.io/glimmer/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>bUc9IWEtH/FuDUIsGqyDIVy/1gvlPtBkFXNcVO/TrPU=</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+</dict>
+</plist>

@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- MAS FOLLOW-UP (distribution: Developer-ID DMG now, Mac App Store later).
+	     Two keys below are valid for Developer-ID but are hard Mac App Store
+	     rejections — remove them before any MAS submission:
+	       1. com.apple.security.cs.disable-library-validation — needed today so
+	          the adhoc-embedded openssl@3 / libopus dylibs (scripts/embed-dylibs.sh)
+	          load. For MAS: sign the embedded dylibs with the team identity and
+	          drop this key.
+	       2. com.apple.security.temporary-exception.shared-preference.read-write —
+	          one-shot migration of the old moonlight-qt defaults. temporary-
+	          exception entitlements are Developer-ID only; remove for MAS.
+	     The osascript mute no-op is already fixed (now CoreAudio, sandbox-legal
+	     on both paths) — see MoonlightManager.systemVolume / setSystemVolume. -->
+	<!-- App Sandbox: contain Glimmer's process so a compromise can't read
+	     the user's home directory, run arbitrary IPC, or write outside
+	     ~/Library/Containers/io.ugfugl.Glimmer/. Pairs with Hardened
+	     Runtime (enabled in the target build settings).
+
+	     Migration impact: pre-sandbox identity files at
+	       ~/Library/Application Support/Glimmer/Identity/
+	     are NOT visible inside the container. Users on a pre-sandbox build
+	     need to re-pair each host once after upgrading. This is a 30-second
+	     user task; we deliberately don't add a temporary-exception read of
+	     the legacy path because that would expand the path-traversal surface
+	     for a same-UID attacker. Re-pair is cleaner. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- We connect to GameStream / Sunshine hosts over LAN — mandatory. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- mDNS / Bonjour discovery + LAN device announcements. Sunshine and
+	     GFE announce on _nvstream._tcp; without this the discovery layer
+	     can't see hosts. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
+
+	<!-- User-selected file read/write for any future "Open custom
+	     resolution file" / config import flows. We do not pre-grant
+	     access to anything; the user picks the file via NSOpenPanel and
+	     the sandbox extends access to exactly that file for the session. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Explicitly opt OUT of mic capture. We never capture local mic;
+	     declaring it as false documents the intent and prevents a future
+	     dependency from silently adding the capability. -->
+	<key>com.apple.security.device.audio-input</key>
+	<false/>
+
+	<!-- Raw-HID access to the DualSense over USB + Bluetooth, so we can read
+	     the Options / Create / Mute buttons that Apple's GameController
+	     framework refuses to deliver (see DualSenseHID.swift / issue #7). Also
+	     requires the user-granted "Input Monitoring" privacy permission at
+	     runtime. MAS-STRIP: com.apple.security.device.usb is a hard App Store
+	     reject — a future Mac App Store target must remove these two keys and
+	     DualSenseHID.swift (GameController-only fallback). -->
+	<key>com.apple.security.device.usb</key>
+	<true/>
+	<key>com.apple.security.device.bluetooth</key>
+	<true/>
+
+	<!-- Hardened Runtime library validation.
+	     TRUE while we ship adhoc-signed: we embed openssl@3 (libssl +
+	     libcrypto) and opus into Contents/Frameworks/, but adhoc-signed
+	     embedded dylibs can't satisfy strict library validation's
+	     "same Team ID as the main binary" requirement on adhoc builds
+	     (the dylibs were originally Homebrew-signed; even after we
+	     re-sign them adhoc, Hardened Runtime treats them as foreign).
+	     Once we ship a Developer ID signed build, every embedded dylib
+	     will be re-signed under the same Team ID and we flip this back
+	     to false. moonlight-common-c stays statically linked. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+
+	<!-- Hardened Runtime: no JIT in this app. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<false/>
+
+	<!-- Sparkle 2 installer XPC (sandboxed app). The updater talks to its
+	     Installer / Downloader XPC services (bundled inside Sparkle.framework)
+	     over these mach service names; without the lookup exception the in-place
+	     update dies with XPC_ERROR_CONNECTION_INTERRUPTED. Names are
+	     <bundle-id>-spks / -spki. codesign (the Makefile `sign` target) does NOT
+	     expand $(PRODUCT_BUNDLE_IDENTIFIER) in entitlements, so they're written
+	     literally. MAS-STRIP: temporary-exception entitlements are Developer-ID
+	     only — remove before any Mac App Store submission. -->
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<array>
+		<string>io.ugfugl.Glimmer-spks</string>
+		<string>io.ugfugl.Glimmer-spki</string>
+	</array>
+
+	<!-- moonlight-qt's preference domain for one-shot migration of hosts +
+	     identity, and the post-migration plist wipe (Identity.swift's
+	     `wipeMoonlightQtIdentityPlist()`). The sandbox blocks
+	     UserDefaults(suiteName:) for foreign domains by default; this
+	     read/write exception lets us pull the legacy data once on first
+	     launch AND wipe the PEM keys after migration so they don't sit
+	     in a world-readable plist forever. -->
+	<key>com.apple.security.temporary-exception.shared-preference.read-write</key>
+	<array>
+		<string>com.moonlight-stream.Moonlight</string>
+		<string>com.moonlight-stream.moonlight-qt</string>
+	</array>
+</dict>
+</plist>
+</content>
+</invoke>

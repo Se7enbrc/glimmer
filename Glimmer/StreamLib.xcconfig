@@ -1,0 +1,26 @@
+// Single source of truth for the app version (MARKETING_VERSION +
+// CURRENT_PROJECT_VERSION). Pulled in here so the Makefile's single
+// `-xcconfig` flag supplies the version to the build.
+#include "Version.xcconfig"
+
+// Xcode build settings for the C libraries the Swift-native streaming engine
+// links against (Homebrew OpenSSL + Opus). Applied via `xcodebuild -xcconfig`
+// from the Makefile so the pbxproj stays portable (no absolute paths committed).
+//
+// Resolves at build time:
+//   OPENSSL_PREFIX / OPUS_PREFIX = $(brew --prefix …), injected by Makefile
+
+// SRCROOT = repo root (directory containing Glimmer.xcodeproj).
+GLIMMER_REPO_ROOT = $(SRCROOT)
+
+// Repo root for our own headers (CHelpers.h, imported via the bridging header) +
+// Homebrew OpenSSL + Opus headers.
+HEADER_SEARCH_PATHS = $(inherited) $(GLIMMER_REPO_ROOT) $(OPENSSL_PREFIX)/include $(OPUS_PREFIX)/include
+
+// Homebrew OpenSSL + Opus libs.
+LIBRARY_SEARCH_PATHS = $(inherited) $(OPENSSL_PREFIX)/lib $(OPUS_PREFIX)/lib
+
+OTHER_LDFLAGS = $(inherited) -lssl -lcrypto -lz -lopus
+
+// Bridging header at repo root (where Xcode looks by convention).
+SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h

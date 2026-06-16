@@ -1,0 +1,108 @@
+# See https://pre-commit.com for usage.
+# Install hooks once:  pre-commit install
+# Run on all files:    pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^third_party/
+      - id: end-of-file-fixer
+        exclude: ^third_party/
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: check-json
+      - id: check-toml
+      - id: check-case-conflict
+      - id: mixed-line-ending
+      - id: fix-byte-order-marker
+
+  # YAML linting.
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args:
+          [
+            --format,
+            parsable,
+            "-d",
+            "{extends: default, rules: {line-length: disable, document-start:
+            disable}}",
+          ]
+        exclude: ^third_party/
+
+  # Markdown linting.
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        args: ["--fix", "--disable", "MD013", "MD029", "MD036", "MD041"]
+        exclude: ^third_party/
+
+  # Prettier — yaml/markdown/json formatting.
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [yaml, markdown, json]
+        args: ["--prose-wrap=always"]
+        exclude: ^third_party/
+
+  # Secret scanning via TruffleHog (replaces gitleaks).
+  # Runs in --pre-commit / --staged mode against verifiable detectors so a
+  # legitimately-rotated test secret doesn't block commits, but real live
+  # credentials (AWS, GCP, GitHub PATs, Stripe keys, etc.) get caught.
+  - repo: local
+    hooks:
+      - id: trufflehog
+        name: TruffleHog
+        description: Scan staged changes for verified secrets.
+        entry:
+          bash -c 'trufflehog git "file://$PWD" --since-commit HEAD
+          --only-verified --fail --no-update'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # Swift linting via SwiftLint (Homebrew: `brew install swiftlint`).
+  # Runs --fix first to autocorrect what it can, then a strict lint pass that
+  # only treats errors as blocking (warnings are surfaced for review but do
+  # not fail the commit). Skipped automatically when no .swift files are in
+  # the change set.
+  #
+  # Skipped intentionally: swift-format. Apple's formatter reflows the
+  # codebase's deliberate trailing-aligned function arguments into a style
+  # that's both noisier and less readable for our patterns. SwiftLint with
+  # --fix covers the high-value cleanups (commas, trailing whitespace, brace
+  # spacing) without the column-aligning churn.
+  - repo: local
+    hooks:
+      - id: swiftlint
+        name: SwiftLint
+        description: SwiftLint --fix then lint (errors only).
+        # If `swiftlint --fix` modifies any staged file we refuse the commit
+        # rather than silently `git add`-ing on the user's behalf. That way
+        # the user sees the autocorrected diff and re-stages it deliberately.
+        # Repo root is discovered via `git rev-parse --show-toplevel` so this
+        # config is portable (the previous version hard-coded an absolute
+        # path).
+        entry:
+          bash -c 'set -e; ROOT=$(git rev-parse --show-toplevel);
+          CFG="$ROOT/.swiftlint.yml"; BEFORE=$(git -C "$ROOT" diff --name-only
+          -- "*.swift" "*.swiftinterface" | sort -u); swiftlint --fix --quiet
+          --config "$CFG"; AFTER=$(git -C "$ROOT" diff --name-only -- "*.swift"
+          "*.swiftinterface" | sort -u); if [ "$BEFORE" != "$AFTER" ]; then echo
+          "swiftlint --fix rewrote files. Review the diff and re-add them:" >&2;
+          diff <(echo "$BEFORE") <(echo "$AFTER") >&2 || true; exit 1; fi;
+          swiftlint lint --quiet --config "$CFG"'
+        language: system
+        types: [swift]
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-commit]

@@ -1,0 +1,1199 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		026FD8A0211FCD7B527606B0 /* StatsOverlaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A952BEEC96F2A8042E0F4C3 /* StatsOverlaySettings.swift */; };
+		040BDEEE8B8E58AC0375BF3A /* StreamingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 448F2B492E4B38A0CFF51260 /* StreamingState.swift */; };
+		086CF5A56FDAE0E5A8341CEA /* Glimmer Login Helper.app in Embed Login Helper */ = {isa = PBXBuildFile; fileRef = 68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		14DC834601C3BEE65839AC02 /* KeyboardScanMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 398ABCA94CDDF4D5B2770B8F /* KeyboardScanMap.swift */; };
+		2025092633A13B85B01C5E46 /* ControllerForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1755AEB5F01C33DF87D6FCE /* ControllerForwarder.swift */; };
+		ABCD20260609000000001802 /* ControllerBattery.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001801 /* ControllerBattery.swift */; };
+		ABCD202606090000000000F2 /* ControllerHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD202606090000000000F1 /* ControllerHaptics.swift */; };
+		ABCD20260610000000004D02 /* ControllerHaptics+Actuation.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260610000000004D01 /* ControllerHaptics+Actuation.swift */; };
+		ABCD20260610000000004D04 /* ControllerForwarder+QuitChord.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260610000000004D03 /* ControllerForwarder+QuitChord.swift */; };
+		ABCD20260609000000001702 /* ControllerMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001701 /* ControllerMotion.swift */; };
+		5E6BA9AE8CE78DA47BAA02C4 /* StreamInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C426DA508131A2723B2CF131 /* StreamInputView.swift */; };
+		82EEF25A701FD81C0CDC8240 /* HostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6B7F5AA2DBCDB1B8D9A413 /* HostsStore.swift */; };
+		A10000001 /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000011 /* GlimmerApp.swift */; };
+		A1009001 /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1009002 /* UpdaterController.swift */; };
+		A1009012 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1009011 /* Sparkle */; };
+		A10000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012 /* ContentView.swift */; };
+		A10000003 /* MoonlightManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000013 /* MoonlightManager.swift */; };
+		A10000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000014 /* Assets.xcassets */; };
+		A10000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000017 /* SettingsView.swift */; };
+		A1000009A /* PairSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000009B /* PairSheet.swift */; };
+		AA0FDB79371DF1443B9A0D0F /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 71A5B2E11628E68BFAF05421 /* AppIcon.icon */; };
+		AA2C1A7427A28573B6FB3037 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA5CD63C82A1DCE2E8BA445D /* main.swift */; };
+		AB00000002 /* Types.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000001 /* Types.swift */; };
+		AB00000004 /* StreamSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000003 /* StreamSession.swift */; };
+		AB00000006 /* Identity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000005 /* Identity.swift */; };
+		AB00000008 /* Network.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000007 /* Network.swift */; };
+		AB00000010 /* Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000009 /* Pairing.swift */; };
+		AB00000012 /* Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000011 /* Discovery.swift */; };
+		AB00000014 /* VideoDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000013 /* VideoDecoder.swift */; };
+		AB00000016 /* AudioDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000015 /* AudioDecoder.swift */; };
+		ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000701 /* AudioDecoder+Meter.swift */; };
+		ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */; };
+		AB00000018 /* InputForwarder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000017 /* InputForwarder.swift */; };
+		AB00000020 /* StreamWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000019 /* StreamWindow.swift */; };
+		AB00000022 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000021 /* Signposts.swift */; };
+		BBF95775D96E9853A40ADED0 /* Host.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9158C8506080330EC17875A9 /* Host.swift */; };
+		A1B2C3D4E5F6000200000C01 /* HostCodecPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000100000C01 /* HostCodecPreference.swift */; };
+		BC8B3FD0322A256049C1CAF8 /* QualityCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */; };
+		CC00000002 /* StatsCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000001 /* StatsCollector.swift */; };
+		CC0000000B /* StatsCollector+Record.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000A /* StatsCollector+Record.swift */; };
+		CC00000004 /* VideoDecoder+HDR.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000003 /* VideoDecoder+HDR.swift */; };
+		CC00000006 /* VideoDecoder+Bitstream.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000005 /* VideoDecoder+Bitstream.swift */; };
+		D96F6019901B5705F1040F52 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 505E37FB63C22AC476506587 /* Foundation.framework */; };
+		F5951726E170AD3E1F645B80 /* HostStatusPoller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447FF92C9458E21549E4965D /* HostStatusPoller.swift */; };
+		FB153DF267467B06C6BE3467 /* MacSystemStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */; };
+		D1000002 /* StreamingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000001 /* StreamingBackend.swift */; };
+		D1000004 /* StreamProtocolConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000003 /* StreamProtocolConstants.swift */; };
+		D1000008 /* NativeBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000007 /* NativeBackend.swift */; };
+		D1000010 /* StreamCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000F /* StreamCrypto.swift */; };
+		D1000012 /* SdpCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000011 /* SdpCodec.swift */; };
+		D1000014 /* RtspClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000013 /* RtspClient.swift */; };
+		D1000016 /* EnetControlChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000015 /* EnetControlChannel.swift */; };
+		D1000018 /* EnetWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000017 /* EnetWire.swift */; };
+		D1000020 /* ReedSolomon.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100001F /* ReedSolomon.swift */; };
+		D1000022 /* VideoDepacketizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000021 /* VideoDepacketizer.swift */; };
+		D1000024 /* RtpVideoQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000023 /* RtpVideoQueue.swift */; };
+		D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */; };
+		D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000D10 /* RtpVideoQueue+AddPacket.swift */; };
+		D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000D20 /* RtpVideoQueue+Reconstruct.swift */; };
+		D1000F01 /* FecHeadroomController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000F00 /* FecHeadroomController.swift */; };
+		D1000026 /* VideoRtpReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000025 /* VideoRtpReceiver.swift */; };
+		D1000028 /* UdpPinger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000027 /* UdpPinger.swift */; };
+		D1000030 /* InputEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000029 /* InputEncoder.swift */; };
+		D1000038 /* InputBatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000037 /* InputBatcher.swift */; };
+		D1000032 /* AudioFecDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000031 /* AudioFecDecoder.swift */; };
+		D1000034 /* RtpAudioQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000033 /* RtpAudioQueue.swift */; };
+		ABCD20260609000000000602 /* RtpAudioQueue+Fec.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */; };
+		D1000036 /* RtpAudioReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000035 /* RtpAudioReceiver.swift */; };
+		D1000AE1 /* RtpAudioReceiver+Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000AE0 /* RtpAudioReceiver+Telemetry.swift */; };
+		ABCD20260609000000000102 /* RtpAudioReceiver+Socket.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000101 /* RtpAudioReceiver+Socket.swift */; };
+		ABCD20260609000000000202 /* RtpAudioReceiver+Ping.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000201 /* RtpAudioReceiver+Ping.swift */; };
+		ABCD20260609000000000302 /* RtpAudioReceiver+StartupGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000301 /* RtpAudioReceiver+StartupGate.swift */; };
+		ABCD20260609000000000402 /* RtpAudioReceiver+Decrypt.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */; };
+		ABCD20260609000000000502 /* RtpAudioReceiver+Events.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */; };
+		D100003A /* EnetControlChannel+Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000039 /* EnetControlChannel+Handshake.swift */; };
+		D100003C /* EnetControlChannel+ControlLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100003B /* EnetControlChannel+ControlLoop.swift */; };
+		D100003E /* EnetControlChannel+Inbound.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100003D /* EnetControlChannel+Inbound.swift */; };
+		D1000040 /* EnetControlChannel+Send.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100003F /* EnetControlChannel+Send.swift */; };
+		A100010A /* TroubleshootingPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100010B /* TroubleshootingPane.swift */; };
+		A100020A /* DiagnosticsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100020B /* DiagnosticsPane.swift */; };
+		A100012A /* LogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100012B /* LogStore.swift */; };
+		A100013A /* ControllerInputTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100013B /* ControllerInputTestView.swift */; };
+		A100014A /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B /* LogViewerView.swift */; };
+		A100015A /* MoonlightManager+Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015B /* MoonlightManager+Audio.swift */; };
+		A100016A /* ContentViewSubviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016B /* ContentViewSubviews.swift */; };
+		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
+		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
+		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
+		A100011A /* DualSenseHID.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100011B /* DualSenseHID.swift */; };
+		D1000042 /* NativeBackend+Pipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000041 /* NativeBackend+Pipeline.swift */; };
+		D1000044 /* NativeBackend+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000043 /* NativeBackend+Helpers.swift */; };
+		D1000046 /* NativeBackend+Input.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000045 /* NativeBackend+Input.swift */; };
+		D1000048 /* StreamSession+Watchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000047 /* StreamSession+Watchdog.swift */; };
+		D1000FB1 /* StreamSession+Reconnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FB0 /* StreamSession+Reconnect.swift */; };
+		D1000B03 /* StreamSession+PresentTrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B04 /* StreamSession+PresentTrip.swift */; };
+		D10000A1 /* StreamSession+PresentMetric.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000A2 /* StreamSession+PresentMetric.swift */; };
+		D1000081 /* TelemetryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000080 /* TelemetryExporter.swift */; };
+		D1000083 /* TelemetryExporter+Render.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000082 /* TelemetryExporter+Render.swift */; };
+		ABCD20260609000000001102 /* TelemetryExporter+RenderVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */; };
+		ABCD20260609000000001202 /* TelemetryExporter+RenderNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */; };
+		ABCD20260609000000001302 /* TelemetryExporter+RenderAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */; };
+		ABCD20260609000000001402 /* TelemetryExporter+RenderSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */; };
+		D1000085 /* StreamSession+Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000084 /* StreamSession+Telemetry.swift */; };
+		D1000087 /* TelemetryLatency.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000086 /* TelemetryLatency.swift */; };
+		D1000F10 /* TelemetryLatency+Trace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000F11 /* TelemetryLatency+Trace.swift */; };
+		D1000FA0 /* TelemetryLatency+Composites.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FA1 /* TelemetryLatency+Composites.swift */; };
+		D10000F1 /* TelemetrySessionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F0 /* TelemetrySessionEvents.swift */; };
+		D10000F3 /* TelemetryLatencySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F2 /* TelemetryLatencySnapshot.swift */; };
+		D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F4 /* TelemetryExporter+RenderP2.swift */; };
+		D10000C1 /* TelemetryCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C0 /* TelemetryCounters.swift */; };
+		ABCD20260609000000000802 /* TelemetryCounters+Gauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */; };
+		ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */; };
+		ABCD20260609000000001002 /* TelemetryCounters+InputActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */; };
+		D10000C3 /* WiFiTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C2 /* WiFiTelemetry.swift */; };
+		ABCD20260610000000005F02 /* EnvSignalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260610000000005F01 /* EnvSignalController.swift */; };
+		D10000E1 /* DisplayTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000E0 /* DisplayTelemetry.swift */; };
+		D1000201 /* ResourceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000200 /* ResourceTelemetry.swift */; };
+		D1000203 /* IOReportSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000202 /* IOReportSampler.swift */; };
+		D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000E2 /* VideoDecoder+DecodeTelemetry.swift */; };
+		D10000C5 /* BuildInfo.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C4 /* BuildInfo.generated.swift */; };
+		D10000C7 /* TelemetrySessionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C6 /* TelemetrySessionReport.swift */; };
+		D10000C9 /* TelemetrySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C8 /* TelemetrySnapshot.swift */; };
+		D10000CB /* TelemetryExporter+RenderNDJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CA /* TelemetryExporter+RenderNDJSON.swift */; };
+		D10000CD /* TelemetryFrameTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CC /* TelemetryFrameTrace.swift */; };
+		D10000CF /* TelemetryExporter+Capture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CE /* TelemetryExporter+Capture.swift */; };
+		ABCD20260609000000001502 /* TelemetryExporter+CaptureSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */; };
+		ABCD20260609000000001602 /* TelemetryExporter+CaptureExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */; };
+		D100004A /* StreamSession+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000049 /* StreamSession+Lifecycle.swift */; };
+		D100004C /* StreamSession+Callbacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100004B /* StreamSession+Callbacks.swift */; };
+		D100004E /* StreamBridgeContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100004D /* StreamBridgeContext.swift */; };
+		D1000050 /* RtspClient+Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100004F /* RtspClient+Handshake.swift */; };
+		D1000052 /* Pairing+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000051 /* Pairing+Crypto.swift */; };
+		D1000054 /* Types+Cert.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000053 /* Types+Cert.swift */; };
+		D1000056 /* Types+Stats.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000055 /* Types+Stats.swift */; };
+		D1000058 /* Types+StatsSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000057 /* Types+StatsSnapshot.swift */; };
+		D100005A /* Identity+Loading.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000059 /* Identity+Loading.swift */; };
+		D100005C /* Identity+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005B /* Identity+Crypto.swift */; };
+		D100005E /* MoonlightManager+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005D /* MoonlightManager+Lifecycle.swift */; };
+		D1000060 /* MoonlightManager+Streaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005F /* MoonlightManager+Streaming.swift */; };
+		D1A00002 /* MoonlightManager+HostRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00001 /* MoonlightManager+HostRoute.swift */; };
+		D1A00004 /* MoonlightManager+SessionReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00003 /* MoonlightManager+SessionReceipt.swift */; };
+		D1000062 /* MoonlightManager+Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000061 /* MoonlightManager+Pairing.swift */; };
+		D1000064 /* NetworkClient+Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000063 /* NetworkClient+Endpoints.swift */; };
+		D1000066 /* NetworkClient+Request.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000065 /* NetworkClient+Request.swift */; };
+		D1000068 /* Network+Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000067 /* Network+Support.swift */; };
+		D100006A /* InputForwarder+Capture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000069 /* InputForwarder+Capture.swift */; };
+		D100006C /* InputForwarder+StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006B /* InputForwarder+StreamView.swift */; };
+		D100006E /* StreamWindow+Show.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006D /* StreamWindow+Show.swift */; };
+		D1000C01 /* StreamWindow+Cursor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000C02 /* StreamWindow+Cursor.swift */; };
+		D1000C11 /* StreamWindow+Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000C12 /* StreamWindow+Views.swift */; };
+		D1000070 /* StatsOverlayLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006F /* StatsOverlayLayer.swift */; };
+		D1000072 /* VideoDecoder+AV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000071 /* VideoDecoder+AV1.swift */; };
+		D1000074 /* VideoDecoder+API.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000073 /* VideoDecoder+API.swift */; };
+		D1000076 /* VideoDecoder+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000075 /* VideoDecoder+Decode.swift */; };
+		D1000078 /* VideoDecoder+Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000077 /* VideoDecoder+Session.swift */; };
+		D10000B1 /* VideoDecoder+Suppression.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000B2 /* VideoDecoder+Suppression.swift */; };
+		D100007A /* VideoDecoder+Sink.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000079 /* VideoDecoder+Sink.swift */; };
+		D100007C /* FramePacer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100007B /* FramePacer.swift */; };
+		D1000B01 /* FramePacer+FrameRateRange.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B02 /* FramePacer+FrameRateRange.swift */; };
+		D1000B11 /* FramePacer+Tick.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B12 /* FramePacer+Tick.swift */; };
+		D1000B21 /* FramePacer+DueGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B22 /* FramePacer+DueGate.swift */; };
+		D1000B31 /* FramePacer+Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B32 /* FramePacer+Recovery.swift */; };
+		D1000B41 /* FramePacer+AdaptiveDepth.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B42 /* FramePacer+AdaptiveDepth.swift */; };
+		D1000B51 /* FramePacer+Submit.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B52 /* FramePacer+Submit.swift */; };
+		D1000BD1 /* FramePacer+TickDeficit.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BD2 /* FramePacer+TickDeficit.swift */; };
+		D1000BD3 /* VideoDecoder+GovernorRepaint.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BD4 /* VideoDecoder+GovernorRepaint.swift */; };
+		D1000B71 /* StreamSession+Start.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B72 /* StreamSession+Start.swift */; };
+		D1000B73 /* StreamSession+StartSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B74 /* StreamSession+StartSetup.swift */; };
+		D1000B61 /* FramePacer+Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B62 /* FramePacer+Constants.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1FA5FE9E31BDE4153C07B98D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000050 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AD84EE95363FBCE53F028062;
+			remoteInfo = "Glimmer Login Helper";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		94C986F80941C0DAC50BA0AE /* Embed Login Helper */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LoginItems;
+			dstSubfolderSpec = 1;
+			files = (
+				086CF5A56FDAE0E5A8341CEA /* Glimmer Login Helper.app in Embed Login Helper */,
+			);
+			name = "Embed Login Helper";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		1A6B7F5AA2DBCDB1B8D9A413 /* HostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostsStore.swift; sourceTree = "<group>"; };
+		398ABCA94CDDF4D5B2770B8F /* KeyboardScanMap.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KeyboardScanMap.swift; path = Stream/KeyboardScanMap.swift; sourceTree = "<group>"; };
+		3A952BEEC96F2A8042E0F4C3 /* StatsOverlaySettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatsOverlaySettings.swift; sourceTree = "<group>"; };
+		447FF92C9458E21549E4965D /* HostStatusPoller.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostStatusPoller.swift; sourceTree = "<group>"; };
+		448F2B492E4B38A0CFF51260 /* StreamingState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingState.swift; sourceTree = "<group>"; };
+		505E37FB63C22AC476506587 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Glimmer Login Helper.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		71A5B2E11628E68BFAF05421 /* AppIcon.icon */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		9158C8506080330EC17875A9 /* Host.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Host.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6000100000C01 /* HostCodecPreference.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostCodecPreference.swift; sourceTree = "<group>"; };
+		A10000010 /* Glimmer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glimmer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000011 /* GlimmerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
+		A1009002 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
+		A10000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A10000013 /* MoonlightManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonlightManager.swift; sourceTree = "<group>"; };
+		A10000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000016 /* Glimmer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Glimmer.entitlements; sourceTree = "<group>"; };
+		A10000017 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A1000009B /* PairSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairSheet.swift; sourceTree = "<group>"; };
+		A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MacSystemStats.swift; sourceTree = "<group>"; };
+		AB00000001 /* Types.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Types.swift; sourceTree = "<group>"; };
+		AB00000003 /* StreamSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamSession.swift; sourceTree = "<group>"; };
+		AB00000005 /* Identity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Identity.swift; sourceTree = "<group>"; };
+		AB00000007 /* Network.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Network.swift; sourceTree = "<group>"; };
+		AB00000009 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Pairing.swift; sourceTree = "<group>"; };
+		AB00000011 /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Discovery.swift; sourceTree = "<group>"; };
+		AB00000013 /* VideoDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/VideoDecoder.swift; sourceTree = "<group>"; };
+		AB00000015 /* AudioDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/AudioDecoder.swift; sourceTree = "<group>"; };
+		ABCD20260609000000000701 /* AudioDecoder+Meter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Meter.swift"; sourceTree = "<group>"; };
+		ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+CushionMemory.swift"; sourceTree = "<group>"; };
+		AB00000017 /* InputForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/InputForwarder.swift; sourceTree = "<group>"; };
+		AB00000019 /* StreamWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamWindow.swift; sourceTree = "<group>"; };
+		AB00000021 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Signposts.swift; sourceTree = "<group>"; };
+		ABCD20260609000000001801 /* ControllerBattery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerBattery.swift; path = Stream/ControllerBattery.swift; sourceTree = "<group>"; };
+		ABCD202606090000000000F1 /* ControllerHaptics.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerHaptics.swift; path = Stream/ControllerHaptics.swift; sourceTree = "<group>"; };
+		ABCD20260610000000004D01 /* ControllerHaptics+Actuation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ControllerHaptics+Actuation.swift"; path = "Stream/ControllerHaptics+Actuation.swift"; sourceTree = "<group>"; };
+		ABCD20260610000000004D03 /* ControllerForwarder+QuitChord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ControllerForwarder+QuitChord.swift"; path = "Stream/ControllerForwarder+QuitChord.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001701 /* ControllerMotion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerMotion.swift; path = Stream/ControllerMotion.swift; sourceTree = "<group>"; };
+		B1755AEB5F01C33DF87D6FCE /* ControllerForwarder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerForwarder.swift; path = Stream/ControllerForwarder.swift; sourceTree = "<group>"; };
+		C426DA508131A2723B2CF131 /* StreamInputView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamInputView.swift; path = Stream/StreamInputView.swift; sourceTree = "<group>"; };
+		CC00000001 /* StatsCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StatsCollector.swift; sourceTree = "<group>"; };
+		CC0000000A /* StatsCollector+Record.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsCollector+Record.swift"; sourceTree = "<group>"; };
+		CC00000003 /* VideoDecoder+HDR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+HDR.swift"; sourceTree = "<group>"; };
+		CC00000005 /* VideoDecoder+Bitstream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Bitstream.swift"; sourceTree = "<group>"; };
+		CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QualityCalculator.swift; sourceTree = "<group>"; };
+		E9A93C80B589802B27974D75 /* LoginHelper.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LoginHelper.entitlements; sourceTree = "<group>"; };
+		FA5CD63C82A1DCE2E8BA445D /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		FAA8BAED455B5E8FC738BF51 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D1000001 /* StreamingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamingBackend.swift; sourceTree = "<group>"; };
+		D1000003 /* StreamProtocolConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamProtocolConstants.swift; sourceTree = "<group>"; };
+		D1000007 /* NativeBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/NativeBackend.swift; sourceTree = "<group>"; };
+		D100000F /* StreamCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/StreamCrypto.swift; sourceTree = "<group>"; };
+		D1000011 /* SdpCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/SdpCodec.swift; sourceTree = "<group>"; };
+		D1000013 /* RtspClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtspClient.swift; sourceTree = "<group>"; };
+		D1000015 /* EnetControlChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/EnetControlChannel.swift; sourceTree = "<group>"; };
+		D1000017 /* EnetWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/EnetWire.swift; sourceTree = "<group>"; };
+		D100001F /* ReedSolomon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/ReedSolomon.swift; sourceTree = "<group>"; };
+		D1000021 /* VideoDepacketizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoDepacketizer.swift; sourceTree = "<group>"; };
+		D1000023 /* RtpVideoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpVideoQueue.swift; sourceTree = "<group>"; };
+		D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+ReceiveQuality.swift"; sourceTree = "<group>"; };
+		D1000D10 /* RtpVideoQueue+AddPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+AddPacket.swift"; sourceTree = "<group>"; };
+		D1000D20 /* RtpVideoQueue+Reconstruct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+Reconstruct.swift"; sourceTree = "<group>"; };
+		D1000F00 /* FecHeadroomController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/FecHeadroomController.swift; sourceTree = "<group>"; };
+		D1000025 /* VideoRtpReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoRtpReceiver.swift; sourceTree = "<group>"; };
+		D1000027 /* UdpPinger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/UdpPinger.swift; sourceTree = "<group>"; };
+		D1000029 /* InputEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputEncoder.swift; sourceTree = "<group>"; };
+		D1000037 /* InputBatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputBatcher.swift; sourceTree = "<group>"; };
+		D1000031 /* AudioFecDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/AudioFecDecoder.swift; sourceTree = "<group>"; };
+		D1000033 /* RtpAudioQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpAudioQueue.swift; sourceTree = "<group>"; };
+		ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioQueue+Fec.swift"; sourceTree = "<group>"; };
+		D1000035 /* RtpAudioReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpAudioReceiver.swift; sourceTree = "<group>"; };
+		D1000AE0 /* RtpAudioReceiver+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Telemetry.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000101 /* RtpAudioReceiver+Socket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Socket.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000201 /* RtpAudioReceiver+Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Ping.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000301 /* RtpAudioReceiver+StartupGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+StartupGate.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Decrypt.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Events.swift"; sourceTree = "<group>"; };
+		D1000039 /* EnetControlChannel+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+Handshake.swift"; sourceTree = "<group>"; };
+		D100003B /* EnetControlChannel+ControlLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+ControlLoop.swift"; sourceTree = "<group>"; };
+		D100003D /* EnetControlChannel+Inbound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+Inbound.swift"; sourceTree = "<group>"; };
+		D100003F /* EnetControlChannel+Send.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+Send.swift"; sourceTree = "<group>"; };
+		A100010B /* TroubleshootingPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TroubleshootingPane.swift; sourceTree = "<group>"; };
+		A100020B /* DiagnosticsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsPane.swift; sourceTree = "<group>"; };
+		A100012B /* LogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStore.swift; sourceTree = "<group>"; };
+		A100013B /* ControllerInputTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerInputTestView.swift; sourceTree = "<group>"; };
+		A100014B /* LogViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerView.swift; sourceTree = "<group>"; };
+		A100015B /* MoonlightManager+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Audio.swift"; sourceTree = "<group>"; };
+		A100016B /* ContentViewSubviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewSubviews.swift; sourceTree = "<group>"; };
+		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
+		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
+		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
+		A100011B /* DualSenseHID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DualSenseHID.swift; path = Stream/DualSenseHID.swift; sourceTree = "<group>"; };
+		D1000041 /* NativeBackend+Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NativeBackend+Pipeline.swift"; sourceTree = "<group>"; };
+		D1000043 /* NativeBackend+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NativeBackend+Helpers.swift"; sourceTree = "<group>"; };
+		D1000045 /* NativeBackend+Input.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NativeBackend+Input.swift"; sourceTree = "<group>"; };
+		D1000047 /* StreamSession+Watchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Watchdog.swift"; sourceTree = "<group>"; };
+		D1000FB0 /* StreamSession+Reconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Reconnect.swift"; sourceTree = "<group>"; };
+		D1000B04 /* StreamSession+PresentTrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+PresentTrip.swift"; sourceTree = "<group>"; };
+		D10000A2 /* StreamSession+PresentMetric.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+PresentMetric.swift"; sourceTree = "<group>"; };
+		D1000080 /* TelemetryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter.swift"; sourceTree = "<group>"; };
+		D1000082 /* TelemetryExporter+Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+Render.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderVideo.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderNetwork.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderAudio.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderSystem.swift"; sourceTree = "<group>"; };
+		D1000084 /* StreamSession+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Telemetry.swift"; sourceTree = "<group>"; };
+		D1000086 /* TelemetryLatency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatency.swift"; sourceTree = "<group>"; };
+		D1000FA1 /* TelemetryLatency+Composites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatency+Composites.swift"; sourceTree = "<group>"; };
+		D1000F11 /* TelemetryLatency+Trace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatency+Trace.swift"; sourceTree = "<group>"; };
+		D10000F0 /* TelemetrySessionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetrySessionEvents.swift"; sourceTree = "<group>"; };
+		D10000F2 /* TelemetryLatencySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatencySnapshot.swift"; sourceTree = "<group>"; };
+		D10000F4 /* TelemetryExporter+RenderP2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderP2.swift"; sourceTree = "<group>"; };
+		D10000C0 /* TelemetryCounters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+Gauges.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+AudioGauges.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+InputActivity.swift"; sourceTree = "<group>"; };
+		D10000C2 /* WiFiTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/WiFiTelemetry.swift"; sourceTree = "<group>"; };
+		ABCD20260610000000005F01 /* EnvSignalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController.swift"; sourceTree = "<group>"; };
+		D10000E0 /* DisplayTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/DisplayTelemetry.swift"; sourceTree = "<group>"; };
+		D1000200 /* ResourceTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ResourceTelemetry.swift"; sourceTree = "<group>"; };
+		D1000202 /* IOReportSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/IOReportSampler.swift"; sourceTree = "<group>"; };
+		D10000E2 /* VideoDecoder+DecodeTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+DecodeTelemetry.swift"; sourceTree = "<group>"; };
+		D10000C4 /* BuildInfo.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BuildInfo.generated.swift"; sourceTree = "<group>"; };
+		D10000C6 /* TelemetrySessionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetrySessionReport.swift"; sourceTree = "<group>"; };
+		D10000C8 /* TelemetrySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetrySnapshot.swift"; sourceTree = "<group>"; };
+		D10000CA /* TelemetryExporter+RenderNDJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderNDJSON.swift"; sourceTree = "<group>"; };
+		D10000CC /* TelemetryFrameTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryFrameTrace.swift"; sourceTree = "<group>"; };
+		D10000CE /* TelemetryExporter+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+Capture.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+CaptureSections.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+CaptureExtras.swift"; sourceTree = "<group>"; };
+		D1000049 /* StreamSession+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Lifecycle.swift"; sourceTree = "<group>"; };
+		D100004B /* StreamSession+Callbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Callbacks.swift"; sourceTree = "<group>"; };
+		D100004D /* StreamBridgeContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBridgeContext.swift; sourceTree = "<group>"; };
+		D100004F /* RtspClient+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtspClient+Handshake.swift"; sourceTree = "<group>"; };
+		D1000051 /* Pairing+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Pairing+Crypto.swift"; sourceTree = "<group>"; };
+		D1000053 /* Types+Cert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+Cert.swift"; sourceTree = "<group>"; };
+		D1000055 /* Types+Stats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+Stats.swift"; sourceTree = "<group>"; };
+		D1000057 /* Types+StatsSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+StatsSnapshot.swift"; sourceTree = "<group>"; };
+		D1000059 /* Identity+Loading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Identity+Loading.swift"; sourceTree = "<group>"; };
+		D100005B /* Identity+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Identity+Crypto.swift"; sourceTree = "<group>"; };
+		D100005D /* MoonlightManager+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Lifecycle.swift"; sourceTree = "<group>"; };
+		D100005F /* MoonlightManager+Streaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Streaming.swift"; sourceTree = "<group>"; };
+		D1A00001 /* MoonlightManager+HostRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+HostRoute.swift"; sourceTree = "<group>"; };
+		D1A00003 /* MoonlightManager+SessionReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+SessionReceipt.swift"; sourceTree = "<group>"; };
+		D1000061 /* MoonlightManager+Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Pairing.swift"; sourceTree = "<group>"; };
+		D1000063 /* NetworkClient+Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Endpoints.swift"; sourceTree = "<group>"; };
+		D1000065 /* NetworkClient+Request.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Request.swift"; sourceTree = "<group>"; };
+		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Network+Support.swift"; sourceTree = "<group>"; };
+		D1000069 /* InputForwarder+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Capture.swift"; sourceTree = "<group>"; };
+		D100006B /* InputForwarder+StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+StreamView.swift"; sourceTree = "<group>"; };
+		D100006D /* StreamWindow+Show.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Show.swift"; sourceTree = "<group>"; };
+		D1000C02 /* StreamWindow+Cursor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Cursor.swift"; sourceTree = "<group>"; };
+		D1000C12 /* StreamWindow+Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Views.swift"; sourceTree = "<group>"; };
+		D100006F /* StatsOverlayLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StatsOverlayLayer.swift; sourceTree = "<group>"; };
+		D1000071 /* VideoDecoder+AV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+AV1.swift"; sourceTree = "<group>"; };
+		D1000073 /* VideoDecoder+API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+API.swift"; sourceTree = "<group>"; };
+		D1000075 /* VideoDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Decode.swift"; sourceTree = "<group>"; };
+		D1000077 /* VideoDecoder+Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Session.swift"; sourceTree = "<group>"; };
+		D10000B2 /* VideoDecoder+Suppression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Suppression.swift"; sourceTree = "<group>"; };
+		D1000079 /* VideoDecoder+Sink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Sink.swift"; sourceTree = "<group>"; };
+		D100007B /* FramePacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer.swift"; sourceTree = "<group>"; };
+		D1000B02 /* FramePacer+FrameRateRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+FrameRateRange.swift"; sourceTree = "<group>"; };
+		D1000B12 /* FramePacer+Tick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Tick.swift"; sourceTree = "<group>"; };
+		D1000B22 /* FramePacer+DueGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+DueGate.swift"; sourceTree = "<group>"; };
+		D1000B32 /* FramePacer+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Recovery.swift"; sourceTree = "<group>"; };
+		D1000B42 /* FramePacer+AdaptiveDepth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+AdaptiveDepth.swift"; sourceTree = "<group>"; };
+		D1000B52 /* FramePacer+Submit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Submit.swift"; sourceTree = "<group>"; };
+		D1000BD2 /* FramePacer+TickDeficit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickDeficit.swift"; sourceTree = "<group>"; };
+		D1000BD4 /* VideoDecoder+GovernorRepaint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+GovernorRepaint.swift"; sourceTree = "<group>"; };
+		D1000B72 /* StreamSession+Start.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Start.swift"; sourceTree = "<group>"; };
+		D1000B74 /* StreamSession+StartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StartSetup.swift"; sourceTree = "<group>"; };
+		D1000B62 /* FramePacer+Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Constants.swift"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1009012 /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BE7F8773C9D8F7CF84921659 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D96F6019901B5705F1040F52 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6C549F55F46655F4FA62E269 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				771ECFBC67E97E41D2D9F0E8 /* OS X */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		771ECFBC67E97E41D2D9F0E8 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				505E37FB63C22AC476506587 /* Foundation.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+		8DDA470B0B4FA74B04B8C203 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				9158C8506080330EC17875A9 /* Host.swift */,
+				A1B2C3D4E5F6000100000C01 /* HostCodecPreference.swift */,
+			);
+			name = Models;
+			path = Models;
+			sourceTree = "<group>";
+		};
+		9F01DE6ECB9422F81F38F159 /* LoginHelper */ = {
+			isa = PBXGroup;
+			children = (
+				FA5CD63C82A1DCE2E8BA445D /* main.swift */,
+				FAA8BAED455B5E8FC738BF51 /* Info.plist */,
+				E9A93C80B589802B27974D75 /* LoginHelper.entitlements */,
+			);
+			name = LoginHelper;
+			path = LoginHelper;
+			sourceTree = "<group>";
+		};
+		A10000030 = {
+			isa = PBXGroup;
+			children = (
+				A10000031 /* Glimmer */,
+				A10000032 /* Products */,
+				6C549F55F46655F4FA62E269 /* Frameworks */,
+				9F01DE6ECB9422F81F38F159 /* LoginHelper */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000031 /* Glimmer */ = {
+			isa = PBXGroup;
+			children = (
+				A10000011 /* GlimmerApp.swift */,
+				A1009002 /* UpdaterController.swift */,
+				A10000012 /* ContentView.swift */,
+				A10000017 /* SettingsView.swift */,
+				A1000009B /* PairSheet.swift */,
+				A100010B /* TroubleshootingPane.swift */,
+				A100020B /* DiagnosticsPane.swift */,
+				A100012B /* LogStore.swift */,
+				A100013B /* ControllerInputTestView.swift */,
+				A100014B /* LogViewerView.swift */,
+				A100015B /* MoonlightManager+Audio.swift */,
+				A100016B /* ContentViewSubviews.swift */,
+				A100017B /* SettingsGeneralStreamingPanes.swift */,
+				A100018B /* SettingsPCsShortcutsPanes.swift */,
+				A100019B /* AboutPane.swift */,
+				A100011B /* DualSenseHID.swift */,
+				A10000013 /* MoonlightManager.swift */,
+				A10000014 /* Assets.xcassets */,
+				A10000015 /* Info.plist */,
+				A10000016 /* Glimmer.entitlements */,
+				AB00000001 /* Types.swift */,
+				D1000001 /* StreamingBackend.swift */,
+				D100007B /* FramePacer.swift */,
+				D1000B02 /* FramePacer+FrameRateRange.swift */,
+				D1000B12 /* FramePacer+Tick.swift */,
+				D1000B22 /* FramePacer+DueGate.swift */,
+				D1000B32 /* FramePacer+Recovery.swift */,
+				D1000B42 /* FramePacer+AdaptiveDepth.swift */,
+				D1000B52 /* FramePacer+Submit.swift */,
+				D1000BD2 /* FramePacer+TickDeficit.swift */,
+				D1000B62 /* FramePacer+Constants.swift */,
+				D1000079 /* VideoDecoder+Sink.swift */,
+				D1000077 /* VideoDecoder+Session.swift */,
+				D10000B2 /* VideoDecoder+Suppression.swift */,
+				D1000075 /* VideoDecoder+Decode.swift */,
+				D1000073 /* VideoDecoder+API.swift */,
+				D1000BD4 /* VideoDecoder+GovernorRepaint.swift */,
+				D1000071 /* VideoDecoder+AV1.swift */,
+				D100006F /* StatsOverlayLayer.swift */,
+				D100006D /* StreamWindow+Show.swift */,
+				D1000C02 /* StreamWindow+Cursor.swift */,
+				D1000C12 /* StreamWindow+Views.swift */,
+				D100006B /* InputForwarder+StreamView.swift */,
+				D1000069 /* InputForwarder+Capture.swift */,
+				D1000067 /* Network+Support.swift */,
+				D1000065 /* NetworkClient+Request.swift */,
+				D1000063 /* NetworkClient+Endpoints.swift */,
+				D1000061 /* MoonlightManager+Pairing.swift */,
+				D100005F /* MoonlightManager+Streaming.swift */,
+				D1A00001 /* MoonlightManager+HostRoute.swift */,
+				D1A00003 /* MoonlightManager+SessionReceipt.swift */,
+				D100005D /* MoonlightManager+Lifecycle.swift */,
+				D100005B /* Identity+Crypto.swift */,
+				D1000059 /* Identity+Loading.swift */,
+				D1000057 /* Types+StatsSnapshot.swift */,
+				D1000055 /* Types+Stats.swift */,
+				D1000053 /* Types+Cert.swift */,
+				D1000051 /* Pairing+Crypto.swift */,
+				D100004F /* RtspClient+Handshake.swift */,
+				D100004D /* StreamBridgeContext.swift */,
+				D100004B /* StreamSession+Callbacks.swift */,
+				D1000049 /* StreamSession+Lifecycle.swift */,
+				D1000B72 /* StreamSession+Start.swift */,
+				D1000B74 /* StreamSession+StartSetup.swift */,
+				D1000047 /* StreamSession+Watchdog.swift */,
+				D1000FB0 /* StreamSession+Reconnect.swift */,
+				D1000B04 /* StreamSession+PresentTrip.swift */,
+				D10000A2 /* StreamSession+PresentMetric.swift */,
+				D1000080 /* TelemetryExporter.swift */,
+				D1000082 /* TelemetryExporter+Render.swift */,
+				ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */,
+				ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */,
+				ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */,
+				ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */,
+				D1000086 /* TelemetryLatency.swift */,
+				D1000FA1 /* TelemetryLatency+Composites.swift */,
+				D1000F11 /* TelemetryLatency+Trace.swift */,
+				D10000F0 /* TelemetrySessionEvents.swift */,
+				D10000F2 /* TelemetryLatencySnapshot.swift */,
+				D10000F4 /* TelemetryExporter+RenderP2.swift */,
+				D10000C0 /* TelemetryCounters.swift */,
+				ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */,
+				ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */,
+				ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */,
+				D10000C2 /* WiFiTelemetry.swift */,
+				ABCD20260610000000005F01 /* EnvSignalController.swift */,
+				D10000E0 /* DisplayTelemetry.swift */,
+				D1000200 /* ResourceTelemetry.swift */,
+				D1000202 /* IOReportSampler.swift */,
+				D10000E2 /* VideoDecoder+DecodeTelemetry.swift */,
+				D10000C4 /* BuildInfo.generated.swift */,
+				D10000C6 /* TelemetrySessionReport.swift */,
+				D10000C8 /* TelemetrySnapshot.swift */,
+				D10000CA /* TelemetryExporter+RenderNDJSON.swift */,
+				D10000CC /* TelemetryFrameTrace.swift */,
+				D10000CE /* TelemetryExporter+Capture.swift */,
+				ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */,
+				ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */,
+				D1000084 /* StreamSession+Telemetry.swift */,
+				D1000045 /* NativeBackend+Input.swift */,
+				D1000043 /* NativeBackend+Helpers.swift */,
+				D1000041 /* NativeBackend+Pipeline.swift */,
+				D100003F /* EnetControlChannel+Send.swift */,
+				D100003D /* EnetControlChannel+Inbound.swift */,
+				D100003B /* EnetControlChannel+ControlLoop.swift */,
+				D1000039 /* EnetControlChannel+Handshake.swift */,
+				D1000003 /* StreamProtocolConstants.swift */,
+				D1000007 /* NativeBackend.swift */,
+				D100000F /* StreamCrypto.swift */,
+				D1000011 /* SdpCodec.swift */,
+				D1000013 /* RtspClient.swift */,
+				D1000015 /* EnetControlChannel.swift */,
+				D1000017 /* EnetWire.swift */,
+				D100001F /* ReedSolomon.swift */,
+				D1000021 /* VideoDepacketizer.swift */,
+				D1000023 /* RtpVideoQueue.swift */,
+				D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */,
+				D1000D10 /* RtpVideoQueue+AddPacket.swift */,
+				D1000D20 /* RtpVideoQueue+Reconstruct.swift */,
+				D1000F00 /* FecHeadroomController.swift */,
+				D1000025 /* VideoRtpReceiver.swift */,
+				D1000027 /* UdpPinger.swift */,
+				D1000029 /* InputEncoder.swift */,
+				D1000037 /* InputBatcher.swift */,
+				D1000031 /* AudioFecDecoder.swift */,
+				D1000033 /* RtpAudioQueue.swift */,
+				ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */,
+				D1000035 /* RtpAudioReceiver.swift */,
+				D1000AE0 /* RtpAudioReceiver+Telemetry.swift */,
+				ABCD20260609000000000101 /* RtpAudioReceiver+Socket.swift */,
+				ABCD20260609000000000201 /* RtpAudioReceiver+Ping.swift */,
+				ABCD20260609000000000301 /* RtpAudioReceiver+StartupGate.swift */,
+				ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */,
+				ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */,
+				AB00000003 /* StreamSession.swift */,
+				AB00000005 /* Identity.swift */,
+				AB00000007 /* Network.swift */,
+				AB00000009 /* Pairing.swift */,
+				AB00000011 /* Discovery.swift */,
+				AB00000013 /* VideoDecoder.swift */,
+				AB00000015 /* AudioDecoder.swift */,
+				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
+				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
+				AB00000017 /* InputForwarder.swift */,
+				AB00000019 /* StreamWindow.swift */,
+				AB00000021 /* Signposts.swift */,
+				CC00000001 /* StatsCollector.swift */,
+				CC0000000A /* StatsCollector+Record.swift */,
+				CC00000003 /* VideoDecoder+HDR.swift */,
+				CC00000005 /* VideoDecoder+Bitstream.swift */,
+				8DDA470B0B4FA74B04B8C203 /* Models */,
+				1A6B7F5AA2DBCDB1B8D9A413 /* HostsStore.swift */,
+				CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */,
+				447FF92C9458E21549E4965D /* HostStatusPoller.swift */,
+				398ABCA94CDDF4D5B2770B8F /* KeyboardScanMap.swift */,
+				C426DA508131A2723B2CF131 /* StreamInputView.swift */,
+				B1755AEB5F01C33DF87D6FCE /* ControllerForwarder.swift */,
+				ABCD20260610000000004D03 /* ControllerForwarder+QuitChord.swift */,
+				ABCD20260609000000001801 /* ControllerBattery.swift */,
+				ABCD202606090000000000F1 /* ControllerHaptics.swift */,
+				ABCD20260610000000004D01 /* ControllerHaptics+Actuation.swift */,
+				ABCD20260609000000001701 /* ControllerMotion.swift */,
+				448F2B492E4B38A0CFF51260 /* StreamingState.swift */,
+				3A952BEEC96F2A8042E0F4C3 /* StatsOverlaySettings.swift */,
+				A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */,
+				71A5B2E11628E68BFAF05421 /* AppIcon.icon */,
+			);
+			path = Glimmer;
+			sourceTree = "<group>";
+		};
+		A10000032 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000010 /* Glimmer.app */,
+				68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000040 /* Glimmer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000041 /* Build configuration list for PBXNativeTarget "Glimmer" */;
+			buildPhases = (
+				A10000042 /* Sources */,
+				A10000020 /* Frameworks */,
+				A10000043 /* Resources */,
+				94C986F80941C0DAC50BA0AE /* Embed Login Helper */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AB7BE451DDA95AEA958F4D81 /* PBXTargetDependency */,
+			);
+			packageProductDependencies = (
+				A1009011 /* Sparkle */,
+			);
+			name = Glimmer;
+			productName = Glimmer;
+			productReference = A10000010 /* Glimmer.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AD84EE95363FBCE53F028062 /* Glimmer Login Helper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 549E5097E50898980152728F /* Build configuration list for PBXNativeTarget "Glimmer Login Helper" */;
+			buildPhases = (
+				4BCB1175B9BE6889E1A89554 /* Sources */,
+				BE7F8773C9D8F7CF84921659 /* Frameworks */,
+				3668FA7D9C62CEACAE1753D6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Glimmer Login Helper";
+			productName = "Glimmer Login Helper";
+			productReference = 68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000050 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					A10000040 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A10000051 /* Build configuration list for PBXProject "Glimmer" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000030;
+			packageReferences = (
+				A1009010 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
+			productRefGroup = A10000032 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000040 /* Glimmer */,
+				AD84EE95363FBCE53F028062 /* Glimmer Login Helper */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A1009010 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1009011 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1009010 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3668FA7D9C62CEACAE1753D6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000043 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000004 /* Assets.xcassets in Resources */,
+				AA0FDB79371DF1443B9A0D0F /* AppIcon.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4BCB1175B9BE6889E1A89554 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA2C1A7427A28573B6FB3037 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000042 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000001 /* GlimmerApp.swift in Sources */,
+				A1009001 /* UpdaterController.swift in Sources */,
+				A10000002 /* ContentView.swift in Sources */,
+				A10000005 /* SettingsView.swift in Sources */,
+				A1000009A /* PairSheet.swift in Sources */,
+				A100010A /* TroubleshootingPane.swift in Sources */,
+				A100020A /* DiagnosticsPane.swift in Sources */,
+				A100012A /* LogStore.swift in Sources */,
+				A100013A /* ControllerInputTestView.swift in Sources */,
+				A100014A /* LogViewerView.swift in Sources */,
+				A100015A /* MoonlightManager+Audio.swift in Sources */,
+				A100016A /* ContentViewSubviews.swift in Sources */,
+				A100017A /* SettingsGeneralStreamingPanes.swift in Sources */,
+				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
+				A100019A /* AboutPane.swift in Sources */,
+				A100011A /* DualSenseHID.swift in Sources */,
+				A10000003 /* MoonlightManager.swift in Sources */,
+				AB00000002 /* Types.swift in Sources */,
+				D1000002 /* StreamingBackend.swift in Sources */,
+				D100007C /* FramePacer.swift in Sources */,
+				D1000B01 /* FramePacer+FrameRateRange.swift in Sources */,
+				D1000B11 /* FramePacer+Tick.swift in Sources */,
+				D1000B21 /* FramePacer+DueGate.swift in Sources */,
+				D1000B31 /* FramePacer+Recovery.swift in Sources */,
+				D1000B41 /* FramePacer+AdaptiveDepth.swift in Sources */,
+				D1000B51 /* FramePacer+Submit.swift in Sources */,
+				D1000BD1 /* FramePacer+TickDeficit.swift in Sources */,
+				D1000B61 /* FramePacer+Constants.swift in Sources */,
+				D100007A /* VideoDecoder+Sink.swift in Sources */,
+				D1000078 /* VideoDecoder+Session.swift in Sources */,
+				D10000B1 /* VideoDecoder+Suppression.swift in Sources */,
+				D1000076 /* VideoDecoder+Decode.swift in Sources */,
+				D1000074 /* VideoDecoder+API.swift in Sources */,
+				D1000BD3 /* VideoDecoder+GovernorRepaint.swift in Sources */,
+				D1000072 /* VideoDecoder+AV1.swift in Sources */,
+				D1000070 /* StatsOverlayLayer.swift in Sources */,
+				D100006E /* StreamWindow+Show.swift in Sources */,
+				D1000C01 /* StreamWindow+Cursor.swift in Sources */,
+				D1000C11 /* StreamWindow+Views.swift in Sources */,
+				D100006C /* InputForwarder+StreamView.swift in Sources */,
+				D100006A /* InputForwarder+Capture.swift in Sources */,
+				D1000068 /* Network+Support.swift in Sources */,
+				D1000066 /* NetworkClient+Request.swift in Sources */,
+				D1000064 /* NetworkClient+Endpoints.swift in Sources */,
+				D1000062 /* MoonlightManager+Pairing.swift in Sources */,
+				D1000060 /* MoonlightManager+Streaming.swift in Sources */,
+				D1A00002 /* MoonlightManager+HostRoute.swift in Sources */,
+				D1A00004 /* MoonlightManager+SessionReceipt.swift in Sources */,
+				D100005E /* MoonlightManager+Lifecycle.swift in Sources */,
+				D100005C /* Identity+Crypto.swift in Sources */,
+				D100005A /* Identity+Loading.swift in Sources */,
+				D1000058 /* Types+StatsSnapshot.swift in Sources */,
+				D1000056 /* Types+Stats.swift in Sources */,
+				D1000054 /* Types+Cert.swift in Sources */,
+				D1000052 /* Pairing+Crypto.swift in Sources */,
+				D1000050 /* RtspClient+Handshake.swift in Sources */,
+				D100004E /* StreamBridgeContext.swift in Sources */,
+				D100004C /* StreamSession+Callbacks.swift in Sources */,
+				D100004A /* StreamSession+Lifecycle.swift in Sources */,
+				D1000B71 /* StreamSession+Start.swift in Sources */,
+				D1000B73 /* StreamSession+StartSetup.swift in Sources */,
+				D1000048 /* StreamSession+Watchdog.swift in Sources */,
+				D1000FB1 /* StreamSession+Reconnect.swift in Sources */,
+				D1000B03 /* StreamSession+PresentTrip.swift in Sources */,
+				D10000A1 /* StreamSession+PresentMetric.swift in Sources */,
+				D1000081 /* TelemetryExporter.swift in Sources */,
+				D1000083 /* TelemetryExporter+Render.swift in Sources */,
+				ABCD20260609000000001102 /* TelemetryExporter+RenderVideo.swift in Sources */,
+				ABCD20260609000000001202 /* TelemetryExporter+RenderNetwork.swift in Sources */,
+				ABCD20260609000000001302 /* TelemetryExporter+RenderAudio.swift in Sources */,
+				ABCD20260609000000001402 /* TelemetryExporter+RenderSystem.swift in Sources */,
+				D1000087 /* TelemetryLatency.swift in Sources */,
+				D1000FA0 /* TelemetryLatency+Composites.swift in Sources */,
+				D1000F10 /* TelemetryLatency+Trace.swift in Sources */,
+				D10000F1 /* TelemetrySessionEvents.swift in Sources */,
+				D10000F3 /* TelemetryLatencySnapshot.swift in Sources */,
+				D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */,
+				D10000C1 /* TelemetryCounters.swift in Sources */,
+				ABCD20260609000000000802 /* TelemetryCounters+Gauges.swift in Sources */,
+				ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */,
+				ABCD20260609000000001002 /* TelemetryCounters+InputActivity.swift in Sources */,
+				D10000C3 /* WiFiTelemetry.swift in Sources */,
+				ABCD20260610000000005F02 /* EnvSignalController.swift in Sources */,
+				D10000E1 /* DisplayTelemetry.swift in Sources */,
+				D1000201 /* ResourceTelemetry.swift in Sources */,
+				D1000203 /* IOReportSampler.swift in Sources */,
+				D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */,
+				D10000C5 /* BuildInfo.generated.swift in Sources */,
+				D10000C7 /* TelemetrySessionReport.swift in Sources */,
+				D10000C9 /* TelemetrySnapshot.swift in Sources */,
+				D10000CB /* TelemetryExporter+RenderNDJSON.swift in Sources */,
+				D10000CD /* TelemetryFrameTrace.swift in Sources */,
+				D10000CF /* TelemetryExporter+Capture.swift in Sources */,
+				ABCD20260609000000001502 /* TelemetryExporter+CaptureSections.swift in Sources */,
+				ABCD20260609000000001602 /* TelemetryExporter+CaptureExtras.swift in Sources */,
+				D1000085 /* StreamSession+Telemetry.swift in Sources */,
+				D1000046 /* NativeBackend+Input.swift in Sources */,
+				D1000044 /* NativeBackend+Helpers.swift in Sources */,
+				D1000042 /* NativeBackend+Pipeline.swift in Sources */,
+				D1000040 /* EnetControlChannel+Send.swift in Sources */,
+				D100003E /* EnetControlChannel+Inbound.swift in Sources */,
+				D100003C /* EnetControlChannel+ControlLoop.swift in Sources */,
+				D100003A /* EnetControlChannel+Handshake.swift in Sources */,
+				D1000004 /* StreamProtocolConstants.swift in Sources */,
+				D1000008 /* NativeBackend.swift in Sources */,
+				D1000010 /* StreamCrypto.swift in Sources */,
+				D1000012 /* SdpCodec.swift in Sources */,
+				D1000014 /* RtspClient.swift in Sources */,
+				D1000016 /* EnetControlChannel.swift in Sources */,
+				D1000018 /* EnetWire.swift in Sources */,
+				D1000020 /* ReedSolomon.swift in Sources */,
+				D1000022 /* VideoDepacketizer.swift in Sources */,
+				D1000024 /* RtpVideoQueue.swift in Sources */,
+				D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */,
+				D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */,
+				D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */,
+				D1000F01 /* FecHeadroomController.swift in Sources */,
+				D1000026 /* VideoRtpReceiver.swift in Sources */,
+				D1000028 /* UdpPinger.swift in Sources */,
+				D1000030 /* InputEncoder.swift in Sources */,
+				D1000038 /* InputBatcher.swift in Sources */,
+				D1000032 /* AudioFecDecoder.swift in Sources */,
+				D1000034 /* RtpAudioQueue.swift in Sources */,
+				ABCD20260609000000000602 /* RtpAudioQueue+Fec.swift in Sources */,
+				D1000036 /* RtpAudioReceiver.swift in Sources */,
+				D1000AE1 /* RtpAudioReceiver+Telemetry.swift in Sources */,
+				ABCD20260609000000000102 /* RtpAudioReceiver+Socket.swift in Sources */,
+				ABCD20260609000000000202 /* RtpAudioReceiver+Ping.swift in Sources */,
+				ABCD20260609000000000302 /* RtpAudioReceiver+StartupGate.swift in Sources */,
+				ABCD20260609000000000402 /* RtpAudioReceiver+Decrypt.swift in Sources */,
+				ABCD20260609000000000502 /* RtpAudioReceiver+Events.swift in Sources */,
+				AB00000004 /* StreamSession.swift in Sources */,
+				AB00000006 /* Identity.swift in Sources */,
+				AB00000008 /* Network.swift in Sources */,
+				AB00000010 /* Pairing.swift in Sources */,
+				AB00000012 /* Discovery.swift in Sources */,
+				AB00000014 /* VideoDecoder.swift in Sources */,
+				AB00000016 /* AudioDecoder.swift in Sources */,
+				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
+				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
+				AB00000018 /* InputForwarder.swift in Sources */,
+				AB00000020 /* StreamWindow.swift in Sources */,
+				AB00000022 /* Signposts.swift in Sources */,
+				CC00000002 /* StatsCollector.swift in Sources */,
+				CC0000000B /* StatsCollector+Record.swift in Sources */,
+				CC00000004 /* VideoDecoder+HDR.swift in Sources */,
+				CC00000006 /* VideoDecoder+Bitstream.swift in Sources */,
+				BBF95775D96E9853A40ADED0 /* Host.swift in Sources */,
+				A1B2C3D4E5F6000200000C01 /* HostCodecPreference.swift in Sources */,
+				82EEF25A701FD81C0CDC8240 /* HostsStore.swift in Sources */,
+				BC8B3FD0322A256049C1CAF8 /* QualityCalculator.swift in Sources */,
+				F5951726E170AD3E1F645B80 /* HostStatusPoller.swift in Sources */,
+				14DC834601C3BEE65839AC02 /* KeyboardScanMap.swift in Sources */,
+				5E6BA9AE8CE78DA47BAA02C4 /* StreamInputView.swift in Sources */,
+				2025092633A13B85B01C5E46 /* ControllerForwarder.swift in Sources */,
+				ABCD20260610000000004D04 /* ControllerForwarder+QuitChord.swift in Sources */,
+				ABCD20260609000000001802 /* ControllerBattery.swift in Sources */,
+				ABCD202606090000000000F2 /* ControllerHaptics.swift in Sources */,
+				ABCD20260610000000004D02 /* ControllerHaptics+Actuation.swift in Sources */,
+				ABCD20260609000000001702 /* ControllerMotion.swift in Sources */,
+				040BDEEE8B8E58AC0375BF3A /* StreamingState.swift in Sources */,
+				026FD8A0211FCD7B527606B0 /* StatsOverlaySettings.swift in Sources */,
+				FB153DF267467B06C6BE3467 /* MacSystemStats.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AB7BE451DDA95AEA958F4D81 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "Glimmer Login Helper";
+			target = AD84EE95363FBCE53F028062 /* Glimmer Login Helper */;
+			targetProxy = 1FA5FE9E31BDE4153C07B98D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		6A89113D803B53021E176230 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LoginHelper/LoginHelper.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LoginHelper/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.LoginHelper;
+				PRODUCT_NAME = "Glimmer Login Helper";
+				SKIP_INSTALL = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A10000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A10000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		A10000062 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Glimmer/Glimmer.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Glimmer/Info.plist;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_INFERSENDABLEFROMCAPTURES = YES;
+				SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES = YES;
+				SWIFT_UPCOMING_FEATURE_REGION_BASED_ISOLATION = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A10000063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Glimmer/Glimmer.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Glimmer/Info.plist;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_INFERSENDABLEFROMCAPTURES = YES;
+				SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES = YES;
+				SWIFT_UPCOMING_FEATURE_REGION_BASED_ISOLATION = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		E197A20E22DCE9AA9CCE5792 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = LoginHelper/LoginHelper.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LoginHelper/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.LoginHelper;
+				PRODUCT_NAME = "Glimmer Login Helper";
+				SKIP_INSTALL = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		549E5097E50898980152728F /* Build configuration list for PBXNativeTarget "Glimmer Login Helper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E197A20E22DCE9AA9CCE5792 /* Release */,
+				6A89113D803B53021E176230 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000041 /* Build configuration list for PBXNativeTarget "Glimmer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000062 /* Debug */,
+				A10000063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000051 /* Build configuration list for PBXProject "Glimmer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000060 /* Debug */,
+				A10000061 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000050 /* Project object */;
+}
