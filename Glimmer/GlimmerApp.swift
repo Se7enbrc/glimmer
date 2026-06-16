@@ -70,7 +70,8 @@ struct GlimmerApp: App {
             CommandGroup(replacing: .newItem) {}
             #if canImport(Sparkle)
             // Standard macOS "Check for Updates..." under the app menu (after the
-            // About item). Sparkle drives the rest: a daily background check plus
+            // About item). Sparkle drives the rest: a check on every open
+            // (applicationDidFinishLaunching) plus a daily background check and
             // the update panels. Mirrored in the menu-bar dropdown for the
             // accessory (no-window) case - see MenuBarContent.
             CommandGroup(after: .appInfo) {
@@ -174,6 +175,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil, queue: .main
         ) { _ in recheck() })
     }
+
+    #if canImport(Sparkle)
+    /// Check for updates on every user-initiated open, in addition to Sparkle's
+    /// daily scheduled check - a cold start should surface a newer release right
+    /// away instead of waiting up to a day. `checkForUpdatesInBackground` is
+    /// silent unless an update is actually available. Skipped on login launches
+    /// (the user didn't open it; the daily scheduled check covers that session).
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard !launchedAtLogin else { return }
+        UpdaterController.shared.updater.checkForUpdatesInBackground()
+    }
+    #endif
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep the menu bar item alive when all windows close.
