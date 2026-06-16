@@ -166,7 +166,6 @@ Keys in the credentials file (template: `make creds-init`):
 | `APPLE_APP_PASSWORD`     | app-specific password for notarytool           | owner, once (rotatable) |
 | `APPLE_TEAM_ID`          | optional; derived from the cert name if absent | owner, optional         |
 | `SIGN_KEYCHAIN_PASSWORD` | dedicated release-keychain password            | `make codesign-setup`   |
-| `DEV_KEYCHAIN_PASSWORD`  | dedicated dev-keychain password                | `make dev-sign-setup`   |
 
 ### One-time owner setup
 
@@ -205,10 +204,12 @@ Remaining interactive surface after this: none at build time. (First-ever
   login-keychain stash/profile when the creds file has no answer. Run the
   one-time steps to upgrade to any-session builds.
 
-`make dev` follows the same pattern: `make dev-sign-setup` (zero-prep - it
-creates the creds file itself if needed) stores `DEV_KEYCHAIN_PASSWORD` there,
-and every `make dev` unlocks the dev keychain from it. The login keychain is
-never touched.
+`make dev` signs with the same Developer ID as `make dist` (non-interactively,
+via the dedicated signing keychain), so dev and release builds share one stable
+identity - TCC grants survive rebuilds and the keychain-stored client identity
+is shared across dev and release. It does NOT notarize (a locally-built signed
+bundle runs fine on the build machine), so the inner loop stays fast. With no
+Developer ID cert present it falls back to ad-hoc.
 
 ### Cutting a signed, notarized DMG
 

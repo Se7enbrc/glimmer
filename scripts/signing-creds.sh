@@ -32,8 +32,6 @@
 # Keys the Makefile consumes (none are read anywhere else):
 #   SIGN_KEYCHAIN_PASSWORD  password of the dedicated release-signing keychain
 #                           (auto-generated + stored by `make codesign-setup`)
-#   DEV_KEYCHAIN_PASSWORD   password of the dedicated dev-signing keychain
-#                           (auto-generated + stored by `make dev-sign-setup`)
 #   P12_PATH                absolute path to the Developer ID .p12 export
 #   P12_PASSWORD            passphrase of that .p12
 #   APPLE_ID                Apple ID email for notarytool
@@ -210,9 +208,8 @@ APPLE_APP_PASSWORD=
 #   field developer-id-p12 (the .p12 itself) → materialized to P12_PATH.
 #OP_SOURCE=op://<vault>/<item>     e.g. op://private/apple-developer-creds
 
-# Filled in automatically by `make codesign-setup` / `make dev-sign-setup`:
+# Filled in automatically by `make codesign-setup`:
 #SIGN_KEYCHAIN_PASSWORD=
-#DEV_KEYCHAIN_PASSWORD=
 EOF
     chmod 600 "$CREDS"
     echo "wrote template: $CREDS  (fill in the values, keep mode 0600)"

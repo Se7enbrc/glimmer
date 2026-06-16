@@ -24,7 +24,6 @@
 #   make creds-init        Write the signing credentials file template.
 #   make codesign-setup    Build the signing keychain + import the Developer ID.
 #   make setup-notary      Store the notarytool profile.
-#   make dev-sign-setup    Create the stable self-signed dev identity (for make dev).
 #   make sparkle-keys      Generate the Sparkle EdDSA update-signing keypair.
 #
 # PROFILING / TELEMETRY:
@@ -72,11 +71,6 @@ CREDS           := scripts/signing-creds.sh
 # can't retrofit that onto an already-imported login-keychain key). This is the
 # standard CI/CD pattern. Created by `make codesign-setup`.
 SIGN_KEYCHAIN   := $(HOME)/Library/Keychains/glimmer-signing.keychain-db
-# Self-signed identity for DEV builds - gives a STABLE code signature so the
-# Input Monitoring / Local Network TCC grants survive rebuilds (ad-hoc's
-# per-build cdhash never matches a prior grant). Created by `make dev-sign-setup`.
-DEV_SIGN_KEYCHAIN := $(HOME)/Library/Keychains/glimmer-dev-signing.keychain-db
-DEV_SIGN_CN       := Glimmer Dev
 # Version single source of truth: Glimmer/Version.xcconfig (NOT pbxproj).
 MARKETING_VERSION := $(shell sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' Glimmer/Version.xcconfig | tr -d ' ')
 DMG_NAME        := Glimmer-$(MARKETING_VERSION).dmg
@@ -91,7 +85,7 @@ export SPARKLE_VERSION
 
 .PHONY: all release install reinstall uninstall clean app sign embed open \
         profile profile-signposts setup-notary notarize dmg dist preflight \
-        codesign-setup codesign-teardown ensure-signing dev dev-sign-setup \
+        codesign-setup codesign-teardown ensure-signing dev \
         creds-init enable-telem disable-telem release-publish sparkle-keys
 
 all: app sign
@@ -210,66 +204,22 @@ reinstall: install
 	@COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
 	echo "  ✓ now running build $$COMMIT"
 
-# One-time: create a self-signed code-signing identity in a dedicated keychain
-# so `make dev` builds carry a STABLE signature. macOS keys the Input
-# Monitoring / Local Network TCC grants on the code signature, so with a stable
-# one the grant survives rebuilds - ad-hoc's changing cdhash means macOS never
-# recognises a prior grant (the raw-HID feature literally can't be tested in dev
-# without this). No Apple cert needed; the cert is self-signed and only used
-# for LOCAL running. The keychain password is stored in the credentials file
-# (created 0600 automatically if absent - still a zero-prep target) so `make
-# dev` can unlock non-interactively from any session; the login keychain is
-# never touched.
-dev-sign-setup:
-	@set -eu; \
-	OPENSSL="$$(brew --prefix openssl@3)/bin/openssl"; \
-	KCPASS="$$($(CREDS) get DEV_KEYCHAIN_PASSWORD --optional 2>/dev/null || true)"; \
-	[ -n "$$KCPASS" ] || KCPASS="$$(/usr/bin/openssl rand -base64 24)"; \
-	TMP="$$(mktemp -d)"; trap 'rm -rf "$$TMP"' EXIT; \
-	"$$OPENSSL" req -x509 -newkey rsa:2048 -nodes -days 3650 \
-		-keyout "$$TMP/key.pem" -out "$$TMP/cert.pem" -subj "/CN=$(DEV_SIGN_CN)" \
-		-addext "basicConstraints=critical,CA:FALSE" \
-		-addext "keyUsage=critical,digitalSignature" \
-		-addext "extendedKeyUsage=critical,codeSigning" 2>/dev/null; \
-	"$$OPENSSL" pkcs12 -export -legacy -inkey "$$TMP/key.pem" -in "$$TMP/cert.pem" \
-		-out "$$TMP/dev.p12" -passout "pass:$$KCPASS" -name "$(DEV_SIGN_CN)"; \
-	security delete-keychain "$(DEV_SIGN_KEYCHAIN)" 2>/dev/null || true; \
-	security create-keychain -p "$$KCPASS" "$(DEV_SIGN_KEYCHAIN)"; \
-	security set-keychain-settings "$(DEV_SIGN_KEYCHAIN)"; \
-	security unlock-keychain -p "$$KCPASS" "$(DEV_SIGN_KEYCHAIN)"; \
-	security import "$$TMP/dev.p12" -k "$(DEV_SIGN_KEYCHAIN)" -P "$$KCPASS" -T /usr/bin/codesign; \
-	security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$$KCPASS" "$(DEV_SIGN_KEYCHAIN)" >/dev/null; \
-	$(CREDS) set DEV_KEYCHAIN_PASSWORD "$$KCPASS"; \
-	security list-keychains -d user -s "$(DEV_SIGN_KEYCHAIN)" $$(security list-keychains -d user | sed 's/[" ]//g'); \
-	echo "  ✓ dev signing identity '$(DEV_SIGN_CN)' ready - 'make dev' now signs stably"
-
-# Fast dev inner-loop. Signs with the self-signed '$(DEV_SIGN_CN)' identity if
-# `make dev-sign-setup` has been run (STABLE signature → TCC grants stick across
-# rebuilds); otherwise ad-hoc (no keychain, but TCC re-prompts each build).
-# Dylibs embedded, installed, relaunched. Real Developer-ID signing +
-# notarization remain a RELEASE step (make dist). Sandbox container is bundle-id
-# keyed, so paired hosts + settings survive.
+# Fast dev inner-loop. Signs with your Developer ID (the same identity as
+# `make dist`), so dev and release builds share one stable code signature: the
+# Input Monitoring / Local Network TCC grants survive rebuilds, and the
+# data-protection-keychain client identity is shared across dev<->release. No
+# Apple round-trip - a locally-built, Developer-ID-signed bundle runs fine on
+# this Mac without notarization (that's a publish-time step), so the loop stays
+# fast. Falls back to ad-hoc automatically when no Developer ID cert is present
+# (TCC re-prompts each build then). Dylibs embedded, installed, relaunched.
 dev:
-	@DEVKC="$(DEV_SIGN_KEYCHAIN)"; SIGN_ID=""; \
-	if [ -f "$$DEVKC" ]; then \
-		others=$$(security list-keychains -d user | sed 's/[" ]//g' | grep -vF "$$DEVKC" || true); \
-		security list-keychains -d user -s "$$DEVKC" $$others >/dev/null 2>&1 || true; \
-		KCPW=$$($(CREDS) get DEV_KEYCHAIN_PASSWORD --optional 2>/dev/null || true); \
-		if [ -z "$$KCPW" ]; then \
-			KCPW=$$(security find-generic-password -a "$(USER)" -s glimmer-dev-signing-kc-pw -w \
-				"$$HOME/Library/Keychains/login.keychain-db" 2>/dev/null || true); \
-		fi; \
-		if [ -n "$$KCPW" ]; then \
-			security unlock-keychain -p "$$KCPW" "$$DEVKC" 2>/dev/null || true; \
-			security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$$KCPW" "$$DEVKC" >/dev/null 2>&1 || true; \
-		fi; \
-		SIGN_ID="$(DEV_SIGN_CN)"; \
-		echo "  ▶ dev build signed with stable identity '$(DEV_SIGN_CN)'"; \
+	@if [ -n "$(strip $(DEVELOPER_ID))" ]; then \
+		echo "  ▶ dev build signed with Developer ID (stable TCC grants; shares the release identity)"; \
 	else \
-		echo "  ▶ dev build ad-hoc - run 'make dev-sign-setup' once for stable TCC grants"; \
-	fi; \
-	$(MAKE) DEVELOPER_ID="$$SIGN_ID" CONFIG=Release app embed; \
-	SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
+		echo "  ▶ dev build ad-hoc - no Developer ID cert found (TCC re-prompts each build)"; \
+	fi
+	@$(MAKE) CONFIG=Release app embed
+	@SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
 	osascript -e 'tell application "Glimmer" to quit' >/dev/null 2>&1 || true; \
 	n=0; while pgrep -x Glimmer >/dev/null && [ $$n -lt 5 ]; do sleep 1; n=$$((n+1)); done; \
 	pkill -x Glimmer 2>/dev/null || true; sleep 1; \
