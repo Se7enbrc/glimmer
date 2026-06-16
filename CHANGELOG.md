@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.6.8 - 2026-06-16
+
+### Security
+
+- **Client identity now lives in the data-protection keychain.** On signed
+  builds the RSA client identity (the key that authenticates you to paired
+  hosts) is stored in the per-app data-protection keychain - encrypted at rest,
+  readable only by Glimmer's signed identity - instead of mode-0600 files, so a
+  Full-Disk-Access process can no longer read the private key off disk. Existing
+  installs migrate automatically on first launch.
+
+### Updates
+
+- **Checks for updates on launch**, in addition to the once-a-day background
+  check.
+
 ## 2026.6.7 - 2026-06-16
 
 Auto-update test release - exercises the Sparkle in-place update from 2026.6.6.
