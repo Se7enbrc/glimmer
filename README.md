@@ -1,8 +1,9 @@
 # Glimmer
 
 Mac-native game-streaming client. Speaks the GameStream/Sunshine protocol
-end-to-end in a from-scratch native Swift engine - no linked C library. (The
-transport was ported from `moonlight-common-c`; see [CREDITS.md](CREDITS.md).)
+end-to-end in a from-scratch native Swift engine - no `moonlight-common-c`
+runtime, no external player. (The transport was ported from
+`moonlight-common-c`; see [CREDITS.md](CREDITS.md).)
 
 ## What it does
 
@@ -19,9 +20,12 @@ transport was ported from `moonlight-common-c`; see [CREDITS.md](CREDITS.md).)
 
 ## Requirements
 
-- macOS 26 or newer
-- Xcode 26 toolchain (Swift 6, strict concurrency)
-- Homebrew with `openssl@3` and `opus`
+To run: macOS 26 or newer on Apple Silicon. The notarized download is
+self-contained - it bundles OpenSSL, Opus, and Sparkle, so there is nothing else
+to install.
+
+To build from source: the Xcode 26 toolchain (Swift 6, strict concurrency) and
+Homebrew with `openssl@3` and `opus`.
 
 ## Install
 
@@ -67,7 +71,8 @@ every Qt quirk and presents a UI that doesn't match the rest of the OS. Glimmer
 is a from-scratch native Swift client - its streaming transport was ported from
 `moonlight-common-c` (GPLv3; see [CREDITS.md](CREDITS.md)) and it owns its own
 video / audio / input pipeline through VideoToolbox + AVAudioEngine, running
-entirely in-process - no helper daemon, no external player, no linked C library.
+entirely in-process - no helper daemon and no external player. (OpenSSL and Opus
+are linked for crypto and audio decode, and bundled inside the app.)
 
 On first launch Glimmer migrates paired hosts and the RSA client identity from a
 prior moonlight-qt install (if one exists) so the user keeps their hosts without

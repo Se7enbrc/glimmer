@@ -478,7 +478,9 @@ details and the pinning lifecycle live in [SECURITY.md](SECURITY.md).
 
 There is no separate native library and no submodule: the entire streaming
 engine compiles as part of the app target. The only external link dependencies
-are Homebrew `openssl@3` and `opus`.
+are Homebrew `openssl@3` and `opus`; `make dist` copies their dylibs into
+`Contents/Frameworks` (rewired to `@rpath`), so the shipped app is
+self-contained and needs nothing installed to run.
 
 ### `Glimmer/StreamLib.xcconfig`
 
