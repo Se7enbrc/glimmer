@@ -1,6 +1,6 @@
 # Release
 
-## The whole release, step by step (2026.6.2-era flow)
+## The whole release, step by step
 
 ```
 # 0. one-time, ever: nothing - `make dist` bootstraps itself (see First-run flow)
@@ -18,7 +18,7 @@ make dist
 git tag 2026.6.2 && git push origin 2026.6.2
 gh release create 2026.6.2 build/dist/Glimmer-2026.6.2.dmg \
     --title "Glimmer 2026.6.2" --notes-file <notes>
-# 5. update the Homebrew cask (tap repo) with the new version + sha256
+# 5. (planned) a Homebrew cask once it ships - not yet available
 ```
 
 Signing never prompts: the Developer ID lives in a dedicated, never-locking
@@ -102,22 +102,23 @@ every one has caught a regression at some point.
 
 If any of these fails, do not tag.
 
-## 4. Tag and push
+## 4. Tag and publish
+
+The canonical publish is **`make release-publish`** (see
+[Auto-update](#auto-update-sparkle)): it builds, signs, notarizes, creates the
+GitHub release `<version>` on `Se7enbrc/glimmer`, uploads the notarized ZIP (the
+Sparkle enclosure) and DMG (the human download), and updates the Pages appcast.
+It creates the tag at the current `main` - CalVer, **unprefixed** (matching the
+appcast enclosure path) - so no manual `git tag` is needed.
+
+Releases are cut manually - there is no automated CI. To publish by hand
+instead, tag the commit and create the release yourself:
 
 ```bash
-git tag -a v2026.5.0 -m "v2026.5.0"
-git push origin main
-git push origin v2026.5.0
-```
-
-Releases are cut manually - there is no automated CI. Create a GitHub release
-from the tag and attach the `build/Build/Products/Release/Glimmer.app` zipped,
-plus the SHA256:
-
-```bash
-cd build/Build/Products/Release
-ditto -c -k --sequesterRsrc --keepParent Glimmer.app Glimmer-2026.5.0.zip
-shasum -a 256 Glimmer-2026.5.0.zip
+git tag 2026.6.7 && git push origin 2026.6.7
+gh release create 2026.6.7 \
+    build/dist/Glimmer-2026.6.7.dmg build/dist/Glimmer-2026.6.7.zip \
+    --title "Glimmer 2026.6.7" --notes-file <notes>
 ```
 
 ## 5. Homebrew cask
@@ -234,7 +235,8 @@ Individual steps are available too: `make preflight` (just the checks),
 
 - **Developer-ID DMG** (the `make dist` output) - direct download, passes
   Gatekeeper on first launch once notarized. This is the primary path.
-- **Homebrew cask** - still fine; `--cask` strips quarantine regardless.
+- **Homebrew cask** (planned) - when shipped, `--cask` will strip quarantine
+  regardless.
 
 > MAS note: the streaming transport is a Swift port of GPLv3 moonlight-common-c
 > (a derivative work - see [CREDITS.md](../CREDITS.md)), so the Mac App Store
@@ -256,11 +258,10 @@ pipeline runs unattended. Two invocations, one edit.
 ## Auto-update (Sparkle)
 
 Glimmer self-updates via [Sparkle 2](https://sparkle-project.org). Updates are
-EdDSA-signed and served from a **separate public repo**,
-`Se7enbrc/glimmer-releases` (GitHub Pages hosts `appcast.xml`; the notarized
-ZIP + DMG + GPL source tarball are the release assets). The source repo stays
-private - only the per-release source tarball is published, which satisfies
-GPLv3's corresponding-source obligation.
+EdDSA-signed and served from this repo's GitHub Pages site (which hosts
+`appcast.xml`); the notarized ZIP + DMG are the release assets. The repo is
+public, so its source at each release tag is itself the GPLv3 corresponding
+source - no separate tarball needed.
 
 ### One-time setup (done 2026-06; here for reference / disaster recovery)
 
@@ -279,19 +280,19 @@ GPLv3's corresponding-source obligation.
   and daily background checks; `Glimmer.entitlements` has the
   `mach-lookup.global-name` exception the sandboxed installer XPC needs
   (`io.ugfugl.Glimmer-spks` / `-spki`).
-- **Hosting:** `Se7enbrc/glimmer-releases` is public with Pages enabled; the
-  feed is `https://se7enbrc.github.io/glimmer-releases/appcast.xml`.
+- **Hosting:** `Se7enbrc/glimmer` has GitHub Pages enabled (`main` / root); the
+  feed is `https://se7enbrc.github.io/glimmer/appcast.xml`.
 
 ### Cutting an auto-updatable release
 
 1. Bump `Glimmer/Version.xcconfig` (both `MARKETING_VERSION` and
-   `CURRENT_PROJECT_VERSION`) and **commit** - the appcast version + source
-   tarball come from `HEAD`.
+   `CURRENT_PROJECT_VERSION`) and **commit + push** - the appcast version and
+   the release tag come from `HEAD` on `main`.
 2. `make release-publish`. Non-interactive (same creds rig as `make dist`). It:
    builds Release → signs → notarizes → staples → DMG (`dist`), then ZIPs the
-   notarized bundle, EdDSA-signs it, archives the corresponding source, creates
-   the GitHub release `<version>` on `glimmer-releases` with ZIP + DMG + source
-   tarball, and inserts the `<item>` into the Pages appcast.
+   notarized bundle, EdDSA-signs it, creates the GitHub release `<version>` on
+   `Se7enbrc/glimmer` with the ZIP + DMG, and inserts the `<item>` into the
+   Pages appcast.
 3. Verify: the new item appears at the appcast URL above, and a prior install's
    "Check for Updates..." offers it.
 

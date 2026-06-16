@@ -488,11 +488,11 @@ sparkle-keys:
 	"$$TOOLS/generate_keys" -p
 
 # Build + notarize + staple (via `dist`), then publish a Sparkle update: ZIP the
-# notarized bundle, EdDSA-sign it (key from the creds file), upload ZIP + DMG +
-# corresponding-source tarball to the PUBLIC glimmer-releases GitHub release, and
-# update the Pages-hosted appcast.xml. Prompt-free once the one-time signing /
-# notary / sparkle-keys setup is done. Bump Glimmer/Version.xcconfig + commit
-# FIRST - the source tarball + appcast version come from HEAD.
+# notarized bundle, EdDSA-sign it (key from the creds file), upload the ZIP + DMG
+# to the public glimmer GitHub release, and update the Pages-hosted appcast.xml.
+# Prompt-free once the one-time signing / notary / sparkle-keys setup is done.
+# Bump Glimmer/Version.xcconfig + commit FIRST - the appcast version comes from
+# HEAD; the public repo at the tag is the GPL corresponding source.
 release-publish: dist
 	@scripts/publish-release.sh \
 		"$(MARKETING_VERSION)" "$(BUILD_NUMBER)" \

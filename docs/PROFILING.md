@@ -237,9 +237,9 @@ stream writes to `~/Library/Logs/Glimmer/`:
 - `telemetry-session-<timestamp>.json` - a one-shot session scorecard;
 - `glimmer-<timestamp>.log` - a richer per-session diagnostic log.
 
-Press **⌃⌥B** during a stream to drop a timestamped "that felt bad" bookmark
-into the telemetry. All of it is local-only and carries performance numbers,
-never secrets - these are the artifacts the bug-report template asks for.
+Press **⌃B** during a stream to drop a timestamped "that felt bad" bookmark into
+the telemetry. All of it is local-only and carries performance numbers, never
+secrets - these are the artifacts the bug-report template asks for.
 
 The Diagnostics pane also surfaces a Grafana port-forward command. That points
 at an **optional, maintainer-local dashboard rig** (Prometheus + Grafana + Loki
