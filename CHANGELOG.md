@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.6.7 - 2026-06-16
+
+Auto-update test release - exercises the Sparkle in-place update from 2026.6.6.
+Source and docs cleanup only (punctuation normalized to ASCII; dependency docs
+corrected); no app-behavior changes. (Build stamp `20260618`.)
+
 ## 2026.6.6 - 2026-06-16
 
 Auto-update validation release - no functional changes vs 2026.6.5; cut to
