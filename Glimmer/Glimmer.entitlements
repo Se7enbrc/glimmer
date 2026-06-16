@@ -107,6 +107,21 @@
 		<string>com.moonlight-stream.Moonlight</string>
 		<string>com.moonlight-stream.moonlight-qt</string>
 	</array>
+
+	<!-- Data-protection keychain access group for the client identity
+	     (KeychainIdentityStore, Identity.swift). The DP keychain on macOS
+	     requires the app to carry a keychain-access-group; without it,
+	     SecItemAdd with kSecUseDataProtectionKeychain returns
+	     errSecMissingEntitlement and identity storage silently falls back to
+	     mode-0600 files (which is what shipped in 2026.6.8). Team-prefixed with
+	     the Developer ID team so it validates under the same signature; codesign
+	     writes it literally (no $(AppIdentifierPrefix) expansion).
+	     KeychainIdentityStore omits kSecAttrAccessGroup, so items land in this
+	     default group. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>5T7M4RH3F8.io.ugfugl.Glimmer</string>
+	</array>
 </dict>
 </plist>
 </content>
