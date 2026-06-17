@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.6.10 - 2026-06-16
+
+Hygiene. Adds an automated unit-test suite (120 tests across the wire codecs,
+Reed-Solomon / audio FEC, input encoders, RTSP/SDP, the AES-GCM stream crypto,
+and the pairing/identity crypto) plus a SwiftLint cleanup. No app-behavior
+changes.
+
 ## 2026.6.9 - 2026-06-16
 
 Hygiene. The client identity stays in mode-0600 sandbox-container files - we
