@@ -587,7 +587,8 @@ final class VideoDepacketizer {
     /// 4-byte start code (NV's frame-start marker; 3-byte means mid-frame)
     /// followed by SPS (H.264, nal_unit_type 7) or VPS (HEVC, type 32) -
     /// the host rides parameter sets on every IDR.
-    private static func isIdrFrameStart(_ payload: [UInt8], hevc: Bool) -> Bool {
+    // internal for testability
+    static func isIdrFrameStart(_ payload: [UInt8], hevc: Bool) -> Bool {
         guard payload.count >= 5,
               payload[0] == 0, payload[1] == 0, payload[2] == 0, payload[3] == 1
         else { return false }
@@ -602,7 +603,8 @@ final class VideoDepacketizer {
     /// start code kept; the decoder strips it - and every other NAL (SEI,
     /// slices) stays in ONE picData buffer in arrival order. Runs only on
     /// IDR frames, so the per-byte scan is off the steady-state path.
-    private func splitAnnexBParamSets(_ au: Data) -> [DecodeBuffer] {
+    // internal for testability
+    func splitAnnexBParamSets(_ au: Data) -> [DecodeBuffer] {
         let bytes = [UInt8](au)
         var vps: Data?, sps: Data?, pps: Data?
         var picData = Data()

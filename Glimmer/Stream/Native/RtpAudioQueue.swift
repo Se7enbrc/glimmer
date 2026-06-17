@@ -427,7 +427,8 @@ final class RtpAudioQueue {
     /// Pad (or, defensively, truncate) a shard to exactly `size` bytes. Sunshine
     /// uses constant-size shards within a block, but the RS math requires every
     /// shard be exactly blockSize.
-    private func padShard(_ bytes: [UInt8], to size: Int) -> [UInt8] {
+    // internal for testability
+    func padShard(_ bytes: [UInt8], to size: Int) -> [UInt8] {
         if bytes.count == size { return bytes }
         if bytes.count > size { return Array(bytes[0..<size]) }
         var out = bytes
@@ -438,7 +439,8 @@ final class RtpAudioQueue {
     /// Append a 12-byte RTP header in BIG-ENDIAN wire order. The drained bytes are
     /// consumed downstream only for their opus payload, but we reproduce the exact
     /// header layout so the assembled packet is byte-faithful to the C path.
-    private func appendRtpHeader(_ out: inout [UInt8], header: UInt8, packetType: UInt8,
+    // internal for testability
+    func appendRtpHeader(_ out: inout [UInt8], header: UInt8, packetType: UInt8,
                                  seq: UInt16, timestamp: UInt32, ssrc: UInt32) {
         out.append(header)
         out.append(packetType)
