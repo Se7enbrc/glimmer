@@ -94,9 +94,12 @@ extension MoonlightManager {
                 // triggering event NOT being a mouse click so the launcher
                 // stays reachable mid-stream.
                 guard self.isStreaming, self.nativeStreamBackgrounded else { return }
+                // Resume on Cmd-Tab, not a window click. currentEvent is nil for both,
+                // so the mouse button is the tell: a click-to-activate still has it down.
                 let evType = NSApp.currentEvent?.type
-                let viaClick = evType == .leftMouseDown || evType == .leftMouseUp
+                let mouseEvent = evType == .leftMouseDown || evType == .leftMouseUp
                     || evType == .rightMouseDown || evType == .otherMouseDown
+                let viaClick = mouseEvent || NSEvent.pressedMouseButtons != 0
                 if !viaClick {
                     self.resumeStreamWindow()
                 }

@@ -18,7 +18,9 @@ final class AWDLSuppressor: @unchecked Sendable {
 
     private var _suppressing = false
     private var _suppressionSince: Date?
+    private var _lastHeartbeat = Date()
     private let stateLock = NSLock()
+    private var pollTimer: DispatchSourceTimer?
 
     var suppressing: Bool {
         stateLock.lock(); defer { stateLock.unlock() }
@@ -32,6 +34,7 @@ final class AWDLSuppressor: @unchecked Sendable {
 
     func start() {
         setupMonitoring()
+        startPolling()
         os_log("AWDL suppressor started", log: log, type: .info)
     }
 
@@ -39,6 +42,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         stateLock.lock()
         let wasSuppressing = _suppressing
         _suppressing = value
+        if value { _lastHeartbeat = Date() }
         if value, _suppressionSince == nil { _suppressionSince = Date() }
         if !value { _suppressionSince = nil }
         stateLock.unlock()
@@ -48,7 +52,13 @@ final class AWDLSuppressor: @unchecked Sendable {
                value ? "true" : "false",
                wasSuppressing ? "true" : "false",
                reason)
-        if value { downIfUp() }
+        if value {
+            downIfUp()
+        } else {
+            // Restore awdl0 - just clearing the flag leaves it down until macOS
+            // re-raises it, breaking AirDrop/Continuity meanwhile.
+            upIfDown()
+        }
     }
 
     /// True if awdl0 is currently UP per the kernel.
@@ -76,6 +86,46 @@ final class AWDLSuppressor: @unchecked Sendable {
             return
         }
         os_log("Brought %{public}@ down", log: log, type: .info, interfaceName)
+    }
+
+    /// Restore awdl0 to its normal (up) state once suppression ends - mirror of
+    /// downIfUp. macOS resumes managing the interface from there.
+    private func upIfDown() {
+        guard !isInterfaceUp() else { return }
+        guard executeIfconfig(args: [interfaceName, "up"]) else {
+            os_log("Failed to bring %{public}@ up", log: log, type: .error, interfaceName)
+            return
+        }
+        os_log("Brought %{public}@ up", log: log, type: .info, interfaceName)
+    }
+
+    // MARK: Heartbeat poll - state-driven safety net
+
+    /// Stay down while the client heartbeats (setSuppressing(true) ~1s); release
+    /// awdl0 if the heartbeat goes stale, and exit once idle so the daemon never
+    /// lingers as a zombie running stale code.
+    private func startPolling() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in self?.poll() }
+        timer.resume()
+        pollTimer = timer
+    }
+
+    private func poll() {
+        stateLock.lock()
+        let suppressing = _suppressing
+        let idle = Date().timeIntervalSince(_lastHeartbeat)
+        stateLock.unlock()
+        if suppressing {
+            if idle > 3 {
+                os_log("heartbeat stale %.1fs - releasing awdl0", log: log, type: .info, idle)
+                setSuppressing(false, reason: "heartbeat-timeout")
+            }
+        } else if idle > 8 {
+            os_log("idle %.0fs - exiting for a clean reload", log: log, type: .info, idle)
+            exit(0)
+        }
     }
 
     @discardableResult

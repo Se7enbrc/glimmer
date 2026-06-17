@@ -30,6 +30,11 @@ final class HelperService: NSObject, NSXPCListenerDelegate, GlimmerHelperProtoco
         }
         newConnection.exportedInterface = NSXPCInterface(with: GlimmerHelperProtocol.self)
         newConnection.exportedObject = self
+        // Fail-safe: if the controlling app vanishes (quit/crash/lost connection)
+        // without releasing, restore awdl0 rather than leave it parked.
+        newConnection.invalidationHandler = { [suppressor] in
+            suppressor.setSuppressing(false, reason: "app-disconnected")
+        }
         newConnection.resume()
         return true
     }

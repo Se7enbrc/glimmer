@@ -201,18 +201,26 @@ final class AWDLHelperManager: ObservableObject {
 
     // MARK: Stream-scoped suppression
 
-    /// Park awdl0 for the duration of a stream. No-op unless the helper is enabled.
+    private var heartbeatTask: Task<Void, Never>?
+
+    /// Park awdl0 for the life of a stream. Heartbeats the daemon every second so
+    /// it keeps awdl0 down and can detect if we go away (stream end / crash) and
+    /// restore it. No-op unless the helper is enabled.
     func suppressForStream() {
         guard isEnabled else { return }
-        let client = self.client
-        Task { @MainActor in
-            let ok = await client.setAWDLDown(true, reason: "stream-start")
-            self.suppressing = ok
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { @MainActor in
+            while !Task.isCancelled {
+                self.suppressing = await self.client.setAWDLDown(true, reason: "stream")
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
     }
 
     /// Release awdl0 when a stream ends.
     func releaseForStream() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         let client = self.client
         Task { @MainActor in
             _ = await client.setAWDLDown(false, reason: "stream-end")
