@@ -106,3 +106,18 @@ repos:
         pass_filenames: false
         require_serial: true
         stages: [pre-commit]
+
+  # Unit-test gate on PUSH (not commit). `make test` runs the GlimmerTests
+  # suite via xcodebuild - far heavier than the lint/secret hooks, so it's a
+  # pre-push "don't push red" gate rather than pre-commit. Activate once with:
+  #   pre-commit install --hook-type pre-push
+  - repo: local
+    hooks:
+      - id: make-test
+        name: make test (unit tests)
+        description: Run the GlimmerTests suite via xcodebuild before pushing.
+        entry: make test
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
