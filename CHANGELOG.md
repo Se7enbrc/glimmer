@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.6.12 - 2026-06-17
+
+Docs only - trimmed the release runbook. No app changes.
+
 ## 2026.6.11 - 2026-06-17
 
 Smooths out Wi-Fi freezes during a stream, and moves Glimmer to an unsandboxed
