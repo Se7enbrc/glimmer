@@ -9,6 +9,7 @@
 #   make install           Build + copy Glimmer.app to /Applications.
 #   make open              Build + install + open.
 #   make release           Build the Release configuration (no install).
+#   make test              Build + run the GlimmerTests unit-test bundle.
 #   make uninstall         Remove Glimmer.app.
 #   make clean             Remove build outputs.
 #
@@ -85,13 +86,23 @@ export SPARKLE_VERSION
 
 .PHONY: all release install reinstall uninstall clean app sign embed open \
         profile profile-signposts setup-notary notarize dmg dist preflight \
-        codesign-setup codesign-teardown ensure-signing dev \
+        codesign-setup codesign-teardown ensure-signing dev test \
         creds-init enable-telem disable-telem release-publish sparkle-keys
 
 all: app sign
 
 release:
 	$(MAKE) CONFIG=Release all
+
+# Build + run the hostless GlimmerTests unit-test bundle (swift-testing).
+# Mirrors the app build invocation (same xcconfig + Homebrew prefixes +
+# CODE_SIGNING_ALLOWED=NO) then runs the scheme's Test action. The shared
+# Glimmer scheme's BuildAction builds ONLY the app, so `make app`/`make dist`
+# are unaffected; only `xcodebuild test` pulls in the GlimmerTests target.
+test:
+	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	  -xcconfig $(STREAM_XCCONFIG) OPENSSL_PREFIX=$(OPENSSL_PREFIX) OPUS_PREFIX=$(OPUS_PREFIX) \
+	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
 
 app:
 	@echo "▶ Building Glimmer.app ($(CONFIG))..."

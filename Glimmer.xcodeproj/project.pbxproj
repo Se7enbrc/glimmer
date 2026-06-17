@@ -176,6 +176,10 @@
 		D1000B71 /* StreamSession+Start.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B72 /* StreamSession+Start.swift */; };
 		D1000B73 /* StreamSession+StartSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B74 /* StreamSession+StartSetup.swift */; };
 		D1000B61 /* FramePacer+Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B62 /* FramePacer+Constants.swift */; };
+		D2000021 /* EnetWireTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000020 /* EnetWireTests.swift */; };
+		D2000023 /* ReedSolomonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000022 /* ReedSolomonTests.swift */; };
+		D2000025 /* InputEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000024 /* InputEncoderTests.swift */; };
+		D2000027 /* SdpCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000026 /* SdpCodecTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -185,6 +189,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = AD84EE95363FBCE53F028062;
 			remoteInfo = "Glimmer Login Helper";
+		};
+		D2000018 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000050 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000040;
+			remoteInfo = Glimmer;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -253,6 +264,11 @@
 		FA5CD63C82A1DCE2E8BA445D /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		FAA8BAED455B5E8FC738BF51 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D1000001 /* StreamingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamingBackend.swift; sourceTree = "<group>"; };
+		D2000019 /* GlimmerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlimmerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D2000020 /* EnetWireTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnetWireTests.swift; sourceTree = "<group>"; };
+		D2000022 /* ReedSolomonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReedSolomonTests.swift; sourceTree = "<group>"; };
+		D2000024 /* InputEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEncoderTests.swift; sourceTree = "<group>"; };
+		D2000026 /* SdpCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdpCodecTests.swift; sourceTree = "<group>"; };
 		D1000003 /* StreamProtocolConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamProtocolConstants.swift; sourceTree = "<group>"; };
 		D1000007 /* NativeBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/NativeBackend.swift; sourceTree = "<group>"; };
 		D100000F /* StreamCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/StreamCrypto.swift; sourceTree = "<group>"; };
@@ -395,6 +411,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D2000015 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -435,6 +458,18 @@
 			path = LoginHelper;
 			sourceTree = "<group>";
 		};
+		D2000016 /* GlimmerTests */ = {
+			isa = PBXGroup;
+			children = (
+				D2000020 /* EnetWireTests.swift */,
+				D2000022 /* ReedSolomonTests.swift */,
+				D2000024 /* InputEncoderTests.swift */,
+				D2000026 /* SdpCodecTests.swift */,
+			);
+			name = GlimmerTests;
+			path = GlimmerTests;
+			sourceTree = "<group>";
+		};
 		A10000030 = {
 			isa = PBXGroup;
 			children = (
@@ -442,6 +477,7 @@
 				A10000032 /* Products */,
 				6C549F55F46655F4FA62E269 /* Frameworks */,
 				9F01DE6ECB9422F81F38F159 /* LoginHelper */,
+				D2000016 /* GlimmerTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -623,6 +659,7 @@
 			children = (
 				A10000010 /* Glimmer.app */,
 				68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */,
+				D2000019 /* GlimmerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -669,6 +706,23 @@
 			productReference = 68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */;
 			productType = "com.apple.product-type.application";
 		};
+		D2000010 /* GlimmerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D2000011 /* Build configuration list for PBXNativeTarget "GlimmerTests" */;
+			buildPhases = (
+				D2000014 /* Sources */,
+				D2000015 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D2000017 /* PBXTargetDependency */,
+			);
+			name = GlimmerTests;
+			productName = GlimmerTests;
+			productReference = D2000019 /* GlimmerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -702,6 +756,7 @@
 			targets = (
 				A10000040 /* Glimmer */,
 				AD84EE95363FBCE53F028062 /* Glimmer Login Helper */,
+				D2000010 /* GlimmerTests */,
 			);
 		};
 /* End PBXProject section */
@@ -750,6 +805,17 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA2C1A7427A28573B6FB3037 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D2000014 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D2000021 /* EnetWireTests.swift in Sources */,
+				D2000023 /* ReedSolomonTests.swift in Sources */,
+				D2000025 /* InputEncoderTests.swift in Sources */,
+				D2000027 /* SdpCodecTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -931,6 +997,12 @@
 			name = "Glimmer Login Helper";
 			target = AD84EE95363FBCE53F028062 /* Glimmer Login Helper */;
 			targetProxy = 1FA5FE9E31BDE4153C07B98D /* PBXContainerItemProxy */;
+		};
+		D2000017 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Glimmer;
+			target = A10000040 /* Glimmer */;
+			targetProxy = D2000018 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1163,6 +1235,34 @@
 			};
 			name = Release;
 		};
+		D2000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Glimmer.app/Contents/MacOS/Glimmer";
+			};
+			name = Debug;
+		};
+		D2000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Glimmer.app/Contents/MacOS/Glimmer";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1180,6 +1280,15 @@
 			buildConfigurations = (
 				A10000062 /* Debug */,
 				A10000063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D2000011 /* Build configuration list for PBXNativeTarget "GlimmerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2000012 /* Debug */,
+				D2000013 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
