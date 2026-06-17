@@ -146,27 +146,38 @@ final class AWDLHelperManager: ObservableObject {
     var shouldPromptToEnable: Bool { !promptSuppressed && state != .enabled }
 
     func refresh() {
-        switch service.status {
+        let status = service.status
+        switch status {
         case .enabled:          state = .enabled
         case .requiresApproval: state = .requiresApproval
         case .notRegistered:    state = .notRegistered
         case .notFound:         state = .unavailable("Helper not found in the app bundle")
         @unknown default:       state = .unavailable("Unknown status")
         }
+        log.notice("AWDL daemon status raw=\(status.rawValue, privacy: .public) state=\(String(describing: self.state), privacy: .public)")
     }
 
     /// Register the daemon. The first time, macOS surfaces a one-time approval in
     /// System Settings → General → Login Items & Extensions.
     func enable() {
-        do {
-            try service.register()
-            log.info("AWDL helper registered")
-        } catch {
-            log.error("AWDL helper register failed: \(error.localizedDescription)")
-            state = .unavailable(error.localizedDescription)
-            return
+        // SMAppService can wedge into "Operation not permitted" (SMAppServiceErrorDomain 1)
+        // or .notFound after the app bundle is replaced - a known re-registration bug, and
+        // every rebuild/app update replaces our bundle. Clear any stuck record with an
+        // unregister, let it settle, then register fresh.
+        Task { @MainActor in
+            try? await service.unregister()
+            try? await Task.sleep(for: .milliseconds(600))
+            do {
+                try service.register()
+                log.info("AWDL helper registered")
+                refresh()
+            } catch {
+                let ns = error as NSError
+                let detail = "\(ns.localizedDescription) [\(ns.domain) \(ns.code)]"
+                log.error("AWDL helper register failed: \(detail, privacy: .public)")
+                state = .unavailable(detail)
+            }
         }
-        refresh()
     }
 
     /// Stop suppressing, then unregister the daemon (launchd unloads it; awdl0

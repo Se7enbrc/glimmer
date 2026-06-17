@@ -36,13 +36,15 @@ struct MainWindow: View {
         .task {
             guard !awdlPromptChecked else { return }
             awdlPromptChecked = true
+            // Let hosts load + the window settle before deciding - checking
+            // hosts.isEmpty immediately on appear raced the async host load,
+            // so the prompt never fired.
+            try? await Task.sleep(for: .seconds(1.0))
+            AWDLHelperManager.shared.refresh()
             guard !moonlight.hosts.isEmpty,
                   !moonlight.showRawHIDPrompt,
                   AWDLHelperManager.shared.shouldPromptToEnable else { return }
-            try? await Task.sleep(for: .seconds(0.8))
-            if AWDLHelperManager.shared.shouldPromptToEnable, !moonlight.showRawHIDPrompt {
-                showAWDLPrompt = true
-            }
+            showAWDLPrompt = true
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {

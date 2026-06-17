@@ -26,8 +26,17 @@
 	     user task; we deliberately don't add a temporary-exception read of
 	     the legacy path because that would expand the path-traversal surface
 	     for a same-UID attacker. Re-pair is cleaner. -->
+	<!-- DISABLED 2026-06: Glimmer ships a privileged root LaunchDaemon (the AWDL
+	     helper, registered via SMAppService.daemon) and a sandboxed app cannot
+	     install or run a system daemon - it needs root for `ifconfig awdl0 down`.
+	     moonlight-qt is likewise unsandboxed, and the Mac App Store path was
+	     already closed (device.usb / disable-library-validation are hard rejects).
+	     The app stays Hardened Runtime + Developer-ID + notarized; identity/hosts
+	     moved to the real ~/Library via a one-time container->home migration. The
+	     sandbox-only keys below (network/files/device/temporary-exception) are now
+	     no-ops, kept pending a tidy pass. -->
 	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<false/>
 
 	<!-- We connect to GameStream / Sunshine hosts over LAN - mandatory. -->
 	<key>com.apple.security.network.client</key>
