@@ -118,6 +118,9 @@ struct AudioFecDecoder {
         let ds = Self.dataShards
         let total = Self.totalShards
         guard shards.count >= total, marks.count >= total else { return false }
+        // GF row ops below index 0..<blockSize on every shard; reject short shards
+        // / a negative blockSize rather than read out of bounds.
+        guard blockSize >= 0, shards.allSatisfy({ $0.count >= blockSize }) else { return false }
 
         // Collect erased DATA shard indices (rs.c:145-147).
         var erasures = [Int]()

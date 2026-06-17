@@ -183,6 +183,9 @@ struct ReedSolomon {
     func decode(shards: inout [[UInt8]], marks: [Bool], bs: Int) -> Bool {
         let totalShards = ds + ps
         guard shards.count >= totalShards, marks.count >= totalShards else { return false }
+        // GF row ops below index 0..<bs on every shard; reject short shards / a
+        // negative bs rather than read out of bounds (don't trust the caller's padding).
+        guard bs >= 0, shards.allSatisfy({ $0.count >= bs }) else { return false }
 
         // Collect erased DATA shard indices (rs.c:145-147).
         var erasures = [Int]()

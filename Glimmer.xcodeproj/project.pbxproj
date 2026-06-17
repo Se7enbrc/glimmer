@@ -183,6 +183,7 @@
 		D2000035 /* ParserHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000034 /* ParserHelperTests.swift */; };
 		D2000037 /* KeyboardScanMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000036 /* KeyboardScanMapTests.swift */; };
 		D2000039 /* StreamProtocolConstantsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000038 /* StreamProtocolConstantsTests.swift */; };
+		D5CD78BE12E450A9FDBE6424 /* FuzzTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 064F5F39A59E54E022FEE74E /* FuzzTests.swift */; };
 		D96F6019901B5705F1040F52 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 505E37FB63C22AC476506587 /* Foundation.framework */; };
 		F5951726E170AD3E1F645B80 /* HostStatusPoller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447FF92C9458E21549E4965D /* HostStatusPoller.swift */; };
 		FB153DF267467B06C6BE3467 /* MacSystemStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */; };
@@ -220,6 +221,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		064F5F39A59E54E022FEE74E /* FuzzTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FuzzTests.swift; sourceTree = "<group>"; };
 		1A6B7F5AA2DBCDB1B8D9A413 /* HostsStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostsStore.swift; sourceTree = "<group>"; };
 		2C2C61CA646A8599B4EC06C5 /* AWDLHelperManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AWDLHelperManager.swift; sourceTree = "<group>"; };
 		398ABCA94CDDF4D5B2770B8F /* KeyboardScanMap.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KeyboardScanMap.swift; path = Stream/KeyboardScanMap.swift; sourceTree = "<group>"; };
@@ -677,6 +679,7 @@
 				D2000034 /* ParserHelperTests.swift */,
 				D2000036 /* KeyboardScanMapTests.swift */,
 				D2000038 /* StreamProtocolConstantsTests.swift */,
+				064F5F39A59E54E022FEE74E /* FuzzTests.swift */,
 			);
 			name = GlimmerTests;
 			path = GlimmerTests;
@@ -991,6 +994,7 @@
 				D2000035 /* ParserHelperTests.swift in Sources */,
 				D2000037 /* KeyboardScanMapTests.swift in Sources */,
 				D2000039 /* StreamProtocolConstantsTests.swift in Sources */,
+				D5CD78BE12E450A9FDBE6424 /* FuzzTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
