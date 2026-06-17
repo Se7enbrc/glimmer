@@ -6,6 +6,8 @@ import AppKit
 struct MainWindow: View {
     @Environment(MoonlightManager.self) private var moonlight
     @Environment(\.openSettings) private var openSettings
+    @State private var showAWDLPrompt = false
+    @State private var awdlPromptChecked = false
 
     var body: some View {
         @Bindable var moonlight = moonlight
@@ -24,6 +26,23 @@ struct MainWindow: View {
             Button("Cancel", role: .cancel) { moonlight.declineRawHIDPrompt() }
         } message: {
             Text(MoonlightManager.rawHIDExplanation)
+        }
+        // One-time launch nudge to enable Wi-Fi stutter protection. Only for
+        // users who've paired a PC (skips first-run onboarding), never while the
+        // rawHID prompt is up; "Don't ask again" inside silences it for good.
+        .sheet(isPresented: $showAWDLPrompt) {
+            AWDLEnablePrompt(manager: AWDLHelperManager.shared)
+        }
+        .task {
+            guard !awdlPromptChecked else { return }
+            awdlPromptChecked = true
+            guard !moonlight.hosts.isEmpty,
+                  !moonlight.showRawHIDPrompt,
+                  AWDLHelperManager.shared.shouldPromptToEnable else { return }
+            try? await Task.sleep(for: .seconds(0.8))
+            if AWDLHelperManager.shared.shouldPromptToEnable, !moonlight.showRawHIDPrompt {
+                showAWDLPrompt = true
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {

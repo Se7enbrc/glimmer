@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import ServiceManagement
+import SwiftUI
 import os.log
 
 // App-side integration for the privileged AWDL network helper (helper/, a root
@@ -206,5 +207,59 @@ final class AWDLHelperManager: ObservableObject {
             _ = await client.setAWDLDown(false, reason: "stream-end")
             self.suppressing = false
         }
+    }
+}
+
+// MARK: - Launch-time enable prompt
+
+/// One-time nudge to turn on Wi-Fi stutter protection, shown on launch while the
+/// helper isn't enabled and the user hasn't opted out. "Don't ask again" and
+/// "Enable" are orthogonal — you can enable and still silence future asks, or
+/// dismiss for good without enabling.
+struct AWDLEnablePrompt: View {
+    @ObservedObject var manager: AWDLHelperManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var dontAskAgain = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: "wifi")
+                    .font(.system(size: 34))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Smooth out Wi-Fi stutter").font(.headline)
+                    Text("Recommended for wireless streaming")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            Text("AirDrop and Continuity share your Mac's Wi-Fi radio. While you stream they "
+                + "can grab the channel and cause multi-second freezes. Glimmer can park that "
+                + "radio for the length of each stream and restore it the instant you stop.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Installs a small helper that needs a one-time approval in System Settings.")
+                .font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Toggle("Don't ask again", isOn: $dontAskAgain)
+                .toggleStyle(.checkbox)
+            HStack {
+                Spacer()
+                Button("Not Now") {
+                    if dontAskAgain { manager.promptSuppressed = true }
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("Enable") {
+                    if dontAskAgain { manager.promptSuppressed = true }
+                    manager.enable()
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 430)
     }
 }
