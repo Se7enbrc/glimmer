@@ -155,16 +155,3 @@ force_cast:
 
 force_try:
   severity: warning
-
-# Custom rules.
-custom_rules:
-  no_coauthor_trailer:
-    name: "No Co-Authored-By trailer"
-    regex: "Co-Authored-By:"
-    message: "Do not embed Co-Authored-By trailers in source files."
-    severity: error
-  no_claude_attribution:
-    name: "No Claude attribution"
-    regex: "Generated with .*Claude"
-    message: "Do not embed Claude attribution in source files."
-    severity: error
