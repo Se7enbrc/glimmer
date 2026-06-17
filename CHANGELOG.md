@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.6.14 - 2026-06-17
+
+The AWDL helper now logs each time macOS re-raises `awdl0` mid-stream and it
+re-suppresses - recent macOS auto-enables `awdl0` for AirDrop/Continuity even
+while it's parked, and each re-enable is a brief contention window that can
+hitch the stream. Logged at a level that persists, so a hitch can be checked
+against it. Helper-only; no app changes.
+
 ## 2026.6.13 - 2026-06-17
 
 `make dev` now runs the test suite before building, and releases go through a

@@ -21,6 +21,8 @@ final class AWDLSuppressor: @unchecked Sendable {
     private var _lastHeartbeat = Date()
     private let stateLock = NSLock()
     private var pollTimer: DispatchSourceTimer?
+    private var _initialDownDone = false
+    private var _reSuppressCount = 0
 
     var suppressing: Bool {
         stateLock.lock(); defer { stateLock.unlock() }
@@ -35,7 +37,7 @@ final class AWDLSuppressor: @unchecked Sendable {
     func start() {
         setupMonitoring()
         startPolling()
-        os_log("AWDL suppressor started", log: log, type: .info)
+        os_log("AWDL suppressor started", log: log, type: .default)
     }
 
     func setSuppressing(_ value: Bool, reason: String) {
@@ -43,21 +45,28 @@ final class AWDLSuppressor: @unchecked Sendable {
         let wasSuppressing = _suppressing
         _suppressing = value
         if value { _lastHeartbeat = Date() }
-        if value, _suppressionSince == nil { _suppressionSince = Date() }
+        if value, _suppressionSince == nil {
+            _suppressionSince = Date()
+            _initialDownDone = false
+            _reSuppressCount = 0
+        }
         if !value { _suppressionSince = nil }
         stateLock.unlock()
 
-        os_log("Set suppressing=%{public}@ (was %{public}@), reason=%{public}@",
-               log: log, type: .info,
-               value ? "true" : "false",
-               wasSuppressing ? "true" : "false",
-               reason)
+        // Log only the on/off TRANSITION - the client heartbeats setSuppressing(true)
+        // ~1/s, so logging every call would bury the signal. .default persists to disk.
+        if wasSuppressing != value {
+            os_log("suppression %{public}@ (reason: %{public}@)", log: log, type: .default,
+                   value ? "ON" : "OFF", reason)
+        }
+        // Mutate the interface on `queue` (shared with poll + the SCDynamicStore
+        // handler) so concurrent re-suppressions serialize and can't double-count.
         if value {
-            downIfUp()
+            queue.async { [weak self] in self?.downIfUp() }
         } else {
             // Restore awdl0 - just clearing the flag leaves it down until macOS
             // re-raises it, breaking AirDrop/Continuity meanwhile.
-            upIfDown()
+            queue.async { [weak self] in self?.upIfDown() }
         }
     }
 
@@ -85,7 +94,22 @@ final class AWDLSuppressor: @unchecked Sendable {
             os_log("Failed to bring %{public}@ down", log: log, type: .error, interfaceName)
             return
         }
-        os_log("Brought %{public}@ down", log: log, type: .info, interfaceName)
+        stateLock.lock()
+        let initial = !_initialDownDone
+        _initialDownDone = true
+        if !initial { _reSuppressCount += 1 }
+        let count = _reSuppressCount
+        stateLock.unlock()
+        if initial {
+            os_log("%{public}@ forced down - suppressing", log: log, type: .default, interfaceName)
+        } else {
+            // macOS re-raised awdl0 on its own: recent macOS auto-enables it for
+            // AirDrop/Continuity even while we hold it down. Each re-enable is a brief
+            // AWDL-contention window that can hitch a stream; logged at .default so it
+            // persists in `log show` for exactly this diagnosis.
+            os_log("%{public}@ re-enabled by macOS (#%ld this stream) - re-suppressed",
+                   log: log, type: .default, interfaceName, count)
+        }
     }
 
     /// Restore awdl0 to its normal (up) state once suppression ends - mirror of
@@ -96,7 +120,7 @@ final class AWDLSuppressor: @unchecked Sendable {
             os_log("Failed to bring %{public}@ up", log: log, type: .error, interfaceName)
             return
         }
-        os_log("Brought %{public}@ up", log: log, type: .info, interfaceName)
+        os_log("%{public}@ restored (up) - suppression ended", log: log, type: .default, interfaceName)
     }
 
     // MARK: Heartbeat poll - state-driven safety net
@@ -119,11 +143,11 @@ final class AWDLSuppressor: @unchecked Sendable {
         stateLock.unlock()
         if suppressing {
             if idle > 3 {
-                os_log("heartbeat stale %.1fs - releasing awdl0", log: log, type: .info, idle)
+                os_log("heartbeat stale %.1fs - releasing awdl0", log: log, type: .default, idle)
                 setSuppressing(false, reason: "heartbeat-timeout")
             }
         } else if idle > 8 {
-            os_log("idle %.0fs - exiting for a clean reload", log: log, type: .info, idle)
+            os_log("idle %.0fs - exiting for a clean reload", log: log, type: .default, idle)
             exit(0)
         }
     }
