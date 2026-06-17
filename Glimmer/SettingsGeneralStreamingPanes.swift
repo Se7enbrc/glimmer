@@ -102,6 +102,10 @@ struct GeneralPane: View {
     /// with a toggle that silently does nothing at the next reboot.
     @State private var loginItemNeedsApproval = false
 
+    /// The privileged AWDL network helper (parks awdl0 during streams). Shared
+    /// singleton so this toggle and the stream lifecycle drive one instance.
+    @ObservedObject private var awdl = AWDLHelperManager.shared
+
     /// Defer the SMAppService register/unregister off the SwiftUI `.onChange`
     /// transaction - running it inline (synchronous, XPC-backed) mid-update
     /// dismissed the Settings window. The @AppStorage write still happens
@@ -110,6 +114,15 @@ struct GeneralPane: View {
         DispatchQueue.main.async {
             let status = LoginItemManager.apply(launchAtLogin: launchAtLogin, minimized: minimized)
             loginItemNeedsApproval = (status == .requiresApproval)
+        }
+    }
+
+    /// Defer the helper register/unregister off the SwiftUI transaction - same
+    /// reason as the login item: an inline XPC-backed SMAppService call mid-
+    /// update dismisses the Settings window.
+    private func scheduleHelperToggle(_ enable: Bool) {
+        Task { @MainActor in
+            if enable { AWDLHelperManager.shared.enable() } else { AWDLHelperManager.shared.disable() }
         }
     }
 
@@ -165,6 +178,32 @@ struct GeneralPane: View {
                 }
                 Toggle("Silence this Mac while streaming (when sound plays on the gaming PC)", isOn: $moonlight.muteMacWhileStreaming)
             }
+            Section("Network") {
+                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
+                        Text("Parks AirDrop's radio (AWDL) for the length of a stream so it can't "
+                            + "grab the Wi-Fi channel and cause multi-second freezes. Restored the "
+                            + "instant you stop. Installs a small helper that needs a one-time approval.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .help("Holds awdl0 down for the duration of each stream via a privileged helper.")
+                if case .requiresApproval = awdl.state {
+                    HStack(spacing: 8) {
+                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Login Items") { awdl.openSystemSettings() }
+                    }
+                }
+                if case .unavailable(let why) = awdl.state {
+                    Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
+                        .font(.footnote).foregroundStyle(.red)
+                }
+            }
             Section("Default action") {
                 // Picker sourced from the selected host's announced app
                 // list (Sunshine's `applist`). "Desktop" is always
@@ -183,6 +222,7 @@ struct GeneralPane: View {
         }
         .formStyle(.grouped)
         .onAppear {
+            awdl.refresh()
             guard launchAtLogin else { loginItemNeedsApproval = false; return }
             let service = launchMinimized
                 ? SMAppService.loginItem(identifier: LoginItemManager.helperBundleID)

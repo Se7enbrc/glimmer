@@ -206,6 +206,11 @@ extension MoonlightManager {
         // lives in the single teardown cleanup site below, gated on
         // `wasStreaming` so it only stamps real sessions.
         isStreaming = true
+        // Park awdl0 for the life of the stream (a no-op unless the user enabled
+        // the network helper). AWDL contention on a single-radio Mac causes the
+        // multi-second Wi-Fi delivery gaps; the helper holds awdl0 down until
+        // cleanupAfterStream releases it on every exit path.
+        AWDLHelperManager.shared.suppressForStream()
         // Cancel the chip poller while the stream is up - the native
         // engine reports its own RTT to the stats overlay, and polling
         // /serverinfo concurrently with the RTSP handshake confuses both
@@ -342,6 +347,10 @@ extension MoonlightManager {
         let wasStreaming = self.isStreaming
         self.streamPhase = .idle
         self.isStreaming = false
+        // Restore awdl0 (AirDrop/Continuity) now the stream is down - covers the
+        // clean-stop, error, and user-cancel paths since this is the single
+        // teardown site. No-op if the helper was never engaged.
+        AWDLHelperManager.shared.releaseForStream()
         self.nativeStreamBackgrounded = false
         self.nativeSession = nil
         // Disconnect beat (#3) - surface the "Stream ended" toast on
