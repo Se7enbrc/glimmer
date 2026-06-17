@@ -93,6 +93,12 @@
 	<array>
 		<string>io.ugfugl.Glimmer-spks</string>
 		<string>io.ugfugl.Glimmer-spki</string>
+		<!-- The privileged AWDL network helper (root LaunchDaemon registered via
+		     SMAppService.daemon). The sandboxed app drives it over this global Mach
+		     service with NSXPCConnection(..., options: .privileged); without this
+		     exception the sandbox blocks the lookup. Written literally (codesign does
+		     not expand variables in entitlements). MAS-STRIP. -->
+		<string>io.ugfugl.glimmer.helper</string>
 	</array>
 
 	<!-- moonlight-qt's preference domain for one-shot migration of hosts +

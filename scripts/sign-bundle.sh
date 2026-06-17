@@ -63,6 +63,12 @@ if [ -d "$HELPER" ]; then
 	fi
 fi
 
+DAEMON="$APP/Contents/MacOS/io.ugfugl.glimmer.helper"
+if [ -f "$DAEMON" ]; then
+	echo "Signing the AWDL network helper (root LaunchDaemon, hardened runtime, no entitlements)"
+	codesign --force --options runtime $TS $KCF --sign "$ID" --identifier "io.ugfugl.glimmer.helper" "$DAEMON"
+fi
+
 echo "Signing the app bundle (Glimmer entitlements, no --deep)"
 codesign --force --options runtime $TS $KCF --sign "$ID" --entitlements "$ENT" "$APP"
 

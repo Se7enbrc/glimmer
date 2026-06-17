@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.ugfugl.glimmer.helper</string>
+    <!-- Path within Glimmer.app to the daemon binary (SMAppService.daemon convention). -->
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/io.ugfugl.glimmer.helper</string>
+    <key>MachServices</key>
+    <dict>
+        <key>io.ugfugl.glimmer.helper</key>
+        <true/>
+    </dict>
+    <!-- Groups the daemon under the app in System Settings > Login Items & Extensions. -->
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>io.ugfugl.Glimmer</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

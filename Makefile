@@ -84,7 +84,23 @@ RELEASES_REPO   ?= Se7enbrc/glimmer
 SPARKLE_VERSION ?= 2.9.3
 export SPARKLE_VERSION
 
+# --- Privileged AWDL network helper (root LaunchDaemon) ---------------------
+# A tiny daemon that parks awdl0 (the AirDrop/Continuity radio) while streaming,
+# to kill the multi-second Wi-Fi delivery gaps AWDL contention causes. Built
+# with swiftc (no Xcode target - it's 4 system-framework-only files) and
+# embedded: binary at Contents/MacOS/, launchd plist at
+# Contents/Library/LaunchDaemons/, where SMAppService.daemon loads it. Signed
+# inside-out (its own block in scripts/sign-bundle.sh, hardened runtime, no
+# entitlements) before the app's outer seal.
+HELPER_LABEL  := io.ugfugl.glimmer.helper
+HELPER_SRCS   := helper/Protocol.swift helper/AWDLSuppressor.swift helper/HelperService.swift helper/main.swift
+HELPER_PLIST  := helper/$(HELPER_LABEL).plist
+HELPER_BIN    := $(DERIVED)/$(HELPER_LABEL)
+HELPER_SDK    := $(shell xcrun --sdk macosx --show-sdk-path)
+HELPER_TARGET := arm64-apple-macos26.0
+
 .PHONY: all release install reinstall uninstall clean app sign embed open \
+        helper-build embed-helper \
         profile profile-signposts setup-notary notarize dmg dist preflight \
         codesign-setup codesign-teardown ensure-signing dev test \
         creds-init enable-telem disable-telem release-publish sparkle-keys
@@ -165,7 +181,26 @@ ensure-signing:
 # device.usb / moonlight exceptions onto the Sparkle downloader, which breaks the
 # sandboxed installer XPC), and Apple deprecated it for distribution. The helper
 # signs each nested component preserving its own entitlements, the app last.
-sign: app ensure-signing
+# Build the AWDL helper daemon with swiftc (system frameworks only - no openssl/
+# opus, so it doesn't need the StreamLib xcconfig). Output lives under build/.
+$(HELPER_BIN): $(HELPER_SRCS)
+	@echo "▶ Building AWDL helper (swiftc, $(HELPER_TARGET))..."
+	@mkdir -p $(DERIVED)
+	xcrun swiftc -O -target $(HELPER_TARGET) -sdk "$(HELPER_SDK)" -o "$(HELPER_BIN)" $(HELPER_SRCS)
+
+helper-build: $(HELPER_BIN)
+
+# Embed the daemon binary + its launchd plist into the freshly-built app bundle.
+# Runs after `app` (which created the bundle) and before `sign` (which signs the
+# daemon inside-out). install(1) overwrites cleanly on every rebuild.
+embed-helper: app $(HELPER_BIN)
+	@echo "▶ Embedding AWDL helper into the app bundle..."
+	@install -m 0755 "$(HELPER_BIN)" "$(GLIMMER_APP_SRC)/Contents/MacOS/$(HELPER_LABEL)"
+	@mkdir -p "$(GLIMMER_APP_SRC)/Contents/Library/LaunchDaemons"
+	@install -m 0644 "$(HELPER_PLIST)" "$(GLIMMER_APP_SRC)/Contents/Library/LaunchDaemons/$(HELPER_LABEL).plist"
+	@echo "  ✓ helper embedded (Contents/MacOS + Contents/Library/LaunchDaemons)"
+
+sign: app embed-helper ensure-signing
 ifeq ($(strip $(DEVELOPER_ID)),)
 	@echo "▶ Adhoc-signing bundle inside-out (no Developer ID cert found)..."
 	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "-" "" Glimmer/Glimmer.entitlements
