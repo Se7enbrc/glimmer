@@ -6,7 +6,8 @@
 # adhoc/Debug divergence to chase:
 #   make                   Build (Release: Dev-ID + notarized) + install to
 #                          /Applications. Falls back to adhoc Release w/o a cert.
-#   make dev / reinstall   Same as `make`, plus quit + relaunch. The inner loop.
+#   make dev               Run tests, then build + install + relaunch. Inner loop.
+#   make reinstall         Build + install + quit-and-relaunch (no tests).
 #   make install           Build + install, no relaunch (same as bare `make`).
 #   make open              Build + install + open.
 #   make release           Build the notarized Release app only (no install).
@@ -272,11 +273,11 @@ reinstall: install
 	@COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
 	echo "  ✓ now running build $$COMMIT"
 
-# `make dev` == `make reinstall`: everything-but-publish (notarized Release),
-# installed, and relaunched. Kept as a name out of muscle memory; the pipeline
-# itself lives in `all` (build/sign/embed/notarize) + `install` (stage) + the
-# quit/relaunch below.
-dev: reinstall
+# `make dev` is the inner loop: run the unit tests, THEN build + install +
+# relaunch the notarized Release build. Tests run first so a failure skips the
+# slow notarize. (Pipeline: `all` build/sign/embed/notarize + `install` stage +
+# `reinstall` quit/relaunch.)
+dev: test reinstall
 
 uninstall:
 	@echo "▶ Uninstalling Glimmer..."

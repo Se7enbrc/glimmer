@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.6.13 - 2026-06-17
+
+`make dev` now runs the test suite before building, and releases go through a
+PR. Dev-workflow only; no app changes.
+
 ## 2026.6.12 - 2026-06-17
 
 Docs only - trimmed the release runbook. No app changes.
