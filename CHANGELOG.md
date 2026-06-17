@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026.6.11 - 2026-06-17
+
+Smooths out Wi-Fi freezes during a stream, and moves Glimmer to an unsandboxed
+app to make that possible.
+
+### Streaming
+
+- **Wi-Fi-stutter helper.** AirDrop / Continuity share the Mac's Wi-Fi radio
+  (AWDL) and can grab the channel mid-stream, causing multi-second freezes.
+  Glimmer now suppresses `awdl0` for the life of a stream and restores it when
+  you stop. Stream-scoped: it only parks the radio while you're actually
+  streaming. The suppression runs through a privileged `SMAppService` daemon;
+  enable it with a toggle in **Settings > General > Network**, and approve the
+  one-time launch prompt macOS shows the first time.
+
+### Internal
+
+- **Glimmer is now an unsandboxed app.** Required to install and run the root
+  AWDL helper (a sandboxed app cannot register a system daemon). Identity and
+  pinned-cert files migrate from the old sandbox container to
+  `~/Library/Application Support/Glimmer/` on first launch; no re-pairing. See
+  [docs/SECURITY.md](docs/SECURITY.md) for the full rationale and the
+  compensating controls.
+
 ## 2026.6.10 - 2026-06-16
 
 Hygiene. Adds an automated unit-test suite (120 tests across the wire codecs,

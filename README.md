@@ -13,10 +13,31 @@ runtime, no external player. (The transport was ported from
 - 10-bit HDR pipeline: BT.2020 NCL YUV→RGB, ITU-R BT.2100 PQ/HLG color space,
   EDR metadata from the host's HDR-mode control message.
 - PIN pairing, mDNS discovery (`_nvstream._tcp`, `_nvstream-tcp._tcp`),
-  self-signed client identity stored as mode-0600 files inside the app's sandbox
-  container (see [docs/SECURITY.md](docs/SECURITY.md) for why not the keychain).
+  self-signed client identity stored as mode-0600 files under
+  `~/Library/Application Support/Glimmer/` (see
+  [docs/SECURITY.md](docs/SECURITY.md) for why not the keychain).
 - Configurable in-stream quit hotkey, quality presets (Smooth / Match my display
   / Maximum / Custom), menu-bar item.
+
+## Wi-Fi stutter helper
+
+AirDrop and Continuity share the Mac's Wi-Fi radio (AWDL). During a stream they
+can grab the channel out from under you and cause multi-second freezes. Glimmer
+ships an optional helper that parks `awdl0` for the life of a stream and
+restores it the moment you stop.
+
+Enable it in **Settings > General > Network** ("Smooth out Wi-Fi stutter while
+streaming"). Because the helper runs as a privileged background service, macOS
+requires a one-time approval in **System Settings > General > Login Items &
+Extensions** the first time you turn it on.
+
+**Troubleshooting.** If it ever reports `operation not permitted` or
+`rejected by BTM` (can happen after many reinstalls), reset the Background Task
+Management database once and re-enable:
+
+```bash
+sudo sfltool resetbtm
+```
 
 ## Requirements
 
@@ -34,6 +55,10 @@ Homebrew with `openssl@3` and `opus`.
 Grab the latest notarized `.dmg` from the
 [Releases](https://github.com/Se7enbrc/glimmer/releases) page and drag Glimmer
 to Applications. From then on it updates itself (Sparkle).
+
+Glimmer is a Developer-ID-signed, notarized, **unsandboxed** app - it is not on
+the Mac App Store. (The unsandboxed posture is what lets it run the Wi-Fi
+stutter helper; see [docs/SECURITY.md](docs/SECURITY.md).)
 
 ### Homebrew
 

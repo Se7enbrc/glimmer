@@ -12,8 +12,9 @@ About, or
 
 Public disclosure on GitHub Issues is acceptable for non-exploitable bugs (UI
 glitches, build failures, etc.). Anything involving the client identity, the
-pairing handshake, host-cert pinning, the stream-transport parsers, or the
-sandbox / Hardened Runtime posture should go through a private advisory first.
+pairing handshake, host-cert pinning, the stream-transport parsers, the
+privileged AWDL helper, or the Hardened Runtime posture should go through a
+private advisory first.
 
 ## Threat model
 
@@ -33,11 +34,13 @@ is sized to that.
   first contact is HTTP, which is acceptable because there's nothing to MITM yet
   - the pin is established by an out-of-band PIN the user types into the host's
     UI, which is what authenticates the cert we then pin.
-- **Same-UID malware on the Mac** - partially defended. The App Sandbox +
-  Hardened Runtime (enabled) means another app under the same user UID cannot
-  read Glimmer's container by default. A TCC-allowlisted attacker with Full Disk
-  Access still wins; that's an OS-level boundary, not a Glimmer-specific
-  defence.
+- **Same-UID malware on the Mac** - partially defended. Glimmer is unsandboxed
+  (see Runtime hardening below for why), so the identity and pinned-cert files
+  live in the home directory at mode 0600 / parent dir 0700 rather than inside a
+  sandbox container. Another app under the same UID cannot read them by default
+  POSIX permissions, but the container boundary is gone; a TCC-allowlisted
+  attacker with Full Disk Access still wins, as it did before - that's an
+  OS-level boundary, not a Glimmer-specific defence.
 - **Hostile host** - a host that has somehow been compromised cannot escalate
   beyond producing bad video / audio / input echoes. The pinned-cert pairing
   limits a hostile host to one the user has explicitly trusted out-of-band.
@@ -74,14 +77,14 @@ client identifier; moonlight-qt uses the same).
 - `client-key.pem` - RSA private key in PEM (PKCS#8 unencrypted)
 - `client-uniqueid.txt` - 32-hex-char client unique ID
 
-Post-sandbox (current state):
-`~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`.
+Current state (unsandboxed): `~/Library/Application Support/Glimmer/Identity/`.
 
-Pre-sandbox (legacy): `~/Library/Application Support/Glimmer/Identity/`.
-Migration is **not** automatic - the sandboxed container cannot read the legacy
-path, and adding a temporary-exception read would expand the path-traversal
-surface for a same-UID attacker. Users on a pre-sandbox build re-pair each host
-once after upgrading. 30-second task per host.
+Legacy (sandboxed builds):
+`~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`.
+A one-time container -> home migration runs on first launch of an unsandboxed
+build: now that the app can read its old container, the existing identity (and
+pinned hosts) move to the home path with mode 0600 preserved. Existing installs
+keep their paired hosts; no re-pairing.
 
 `FileIdentityStore.write` (`Identity.swift`):
 
@@ -108,22 +111,22 @@ keychain once builds became Developer ID signed, and stayed on files:
   streaming identity, and the project already tried it once and retreated.
 - The reference implementation (**moonlight-qt**) stores the same RSA key as
   **plaintext PEM in a mode-0644 QSettings plist** under
-  `~/Library/Preferences`, no keychain at all. Glimmer's mode-0600 files inside
-  the App Sandbox container are already stricter: the sandbox blocks other
-  same-UID apps from the container, and 0600 beats 0644.
+  `~/Library/Preferences`, no keychain at all. Glimmer's mode-0600 home files
+  are already stricter: only the owning UID can read them, and 0600 beats 0644.
 
 The one residual exposure is a Full-Disk-Access same-UID process reading the key
 
-- a narrow threat the sandbox already blocks for ordinary apps, and one the
-  reference implementation doesn't address either.
+- a narrow OS-level threat, and one the reference implementation doesn't address
+  either.
 
 **One-shot moonlight-qt migration.** On first launch, Glimmer reads the
 `com.moonlight-stream.Moonlight` and `com.moonlight-stream.moonlight-qt`
-preference domains (via the sandbox temporary-exception entitlement). If a
-moonlight-qt install left a client identity + paired-host list, we adopt it so
-the user doesn't have to re-pair. After successful migration the PEM material in
-the foreign plist is wiped (it sat in a world-readable plist before -
-moonlight-qt's storage is not 0600). Idempotent; dormant after the first run.
+preference domains (no sandbox entitlement needed now that the app is
+unsandboxed). If a moonlight-qt install left a client identity + paired-host
+list, we adopt it so the user doesn't have to re-pair. After successful
+migration the PEM material in the foreign plist is wiped (it sat in a
+world-readable plist before - moonlight-qt's storage is not 0600). Idempotent;
+dormant after the first run.
 
 ## Pairing
 
@@ -172,14 +175,13 @@ retry.
 ## Pinning
 
 Host certs are pinned **after** successful pairing. The pin lives in a mode-0600
-file under the sandbox container at
-`~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/PinnedHosts/<hostUUID>.pem`
+file at `~/Library/Application Support/Glimmer/PinnedHosts/<hostUUID>.pem`
 (moved out of `UserDefaults` because `cfprefsd` is shared across same-UID
 processes - any other process running as the user could rewrite a pin through
 the preferences daemon). PEM, not raw `SecCertificate` - PEM survives keychain
 wipes, OS migrations, and Time Machine restores in a way the `SecCertificate`
-ref does not. The cert is public information; the threat addressed by
-mode-0600 + container isolation is _write_, not _read_.
+ref does not. The cert is public information; the threat addressed by mode-0600
+is _write_, not _read_.
 
 **Once pinned, ANY mismatch fails the connection.** The TLS delegate
 (`Network.swift:TLSDelegate.urlSession(_:didReceive:completionHandler:)`)
@@ -228,29 +230,57 @@ alternative is "the on-path attacker rotates the cert for them".
 
 ## Runtime hardening
 
-Enabled.
+**Glimmer runs UNSANDBOXED.** This is a deliberate trade, not an oversight.
 
-- **App Sandbox** (`com.apple.security.app-sandbox = true`): process
-  containment. Filesystem writes are confined to the container
-  (`~/Library/Containers/io.ugfugl.Glimmer/`); arbitrary IPC is blocked; reads
-  outside the container require user grants via NSOpenPanel.
-- **Hardened Runtime** (`ENABLE_HARDENED_RUNTIME = YES`): no JIT, strict library
+**Why no sandbox.** The Wi-Fi-stutter helper registers a root LaunchDaemon via
+`SMAppService.daemon`, and a sandboxed app cannot install or run a system
+daemon - the helper needs root to run `ifconfig awdl0 down`. The reference
+client (**moonlight-qt**) is likewise unsandboxed. The Mac App Store path was
+already closed independently: the app needs `com.apple.security.device.usb`
+(DualSense raw-HID adaptive triggers / haptics) and
+`com.apple.security.cs.disable-library-validation` (the embedded OpenSSL/Opus
+dylibs), both of which are hard MAS rejects. There was no
+sandboxed-and-shippable configuration to give up.
+
+**Compensating controls that remain:**
+
+- **Hardened Runtime** (`ENABLE_HARDENED_RUNTIME = YES`): no JIT, library
   validation, no library injection. Xcode emits a note that the runtime is
-  disabled under adhoc signing - that's expected for development; the setting
-  persists so Developer ID signed Release builds get the full enforcement.
+  disabled under adhoc signing - expected for development; the setting persists
+  so Developer ID signed Release builds get the full enforcement.
+- **Developer-ID signing + notarization + stapling.** Release builds are signed
+  with the team Developer ID, notarized by Apple, and the ticket is stapled to
+  the app and DMG.
+- **Minimal-attack-surface helper.** The root daemon exposes exactly one
+  operation over XPC: `setAWDLDown(true/false)`. It is not a
+  run-anything-as-root backdoor. It accepts a connection only from a caller
+  whose code signature satisfies
+  `identifier "io.ugfugl.Glimmer" and anchor apple generic and certificate leaf[subject.OU]="5T7M4RH3F8"`
+  - i.e. the genuinely-signed Glimmer app, not a process that merely claims the
+    bundle id.
+
+**The defense-in-depth the sandbox used to provide** was containment of a
+memory-safety exploit in the streaming-protocol parsers reachable from a
+malicious host. With the sandbox gone, that is addressed by hardening the
+parsers directly instead:
+
+- **Fuzz the parsing paths** - RTP / FEC / RTSP / ENet / crypto (a tracked
+  follow-up).
+- **Re-enable Hardened Runtime library validation** by signing the embedded
+  dylibs under the team id, then dropping `disable-library-validation`.
+
+Note this is a LAN client connecting to the **user's own host**, so that exploit
+path is low-likelihood to begin with.
 
 **Entitlements** (`Glimmer/Glimmer.entitlements`):
 
-| Key                                                | Value                                           | Why                                                                                               |
-| -------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `app-sandbox`                                      | true                                            | Process containment.                                                                              |
-| `network.client`                                   | true                                            | LAN connection to GameStream / Sunshine hosts.                                                    |
-| `network.server`                                   | true                                            | mDNS / Bonjour discovery (`_nvstream._tcp`).                                                      |
-| `files.user-selected.read-write`                   | true                                            | Future config-import flows via NSOpenPanel. No pre-grant.                                         |
-| `device.audio-input`                               | false                                           | Explicit no-mic posture.                                                                          |
-| `cs.disable-library-validation`                    | false                                           | Strict - system libs + the embedded OpenSSL/Opus dylibs (re-signed with the app's identity) only. |
-| `cs.allow-jit`                                     | false                                           | No JIT.                                                                                           |
-| `temporary-exception.shared-preference.read-write` | `com.moonlight-stream.{Moonlight,moonlight-qt}` | One-shot identity migration + post-migration PEM wipe.                                            |
+| Key                             | Value | Why                                                                      |
+| ------------------------------- | ----- | ------------------------------------------------------------------------ |
+| `app-sandbox`                   | false | Unsandboxed - required to install/run the root AWDL helper (see above).  |
+| `device.usb`                    | true  | DualSense raw-HID (adaptive triggers / haptics).                         |
+| `cs.disable-library-validation` | true  | Embedded OpenSSL/Opus dylibs; being retired once they're team-id-signed. |
+| `cs.allow-jit`                  | false | No JIT.                                                                  |
+| `device.audio-input`            | false | Explicit no-mic posture.                                                 |
 
 **NSWindow.sharingType** = `.none`. The stream window opts out of
 ScreenCaptureKit, `screencapture(1)`, and Cmd-Shift-5. Third-party recording /
