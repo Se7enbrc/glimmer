@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- DEBUG / adhoc builds ONLY. Identical to Glimmer.entitlements but KEEPS
+	     disable-library-validation: a Debug/adhoc build links the Homebrew
+	     openssl@3 / opus dylibs (a different Team ID, not embedded + Team-signed),
+	     which strict Hardened-Runtime library validation rejects. Release builds
+	     (Dev-ID, notarized, dylibs embedded + re-signed under our Team ID) use
+	     Glimmer.entitlements with validation ON. The Makefile picks the file by
+	     config; see docs/SECURITY.md. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+
+	<key>com.apple.security.cs.allow-jit</key>
+	<false/>
+</dict>
+</plist>

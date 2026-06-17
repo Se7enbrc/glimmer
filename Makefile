@@ -1,14 +1,16 @@
 # Glimmer - Mac-native game-streaming client.
 #
-# FAST ITERATION (the dev inner-loop - no publishing):
-#   make                   Build Glimmer.app (Debug).
-#   make dev               Build + install + relaunch, Developer-ID signed +
-#                          notarized (matches release). The loop.
-#   make reinstall         Build + install + quit-and-relaunch (guarantees the new
-#                          binary is the one actually running).
-#   make install           Build + copy Glimmer.app to /Applications.
+# EVERYTHING BUT PUBLISH (the dev tier - notarized Release, installed, NOT
+# published). Every build here is byte-for-byte what ships - same Developer-ID
+# signing, notarization, and STRICT library validation - so there's no
+# adhoc/Debug divergence to chase:
+#   make                   Build (Release: Dev-ID + notarized) + install to
+#                          /Applications. Falls back to adhoc Release w/o a cert.
+#   make dev / reinstall   Same as `make`, plus quit + relaunch. The inner loop.
+#   make install           Build + install, no relaunch (same as bare `make`).
 #   make open              Build + install + open.
-#   make release           Build the Release configuration (no install).
+#   make release           Build the notarized Release app only (no install).
+#   make app               Quick compile-only check (no signing / notarize).
 #   make test              Build + run the GlimmerTests unit-test bundle.
 #   make uninstall         Remove Glimmer.app.
 #   make clean             Remove build outputs.
@@ -105,10 +107,27 @@ HELPER_TARGET := arm64-apple-macos26.0
         codesign-setup codesign-teardown ensure-signing dev test \
         creds-init enable-telem disable-telem release-publish sparkle-keys
 
-all: app sign
+# TIER 1 - "everything but publish": the full release pipeline at Release
+# (xcodebuild -> inside-out sign -> embed + re-sign dylibs -> notarize -> staple),
+# stopping just short of cutting/uploading a DMG, then INSTALLED to /Applications.
+# EVERY build goes through this, so what you run is byte-for-byte what ships:
+# daemon registration, TCC, and STRICT library validation all behave identically
+# - none of the adhoc/Debug divergence that used to cause heisenbugs. `make` /
+# `make all` installs it (warning if an older copy is still running); `make dev`
+# / `make reinstall` additionally quit + relaunch. TIER 2 - "publish" - is
+# `make dist`. Quick compile-only check: `make app`.
+all: install
 
+# Build the notarized Release app (everything but publish) WITHOUT installing.
+# Falls back to adhoc Release (un-notarized; TCC re-prompts) without a Dev ID cert.
 release:
-	$(MAKE) CONFIG=Release all
+	@if [ -n "$(strip $(DEVELOPER_ID))" ]; then \
+		echo "  ▶ everything-but-publish: Developer ID + notarized (matches release)"; \
+		$(MAKE) CONFIG=Release notarize; \
+	else \
+		echo "  ▶ everything-but-publish: adhoc Release - no Developer ID cert (un-notarized; TCC re-prompts)"; \
+		$(MAKE) CONFIG=Release app embed; \
+	fi
 
 # Build + run the hostless GlimmerTests unit-test bundle (swift-testing).
 # Mirrors the app build invocation (same xcconfig + Homebrew prefixes +
@@ -200,13 +219,17 @@ embed-helper: app $(HELPER_BIN)
 	@install -m 0644 "$(HELPER_PLIST)" "$(GLIMMER_APP_SRC)/Contents/Library/LaunchDaemons/$(HELPER_LABEL).plist"
 	@echo "  ✓ helper embedded (Contents/MacOS + Contents/Library/LaunchDaemons)"
 
+# Strict library validation (Glimmer.entitlements) needs the Homebrew dylibs
+# embedded + re-signed under our Team ID, which only the Release/Dev-ID path does
+# (embed-dylibs). Debug and any adhoc build link the Homebrew copies as-is, so
+# they get Glimmer-Debug.entitlements (disable-library-validation). See SECURITY.md.
 sign: app embed-helper ensure-signing
 ifeq ($(strip $(DEVELOPER_ID)),)
 	@echo "▶ Adhoc-signing bundle inside-out (no Developer ID cert found)..."
-	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "-" "" Glimmer/Glimmer.entitlements
+	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "-" "" Glimmer/Glimmer-Debug.entitlements
 else
 	@echo "▶ Signing bundle inside-out with: $(DEVELOPER_ID)"
-	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "$(DEVELOPER_ID)" "$(SIGN_KEYCHAIN)" Glimmer/Glimmer.entitlements
+	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "$(DEVELOPER_ID)" "$(SIGN_KEYCHAIN)" $(if $(filter Release,$(CONFIG)),Glimmer/Glimmer.entitlements,Glimmer/Glimmer-Debug.entitlements)
 endif
 
 # Embed + re-sign the Homebrew dylibs. Done AFTER `sign` because embedding
@@ -215,19 +238,18 @@ endif
 embed: sign
 	scripts/embed-dylibs.sh "$(GLIMMER_APP_SRC)" "$(if $(strip $(DEVELOPER_ID)),$(DEVELOPER_ID),-)" "$(if $(strip $(DEVELOPER_ID)),$(SIGN_KEYCHAIN),)"
 
-install: all
-	@echo "▶ Installing Glimmer.app to $(GLIMMER_APP_DST)..."
-	@if [ -d "$(GLIMMER_APP_DST)" ]; then \
-		echo "  removing existing $(GLIMMER_APP_DST)"; \
-		rm -rf "$(GLIMMER_APP_DST)"; \
-	fi
-	cp -R "$(GLIMMER_APP_SRC)" "$(GLIMMER_APP_DST)"
-	@COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
+# Install the everything-but-publish build (see `release`) to /Applications.
+# `reinstall`/`open`/`dev` build on this.
+install: release
+	@SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
+	echo "▶ Installing Glimmer.app to $(GLIMMER_APP_DST)..."; \
+	if [ -d "$(GLIMMER_APP_DST)" ]; then echo "  removing existing $(GLIMMER_APP_DST)"; rm -rf "$(GLIMMER_APP_DST)"; fi; \
+	cp -R "$$SRC" "$(GLIMMER_APP_DST)"; \
+	COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
 	echo "  ✓ installed build $$COMMIT"; \
 	if pgrep -x Glimmer >/dev/null 2>&1; then \
 		echo "  ⚠ Glimmer is RUNNING an older build - it will NOT load $$COMMIT until you"; \
-		echo "    fully QUIT (⌘Q) and relaunch. Starting a new STREAM does not reload the"; \
-		echo "    binary. Run 'make reinstall' to quit + relaunch automatically."; \
+		echo "    fully QUIT (⌘Q) and relaunch. Run 'make reinstall' to do it automatically."; \
 	fi
 
 open: install
@@ -250,26 +272,11 @@ reinstall: install
 	@COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
 	echo "  ✓ now running build $$COMMIT"
 
-# Dev inner-loop. Developer-ID signed AND notarized (same path as `make dist`),
-# so a dev build matches a release bar the version bump + publish: stable TCC
-# grants, and SMAppService daemon registration behaves identically. Falls back to
-# ad-hoc + no-notarize without a Developer ID cert. Use `make reinstall` (Debug)
-# for fast iteration that doesn't touch the helper/TCC.
-dev:
-	@if [ -n "$(strip $(DEVELOPER_ID))" ]; then \
-		echo "  ▶ dev build: Developer ID + notarized (matches release)"; \
-		$(MAKE) CONFIG=Release notarize; \
-	else \
-		echo "  ▶ dev build ad-hoc - no Developer ID cert (un-notarized; TCC re-prompts)"; \
-		$(MAKE) CONFIG=Release app embed; \
-	fi
-	@SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
-	osascript -e 'tell application "Glimmer" to quit' >/dev/null 2>&1 || true; \
-	n=0; while pgrep -x Glimmer >/dev/null && [ $$n -lt 5 ]; do sleep 1; n=$$((n+1)); done; \
-	pkill -x Glimmer 2>/dev/null || true; sleep 1; \
-	rm -rf "$(GLIMMER_APP_DST)"; cp -R "$$SRC" "$(GLIMMER_APP_DST)"; \
-	echo "  ✓ dev build installed to $(GLIMMER_APP_DST)"; \
-	open -a "$(GLIMMER_APP_DST)"
+# `make dev` == `make reinstall`: everything-but-publish (notarized Release),
+# installed, and relaunched. Kept as a name out of muscle memory; the pipeline
+# itself lives in `all` (build/sign/embed/notarize) + `install` (stage) + the
+# quit/relaunch below.
+dev: reinstall
 
 uninstall:
 	@echo "▶ Uninstalling Glimmer..."

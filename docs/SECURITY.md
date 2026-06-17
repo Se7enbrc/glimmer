@@ -236,11 +236,11 @@ alternative is "the on-path attacker rotates the cert for them".
 `SMAppService.daemon`, and a sandboxed app cannot install or run a system
 daemon - the helper needs root to run `ifconfig awdl0 down`. The reference
 client (**moonlight-qt**) is likewise unsandboxed. The Mac App Store path was
-already closed independently: the app needs `com.apple.security.device.usb`
-(DualSense raw-HID adaptive triggers / haptics) and
-`com.apple.security.cs.disable-library-validation` (the embedded OpenSSL/Opus
-dylibs), both of which are hard MAS rejects. There was no
-sandboxed-and-shippable configuration to give up.
+already closed independently: the root `SMAppService` daemon cannot be shipped
+sandboxed at all, and a sandboxed build would also need
+`com.apple.security.device.usb` (DualSense raw-HID adaptive triggers / haptics),
+a hard MAS reject. There was no sandboxed-and-shippable configuration to give
+up.
 
 **Compensating controls that remain:**
 
@@ -264,23 +264,33 @@ memory-safety exploit in the streaming-protocol parsers reachable from a
 malicious host. With the sandbox gone, that is addressed by hardening the
 parsers directly instead:
 
-- **Fuzz the parsing paths** - RTP / FEC / RTSP / ENet / crypto (a tracked
-  follow-up).
-- **Re-enable Hardened Runtime library validation** by signing the embedded
-  dylibs under the team id, then dropping `disable-library-validation`.
+- **Fuzz the host-reachable parsers** - a deterministic swift-testing suite
+  (`GlimmerTests/FuzzTests.swift`) hammers Annex-B / RTP / FEC / RTSP / ENet /
+  AES-GCM with random + mutated-valid input, asserting they reject rather than
+  trap. It found and fixed an out-of-bounds read in the Reed-Solomon FEC
+  decoders (a shard shorter than the block size).
+- **Hardened Runtime library validation is ON for Release.** The embedded
+  OpenSSL/Opus dylibs are re-signed under the team id at build time, so the
+  Release entitlements drop `disable-library-validation`. Adhoc / Debug builds
+  link the Homebrew dylibs as-is and keep it via `Glimmer-Debug.entitlements` -
+  an adhoc binary has no team id for validation to match.
 
 Note this is a LAN client connecting to the **user's own host**, so that exploit
 path is low-likelihood to begin with.
 
-**Entitlements** (`Glimmer/Glimmer.entitlements`):
+**Entitlements** (`Glimmer/Glimmer.entitlements`, Release):
 
-| Key                             | Value | Why                                                                      |
-| ------------------------------- | ----- | ------------------------------------------------------------------------ |
-| `app-sandbox`                   | false | Unsandboxed - required to install/run the root AWDL helper (see above).  |
-| `device.usb`                    | true  | DualSense raw-HID (adaptive triggers / haptics).                         |
-| `cs.disable-library-validation` | true  | Embedded OpenSSL/Opus dylibs; being retired once they're team-id-signed. |
-| `cs.allow-jit`                  | false | No JIT.                                                                  |
-| `device.audio-input`            | false | Explicit no-mic posture.                                                 |
+| Key            | Value | Why                                                                     |
+| -------------- | ----- | ----------------------------------------------------------------------- |
+| `app-sandbox`  | false | Unsandboxed - required to install/run the root AWDL helper (see above). |
+| `cs.allow-jit` | false | No JIT.                                                                 |
+
+Unsandboxed builds carry no `device.*` exceptions - those are sandbox
+capabilities; raw-HID, networking, and file access all work without them once
+unsandboxed. The Debug/adhoc variant (`Glimmer/Glimmer-Debug.entitlements`) adds
+`cs.disable-library-validation` = true so a build that links the Homebrew
+OpenSSL/Opus dylibs as-is can still load them; Release omits it (validation
+enforced).
 
 **NSWindow.sharingType** = `.none`. The stream window opts out of
 ScreenCaptureKit, `screencapture(1)`, and Cmd-Shift-5. Third-party recording /

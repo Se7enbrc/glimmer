@@ -11,12 +11,6 @@
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
 
-	<!-- Hardened Runtime library validation, disabled so the embedded openssl@3
-	     / opus dylibs load. Re-enable once they're signed under our Team ID at
-	     build time (tracked with the RCE-hardening pass). -->
-	<key>com.apple.security.cs.disable-library-validation</key>
-	<true/>
-
 	<!-- Hardened Runtime: no JIT. -->
 	<key>com.apple.security.cs.allow-jit</key>
 	<false/>
