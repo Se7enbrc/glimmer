@@ -2,8 +2,8 @@
 #
 # FAST ITERATION (the dev inner-loop - no publishing):
 #   make                   Build Glimmer.app (Debug).
-#   make dev               Build + install + relaunch, signed with the stable dev
-#                          identity so TCC grants stick across rebuilds. The loop.
+#   make dev               Build + install + relaunch, Developer-ID signed +
+#                          notarized (matches release). The loop.
 #   make reinstall         Build + install + quit-and-relaunch (guarantees the new
 #                          binary is the one actually running).
 #   make install           Build + copy Glimmer.app to /Applications.
@@ -250,21 +250,19 @@ reinstall: install
 	@COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
 	echo "  ✓ now running build $$COMMIT"
 
-# Fast dev inner-loop. Signs with your Developer ID (the same identity as
-# `make dist`), so dev and release builds share one stable code signature: the
-# Input Monitoring / Local Network TCC grants survive rebuilds, and the
-# data-protection-keychain client identity is shared across dev<->release. No
-# Apple round-trip - a locally-built, Developer-ID-signed bundle runs fine on
-# this Mac without notarization (that's a publish-time step), so the loop stays
-# fast. Falls back to ad-hoc automatically when no Developer ID cert is present
-# (TCC re-prompts each build then). Dylibs embedded, installed, relaunched.
+# Dev inner-loop. Developer-ID signed AND notarized (same path as `make dist`),
+# so a dev build matches a release bar the version bump + publish: stable TCC
+# grants, and SMAppService daemon registration behaves identically. Falls back to
+# ad-hoc + no-notarize without a Developer ID cert. Use `make reinstall` (Debug)
+# for fast iteration that doesn't touch the helper/TCC.
 dev:
 	@if [ -n "$(strip $(DEVELOPER_ID))" ]; then \
-		echo "  ▶ dev build signed with Developer ID (stable TCC grants; shares the release identity)"; \
+		echo "  ▶ dev build: Developer ID + notarized (matches release)"; \
+		$(MAKE) CONFIG=Release notarize; \
 	else \
-		echo "  ▶ dev build ad-hoc - no Developer ID cert found (TCC re-prompts each build)"; \
+		echo "  ▶ dev build ad-hoc - no Developer ID cert (un-notarized; TCC re-prompts)"; \
+		$(MAKE) CONFIG=Release app embed; \
 	fi
-	@$(MAKE) CONFIG=Release app embed
 	@SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
 	osascript -e 'tell application "Glimmer" to quit' >/dev/null 2>&1 || true; \
 	n=0; while pgrep -x Glimmer >/dev/null && [ $$n -lt 5 ]; do sleep 1; n=$$((n+1)); done; \
