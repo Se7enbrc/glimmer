@@ -19,6 +19,16 @@ app to make that possible.
   [`vddsettings.xml`](docs/vddsettings.xml) document the Sunshine +
   Virtual-Display-Driver setup the host needs to present those modes.
 
+### Security
+
+- **Hardened Runtime library validation is back on** for release builds. The
+  embedded OpenSSL/Opus dylibs are re-signed under the team ID at build time, so
+  the app no longer ships with library validation disabled - the compensating
+  control now that there's no sandbox. See [docs/SECURITY.md](docs/SECURITY.md).
+- **Fuzzed the stream-transport parsers** (Annex-B / RTP / FEC / RTSP / ENet /
+  AES-GCM) - the bytes a host sends that the client has to parse. It surfaced
+  and fixed an out-of-bounds read in the Reed-Solomon FEC decoders.
+
 ### Internal
 
 - **Glimmer is now an unsandboxed app.** Required to install and run the root
@@ -27,6 +37,9 @@ app to make that possible.
   `~/Library/Application Support/Glimmer/` on first launch; no re-pairing. See
   [docs/SECURITY.md](docs/SECURITY.md) for the full rationale and the
   compensating controls.
+- **The AWDL helper survives app updates.** Its privileged registration now
+  self-heals on launch, so an auto-update no longer leaves the Wi-Fi-stutter
+  suppression silently disabled until you toggle it again.
 
 ## 2026.6.10 - 2026-06-16
 
