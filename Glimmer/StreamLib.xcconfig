@@ -22,5 +22,12 @@ LIBRARY_SEARCH_PATHS = $(inherited) $(OPENSSL_PREFIX)/lib $(OPUS_PREFIX)/lib
 
 OTHER_LDFLAGS = $(inherited) -lssl -lcrypto -lz -lopus
 
+// Apple Silicon only. Homebrew's openssl@3 / opus are arm64-only, so a universal
+// (arm64 + x86_64) link fails on the x86_64 slice with undefined OpenSSL symbols.
+// Pin arm64 so the Release build - which otherwise defaults to ARCHS_STANDARD
+// (universal) - stays arm64-only, matching the shipped binaries. (The committed
+// shared scheme doesn't carry the auto-scheme's run-destination arch narrowing.)
+ARCHS = arm64
+
 // Bridging header at repo root (where Xcode looks by convention).
 SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
