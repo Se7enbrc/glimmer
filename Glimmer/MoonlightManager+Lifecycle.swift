@@ -27,6 +27,11 @@ extension MoonlightManager {
         // it now. This is the fix for "doesn't start after reboot" - the next
         // reboot picks up the freshly-reconciled registration.
         LoginItemManager.reconcile()
+        // Same self-heal for the privileged AWDL daemon: an app update / reinstall
+        // swaps the bundle (and the daemon binary inside it), which can wedge the
+        // SMAppService registration. Re-assert it so the post-update stream uses
+        // the new daemon without the user re-toggling anything.
+        AWDLHelperManager.shared.reconcileAfterUpdate()
         log.info("Glimmer stream engine: Swift-native")
         // Install step: build the client SecIdentity once, into Glimmer's own
         // keychain, so streams don't prompt the user for keychain access.

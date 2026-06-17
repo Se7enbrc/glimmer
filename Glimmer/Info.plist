@@ -66,13 +66,14 @@
 		<string>_nvstream._tcp</string>
 		<string>_nvstream-tcp._tcp</string>
 	</array>
-	<!-- Sparkle auto-update (Developer-ID, sandboxed). SUFeedURL is the public
+	<!-- Sparkle auto-update (unsandboxed, Developer-ID). SUFeedURL is the public
 	     appcast on the glimmer repo's GitHub Pages site; SUPublicEDKey is the
 	     ed25519 PUBLIC key (private key lives in the signing creds file, used by
-	     `make release-publish`). SUEnableInstallerLauncherService is REQUIRED
-	     under the App Sandbox so the installer XPC can launch - paired with the
-	     mach-lookup exception in Glimmer.entitlements. Daily background checks;
-	     the user is prompted before an update installs (Sparkle default). -->
+	     `make release-publish`). SUEnableInstallerLauncherService routes the
+	     install through Sparkle's XPC installer service; now that the app is
+	     unsandboxed it needs no entitlement to reach it (the sandbox-era
+	     mach-lookup exception is gone). Daily background checks; the user is
+	     prompted before an update installs (Sparkle default). -->
 	<key>SUFeedURL</key>
 	<string>https://se7enbrc.github.io/glimmer/appcast.xml</string>
 	<key>SUPublicEDKey</key>

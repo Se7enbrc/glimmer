@@ -120,6 +120,10 @@ final class AWDLHelperManager: ObservableObject {
     private let service = SMAppService.daemon(plistName: HelperConstants.daemonPlistName)
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "AWDLHelper")
     private static let promptSuppressedKey = "awdlHelperPromptSuppressed"
+    /// The user's saved intent (set on enable, cleared on disable). Drives the
+    /// launch-time reconcile so a registration the user wanted self-heals after
+    /// an update even if SMAppService's status reads `.notFound`.
+    private static let enabledIntentKey = "awdlHelperEnabled"
 
     private init() { refresh() }
 
@@ -160,6 +164,7 @@ final class AWDLHelperManager: ObservableObject {
     /// Register the daemon. The first time, macOS surfaces a one-time approval in
     /// System Settings → General → Login Items & Extensions.
     func enable() {
+        UserDefaults.standard.set(true, forKey: Self.enabledIntentKey)
         // SMAppService can wedge into "Operation not permitted" (SMAppServiceErrorDomain 1)
         // or .notFound after the app bundle is replaced - a known re-registration bug, and
         // every rebuild/app update replaces our bundle. Clear any stuck record with an
@@ -183,6 +188,7 @@ final class AWDLHelperManager: ObservableObject {
     /// Stop suppressing, then unregister the daemon (launchd unloads it; awdl0
     /// returns to normal Continuity behaviour).
     func disable() {
+        UserDefaults.standard.set(false, forKey: Self.enabledIntentKey)
         let client = self.client
         Task {
             _ = await client.setAWDLDown(false, reason: "user-disabled")
@@ -193,6 +199,28 @@ final class AWDLHelperManager: ObservableObject {
         }
         suppressing = false
         refresh()
+    }
+
+    /// Re-assert the daemon registration at launch so one invalidated by an app
+    /// update / move / reinstall self-heals. The daemon binary lives in the app
+    /// bundle, and every Sparkle update, `make dev`, or reinstall swaps that
+    /// bundle in place. A healthy `.enabled` registration already picks up the
+    /// new binary on the next on-demand launch - the daemon idle-exits, so no
+    /// stale process lingers - so we only need to act when the swap WEDGED the
+    /// registration (.notFound / .notRegistered, the known SMAppService failure).
+    /// Mirrors `LoginItemManager.reconcile()`; runs only if the user wants it on.
+    func reconcileAfterUpdate() {
+        guard UserDefaults.standard.bool(forKey: Self.enabledIntentKey) else { return }
+        refresh()
+        switch state {
+        case .enabled:
+            log.info("AWDL daemon enabled; new binary loads on the next stream (idle-exit)")
+        case .requiresApproval:
+            log.notice("AWDL daemon awaiting approval in System Settings ▸ Login Items")
+        case .notRegistered, .unavailable:
+            log.notice("AWDL daemon registration drifted after an update (\(String(describing: self.state), privacy: .public)) - self-healing")
+            enable()
+        }
     }
 
     func openSystemSettings() {
