@@ -14,6 +14,10 @@ app to make that possible.
   streaming. The suppression runs through a privileged `SMAppService` daemon;
   enable it with a toggle in **Settings > General > Network**, and approve the
   one-time launch prompt macOS shows the first time.
+- **Host display setup.** Glimmer requests your Mac's exact native resolution +
+  refresh; [docs/HOST_SETUP.md](docs/HOST_SETUP.md) and a sample
+  [`vddsettings.xml`](docs/vddsettings.xml) document the Sunshine +
+  Virtual-Display-Driver setup the host needs to present those modes.
 
 ### Internal
 

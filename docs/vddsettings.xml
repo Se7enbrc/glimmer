@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample Virtual Display Driver (VDD) config for streaming to Glimmer.
+  Driver: https://github.com/VirtualDrivers/Virtual-Display-Driver
+
+  Glimmer requests an exact width x height @ refresh from the host; the VDD can
+  only present a mode that is listed here, so any resolution/refresh you might
+  pick in Glimmer (Settings > Quality, including "Match this Mac's display")
+  MUST have an entry below, or the stream falls back / fails. This file covers
+  the common Mac panel + streaming modes; add a <resolution> block for anything
+  you request that is missing.
+
+  Install: copy to
+    C:\IddSampleDriver\vdd_settings.xml   (or the path your VDD build reads)
+  then have Sunshine manage the VDD (see docs/HOST_SETUP.md). Set <friendlyname>
+  to your GPU exactly as it appears in Device Manager > Display adapters.
+-->
+<vdd_settings>
+  <monitors>
+    <count>1</count>
+  </monitors>
+  <gpu>
+    <friendlyname>NVIDIA GeForce RTX 4080</friendlyname>
+  </gpu>
+  <global>
+    <g_refresh_rate>120</g_refresh_rate>
+  </global>
+  <resolutions>
+    <!-- 16:9 streaming standards (Glimmer's 720p/1080p/1440p/2160p presets) -->
+    <resolution><width>1280</width><height>720</height><refresh_rate>60</refresh_rate></resolution>
+    <resolution><width>1280</width><height>720</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>1280</width><height>720</height><refresh_rate>240</refresh_rate></resolution>
+    <resolution><width>1920</width><height>1080</height><refresh_rate>60</refresh_rate></resolution>
+    <resolution><width>1920</width><height>1080</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>1920</width><height>1080</height><refresh_rate>240</refresh_rate></resolution>
+    <resolution><width>2560</width><height>1440</height><refresh_rate>60</refresh_rate></resolution>
+    <resolution><width>2560</width><height>1440</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>2560</width><height>1440</height><refresh_rate>240</refresh_rate></resolution>
+    <resolution><width>3840</width><height>2160</height><refresh_rate>60</refresh_rate></resolution>
+    <resolution><width>3840</width><height>2160</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>3840</width><height>2160</height><refresh_rate>240</refresh_rate></resolution>
+
+    <!-- Apple Silicon built-in Retina panels (for "Match this Mac's display").
+         These are 16:10-ish native pixel sizes; ProMotion tops out at 120 Hz,
+         240 entries are kept for low-latency headroom where the host can drive it. -->
+    <resolution><width>2560</width><height>1600</height><refresh_rate>60</refresh_rate></resolution>   <!-- 13" MBP -->
+    <resolution><width>2560</width><height>1600</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>2560</width><height>1664</height><refresh_rate>60</refresh_rate></resolution>   <!-- 13" Air M2/M3 -->
+    <resolution><width>2560</width><height>1664</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>2880</width><height>1864</height><refresh_rate>60</refresh_rate></resolution>   <!-- 15" Air -->
+    <resolution><width>2880</width><height>1864</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>3024</width><height>1964</height><refresh_rate>60</refresh_rate></resolution>   <!-- 14" MBP -->
+    <resolution><width>3024</width><height>1964</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>3024</width><height>1964</height><refresh_rate>240</refresh_rate></resolution>
+    <resolution><width>3456</width><height>2234</height><refresh_rate>60</refresh_rate></resolution>   <!-- 16" MBP -->
+    <resolution><width>3456</width><height>2234</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>3456</width><height>2234</height><refresh_rate>240</refresh_rate></resolution>
+
+    <!-- Ultrawide + high-res external (5K Studio Display, 6K Pro Display XDR, 8K) -->
+    <resolution><width>3440</width><height>1440</height><refresh_rate>60</refresh_rate></resolution>
+    <resolution><width>3440</width><height>1440</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>5120</width><height>2880</height><refresh_rate>60</refresh_rate></resolution>   <!-- 5K -->
+    <resolution><width>5120</width><height>2880</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>6016</width><height>3384</height><refresh_rate>60</refresh_rate></resolution>   <!-- 6K Pro Display XDR -->
+    <resolution><width>7680</width><height>4320</height><refresh_rate>60</refresh_rate></resolution>   <!-- 8K (client max) -->
+  </resolutions>
+  <options>
+    <CustomEdid>false</CustomEdid>
+    <PreventSpoof>false</PreventSpoof>
+    <EdidCeaOverride>false</EdidCeaOverride>
+    <HardwareCursor>true</HardwareCursor>
+    <SDR10bit>false</SDR10bit>
+    <HDRPlus>true</HDRPlus>
+    <logging>false</logging>
+    <debuglogging>false</debuglogging>
+  </options>
+</vdd_settings>

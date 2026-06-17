@@ -45,6 +45,11 @@ To run: macOS 26 or newer on Apple Silicon. The notarized download is
 self-contained - it bundles OpenSSL, Opus, and Sparkle, so there is nothing else
 to install.
 
+Your **host** (the gaming PC) needs Sunshine plus a display that can present the
+exact resolution/refresh you stream at - on Windows a Virtual Display Driver, on
+Linux a current Sunshine that resizes the session. See
+[docs/HOST_SETUP.md](docs/HOST_SETUP.md).
+
 To build from source: the Xcode 26 toolchain (Swift 6, strict concurrency) and
 Homebrew with `openssl@3` and `opus`.
 
