@@ -3,22 +3,23 @@
 ## The whole release, step by step
 
 ```
-# 0. one-time, ever: nothing - `make dist` bootstraps itself (see First-run flow)
+# 0. one-time, ever: signing + notary + sparkle setup (see Code-signing and
+#    Auto-update below); after that the whole pipeline is non-interactive
 # 1. bump Glimmer/Version.xcconfig (MARKETING_VERSION + CURRENT_PROJECT_VERSION)
-#    + add the CHANGELOG entry; commit + push
-# 2. build the artifact (signs, notarizes, staples, DMGs - non-interactive):
+#    + add the CHANGELOG entry; commit + push to main
+# 2. (optional) build the artifact WITHOUT publishing, to inspect it first:
 make dist
-# 3. verify the triple-match BEFORE publishing (the near-miss-shipped-old-code
-#    gotcha, hit three times historically):
+#    then verify the triple-match (the near-miss-shipped-old-code gotcha, hit
+#    three times historically):
 #      git rev-parse HEAD                       == the commit you think it is
 #      /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' \
 #          build/Build/Products/Release/Glimmer.app/Contents/Info.plist
 #      spctl --assess --type execute build/Build/Products/Release/Glimmer.app
-# 4. tag THAT commit + publish with the DMG:
-git tag 2026.6.2 && git push origin 2026.6.2
-gh release create 2026.6.2 build/dist/Glimmer-2026.6.2.dmg \
-    --title "Glimmer 2026.6.2" --notes-file <notes>
-# 5. (planned) a Homebrew cask once it ships - not yet available
+# 3. publish - builds + signs + notarizes + GitHub release + appcast in one shot
+#    (auto-tags HEAD on main; the `dist` above is just an optional preview of
+#    this exact build):
+make release-publish
+# 4. (planned) a Homebrew cask once it ships - not yet available
 ```
 
 Signing never prompts: the Developer ID lives in a dedicated, never-locking
@@ -68,12 +69,16 @@ itself (when, not which marketing milestone).
 ## 2. Build and install locally
 
 ```bash
-make clean
-make release && make install
+make install        # or `make dev` to also quit + relaunch
 ```
 
-This produces `build/Build/Products/Release/Glimmer.app`, adhoc-signs it, and
-copies to `/Applications/Glimmer.app`.
+`make install` runs the full "everything but publish" pipeline - Release build,
+Developer ID sign, embed + re-sign the bundled dylibs, notarize, staple - then
+copies the result to `/Applications/Glimmer.app`. It is byte-for-byte what
+ships, so daemon registration, TCC, and strict library validation all behave
+exactly as in a release; with no Developer ID cert it falls back to adhoc
+Release. For a quick compile-only check that skips signing and notarization, use
+`make app`.
 
 ## 3. Pre-tag smoke-test checklist
 
@@ -204,12 +209,17 @@ Remaining interactive surface after this: none at build time. (First-ever
   login-keychain stash/profile when the creds file has no answer. Run the
   one-time steps to upgrade to any-session builds.
 
-`make dev` signs with the same Developer ID as `make dist` (non-interactively,
-via the dedicated signing keychain), so dev and release builds share one stable
-identity - TCC grants survive rebuilds and the keychain-stored client identity
-is shared across dev and release. It does NOT notarize (a locally-built signed
-bundle runs fine on the build machine), so the inner loop stays fast. With no
-Developer ID cert present it falls back to ad-hoc.
+`make dev` - and `make`, `make install`, `make reinstall` - now runs the SAME
+pipeline as `make dist` minus the DMG/publish step: Developer ID signed,
+notarized, and stapled, non-interactively via the dedicated signing keychain.
+Dev and release builds are therefore identical, which is the point: TCC grants
+survive rebuilds, the keychain-stored client identity is shared, SMAppService
+daemon registration behaves the same, and strict library validation is enforced
+
+- none of the adhoc/Debug divergence that used to cause heisenbugs. The trade is
+  that the inner loop now pays the notarization round-trip; `make app` is the
+  quick compile-only escape. With no Developer ID cert present it falls back to
+  adhoc Release.
 
 ### Cutting a signed, notarized DMG
 
@@ -278,9 +288,9 @@ source - no separate tarball needed.
   linked to the Glimmer target; `Glimmer/UpdaterController.swift` exposes "Check
   for Updates..." in the app menu and the menu-bar dropdown. `Info.plist`
   carries `SUFeedURL` (the Pages appcast), `SUEnableInstallerLauncherService`,
-  and daily background checks; `Glimmer.entitlements` has the
-  `mach-lookup.global-name` exception the sandboxed installer XPC needs
-  (`io.ugfugl.Glimmer-spks` / `-spki`).
+  and daily background checks. Now that the app is unsandboxed, Sparkle's
+  installer XPC needs no entitlement exception - the old
+  `mach-lookup.global-name` keys went away with the sandbox.
 - **Hosting:** `Se7enbrc/glimmer` has GitHub Pages enabled (`main` / root); the
   feed is `https://se7enbrc.github.io/glimmer/appcast.xml`.
 
