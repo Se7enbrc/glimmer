@@ -21,6 +21,7 @@
 #include <sys/uio.h>
 #include <openssl/bio.h>
 #include <openssl/pkcs12.h>
+#include <openssl/ssl.h>
 
 // MARK: - Batched UDP receive (recvmsg_x)
 // `recvmsg_x` is Darwin's batched datagram receive (the macOS analogue of
@@ -94,6 +95,15 @@ static inline int gl_surround_audio_info_from_audio_configuration(int x) {
 /// into `*out_data`. Equivalent to the `BIO_get_mem_data` macro.
 static inline long gl_bio_get_mem_data(BIO *bio, char **out_data) {
     return BIO_ctrl(bio, BIO_CTRL_INFO, 0, (char *)out_data);
+}
+
+// MARK: - TLS minimum-version floor (control channel)
+// SSL_CTX_set_min_proto_version is a macro, so Swift can't call it. Exact-DER
+// cert PINNING is the security guarantee (see ControlTransport); flooring at
+// TLS 1.2 just keeps the handshake off legacy protocol versions - cheap defense
+// in depth. Returns 1 on success.
+static inline int gl_ssl_ctx_set_min_tls12(SSL_CTX *ctx) {
+    return SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
 }
 
 // MARK: - OpenSSL keygen wrapper

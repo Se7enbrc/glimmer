@@ -87,6 +87,9 @@ enum ControlTransport {
             throw StreamError.crypto("SSL_CTX_new failed")
         }
         defer { SSL_CTX_free(ctx) }
+        // Floor the handshake at TLS 1.2 - the pin is the real guarantee, this just
+        // keeps us off legacy protocol versions. (Sunshine speaks 1.2/1.3.)
+        _ = gl_ssl_ctx_set_min_tls12(ctx)
         // We pin instead of CA-validating (the host cert is self-signed); do the
         // pin check by hand after the handshake. VERIFY_NONE keeps SSL_connect
         // from rejecting the self-signed leaf before we get to look at it.
