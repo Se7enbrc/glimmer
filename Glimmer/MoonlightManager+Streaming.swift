@@ -95,10 +95,12 @@ extension MoonlightManager {
         resumableAppName ?? defaultAppName
     }
 
-    /// Primary-button copy: "Resume <app>" when a resume target exists,
-    /// plain "Connect" otherwise.
+    /// Primary-button copy. Always "Stream <app>" - this button only shows on the
+    /// launcher (never mid-stream), so "Resume" read as confusing. The verb is the
+    /// same whether we resume the host's running session or launch fresh;
+    /// `streamHeroApp()` still picks /resume vs /launch under the hood.
     var heroActionLabel: String {
-        resumableAppName.map { "Resume \($0)" } ?? "Connect"
+        "Stream \(heroTargetAppName)"
     }
 
     /// Launch the hero target (the primary click / Return-key action).
@@ -223,8 +225,8 @@ extension MoonlightManager {
         let cfg = nativeStreamConfig(for: host)
         let info = nativeServerInfo(for: host)
         // Hero-verb memory: stamp the app NAME at stream START (unlike the
-        // lastConnected DATE above) so the next launcher visit can offer
-        // "Resume <app>" even if this session ends badly.
+        // lastConnected DATE above) so the next launcher visit names the app in
+        // "Stream <app>" even if this session ends badly.
         UserDefaults.standard.set(app.name, forKey: Self.lastPlayedAppKey(for: host.id))
         // Arm the session-receipt latch with this session's identity (host +
         // requested mode). The live edge stamps the wall clock; the teardown

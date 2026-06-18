@@ -285,7 +285,7 @@ private struct ConnectBanner: View {
                         moonlight.nativeStreamError = nil
                         // The hero verb's target, NOT streamDefaultApp(): the
                         // failed launch stamped lastPlayedApp at start, so the
-                        // hero above still reads "Resume <app>" - a Retry that
+                        // hero above still reads "Stream <app>" - a Retry that
                         // launched the default app would contradict it.
                         moonlight.streamHeroApp()
                     }

@@ -318,9 +318,9 @@ struct StreamButton: View {
     /// Four button states, depending on session lifecycle and selection:
     ///   * `.noPC`        - no host paired/selected. "Choose a PC"; tap is a
     ///                       no-op, the label tells the user what to do next.
-    ///   * `.connect`     - host selected, no stream yet. "Resume <app>" when
-    ///                       a resume target is known (host-reported session
-    ///                       or last-played), else "Connect". Tap launches.
+    ///   * `.connect`     - host selected, no stream yet. "Stream <app>" (the
+    ///                       resume target if known - host-reported session or
+    ///                       last-played - else the default app). Tap launches.
     ///   * `.connecting`  - handshake in flight. "Connecting to <Host>..." +
     ///                       stage subtext. Tap (or ⎋) CANCELS the attempt -
     ///                       a stuck connect must never strand the user.
