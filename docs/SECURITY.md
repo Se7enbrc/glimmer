@@ -77,14 +77,7 @@ client identifier; moonlight-qt uses the same).
 - `client-key.pem` - RSA private key in PEM (PKCS#8 unencrypted)
 - `client-uniqueid.txt` - 32-hex-char client unique ID
 
-Current state (unsandboxed): `~/Library/Application Support/Glimmer/Identity/`.
-
-Legacy (sandboxed builds):
-`~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`.
-A one-time container -> home migration runs on first launch of an unsandboxed
-build: now that the app can read its old container, the existing identity (and
-pinned hosts) move to the home path with mode 0600 preserved. Existing installs
-keep their paired hosts; no re-pairing.
+Stored at `~/Library/Application Support/Glimmer/Identity/`.
 
 `FileIdentityStore.write` (`Identity.swift`):
 
@@ -121,10 +114,9 @@ The one residual exposure is a Full-Disk-Access same-UID process reading the key
 
 **One-shot moonlight-qt migration.** On first launch, Glimmer reads the
 `com.moonlight-stream.Moonlight` and `com.moonlight-stream.moonlight-qt`
-preference domains (no sandbox entitlement needed now that the app is
-unsandboxed). If a moonlight-qt install left a client identity + paired-host
-list, we adopt it so the user doesn't have to re-pair. After successful
-migration the PEM material in the foreign plist is wiped (it sat in a
+preference domains. If a moonlight-qt install left a client identity +
+paired-host list, we adopt it so the user doesn't have to re-pair. After
+successful migration the PEM material in the foreign plist is wiped (it sat in a
 world-readable plist before - moonlight-qt's storage is not 0600). Idempotent;
 dormant after the first run.
 

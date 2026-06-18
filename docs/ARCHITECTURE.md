@@ -448,9 +448,7 @@ acceptable.
 `Identity.swift`: per-machine 32-hex `uniqueID`, an RSA-2048 keypair, and a
 20-year self-signed cert (CN `NVIDIA GameStream Client` - every GameStream
 client identifies as this string, including moonlight-qt). Three mode-0600 files
-under
-`~/Library/Containers/io.ugfugl.Glimmer/Data/Library/Application Support/Glimmer/Identity/`
-(post-sandbox):
+under `~/Library/Application Support/Glimmer/Identity/`:
 
 - `client-cert.pem`
 - `client-key.pem`

@@ -4,8 +4,8 @@
 //  In-app ring buffer for a Sunshine-style troubleshooting log.
 //
 //  Why not just read os_log? `OSLogStore(scope: .currentProcessIdentifier)` is
-//  not reliably readable from inside the App Sandbox on this platform - the
-//  Troubleshooting log viewer came up empty even though os_log was emitting.
+//  not reliably readable on this platform - the Troubleshooting log viewer came
+//  up empty even though os_log was emitting.
 //  So the canonical troubleshooting record is THIS in-memory ring buffer, which
 //  the viewer reads directly. Every entry is ALSO mirrored to os_log (.public -
 //  callers pass already-redacted strings, same discipline as the rest of the
@@ -129,11 +129,9 @@ enum Diag {
 /// Buffered background file sink that mirrors the Diag/os_log stream to a
 /// per-session text file when telemetry/debug is enabled. This is the THIRD sink
 /// on `LogStore.log` (after the in-memory ring buffer and os_log): it persists the
-/// rich runtime log to `~/Library/Logs/Glimmer/glimmer-<ISO8601>.log` (which, in
-/// the App Sandbox, resolves to the container's
-/// `Data/Library/Logs/Glimmer` - the SAME directory the telemetry NDJSON writer
-/// uses, so a log shipper can mount one folder and tail both `*.log`
-/// and `*.ndjson`).
+/// rich runtime log to `~/Library/Logs/Glimmer/glimmer-<ISO8601>.log` - the SAME
+/// directory the telemetry NDJSON writer uses, so a log shipper can mount one
+/// folder and tail both `*.log` and `*.ndjson`.
 ///
 /// GATING + HOT-PATH SAFETY (load-bearing - same contract as the telemetry rig):
 ///   * `SessionLogFileSink.shared` is nil unless the telemetry/debug gate is on

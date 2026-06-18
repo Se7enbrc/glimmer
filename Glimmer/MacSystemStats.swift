@@ -2,11 +2,11 @@
 //  MacSystemStats.swift
 //
 //  Read host-Mac vitals (battery, CPU, RAM) for the in-stream stats overlay.
-//  Built on the public sandbox-safe APIs: IOPS for battery, Mach
+//  Built on public APIs: IOPS for battery, Mach
 //  `host_statistics`/`host_statistics64` for CPU + RAM. GPU usage is NOT
 //  surfaced here - the only path on macOS is IOReport/IOAccelerator
-//  registry walking, which is technically reachable from a sandboxed app
-//  but needs more careful entitlement / fallback work. Future: GPU.
+//  registry walking, which needs more careful decode / fallback work.
+//  Future: GPU.
 //
 
 import Darwin
