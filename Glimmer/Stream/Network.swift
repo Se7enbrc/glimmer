@@ -18,8 +18,9 @@
 //  Ported from moonlight-qt's app/backend/nvhttp.{h,cpp} (GPLv3; see CREDITS.md).
 //  The big differences from the C++ side:
 //
-//    * URLSession instead of QNetworkAccessManager. Means we do the TLS
-//      identity dance through URLSessionDelegate, not QSslConfiguration.
+//    * Our own OpenSSL mutual-TLS HTTP client (ControlTransport) instead of
+//      QNetworkAccessManager - the client cert + host-cert pin run straight
+//      through libssl, no URLSession and no keychain in the path.
 //    * Trust-on-first-use: the very first /serverinfo call goes over plain
 //      HTTP, pulls the host cert out of the response (well - out of the next
 //      HTTPS handshake), pins it, and from then on we refuse to talk HTTPS to
@@ -29,7 +30,8 @@
 //    * XMLParser-driven tree builder instead of QXmlStreamReader's pull API.
 //
 //  This file is concurrency-strict. `NetworkClient` is an actor, so all its
-//  state is isolated; URLSession callbacks bridge back via continuations.
+//  state is isolated; the transport's blocking IO runs off-actor and bridges
+//  back via continuations.
 //
 
 import Foundation
@@ -257,10 +259,10 @@ public actor NetworkClient {
     /// successful HTTPS handshake.
     var server: ServerInfo
 
-    /// Snapshot of the client identity grabbed at init time. We can't reach
-    /// into IdentityManager from a URLSessionDelegate callback (sync, non-async
-    /// context), so we cache the PEM blobs here and convert to a SecIdentity
-    /// lazily on first HTTPS call.
+    /// Client cert + key (PEM), snapshotted from IdentityManager on first use.
+    /// ControlTransport feeds them straight into OpenSSL for mutual TLS - no
+    /// SecIdentity, no keychain. The host-cert pin lives on `server.serverCertPEM`
+    /// and is passed per request.
     var clientCertPEM: String?
     var clientKeyPEM: String?
 
@@ -269,23 +271,6 @@ public actor NetworkClient {
     /// the comment above `Self.wireUniqueID`.
     var clientUniqueID: String?
 
-    /// Lazily-built TLS identity for mutual auth on HTTPS. Built once, reused
-    /// for every HTTPS request. `nil` until prepareIdentity() runs.
-    var clientIdentity: SecIdentity?
-
-    /// The host cert we trust for HTTPS (TOFU). Populated either from a prior
-    /// pairing run (server.serverCertPEM) or by extracting whatever cert the
-    /// host presents on the first HTTPS handshake after we've started trusting
-    /// it. Once set, ANY mismatch fails the connection.
-    var pinnedHostCert: SecCertificate?
-
-    /// URLSession + its delegate. Held as instance state so we can share a
-    /// connection pool across requests. The delegate is a class because that's
-    /// what URLSession requires; it's `Sendable` because it's stateless past
-    /// init - every callback reads the credential from immutable storage.
-    let session: URLSession
-    let delegate: TLSDelegate
-
     let log = Logger(subsystem: "io.ugfugl.Glimmer",
                              category: "Stream.Network")
 
@@ -293,66 +278,25 @@ public actor NetworkClient {
 
     public init(server: ServerInfo) {
         self.server = server
-
-        // Pre-seed the pinned cert from any previously persisted PEM. This is
-        // what makes "I paired with this host yesterday" survive an app
-        // restart - the caller pulled the PEM from disk and stuffed it onto
-        // ServerInfo before constructing us.
-        if let pem = server.serverCertPEM,
-           let cert = Self.parsePEMCertificate(pem) {
-            self.pinnedHostCert = cert
-        }
-
-        let delegate = TLSDelegate()
-        self.delegate = delegate
-        if let pinned = pinnedHostCert {
-            delegate.setPinnedServerCert(pinned)
-        }
-
-        // Per-host config: GFE 3.20+ misbehaves with HTTP/2 + persistent
-        // connections (moonlight-qt has the same workaround). HTTP/2 is off by
-        // default for ephemeral sessions on macOS, and pipelining was removed
-        // entirely from URLSession in macOS 15.4. We don't try to re-enable
-        // either.
-        let config = URLSessionConfiguration.ephemeral
-        config.httpMaximumConnectionsPerHost = 2
-        config.httpAdditionalHeaders = [:]
-        config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        config.urlCache = nil
-        config.timeoutIntervalForRequest = 20
-        config.timeoutIntervalForResource = 30
-
-        self.session = URLSession(configuration: config,
-                                  delegate: delegate,
-                                  delegateQueue: nil)
+        // The host-cert pin (if any) rides on `server.serverCertPEM` already;
+        // ControlTransport reads it per request. Nothing else to set up - the
+        // control channel is connectionless from this object's point of view.
     }
 
-    /// Drain any pending requests on the underlying URLSession. Safe to call
-    /// from a deinit-like sequence; we don't expose deinit because URLSession
-    /// itself owns a strong reference back to the delegate until invalidated.
-    public func shutdown() {
-        session.invalidateAndCancel()
-    }
+    /// No-op: the control channel is per-request (ControlTransport opens and
+    /// closes a connection per call), so there's nothing persistent to tear
+    /// down. Kept only so the existing `await net.shutdown()` call sites don't churn.
+    public func shutdown() {}
 
-    /// Called by `PairingClient` once the host has proven possession of
-    /// its private key (the RSA-signature step in /pair's pairingsecret
-    /// round-trip). Any cert installed via this entry point is treated as
-    /// fully validated and is what subsequent HTTPS connections must
-    /// match. This is the ONE write path for the pin - `fetchServerInfo`
-    /// no longer auto-pins.
-    ///
-    /// Returns the parsed SecCertificate so the caller can also persist
-    /// the PEM to durable storage (UserDefaults under
-    /// `glimmer.pinnedCert.<hostUUID>` is the suggested key shape).
-    public func setPinnedHostCert(pem: String) throws -> SecCertificate {
-        guard let parsed = Self.parsePEMCertificate(pem) else {
-            throw StreamError.crypto("Failed to parse host cert PEM during pin install")
-        }
-        pinnedHostCert = parsed
+    /// Called by `PairingClient` once the host has proven possession of its
+    /// private key (the RSA-signature step in /pair's pairingsecret round-trip).
+    /// The cert installed here is fully validated and is what subsequent HTTPS
+    /// connections must match - ControlTransport pins `server.serverCertPEM` by
+    /// exact DER. This is the ONE write path for the pin - `fetchServerInfo` no
+    /// longer auto-pins.
+    public func setPinnedHostCert(pem: String) {
         server.serverCertPEM = pem
-        delegate.setPinnedServerCert(parsed)
         log.info("Host cert pinned (length \(pem.count, privacy: .public) bytes)")
-        return parsed
     }
 
     /// Currently-pinned host cert in PEM form, if any. Useful for the UI
@@ -363,10 +307,8 @@ public actor NetworkClient {
 
     // MARK: Identity prep
     //
-    // Has to run before any HTTPS call. We snapshot the cert + key out of the
-    // IdentityManager actor and lazily build a SecIdentity (which Keychain
-    // Services needs us to construct via SecPKCS12Import) the first time
-    // anyone asks for HTTPS auth.
+    // Snapshot the client cert + key (PEM) out of the IdentityManager actor
+    // before any HTTPS call. ControlTransport feeds them straight into OpenSSL.
 
     func ensureIdentityLoaded() async throws {
         if clientCertPEM != nil { return }
@@ -374,59 +316,6 @@ public actor NetworkClient {
         clientCertPEM   = try await im.clientCertPEM()
         clientKeyPEM    = try await im.clientKeyPEM()
         clientUniqueID  = try await im.uniqueID()
-    }
-
-    func ensureClientIdentity() async throws -> SecIdentity {
-        try await ensureIdentityLoaded()
-        if let id = clientIdentity { return id }
-
-        // Identity setup happens at install time in IdentityManager - see
-        // IdentityManager.secIdentity(). It builds the SecIdentity inside
-        // Glimmer's own keychain so the user never sees a "wants to sign"
-        // prompt. We just borrow it here.
-        let id = try await IdentityManager.shared.secIdentity()
-        clientIdentity = id
-
-        // Push the credential through to the delegate so URLSession's
-        // synchronous challenge handler can serve it without re-entering the
-        // actor.
-        delegate.setClientCredential(URLCredential(identity: id,
-                                                   certificates: nil,
-                                                   persistence: .forSession))
-        return id
-    }
-
-    // MARK: - PEM/DER + Identity helpers
-
-    /// Parse a PEM "BEGIN CERTIFICATE" block into a SecCertificate. Returns
-    /// nil on any failure; callers treat "no pinned cert" the same as "first
-    /// connection".
-    static func parsePEMCertificate(_ pem: String) -> SecCertificate? {
-        guard let der = pemBody(pem, marker: "CERTIFICATE") else { return nil }
-        return SecCertificateCreateWithData(nil, der as CFData)
-    }
-
-    /// Export a SecCertificate back to PEM for persistence in ServerInfo.
-    static func exportPEM(_ cert: SecCertificate) -> String {
-        let der = SecCertificateCopyData(cert) as Data
-        let base64 = der.base64EncodedString(options: [.lineLength64Characters,
-                                                       .endLineWithLineFeed])
-        return "-----BEGIN CERTIFICATE-----\n\(base64)\n-----END CERTIFICATE-----\n"
-    }
-
-    /// Strip the PEM armor and base64-decode the body of the first matching
-    /// block. `marker` is "CERTIFICATE", "RSA PRIVATE KEY", etc.
-    static func pemBody(_ pem: String, marker: String) -> Data? {
-        let begin = "-----BEGIN \(marker)-----"
-        let end   = "-----END \(marker)-----"
-        guard let beginRange = pem.range(of: begin),
-              let endRange = pem.range(of: end, range: beginRange.upperBound..<pem.endIndex)
-        else { return nil }
-        let body = pem[beginRange.upperBound..<endRange.lowerBound]
-            .replacingOccurrences(of: "\r", with: "")
-            .replacingOccurrences(of: "\n", with: "")
-            .replacingOccurrences(of: " ", with: "")
-        return Data(base64Encoded: body)
     }
 
     /// Flatten the immediate-child element names + brief text of an XML node
@@ -467,28 +356,10 @@ public actor NetworkClient {
     // names AND XML tag names (the host echoes some of them back).
 
     /// Lowercased query/tag names whose values must be redacted before
-    /// logging. Used by `redactedURL`, the query-dump in `runLaunchLike`,
-    /// and `dumpXMLRedacted`.
+    /// logging. Used by the query-dump in `runLaunchLike` and `dumpXMLRedacted`.
     static let sensitiveQueryKeys: Set<String> = [
         "rikey", "rikeyid", "gcmkey", "gcmkeyid", "uuid", "uniqueid"
     ]
-
-    /// Build a log-safe absolute-URL string. Host + path are preserved
-    /// (they're useful for debugging); query-string values matching
-    /// `sensitiveQueryKeys` are replaced with `<redacted>`. Returns
-    /// `<invalid-url>` on parse failure so the log line is never empty.
-    static func redactedURL(_ url: URL) -> String {
-        guard var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return "<invalid-url>"
-        }
-        comps.queryItems = comps.queryItems?.map { item in
-            if sensitiveQueryKeys.contains(item.name.lowercased()) {
-                return URLQueryItem(name: item.name, value: "<redacted>")
-            }
-            return item
-        }
-        return comps.string ?? "<invalid-url>"
-    }
 
     /// Same shape as `dumpXML`, but every child whose tag name matches
     /// `sensitiveQueryKeys` has its body replaced with `<redacted>` so

@@ -73,6 +73,7 @@
 		ABCD20260610000000005F02 /* EnvSignalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260610000000005F01 /* EnvSignalController.swift */; };
 		BBF95775D96E9853A40ADED0 /* Host.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9158C8506080330EC17875A9 /* Host.swift */; };
 		BC8B3FD0322A256049C1CAF8 /* QualityCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */; };
+		C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */; };
 		CC00000002 /* StatsCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000001 /* StatsCollector.swift */; };
 		CC00000004 /* VideoDecoder+HDR.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000003 /* VideoDecoder+HDR.swift */; };
 		CC00000006 /* VideoDecoder+Bitstream.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000005 /* VideoDecoder+Bitstream.swift */; };
@@ -228,6 +229,7 @@
 		3A952BEEC96F2A8042E0F4C3 /* StatsOverlaySettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatsOverlaySettings.swift; sourceTree = "<group>"; };
 		447FF92C9458E21549E4965D /* HostStatusPoller.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostStatusPoller.swift; sourceTree = "<group>"; };
 		448F2B492E4B38A0CFF51260 /* StreamingState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingState.swift; sourceTree = "<group>"; };
+		48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Stream/ControlTransport.swift; sourceTree = "<group>"; };
 		505E37FB63C22AC476506587 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Glimmer Login Helper.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		71A5B2E11628E68BFAF05421 /* AppIcon.icon */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
@@ -653,6 +655,7 @@
 				A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */,
 				71A5B2E11628E68BFAF05421 /* AppIcon.icon */,
 				2C2C61CA646A8599B4EC06C5 /* AWDLHelperManager.swift */,
+				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
 			);
 			path = Glimmer;
 			sourceTree = "<group>";
@@ -978,6 +981,7 @@
 				026FD8A0211FCD7B527606B0 /* StatsOverlaySettings.swift in Sources */,
 				FB153DF267467B06C6BE3467 /* MacSystemStats.swift in Sources */,
 				109EA4B557EB9EFC0400C751 /* AWDLHelperManager.swift in Sources */,
+				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

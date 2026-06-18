@@ -2,13 +2,11 @@
 //  Network+Support.swift
 //
 //  Supporting types for NetworkClient: the optional-knobs extension on
-//  StreamConfig, the URLSession TLS delegate (client credential + server-cert
-//  pinning), and the SAX XML tree builder. Split out of Network.swift to keep
+//  StreamConfig and the SAX XML tree builder. Split out of Network.swift to keep
 //  each unit focused.
 //
 
 import Foundation
-import Network
 import os.log
 
 // MARK: - Optional knobs on StreamConfig
@@ -26,128 +24,6 @@ extension StreamConfig {
     var remoteInputKey: Data? { nil }
     /// Optional override for the AES IV used on the remote-input channel.
     var remoteInputIV: Data? { nil }
-}
-
-// MARK: - URLSession TLS delegate
-//
-// All of this runs on URLSession's delegate queue - synchronous, non-actor
-// context. The delegate is a class (URLSessionDelegate requires it) and
-// stores its credentials behind a small lock. We can't make it an actor
-// because URLSession won't await us.
-
-final class TLSDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
-
-    private let lock = NSLock()
-    private var clientCredential: URLCredential?
-    private var pinnedServerCert: SecCertificate?
-    private var lastServerCert: SecCertificate?
-
-    private let log = Logger(subsystem: "io.ugfugl.Glimmer",
-                             category: "Stream.Network.TLS")
-
-    func setClientCredential(_ credential: URLCredential) {
-        lock.lock(); defer { lock.unlock() }
-        clientCredential = credential
-    }
-
-    func setPinnedServerCert(_ cert: SecCertificate) {
-        lock.lock(); defer { lock.unlock() }
-        pinnedServerCert = cert
-    }
-
-    func lastSeenServerCert() -> SecCertificate? {
-        lock.lock(); defer { lock.unlock() }
-        return lastServerCert
-    }
-
-    // MARK: URLSessionDelegate
-
-    func urlSession(_ session: URLSession,
-                    didReceive challenge: URLAuthenticationChallenge,
-                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        let space = challenge.protectionSpace
-
-        switch space.authenticationMethod {
-
-        case NSURLAuthenticationMethodClientCertificate:
-            // Host is asking us to prove who we are. Hand over the SecIdentity
-            // we built from IdentityManager. If it isn't ready yet (very
-            // first call before identity prep finished), drop to default -
-            // URLSession will cancel and we surface that as a TLS error.
-            lock.lock(); let cred = clientCredential; lock.unlock()
-            if let cred {
-                completionHandler(.useCredential, cred)
-            } else {
-                log.warning("Client-cert challenge with no credential available")
-                completionHandler(.performDefaultHandling, nil)
-            }
-
-        case NSURLAuthenticationMethodServerTrust:
-            // Threat model (C2):
-            //
-            //   - pin set, leaf matches:    accept, use credential.
-            //   - pin set, leaf mismatches: REFUSE. This is the MITM gate.
-            //     We do not log fingerprints at public privacy because that
-            //     would let a hostile log scraper read the pinned cert; but
-            //     we do log the mismatch so a real cert rotation is
-            //     diagnosable from `log show` under our subsystem.
-            //   - pin set, no leaf in chain: refuse - handshake is too
-            //     broken to evaluate. Better to fail than to fall through
-            //     to "accept blindly".
-            //   - no pin set, leaf present: this is the unpaired first-
-            //     contact path. Sunshine over HTTPS during /pair is the
-            //     only path that hits this. We record the leaf so the
-            //     actor can pin it after the RSA-validated pairing
-            //     handshake - but we DO NOT auto-pin here.
-            guard let trust = space.serverTrust else {
-                completionHandler(.cancelAuthenticationChallenge, nil)
-                return
-            }
-
-            let leaf: SecCertificate? = {
-                if #available(macOS 12.0, *) {
-                    return (SecTrustCopyCertificateChain(trust) as? [SecCertificate])?.first
-                } else {
-                    return SecTrustGetCertificateAtIndex(trust, 0)
-                }
-            }()
-
-            if let leaf {
-                lock.lock(); lastServerCert = leaf; lock.unlock()
-            }
-
-            lock.lock(); let pin = pinnedServerCert; lock.unlock()
-
-            if let pin {
-                // Pin set - only accept exact match.
-                guard let leaf else {
-                    log.error("Pinned host returned no leaf cert in chain - refusing")
-                    completionHandler(.cancelAuthenticationChallenge, nil)
-                    return
-                }
-                let pinData = SecCertificateCopyData(pin) as Data
-                let leafData = SecCertificateCopyData(leaf) as Data
-                if pinData == leafData {
-                    completionHandler(.useCredential, URLCredential(trust: trust))
-                } else {
-                    log.error("Pinned cert mismatch - refusing TLS handshake (possible MITM or host re-imaged)")
-                    completionHandler(.cancelAuthenticationChallenge, nil)
-                }
-            } else {
-                // No pin yet. This is reachable only on the unpaired
-                // discovery path (Pairing.swift's HTTPS pairchallenge
-                // round-trip after the symmetric handshake). The cert is
-                // recorded into `lastServerCert` but not yet binding;
-                // the actor pins it only after the RSA signature in
-                // pairing verifies, which is what gives "this is the real
-                // host" its meaning.
-                completionHandler(.useCredential, URLCredential(trust: trust))
-            }
-
-        default:
-            completionHandler(.performDefaultHandling, nil)
-        }
-    }
 }
 
 // MARK: - XML parser

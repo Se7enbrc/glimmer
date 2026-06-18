@@ -165,41 +165,17 @@ extension IdentityManager {
         return pem
     }
 
-    // MARK: - SecIdentity construction (one-time per process)
+    // MARK: - Legacy login-keychain cleanup
     //
-    // The SecIdentity for mutual-TLS comes from the file-store PEMs. We build
-    // it by feeding the PEMs through OpenSSL → PKCS#12 → SecPKCS12Import,
-    // grab the SecIdentityRef the import returns, and cache it for the
-    // lifetime of the process. The keychain item the import creates is
-    // pre-authorized for this process via SecAccess, deleted on the next
-    // launch, and re-imported fresh. That's the only documented way for an
-    // adhoc-signed app to use a SecIdentity without prompting the user; once
-    // we ship a real Developer ID, this whole path collapses into a single
-    // SecItemCopyMatching on the data-protection keychain (see the
-    // "Future: when signed with a Developer ID" note at the top of the file).
+    // Pre-OpenSSL builds laundered the client cert/key through a SecIdentity in
+    // the login keychain. The control channel now runs on OpenSSL straight from
+    // the PEMs, so that item is dead weight - preflight() deletes it on launch.
 
     private static let dpLabel = "Glimmer Client Identity"
 
-    func buildOrLoadIdentity() throws -> SecIdentity {
-        // We deliberately do NOT reuse the existing labelled identity from a
-        // prior launch. Its ACL is pinned (via SecTrustedApplication) to the
-        // Glimmer executable's CDHash at the time of import - which means
-        // every rebuild during development (and every signed app-update for
-        // shipped users without a stable Developer ID) invalidates the ACL,
-        // making the "Glimmer wants to use the key" prompt fire.
-        //
-        // Re-importing on every launch costs a few ms of OpenSSL work and a
-        // round-trip through Security.framework. The benefit is that the new
-        // SecAccess is built from the current process's SecTrustedApplication,
-        // so the ACL always matches the running binary and there's no prompt.
-        deleteLabelledIdentity()
-        let identity = try load()
-        return try importLabelledIdentity(certPEM: identity.certPEM,
-                                          keyPEM: identity.keyPEM)
-    }
-
-    /// Wipe any previous "Glimmer Client Identity" entry (and its associated
-    /// cert / key) so the re-import lands cleanly without colliding.
+    /// Delete the orphaned "Glimmer Client Identity" item (+ its cert/key) that
+    /// older builds imported into the login keychain. Idempotent; SecItemDelete
+    /// on absent items is a harmless no-op.
     func deleteLabelledIdentity() {
         for cls in [kSecClassIdentity, kSecClassKey, kSecClassCertificate] {
             let query: [String: Any] = [
@@ -209,101 +185,5 @@ extension IdentityManager {
             ]
             _ = SecItemDelete(query as CFDictionary)
         }
-    }
-
-    func importLabelledIdentity(certPEM: String, keyPEM: String) throws -> SecIdentity {
-        let pkcs12Pass = "glimmer-transient"
-        guard let p12 = makePKCS12(certPEM: certPEM, keyPEM: keyPEM, passphrase: pkcs12Pass) else {
-            throw StreamError.crypto("Failed to build PKCS#12 from client identity")
-        }
-
-        // Pre-authorize Glimmer via SecAccess so the import into login keychain
-        // doesn't fire the "Glimmer wants to sign using key" prompt. SecAccess
-        // is deprecated (the data-protection keychain replaces it, but
-        // requires entitlements adhoc-signed apps can't claim), but the API
-        // still works on macOS 26 and is the only documented way to silently
-        // authorize a non-entitled app to use a keychain item.
-        var glimmerApp: SecTrustedApplication?
-        var status = SecTrustedApplicationCreateFromPath(nil, &glimmerApp)
-        guard status == errSecSuccess, let glimmerApp else {
-            throw StreamError.crypto("SecTrustedApplicationCreateFromPath failed (\(status))")
-        }
-        let trustedApps: [SecTrustedApplication] = [glimmerApp]
-        var access: SecAccess?
-        status = SecAccessCreate(Self.dpLabel as CFString, trustedApps as CFArray, &access)
-        guard status == errSecSuccess, let access else {
-            throw StreamError.crypto("SecAccessCreate failed (\(status))")
-        }
-
-        let options: [String: Any] = [
-            kSecImportExportPassphrase as String: pkcs12Pass,
-            kSecImportExportAccess as String: access
-        ]
-        var rawItems: CFArray?
-        let importStatus = SecPKCS12Import(p12 as CFData, options as CFDictionary, &rawItems)
-        guard importStatus == errSecSuccess,
-              let items = rawItems as? [[String: Any]],
-              let first = items.first,
-              let identityAny = first[kSecImportItemIdentity as String] else {
-            throw StreamError.crypto("SecPKCS12Import failed (OSStatus \(importStatus))")
-        }
-        // The CF type for kSecImportItemIdentity is documented as SecIdentityRef,
-        // but defend against keychain misbehaviour with a typeID check before
-        // casting - an unexpected value throws a crypto error rather than
-        // trapping. Past the check, unsafeDowncast is the established idiom for
-        // a typeID-verified CF cast (mirrors the CGColorSpace casts in
-        // VideoDecoder+HDR) and avoids a force-cast.
-        let identityRef = identityAny as CFTypeRef
-        guard CFGetTypeID(identityRef) == SecIdentityGetTypeID() else {
-            throw StreamError.crypto("SecPKCS12Import returned a non-identity (typeID \(CFGetTypeID(identityRef)))")
-        }
-        let identity = unsafeDowncast(identityRef, to: SecIdentity.self)
-
-        // Label the imported items so we can find them on the next launch
-        // (and so they show up as something human-readable in Keychain Access
-        // rather than the default "Imported Private Key").
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassIdentity,
-            kSecValueRef as String: identity,
-            kSecAttrLabel as String: Self.dpLabel
-        ]
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        if addStatus != errSecSuccess && addStatus != errSecDuplicateItem {
-            log.error("SecItemAdd for labelled identity failed: \(addStatus, privacy: .public) (continuing - identity still usable)")
-        }
-
-        log.info("Imported SecIdentity from file-store PEMs (pre-authorized for current binary, no prompt)")
-        return identity
-    }
-
-    /// Re-implemented here so we don't depend on Network.swift's private
-    /// helpers. Same OpenSSL dance: build PKCS#12 from PEM.
-    func makePKCS12(certPEM: String, keyPEM: String, passphrase: String) -> Data? {
-        guard let certBio = certPEM.withCString({ BIO_new_mem_buf($0, -1) }) else { return nil }
-        defer { BIO_free(certBio) }
-        guard let cert = PEM_read_bio_X509(certBio, nil, nil, nil) else { return nil }
-        defer { X509_free(cert) }
-
-        guard let keyBio = keyPEM.withCString({ BIO_new_mem_buf($0, -1) }) else { return nil }
-        defer { BIO_free(keyBio) }
-        guard let pkey = PEM_read_bio_PrivateKey(keyBio, nil, nil, nil) else { return nil }
-        defer { EVP_PKEY_free(pkey) }
-
-        let name = "Glimmer Client Identity"
-        guard let p12 = name.withCString({ namePtr in
-            passphrase.withCString { passPtr in
-                PKCS12_create(passPtr, namePtr, pkey, cert, nil, 0, 0, 0, 0, 0)
-            }
-        }) else { return nil }
-        defer { PKCS12_free(p12) }
-
-        guard let outBio = BIO_new(BIO_s_mem()) else { return nil }
-        defer { BIO_free(outBio) }
-        guard i2d_PKCS12_bio(outBio, p12) == 1 else { return nil }
-
-        var ptr: UnsafeMutablePointer<CChar>?
-        let len = gl_bio_get_mem_data(outBio, &ptr)
-        guard len > 0, let ptr else { return nil }
-        return Data(bytes: ptr, count: Int(len))
     }
 }

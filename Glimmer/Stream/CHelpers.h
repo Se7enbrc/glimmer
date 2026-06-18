@@ -9,8 +9,15 @@
 #define Glimmer_Stream_CHelpers_h
 
 #include <stdint.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/uio.h>
 #include <openssl/bio.h>
 #include <openssl/pkcs12.h>
@@ -105,6 +112,53 @@ static inline EVP_PKEY *gl_rsa_keygen(int bits) {
 cleanup:
     EVP_PKEY_CTX_free(ctx);
     return pkey;
+}
+
+// MARK: - TCP connect with timeout (control channel)
+// Plain connect() has no timeout knob, so a dead host would hang the control
+// request until the OS default (~75s). We do a non-blocking connect + poll so it
+// fails fast. On success the socket is returned in BLOCKING mode with
+// SO_RCVTIMEO/SO_SNDTIMEO set to the same deadline, so the TLS handshake and HTTP
+// read/write that follow on this fd inherit the bound. Returns the fd, or -1.
+// `host` may be a hostname or a numeric IP; `port` is the decimal string.
+static inline int gl_tcp_connect(const char *host, const char *port, int timeout_ms) {
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    struct addrinfo *res = NULL;
+    if (getaddrinfo(host, port, &hints, &res) != 0 || !res) return -1;
+
+    int fd = -1;
+    for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
+        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd < 0) continue;
+        int fl = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+        int rc = connect(fd, ai->ai_addr, ai->ai_addrlen);
+        if (rc == 0) goto connected;
+        if (rc < 0 && errno == EINPROGRESS) {
+            struct pollfd pfd = { .fd = fd, .events = POLLOUT, .revents = 0 };
+            if (poll(&pfd, 1, timeout_ms) > 0 && (pfd.revents & POLLOUT)) {
+                int soerr = 0;
+                socklen_t slen = sizeof(soerr);
+                if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &slen) == 0 && soerr == 0) goto connected;
+            }
+        }
+        close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(res);
+    return -1;
+
+connected:
+    freeaddrinfo(res);
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
+    struct timeval tv = { .tv_sec = timeout_ms / 1000, .tv_usec = (timeout_ms % 1000) * 1000 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    return fd;
 }
 
 #endif

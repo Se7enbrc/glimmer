@@ -235,7 +235,7 @@ public actor PairingClient {
         // auto-pins; the earlier behaviour (silent re-bind on TLS
         // error) is C2.
         // ---------------------------------------------------------------
-        _ = try await network.setPinnedHostCert(pem: serverCertPEM)
+        await network.setPinnedHostCert(pem: serverCertPEM)
 
         try await completeClientPairing(
             clientSecret: clientSecret,

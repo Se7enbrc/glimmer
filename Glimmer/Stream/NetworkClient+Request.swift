@@ -41,7 +41,6 @@ extension NetworkClient {
                     timeout: TimeInterval) async throws -> XMLNode {
 
         try await ensureIdentityLoaded()
-        if usePaired { _ = try await ensureClientIdentity() }
 
         // IMPORTANT: GFE keys its per-session state on `uniqueid`. moonlight-qt
         // intentionally hard-codes "0123456789ABCDEF" so any moonlight client
@@ -51,102 +50,57 @@ extension NetworkClient {
         // still load the IdentityManager-generated client uniqueid in
         // ensureIdentityLoaded() because it's persisted for debugging /
         // forward-compat, but it must not be sent.
-        let uid = Self.wireUniqueID
-        let scheme = usePaired ? "https" : "http"
         let port = usePaired ? server.httpsPort : server.httpPort
 
+        // Build the request-URI (path + query). URLComponents does the percent-
+        // encoding; we extract just the origin-form target for the raw HTTP line.
         var components = URLComponents()
-        components.scheme = scheme
-        components.host = server.address
-        components.port = port
         components.path = "/" + path
-
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "uniqueid", value: uid),
+            URLQueryItem(name: "uniqueid", value: Self.wireUniqueID),
             URLQueryItem(name: "uuid", value: Self.requestNonce())
         ]
         for (key, value) in query.sorted(by: { $0.key < $1.key }) {
             items.append(URLQueryItem(name: key, value: value))
         }
         components.queryItems = items
-
-        guard var url = components.url else {
-            throw StreamError.hostUnreachable("Failed to build URL for /\(path)")
+        guard let encodedQuery = components.percentEncodedQuery else {
+            throw StreamError.hostUnreachable("Failed to build query for /\(path)")
         }
-        // Append the launch-params tail literally - it carries its own
-        // pre-encoded form and percent-encoding it again would break it.
+        var target = "\(components.percentEncodedPath)?\(encodedQuery)"
+        // Append the launch-params tail literally - it carries its own pre-encoded
+        // form and percent-encoding it again would break it.
         if let extra = extraQuery, !extra.isEmpty {
-            let trimmed = extra.hasPrefix("&") ? extra : "&" + extra
-            if let appended = URL(string: url.absoluteString + trimmed) {
-                url = appended
-            }
+            target += extra.hasPrefix("&") ? extra : "&" + extra
         }
 
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.timeoutInterval = timeout
-        // Belt + braces against any cached "Hey, you connected to this host
-        // five minutes ago, want to reuse?" behavior from URLSession.
-        req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        // Match moonlight-qt's User-Agent so Sunshine's per-client capability
-        // gating doesn't refuse HDR or other features on an unknown UA. Qt's
-        // QNetworkAccessManager sends "Mozilla/5.0" by default; moonlight-qt
-        // doesn't override it, so the wire UA reads as Qt's stock string.
-        // Sunshine's HDR negotiation has at times refused unknown clients, so
-        // we put on the same hat.
-        req.setValue("Mozilla/5.0 (compatible; Moonlight/Glimmer)", forHTTPHeaderField: "User-Agent")
+        // SECURITY: log the path only - the query carries rikey/rikeyid/uuid
+        // (session AES key + nonce) that must never reach the unified log.
+        log.debug("GET /\(path, privacy: .public)")
 
-        // SECURITY: redact the URL before logging - query string may carry
-        // rikey/rikeyid/uuid/uniqueid (session AES key + per-request nonce)
-        // which must not appear in unified log even at .debug level.
-        log.debug("GET \(Self.redactedURL(url), privacy: .public)")
+        // Mutual-TLS HTTP over our own OpenSSL transport (no URLSession, no
+        // keychain). usePaired=true presents the client cert + pins the host cert
+        // by DER; usePaired=false is the plain-HTTP unpaired probe. The UA matches
+        // moonlight-qt so Sunshine's per-client feature gating (HDR etc.) doesn't
+        // refuse us as an unknown client.
+        let resp = try await ControlTransport.get(
+            host: server.address, port: port, target: target,
+            userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
+            tls: usePaired,
+            clientCertPEM: usePaired ? clientCertPEM : nil,
+            clientKeyPEM: usePaired ? clientKeyPEM : nil,
+            pinnedCertPEM: usePaired ? server.serverCertPEM : nil,
+            timeout: timeout)
 
-        let (data, response) = try await performRequest(req)
-
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            // GameStream actually puts errors in the body XML and returns
-            // HTTP 200, so this only fires for transport-level breakage like
-            // a 401 from a misconfigured reverse proxy.
-            throw StreamError.launchFailed("HTTP \(http.statusCode) on /\(path)")
+        // GameStream puts protocol errors in the body XML with HTTP 200, so a
+        // non-2xx is transport-level breakage (e.g. a 401 from a reverse proxy).
+        if !(200...299).contains(resp.status) {
+            throw StreamError.launchFailed("HTTP \(resp.status) on /\(path)")
         }
-
         do {
-            return try XMLTreeBuilder.parse(data: data)
+            return try XMLTreeBuilder.parse(data: resp.body)
         } catch {
             throw StreamError.launchFailed("Malformed XML on /\(path): \(error)")
-        }
-    }
-
-    /// Bridges URLSession's data-task API into async/await with a real timeout.
-    /// We use `dataTask(with:completionHandler:)` rather than the async helper
-    /// so the URLSession delegate's TLS challenge runs on the session's own
-    /// queue - the async helper short-circuits some delegate callbacks on
-    /// older macOS releases.
-    func performRequest(_ req: URLRequest) async throws -> (Data, URLResponse) {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(Data, URLResponse), Error>) in
-            let task = session.dataTask(with: req) { data, response, error in
-                if let error {
-                    let nserr = error as NSError
-                    switch nserr.code {
-                    case NSURLErrorTimedOut:
-                        cont.resume(throwing: StreamError.hostUnreachable("Request timed out"))
-                    case NSURLErrorServerCertificateUntrusted,
-                         NSURLErrorClientCertificateRejected,
-                         NSURLErrorClientCertificateRequired,
-                         NSURLErrorSecureConnectionFailed:
-                        cont.resume(throwing: StreamError.hostUnreachable("TLS handshake failed: \(nserr.localizedDescription)"))
-                    default:
-                        cont.resume(throwing: StreamError.hostUnreachable(nserr.localizedDescription))
-                    }
-                    return
-                }
-                guard let data, let response else {
-                    cont.resume(throwing: StreamError.hostUnreachable("Empty response"))
-                    return
-                }
-                cont.resume(returning: (data, response))
-            }
-            task.resume()
         }
     }
 

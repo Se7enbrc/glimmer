@@ -160,9 +160,8 @@ extension MoonlightManager {
             await MainActor.run { [weak self] in self?.hostUnreachableStreak = 0 }
             // Step 2: now that we know the host is up, ask /serverinfo who
             // it is and whether it's busy. We do this on a fresh
-            // NetworkClient per poll - the client is cheap to construct,
-            // and reusing one across polls would let stale URLSession
-            // connections age in the background.
+            // NetworkClient per poll - the client is cheap to construct and
+            // holds no persistent connection, so there's nothing to reuse.
             let client = NetworkClient(server: snap.info)
             do {
                 let info = try await client.fetchServerInfo()

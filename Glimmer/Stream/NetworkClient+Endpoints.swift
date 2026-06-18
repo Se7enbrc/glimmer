@@ -42,7 +42,7 @@ extension NetworkClient {
 
         var xml: XMLNode
         var fetchedOverPaired = false   // implicit pair-proof: HTTPS succeeded
-        if pinnedHostCert != nil {
+        if server.serverCertPEM != nil {
             // Pinned. HTTPS only. Any TLS failure here is either a real
             // outage or a possible MITM - we don't try to disambiguate,
             // we just refuse and ask the user to re-pair if their host
@@ -181,7 +181,7 @@ extension NetworkClient {
         // We still expose the host cert opportunistically on ServerInfo so
         // a future "show fingerprint to user" UI has something to render -
         // but it does not become a pin until pairing succeeds.
-        if pinnedHostCert == nil {
+        if server.serverCertPEM == nil {
             if let pemFromXML = xml.string(forChild: "PlainCert"), !pemFromXML.isEmpty {
                 server.serverCertPEM = pemFromXML
             }

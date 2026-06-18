@@ -421,9 +421,9 @@ extension MoonlightManager {
     /// unit-testable.
     static func connectFailureBanner(for error: Error, hostName: String) -> String {
         guard let streamError = error as? StreamError else {
-            // Non-StreamError (NSError from the HTTP/TLS layer, URLSession
-            // timeout, DNS failure) on the start path almost always means the
-            // host never answered - the reach-failure copy is correct.
+            // Any non-StreamError on the start path is unexpected - the control
+            // layer always throws StreamError - so treat it as a reach failure,
+            // by far the most likely cause.
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
         }
         switch streamError {
