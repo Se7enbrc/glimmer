@@ -45,16 +45,12 @@
 //      when bring-up succeeds in a different environment - the many silent nil
 //      paths mean a packaged app could be dead-on-arrival invisibly.
 //
-//  ENTITLE-OR-REMOVE DECISION (made on a packaged run's evidence - do not
+//  FIX-OR-REMOVE DECISION (made on a packaged run's evidence - do not
 //  pre-empt it in code):
-//    * The prime suspect for production darkness is the App Sandbox
-//      (Glimmer.entitlements enables it; a successful bring-up environment may
-//      be unsandboxed). The stage-naming NOTICEs below settle sandbox-vs-API
-//      in one instrumented packaged run.
-//    * If sandbox-blocked: EITHER add the entitlement/exception the failing
-//      stage needs (a deliberate security-surface decision, not a telemetry-pass
-//      change), OR remove this sampler honestly: delete the file, its exporter
-//      hook (TelemetryExporter+CaptureSections.fillResource), the NDJSON/prom
+//    * If a stage fails on a packaged build, the stage-naming NOTICEs below
+//      name it. If the dlopen/subscription is flat-out refused: remove this
+//      sampler honestly - delete the file, its exporter hook
+//      (TelemetryExporter+CaptureSections.fillResource), the NDJSON/prom
 //      render keys, and gate the dashboard power/GPU panels off.
 //    * If API-stage (a group/format change on a newer OS): fix the decode or
 //      drop only the failing group - each group already degrades independently.
@@ -204,8 +200,8 @@ final class IOReportSampler: @unchecked Sendable {
 
     /// Build the sampler, or return nil if IOReport is unavailable - with a
     /// one-time Diag NOTICE naming the FAILING STAGE (dlopen / which dlsym /
-    /// which subscription), so a packaged sandboxed run answers sandbox-vs-API
-    /// from its session log instead of shipping silently-dark fields again.
+    /// which subscription), so a packaged run names the failing stage from its
+    /// session log instead of shipping silently-dark fields again.
     /// Called ONLY on the gate-on path (the exporter constructs it in start(),
     /// after the session log sink is up), so the dlopen + subscription cost is
     /// paid only when telemetry is opt-in ON - and the NOTICEs are bounded to
@@ -213,8 +209,7 @@ final class IOReportSampler: @unchecked Sendable {
     init?() {
         // Resolves from the dyld shared cache - no on-disk file, no link-time dep.
         guard let handle = dlopen("/usr/lib/libIOReport.dylib", RTLD_LAZY) else {
-            Self.noteBringUpFailure("dlopen(/usr/lib/libIOReport.dylib) returned nil"
-                + " - sandbox denial is the prime suspect for a packaged build")
+            Self.noteBringUpFailure("dlopen(/usr/lib/libIOReport.dylib) returned nil")
             return nil
         }
         var missingSymbols: [String] = []

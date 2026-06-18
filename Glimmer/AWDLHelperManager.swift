@@ -23,8 +23,7 @@ import os.log
 }
 
 enum HelperConstants {
-    /// The daemon's Mach service (matches helper/Protocol.swift + the launchd
-    /// plist + the sandbox mach-lookup exception in Glimmer.entitlements).
+    /// The daemon's Mach service (matches helper/Protocol.swift + the launchd plist).
     static let machServiceName = "io.ugfugl.glimmer.helper"
     /// The launchd plist filename in Contents/Library/LaunchDaemons/.
     static let daemonPlistName = "io.ugfugl.glimmer.helper.plist"

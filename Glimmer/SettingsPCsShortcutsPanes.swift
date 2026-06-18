@@ -269,10 +269,9 @@ struct ShortcutsPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            // (Raw/accel-free mouse was explored here but is impossible while
-            // sandboxed - macOS won't let a sandboxed app open the pointer's HID
-            // (kIOReturnNotPermitted) and CGEventTap deltas are accelerated. See
-            // issue #22, closed not-planned. Mouse motion uses macOS's deltas.)
+            // (Raw/accel-free mouse was explored here but shelved: CGEventTap
+            // deltas are accelerated and the system accel-disable is intrusive.
+            // See issue #22, closed not-planned. Mouse motion uses macOS's deltas.)
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showChordCapture) {

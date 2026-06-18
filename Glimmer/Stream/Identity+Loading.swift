@@ -329,11 +329,6 @@ extension IdentityManager {
     // still use moonlight-qt alongside Glimmer keep their host list
     // intact. (The next time they pair from moonlight-qt itself, qt will
     // regenerate its own identity.)
-    //
-    // Sandbox note: we declare
-    //   com.apple.security.temporary-exception.shared-preference.read-write
-    // scoped narrowly to the moonlight-stream domains in the entitlements
-    // file so this write reaches the actual plist even inside the sandbox.
 
     fileprivate static let moonlightQtSuiteName = "com.moonlight-stream.Moonlight"
 
@@ -349,9 +344,8 @@ extension IdentityManager {
     /// Idempotent.
     func wipeMoonlightQtIdentityPlist() {
         guard let mq = UserDefaults(suiteName: Self.moonlightQtSuiteName) else {
-            // Suite unreadable (sandbox without the temporary-exception, or
-            // CFPreferences misconfig). Not an error per se - just nothing
-            // to wipe from our point of view.
+            // Suite unreadable (CFPreferences misconfig). Not an error per se -
+            // just nothing to wipe from our point of view.
             log.info("moonlight-qt suite not readable; nothing to wipe")
             return
         }

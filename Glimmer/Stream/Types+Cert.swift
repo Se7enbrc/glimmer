@@ -84,7 +84,7 @@ public enum PinnedCertStore {
     // MARK: File-backed store (mode-0600 files under Application Support)
     //
     // UserDefaults backs onto a plain XML plist in
-    // ~/Library/Preferences/ (sandbox-containered or not). Any same-UID
+    // ~/Library/Preferences/. Any same-UID
     // process can both read and *write* to it via cfprefsd - there is no
     // per-app ACL. For a pinned host cert the read leak is mostly
     // harmless (the cert is public anyway), but the write surface is the
@@ -96,9 +96,8 @@ public enum PinnedCertStore {
     //   <ApplicationSupport>/Glimmer/PinnedHosts/<sanitized-id>.pem
     // with mode 0600 (owner-only). Same enforcement pattern as
     // `FileIdentityStore` in Identity.swift - atomic write, stat(2)
-    // verify, on-failure delete-and-throw. Inside the sandbox this lands
-    // at <Container>/Library/Application Support/Glimmer/PinnedHosts/...
-    // which is per-app private at the filesystem level.
+    // verify, on-failure delete-and-throw. mode 0600 keeps it
+    // owner-only at the filesystem level.
     //
     // Migration: read-side hits the legacy UserDefaults key as a
     // fallback, copies forward to the file store, and deletes the
@@ -159,8 +158,7 @@ public enum PinnedCertStore {
     // MARK: File-store internals
 
     /// `~/Library/Application Support/Glimmer/PinnedHosts/`. Created at
-    /// mode 0700 on first write. Inside the sandbox this resolves to
-    /// the container's Application Support path.
+    /// mode 0700 on first write.
     private static func directoryURL() throws -> URL {
         let fm = FileManager.default
         let base = try fm.url(for: .applicationSupportDirectory,

@@ -3,8 +3,7 @@
 //
 //  "Mute the Mac while streaming" - captures the default output device's
 //  virtual main volume on stream start, drops it to zero, and restores it on
-//  stop. CoreAudio (sandbox-legal on Developer-ID + Mac App Store) rather than
-//  the osascript shell-out the App Sandbox blocks. Split out of
+//  stop. CoreAudio rather than an osascript shell-out. Split out of
 //  MoonlightManager.swift to keep the core type under the body-length limit.
 //
 
@@ -14,9 +13,7 @@ import Foundation
 
 extension MoonlightManager {
     // Capture the system output level on stream start, drop it to zero, and
-    // restore it on stop. Backed by CoreAudio (see systemVolume/setSystemVolume)
-    // rather than `osascript`, which the App Sandbox blocks - the shell-out
-    // path was a silent no-op in the shipping build.
+    // restore it on stop. Backed by CoreAudio (see systemVolume/setSystemVolume).
     //
     // `prePausedMacVolume` non-nil is the did-mute LATCH: it is set exactly
     // when we drop the volume and cleared exactly when we put it back, so
@@ -52,11 +49,8 @@ extension MoonlightManager {
         }
     }
 
-    // System output volume via CoreAudio. Replaces the prior `osascript`
-    // shell-out, which the App Sandbox blocks (Process exec of
-    // /usr/bin/osascript is denied), making the mute feature a silent no-op.
-    // CoreAudio property access on the default output device is sandbox-legal
-    // on BOTH distribution paths - Developer-ID DMG and the Mac App Store.
+    // System output volume via CoreAudio property access on the default output
+    // device.
     private func defaultOutputDeviceID() -> AudioObjectID? {
         var deviceID = AudioObjectID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)

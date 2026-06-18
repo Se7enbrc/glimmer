@@ -14,12 +14,12 @@
 //  on the GameController path.
 //
 //  REQUIRES the "Input Monitoring" privacy permission (TCC kTCCServiceListenEvent
-//  - it covers game controllers, not just keyboards) plus the
-//  com.apple.security.device.usb / .bluetooth sandbox entitlements. This is
-//  Developer-ID-legal but NOT Mac-App-Store-compatible (device.usb is a hard
-//  App-Review reject). MAS-STRIP: a future Mac App Store target must remove
-//  this file, its two device.* entitlements, and the call sites that reference
-//  DualSenseHID (ControllerForwarder / InputForwarder / TroubleshootingPane).
+//  - it covers game controllers, not just keyboards). Raw-HID open works under
+//  the unsandboxed Developer-ID build with no device.* entitlement. NOT
+//  Mac-App-Store-compatible (raw device HID is a hard App-Review reject).
+//  MAS-STRIP: a future Mac App Store target must remove this file and the call
+//  sites that reference DualSenseHID (ControllerForwarder / InputForwarder /
+//  TroubleshootingPane).
 //
 
 import Foundation
@@ -100,11 +100,11 @@ final class DualSenseHID: @unchecked Sendable {
     /// them to zero. ControllerHaptics feeds lightbar/rumble here when raw-HID
     /// is live; setAdaptiveTriggers feeds the trigger blocks. Lock-guarded.
     private var outputState = DualSenseOutputState()
-    /// Latch so the "SetReport refused by the sandbox" breadcrumb logs once,
-    /// not per write (host re-arms triggers can arrive at frame rate).
+    /// Latch so the "SetReport refused" breadcrumb logs once, not per write
+    /// (host re-arms triggers can arrive at frame rate).
     private var loggedWriteFailure = false
     /// Latch for the first successful OUTPUT write (proves the raw-HID write
-    /// path is permitted under the sandbox - the P1 open question).
+    /// path reached the device).
     private var loggedWriteSuccess = false
 
     /// Serial queue for the IOKit OUTPUT-report writes. The host feedback
@@ -224,9 +224,8 @@ final class DualSenseHID: @unchecked Sendable {
         // it already provides (sticks/face/triggers/touchpad/rumble/light), and
         // we read the centre buttons + battery alongside it. A non-exclusive
         // open still permits IOHIDDeviceSetReport(Output) - the adaptive-trigger
-        // write path below - for an already-matched device under the USB/HID
-        // gamepad entitlement (degrades to a clean no-op if the sandbox refuses
-        // the write; see writeOutputReport).
+        // write path below - for an already-matched device (degrades to a clean
+        // no-op if the write is refused; see writeOutputReport).
         let rc = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         // NOTICE (was INFO): the open-rc + Input-Monitoring state is the one fact
         // that tells "are the DualSense centre buttons / battery actually
@@ -534,10 +533,10 @@ final class DualSenseHID: @unchecked Sendable {
                 log.info("DualSense OUTPUT report write OK (transport=\(bluetooth ? "BT" : "USB", privacy: .public)) - adaptive triggers live")
             }
         } else if !loggedWriteWasRefused() {
-            // SAFETY no-op: a refused write (e.g. kIOReturnNotPermitted under the
-            // sandbox, or an exclusive grab by gamecontrollerd) degrades to "no
-            // adaptive triggers". Everything else - the read path, buttons,
-            // battery - is unaffected. Logged once so the verdict is in the log.
+            // SAFETY no-op: a refused write (e.g. kIOReturnNotPermitted, or an
+            // exclusive grab by gamecontrollerd) degrades to "no adaptive
+            // triggers". Everything else - the read path, buttons, battery - is
+            // unaffected. Logged once so the verdict is in the log.
             log.error("DualSense OUTPUT report write refused rc=0x\(String(UInt32(bitPattern: rc), radix: 16), privacy: .public) - adaptive triggers disabled (degraded no-op)")
         }
     }

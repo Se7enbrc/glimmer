@@ -276,9 +276,9 @@ public final class InputForwarder {
     /// associated; NSEvent.deltaX/Y goes silent under associate-false), falling
     /// back to NSEvent.deltaX/Y only for a synthetic event with no CGEvent
     /// backing. NOTE: these deltas carry macOS's pointer-acceleration curve -
-    /// there is no accel-free path for the mouse while sandboxed (raw HID open
-    /// is `kIOReturnNotPermitted`; CGEventTap is also accelerated; the system
-    /// accel-disable is sandbox-blocked - see issue #22, closed not-planned).
+    /// no accel-free path was adopted for the mouse (CGEventTap is also
+    /// accelerated; the system accel-disable is intrusive - see issue #22,
+    /// closed not-planned).
     /// Returned in the same down-positive Y convention macOS uses so the
     /// LiSendMouseMoveEvent call site needs no sign flip.
     func mouseDelta(from event: NSEvent) -> (dx: Double, dy: Double) {

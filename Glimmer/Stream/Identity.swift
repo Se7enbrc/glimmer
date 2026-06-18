@@ -13,7 +13,7 @@
 //  Ported (loosely now) from moonlight-qt's app/backend/identitymanager.{h,cpp}.
 //
 //
-// STORAGE DECISION: mode-0600 files in the sandbox container, deliberately.
+// STORAGE DECISION: mode-0600 files under Application Support, deliberately.
 // We evaluated moving to the keychain once builds went Developer-ID signed,
 // and chose to stay on files:
 //
@@ -30,8 +30,8 @@
 //
 //   * The reference (moonlight-qt) stores PLAINTEXT PEM in a mode-0644
 //     QSettings plist under ~/Library/Preferences - no keychain at all. Our
-//     mode-0600 files inside the App Sandbox container are already stricter:
-//     the sandbox blocks other same-UID apps from the container, and 0600 > 0644.
+//     mode-0600 files are already stricter: 0600 keeps every other user out
+//     (0600 > 0644).
 //
 // So: files. See SECURITY.md for the user-facing version.
 //
@@ -42,11 +42,11 @@
 // host indefinitely. If it leaks, the attacker is a permanent imposter against
 // every host this install paired with - until the user unpairs each one.
 //
-// The mode-0600 files live in the App Sandbox container: other users on the Mac
-// are out (0600), and the sandbox keeps other same-UID apps out of the
-// container by default. A TCC-allowlisted app with Full Disk Access can still
-// read them - an OS-level boundary, not a Glimmer-specific defence, and a
-// narrower exposure than moonlight-qt's unsandboxed 0644 plist.
+// The mode-0600 files keep every other user on the Mac out. Unsandboxed, there's
+// no container boundary, so a same-UID process isn't blocked by macOS - the 0600
+// perms are the boundary (still stricter than moonlight-qt's 0644 plist). A
+// TCC-allowlisted app with Full Disk Access can still read them - an OS-level
+// boundary, not a Glimmer-specific defence.
 //
 
 import Foundation

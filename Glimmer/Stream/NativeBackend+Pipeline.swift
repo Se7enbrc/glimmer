@@ -485,8 +485,9 @@ extension NativeConnectionEvents {
     /// matches DualSenseHID's reader; the singleton resolves the open device
     /// and merges these params with the current lightbar + rumble before
     /// writing (the 0x02/0x31 report is all-or-nothing). A no-op when the
-    /// raw-HID feature is off or the write is refused by the sandbox - adaptive
-    /// triggers simply don't engage, nothing else is affected.
+    /// raw-HID feature is off or the write is refused (e.g. gamecontrollerd
+    /// grabbed the device) - adaptive triggers simply don't engage, nothing
+    /// else is affected.
     func setAdaptiveTriggers(controller: UInt16, eventFlags: UInt8,
                              typeLeft: UInt8, typeRight: UInt8,
                              left: [UInt8], right: [UInt8]) {
