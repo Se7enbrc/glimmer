@@ -292,6 +292,11 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     private var audioRateAnchorNanos: UInt64 = 0
     private var audioTicksPerMs = 1.0
     private var audioRateResolved = false
+    /// Latest RESIDENT corrector-inserted silence (ms) in the audio buffer, pushed
+    /// by `publishAudioState`. Subtracted from the buffer-fill term in `deriveSkewMs`
+    /// so the playhead reflects real media, not inserted silence (see the type doc
+    /// + `AudioDecoder.pendingSilenceFrames`). 0 until audio flows / no inserts.
+    private var residentSilenceMs: Double = 0
     // Session accumulator (scorecard percentiles): bucket counts + exact
     // min/max/sum, plus an explicit OVERFLOW count for samples past the last
     // bound so the quantile walk's rank space covers EVERY sample - the old
@@ -339,6 +344,15 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         os_unfair_lock_unlock(lock)
     }
 
+    /// Push the latest resident corrector-inserted silence (ms). Called from
+    /// `publishAudioState` at the schedule + completion cadence; one lock + one
+    /// store - the same always-live budget as the audio meter's per-packet work.
+    func setResidentSilenceMs(_ ms: Double) {
+        os_unfair_lock_lock(lock)
+        residentSilenceMs = ms > 0 ? ms : 0
+        os_unfair_lock_unlock(lock)
+    }
+
     /// Re-anchors after the first latch are counted so a mid-session
     /// re-baseline (suppression window, RTP discontinuity) is visible next to
     /// the skew series it steps.
@@ -377,7 +391,12 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         // type); both monotone within any realistic session.
         let videoMs = Double(videoLastRtp &- videoAnchorRtp) / Self.videoRtpTicksPerMs
         let audioMs = Double(audioLastRtp &- audioAnchorRtp) / audioTicksPerMs
-        let skewMs = videoMs - audioMs + fillMs
+        // Subtract resident corrector-silence from the fill: the audio playhead is
+        // (audioMs − REAL buffered media), and inserted silence inflates `fillMs`
+        // without advancing `audioMs`, so counting it biases skew toward "audio
+        // late". Clamp ≥0 (silence is a subset of fill; guards snapshot skew).
+        let realFillMs = max(0, fillMs - residentSilenceMs)
+        let skewMs = videoMs - audioMs + realFillMs
         guard abs(skewMs) <= Self.sanityBoundMs else {
             anchored = false // discontinuity: re-anchor next tick, never wedge
             return nil

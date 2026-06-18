@@ -269,6 +269,9 @@ extension AudioDecoder {
         let silenceFrames = UInt64(frames)
         audioMeterLock.lock()
         framesScheduled &+= silenceFrames
+        // Resident silence for the av_skew correction (-= at completion): this
+        // silence inflates buffer fill without advancing the audio RTP position.
+        pendingSilenceFrames &+= silenceFrames
         // Keep the drift gauge honest: the silence is media the wall-time stream
         // never delivered, so advance the segment's media-played reference by the
         // same amount - wall − media − fill stays an identity instead of stepping
@@ -284,7 +287,7 @@ extension AudioDecoder {
         // discipline): a completion in the sliver between sees fill briefly
         // overstated - harmless, and it can't mistake the moment for a drain.
         playerNode.scheduleBuffer(silence) { [weak self] in
-            self?.meterCompleteOnePlayout(frames: silenceFrames)
+            self?.meterCompleteOnePlayout(frames: silenceFrames, isSilence: true)
         }
         playerNode.play() // no-op mid-stream; keeps the prime edge uniform
         Diag.notice(
@@ -301,9 +304,14 @@ extension AudioDecoder {
     /// pause()/play() here would race teardown. The post-drain cushion rebuild
     /// belongs to the DECODE path - the catch-up clump under the gate grace, or
     /// the grace-expiry silence backfill - never this handler's.
-    func meterCompleteOnePlayout(frames: UInt64) {
+    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false) {
         audioMeterLock.lock()
         framesPlayed &+= frames
+        // A corrector-inserted silence buffer finished: release its resident
+        // contribution so the av_skew fill correction tracks only buffered silence.
+        if isSilence {
+            pendingSilenceFrames = pendingSilenceFrames >= frames ? pendingSilenceFrames &- frames : 0
+        }
         // The scheduled-ahead trough right at this completion - the truest low of the
         // backlog (a completion is exactly where the queue is shallowest). Fed to the
         // reset-on-read MIN-fill window below so the exporter can prove the cushion
@@ -424,6 +432,7 @@ extension AudioDecoder {
     func publishAudioState() {
         audioMeterLock.lock()
         let aheadFrames = framesScheduled &- framesPlayed
+        let residentSilenceFrames = pendingSilenceFrames
         let rate = meterSampleRate
         let started = playoutStarted
         let anchorNanos = driftAnchorNanos
@@ -442,6 +451,11 @@ extension AudioDecoder {
         audioMeterLock.unlock()
         if needsLinkResolve { resolveCushionLink() }
         guard rate > 0 else { return }
+        // Surface resident corrector-silence to the A/V-skew meter so it subtracts
+        // it from buffer fill: the silence is buffered media the audio RTP clock
+        // never advanced past, so counting it makes audio read falsely "late".
+        AudioVideoSkewStore.shared.setResidentSilenceMs(
+            Double(residentSilenceFrames) / rate * 1000.0)
 
         let bufferFillMs = Double(aheadFrames) / rate * 1000.0
         var driftMs: Double?

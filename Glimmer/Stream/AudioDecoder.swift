@@ -57,6 +57,14 @@ public final class AudioDecoder: @unchecked Sendable {
     /// incremented in the scheduleBuffer completion handler (off-thread). The
     /// scheduled-ahead backlog = framesScheduled − framesPlayed.
     var framesPlayed: UInt64 = 0
+    /// Corrector-inserted silence frames currently RESIDENT in the buffer
+    /// (scheduled but not yet played): the running sum of micro-stretch + backfill
+    /// silence, += at each silence schedule and -= at each silence completion.
+    /// Subtracted from buffer fill before deriving `av_skew_ms` so the audio
+    /// playhead reflects REAL media - inserted silence inflates fill without
+    /// advancing the audio RTP position, which otherwise biases the skew toward
+    /// "audio late" by exactly the resident silence. Guarded by `audioMeterLock`.
+    var pendingSilenceFrames: UInt64 = 0
     /// Output sample rate (Hz) - set at init so the meter can convert frames↔ms.
     var meterSampleRate: Double = 48_000
     /// Wall-clock (`DispatchTime` ns) anchor for the audio-clock-drift metric: the

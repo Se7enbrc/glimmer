@@ -446,6 +446,9 @@ extension AudioDecoder {
         let stretchFrames = UInt64(frames)
         audioMeterLock.lock()
         framesScheduled &+= stretchFrames
+        // Resident silence for the av_skew correction (-= at completion): this
+        // stretch silence inflates buffer fill without advancing the audio RTP.
+        pendingSilenceFrames &+= stretchFrames
         // Keep the drift gauge RAW (the backfill idiom): the silence is media
         // the wall-time stream never delivered, so credit the segment's
         // media-played reference - the gauge keeps showing the true skew slope
@@ -456,7 +459,7 @@ extension AudioDecoder {
         let appliedMs = driftCompAppliedMs
         audioMeterLock.unlock()
         playerNode.scheduleBuffer(silence) { [weak self] in
-            self?.meterCompleteOnePlayout(frames: stretchFrames)
+            self?.meterCompleteOnePlayout(frames: stretchFrames, isSilence: true)
         }
         Diag.notice(
             "audio drift micro-stretch +\(Int(Self.driftStretchStepMs))ms silence "
