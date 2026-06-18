@@ -137,7 +137,7 @@ extension FramePacer {
         // ignored / mis-honored - the floor must never exceed the panel max.
         let panelMax = Self.panelMaxHz(for: view)
         let range = Self.preferredRange(
-            forStreamIntervalSeconds: self.streamFrameIntervalSeconds,
+            forStreamIntervalSeconds: self.configuredFrameIntervalSeconds,
             panelMaxHz: panelMax)
         link.preferredFrameRateRange = range
         // Record the floor we just pinned so the per-tick re-apply (FIX #1) only

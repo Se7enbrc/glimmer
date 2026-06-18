@@ -134,6 +134,13 @@ final class FramePacer: @unchecked Sendable {
     /// of recent hostPTS deltas. Seeded from the configured stream fps so the
     /// very first ticks have a sane cadence before PTS history accrues.
     var streamFrameIntervalSeconds: Double
+    /// The FIXED configured-fps interval (set once at init, never refined). The
+    /// present-callback FLOOR pins to THIS, not to the per-frame-refined
+    /// `streamFrameIntervalSeconds` (which jitters with measured PTS cadence) - so
+    /// the floor never re-pins on cadence wobble, which makes the display
+    /// renegotiate its refresh and drop a frame (the TestUFO frameskip gap). The
+    /// due gate still paces from the refined interval; only the floor is fixed.
+    let configuredFrameIntervalSeconds: Double
     /// Last hostPTS we saw at submit, to compute the next delta.
     var lastSubmittedPTSSeconds: Double = .nan
     /// Recent hostPTS deltas (seconds) for the median estimate. Bounded.
@@ -402,27 +409,16 @@ final class FramePacer: @unchecked Sendable {
     /// VideoDecoder and so the selector signature stays clean.
     @MainActor private var tickProxy: DisplayLinkProxy?
 
-    /// The stream Hz (floor) we last pinned `preferredFrameRateRange` to (FIX
-    /// #1). Seeded from the configured fps at install; re-applied from the
-    /// PTS-refined cadence on the main-actor tick when it drifts past
-    /// `frameRateReapplyHysteresisHz`, so a configured-vs-actual fps mismatch
-    /// (or a mid-stream fps change) updates the throttle floor without a
-    /// per-frame cross-queue hop from `submit`. `.nan` until first applied.
+    /// The Hz (floor) we last pinned `preferredFrameRateRange` to (FIX #1).
+    /// Pinned to the FIXED configured fps at install and held there; the
+    /// main-actor re-apply only touches it again if the panel max changes under
+    /// us (deadband `frameRateReapplyHysteresisHz`). `.nan` until first applied.
     /// Module-internal (not private) so the re-apply helper in
     /// FramePacer+FrameRateRange.swift can read/update it.
     @MainActor var appliedFloorHz: Double = .nan
 
-    // Floor re-pin smoothing state (the re-pin-storm fix - see
-    // `reapplyPreferredRangeIfNeeded`): the EWMA-smoothed refined cadence the
-    // clamped candidate is built from, the last re-pin instant (min-dwell),
-    // and the last floor MIRRORED to Diag (once-per-change-class demotion).
-    // All main-actor: written only on the tick path where the link lives.
-    @MainActor var refinedFloorEwmaHz: Double = .nan
-    @MainActor var lastFloorRePinAt: CFTimeInterval = .nan
-    @MainActor var lastDiagMirroredFloorHz: Double = .nan
-
-    // `frameRateReapplyHysteresisHz` and the EWMA/dwell tuning live in
-    // FramePacer+FrameRateRange.swift with the re-apply helper that uses them.
+    // `frameRateReapplyHysteresisHz` lives in FramePacer+FrameRateRange.swift
+    // with the re-apply helper that uses it.
 
     /// Dedicated serial queue for the present path. `.userInteractive` because
     /// a missed release is a dropped frame the user sees. NEVER the main actor.
@@ -436,7 +432,9 @@ final class FramePacer: @unchecked Sendable {
         // Seed the cadence from the configured fps; refined from PTS deltas
         // once frames flow. Guard against a zero/garbage config.
         let fps = configuredFps > 0 ? Double(configuredFps) : 60.0
-        self.streamFrameIntervalSeconds = FramePacer.clampFrameInterval(1.0 / fps)
+        let interval = FramePacer.clampFrameInterval(1.0 / fps)
+        self.streamFrameIntervalSeconds = interval
+        self.configuredFrameIntervalSeconds = interval
     }
 
     /// Clamp a frame-interval estimate to a sane [1ms, 1s] range. A poisoned
@@ -475,10 +473,11 @@ final class FramePacer: @unchecked Sendable {
         rateWindowStartHostTime = now
         rateWindowStartTicks = tickCount
         rateWindowStartReleases = releaseCount
-        // D3 (warm re-enable floor seed): a re-enabled pacer is freshly built
+        // D3 (warm re-enable cadence seed): a re-enabled pacer is freshly built
         // from the CONFIGURED fps, but its predecessor had already refined the
-        // true content cadence - adopt it so installLink pins the refined
-        // floor (~174Hz), not the configured 240. See the helper for the WHY.
+        // true content cadence - adopt it to warm-start the DUE GATE's pacing
+        // cadence. The present-callback floor is unaffected: it always pins the
+        // FIXED configured rate (configuredFrameIntervalSeconds), never this.
         adoptStashedRefinedCadenceLocked()
         os_unfair_lock_unlock(&lock)
 
