@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.6.15 - 2026-06-18
+
+Fixes streams suddenly failing with "host doesn't recognize this Mac" after the
+Mac sleeps. The client TLS identity is imported into the login keychain, which
+locks on sleep/idle; the long-running app kept using the now-unusable cached
+identity, so the next stream's mutual-TLS handshake couldn't sign - and that was
+misreported as a lost pairing. Glimmer now re-imports the identity on demand
+when its key can't sign, so it self-heals instead of needing a restart.
+
 ## 2026.6.14 - 2026-06-17
 
 The AWDL helper now logs each time macOS re-raises `awdl0` mid-stream and it
