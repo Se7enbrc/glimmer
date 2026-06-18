@@ -368,103 +368,50 @@ extension AudioDecoder {
     //  post-(re)prime grace belong to the under-run/rebuild machinery, which
     //  keeps sole custody of recovery there.
 
-    /// Accumulated UNREPAID drift (ms) before the micro-stretch arms. Low end
-    /// of the 30-50ms design window: at the measured 40ppm the first repayment
-    /// lands ~12min in, while the learned wired targets (40-60ms) keep the
-    /// cushion above empty until it does. Once armed, repayment tracks accrual
-    /// step-for-step, so the residual rides just inside the threshold.
-    static let driftStretchArmMs: Double = 30
-    /// One repayment quantum (ms) - exactly one packet, the same splice size
-    /// the steady-state trim already takes at a far higher allowed cadence.
-    static let driftStretchStepMs: Double = 5
-    /// Minimum spacing (ns) between stretches: bounds the worst case at one
-    /// packet per 30s (~167µs/s, +0.017% - far below audibility) even against
-    /// a haywire gauge; the measured 40ppm need is one per ~125s.
-    static let driftStretchMinIntervalNanos: UInt64 = 30_000_000_000
-
-    /// One micro-stretch check, on the decode path after each scheduled packet
-    /// (`stateLock` held by the caller - the schedule below stays serialized
-    /// against `shutdown()`: the completion-handler-vs-shutdown discipline).
-    /// Steady-state cost: one lock + a few compares; the clock read only runs
-    /// past the cheap gates while the fill is actually short. Inserts at most
-    /// ONE silence quantum, when ALL hold: primed and not draining/rebuilding
-    /// (the distress disarms), fill a full step short of target
-    /// (corroboration), rate-limit clear, and the segment's unrepaid drift
-    /// past the arm threshold (the long-window key).
-    func driftMicroStretch(format: AVAudioFormat) {
-        audioMeterLock.lock()
-        guard primed, playoutStarted, !playoutDrained, driftAnchorNanos != 0,
-              meterSampleRate > 0 else {
-            audioMeterLock.unlock()
-            return
-        }
-        let rate = meterSampleRate
-        let aheadFrames = framesScheduled &- framesPlayed
-        let fillMs = Double(aheadFrames) / rate * 1000.0
-        // Corroboration gate - and the insert cap: fill ≤ target − step keeps
-        // post-insert fill ≤ target, a full hysteresis band below the trim, so
-        // a stretch can never feed the very trim that would undo it.
-        guard fillMs <= playoutTargetMs - Self.driftStretchStepMs else {
-            audioMeterLock.unlock()
-            return
-        }
+    /// Drift-tracking resampler PI loop. Called ~per decoded packet from
+    /// `publishAudioState`; self-rate-limits to ~4Hz (drift is ppm-slow). When
+    /// `engaged` (steady playout - `primed && !playoutDrained`) it steers the
+    /// varispeed rate by the buffer-fill error: the INTEGRAL absorbs the steady
+    /// host↔Mac clock offset (its whole job), the PROPORTIONAL answers transient
+    /// fill excursions, both slew-limited so the rate (hence pitch) never steps
+    /// audibly. When NOT engaged (pre-roll / re-prime / drain) it forgets the
+    /// estimate and slews back to rate 1.0 so a resumed segment starts neutral -
+    /// the under-run + rebuild machinery owns recovery there. Single caller, so the
+    /// resampler state needs no lock.
+    func driveResampler(fillMs: Double, targetMs: Double, engaged: Bool) {
+        // Self-rate-limit to ~4Hz: publishAudioState fires per decoded packet
+        // (~200Hz) and drift is ppm-slow, so a fast loop only adds noise.
         let now = DispatchTime.now().uptimeNanoseconds
-        guard now >= gateGraceUntilNanos,
-              now &- lastDriftStretchNanos >= Self.driftStretchMinIntervalNanos,
-              now >= driftAnchorNanos, framesPlayed >= driftAnchorFramesPlayed else {
-            audioMeterLock.unlock()
-            return
-        }
-        // The same per-segment identity `publishAudioState` exports: wall
-        // elapsed − media played − standing fill = the segment's clock slip.
-        let wallMs = Double(now &- driftAnchorNanos) / 1_000_000.0
-        let mediaMs = Double(framesPlayed &- driftAnchorFramesPlayed) / rate * 1000.0
-        let driftMs = wallMs - mediaMs - fillMs
-        let unrepaidMs = driftMs + driftCompAppliedMs
-        guard unrepaidMs <= -Self.driftStretchArmMs else {
-            audioMeterLock.unlock()
-            return
-        }
-        // Claim the rate-limit slot before dropping the lock for the alloc -
-        // re-entry inside the window is then impossible however the alloc
-        // goes (a failed alloc simply retries a window later; self-healing,
-        // and the under-run machinery still backstops a drain meanwhile).
-        lastDriftStretchNanos = now
-        audioMeterLock.unlock()
+        guard now &- lastResamplerUpdateNanos >= Self.resamplerUpdateIntervalNanos else { return }
+        lastResamplerUpdateNanos = now
 
-        let frames = AVAudioFrameCount((Self.driftStretchStepMs / 1000.0) * format.sampleRate)
-        guard frames > 0,
-              let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return }
-        silence.frameLength = frames
-        // Zero explicitly - AVAudioPCMBuffer does not guarantee zeroed memory,
-        // and "silence" must never be heap garbage (same rule as the backfill).
-        if let channels = silence.floatChannelData {
-            for channel in 0..<Int(format.channelCount) {
-                channels[channel].update(repeating: 0, count: Int(frames))
+        guard engaged else {
+            // Pre-roll / re-prime / drain: the under-run + rebuild machinery owns
+            // recovery. Forget the drift estimate and slew the rate back to 1.0 so
+            // a resumed segment starts neutral. (Slew, never snap - no pitch step.)
+            resamplerIntegralPpm = 0
+            if resamplerEpsPpm != 0 {
+                resamplerEpsPpm += max(-Self.resamplerSlewPpm,
+                                       min(Self.resamplerSlewPpm, -resamplerEpsPpm))
+                varispeed.rate = Float(1.0 + resamplerEpsPpm * 1e-6)
             }
+            return
         }
-        let stretchFrames = UInt64(frames)
-        audioMeterLock.lock()
-        framesScheduled &+= stretchFrames
-        // Resident silence for the av_skew correction (-= at completion): this
-        // stretch silence inflates buffer fill without advancing the audio RTP.
-        pendingSilenceFrames &+= stretchFrames
-        // Keep the drift gauge RAW (the backfill idiom): the silence is media
-        // the wall-time stream never delivered, so credit the segment's
-        // media-played reference - the gauge keeps showing the true skew slope
-        // (how later measurement verifies the skew is still there AND repaid),
-        // while the ledger carries what has been repaid so far.
-        driftAnchorFramesPlayed &+= stretchFrames
-        driftCompAppliedMs += Self.driftStretchStepMs
-        let appliedMs = driftCompAppliedMs
-        audioMeterLock.unlock()
-        playerNode.scheduleBuffer(silence) { [weak self] in
-            self?.meterCompleteOnePlayout(frames: stretchFrames, isSilence: true)
-        }
-        Diag.notice(
-            "audio drift micro-stretch +\(Int(Self.driftStretchStepMs))ms silence "
-            + "(\(Int(appliedMs.rounded()))ms repaid this segment) - segment clock skew "
-            + "\(Int(driftMs.rounded()))ms",
-            "Stream")
+        // Fill above the cushion setpoint ⇒ too much buffered ⇒ consume faster
+        // (rate > 1). The INTEGRAL absorbs the steady ppm clock offset (its whole
+        // job); the PROPORTIONAL term answers transient fill excursions. The
+        // deadband stops the integral accruing on sub-ms noise once converged.
+        let error = fillMs - targetMs
+        let e = abs(error) < Self.resamplerDeadbandMs ? 0 : error
+        resamplerIntegralPpm = clampResamplerPpm(resamplerIntegralPpm + Self.resamplerKiPpmPerMs * e)
+        let targetPpm = clampResamplerPpm(Self.resamplerKpPpmPerMs * e + resamplerIntegralPpm)
+        // Slew-limit the APPLIED offset so the rate (hence pitch) never steps.
+        resamplerEpsPpm += max(-Self.resamplerSlewPpm,
+                               min(Self.resamplerSlewPpm, targetPpm - resamplerEpsPpm))
+        varispeed.rate = Float(1.0 + resamplerEpsPpm * 1e-6)
+    }
+
+    private func clampResamplerPpm(_ v: Double) -> Double {
+        max(-Self.resamplerBoundPpm, min(Self.resamplerBoundPpm, v))
     }
 }

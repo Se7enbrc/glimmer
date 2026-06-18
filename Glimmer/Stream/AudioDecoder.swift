@@ -27,6 +27,13 @@ public final class AudioDecoder: @unchecked Sendable {
     private var decoder: OpaquePointer?            // OpusMSDecoder*
     private let engine = AVAudioEngine()
     let playerNode = AVAudioPlayerNode()
+    /// Drift-tracking resampler, inserted between `playerNode` and the mixer. A
+    /// slew-limited PI loop (`driveResampler`, driven ~1Hz from `publishAudioState`)
+    /// steers `rate = 1+ε` to hold buffer fill at the cushion setpoint, cancelling
+    /// the steady host↔Mac clock drift continuously - replacing the old
+    /// one-directional/clicky silence micro-stretch. ε is ppm-scale (the bound is
+    /// ±500ppm = ±0.5 cents, inaudible; the slew limit keeps the pitch from stepping).
+    let varispeed = AVAudioUnitVarispeed()
     private var inputFormat: AVAudioFormat?
     private var channelCount: Int = 2
     private var samplesPerFrame: Int = 240         // 5ms at 48kHz, common GFE/Sunshine config
@@ -85,15 +92,29 @@ public final class AudioDecoder: @unchecked Sendable {
     /// the current segment. Drift uses (framesPlayed − this) so a re-baseline after a
     /// drain doesn't double-count media already played in an earlier segment.
     var driftAnchorFramesPlayed: UInt64 = 0
-    /// Media (ms) the drift MICRO-STRETCH has inserted this playout segment to
-    /// repay measured clock skew (AudioDecoder+CushionMemory.swift). The drift
-    /// gauge stays RAW - each insert credits `driftAnchorFramesPlayed`, the
-    /// backfill idiom - so this ledger is what separates skew already repaid
-    /// from skew still standing. Reset wherever the drift anchor re-baselines.
-    var driftCompAppliedMs: Double = 0
-    /// `DispatchTime` ns of the last micro-stretch - its rate limit (the
-    /// haywire-gauge bound). Guarded by `audioMeterLock`. 0 = none yet.
-    var lastDriftStretchNanos: UInt64 = 0
+    /// Drift-resampler PI state (the loop lives in `driveResampler`,
+    /// AudioDecoder+CushionMemory.swift). `resamplerIntegralPpm` accumulates the
+    /// steady host↔Mac clock offset; the applied `resamplerEpsPpm` slews toward the
+    /// PI target so the varispeed rate never steps audibly. Touched only on the
+    /// ~1Hz `publishAudioState` cadence (single caller) so no lock; reset toward 0
+    /// whenever the loop disengages (pre-roll / re-prime / drain).
+    var resamplerIntegralPpm: Double = 0
+    var resamplerEpsPpm: Double = 0
+    /// `DispatchTime` ns of the last PI update - `publishAudioState` (hence
+    /// `driveResampler`) fires per decoded packet (~200Hz), so the loop rate-limits
+    /// itself to ~4Hz off this; drift is ppm-slow and a fast loop only adds noise.
+    var lastResamplerUpdateNanos: UInt64 = 0
+    /// Drift-resampler PI tuning. Conservative starting values: the SLEW limit and the
+    /// BOUND are the safety guards (the varispeed rate can never step audibly nor run
+    /// away), so the gains can be tuned up in an A/B with no warble risk. The drift to
+    /// correct is tens of ppm (host↔Mac clock offset), so ε settles ppm-scale ⇒ pitch
+    /// shift well under a cent.
+    static let resamplerUpdateIntervalNanos: UInt64 = 250_000_000  // ~4Hz; drift is ppm-slow
+    static let resamplerDeadbandMs = 1.0    // ignore sub-ms fill noise (integral anti-windup)
+    static let resamplerKpPpmPerMs = 3.0    // proportional: answers transient fill excursions
+    static let resamplerKiPpmPerMs = 0.03   // integral: absorbs the steady ppm clock offset
+    static let resamplerSlewPpm = 2.0       // max ppm change per update ⇒ rate never steps
+    static let resamplerBoundPpm = 500.0    // hard clamp ≫ any real drift (~1 cent worst case)
     /// Mirror of `isShutdown` in the METER lock's domain, raised by `shutdown()`
     /// BEFORE `playerNode.stop()`. Stopping a node with a standing cushion fires
     /// the completion handler of EVERY queued buffer (.dataConsumed semantics:
@@ -337,7 +358,7 @@ public final class AudioDecoder: @unchecked Sendable {
         meterSampleRate = Double(sampleRate)
         framesScheduled = 0; framesPlayed = 0
         driftAnchorNanos = 0; driftAnchorFramesPlayed = 0
-        driftCompAppliedMs = 0; lastDriftStretchNanos = 0
+        resamplerIntegralPpm = 0; resamplerEpsPpm = 0; varispeed.rate = 1.0
         playoutStarted = false; playoutDrained = false; meterShutdown = false
         // Cushion / pre-roll state for this session: start paused (no play() at
         // engine start), at the SEEDED adaptive target, re-prime count reset. (The
@@ -419,7 +440,14 @@ public final class AudioDecoder: @unchecked Sendable {
         inputFormat = fmt
 
         engine.attach(playerNode)
-        engine.connect(playerNode, to: engine.mainMixerNode, format: fmt)
+        engine.attach(varispeed)
+        // playerNode → varispeed → mixer. The varispeed resamples the player's
+        // output by `rate=1+ε` (driveResampler), pulling the player's buffers at
+        // the consumption rate - so completion timing (framesPlayed) still tracks
+        // real consumption and the input-frame fill/cushion math reads true (the
+        // ε factor on the frames→ms convert is ppm-negligible).
+        engine.connect(playerNode, to: varispeed, format: fmt)
+        engine.connect(varispeed, to: engine.mainMixerNode, format: fmt)
         do {
             // Start the engine but DO NOT `play()` the player node yet. Playback is
             // deferred until a `playoutTargetMs` cushion of decoded audio is queued
@@ -609,10 +637,8 @@ public final class AudioDecoder: @unchecked Sendable {
         // format, hence the parameter). No-op once primed, so this stays one lock
         // + a compare on the steady-state path.
         maybePrime(format: fmt)
-        // Deterministic clock-skew repayment (the measured −40ppm drain): DECODE
-        // path only - it schedules into the node, which must stay serialized
-        // against `shutdown()`. Design + gates: AudioDecoder+CushionMemory.swift.
-        driftMicroStretch(format: fmt)
+        // Drives the drift resampler's PI loop (self-rate-limited to ~4Hz) + the
+        // 1Hz audio-state gauge. The resampler replaced the decode-path micro-stretch.
         publishAudioState()
         return true
     }

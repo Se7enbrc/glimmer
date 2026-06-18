@@ -128,10 +128,6 @@ extension AudioDecoder {
             playoutStarted = true
             driftAnchorNanos = DispatchTime.now().uptimeNanoseconds
             driftAnchorFramesPlayed = framesPlayed
-            // The micro-stretch repayment ledger is per-segment like the drift
-            // gauge it offsets (AudioDecoder+CushionMemory.swift) - fresh
-            // anchor, fresh ledger.
-            driftCompAppliedMs = 0
             // Arm the gate grace on this same edge (cold start or post-drain
             // restart): the next ~250ms of arrivals are the cushion (re)build - the
             // catch-up clump the link just proved it needs - so neither the trim nor
@@ -445,6 +441,10 @@ extension AudioDecoder {
         // target - without it a fill hugging a flat ceiling is indistinguishable
         // from the old disguised-permanent-give-up re-pin.
         let targetMs = playoutTargetMs
+        // Engage the drift resampler only in steady playout - the SAME gate the trim
+        // uses (Meter trim path). During pre-roll / re-prime / drain the rebuild
+        // machinery owns recovery and driveResampler slews the rate back to 1.0.
+        let resamplerEngaged = primed && !playoutDrained
         // One Bool under the lock already held: the cushion memory's one-shot
         // link resolve (the route probe feeds ~1-2s after audio bring-up).
         let needsLinkResolve = !cushionLinkResolved
@@ -458,6 +458,10 @@ extension AudioDecoder {
             Double(residentSilenceFrames) / rate * 1000.0)
 
         let bufferFillMs = Double(aheadFrames) / rate * 1000.0
+        // Drive the drift-tracking resampler (self-rate-limited to ~4Hz inside):
+        // steers the varispeed rate by the buffer-fill error to absorb the host↔Mac
+        // clock skew. Single caller, so the resampler state needs no lock.
+        driveResampler(fillMs: bufferFillMs, targetMs: targetMs, engaged: resamplerEngaged)
         var driftMs: Double?
         // Measure drift over the CURRENT playout segment only: wall and media-played
         // are both relative to the segment anchor (re-baselined on each restart),
