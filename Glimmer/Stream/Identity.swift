@@ -232,10 +232,33 @@ public actor IdentityManager {
     /// for subsequent calls. The PEM source (file store today, keychain on
     /// signed builds in the future) is transparent to this layer.
     public func secIdentity() throws -> SecIdentity {
-        if let cachedIdentity { return cachedIdentity }
+        if let cachedIdentity, Self.canSign(cachedIdentity) { return cachedIdentity }
+        // No cache yet, OR the cached identity's key can't sign anymore because
+        // the login keychain (where SecPKCS12Import lands it) locked on sleep /
+        // idle. Re-import from the PEMs - the keychain is unlocked whenever the
+        // user is actively here to start a stream. Without this, a locked keychain
+        // fails the mutual-TLS handshake and the failure is misreported downstream
+        // as "host doesn't recognize this Mac" until the app is restarted.
+        cachedIdentity = nil
         let id = try buildOrLoadIdentity()
         cachedIdentity = id
         return id
+    }
+
+    /// True if `identity`'s private key can sign right now - i.e. its keychain is
+    /// unlocked and we're authorized. Probes with keychain UI suppressed so a
+    /// locked keychain reports false (→ re-import) instead of throwing a password
+    /// prompt. The signature itself is thrown away.
+    private static func canSign(_ identity: SecIdentity) -> Bool {
+        var key: SecKey?
+        guard SecIdentityCopyPrivateKey(identity, &key) == errSecSuccess, let key else { return false }
+        SecKeychainSetUserInteractionAllowed(false)
+        defer { SecKeychainSetUserInteractionAllowed(true) }
+        var error: Unmanaged<CFError>?
+        let sig = SecKeyCreateSignature(key, .rsaSignatureDigestPKCS1v15SHA256,
+                                        Data(repeating: 0, count: 32) as CFData, &error)
+        error?.release()
+        return sig != nil
     }
 
     /// Bootstrap step - call this early (from MoonlightManager.bootstrap()) so
