@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.6.16 - 2026-06-18
+
+Root-fixes the "host suddenly stops trusting this Mac after sleep" problem. The
+control channel (pairing, launch, resume) now runs on Glimmer's own OpenSSL
+mutual-TLS client instead of URLSession - which had forced the client identity
+through the login keychain, the thing that locked on sleep and broke the
+connection. The cert + key now load straight from the on-disk PEM, with the host
+cert pinned exactly as before, so there's no keychain in the path to lapse on
+wake. (2026.6.15 was a stopgap that re-imported on demand; this removes the
+cause.)
+
 ## 2026.6.15 - 2026-06-18
 
 Fixes streams suddenly failing with "host doesn't recognize this Mac" after the
