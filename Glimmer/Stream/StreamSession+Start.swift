@@ -90,17 +90,12 @@ extension StreamSession {
         var serverInfo = server
         let network = NetworkClient(server: serverInfo)
         self.network = network
-        // Invalidate the per-session URLSession on any exit where stop() can't
-        // own it. URLSession retains its delegate (and connection pool +
-        // queues) until explicitly invalidated, so a pre-bridge throw - the
-        // serverinfo fetch, the pairing check, or launchWithBusyRecovery below
-        // - that just dropped the actor leaked one ephemeral URLSession +
-        // TLSDelegate PER ATTEMPT, including every error-banner Retry against
-        // a sleeping host. On the success path stop() owns the shutdown (and
-        // nils `network`, making the helper a no-op); on the startConnection-
-        // failure path stop() has already run inside connectBackend's catch,
-        // with the same result. shutdown() is invalidateAndCancel -
-        // idempotent, so the belt-and-braces overlap with stop() is harmless.
+        // Drop the orphaned NetworkClient on any exit where stop() can't own it
+        // (a pre-bridge throw from the serverinfo fetch, the pairing check, or
+        // launchWithBusyRecovery below). shutdown() is a no-op now - the control
+        // channel is per-request - so this is just lifecycle symmetry, and the
+        // belt-and-braces overlap with stop() on the success / backend-failure
+        // paths is harmless.
         defer { if !startHandedOff { shutdownOrphanedNetwork() } }
         serverInfo = try await network.fetchServerInfo()
         // swiftlint:disable:next line_length
@@ -243,8 +238,7 @@ extension StreamSession {
     /// NetworkClient is an actor and this helper runs from a synchronous
     /// `defer`, so the shutdown hops into a detached task. Fire-and-forget is
     /// correct: the client is ORPHANED (no consumer can reach it once the
-    /// field is nil'd synchronously below), and shutdown() only closes its
-    /// socket + invalidates its URLSession.
+    /// field is nil'd synchronously below), and shutdown() is a no-op now anyway.
     private func shutdownOrphanedNetwork() {
         guard let net = network else { return }
         network = nil

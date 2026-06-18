@@ -142,13 +142,8 @@ extension StreamSession {
         //    be unreachable here if the network just dropped.
         if let net = network {
             try? await net.cancel()
-            // Invalidate the per-session URLSession now that its last request
-            // (the /cancel above) has completed. URLSession retains its
-            // delegate - and its connection pool + dispatch queues - until
-            // explicitly invalidated, so just dropping the reference below
-            // leaked one ephemeral URLSession + TLSDelegate per session for
-            // process lifetime. Same contract HostStatusPoller already honors
-            // after every probe.
+            // shutdown() is a no-op now (the control channel is per-request) -
+            // kept for symmetry with the rest of the teardown.
             await net.shutdown()
         }
         network = nil

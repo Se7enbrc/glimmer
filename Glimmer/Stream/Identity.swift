@@ -53,21 +53,6 @@ import Foundation
 import os.log
 import Security
 
-// MARK: - Sendable bridge for Security-framework CF types
-//
-// SecIdentity / SecCertificate / SecKey are CoreFoundation reference types
-// (SecIdentityRef etc). Apple documents the Security framework's object types
-// as thread-safe for retain/release, and the values themselves are immutable
-// once created - so they're effectively `Sendable`. The SDK headers do not
-// (yet) declare the conformance, so we add it retroactively. The
-// `@retroactive` attribute makes the intent explicit to readers and silences
-// the Swift 6 warning about adopting a protocol the type's owner did not
-// declare.
-extension SecIdentity: @retroactive @unchecked Sendable {}
-extension SecCertificate: @retroactive @unchecked Sendable {}
-extension SecKey: @retroactive @unchecked Sendable {}
-extension SecTrust: @retroactive @unchecked Sendable {}
-
 // MARK: - Storage keys
 //
 // These string literals match QSettings keys written by moonlight-qt. Keeping
@@ -205,7 +190,6 @@ public actor IdentityManager {
     }
 
     var cached: Identity?
-    var cachedIdentity: SecIdentity?    // built once, reused for life of process
 
     let log = Logger(subsystem: "io.ugfugl.Glimmer",
                              category: "Stream.Identity")
@@ -226,52 +210,15 @@ public actor IdentityManager {
         try load().uniqueID
     }
 
-    /// Returns the SecIdentity used for mutual TLS client authentication.
-    ///
-    /// Built once per process from the PEMs returned by `load()` and cached
-    /// for subsequent calls. The PEM source (file store today, keychain on
-    /// signed builds in the future) is transparent to this layer.
-    public func secIdentity() throws -> SecIdentity {
-        if let cachedIdentity, Self.canSign(cachedIdentity) { return cachedIdentity }
-        // No cache yet, OR the cached identity's key can't sign anymore because
-        // the login keychain (where SecPKCS12Import lands it) locked on sleep /
-        // idle. Re-import from the PEMs - the keychain is unlocked whenever the
-        // user is actively here to start a stream. Without this, a locked keychain
-        // fails the mutual-TLS handshake and the failure is misreported downstream
-        // as "host doesn't recognize this Mac" until the app is restarted.
-        cachedIdentity = nil
-        let id = try buildOrLoadIdentity()
-        cachedIdentity = id
-        return id
-    }
-
-    /// True if `identity`'s private key can sign right now - i.e. its keychain is
-    /// unlocked and we're authorized. Probes with keychain UI suppressed so a
-    /// locked keychain reports false (→ re-import) instead of throwing a password
-    /// prompt. The signature itself is thrown away.
-    private static func canSign(_ identity: SecIdentity) -> Bool {
-        var key: SecKey?
-        guard SecIdentityCopyPrivateKey(identity, &key) == errSecSuccess, let key else { return false }
-        SecKeychainSetUserInteractionAllowed(false)
-        defer { SecKeychainSetUserInteractionAllowed(true) }
-        var error: Unmanaged<CFError>?
-        let sig = SecKeyCreateSignature(key, .rsaSignatureDigestPKCS1v15SHA256,
-                                        Data(repeating: 0, count: 32) as CFData, &error)
-        error?.release()
-        return sig != nil
-    }
-
     /// Bootstrap step - call this early (from MoonlightManager.bootstrap()) so
     /// the identity setup happens during launch, not on the user's first
     /// stream click. Idempotent.
     public func preflight() async {
         cleanupOrphanLoginKeychainEntries()
-        do {
-            _ = try secIdentity()
-            log.info("Client SecIdentity ready")
-        } catch {
-            log.error("Failed to prepare client SecIdentity: \(String(describing: error), privacy: .public)")
-        }
+        // Remove the now-orphaned "Glimmer Client Identity" item that pre-OpenSSL
+        // builds imported into the login keychain - the control channel no longer
+        // uses a SecIdentity, so nothing of ours should linger there.
+        deleteLabelledIdentity()
         // SECURITY (#5): for users whose moonlight-qt migration already ran
         // in a pre-#5 build, the source plist still has the PEM material
         // even though we've long since stopped reading from it. Do a

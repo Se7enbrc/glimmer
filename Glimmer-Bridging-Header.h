@@ -26,5 +26,6 @@
 #import <openssl/bn.h>
 #import <openssl/pkcs12.h>
 #import <openssl/err.h>
+#import <openssl/ssl.h>
 
 #endif
