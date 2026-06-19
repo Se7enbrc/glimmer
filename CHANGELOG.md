@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.6.17 - 2026-06-18
+
+Fixes visible frame-skipping on high-refresh displays. The present-pacing floor
+was re-pinning the display's refresh rate every couple of seconds to chase
+content cadence, and each renegotiation dropped a frame (reproducible on
+testufo.com/frameskipping). The floor now holds the requested refresh steady -
+skipping gone, and the top end is preserved (the panel max is still honored).
+
+Also in this release: audio drift is now corrected by a continuous resampler
+instead of the old silence-insertion stretch, so playback stays smoother under
+host/Mac clock skew; the launcher's primary button reads "Stream &lt;app&gt;"
+instead of the misleading "Resume &lt;app&gt;"; and the control channel is
+floored at TLS 1.2.
+
 ## 2026.6.16 - 2026-06-18
 
 Root-fixes the "host suddenly stops trusting this Mac after sleep" problem. The
