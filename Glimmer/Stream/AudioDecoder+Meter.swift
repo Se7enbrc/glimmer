@@ -487,7 +487,10 @@ extension AudioDecoder {
                 // (`takeAudioBufferFillMinMs`), not this last-writer-wins gauge, so
                 // it isn't carried here; the exporter pulls it directly.
                 bufferFillMinMs: nil,
-                rePrimeTotal: rePrimes))
+                rePrimeTotal: rePrimes,
+                // The resampler's applied rate offset (read on this same ~4Hz single-
+                // caller path, no extra lock) - makes the loop visible vs av_skew noise.
+                resamplerPpm: resamplerEpsPpm))
     }
 
     // MARK: - Audio OUTPUT route (under-run attribution breadcrumbs)

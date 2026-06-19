@@ -123,6 +123,7 @@ extension TelemetryRenderer {
         builder.add("audio_loss_rate", audio.lossRate)
         builder.add("audio_fec_recovery_rate", audio.fecRecoveryRate)
         builder.add("audio_buffer_fill_ms", audio.bufferFillMs)
+        builder.add("audio_resampler_ppm", audio.resamplerPpm)
         builder.add("audio_buffer_fill_min_ms", audio.bufferFillMinMs)
         // The adaptive target the fill is steered toward - fill vs target is
         // the cushion judge (base 30 / cap 150 / ceiling 190).
