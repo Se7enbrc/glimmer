@@ -88,6 +88,12 @@ extension TelemetryRenderer {
                             "A/V-skew pair re-anchors after the first (stale stream or RTP "
                             + "discontinuity) - each one steps the skew baseline.",
                             AudioVideoSkewStore.shared.rebaseTotal)
+        builder.emit("glimmer_audio_resampler_ppm",
+                     "Drift resampler applied rate offset, ppm signed (varispeed rate − 1): "
+                     + "0 = disengaged, ~the steady host↔Mac clock offset (tens of ppm) when "
+                     + "converged. The loop steering buffer fill - the direct view of the "
+                     + "corrector vs the video-side-noisy av_skew.",
+                     audio.resamplerPpm)
         let cushionFloorMs = AudioCushionTelemetry.shared.floorMs
         builder.emit("glimmer_audio_cushion_floor_ms",
                      "Learned audio cushion LOSS FLOOR, ms (EWMA of the target at each under-run; "

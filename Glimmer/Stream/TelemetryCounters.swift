@@ -448,6 +448,12 @@ final class TelemetryCounters: @unchecked Sendable {
         /// re-arm and the cushion rebuilds via the post-gap catch-up clump (see
         /// AudioDecoder). Directly countable alongside under-runs.
         var rePrimeTotal: UInt64
+        /// RESAMPLER applied rate offset (ppm): the drift-tracking resampler's live
+        /// `varispeed.rate − 1` in parts-per-million. 0 when disengaged (pre-roll /
+        /// re-prime / drain); when converged it sits at the steady host↔Mac clock
+        /// offset (~tens of ppm) - the direct view of the resampler holding the fill
+        /// it's steering (vs the av_skew that bounces with video-side timing).
+        var resamplerPpm: Double = 0
     }
     // Module-internal (not private) so the audio accessors in
     // TelemetryCounters+AudioGauges.swift can reach these (and the min-window

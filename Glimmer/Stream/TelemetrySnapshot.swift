@@ -273,6 +273,11 @@ struct AudioSnapshot: Sendable {
     // ---- Output / playout health ----
     /// Decoded audio buffered ahead of the playhead (ms) - the buffer level/fill.
     var bufferFillMs: Double?
+    /// RESAMPLER applied rate offset (ppm): the drift-tracking resampler's live
+    /// `varispeed.rate − 1`, parts-per-million. 0 disengaged; ~the steady host↔Mac
+    /// clock offset (tens of ppm) when converged - the direct view of the loop
+    /// holding the fill, vs the av_skew that bounces with video-side timing.
+    var resamplerPpm: Double?
     /// Windowed MINIMUM buffer fill this tick (ms) - the trough of the
     /// scheduled-ahead backlog, reset-on-read. The 1Hz `bufferFillMs` gauge can
     /// miss the instantaneous low that precedes an under-run; this is the field that
