@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.6.18 - 2026-06-20
+
+Fixes controller input dying after you record a custom quit chord. Recording a
+chord temporarily borrows the gamepad's input handlers, and dismissing the
+recorder left them detached - so controller input stayed dead until the stream
+was restarted. Input now re-attaches automatically whenever the stream window
+regains focus, so it recovers on its own.
+
+Also in this release: the Mac's own mouse acceleration is now turned off while a
+stream is focused, so only the game's sensitivity shapes your aim instead of the
+Mac's pointer curve stacking on top of it - on by default, with a toggle in
+Settings > General > Mouse (mice only; the trackpad is untouched). Audio on a
+fresh, jittery, or remote connection starts at a smarter playout cushion instead
+of walking up to it through a few audible blips. And the telemetry now surfaces
+the FEC loss-recovery headroom - including how close each frame came to
+unrecoverable - for better visibility into marginal links.
+
 ## 2026.6.17 - 2026-06-18
 
 Fixes visible frame-skipping on high-refresh displays. The present-pacing floor
