@@ -133,6 +133,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         Diag.notice("app launching - Glimmer \(version) (\(build)) commit \(BuildInfo.commit) "
             + "built \(BuildInfo.date) (launchedAtLogin=\(launchedAtLogin))", "Launch")
+
+        // Default-ON prefs (registered, not written - the user's explicit choice
+        // still overrides). disableMouseAccelWhileStreaming linearizes the system
+        // pointer acceleration while the stream window is focused so forwarded
+        // mouse deltas are raw 1:1; the non-UI gate reads it via UserDefaults.bool,
+        // which needs the registered default to read `true` before first toggle.
+        UserDefaults.standard.register(defaults: [
+            MouseAccelerationControl.enabledDefaultsKey: true
+        ])
+        // Crash recovery: if a prior session died mid-stream with the pointer
+        // acceleration linearized, restore the user's saved value now (no-op in
+        // the clean case). Runs before any window/stream can re-engage capture.
+        MouseAccelerationControl.restoreOrphanedOverride()
+
         if let mgr = Self.boundManager {
             self.moonlight = mgr
             mgr.attach(appDelegate: self)

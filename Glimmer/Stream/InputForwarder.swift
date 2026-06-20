@@ -311,6 +311,14 @@ public final class InputForwarder {
     /// `enterCapturedMode()` for why we turn coalescing OFF in relative aim.
     var savedMouseCoalescing: Bool?
 
+    /// Saved global mouse pointer-acceleration from BEFORE we linearized it for
+    /// relative aim, restored on disengage. nil while we have NOT overridden it
+    /// (feature off, read/write failed, or the user already runs linear) - so the
+    /// restore in `exitCapturedMode()` is paired exactly once with the override.
+    /// The same value is also persisted to UserDefaults while engaged so a crash
+    /// can't strand the pointer in linear mode; see `MouseAccelerationControl`.
+    var savedMouseAcceleration: Double?
+
     /// NSEvent local-monitor token for gesture suppression. While the stream
     /// window is key, we swallow gesture-family events so macOS's pinch-to-
     /// zoom, smart-zoom, swipe-to-Mission-Control, and rotate don't reach

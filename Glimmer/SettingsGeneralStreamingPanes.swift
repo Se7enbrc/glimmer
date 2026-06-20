@@ -96,6 +96,11 @@ struct GeneralPane: View {
     @Environment(MoonlightManager.self) private var moonlight
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     @AppStorage("launchMinimized") private var launchMinimized: Bool = false
+    // Default-ON: linearize the Mac's mouse acceleration while a stream is
+    // focused so only the game's own sensitivity shapes aim. Key mirrors
+    // MouseAccelerationControl.enabledDefaultsKey (registered true in GlimmerApp,
+    // which is what makes the non-UI UserDefaults.bool read default to on too).
+    @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
     /// True when macOS has the login item but it's pending the user's approval
     /// in System Settings ▸ Login Items - surfaced inline so the user isn't left
@@ -203,6 +208,20 @@ struct GeneralPane: View {
                     Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
                         .font(.footnote).foregroundStyle(.red)
                 }
+            }
+            Section("Mouse") {
+                Toggle(isOn: $rawMouseWhileStreaming) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Aim with raw mouse motion while streaming").fontWeight(.medium)
+                        Text("Turns off the Mac's own mouse acceleration while the stream window "
+                            + "is focused, so only the game's sensitivity shapes your aim instead of "
+                            + "the Mac's pointer curve stacking on top of it. Restored the instant "
+                            + "you leave the stream. Affects mice only - the trackpad is untouched.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .help("Linearizes the system mouse acceleration (like `com.apple.mouse.scaling -1`) for the duration of each focused stream.")
             }
             Section("Default action") {
                 // Picker sourced from the selected host's announced app
