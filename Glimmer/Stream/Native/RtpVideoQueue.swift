@@ -229,6 +229,12 @@ final class RtpVideoQueue {
     var windowLostPreFec = 0
     var windowOutOfOrder = 0
     var windowDuplicate = 0
+    /// FEC observability (read-only): the smallest parity headroom seen on a
+    /// FEC-recovered frame this window (parity − data deficit), tracked in
+    /// logFecRecovery and published + reset in maybeLogMetrics. `Int.max` = no
+    /// recovery this window, in which case the publish reports the current frame's
+    /// full parity count (the healthy baseline) instead.
+    var windowMinParityMargin = Int.max
     /// CROSS-WINDOW reorder credit (metric honesty). A reorder that fills a gap
     /// counted as loss should UNCOUNT one loss slot - but the gap and its filling
     /// reorder often straddle a maybeLogMetrics window boundary (the forward jump
@@ -495,6 +501,19 @@ final class RtpVideoQueue {
                 Self.cat)
         }
 
+        // FEC HEALTH gauge (read-only): publish the controller's just-stepped
+        // response + the per-frame parity headroom for the dashboard. Pure read-out
+        // - nothing here feeds back into the FEC/reorder logic. `fecPercentage` and
+        // `bufferParityPackets` are the latest frame's (they persist across windows);
+        // `windowMinParityMargin` is this window's worst recovered-frame headroom, or
+        // the current frame's full parity when no recovery occurred.
+        counters.setFecHealth(TelemetryCounters.FecHealthSnapshot(
+            reorderHoldMs: Double(reorderWindowUs) / 1000.0,
+            headroomLevel: fecHeadroom.level,
+            lossLevel: fecHeadroom.lossLevel,
+            fecPercentage: fecPercentage,
+            parityMargin: windowMinParityMargin == Int.max ? bufferParityPackets : windowMinParityMargin))
+
         framesInWindow = 0
         fecRecoveredFramesInWindow = 0
         packetsInWindow = 0
@@ -508,6 +527,7 @@ final class RtpVideoQueue {
         windowLostPreFec = 0
         windowOutOfOrder = 0
         windowDuplicate = 0
+        windowMinParityMargin = Int.max
         for index in gapBuckets.indices { gapBuckets[index] = 0 }
         gapCount = 0
         gapMaxUs = 0

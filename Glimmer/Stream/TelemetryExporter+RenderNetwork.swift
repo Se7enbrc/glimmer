@@ -22,6 +22,26 @@ extension TelemetryRenderer {
         builder.emit("glimmer_net_recv_jitter_ms", "RFC3550 smoothed receive jitter, ms.", snap.recvJitterMs)
         builder.emit("glimmer_net_fec_recovery_rate",
                      "Fraction of frames needing Reed-Solomon recovery this window.", snap.fecRecoveryRate)
+        // FEC HEALTH (read-only observability): the FecHeadroomController's response
+        // (reorder-hold + both headroom axes) and the per-frame parity headroom, so a
+        // degrading link's escalation is visible, not only in the diag log. Clean-link
+        // baseline: hold ≈ 24ms, both levels 0, a comfortable positive parity margin.
+        builder.emit("glimmer_fec_reorder_hold_ms",
+                     "Live FEC reorder-hold window the receiver applies, ms (base 24, cap 48).",
+                     snap.fecReorderHoldMs)
+        builder.emit("glimmer_fec_headroom_level",
+                     "FEC headroom jitter/out-of-order/retransmit axis level (0 = clean link).",
+                     snap.fecHeadroomLevel.map(Double.init))
+        builder.emit("glimmer_fec_loss_level",
+                     "FEC headroom direct-loss axis level (0 = clean link).",
+                     snap.fecLossLevel.map(Double.init))
+        builder.emit("glimmer_fec_percentage",
+                     "Host-driven per-frame FEC percentage (latest frame).",
+                     snap.fecPercentage.map(Double.init))
+        builder.emit("glimmer_fec_parity_margin",
+                     "Spare parity shards on the worst frame this window (parity - data deficit); "
+                     + "trends toward 0 before a frame goes unrecoverable.",
+                     snap.fecParityMargin.map(Double.init))
         builder.emit("glimmer_net_packets_per_second", "Video packets received per second.", snap.packetsPerSecond)
         builder.emit("glimmer_net_rtt_ms", "ENet RTT estimate (high-res local clock), ms.", snap.rttMs)
         builder.emit("glimmer_net_rtt_variance_ms", "ENet RTT variance, ms.", snap.rttVarianceMs)
