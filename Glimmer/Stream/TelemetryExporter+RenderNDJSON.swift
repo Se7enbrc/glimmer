@@ -158,6 +158,8 @@ extension TelemetryRenderer {
         // target is legible against the evidence holding it.
         let cushionFloorMs = AudioCushionTelemetry.shared.floorMs
         builder.add("audio_cushion_floor_ms", cushionFloorMs > 0 ? cushionFloorMs : nil)
+        let cushionSeedMs = AudioCushionTelemetry.shared.seedMs
+        builder.add("audio_cushion_seed_ms", cushionSeedMs > 0 ? cushionSeedMs : nil)
         builder.add("audio_first_packet_ms", audio.firstPacketMs)
     }
 
