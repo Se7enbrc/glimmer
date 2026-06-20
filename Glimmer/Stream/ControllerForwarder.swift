@@ -165,21 +165,12 @@ extension InputForwarder {
                 "Controller")
         }
         if useHID {
+            // Retain the raw-HID reader (Options/Create/Mute centre buttons +
+            // battery). The onChange handler that turns a centre-button edge into
+            // a host push is installed by installInputHandlers(for:) below - one
+            // place installs BOTH the GameController and raw-HID handlers so a
+            // focus-regain resync can re-install (heal) them together.
             DualSenseHID.shared.retain()
-            // Drive a gamepad update when the HID-only buttons (Options /
-            // Create / Mute) change - GameController never fires for them, so
-            // without this the quit chord and host-forwarding only update when
-            // some *other* (GameController) input changes. That's why holding
-            // L1+R1 and then adding Options+Create never triggered the chord.
-            let hidSlot = slot
-            DualSenseHID.shared.onChange = { [weak self, weak gamepad] in
-                guard let self, let ex = gamepad?.extendedGamepad else { return }
-                // Center-button edge only (DualSenseHID gates onChange on a real
-                // bit change). Push controller state WITHOUT re-forwarding the
-                // touchpad - that stays on the GameController valueChangedHandler,
-                // the single full-state source. Kills the old double-feed.
-                self.sendCenterButtonUpdate(pad: ex, slot: hidSlot)
-            }
         }
 
         let state = AttachedController(
@@ -211,16 +202,13 @@ extension InputForwarder {
             + "caps=0x\(String(caps, radix: 16)) buttons=0x\(String(buttons, radix: 16))",
             "Controller")
 
-        // Hook the value-changed handler. GameController invokes this on the
-        // main queue by default; we explicitly assume MainActor isolation so
-        // Swift 6 strict concurrency is satisfied.
-        let slotForClosure = slot
-        gamepad.extendedGamepad?.valueChangedHandler = { [weak self] (pad, _) in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.sendGamepadUpdate(pad: pad, slot: slotForClosure)
-            }
-        }
+        // Install the live input handlers (GameController valueChangedHandler +
+        // the raw-HID centre-button onChange). Factored into installInputHandlers
+        // so resyncControllers() can RE-install them on every focus regain: the
+        // Settings chord-capture sheet grabs both single-slot handlers to record a
+        // chord and nils them on dismiss, which otherwise left controller input
+        // dead until a stream restart. See installInputHandlers.
+        installInputHandlers(for: state)
 
         // If the stream is already up, announce arrival immediately;
         // otherwise it'll go out when `setReady(true)` is called.
@@ -596,6 +584,43 @@ extension InputForwarder {
         }
     }
 
+    // MARK: - Input handler install / heal
+
+    /// (Re)install the live input handlers for an attached controller: the
+    /// GameController `valueChangedHandler` (the single full-state forward) and,
+    /// for a raw-HID DualSense, `DualSenseHID.shared.onChange` (the centre-button
+    /// edge GameController never delivers). Idempotent, so it doubles as a HEAL:
+    /// the Settings chord-capture sheet (ChordCaptureSheet.engage/disengage) takes
+    /// over both single-slot handlers to record a chord and sets them to `nil` on
+    /// dismiss - which, with a stream live, left the forwarder's input path dead
+    /// until a session restart re-ran attach(). resyncControllers() calls this on
+    /// every focus regain, so returning to the stream restores input with no
+    /// restart.
+    func installInputHandlers(for state: AttachedController) {
+        guard let gamepad = state.controller else { return }
+        let slot = state.slot
+        // GameController invokes this on the main queue; assume MainActor so
+        // Swift 6 strict concurrency is satisfied.
+        gamepad.extendedGamepad?.valueChangedHandler = { [weak self] (pad, _) in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.sendGamepadUpdate(pad: pad, slot: slot)
+            }
+        }
+        // Raw-HID centre buttons (Options/Create/Mute): GameController never fires
+        // valueChangedHandler for them, so this onChange is the only path that
+        // carries a centre-button edge (e.g. the Moonlight-default chord's Create)
+        // to the host. DualSenseHID gates onChange on a real bit change; the push
+        // does NOT re-forward the touchpad (that stays on the GameController path,
+        // the single full-state source - no double-feed).
+        if state.retainedHID {
+            DualSenseHID.shared.onChange = { [weak self, weak gamepad] in
+                guard let self, let ex = gamepad?.extendedGamepad else { return }
+                self.sendCenterButtonUpdate(pad: ex, slot: slot)
+            }
+        }
+    }
+
     // MARK: - Focus resync (#8)
 
     /// Re-send every attached controller's current state to the host. Called
@@ -606,6 +631,13 @@ extension InputForwarder {
     func resyncControllers() {
         guard isReady else { return }
         for state in attachedControllers.values {
+            // Re-install handlers FIRST: a component that grabbed the single-slot
+            // valueChangedHandler / DualSenseHID.onChange while we were not key -
+            // the Settings chord-capture sheet - may have nil'd ours, leaving
+            // controller input dead. Healing here means returning focus to the
+            // stream restores live input without a session restart. Then push
+            // current state so a held stick/button snaps to live immediately.
+            installInputHandlers(for: state)
             guard let pad = state.controller?.extendedGamepad else { continue }
             sendGamepadUpdate(pad: pad, slot: state.slot)
         }
