@@ -171,4 +171,51 @@ connected:
     return fd;
 }
 
+// MARK: - Global mouse pointer-acceleration (relative-aim linearization)
+// macOS runs even relative (associate-false) HID deltas through its pointer-
+// acceleration curve before they reach kCGMouseEventDeltaX/Y, so a streamed game
+// sees the Mac's acceleration STACKED on top of its own in-game sensitivity.
+// Flooring the global mouse acceleration to linear while the stream window is
+// focused removes the Mac curve so only the host's sensitivity shapes aim;
+// MouseAccelerationControl (InputForwarder+Capture.swift) saves the prior value
+// and restores it on blur/teardown. The IOHID*AccelerationWithKey pair is the
+// long-standing (if deprecated) control surface; a NEGATIVE value (-1.0) is the
+// "disabled / linear" sentinel - the same one `com.apple.mouse.scaling -1`
+// writes. Affects MICE only (kIOHIDMouseAccelerationType); the trackpad has its
+// own acceleration type and is left untouched.
+#include <IOKit/hidsystem/IOHIDLib.h>
+#include <IOKit/hidsystem/IOHIDParameter.h>
+#include <IOKit/hidsystem/event_status_driver.h>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
+/// Read the current global mouse acceleration. Returns the value on success
+/// (>= -1.0; -1.0 means the user already runs linear), or -2.0 on failure - a
+/// value the API never produces, so it is an unambiguous error sentinel.
+static inline double gl_get_mouse_acceleration(void) {
+    NXEventHandle handle = NXOpenEventStatus();
+    if (!handle) return -2.0;
+    double value = -2.0;
+    if (IOHIDGetAccelerationWithKey(handle, CFSTR(kIOHIDMouseAccelerationType), &value)
+        != KERN_SUCCESS) {
+        value = -2.0;
+    }
+    NXCloseEventStatus(handle);
+    return value;
+}
+
+/// Set the global mouse acceleration. A negative value (e.g. -1.0) disables
+/// acceleration entirely (linear 1:1). Returns 1 on success, 0 on failure.
+static inline int gl_set_mouse_acceleration(double value) {
+    NXEventHandle handle = NXOpenEventStatus();
+    if (!handle) return 0;
+    int ok = (IOHIDSetAccelerationWithKey(handle, CFSTR(kIOHIDMouseAccelerationType), value)
+              == KERN_SUCCESS);
+    NXCloseEventStatus(handle);
+    return ok;
+}
+
+#pragma clang diagnostic pop
+
 #endif

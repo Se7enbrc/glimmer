@@ -148,6 +148,22 @@ extension InputForwarder {
             savedMouseCoalescing = NSEvent.isMouseCoalescingEnabled
         }
         NSEvent.isMouseCoalescingEnabled = false
+        // Linearize the system pointer acceleration so the relative deltas we
+        // forward to the host are raw 1:1 - macOS otherwise runs even
+        // associate-false HID motion through its acceleration curve, stacking the
+        // Mac's curve on top of the game's own in-game sensitivity. Default-on;
+        // opt out in Settings. Saved + restored like coalescing above, with a
+        // UserDefaults crash-safety sentinel (see MouseAccelerationControl).
+        // engageLinear() returns nil - leaving savedMouseAcceleration nil so
+        // exitCapturedMode skips the restore - when the feature is off, the
+        // read/write fails, or the user already runs linear (nothing of ours to
+        // undo). The guard mirrors the coalescing save: only on the first engage.
+        if savedMouseAcceleration == nil, MouseAccelerationControl.isEnabled {
+            savedMouseAcceleration = MouseAccelerationControl.engageLinear()
+            if let prior = savedMouseAcceleration {
+                log.info("Mouse capture: pointer acceleration linearized (was \(prior), now \(MouseAccelerationControl.linear))")
+            }
+        }
         isMouseCaptured = true
         log.info("Mouse capture: relative aim engaged (associate-false; coalescing off; cursor disassociated, visibility owned by StreamWindow)")
     }
@@ -172,6 +188,14 @@ extension InputForwarder {
         if let prior = savedMouseCoalescing {
             NSEvent.isMouseCoalescingEnabled = prior
             savedMouseCoalescing = nil
+        }
+        // Restore the pointer acceleration we linearized on engage (pairs with
+        // engageLinear; also clears the crash-safety sentinel). nil = we never
+        // overrode it (feature off / already linear / failed), so nothing to undo.
+        if let prior = savedMouseAcceleration {
+            MouseAccelerationControl.restore(prior)
+            savedMouseAcceleration = nil
+            log.info("Mouse capture: pointer acceleration restored to \(prior)")
         }
         log.info("Mouse capture: relative aim disengaged (associate-true; coalescing restored; cursor re-associated, visibility owned by StreamWindow)")
     }
@@ -412,5 +436,76 @@ extension InputForwarder {
     /// falls back to its raw value, which is enough to identify the type.
     func diagnosticEventTypeName(_ type: NSEvent.EventType) -> String {
         Self.diagnosticEventTypeNames[type] ?? "type(\(type.rawValue))"
+    }
+}
+
+// MARK: - System mouse pointer-acceleration control (relative-aim linearization)
+
+/// Floors the global mouse pointer-acceleration to linear while the stream
+/// window is focused, so the relative deltas InputForwarder forwards are raw 1:1
+/// and only the host game's own sensitivity shapes aim. macOS otherwise runs
+/// even associate-false HID motion through its acceleration curve (the
+/// "accel-free under associate-false" assumption is optimistic - the curve is
+/// applied before kCGMouseEventDeltaX/Y), stacking the Mac's curve on the host's.
+/// This is the same save→override→restore discipline `enterCapturedMode()`
+/// already uses for `NSEvent.isMouseCoalescingEnabled`.
+///
+/// CRASH-SAFETY: the override is a GLOBAL system setting, not process-local. If
+/// Glimmer dies while focused (crash / SIGKILL) the in-memory saved value is
+/// gone and the mouse would stay linear system-wide. So `engageLinear()` ALSO
+/// persists the pre-override value to UserDefaults the instant it overrides;
+/// `restoreOrphanedOverride()` (called once at launch, GlimmerApp) detects a
+/// leftover and restores it - a crash can never strand the pointer in linear
+/// mode past the next launch. The normal blur/teardown path clears the sentinel.
+enum MouseAccelerationControl {
+    /// Default-ON opt-out preference. Registered `true` in GlimmerApp so both
+    /// this gate and the Settings `@AppStorage` toggle read on by default.
+    static let enabledDefaultsKey = "disableMouseAccelWhileStreaming"
+    /// Crash-safety sentinel: holds the pre-override acceleration WHILE the
+    /// override is engaged; absent at rest (cleared on every clean restore).
+    private static let pendingRestoreKey = "mouseAccelPendingRestore"
+    /// The "disabled / linear" acceleration value (mirrors `com.apple.mouse.scaling -1`).
+    static let linear = -1.0
+
+    /// Whether the linearize-while-focused feature is on (default true).
+    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledDefaultsKey) }
+
+    /// Engage linear mode. Returns the saved prior acceleration to hand back on
+    /// disengage, or nil when there is nothing of ours to undo: the read failed,
+    /// the user already runs linear (prior < 0), or the write was refused. Stamps
+    /// the crash-safety sentinel only when it actually overrides.
+    static func engageLinear() -> Double? {
+        let prior = gl_get_mouse_acceleration()
+        // -2.0 = read failure; < 0 (e.g. -1) = already disabled - either way
+        // there is no positive value of ours to restore later, so do nothing.
+        guard prior >= 0 else { return nil }
+        let defaults = UserDefaults.standard
+        defaults.set(prior, forKey: pendingRestoreKey)
+        guard gl_set_mouse_acceleration(linear) == 1 else {
+            defaults.removeObject(forKey: pendingRestoreKey)
+            return nil
+        }
+        return prior
+    }
+
+    /// Restore a previously-saved acceleration value and clear the sentinel.
+    static func restore(_ value: Double) {
+        _ = gl_set_mouse_acceleration(value)
+        UserDefaults.standard.removeObject(forKey: pendingRestoreKey)
+    }
+
+    /// Launch-time crash recovery: if a prior run died with the override engaged,
+    /// the sentinel still holds the pre-override value - restore it now and clear
+    /// it. No-op when the sentinel is absent (the clean, common case). The stored
+    /// value is always a real >= 0 acceleration (engageLinear only writes it after
+    /// guarding `prior >= 0`), so restoring it unconditionally is safe.
+    static func restoreOrphanedOverride() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: pendingRestoreKey) != nil else { return }
+        let saved = defaults.double(forKey: pendingRestoreKey)
+        _ = gl_set_mouse_acceleration(saved)
+        defaults.removeObject(forKey: pendingRestoreKey)
+        Diag.notice("Mouse: restored orphaned pointer-acceleration override to \(saved) "
+            + "(prior session ended while streaming)", "Launch")
     }
 }
