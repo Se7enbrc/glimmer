@@ -75,6 +75,41 @@ extension TelemetryCounters {
         return packetGapValue
     }
 
+    /// Live FEC-HEALTH gauge: the FecHeadroomController's RESPONSE (the reorder-
+    /// hold it is holding + both headroom axes) plus the per-frame parity headroom,
+    /// published once per ~2s receive-metrics window by the RTP path. READ-ONLY
+    /// observability - none of these values feed back into the FEC/reorder logic;
+    /// they let a degrading link be SEEN on the dashboard (the controller's
+    /// transitions were previously diag-log-only). Last-writer-wins behind one lock,
+    /// the same idiom as `packetGap`. nil before the first window.
+    struct FecHealthSnapshot: Sendable {
+        /// Live reorder-hold window the queue applies (ms): base 24, cap 48 - the
+        /// controller's combined response to jitter + loss.
+        var reorderHoldMs: Double
+        /// Jitter / out-of-order / retransmit axis level (0 on a clean link).
+        var headroomLevel: Int
+        /// Direct-loss axis level (0 on a clean link).
+        var lossLevel: Int
+        /// Host-driven per-frame FEC percentage of the latest frame.
+        var fecPercentage: Int
+        /// Spare parity shards on the WORST frame this window (parity − data
+        /// deficit) - the early warning before a frame goes unrecoverable. On a
+        /// clean window (no recovery) this is the current frame's full parity count.
+        var parityMargin: Int
+    }
+
+    /// Publish the FEC-health gauge. Called once per ~2s window by the RTP receive
+    /// path (never the per-datagram hot path).
+    func setFecHealth(_ snapshot: FecHealthSnapshot) {
+        os_unfair_lock_lock(fecHealthLock); fecHealthValue = snapshot; os_unfair_lock_unlock(fecHealthLock)
+    }
+    /// Latest FEC-health gauge, or nil before the first window. Read by the
+    /// exporter on its 1Hz queue (never the hot path).
+    var fecHealth: FecHealthSnapshot? {
+        os_unfair_lock_lock(fecHealthLock); defer { os_unfair_lock_unlock(fecHealthLock) }
+        return fecHealthValue
+    }
+
     func setRecvJitterMs(_ ms: Double) {
         os_unfair_lock_lock(jitterLock); recvJitterMsValue = ms; os_unfair_lock_unlock(jitterLock)
     }

@@ -106,6 +106,10 @@ extension RtpVideoQueue {
         // periodic FEC-recovery-rate metric (latched; tallied at submit time).
         currentFrameNeededFec = true
         let recovered = bufferDataPackets - receivedDataPackets
+        // FEC observability (read-only): track the worst parity headroom this window
+        // - how many spare parity shards remained after this frame's deficit.
+        // Published + reset in maybeLogMetrics. Pure book-keeping, no control effect.
+        windowMinParityMargin = min(windowMinParityMargin, bufferParityPackets - recovered)
         if !loggedFirstFecRecovery {
             loggedFirstFecRecovery = true
             Diag.notice("NativeVideo first FEC recovery: \(recovered) shards, frame \(currentFrameNumber)", Self.cat)

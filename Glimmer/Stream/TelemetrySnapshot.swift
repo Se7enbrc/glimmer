@@ -104,6 +104,21 @@ struct TelemetrySnapshot: Sendable {
     var packetGapP95Us: Double?
     var packetGapMaxUs: Double?
 
+    // network - FEC health (the FecHeadroomController response + per-frame parity
+    // headroom). READ-ONLY observability: surfaces a degrading link's reorder-hold
+    // escalation and how close frames ran to unrecoverable. nil until the first ~2s
+    // receive window flushes.
+    /// Live reorder-hold window (ms): base 24, cap 48.
+    var fecReorderHoldMs: Double?
+    /// Jitter / out-of-order / retransmit headroom level (0 = clean).
+    var fecHeadroomLevel: Int?
+    /// Direct-loss headroom level (0 = clean).
+    var fecLossLevel: Int?
+    /// Host per-frame FEC percentage (latest frame).
+    var fecPercentage: Int?
+    /// Spare parity shards on the worst frame this window (parity − deficit).
+    var fecParityMargin: Int?
+
     // ENet reliable-stream health
     var enetSentReliable: Int?
     var enetOldestUnackedMs: UInt32?

@@ -238,6 +238,13 @@ extension TelemetryExporter {
             snap.packetGapP95Us = gap.p95Us
             snap.packetGapMaxUs = gap.maxUs
         }
+        if let fec = counters.fecHealth {
+            snap.fecReorderHoldMs = fec.reorderHoldMs
+            snap.fecHeadroomLevel = fec.headroomLevel
+            snap.fecLossLevel = fec.lossLevel
+            snap.fecPercentage = fec.fecPercentage
+            snap.fecParityMargin = fec.parityMargin
+        }
         // Refresh the live RTT gauge the per-frame glass-to-glass computation
         // reads at present (~RTT/2 for the transit leg). Done here on the 1Hz
         // queue, never the hot path; the present-side read is the only hot-path

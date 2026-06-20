@@ -395,6 +395,12 @@ final class TelemetryCounters: @unchecked Sendable {
     let decodeStateLock = os_unfair_lock_t.allocate(capacity: 1)
     var decodeStateValue: DecodeState?
 
+    // Live FEC-HEALTH gauge storage (reorder-hold + headroom axes + per-frame
+    // parity headroom); the `FecHealthSnapshot` value type + accessors live in
+    // TelemetryCounters+Gauges.swift. Module-internal so those accessors reach it.
+    let fecHealthLock = os_unfair_lock_t.allocate(capacity: 1)
+    var fecHealthValue: FecHealthSnapshot?
+
     /// Host-RUMBLE receipt stamp (the last 0x010b receipt instant) - the detach-
     /// context breadcrumb's rumble-age source (ControllerForwarder.detach).
     /// Self-locked holder (the `P2State` idiom), defined in
@@ -512,6 +518,7 @@ final class TelemetryCounters: @unchecked Sendable {
         rttLock.initialize(to: os_unfair_lock_s())
         gapLock.initialize(to: os_unfair_lock_s())
         decodeStateLock.initialize(to: os_unfair_lock_s())
+        fecHealthLock.initialize(to: os_unfair_lock_s())
         audioStateLock.initialize(to: os_unfair_lock_s())
         audioFirstPacketLock.initialize(to: os_unfair_lock_s())
         presentSuppressedLock.initialize(to: os_unfair_lock_s())
@@ -520,7 +527,7 @@ final class TelemetryCounters: @unchecked Sendable {
     deinit {
         jitterLock.deallocate(); inputLock.deallocate()
         rttLock.deallocate(); gapLock.deallocate()
-        decodeStateLock.deallocate()
+        decodeStateLock.deallocate(); fecHealthLock.deallocate()
         audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
         presentSuppressedLock.deallocate(); decodeGatedLock.deallocate()
     }
@@ -583,6 +590,7 @@ final class TelemetryCounters: @unchecked Sendable {
         rumbleActivity.reset()
         os_unfair_lock_lock(gapLock); packetGapValue = nil; os_unfair_lock_unlock(gapLock)
         os_unfair_lock_lock(decodeStateLock); decodeStateValue = nil; os_unfair_lock_unlock(decodeStateLock)
+        os_unfair_lock_lock(fecHealthLock); fecHealthValue = nil; os_unfair_lock_unlock(fecHealthLock)
         os_unfair_lock_lock(audioStateLock)
         audioStateValue = nil; audioBufferFillMinMsValue = .infinity
         os_unfair_lock_unlock(audioStateLock)
