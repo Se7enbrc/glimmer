@@ -80,6 +80,42 @@ extension AudioDecoder {
     /// preference storage - the host never rides telemetry or logs.
     static let cushionMemoryKeyPrefix = "audioCushionMemory."
 
+    /// COLD-SEED jitter coefficient. On a FRESH link (no per-host memory to
+    /// adopt) the starting cushion is biased by `coldSeedJitterK * smoothedJitterMs`
+    /// so a standing-jitter remote/VPN link starts near the depth it needs instead
+    /// of blip-walking up from the bare base (the first-contact ratchet the per-host
+    /// memory only papers over on the SECOND session). 2.0 ≈ 2σ of the jitter
+    /// envelope. DO-NO-HARM (hard constraint): a clean/wired link's smoothed jitter
+    /// is sub-ms, so the biased term stays well under `playoutCushionBaseMs` and the
+    /// seed's `max(base, …)` returns the base UNCHANGED - byte-identical to the old
+    /// fixed seed. Given the margin below, only standing jitter above ~10ms lifts it.
+    static let coldSeedJitterK: Double = 2.0
+    /// Fixed RTT-variance / scheduling-slack margin (ms) added to the jitter term in
+    /// the cold seed. RTT variance isn't cheaply reachable from the reconciler's
+    /// published decision (smoothed jitter is), so this stands in for it - one
+    /// cushion step. Small enough that it never lifts a clean link off the base
+    /// (the `max(base, …)` still picks the base when jitter is sub-ms).
+    static let coldSeedRttVarMarginMs: Double = AudioDecoder.playoutCushionStepMs
+
+    /// Jitter-aware COLD seed (ms) for a fresh link with NO per-host memory to
+    /// adopt: bias the starting cushion off the reconciler's live smoothed jitter
+    /// so a standing-jitter link doesn't blip-walk up from the bare base. Pure read
+    /// of `EnvSignalController`'s published decision; touches no control flow, no
+    /// grow/decay/floor, no steady-state.
+    ///
+    /// DO-NO-HARM: a clean/wired link's smoothed jitter is sub-ms, so
+    /// `k*jitter + margin` stays under `base` and `max(base, …)` returns `base`
+    /// UNCHANGED - byte-identical to the old fixed 30ms seed. A cold/zero estimate
+    /// (pre-roll before the reconciler has data) returns `base` via the `jitter > 0`
+    /// guard. The result is clamped to `cap` so it can never seed past the over-run
+    /// envelope. Callers only reach this on the no-memory path (memory still wins).
+    static func jitterAwareColdSeedMs(base: Double, cap: Double) -> Double {
+        let jitter = EnvSignalController.shared.decision.smoothedJitterMs
+        guard jitter.isFinite, jitter > 0 else { return base }
+        let biased = (coldSeedJitterK * jitter).rounded(.up) + coldSeedRttVarMarginMs
+        return min(max(base, biased), cap)
+    }
+
     // MARK: - Persistence (UserDefaults, per host+link)
 
     /// One session's starting cushion, resolved at decoder init.
@@ -180,8 +216,15 @@ extension AudioDecoder {
                                    fromMemory: true)
             }
         }
+        // No memory for this host+link. Bias the cold seed off the live link
+        // estimate (jitter-aware); a clean link reads the base unchanged. At INIT
+        // the reconciler usually has no jitter yet (link still "unknown"), so this
+        // typically resolves to the base here and actually bites at the one-shot
+        // link resolve (resolveCushionLink) ~1-2s later, where jitter is meaningful.
         return CushionSeed(key: key, host: host, link: link,
-                           targetMs: playoutCushionBaseMs, floorMs: 0, fromMemory: false)
+                           targetMs: jitterAwareColdSeedMs(
+                               base: playoutCushionBaseMs, cap: cushionMaxMs(forLink: link)),
+                           floorMs: 0, fromMemory: false)
     }
 
     /// Announce the seed (sensor-honesty: a new dial self-describes) and latch
@@ -289,6 +332,13 @@ extension AudioDecoder {
         // the tiny-lock discipline stands even on this one-shot path).
         let key = Self.cushionMemoryKey(host: host, link: link)
         let stored = Self.readCushionMemory(key: key)
+        // Jitter-aware cold seed for the no-memory branch below - computed HERE,
+        // OUTSIDE the meter lock (it reads EnvSignal's own lock; the tiny-lock
+        // discipline this file keeps). By now (~1-2s in) the reconciler HAS jitter,
+        // unlike at the init seed, so this is where the cold seed actually bites.
+        // Clean link → base (do-no-harm).
+        let coldSeedMs = Self.jitterAwareColdSeedMs(
+            base: Self.playoutCushionBaseMs, cap: Self.cushionMaxMs(forLink: link))
 
         audioMeterLock.lock()
         // Re-check after the lock gap: the decode and completion threads both
@@ -300,6 +350,7 @@ extension AudioDecoder {
         // to the deeper tunnel cap; a resolved-wired link tightens it back to 150ms).
         effectiveCushionMaxMs = Self.cushionMaxMs(forLink: link)
         effectiveOverrunCeilingMs = effectiveCushionMaxMs + Self.bufferOverrunCeilingSlackMs
+        var coldSeedApplied = false
         if let stored {
             if cushionHadUnderrun {
                 // This session already produced real evidence: the resolved
@@ -315,18 +366,23 @@ extension AudioDecoder {
             quietWindowMinFillMs = .infinity
         } else if !cushionHadUnderrun {
             // No memory for the RESOLVED link and no real evidence yet this
-            // session: drop the borrowed bring-up guess back to defaults so a
-            // wrong-link seed can't persist into this link's bucket - the
-            // ladder re-learns this link from its own evidence (one blip
-            // worst-case re-arms the floor immediately).
-            playoutTargetMs = Self.playoutCushionBaseMs
+            // session: seed off the now-meaningful live jitter (cold seed) rather
+            // than dropping flat to base, so a standing-jitter link starts near the
+            // depth it needs. The borrowed bring-up guess is still discarded - we
+            // seed from THIS link's OWN measured jitter, not the borrow, so a
+            // wrong-link seed can't persist into this bucket. DO-NO-HARM: a clean
+            // link's coldSeedMs == base, byte-identical to the old `= base`. The
+            // ladder still re-learns this link from its own evidence on top.
+            playoutTargetMs = coldSeedMs
             learnedFloorMs = 0
+            coldSeedApplied = true
             quietSinceNanos = now
             floorQuietSinceNanos = now
             quietWindowMinFillMs = .infinity
         }
         let target = playoutTargetMs
         let floor = learnedFloorMs
+        let cap = effectiveCushionMaxMs
         audioMeterLock.unlock()
         AudioCushionTelemetry.shared.setFloorMs(floor)
         Diag.notice(
@@ -334,6 +390,20 @@ extension AudioDecoder {
             + "floor \(Int(floor.rounded()))ms"
             + (stored != nil ? " (per-host memory adopted)" : " (no memory for this link yet)"),
             "Stream")
+        // Cold-seed breadcrumb: greppable record of the jitter-aware decision when
+        // it actually lifted the seed above base on this fresh link. Updates the
+        // seed gauge to the resolve-time value (the init latch held the base).
+        if coldSeedApplied {
+            AudioCushionTelemetry.shared.setSeedMs(target)
+            if target > Self.playoutCushionBaseMs {
+                Diag.notice(
+                    "audio cushion cold-seed (jitter-aware): \(Int(target.rounded()))ms from "
+                    + "smoothed jitter "
+                    + "\(String(format: "%.1f", EnvSignalController.shared.decision.smoothedJitterMs))ms "
+                    + "(base \(Int(Self.playoutCushionBaseMs))ms, cap \(Int(cap))ms) - link \(link)",
+                    "Audio")
+            }
+        }
     }
 
     // MARK: - Drift micro-stretch (deterministic clock-skew repayment)

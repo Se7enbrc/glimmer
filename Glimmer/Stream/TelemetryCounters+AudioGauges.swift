@@ -551,6 +551,7 @@ final class AudioCushionTelemetry: @unchecked Sendable {
     private let lock = os_unfair_lock_t.allocate(capacity: 1)
     private var seedValue: Seed?
     private var floorMsValue: Double = 0
+    private var seedMsValue: Double = 0
     init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
@@ -558,6 +559,7 @@ final class AudioCushionTelemetry: @unchecked Sendable {
         os_unfair_lock_lock(lock)
         seedValue = seed
         floorMsValue = seed.floorMs
+        seedMsValue = seed.targetMs
         os_unfair_lock_unlock(lock)
     }
     var seed: Seed? {
@@ -573,5 +575,17 @@ final class AudioCushionTelemetry: @unchecked Sendable {
     var floorMs: Double {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return floorMsValue
+    }
+
+    /// The COLD-START seed target (ms): the t=0 cushion chosen before the grow
+    /// ratchet runs. Set at init (latchSeed, from the per-host/default seed) and
+    /// updated when the one-shot link resolve applies a jitter-aware cold seed on
+    /// a fresh (no-memory) link. A clean/wired link reads the 30ms base.
+    func setSeedMs(_ value: Double) {
+        os_unfair_lock_lock(lock); seedMsValue = value; os_unfair_lock_unlock(lock)
+    }
+    var seedMs: Double {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        return seedMsValue
     }
 }

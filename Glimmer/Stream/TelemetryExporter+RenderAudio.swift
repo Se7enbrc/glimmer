@@ -99,6 +99,13 @@ extension TelemetryRenderer {
                      "Learned audio cushion LOSS FLOOR, ms (EWMA of the target at each under-run; "
                      + "decay never steps below floor + one step). Absent until learned.",
                      cushionFloorMs > 0 ? cushionFloorMs : nil)
+        let cushionSeedMs = AudioCushionTelemetry.shared.seedMs
+        builder.emit("glimmer_audio_cushion_seed_ms",
+                     "Audio cushion COLD-START seed target, ms (the t=0 playout cushion chosen "
+                     + "before the grow ratchet runs). Jitter-aware on a fresh no-memory link: "
+                     + "max(base, ceil(2*smoothedJitter)+10) clamped to cap; a clean/wired link "
+                     + "reads the 30ms base. Per-host memory, when present, seeds this directly.",
+                     cushionSeedMs > 0 ? cushionSeedMs : nil)
         builder.emit("glimmer_audio_first_packet_ms",
                      "Time from stream start to first decoded audio, ms (cold-start metric).",
                      audio.firstPacketMs)
