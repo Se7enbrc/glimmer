@@ -1,53 +1,20 @@
 //
 //  TroubleshootingPane.swift
 //
-//  Settings → Troubleshooting. A live controller input test (the diagnostic
-//  for "controller input dies after Cmd-Tab" - it reads GameController
-//  directly, so if signals stay live here but not in-stream, the stream's
-//  forwarding is the culprit), a battery readout, and an in-app log viewer
-//  (Sunshine-style - read the app's own unified-log entries without leaving
-//  the app).
+//  Hosts the opt-in raw-HID DualSense control (RawHIDControl), used by
+//  Settings → Input. The Troubleshooting PANE that used to live here - the
+//  controller input test + the log viewer - folded into the always-visible part
+//  of Settings → Diagnostics (one pane instead of two thin ones; the input test
+//  and logs stay reachable by everyone, the telemetry/tuning sections reveal via
+//  the About option-click). Only this shared control remains here; the file name
+//  is kept to avoid an Xcode project-file edit.
 //
 
 import AppKit
-import GameController
 import SwiftUI
 
-struct TroubleshootingPane: View {
-    @Environment(MoonlightManager.self) private var moonlight
-
-    var body: some View {
-        Form {
-            // The "Extra DualSense buttons" raw-HID control now lives in
-            // Settings → Input (alongside the mouse + controller-quit settings),
-            // so all raw input shares one home. Troubleshooting keeps the live
-            // input TEST + logs - the diagnostics, not the settings.
-            Section {
-                ControllerInputTest()
-            } header: {
-                Text("Controller input test")
-            } footer: {
-                Text("Reads the controller directly through macOS. If a signal "
-                    + "lights up here but not in a stream, the issue is in how "
-                    + "the stream forwards it - try this view right after a "
-                    + "Cmd-Tab to confirm input is still live.")
-            }
-
-            Section {
-                LogViewer()
-            } header: {
-                Text("Logs")
-            } footer: {
-                Text("Recent entries from Glimmer's unified log. Copy them when "
-                    + "filing an issue.")
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
 // Module-internal (was private) so Settings → Input can host it alongside the
-// mouse + controller-quit settings; the live input test below stays here.
+// mouse + controller-quit settings.
 /// Opt-in control for the raw-HID DualSense reader. Off by default; turning it
 /// on shows a plain-language explanation BEFORE macOS's "Input Monitoring"
 /// prompt, so that scary system dialog is never a surprise.

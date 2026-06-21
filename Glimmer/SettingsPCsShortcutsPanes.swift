@@ -278,10 +278,9 @@ struct ShortcutsPane: View {
                 Toggle(isOn: $rawMouseWhileStreaming) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Aim with raw mouse motion while streaming").fontWeight(.medium)
-                        Text("Turns off the Mac's own mouse acceleration while the stream window "
-                            + "is focused, so only the game's sensitivity shapes your aim instead of "
-                            + "the Mac's pointer curve stacking on top of it. Restored the instant "
-                            + "you leave the stream. Affects mice only - the trackpad is untouched.")
+                        Text("Only the game's own sensitivity shapes your aim - the Mac's pointer "
+                            + "acceleration stops stacking on top while the stream is focused, and is "
+                            + "restored the instant you leave. Mice only; the trackpad is untouched.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

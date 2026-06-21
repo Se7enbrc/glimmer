@@ -62,14 +62,16 @@ struct AboutPane: View {
                         Text("Version \(versionString)")
                             .font(.footnote)
                             .foregroundStyle(.tertiary)
-                            // Hidden reveal for the Diagnostics pane. Option-
-                            // clicking the version line toggles the
-                            // `showDiagnostics` UserDefault - a deliberate,
-                            // undiscoverable gesture so normal users never trip
-                            // it, but a power user (or a bug report) can surface
-                            // the debug/tuning wires. The Telemetry toggle lives
-                            // INSIDE Diagnostics, so it can't gate its own
-                            // reveal - hence this separate gesture-driven flag.
+                            // Hidden reveal for the telemetry/tuning sections
+                            // inside Settings → Diagnostics (the pane itself is
+                            // always visible for the input test + logs; only the
+                            // debug wires hide). Option-clicking the version line
+                            // toggles the `showDiagnostics` UserDefault - a
+                            // deliberate, undiscoverable gesture so normal users
+                            // never trip it, but a power user (or a bug report)
+                            // can surface them. The Telemetry toggle lives inside
+                            // those sections, so it can't gate its own reveal -
+                            // hence this separate gesture-driven flag.
                             .gesture(
                                 TapGesture()
                                     .modifiers(.option)
@@ -78,7 +80,7 @@ struct AboutPane: View {
                             // Option-cursor hint that something lives here,
                             // without spelling it out.
                             .help(moonlight.showDiagnostics
-                                  ? "Option-click to hide Diagnostics"
+                                  ? "Option-click to hide the developer tools"
                                   : "")
                     }
                     Spacer()
