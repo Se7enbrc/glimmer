@@ -263,8 +263,11 @@ extension MoonlightManager {
     // MARK: - Effective config + persistence
 
     /// Recompute the effective stream config from the current preset + custom
-    /// overrides and stash it for the UI to read.
-    func persistQualitySettings() {
+    /// overrides and stash it for the UI to read. Returns true iff any effective
+    /// value actually moved, so callers on the hot display-change path can skip
+    /// invalidating views when nothing changed.
+    @discardableResult
+    func persistQualitySettings() -> Bool {
         let display = smartDefaultsForCurrentDisplay()
 
         let width: Int, height: Int, fps: Int, bitrate: Int, hdr: Bool
@@ -289,15 +292,22 @@ extension MoonlightManager {
             bitrate = customBitrateMbps * 1000
             hdr = customHDR
         }
-        effectiveWidth = width
-        effectiveHeight = height
-        effectiveFPS = fps
-        effectiveBitrateKbps = bitrate
-        effectiveHDR = hdr
+        // Idempotent writes: assign each @Observable property only when it
+        // actually moves. A spurious didChangeScreenParameters notification (the
+        // launcher gets these on EDR / brightness / refresh changes that don't
+        // touch the resolution) would otherwise re-stamp identical values and
+        // schedule a needless SwiftUI invalidation every time - exactly the kind
+        // of display-cycle layout churn that feeds AttributeGraph instability.
+        // Writing an @Observable property always invalidates its readers, even
+        // when the value is unchanged, so the guards are load-bearing.
+        var changed = false
+        if effectiveWidth != width { effectiveWidth = width; changed = true }
+        if effectiveHeight != height { effectiveHeight = height; changed = true }
+        if effectiveFPS != fps { effectiveFPS = fps; changed = true }
+        if effectiveBitrateKbps != bitrate { effectiveBitrateKbps = bitrate; changed = true }
+        if effectiveHDR != hdr { effectiveHDR = hdr; changed = true }
         UserDefaults.standard.set(qualityPreset.rawValue, forKey: "qualityPreset")
-        // Writing the @Observable-tracked properties above schedules the
-        // necessary view updates; no explicit objectWillChange.send()
-        // needed.
+        return changed
     }
 
     /// Snap custom values to the display's native dimensions.
