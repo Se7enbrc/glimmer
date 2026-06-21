@@ -42,8 +42,6 @@ extension InputForwarder {
         case .l3r3:
             return (pad.leftThumbstickButton?.isPressed ?? false)
                 && (pad.rightThumbstickButton?.isPressed ?? false)
-        case .home:
-            return pad.buttonHome?.isPressed ?? false
         case .custom:
             let custom = customControllerChordProvider()
             return !custom.isEmpty && custom.isSubset(of: heldControllerButtons(pad: pad))
@@ -66,7 +64,7 @@ extension InputForwarder {
             return true   // "select" maps to Create, which GameController drops on DualSense
         case .custom:
             return !customControllerChordProvider().isDisjoint(with: [.create, .mute])
-        case .none, .l1r1, .l1r1l2r2, .l3r3, .home:
+        case .none, .l1r1, .l1r1l2r2, .l3r3:
             return false
         }
     }

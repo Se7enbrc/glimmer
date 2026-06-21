@@ -56,6 +56,26 @@
     <resolution><width>3456</width><height>2234</height><refresh_rate>120</refresh_rate></resolution>
     <resolution><width>3456</width><height>2234</height><refresh_rate>240</refresh_rate></resolution>
 
+    <!-- Apple "default Retina scale" sizes (Glimmer's HiDPI preset = panel
+         native halved, the logical point grid macOS lays the UI out in). A
+         quarter of the pixels of the native entries above; the Mac integer-
+         upscales 2x on display, so they stay crisp at far lower bandwidth. -->
+    <resolution><width>1280</width><height>800</height><refresh_rate>60</refresh_rate></resolution>    <!-- 13" MBP HiDPI -->
+    <resolution><width>1280</width><height>800</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>1280</width><height>832</height><refresh_rate>60</refresh_rate></resolution>    <!-- 13" Air HiDPI -->
+    <resolution><width>1280</width><height>832</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>1440</width><height>932</height><refresh_rate>60</refresh_rate></resolution>    <!-- 15" Air HiDPI -->
+    <resolution><width>1440</width><height>932</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>1512</width><height>982</height><refresh_rate>60</refresh_rate></resolution>    <!-- 14" MBP HiDPI -->
+    <resolution><width>1512</width><height>982</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>1728</width><height>1117</height><refresh_rate>60</refresh_rate></resolution>   <!-- 16" MBP HiDPI -->
+    <resolution><width>1728</width><height>1117</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>2240</width><height>1260</height><refresh_rate>60</refresh_rate></resolution>   <!-- 24" iMac HiDPI -->
+    <resolution><width>2240</width><height>1260</height><refresh_rate>120</refresh_rate></resolution>
+    <resolution><width>3008</width><height>1692</height><refresh_rate>60</refresh_rate></resolution>   <!-- 6K Pro Display XDR HiDPI -->
+    <!-- (5K Studio Display HiDPI = 2560x1440 and 4K external HiDPI = 1920x1080
+         are already covered by the 16:9 standards above.) -->
+
     <!-- Ultrawide + high-res external (5K Studio Display, 6K Pro Display XDR, 8K) -->
     <resolution><width>3440</width><height>1440</height><refresh_rate>60</refresh_rate></resolution>
     <resolution><width>3440</width><height>1440</height><refresh_rate>120</refresh_rate></resolution>

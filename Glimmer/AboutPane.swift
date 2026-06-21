@@ -85,7 +85,26 @@ struct AboutPane: View {
                 }
                 .padding(.vertical, 6)
             }
-            Section("Acknowledgements") {
+            // Order: Support up top (the one ask), License in the middle (the
+            // legal fact), and the projects we lean on at the bottom as a
+            // closing note of appreciation.
+            Section("Support") {
+                if let url = URL(string: AboutLink.donate) {
+                    Link("Support Glimmer's development", destination: url)
+                        .font(.footnote)
+                }
+            }
+            Section("License") {
+                Text("Glimmer is free software under the GNU General Public License v3. "
+                    + "You may run, study, share, and modify it; there is no warranty.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let url = URL(string: AboutLink.license) {
+                    Link("GNU GPL v3", destination: url)
+                        .font(.footnote)
+                }
+            }
+            Section("Projects we like") {
                 Text("Built for Sunshine, the open-source game-streaming host. Glimmer "
                     + "speaks the Moonlight protocol - itself carrying NVIDIA GameStream "
                     + "forward - and the transport is ported from moonlight-common-c, "
@@ -102,22 +121,6 @@ struct AboutPane: View {
                 }
                 if let url = URL(string: AboutLink.credits) {
                     Link("Credits", destination: url)
-                        .font(.footnote)
-                }
-            }
-            Section("License") {
-                Text("Glimmer is free software under the GNU General Public License v3. "
-                    + "You may run, study, share, and modify it; there is no warranty.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                if let url = URL(string: AboutLink.license) {
-                    Link("GNU GPL v3", destination: url)
-                        .font(.footnote)
-                }
-            }
-            Section("Support") {
-                if let url = URL(string: AboutLink.donate) {
-                    Link("Support Glimmer's development", destination: url)
                         .font(.footnote)
                 }
             }

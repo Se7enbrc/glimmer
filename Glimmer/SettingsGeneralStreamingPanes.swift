@@ -96,20 +96,11 @@ struct GeneralPane: View {
     @Environment(MoonlightManager.self) private var moonlight
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     @AppStorage("launchMinimized") private var launchMinimized: Bool = false
-    // Default-ON: linearize the Mac's mouse acceleration while a stream is
-    // focused so only the game's own sensitivity shapes aim. Key mirrors
-    // MouseAccelerationControl.enabledDefaultsKey (registered true in GlimmerApp,
-    // which is what makes the non-UI UserDefaults.bool read default to on too).
-    @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
     /// True when macOS has the login item but it's pending the user's approval
     /// in System Settings ▸ Login Items - surfaced inline so the user isn't left
     /// with a toggle that silently does nothing at the next reboot.
     @State private var loginItemNeedsApproval = false
-
-    /// The privileged AWDL network helper (parks awdl0 during streams). Shared
-    /// singleton so this toggle and the stream lifecycle drive one instance.
-    @ObservedObject private var awdl = AWDLHelperManager.shared
 
     /// Defer the SMAppService register/unregister off the SwiftUI `.onChange`
     /// transaction - running it inline (synchronous, XPC-backed) mid-update
@@ -119,15 +110,6 @@ struct GeneralPane: View {
         DispatchQueue.main.async {
             let status = LoginItemManager.apply(launchAtLogin: launchAtLogin, minimized: minimized)
             loginItemNeedsApproval = (status == .requiresApproval)
-        }
-    }
-
-    /// Defer the helper register/unregister off the SwiftUI transaction - same
-    /// reason as the login item: an inline XPC-backed SMAppService call mid-
-    /// update dismisses the Settings window.
-    private func scheduleHelperToggle(_ enable: Bool) {
-        Task { @MainActor in
-            if enable { AWDLHelperManager.shared.enable() } else { AWDLHelperManager.shared.disable() }
         }
     }
 
@@ -183,46 +165,6 @@ struct GeneralPane: View {
                 }
                 Toggle("Silence this Mac while streaming (when sound plays on the gaming PC)", isOn: $moonlight.muteMacWhileStreaming)
             }
-            Section("Network") {
-                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
-                        Text("Parks AirDrop's radio (AWDL) for the length of a stream so it can't "
-                            + "grab the Wi-Fi channel and cause multi-second freezes. Restored the "
-                            + "instant you stop. Installs a small helper that needs a one-time approval.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .help("Holds awdl0 down for the duration of each stream via a privileged helper.")
-                if case .requiresApproval = awdl.state {
-                    HStack(spacing: 8) {
-                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote).foregroundStyle(.orange)
-                        Spacer()
-                        Button("Open Login Items") { awdl.openSystemSettings() }
-                    }
-                }
-                if case .unavailable(let why) = awdl.state {
-                    Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
-                        .font(.footnote).foregroundStyle(.red)
-                }
-            }
-            Section("Mouse") {
-                Toggle(isOn: $rawMouseWhileStreaming) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Aim with raw mouse motion while streaming").fontWeight(.medium)
-                        Text("Turns off the Mac's own mouse acceleration while the stream window "
-                            + "is focused, so only the game's sensitivity shapes your aim instead of "
-                            + "the Mac's pointer curve stacking on top of it. Restored the instant "
-                            + "you leave the stream. Affects mice only - the trackpad is untouched.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .help("Linearizes the system mouse acceleration (like `com.apple.mouse.scaling -1`) for the duration of each focused stream.")
-            }
             Section("Default action") {
                 // Picker sourced from the selected host's announced app
                 // list (Sunshine's `applist`). "Desktop" is always
@@ -241,7 +183,6 @@ struct GeneralPane: View {
         }
         .formStyle(.grouped)
         .onAppear {
-            awdl.refresh()
             guard launchAtLogin else { loginItemNeedsApproval = false; return }
             let service = launchMinimized
                 ? SMAppService.loginItem(identifier: LoginItemManager.helperBundleID)
@@ -289,6 +230,21 @@ enum CommonResolution: CaseIterable {
 struct QualityPane: View {
     @Environment(MoonlightManager.self) private var moonlight
 
+    /// The privileged AWDL network helper (parks awdl0 during streams). Shared
+    /// singleton so this toggle and the stream lifecycle drive one instance.
+    /// Lives in Quality because parking AirDrop's radio is a stream-smoothness
+    /// lever, not a general app setting.
+    @ObservedObject private var awdl = AWDLHelperManager.shared
+
+    /// Defer the helper register/unregister off the SwiftUI transaction - an
+    /// inline XPC-backed SMAppService call mid-update dismisses the Settings
+    /// window.
+    private func scheduleHelperToggle(_ enable: Bool) {
+        Task { @MainActor in
+            if enable { AWDLHelperManager.shared.enable() } else { AWDLHelperManager.shared.disable() }
+        }
+    }
+
     /// Width clamp: 640..7680 (480p min, 8K max). Matches Moonlight's
     /// upstream bounds. Wired to .onChange so it runs on EVERY commit:
     /// TextField(value:format:) writes the binding whenever editing ends -
@@ -332,6 +288,21 @@ struct QualityPane: View {
                 }
                 .pickerStyle(.inline)
                 .labelsHidden()
+
+                // Notch coverage as a compact pill right under the resolution
+                // choice - it shapes the same picture. DEFAULT ON: full-panel
+                // coverage is the product stance on notched MacBooks. Only
+                // meaningful on built-in notched panels; elsewhere the safe-area
+                // inset is zero and the toggle is a no-op. Snapshotted at session
+                // start, so the next-stream caveat lives in the description.
+                Toggle("Fill the notch", isOn: $moonlight.streamCoversNotch)
+                    .toggleStyle(.button)
+                    .help("Covers the whole panel on notched MacBooks; a sliver of the image hides behind the camera notch.")
+                Text("On notched MacBooks the stream fills the entire panel - a thin strip of "
+                    + "the picture sits behind the notch. Turn off to keep the image clear of it "
+                    + "(macOS safe-area framing). Applies on your next stream.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             if moonlight.qualityPreset == .custom {
@@ -457,25 +428,30 @@ struct QualityPane: View {
                 }
             }
 
-            Section("Display") {
-                // DEFAULT ON: full-panel coverage is the product stance on
-                // notched MacBooks; this is the opt-out.
-                // Only meaningful on built-in panels with a notch; elsewhere
-                // the safe-area inset is zero and the toggle has no effect.
-                // The value is snapshotted into the stream window once at
-                // session start (no live provider, unlike stats/hotkeys), so
-                // the footnote carries the next-stream caveat - same copy as
-                // the equally session-snapshotted captureSysKeys toggle.
-                Toggle(isOn: $moonlight.streamCoversNotch) {
+            Section("Wi-Fi") {
+                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Use every pixel of the display (a sliver hides behind the notch)")
-                            .fontWeight(.medium)
-                        Text("On notched MacBooks the stream covers the entire physical panel. "
-                            + "Turn off to match macOS's safe-area framing instead. "
-                            + "Takes effect on the next stream.")
+                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
+                        Text("Parks AirDrop's radio (AWDL) for the length of a stream so it can't "
+                            + "grab the Wi-Fi channel and cause multi-second freezes. Restored the "
+                            + "instant you stop. Installs a small helper that needs a one-time approval.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                }
+                .help("Holds awdl0 down for the duration of each stream via a privileged helper.")
+                if case .requiresApproval = awdl.state {
+                    HStack(spacing: 8) {
+                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Login Items") { awdl.openSystemSettings() }
+                    }
+                }
+                if case .unavailable(let why) = awdl.state {
+                    Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
+                        .font(.footnote).foregroundStyle(.red)
                 }
             }
 
@@ -489,8 +465,8 @@ struct QualityPane: View {
             // they never scatter across panes. Anything here must be safe to
             // flip blind and safe to ignore. A dial that proves itself moves
             // up into a real section; one that doesn't gets deleted, not
-            // hidden. (The notch toggle graduated to Display above -
-            // full-panel coverage is the product default, not an
+            // hidden. (The notch toggle graduated to a pill under the Preset
+            // picker - full-panel coverage is the product default, not an
             // experiment.) The fence is currently EMPTY, so no Section
             // is emitted at all: SwiftUI's grouped Form renders a Section
             // HEADER even over an EmptyView body, leaving a dangling flask
@@ -498,6 +474,7 @@ struct QualityPane: View {
             // systemImage: "flask") }` with the first new dial.
         }
         .formStyle(.grouped)
+        .onAppear { awdl.refresh() }
     }
 
     /// Two-tier bitrate guidance under the slider. Tier 1 is the baked-in

@@ -69,19 +69,23 @@ struct MoonlightApp: Identifiable, Hashable {
 
 enum QualityPreset: String, CaseIterable, Identifiable {
     // Declaration order drives `allCases`, which drives the picker order.
-    // Match-my-display is the default and sits at the top.
-    case matchDisplay  // host-native fps + display res, balanced
-    case smooth      // 60 fps, conservative bitrate
-    case maximum     // host-native fps, peak bitrate
-    case custom      // user-defined width/height/fps/bitrate
+    // Native Retina is the default and sits at the top.
+    //
+    // Smooth/Maximum were dropped: their 16:9 caps looked poor on the 16:10
+    // Retina panels these run on, and the bitrate-multiplier axis they rode
+    // was redundant once presets differ by RESOLUTION instead. The two that
+    // remain are the two real choices - full native, or the Mac's own default
+    // Retina scale at a quarter of the pixels - plus Custom.
+    case matchDisplay  // panel-native pixel grid + host-native fps (sharpest)
+    case hidpi         // default "looks like" scale (native ÷ 2), 2x-crisp, ~¼ the bitrate
+    case custom        // user-defined width/height/fps/bitrate
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .smooth: return "Smooth"
-        case .matchDisplay: return "Match my display"
-        case .maximum: return "Maximum"
+        case .matchDisplay: return "Native Retina"
+        case .hidpi: return "HiDPI"
         case .custom: return "Custom"
         }
     }
@@ -91,9 +95,8 @@ enum QualityPreset: String, CaseIterable, Identifiable {
     // pane's "Your next stream" summary.
     var subtitle: String {
         switch self {
-        case .smooth: return "Always fluid, even on Wi-Fi (caps sharpness at 1440p 60)"
-        case .matchDisplay: return "Looks like this Mac's own display (wants a solid network)"
-        case .maximum: return "Sharpest picture in heavy scenes (uses the most bandwidth)"
+        case .matchDisplay: return "Every pixel of this Mac's panel (sharpest; wants a solid network)"
+        case .hidpi: return "This Mac's default Retina scale - a touch softer, far less bandwidth"
         case .custom: return "Pick your own resolution, refresh, and bitrate"
         }
     }
@@ -234,8 +237,12 @@ public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
     case l1r1
     case l1r1l2r2
     case l3r3
-    case home
     case custom
+    // NOTE: `.home` (the PS / Guide / "menu" button) was removed - macOS
+    // gamecontrollerd reserves that button for system gestures, so it never
+    // reliably reached the app as a quit chord. A persisted `.home` decodes to
+    // nil and falls back to the default (see MoonlightManager load), so this is
+    // a clean removal with no migration step.
 
     public var displayName: String {
         switch self {
@@ -244,7 +251,6 @@ public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
         case .l1r1: return "L1 + R1"
         case .l1r1l2r2: return "L1 + R1 + L2 + R2"
         case .l3r3: return "L3 + R3 (stick clicks)"
-        case .home: return "Home / Guide"
         case .custom: return "Custom (recorded)"
         }
     }

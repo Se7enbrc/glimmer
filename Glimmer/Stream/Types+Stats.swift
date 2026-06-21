@@ -204,15 +204,20 @@ public struct StatsThresholds: Sendable, Equatable, Codable {
 /// cursor is hidden, right-click is a game input, not a launcher
 /// gesture), so the positional preference lives in Settings.
 public enum StatsOverlayCorner: String, CaseIterable, Sendable {
-    case topLeft, topRight, bottomLeft, bottomRight
+    // "Corner" by history; now also carries the two edge-centers. Top-center
+    // sits clear of the camera notch; bottom-center rides the bottom edge.
+    // rawValues are the case names, so adding cases mid-list is persistence-safe.
+    case topLeft, topCenter, topRight, bottomLeft, bottomCenter, bottomRight
 
     /// Human-readable label for the Settings picker.
     public var displayName: String {
         switch self {
-        case .topLeft:     return "Top left"
-        case .topRight:    return "Top right"
-        case .bottomLeft:  return "Bottom left"
-        case .bottomRight: return "Bottom right"
+        case .topLeft:      return "Top left"
+        case .topCenter:    return "Top center (under the notch)"
+        case .topRight:     return "Top right"
+        case .bottomLeft:   return "Bottom left"
+        case .bottomCenter: return "Bottom center"
+        case .bottomRight:  return "Bottom right"
         }
     }
 }

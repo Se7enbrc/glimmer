@@ -143,13 +143,13 @@ extension MoonlightManager {
         let fpsValue = Double(fps)
         let frameRateFactor = (fpsValue <= 60 ? fpsValue : (sqrt(fpsValue / 60.0) * 60.0)) / 30.0
 
-        // Preset multiplier: smooth = 0.75x, match = 1.0x, max = 1.5x.
+        // Preset multiplier: the surviving presets all stream at the formula's
+        // reference bits-per-pixel and differ by RESOLUTION instead (HiDPI sends
+        // a quarter of the pixels, so the resolution factor already discounts it).
+        // Kept as an explicit switch so a future preset has to make a choice.
         let presetMultiplier: Double
         switch preset {
-        case .smooth: presetMultiplier = 0.75
-        case .matchDisplay: presetMultiplier = 1.0
-        case .maximum: presetMultiplier = 1.5
-        case .custom: presetMultiplier = 1.0
+        case .matchDisplay, .hidpi, .custom: presetMultiplier = 1.0
         }
 
         let kbps = Int((resolutionFactor * frameRateFactor * presetMultiplier).rounded() * 1000)
@@ -269,17 +269,18 @@ extension MoonlightManager {
 
         let width: Int, height: Int, fps: Int, bitrate: Int, hdr: Bool
         switch qualityPreset {
-        case .smooth:
-            width = min(display.width, 2560)
-            height = min(display.height, 1440)
-            fps = 60
-            bitrate = bitrateKbps(width: width, height: height, fps: fps, preset: .smooth)
-            hdr = true
-        case .matchDisplay, .maximum:
+        case .matchDisplay:
             width = display.width
             height = display.height
             fps = display.fps
-            bitrate = bitrateKbps(width: width, height: height, fps: fps, preset: qualityPreset)
+            bitrate = bitrateKbps(width: width, height: height, fps: fps, preset: .matchDisplay)
+            hdr = true
+        case .hidpi:
+            let hd = hidpiDefaultsForCurrentDisplay()
+            width = hd.width
+            height = hd.height
+            fps = hd.fps
+            bitrate = bitrateKbps(width: width, height: height, fps: fps, preset: .hidpi)
             hdr = true
         case .custom:
             width = customWidth
@@ -321,20 +322,32 @@ extension MoonlightManager {
     func effectiveValuesForPreset(_ preset: QualityPreset) -> PresetSnapshot {
         let display = smartDefaultsForCurrentDisplay()
         switch preset {
-        case .smooth:
-            let width = min(display.width, 2560)
-            let height = min(display.height, 1440)
-            let kbps = bitrateKbps(width: width, height: height, fps: 60, preset: .smooth)
-            return PresetSnapshot(width: width, height: height, fps: 60, bitrateKbps: kbps)
         case .matchDisplay:
             let kbps = bitrateKbps(width: display.width, height: display.height, fps: display.fps, preset: .matchDisplay)
             return PresetSnapshot(width: display.width, height: display.height, fps: display.fps, bitrateKbps: kbps)
-        case .maximum:
-            let kbps = bitrateKbps(width: display.width, height: display.height, fps: display.fps, preset: .maximum)
-            return PresetSnapshot(width: display.width, height: display.height, fps: display.fps, bitrateKbps: kbps)
+        case .hidpi:
+            let hd = hidpiDefaultsForCurrentDisplay()
+            let kbps = bitrateKbps(width: hd.width, height: hd.height, fps: hd.fps, preset: .hidpi)
+            return PresetSnapshot(width: hd.width, height: hd.height, fps: hd.fps, bitrateKbps: kbps)
         case .custom:
             return PresetSnapshot(width: customWidth, height: customHeight, fps: customFPS, bitrateKbps: customBitrateMbps * 1000)
         }
+    }
+
+    /// HiDPI preset target: the display's DEFAULT "looks like" logical
+    /// resolution. Apple ships every built-in Retina panel at a default scale
+    /// of exactly 2x, so the panel-native pixel grid halved IS the point grid
+    /// the macOS UI is laid out in (3024x1964 -> 1512x982 on a 14" MBP, etc.).
+    /// Streaming at this size and letting the panel integer-upscale 2x stays
+    /// crisp while carrying ~1/4 the pixels of native - the bandwidth win. fps
+    /// tracks the panel max, same as matchDisplay. Falls back to native for a
+    /// degenerately small panel where halving would drop below 720p-ish.
+    func hidpiDefaultsForCurrentDisplay() -> (width: Int, height: Int, fps: Int) {
+        let native = smartDefaultsForCurrentDisplay()
+        let w = native.width / 2
+        let h = native.height / 2
+        guard w >= 1280, h >= 720 else { return native }
+        return (w, h, native.fps)
     }
 
     /// Friendly label for common Mac and external panel native resolutions.
