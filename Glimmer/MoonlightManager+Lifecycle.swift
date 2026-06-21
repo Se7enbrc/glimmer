@@ -65,11 +65,18 @@ extension MoonlightManager {
             // yanking the resolution mid-stream would be disruptive.
             Task { @MainActor in
                 guard let self, !self.isStreaming else { return }
-                self.persistQualitySettings()
-                // Bump the sentinel so any view that read
-                // `currentDisplayDescription` rebuilds. @Observable can't
-                // see through NSScreen.main on its own.
-                self.displayInfoRevision &+= 1
+                // persistQualitySettings is idempotent and reports whether the
+                // effective config actually moved. A no-op screen-parameter
+                // notification (common on the launcher - EDR/brightness/refresh
+                // changes that don't touch the resolution) then mutates zero
+                // @Observable state and invalidates nothing, instead of churning
+                // the view graph on every display tick.
+                if self.persistQualitySettings() {
+                    // Bump the sentinel so any view that read
+                    // `currentDisplayDescription` rebuilds. @Observable can't
+                    // see through NSScreen.main on its own.
+                    self.displayInfoRevision &+= 1
+                }
             }
         })
         notificationTokens.append(nc.addObserver(
