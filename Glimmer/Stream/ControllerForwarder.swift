@@ -109,6 +109,14 @@ extension InputForwarder {
         }
         gamepadMask |= UInt16(1) << slot
 
+        // Light the controller's player-number LEDs to match its slot - the one
+        // native touch the pad was missing. GameController owns this on macOS (it
+        // drives the DualSense's player dots, the Xbox quadrant, etc.), so we use
+        // the official playerIndex rather than poking raw-HID LED bytes and
+        // fighting gamecontrollerd. Only indices 1-4 exist; a 5th+ pad (slot >= 4,
+        // Sunshine-only territory) stays unset and keeps the system default.
+        gamepad.playerIndex = GCControllerPlayerIndex(rawValue: Int(slot)) ?? .indexUnset
+
         // Determine controller type from GameController metadata. macOS doesn't
         // expose a clean type enum, so we infer from product category strings.
         let kind = controllerType(for: gamepad)
