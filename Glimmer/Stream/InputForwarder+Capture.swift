@@ -466,6 +466,9 @@ enum MouseAccelerationControl {
     private static let pendingRestoreKey = "mouseAccelPendingRestore"
     /// The "disabled / linear" acceleration value (mirrors `com.apple.mouse.scaling -1`).
     static let linear = -1.0
+    /// One-time latch so a failing/absent IOKit acceleration API logs a single
+    /// NOTICE, not one per stream focus. Single-writer on the @MainActor capture path.
+    nonisolated(unsafe) private static var loggedAPIUnavailable = false
 
     /// Whether the linearize-while-focused feature is on (default true).
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledDefaultsKey) }
@@ -476,8 +479,19 @@ enum MouseAccelerationControl {
     /// the crash-safety sentinel only when it actually overrides.
     static func engageLinear() -> Double? {
         let prior = gl_get_mouse_acceleration()
-        // -2.0 = read failure; < 0 (e.g. -1) = already disabled - either way
-        // there is no positive value of ours to restore later, so do nothing.
+        // < -1.5 = the (deprecated, private) IOKit acceleration API failed or is
+        // gone on this OS (the read sentinel is -2.0). Degrade silently - the
+        // stream is unaffected, the mouse just keeps the Mac's acceleration - but
+        // log ONCE so a future-macOS regression is visible in the log.
+        if prior < -1.5 {
+            if !loggedAPIUnavailable {
+                loggedAPIUnavailable = true
+                Diag.notice("Mouse: pointer-acceleration API unavailable - raw-aim "
+                    + "linearization disabled (stream unaffected)", "Input")
+            }
+            return nil
+        }
+        // prior in [-1, 0): the user already runs linear - nothing of ours to undo.
         guard prior >= 0 else { return nil }
         let defaults = UserDefaults.standard
         defaults.set(prior, forKey: pendingRestoreKey)

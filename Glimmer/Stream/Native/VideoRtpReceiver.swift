@@ -296,28 +296,52 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // Batched receive (issue #24): up to `cap` datagrams per recvmsg_x
             // syscall, cutting the ~14k recvfrom/s floor at 4K240 (measurably
             // smoother). Buffers allocated once and reused; handleDatagram
-            // copies each out - the win is the syscall COUNT. recvmsg_x is
-            // universally available on macOS; the plain recvfrom path it
-            // replaced is in git history if a fallback is ever needed.
+            // copies each out - the win is the syscall COUNT. recvmsg_x is a
+            // Darwin-PRIVATE syscall with no public contract; if a future kernel
+            // ever drops it the call returns ENOSYS and we fall back to one
+            // recvfrom per datagram (slower - the syscall-count win is gone - but
+            // correct) for the rest of the session. A removed SPI then degrades
+            // the stream, it doesn't kill it.
             let cap = 32
             let stride = bufSize
             let storage = UnsafeMutablePointer<UInt8>.allocate(capacity: cap * stride)
             let lengths = UnsafeMutablePointer<Int32>.allocate(capacity: cap)
             defer { storage.deallocate(); lengths.deallocate() }
+            var batched = true
             while let self, !self.interrupted.isSet {
-                let n = gl_recvmsg_x_batch(sock, storage, Int32(stride), Int32(cap), lengths)
-                if n > 0 {
-                    for i in 0..<Int(n) {
-                        // Clamp to stride: a bad length (never observed, but a
-                        // private-API misread would be) must not read OOB.
-                        let len = min(Int(lengths[i]), stride)
-                        guard len > 0 else { continue }
-                        self.handleDatagram(Array(UnsafeBufferPointer(start: storage + i * stride, count: len)))
+                if batched {
+                    let n = gl_recvmsg_x_batch(sock, storage, Int32(stride), Int32(cap), lengths)
+                    if n > 0 {
+                        for i in 0..<Int(n) {
+                            // Clamp to stride: a bad length (never observed, but a
+                            // private-API misread would be) must not read OOB.
+                            let len = min(Int(lengths[i]), stride)
+                            guard len > 0 else { continue }
+                            self.handleDatagram(Array(UnsafeBufferPointer(start: storage + i * stride, count: len)))
+                        }
+                    } else if n < 0 {
+                        let err = errno
+                        if err == EAGAIN || err == EWOULDBLOCK || err == EINTR { continue } // poll timeout
+                        if err == ENOSYS {
+                            // Batched receive not implemented on this kernel - drop
+                            // to the per-datagram path for the rest of the session.
+                            Diag.notice("recvmsg_x unavailable (ENOSYS) - falling back to recvfrom", Self.cat)
+                            batched = false
+                            continue
+                        }
+                        break // socket closed (stop) or fatal
                     }
-                } else if n < 0 {
-                    let err = errno
-                    if err == EAGAIN || err == EWOULDBLOCK || err == EINTR { continue } // poll timeout
-                    break // socket closed (stop) or fatal
+                } else {
+                    // Fallback: one recvfrom per datagram. Same SO_RCVTIMEO-driven
+                    // EAGAIN cancellation as the batched path; close(fd) unblocks it.
+                    let len = recvfrom(sock, storage, stride, 0, nil, nil)
+                    if len > 0 {
+                        self.handleDatagram(Array(UnsafeBufferPointer(start: storage, count: min(len, stride))))
+                    } else if len < 0 {
+                        let err = errno
+                        if err == EAGAIN || err == EWOULDBLOCK || err == EINTR { continue }
+                        break
+                    }
                 }
             }
         }
