@@ -538,6 +538,12 @@ final class RtpVideoQueue {
     // MARK: - little-endian read
 
     @inline(__always) func le32(_ b: [UInt8], _ off: Int) -> UInt32 {
-        UInt32(b[off]) | (UInt32(b[off + 1]) << 8) | (UInt32(b[off + 2]) << 16) | (UInt32(b[off + 3]) << 24)
+        // Defense-in-depth: every current caller (AddPacket / Reconstruct) already
+        // rejects packets shorter than the NV header before reading, so this guard
+        // never fires today. It's here so the bare helper can't trap on a future
+        // caller that forgets the length check - a short read degrades to 0, not a
+        // hard crash in a release build where array bounds checks are compiled out.
+        guard off >= 0, off + 3 < b.count else { return 0 }
+        return UInt32(b[off]) | (UInt32(b[off + 1]) << 8) | (UInt32(b[off + 2]) << 16) | (UInt32(b[off + 3]) << 24)
     }
 }
