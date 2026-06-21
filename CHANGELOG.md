@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026.6.19 - 2026-06-21
+
+A polish pass across Settings, the controller, and stream robustness.
+
+The Quality presets are simpler and truer to these displays: "Match my display"
+is now "Native Retina" (every pixel of the Mac's panel), the rarely-right Smooth
+and Maximum presets are gone, and a new HiDPI preset streams at the Mac's
+default Retina scale - a crisp picture at roughly a quarter of the bandwidth.
+Notch coverage is now a single-line toggle right under the resolution picker,
+and the in-stream stats overlay can sit top-center (clear of the camera notch)
+or bottom-center.
+
+Settings are also reorganized: the raw-mouse aim toggle moved to Input, Wi-Fi
+stutter-smoothing moved to Quality, and the Troubleshooting and Diagnostics
+panes merged into one - the controller test and logs stay in plain sight, while
+the telemetry wires reveal with the usual option-click on the version line.
+
+On the controller, the DualSense player-number LEDs now light to match its slot,
+and the unreliable Home / Guide quit chord - macOS reserves that button - was
+removed (the Options + Create + L1 + R1 chord remains).
+
+Under the hood: a SwiftUI layout-engine crash is hardened by making the
+display-change recompute idempotent; the video receive path falls back
+gracefully if a future macOS ever drops its private batched-receive syscall; and
+a handful of defensive guards round it out.
+
 ## 2026.6.18 - 2026-06-20
 
 Fixes controller input dying after you record a custom quit chord. Recording a
