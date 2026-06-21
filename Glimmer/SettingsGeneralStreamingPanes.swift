@@ -296,7 +296,7 @@ struct QualityPane: View {
                 // inset is zero and the toggle is a no-op. Snapshotted at session
                 // start, so the next-stream caveat lives in the description.
                 Toggle("Fill the notch", isOn: $moonlight.streamCoversNotch)
-                    .toggleStyle(.button)
+                    .toggleStyle(.switch)
                     .help("Covers the whole panel on notched MacBooks; a sliver of the image hides behind the camera notch.")
                 Text("Fills the whole panel on notched MacBooks - a thin strip of the picture "
                     + "hides behind the notch. Off keeps it clear. Applies next stream.")
