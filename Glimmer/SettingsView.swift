@@ -6,7 +6,11 @@ import SwiftUI
 // MARK: - Settings Root
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, streaming, pcs, shortcuts, troubleshooting, diagnostics, about
+    // `.diagnostics` is the merged home for what used to be two panes:
+    // the always-visible troubleshooting surface (controller input test + logs)
+    // plus the option-click-revealed telemetry/tuning wires. The old
+    // `.troubleshooting` case folded into it.
+    case general, streaming, pcs, shortcuts, diagnostics, about
 
     var id: String { rawValue }
     var title: String {
@@ -23,7 +27,6 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         // keys, controller raw-HID + quit chord, mouse). Case/rawValue
         // "shortcuts" stays put so nothing persisted/deep-linked breaks.
         case .shortcuts: return "Input"
-        case .troubleshooting: return "Troubleshooting"
         case .diagnostics: return "Diagnostics"
         case .about: return "About"
         }
@@ -37,8 +40,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .streaming: return "dial.high.fill"
         case .pcs: return "display"
         case .shortcuts: return "keyboard.fill"
-        case .troubleshooting: return "stethoscope"
-        case .diagnostics: return "waveform.path.ecg"
+        case .diagnostics: return "stethoscope"
         // System Settings' About uses `info.circle.fill` - the bare "info"
         // symbol doesn't ship in SF Symbols 6 and falls back to a missing
         // glyph on macOS 26.
@@ -52,8 +54,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .streaming: return .red
         case .pcs: return .orange
         case .shortcuts: return .indigo
-        case .troubleshooting: return .teal
-        case .diagnostics: return .purple
+        case .diagnostics: return .teal
         case .about: return .gray
         }
     }
@@ -63,12 +64,11 @@ struct SettingsRoot: View {
     @Environment(MoonlightManager.self) private var moonlight
     @State private var selection: SettingsPane = .general
 
-    /// Panes shown in the sidebar. Diagnostics is HIDDEN until revealed by the
-    /// option-click gesture on the version line in About - normal users never
-    /// see it, so the debug/tuning wires stay out of the way.
-    private var visiblePanes: [SettingsPane] {
-        SettingsPane.allCases.filter { $0 != .diagnostics || moonlight.showDiagnostics }
-    }
+    /// Panes shown in the sidebar. All are always present now: Diagnostics holds
+    /// the always-visible troubleshooting surface (controller input test + logs),
+    /// and its debug/tuning sections stay hidden INSIDE the pane until the
+    /// option-click gesture on the About version line flips `showDiagnostics`.
+    private var visiblePanes: [SettingsPane] { SettingsPane.allCases }
 
     var body: some View {
         // NavigationSplitView's master column auto-adopts Liquid Glass
@@ -114,12 +114,6 @@ struct SettingsRoot: View {
             .scrollContentBackground(.hidden)
             .navigationSplitViewColumnWidth(min: 170, ideal: 190)
             .toolbar(removing: .sidebarToggle)
-            // If the user collapses the Diagnostics reveal while it's the
-            // selected pane, fall back to General so the detail view doesn't
-            // point at a now-hidden pane.
-            .onChange(of: moonlight.showDiagnostics) { _, shown in
-                if !shown, selection == .diagnostics { selection = .general }
-            }
         } detail: {
             Group {
                 switch selection {
@@ -127,7 +121,6 @@ struct SettingsRoot: View {
                 case .streaming: QualityPane()
                 case .pcs: PCsPane()
                 case .shortcuts: ShortcutsPane()
-                case .troubleshooting: TroubleshootingPane()
                 case .diagnostics: DiagnosticsPane()
                 case .about: AboutPane()
                 }

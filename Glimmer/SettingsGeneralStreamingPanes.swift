@@ -298,9 +298,8 @@ struct QualityPane: View {
                 Toggle("Fill the notch", isOn: $moonlight.streamCoversNotch)
                     .toggleStyle(.button)
                     .help("Covers the whole panel on notched MacBooks; a sliver of the image hides behind the camera notch.")
-                Text("On notched MacBooks the stream fills the entire panel - a thin strip of "
-                    + "the picture sits behind the notch. Turn off to keep the image clear of it "
-                    + "(macOS safe-area framing). Applies on your next stream.")
+                Text("Fills the whole panel on notched MacBooks - a thin strip of the picture "
+                    + "hides behind the notch. Off keeps it clear. Applies next stream.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
