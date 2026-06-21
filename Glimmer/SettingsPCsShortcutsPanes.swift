@@ -188,6 +188,11 @@ struct PCTile: View {
 struct ShortcutsPane: View {
     @Environment(MoonlightManager.self) private var moonlight
     @State private var showChordCapture = false
+    // Default-ON: linearize the Mac's mouse acceleration while a stream is
+    // focused so only the game's own sensitivity shapes aim. Key mirrors
+    // MouseAccelerationControl.enabledDefaultsKey (registered true in GlimmerApp,
+    // which is what makes the non-UI UserDefaults.bool read default to on too).
+    @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
     var body: some View {
         // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
@@ -269,9 +274,20 @@ struct ShortcutsPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            // (Raw/accel-free mouse was explored here but shelved: CGEventTap
-            // deltas are accelerated and the system accel-disable is intrusive.
-            // See issue #22, closed not-planned. Mouse motion uses macOS's deltas.)
+            Section("Mouse") {
+                Toggle(isOn: $rawMouseWhileStreaming) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Aim with raw mouse motion while streaming").fontWeight(.medium)
+                        Text("Turns off the Mac's own mouse acceleration while the stream window "
+                            + "is focused, so only the game's sensitivity shapes your aim instead of "
+                            + "the Mac's pointer curve stacking on top of it. Restored the instant "
+                            + "you leave the stream. Affects mice only - the trackpad is untouched.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .help("Linearizes the system mouse acceleration (like `com.apple.mouse.scaling -1`) for the duration of each focused stream.")
+            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showChordCapture) {

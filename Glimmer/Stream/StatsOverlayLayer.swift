@@ -175,17 +175,30 @@ public final class StatsOverlayLayer {
 
         let hostWidth = host.bounds.width
         let hostHeight = host.bounds.height
+        let centerX = (hostWidth - boxWidth) / 2
+        // Top-center clears the camera notch: on a notched panel the safe-area
+        // top inset is the notch band, so anchor below it (with a small gap);
+        // elsewhere safeAreaInsets.top is 0 and this collapses to the normal
+        // inset. CALayer origin is bottom-left, so "top" is the larger y.
+        let notchTop = NSScreen.main?.safeAreaInsets.top ?? 0
+        let topCenterY = hostHeight - max(inset, notchTop + 8) - boxHeight
         let x: CGFloat
         let y: CGFloat
         switch corner {
         case .topLeft:
             x = inset
             y = hostHeight - inset - boxHeight
+        case .topCenter:
+            x = centerX
+            y = topCenterY
         case .topRight:
             x = hostWidth - inset - boxWidth
             y = hostHeight - inset - boxHeight
         case .bottomLeft:
             x = inset
+            y = inset
+        case .bottomCenter:
+            x = centerX
             y = inset
         case .bottomRight:
             x = hostWidth - inset - boxWidth
