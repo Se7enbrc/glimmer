@@ -155,7 +155,7 @@ trust-on-first-use: `NetworkClient.fetchServerInfo` will NOT auto-pin on first
 contact. The previous "auto-pin on first /serverinfo" behaviour was the
 canonical same-LAN-attacker-rides-an-induced-TLS-error gap; closed in the same
 refactor that moved the pin into the pairing flow (search for `SECURITY (C2)` in
-`Network.swift`).
+`NetworkClient+Endpoints.swift`).
 
 **Failure path.** Any deviation throws `StreamError.pairingFailed` with a
 specific message at `.private` log privacy. The caller sees a uniform "pairing
@@ -175,11 +175,12 @@ wipes, OS migrations, and Time Machine restores in a way the `SecCertificate`
 ref does not. The cert is public information; the threat addressed by mode-0600
 is _write_, not _read_.
 
-**Once pinned, ANY mismatch fails the connection.** The TLS delegate
-(`Network.swift:TLSDelegate.urlSession(_:didReceive:completionHandler:)`)
-refuses the handshake if the leaf cert doesn't byte-equal the pinned PEM. We do
-NOT silently re-pin on TLS error. The previous auto-rebind-on-TLS-error path was
-the gap a same-LAN attacker rode to pin their own cert - closed.
+**Once pinned, ANY mismatch fails the connection.** Enforcement lives in
+`ControlTransport.swift`: `performBlocking` runs a post-handshake exact-DER pin
+check via `X509_cmp` (no `URLSession`, no `SecTrust`), refusing the connection
+if the leaf cert doesn't byte-equal the pinned PEM. We do NOT silently re-pin on
+TLS error. The previous auto-rebind-on-TLS-error path was the gap a same-LAN
+attacker rode to pin their own cert - closed.
 
 A real cert rotation (Sunshine reinstall, OS reset on the host) lands the user
 on a loud `hostUnreachable` error directing them to **Settings → PCs → Compare

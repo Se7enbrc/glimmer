@@ -1,7 +1,7 @@
 //
 //  FramePacer+FrameRateRange.swift
 //
-//  The present-callback throttle floor (FIX #1). Split out of FramePacer.swift
+//  The present-callback throttle floor. Split out of FramePacer.swift
 //  to keep that file under the length limit; these are the pure / view-reading
 //  static helpers that build the CADisplayLink `preferredFrameRateRange` so
 //  macOS cannot throttle the present callback below stream cadence on a static
@@ -111,7 +111,7 @@ extension FramePacer {
     }
 
     /// Build the CADisplayLink frame-rate range that forbids throttling the
-    /// present callback below the stream cadence on a static layer (FIX #1).
+    /// present callback below the stream cadence on a static layer.
     /// `minimum` is pinned to the stream Hz so macOS keeps the callback firing
     /// at stream cadence even on a flat scene; `maximum` is the panel max. The
     /// floor is CLAMPED to `min(streamHz, panelMaxHz)` so a sub-stream-fps

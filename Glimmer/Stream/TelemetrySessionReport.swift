@@ -13,7 +13,7 @@
 //  Two pieces live here:
 //    * `SessionAggregate` - the running per-tick rollup the exporter folds each
 //      1Hz snapshot into (fps min/avg/max, peak depth, worst windows), GATE-
-//      AWARE (D4): each tick is classified active/gated/bring-up/resume and
+//      AWARE: each tick is classified active/gated/bring-up/resume and
 //      the headline numbers cover ACTIVE seconds only (see the type doc). The
 //      raw session-wide latency percentiles still come from the cumulative
 //      histograms at stop (lossless); the aggregate additionally stitches an
@@ -37,7 +37,7 @@ import Foundation
 /// min/avg/max, peak pacing depth, and the worst single 1s windows for the
 /// signals where a transient spike is the story.
 ///
-/// GATE-AWARE (D4): every tick is classified ACTIVE / GATED / BRING-UP /
+/// GATE-AWARE: every tick is classified ACTIVE / GATED / BRING-UP /
 /// RESUME before folding, and the HEADLINE numbers (fps min/avg/max, worst
 /// windows, latency percentiles) are computed over ACTIVE seconds only. The
 /// all-session versions lie: a long decode-gated AFK window working as designed
@@ -275,7 +275,7 @@ struct SessionReport {
         top.append("\"build\":{\"commit\":\"\(buildCommit)\",\"date\":\"\(buildDate)\"}")
         top.append("\"duration_s\":\(num(durationSeconds))")
         top.append("\"ticks\":\(aggregate.tickCount)")
-        // GATE-AWARE segmentation (D4): per-segment second counts first, so
+        // GATE-AWARE segmentation: per-segment second counts first, so
         // every headline below reads against its denominator. `fps`/`latency`/
         // `worst_windows` are ACTIVE-seconds; the `*_raw` keys are all-session.
         top.append("\"segments\":\(segmentsObject())")
@@ -311,7 +311,7 @@ struct SessionReport {
 
     // MARK: - Sub-objects
 
-    /// Per-segment second counts (D4) - the denominators that make the
+    /// Per-segment second counts - the denominators that make the
     /// headline-vs-raw split legible at a glance: a session that was 90%
     /// gated AFK self-describes as such on the first line.
     private func segmentsObject() -> String {

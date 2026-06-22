@@ -163,7 +163,11 @@ struct GeneralPane: View {
                         Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
                     }
                 }
-                Toggle("Silence this Mac while streaming (when sound plays on the gaming PC)", isOn: $moonlight.muteMacWhileStreaming)
+                Toggle("Mute this Mac while streaming", isOn: $moonlight.muteMacWhileStreaming)
+                Text("Keeps game audio on the gaming PC's output only; this Mac stays silent "
+                    + "for the length of the stream.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             Section("Default action") {
                 // Picker sourced from the selected host's announced app
@@ -376,7 +380,7 @@ struct QualityPane: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Match this Mac's display") {
+                        Button("Use native resolution") {
                             moonlight.snapCustomToDisplay()
                         }
                         .buttonStyle(.borderless)
@@ -460,17 +464,7 @@ struct QualityPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            // EXPERIMENTS FENCE - the single home for try-it-and-see dials so
-            // they never scatter across panes. Anything here must be safe to
-            // flip blind and safe to ignore. A dial that proves itself moves
-            // up into a real section; one that doesn't gets deleted, not
-            // hidden. (The notch toggle graduated to a pill under the Preset
-            // picker - full-panel coverage is the product default, not an
-            // experiment.) The fence is currently EMPTY, so no Section
-            // is emitted at all: SwiftUI's grouped Form renders a Section
-            // HEADER even over an EmptyView body, leaving a dangling flask
-            // card. Re-add `Section { ... } header: { Label("Experiments",
-            // systemImage: "flask") }` with the first new dial.
+            // No Experiments section yet. Don't emit an empty `Section { } header: { Label("Experiments", systemImage: "flask") }` — SwiftUI's grouped Form renders the Section header even over an EmptyView body, leaving a dangling flask card. Add the Section back together with the first real dial.
         }
         .formStyle(.grouped)
         .onAppear { awdl.refresh() }

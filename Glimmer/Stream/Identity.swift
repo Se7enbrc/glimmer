@@ -219,8 +219,8 @@ public actor IdentityManager {
         // builds imported into the login keychain - the control channel no longer
         // uses a SecIdentity, so nothing of ours should linger there.
         deleteLabelledIdentity()
-        // SECURITY (#5): for users whose moonlight-qt migration already ran
-        // in a pre-#5 build, the source plist still has the PEM material
+        // SECURITY: for users whose moonlight-qt migration already ran
+        // in an earlier build, the source plist still has the PEM material
         // even though we've long since stopped reading from it. Do a
         // version-gated best-effort wipe so those installs catch up.
         sweepStaleMoonlightQtPEMs()

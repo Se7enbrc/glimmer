@@ -42,8 +42,8 @@
 //     only emit modifier transitions, not modifier state on every key. This
 //     matches moonlight-qt's `m_KeysDown` QSet semantics.
 //
-//   * Mouse motion is *relative* via the SDL associate-false model (issue #14;
-//     P0 mouse-snap fix). When relative aim is engaged we call
+//   * Mouse motion is *relative* via the SDL associate-false model
+//     (P0 mouse-snap fix). When relative aim is engaged we call
 //     `CGAssociateMouseAndMouseCursorPosition(false)` (enterCapturedMode) so the
 //     OS STOPS physically moving the on-screen cursor - exactly
 //     SDL_SetRelativeMouseMode(true) on macOS. This is the airtight fix for the
@@ -170,7 +170,7 @@ public final class InputForwarder {
     /// edits in Settings take effect on the next gamepad event.
     public var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none }
 
-    /// The user-recorded button set for the `.custom` quit chord (issue #9).
+    /// The user-recorded button set for the `.custom` quit chord.
     /// Consulted only when `controllerQuitChordProvider()` returns `.custom`.
     public var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] }
 
@@ -277,8 +277,8 @@ public final class InputForwarder {
     /// back to NSEvent.deltaX/Y only for a synthetic event with no CGEvent
     /// backing. NOTE: these deltas carry macOS's pointer-acceleration curve -
     /// no accel-free path was adopted for the mouse (CGEventTap is also
-    /// accelerated; the system accel-disable is intrusive - see issue #22,
-    /// closed not-planned).
+    /// accelerated; the system accel-disable is intrusive and was
+    /// deliberately not adopted).
     /// Returned in the same down-positive Y convention macOS uses so the
     /// LiSendMouseMoveEvent call site needs no sign flip.
     func mouseDelta(from event: NSEvent) -> (dx: Double, dy: Double) {
@@ -295,7 +295,7 @@ public final class InputForwarder {
     /// / `exitCapturedMode()` from the window's becomeKey/resignKey hooks.
     /// Re-entrant: enter while already-captured is a no-op.
     ///
-    /// Under the SDL associate-false model (issue #14; P0 mouse-snap fix) this
+    /// Under the SDL associate-false model (P0 mouse-snap fix) this
     /// flag ALSO gates the cursor-association latch:
     /// `enterCapturedMode` calls `CGAssociateMouseAndMouseCursorPosition(false)`
     /// when flipping it true, and `exitCapturedMode` re-associates (true) when

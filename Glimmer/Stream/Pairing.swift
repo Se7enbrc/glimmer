@@ -216,7 +216,7 @@ public actor PairingClient {
         // NetworkClient layer to even attempt TLS, so we have to set the
         // in-memory pin here.
         //
-        // SECURITY (#11): the PERSISTED pin (PinnedCertStore.store(...))
+        // SECURITY: the PERSISTED pin (PinnedCertStore.store(...))
         // does NOT happen here. It happens AFTER step 7
         // (HTTPS pairchallenge) returns paired=1 - at which point the
         // host has proven, over a TLS handshake gated by THIS exact
@@ -248,7 +248,7 @@ public actor PairingClient {
 
         // ---------------------------------------------------------------
         // PERSISTED PIN COMMIT - SECURITY-CRITICAL LATE COMMIT.
-        // SECURITY (#11): this block MUST stay at the very bottom of the
+        // SECURITY: this block MUST stay at the very bottom of the
         // pair flow, AFTER step 7 (HTTPS pairchallenge) has returned a
         // paired=1 over a TLS handshake gated by the in-memory pin set
         // at step 5. Moving this block earlier in the flow re-introduces
@@ -450,7 +450,7 @@ public actor PairingClient {
     /// Step 5 host-proof verification, split out of `runPairingFlow`.
     ///
     /// (a) MITM check.
-    /// SECURITY (#10): collapse MITM-detection and wrong-PIN errors
+    /// SECURITY: collapse MITM-detection and wrong-PIN errors
     /// into a single externally-visible `.pairingRejected`. The
     /// attacker shouldn't get to learn whether their attempt failed
     /// because the PIN was wrong (offline-brute-force the PIN) or
@@ -517,7 +517,7 @@ public actor PairingClient {
 
     /// Commit the verified host cert to the file-backed pin store.
     ///
-    /// SECURITY (#11): the caller invokes this ONLY at the very bottom of
+    /// SECURITY: the caller invokes this ONLY at the very bottom of
     /// `runPairingFlow`, after step 7 (HTTPS pairchallenge) has confirmed
     /// paired=1 over a TLS handshake gated by the in-memory pin set at step 5.
     /// A storage failure must NOT abort an otherwise-successful pair: the cert
@@ -528,7 +528,7 @@ public actor PairingClient {
             log.error("No host uniqueId on ServerInfo at pairing-success - cannot persist pin; cert will need re-pairing on next launch")
             return
         }
-        // SECURITY (#4 + #9): persist into the file-backed
+        // SECURITY: persist into the file-backed
         // PinnedCertStore. Atomic mode-0600 write; the same-UID-
         // process write surface that UserDefaults exposed (cfprefsd
         // is shared) goes away because the file is in our

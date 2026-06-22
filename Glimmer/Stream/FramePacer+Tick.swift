@@ -86,7 +86,7 @@ extension FramePacer {
         lastTickHostTime = hostNow
         tickCount &+= 1
         // Snapshot the PTS-refined stream interval under the lock so the
-        // main-actor floor re-apply (FIX #1) reads a consistent value without a
+        // main-actor floor re-apply reads a consistent value without a
         // second lock acquisition. `streamFrameIntervalSeconds` is written on the
         // decode/pacing queue (submit's median refine); this is the only place we
         // read it main-side.
@@ -136,7 +136,7 @@ extension FramePacer {
                 "fromHz=\(changedFromHz, privacy: .public) toHz=\(changedToHz, privacy: .public)")
         }
 
-        // FIX #1 (re-apply): the present-callback floor is seeded at install from
+        // Floor re-apply: the present-callback floor is seeded at install from
         // the CONFIGURED fps, but the true cadence is learned from PTS deltas once
         // frames flow (a configured-vs-actual mismatch, or a mid-stream fps change
         // like 60→120). Re-pin the floor from the refined cadence here - on the
@@ -149,7 +149,7 @@ extension FramePacer {
         }
     }
 
-    // The FIX #1 floor re-apply (`reapplyPreferredRangeIfNeeded`) lives in
+    // The floor re-apply (`reapplyPreferredRangeIfNeeded`) lives in
     // FramePacer+FrameRateRange.swift alongside the range builders it calls.
 }
 

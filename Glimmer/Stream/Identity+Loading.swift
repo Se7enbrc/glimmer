@@ -110,7 +110,7 @@ extension IdentityManager {
             let identity = Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
             try writeIdentityToFileStore(identity)
             wipeUserDefaultsPlaintext()
-            // SECURITY (#5): once the file store has the canonical copy,
+            // SECURITY: once the file store has the canonical copy,
             // remove the PEM material from moonlight-qt's plist so the
             // long-lived private key isn't left readable at its world-
             // accessible source path forever. Conditioned on having
@@ -368,7 +368,7 @@ extension IdentityManager {
                                   forKey: Self.mqtPlistSweepKey)
     }
 
-    /// Best-effort cleanup for users who migrated before #5 shipped: the
+    /// Best-effort cleanup for users who migrated before the file store shipped: the
     /// file store has the canonical PEMs and we've not touched the source
     /// plist. Run on every preflight, gated by a UserDefaults version flag
     /// so it's effectively one-shot.

@@ -250,7 +250,7 @@ extension StreamSession {
                     Task { [weak self] in await self?.clearDecodeOnlyStallLatch() }
                 }
 
-                // ACTIVE RECOVERY (#20): decode silent past the recovery
+                // ACTIVE RECOVERY: decode silent past the recovery
                 // threshold - request an IDR each tick to prompt a host that
                 // paused video (e.g. the Windows sign-in → desktop transition)
                 // to resume, rather than freezing until a manual reconnect.
@@ -553,7 +553,7 @@ extension StreamSession {
         didLogWatchdogHold = false
     }
 
-    /// Active stall recovery (#20): request an IDR to prompt the host to resume
+    /// Active stall recovery: request an IDR to prompt the host to resume
     /// the video stream after it paused (e.g. the Windows sign-in → desktop
     /// transition stops the encoder briefly). Called each watchdog tick for the
     /// whole stall once past `decodeStallRecoveryThreshold`; the request is
@@ -583,7 +583,7 @@ extension StreamSession {
         // teardown. It re-arms naturally once frames resume.
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
 
-        // HOLD-IF-ALIVE (#20): a 10s video stall is NOT proof the session is
+        // HOLD-IF-ALIVE: a 10s video stall is NOT proof the session is
         // dead. During a Windows sign-in → desktop transition the host pauses
         // the encoder (Sunshine can't capture the secure desktop) while its
         // ENet control loop keeps ACKing our 100ms keepalives - so the link is

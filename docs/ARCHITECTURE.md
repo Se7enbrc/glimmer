@@ -29,25 +29,29 @@ start a second session while one is running (`isStreaming` guard).
 
 Top-level pieces:
 
-| Layer                 | Type                                     | Lives where                                                 |
-| --------------------- | ---------------------------------------- | ----------------------------------------------------------- |
-| SwiftUI views         | views + observable state                 | `Glimmer/ContentView.swift`, `SettingsView.swift`           |
-| `MoonlightManager`    | `@MainActor` `@Observable`               | `Glimmer/MoonlightManager.swift`                            |
-| `StreamSession`       | `actor`                                  | `Glimmer/Stream/StreamSession.swift` (+ extensions)         |
-| `StreamingBackend`    | protocol (the engine boundary)           | `Glimmer/Stream/StreamingBackend.swift`                     |
-| `NativeBackend`       | `final class`, sole backend conformer    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/`     |
-| `StreamBridgeContext` | `final class`, `@unchecked Sendable`     | `Glimmer/Stream/StreamBridgeContext.swift`                  |
-| `NetworkClient`       | `actor` over `URLSession`                | `Glimmer/Stream/Network.swift`                              |
-| `PairingClient`       | `actor`                                  | `Glimmer/Stream/Pairing.swift`                              |
-| `IdentityManager`     | `actor` (singleton)                      | `Glimmer/Stream/Identity.swift`                             |
-| `VideoDecoder`        | `@MainActor final class`                 | `Glimmer/Stream/VideoDecoder.swift` (+`+HDR`, `+Bitstream`) |
-| `FramePacer`          | `final class`, `@unchecked Sendable`     | `Glimmer/Stream/FramePacer.swift` (+ extensions)            |
-| `AudioDecoder`        | `final class`, `@unchecked Sendable`     | `Glimmer/Stream/AudioDecoder.swift`                         |
-| `InputForwarder`      | `@MainActor final class`                 | `Glimmer/Stream/InputForwarder.swift`                       |
-| `ControllerForwarder` | `@MainActor` extension on InputForwarder | `Glimmer/Stream/ControllerForwarder.swift`                  |
-| `StreamWindow`        | `@MainActor final class`                 | `Glimmer/Stream/StreamWindow.swift`                         |
-| `StatsCollector`      | `final class`, `@unchecked Sendable`     | `Glimmer/Stream/StatsCollector.swift`                       |
-| Telemetry (opt-in)    | exporter + counters                      | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions)     |
+| Layer                 | Type                                                       | Lives where                                                 |
+| --------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
+| SwiftUI views         | views + observable state                                   | `Glimmer/ContentView.swift`, `SettingsView.swift`           |
+| `MoonlightManager`    | `@MainActor` `@Observable`                                 | `Glimmer/MoonlightManager.swift`                            |
+| `StreamSession`       | `actor`                                                    | `Glimmer/Stream/StreamSession.swift` (+ extensions)         |
+| `StreamingBackend`    | protocol (the engine boundary)                             | `Glimmer/Stream/StreamingBackend.swift`                     |
+| `NativeBackend`       | `final class`, sole backend conformer                      | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/`     |
+| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StreamBridgeContext.swift`                  |
+| `NetworkClient`       | `actor` over `ControlTransport` (hand-rolled OpenSSL mTLS) | `Glimmer/Stream/Network.swift`                              |
+| `PairingClient`       | `actor`                                                    | `Glimmer/Stream/Pairing.swift`                              |
+| `IdentityManager`     | `actor` (singleton)                                        | `Glimmer/Stream/Identity.swift`                             |
+| `VideoDecoder`        | `@MainActor final class`                                   | `Glimmer/Stream/VideoDecoder.swift` (+`+HDR`, `+Bitstream`) |
+| `FramePacer`          | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/FramePacer.swift` (+ extensions)            |
+| `AudioDecoder`        | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/AudioDecoder.swift`                         |
+| `InputForwarder`      | `@MainActor final class`                                   | `Glimmer/Stream/InputForwarder.swift`                       |
+| `ControllerForwarder` | `@MainActor` extension on InputForwarder                   | `Glimmer/Stream/ControllerForwarder.swift`                  |
+| `StreamWindow`        | `@MainActor final class`                                   | `Glimmer/Stream/StreamWindow.swift`                         |
+| `StatsCollector`      | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StatsCollector.swift`                       |
+| Telemetry (opt-in)    | exporter + counters                                        | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions)     |
+
+> The control/HTTP path runs over `ControlTransport` (`ControlTransport.swift`):
+> a hand-rolled OpenSSL + POSIX-socket mutual-TLS client, deliberately **not**
+> `URLSession` - this keeps the (sleep-locking) keychain out of the path.
 
 ## The `StreamingBackend` boundary
 
@@ -324,12 +328,15 @@ enable (`0x5501` - answered with `sendControllerMotion` samples), and RGB
 lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`, and
 `ControllerBattery` own the actuator/sampler sides.
 
-**Gesture suppression.** An `NSEvent.addLocalMonitorForEvents` for `.magnify` /
-`.smartMagnify` / `.swipe` / `.gesture` / `.beginGesture` / `.endGesture` /
-`.pressure` / `.rotate` swallows the gesture family while the stream window is
-key. Scroll wheel is NOT swallowed - scrolls forward as host scroll events.
-macOS Accessibility Zoom chords (⌥⌘8 / ⌥⌘= / ⌥⌘-) are intercepted
-unconditionally so they never reach the OS while a stream is up.
+**Gesture suppression.** An `NSEvent.addLocalMonitorForEvents` for the narrow
+mask `[.magnify, .smartMagnify, .swipe, .rotate]` swallows that gesture family
+while the stream window is key. The broader gesture/pressure types (`.gesture` /
+`.beginGesture` / `.endGesture` / `.pressure`) are deliberately EXCLUDED: they
+carry the trackpad pan/scroll the OS synthesizes `mouseMoved` from, so
+swallowing them would kill cursor + scroll on trackpad-only Macs. Scroll wheel
+is NOT swallowed - scrolls forward as host scroll events. macOS Accessibility
+Zoom chords (⌥⌘8 / ⌥⌘= / ⌥⌘-) are intercepted unconditionally so they never
+reach the OS while a stream is up.
 
 **Input gating.** The engine refuses input until the control channel is up: the
 backend's `send*` methods return -2 before then (mirroring upstream

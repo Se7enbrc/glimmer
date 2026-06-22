@@ -1,7 +1,7 @@
 //
 //  FecHeadroomController.swift
 //
-//  PROACTIVE FEC headroom (#3): the OURS-OWNED slice of a wifi loss burst -
+//  PROACTIVE FEC headroom: the OURS-OWNED slice of a wifi loss burst -
 //  prevent, don't react. Today FEC/recovery is REACTIVE: only once loss has
 //  become unrecoverable do we flood RFI + post-invalidation IDR (a long loss
 //  burst can overwhelm the host's fixed FEC parity before that ever fires). This
@@ -11,7 +11,7 @@
 //  marginal frames complete from the parity the host ALREADY sends BEFORE they
 //  tip into unrecoverable - then relaxes back to baseline when the link clears.
 //
-//  LOSS AXIS (#25): the jitter/ooo/retransmit signals above miss a LOW-jitter but
+//  LOSS AXIS: the jitter/ooo/retransmit signals above miss a LOW-jitter but
 //  LOSSY link (bursty 5GHz loss, ~0ms jitter) - exactly where frames tip into
 //  unrecoverable → IDR while the controller sits at the 24ms floor. A SEPARATE
 //  loss accumulator (`observeLoss` / `lossLevel`) escalates the SAME reorder-hold
@@ -32,7 +32,7 @@
 //     sent - see EnetControlChannel.queueFrameFecStatus / SdpCodec). So a wire-
 //     side FEC/bitrate nudge is not available without protocol risk.
 //   * The reorder-hold window, by contrast, is a pure RECEIVE-side lever already
-//     present in RtpVideoQueue (Issue 2b): it only governs how long an incomplete
+//     present in RtpVideoQueue: it only governs how long an incomplete
 //     frame waits for its late tail/parity shards before we declare loss. Widening
 //     it during a degradation trend gives the host's existing parity more time to
 //     land and complete the frame via FEC - genuine proactive FEC HEADROOM - with
@@ -163,22 +163,9 @@ struct FecHeadroomController {
     /// guard on top of the asymmetric counters.
     static let minDwellWindows = 2
 
-    // MARK: - Loss axis (#25): widen the hold on ACTUAL loss, not just jitter
-    //
-    // The jitter/ooo/retransmit signals above miss the case #25 is about: a
-    // low-jitter but LOSSY link (bursty 5GHz packet loss with ~0ms jitter). There
-    // the controller would sit at the 24ms floor while frames tip into
-    // unrecoverable → IDR. So a SEPARATE accumulator escalates the hold on direct
-    // loss evidence - frames the host's parity had to RECOVER (`fecRecovered`,
-    // proactive: parity is being consumed, we're near the edge) and frames that
-    // went UNRECOVERABLE (reactive safety net). It drives ONLY the reorder-hold
-    // (combined with the jitter level via `max` in `holdWindowUs`), NEVER the
-    // pacer depth - a deeper present buffer does nothing for loss recovery and
-    // only adds latency. A clean link (zero recoveries, zero unrecoverable) keeps
-    // `lossLevel` at 0 → byte-identical, same do-no-harm contract as the jitter
-    // axis. Loss is BURSTY+SPARSE, so the cadence differs from the jitter axis: a
-    // qualifying window escalates fast (dwell-guarded), and the bleed-out is SLOW
-    // (`lossClearWindows`) so the headroom rides ACROSS the gaps between bursts.
+    // MARK: - Loss axis: widen the hold on ACTUAL loss, not just jitter
+    // (Rationale: the file header's LOSS AXIS note and observeLoss() below; the
+    // per-field docs that follow give the cadence numbers.)
 
     /// Consecutive loss-active windows before a loss-axis escalation. 1 = a single
     /// window with FEC recovery / an unrecoverable frame steps the hold (still
@@ -319,7 +306,7 @@ struct FecHeadroomController {
         return false
     }
 
-    /// INCREMENT 1 - RECONCILED drive. Adopt the UNIFIED jitter→headroom decision
+    /// RECONCILED drive. Adopt the UNIFIED jitter→headroom decision
     /// the EnvSignalController publishes instead of self-deciding from raw jitter:
     /// the published `headroomLevel` becomes this controller's `level`, and the
     /// published `smoothedJitterMs` drives the jitter-scaled base (the SAME EWMA
@@ -350,7 +337,7 @@ struct FecHeadroomController {
         return changed
     }
 
-    /// LOSS AXIS (#25). Feed one window's direct-loss evidence and step the
+    /// LOSS AXIS. Feed one window's direct-loss evidence and step the
     /// SEPARATE `lossLevel` (combined with the jitter axis via `max` in
     /// `holdWindowUs`). Returns true iff `lossLevel` changed, so the caller can log
     /// it. Called every window REGARDLESS of `reconcilerEnabled` - the loss axis is

@@ -169,7 +169,7 @@ public actor StreamSession {
     /// of waiting passively for the host to come back on its own. This is the
     /// fix for "stream freezes when the host's desktop switches (Windows
     /// sign-in / secure desktop) and stays frozen until you manually reconnect"
-    /// (#20): the host pauses video across the switch and needs a keyframe
+    /// The host pauses video across the switch and needs a keyframe
     /// request to resume - nothing else fires one when reception simply stops.
     /// We nudge from here up to `frameWatchdogTimeout` (the give-up), matching
     /// moonlight's recover-then-terminate behavior. Below the soft/hard
@@ -190,7 +190,7 @@ public actor StreamSession {
     /// never occurs on a healthy link. When `enetHealth().sinceLastAckMs` is
     /// under this, the frame watchdog HOLDS instead of tearing down: it keeps
     /// requesting IDRs and waits for the desktop to return, matching moonlight,
-    /// which terminates on connection loss - not on a video stall alone (#20).
+    /// which terminates on connection loss - not on a video stall alone.
     /// Teardown for a genuinely-gone host is owned by ENet's own dead-peer
     /// detection (`EnetControlChannel+ControlLoop`, `onTerminated(-1)`).
     static let enetAliveHoldThresholdMs: UInt32 = 5000

@@ -88,7 +88,7 @@ struct AboutPane: View {
                 .padding(.vertical, 6)
             }
             // Order: Support up top (the one ask), License in the middle (the
-            // legal fact), and the projects we lean on at the bottom as a
+            // legal fact), and the third-party credits at the bottom as a
             // closing note of appreciation.
             Section("Support") {
                 if let url = URL(string: AboutLink.donate) {

@@ -276,7 +276,7 @@ extension FramePacer {
         var trimmed: [CMSampleBuffer] = []
         var sampledDepth = 0
 
-        // INCREMENT 1: refresh the reconciler's desired target BEFORE taking the
+        // Refresh the reconciler's desired target BEFORE taking the
         // pacer lock (the refresh briefly takes the controller's lock; doing it
         // here keeps the pacer from ever holding two locks). The grow/decay math
         // below - under the pacer lock - then reads only the pulled snapshot.

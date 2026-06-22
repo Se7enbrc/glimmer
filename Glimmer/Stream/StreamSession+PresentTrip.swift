@@ -9,15 +9,15 @@
 //  `tickPresentWatchdog` in StreamSession+Watchdog.swift.
 //
 //  JITTER REGRESSION FIX (root-caused on a clean-but-jittery wifi link): the
-//  old #2 "callback throttled" trip keyed on buffer depth (`depth >= maxQueuedFrames`)
+//  old "callback throttled" trip keyed on buffer depth (`depth >= maxQueuedFrames`)
 //  + late-drops, which is the NORMAL signature of healthy jitter absorption
-//  (the #3 FecHeadroomController deepens the buffer 24→48ms, so the FIFO
+//  (the FecHeadroomController deepens the buffer 24→48ms, so the FIFO
 //  legitimately fills and drop-to-newest late-drops under zero-loss wifi
 //  jitter). It mis-fired 98× on a clean-but-jittery link, its self-heal
 //  (force-release → rebuildLink) re-seeded the cadence and tripped the
 //  present_stall give-up that disabled the pacer for ~5s of unpaced direct
-//  presentation each - turning recoverable jitter into hard hitches. FIX #1
-//  (pinning `preferredFrameRateRange` to stream Hz) already PREVENTS the OS
+//  presentation each - turning recoverable jitter into hard hitches. The
+//  floor pin (pinning `preferredFrameRateRange` to stream Hz) already PREVENTS the OS
 //  from throttling the callback below cadence, so the throttle trip is
 //  redundant; it is REMOVED. The remaining present-freeze trip is jitter-proof:
 //  it keys ONLY on the present callback genuinely not releasing ANY frame while
@@ -146,7 +146,7 @@ extension StreamSession {
         // callback is still ticking (the link is alive, NOT linkDead), frames are
         // QUEUED, yet NO frame has reached the renderer for a full, jitter-proof
         // window. Crucially it never keys on the buffer being DEEP or on late-drop
-        // count: under zero-loss wifi jitter (amplified by the #3
+        // count: under zero-loss wifi jitter (amplified by the
         // FecHeadroomController deepening the buffer 24→48ms) the FIFO
         // LEGITIMATELY pins full and drop-to-newest late-drops some frames WHILE
         // the pacer keeps releasing ~1 frame/tick (and the present-loop backoff
@@ -167,7 +167,7 @@ extension StreamSession {
         // (drop-to-newest replaces the head, never empties), while a healthy
         // pacer releases a queued frame within a tick, keeping the release clock
         // fresh. The gate keys on depth being NON-ZERO, never HIGH - the
-        // jitter-misfire direction (the removed #2 trip) stays removed.
+        // jitter-misfire direction (the removed callback-throttle trip) stays removed.
         //
         // With frames queued, the release clock only goes stale for the whole
         // window if the `due` gate has latched false AND the pacer's own
@@ -308,7 +308,7 @@ extension StreamSession {
             // live link) → force the next tick to release (re-seed the cadence
             // base). Cheapest fix; preserves pacing. Escalates to drain+rebuild if
             // it doesn't resume - `installLink` re-pins `preferredFrameRateRange`
-            // (FIX #1) on the rebuilt link, so a stale floor (if any) is restored.
+            // on the rebuilt link, so a stale floor (if any) is restored.
             // A tick-deficit trip takes this branch too (the link IS ticking,
             // partially), but only transits it for ~one watchdog beat: its
             // stalledFor is fed from the MEASURED deficit duration (already at

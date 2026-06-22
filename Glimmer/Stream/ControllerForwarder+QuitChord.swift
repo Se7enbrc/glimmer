@@ -123,7 +123,7 @@ extension InputForwarder {
 
 /// The set of buttons currently held on a gamepad, used both to match a
 /// recorded `.custom` chord (ControllerForwarder) and to drive the Settings
-/// capture sheet (issue #9). Reads GameController plus the DualSense raw-HID
+/// capture sheet. Reads GameController plus the DualSense raw-HID
 /// center buttons - the same sources `sendGamepadUpdate` forwards. Free
 /// function (not an InputForwarder method) so the Settings capture sheet, which
 /// has no live stream, can call it too.

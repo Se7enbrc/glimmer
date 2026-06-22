@@ -292,7 +292,7 @@ public final class StreamWindow {
         window.acceptsMouseMovedEvents = true
         window.hidesOnDeactivate = false
 
-        // SECURITY (#8): refuse to be screen-captured. Prevents
+        // SECURITY: refuse to be screen-captured. Prevents
         // ScreenCaptureKit, the screencapture(1) tool, Cmd-Shift-5, Zoom /
         // Teams / Discord screen-share, and the Quick-Time screen recording
         // path from pulling the stream surface. Apps capturing the screen

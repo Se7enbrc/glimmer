@@ -100,7 +100,7 @@ import os
 /// (lifecycle) all touch it, mirroring `StatsCollector`'s contract.
 final class FramePacer: @unchecked Sendable {
 
-    // Module-internal (not private) so the FIX #1 floor re-apply in
+    // Module-internal (not private) so the floor re-apply in
     // FramePacer+FrameRateRange.swift can log through the same category.
     let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Pacer")
 
@@ -146,7 +146,7 @@ final class FramePacer: @unchecked Sendable {
     /// Recent hostPTS deltas (seconds) for the median estimate. Bounded.
     var ptsDeltas: [Double] = []
 
-    // MARK: - Adaptive jitter buffer state (Issue 2a)
+    // MARK: - Adaptive jitter buffer state
 
     /// The most recent SMOOTHED RFC-3550 reorder jitter (ms) measured by the RTP
     /// receive path (`RtpVideoQueue` → `TelemetryCounters.recvJitterMs`), refreshed
@@ -165,7 +165,7 @@ final class FramePacer: @unchecked Sendable {
     /// frame, so the decay is rate-limited to one frame per `targetShrinkInterval`.
     var lastTargetShrinkTime: CFTimeInterval = .nan
 
-    // MARK: - Reconciler desired-target snapshot (INCREMENT 1)
+    // MARK: - Reconciler desired-target snapshot
     //
     // THREAD ISOLATION: the reconciler's desired depth comes from
     // EnvSignalController's published `headroomLevel`. To honor never-hold-two-
@@ -390,7 +390,7 @@ final class FramePacer: @unchecked Sendable {
     /// The CADisplayLink bound to the stream window's screen. macOS 14+
     /// `NSView.displayLink(target:selector:)`. Stored so we can invalidate on
     /// teardown / rebind on a screen change. Touched on the main actor only.
-    /// Module-internal (not private) so the FIX #1 floor re-apply in
+    /// Module-internal (not private) so the floor re-apply in
     /// FramePacer+FrameRateRange.swift can re-pin `preferredFrameRateRange`.
     @MainActor var displayLink: CADisplayLink?
     /// The view we bound the link to, kept so a screen change can rebind.
@@ -409,7 +409,7 @@ final class FramePacer: @unchecked Sendable {
     /// VideoDecoder and so the selector signature stays clean.
     @MainActor private var tickProxy: DisplayLinkProxy?
 
-    /// The Hz (floor) we last pinned `preferredFrameRateRange` to (FIX #1).
+    /// The Hz (floor) we last pinned `preferredFrameRateRange` to.
     /// Pinned to the FIXED configured fps at install and held there; the
     /// main-actor re-apply only touches it again if the panel max changes under
     /// us (deadband `frameRateReapplyHysteresisHz`). `.nan` until first applied.
@@ -473,7 +473,7 @@ final class FramePacer: @unchecked Sendable {
         rateWindowStartHostTime = now
         rateWindowStartTicks = tickCount
         rateWindowStartReleases = releaseCount
-        // D3 (warm re-enable cadence seed): a re-enabled pacer is freshly built
+        // Warm re-enable cadence seed: a re-enabled pacer is freshly built
         // from the CONFIGURED fps, but its predecessor had already refined the
         // true content cadence - adopt it to warm-start the DUE GATE's pacing
         // cadence. The present-callback floor is unaffected: it always pins the
@@ -501,7 +501,7 @@ final class FramePacer: @unchecked Sendable {
     func stop() {
         // Stash the refined content cadence FIRST (helper takes the lock) so a
         // warm re-enable after a give-up can seed its fresh pacer's floor from
-        // the truth (~174Hz) instead of the configured fps (the D3 240.0Hz
+        // the truth (~174Hz) instead of the configured fps (the 240.0Hz
         // warm-re-enable seed bug) - see adoptStashedRefinedCadenceLocked.
         stashRefinedCadenceForWarmReenable()
         os_unfair_lock_lock(&lock)
@@ -569,7 +569,7 @@ final class FramePacer: @unchecked Sendable {
         tickProxy = proxy
     }
 
-    // Per the code map in the file header: the throttle floor (FIX #1) lives in
+    // Per the code map in the file header: the throttle floor lives in
     // FramePacer+FrameRateRange.swift; the decode-queue submit path in
     // FramePacer+Submit.swift; the vsync tick in FramePacer+Tick.swift; the
     // trim → backoff → due-gate → release core (+ `BackoffBeat` /

@@ -94,7 +94,7 @@ extension StreamWindow {
     ///       synchronously inside makeKeyAndOrderFront without posting a fresh
     ///       notification) - so the cursor-hide latch that path (a) re-engages
     ///       was being skipped, leaving the system cursor drawn over the stream
-    ///       (the #14-adjacent bug). Funnelling both paths through this one
+    ///       (the cursor-model-adjacent bug). Funnelling both paths through this one
     ///       method makes them indistinguishable.
     ///
     /// Single-owner safe: `setCursorHidden(true)` is idempotent off

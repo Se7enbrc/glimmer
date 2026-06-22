@@ -162,7 +162,7 @@ public actor HostDiscovery {
     /// Drop the interface-zone suffix Network appends to a resolved address
     /// (e.g. `192.0.2.10%en0`). The zone is an interface hint that's noise
     /// for a routable address and breaks the HTTP/TLS host parsing downstream
-    /// (pairing dialed the literal `...%en0` and failed - issue #21). It is
+    /// (pairing dialed the literal `...%en0` and failed). It is
     /// REQUIRED for IPv6 link-local (fe80::/10) to connect at all, so keep it
     /// there; strip it everywhere else.
     static func canonicalHost(_ raw: String, ipv6: Bool) -> String {

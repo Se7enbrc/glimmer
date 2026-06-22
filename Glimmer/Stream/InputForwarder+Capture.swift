@@ -17,7 +17,7 @@ extension InputForwarder {
 
     // MARK: - Mouse capture & gesture suppression
     //
-    // SDL ASSOCIATE-FALSE CURSOR MODEL (issue #14, P0 mouse-snap fix). This is
+    // SDL ASSOCIATE-FALSE CURSOR MODEL (P0 mouse-snap fix). This is
     // the SDL_SetRelativeMouseMode(true) recipe on macOS and is the airtight
     // root-cause fix for the in-game aim snapping to a screen edge/corner.
     //
@@ -238,8 +238,8 @@ extension InputForwarder {
 
     // MARK: - Diagnostic event tap (stage 1: identify the zoom trigger)
     //
-    // The bug we're chasing: macOS zooms into the stream during intense D4
-    // input. Ctrl+scroll has been ruled out. We don't yet know which event
+    // The bug we're chasing: macOS zooms into the stream during intense
+    // gameplay input. Ctrl+scroll has been ruled out. We don't yet know which event
     // type fires immediately before zoom - could be a gesture phase event,
     // a systemDefined media-key subtype, a hover-text trigger, the
     // accessibility-zoom chord (⌥⌘8 / ⌥⌘= / ⌥⌘-), or pointer-shake.
@@ -280,7 +280,7 @@ extension InputForwarder {
         // mask, raw subtype-or-zero. Type-specific accessors
         // (`event.window`, `event.chars`, `scrollingDeltaX`,
         // `magnification`, etc.) throw on the wrong event type, and at
-        // high event rates (e.g. click + 1-4 key spam in D4) the OSLog
+        // high event rates (e.g. click + 1-4 key spam under intense input) the OSLog
         // formatter dies mid-interpolation and takes keyboard delivery
         // with it. The body of `logDiagnosticEvent` below enforces this;
         // do not add an accessor that's documented as "returns valid

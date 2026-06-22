@@ -406,7 +406,7 @@ extension AudioDecoder {
         }
     }
 
-    // MARK: - Drift micro-stretch (deterministic clock-skew repayment)
+    // MARK: - Drift-tracking resampler (deterministic clock-skew repayment)
     //
     //  MEASURED FAULT (a long wired 4K240 test): the audio clock
     //  drift gauge ramped at a rock-constant −39..−40.4µs/s in every quiet
@@ -415,28 +415,12 @@ extension AudioDecoder {
     //  drain math for a 40-80ms reservoir at 40ppm.
     //  A deterministic drain, not link noise - the cushion ladder can only
     //  stretch the period (deeper target → longer walk to empty), never fix
-    //  it. The repayment: once the LONG-WINDOW accumulated drift proves a
-    //  standing skew, insert one 5ms silence packet per 5ms of accrued skew
-    //  (~40µs/s at the measured 40ppm - one packet per ~2min, inaudible) so
-    //  the cushion holds its depth instead of walking to empty. Discrete
-    //  packet quanta in the trim machinery's idiom - threshold-armed,
-    //  rate-limited, standing down in distress windows - NOT a resampler:
-    //  no signal-path rework, no decoder state touched, and the cadence the
-    //  steady-state trim already proved inaudible bounds this too.
-    //
-    //  JITTERY-LINK ARGUMENT (why this can't oscillate on a bursty link): the
-    //  key is the CUMULATIVE per-segment drift - an integral needing many
-    //  minutes of one-sided ppm-scale accrual to reach the arm point - never
-    //  a short-window slope. Delivery jitter can only push that gauge
-    //  POSITIVE (a late clump stalls `framesScheduled` while wall time runs;
-    //  media the host hasn't sent cannot arrive early), so burst wobble moves
-    //  the residual AWAY from the arm point - and the threshold is 6× the
-    //  5ms single-packet granularity besides. Corroboration gate: a stretch
-    //  also requires the fill to actually sit a full step short of target, so
-    //  a gauge gone haywire against a healthy cushion does nothing. And every
-    //  distress window disarms it outright - un-primed, drained, and the
-    //  post-(re)prime grace belong to the under-run/rebuild machinery, which
-    //  keeps sole custody of recovery there.
+    //  it. The varispeed PI loop below
+    //  (`driveResampler`) repays it: it steers the playout rate by ppm to absorb
+    //  the standing host↔Mac clock offset so the cushion holds its depth instead
+    //  of walking to empty. This replaced an earlier decode-path "5ms silence
+    //  packet per 5ms of accrued skew" micro-stretch (AudioDecoder.swift notes
+    //  the swap).
 
     /// Drift-tracking resampler PI loop. Called ~per decoded packet from
     /// `publishAudioState`; self-rate-limits to ~4Hz (drift is ppm-slow). When

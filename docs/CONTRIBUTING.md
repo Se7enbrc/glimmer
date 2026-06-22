@@ -171,11 +171,12 @@ NOT acceptable:
 
 The canonical place to surface a stream event to the consumer is
 `StreamBridgeContext.eventContinuation?.yield(_:)`. `AsyncStream.Continuation`
-is `Sendable` and FIFO-ordered, so yielding from a C worker thread preserves the
-order the C library invoked us in. The previous `Task { await deliver(...) }`
-pattern lost ordering because consecutive Tasks land on the global concurrent
-executor without inter-Task happens-before - see the comment at
-`StreamSession.swift:807` for the motivating regression.
+is `Sendable` and FIFO-ordered, so yielding from the engine's receive thread
+preserves the order the native engine delivered them in. The previous
+`Task { await deliver(...) }` pattern lost ordering because consecutive Tasks
+land on the global concurrent executor without inter-Task happens-before - see
+the comment at `StreamBridgeContext.eventContinuation` (in
+`StreamBridgeContext.swift`) for the motivating regression.
 
 ## Logging
 
