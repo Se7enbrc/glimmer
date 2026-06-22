@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.6.21 - 2026-06-22
+
+Clearer recovery when the Wi-Fi helper won't install. macOS occasionally keeps a
+stuck background-item record after an app update and refuses to register the
+helper - the app used to report this as "helper not found in the app bundle,"
+which was both false and a dead end. It now explains what actually happened and
+links straight to Apple's own Login Items & Extensions guide for managing it.
+
 ## 2026.6.20 - 2026-06-22
 
 A maintenance pass. Fixes a couple of stale in-app pointers left by the
