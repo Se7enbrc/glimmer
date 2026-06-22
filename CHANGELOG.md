@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.6.20 - 2026-06-22
+
+A maintenance pass. Fixes a couple of stale in-app pointers left by the
+Troubleshooting/Diagnostics merge - the DualSense chord tip and the quit-chord
+hint now send you to Settings > Input, where those controls actually live. The
+mute-while-streaming toggle reads outcome-first with a clearer footnote, the
+Custom resolution helper is now a "Use native resolution" button, and the
+empty-state copy settles on a single "Pair a PC."
+
+Everything else is under-the-hood housekeeping: stale comments and docs brought
+back in line with the code - notably the security notes, which now describe the
+current OpenSSL certificate-pinning path - and internal planning shorthand
+scrubbed out of the source.
+
 ## 2026.6.19 - 2026-06-21
 
 A polish pass across Settings, the controller, and stream robustness.
