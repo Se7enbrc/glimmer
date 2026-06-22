@@ -124,6 +124,48 @@ final class AWDLHelperManager: ObservableObject {
     /// an update even if SMAppService's status reads `.notFound`.
     private static let enabledIntentKey = "awdlHelperEnabled"
 
+    // MARK: Diagnostics messaging
+
+    /// Whether the daemon plist is actually present in OUR bundle. SMAppService
+    /// reports `.notFound` (and register() fails `SMAppServiceErrorDomain 1`) even
+    /// when the file is right here - that's a stuck system record after a bundle
+    /// swap, NOT a packaging miss - so we check the bundle to tell the truth
+    /// instead of the misleading "not found in the app bundle".
+    private static var daemonIsBundled: Bool {
+        let url = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Library/LaunchDaemons", isDirectory: true)
+            .appendingPathComponent(HelperConstants.daemonPlistName)
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    /// User-facing recovery text for the known wedged-Background-Task-Management
+    /// case (`SMAppServiceErrorDomain 1`, or `.notFound` while the daemon IS
+    /// bundled): after a bundle swap the system kept a stuck registration that
+    /// refuses both register and unregister. The record lives in the on-disk BTM
+    /// database and survives a plain reboot; the reliable clear is `sfltool
+    /// resetbtm` + restart, which we log for support rather than ask users to run -
+    /// the UI points them at Apple's own Login Items guide (`recoveryDocURL`).
+    private static let wedgedRegistrationMessage =
+        "macOS left a stuck background-item record (a known glitch after an app "
+        + "update), so it won't register the helper. You can manage Glimmer's "
+        + "background items in System Settings - Login Items & Extensions."
+
+    /// Apple's official Login Items & Extensions guide - a credible reference for
+    /// managing the stuck background item, shown instead of asking the user to run
+    /// a raw `sudo` command.
+    static let loginItemsHelpURL = URL(string:
+        "https://support.apple.com/guide/mac-help/change-login-items-extensions-settings-mtusr003/mac")!
+
+    /// `.notFound` is ambiguous: a genuine packaging miss, or a wedged record while
+    /// the daemon IS present. Tell them apart so the message isn't a red herring.
+    private static var notFoundMessage: String {
+        daemonIsBundled ? wedgedRegistrationMessage : "Helper not found in the app bundle."
+    }
+
+    private static func isWedgedRegistration(_ ns: NSError) -> Bool {
+        ns.domain == "SMAppServiceErrorDomain" && ns.code == 1
+    }
+
     private init() { refresh() }
 
     var isEnabled: Bool { state == .enabled }
@@ -136,6 +178,17 @@ final class AWDLHelperManager: ObservableObject {
         case .enabled, .requiresApproval: return true
         case .notRegistered, .unavailable: return false
         }
+    }
+
+    /// Help link to surface beside the unavailable message - non-nil ONLY for the
+    /// known wedged-registration case, so users see Apple's Login Items guide
+    /// rather than a scary command. Matches against the same constant the state
+    /// was built from, so it's exact, not a heuristic on the prose.
+    var recoveryDocURL: URL? {
+        if case .unavailable(let why) = state, why == Self.wedgedRegistrationMessage {
+            return Self.loginItemsHelpURL
+        }
+        return nil
     }
 
     /// User opted out of the launch-time enable nudge ("Don't ask again").
@@ -154,7 +207,7 @@ final class AWDLHelperManager: ObservableObject {
         case .enabled:          state = .enabled
         case .requiresApproval: state = .requiresApproval
         case .notRegistered:    state = .notRegistered
-        case .notFound:         state = .unavailable("Helper not found in the app bundle")
+        case .notFound:         state = .unavailable(Self.notFoundMessage)
         @unknown default:       state = .unavailable("Unknown status")
         }
         log.notice("AWDL daemon status raw=\(status.rawValue, privacy: .public) state=\(String(describing: self.state), privacy: .public)")
@@ -178,8 +231,17 @@ final class AWDLHelperManager: ObservableObject {
             } catch {
                 let ns = error as NSError
                 let detail = "\(ns.localizedDescription) [\(ns.domain) \(ns.code)]"
-                log.error("AWDL helper register failed: \(detail, privacy: .public)")
-                state = .unavailable(detail)
+                // SMAppServiceErrorDomain 1 ("Operation not permitted") is the known
+                // wedged-BTM case after a bundle swap - both register and unregister
+                // refuse. Show users a plain message + Apple's Login Items guide; keep
+                // the reliable `sfltool resetbtm` fix in the log for support, not the UI.
+                if Self.isWedgedRegistration(ns) {
+                    log.error("AWDL helper register failed: \(detail, privacy: .public) - wedged Background Task Management record; reliable clear is 'sudo sfltool resetbtm' + restart")
+                    state = .unavailable(Self.wedgedRegistrationMessage)
+                } else {
+                    log.error("AWDL helper register failed: \(detail, privacy: .public)")
+                    state = .unavailable(detail)
+                }
             }
         }
     }
