@@ -453,8 +453,14 @@ struct QualityPane: View {
                     }
                 }
                 if case .unavailable(let why) = awdl.state {
-                    Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
-                        .font(.footnote).foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
+                            .font(.footnote).foregroundStyle(.red)
+                        if let url = awdl.recoveryDocURL {
+                            Link("How to manage login items (Apple Support)", destination: url)
+                                .font(.footnote)
+                        }
+                    }
                 }
             }
 
