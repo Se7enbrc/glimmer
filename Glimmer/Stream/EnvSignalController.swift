@@ -74,7 +74,7 @@ final class EnvSignalController: @unchecked Sendable {
     static let shared = EnvSignalController()
     private static let cat = "EnvSignal"
 
-    // MARK: - Reconciler kill-switch (INCREMENT 1 - the A/B flag)
+    // MARK: - Reconciler kill-switch (the A/B flag)
 
     /// When TRUE (the default) the unified LINK RECONCILER is live: this
     /// controller publishes ONE jitter→headroom decision (`headroomLevel` +
@@ -147,7 +147,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// session can never escalate off an unwarmed percentile.
     static let radioBaselineMinSamples = 60
 
-    // MARK: - Reconciler decision tunables (INCREMENT 1)
+    // MARK: - Reconciler decision tunables
 
     /// Maximum published headroom level. Matches FecHeadroomController.maxLevel
     /// (3 = (48ms − 24ms) / 8ms) so a clean link→0 and full escalation→3 maps
@@ -212,7 +212,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// only trusts the route within `routeTrustHorizonNanos` of this.
     private var lastFedNanos: UInt64 = 0
 
-    // MARK: - Published reconciler decision (INCREMENT 1, lock-guarded)
+    // MARK: - Published reconciler decision (lock-guarded)
     //
     // The single jitter→headroom decision both actuators PULL on their own
     // ticks. Computed in the reconcile phase at window close (`reconcileLocked`)
@@ -413,7 +413,7 @@ final class EnvSignalController: @unchecked Sendable {
         var rssiP50: Int?
         var txP95: Double?
         var radioArmed = false
-        // JITTER evidence (INCREMENT 1): the worst recv-jitter (ms) seen across
+        // JITTER evidence: the worst recv-jitter (ms) seen across
         // the window's ticks (live gauge, max-folded), plus the window-summed
         // out-of-order + ENet-retransmit deltas. Folded delta-snapshotted like
         // the gap counters so the state classifier captures the jitter racer the
@@ -553,7 +553,7 @@ final class EnvSignalController: @unchecked Sendable {
             }
         }
 
-        // INCREMENT 1: jitter/loss is now a first-class degradation input
+        // Jitter/loss is now a first-class degradation input
         // alongside co-gap + radio, using FecHeadroomController's already-tuned
         // thresholds (window predicates above). The classifier captures the
         // jitter racer, so the published headroom tracks it instead of two

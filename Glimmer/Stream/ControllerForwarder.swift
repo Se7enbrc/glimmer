@@ -168,7 +168,7 @@ extension InputForwarder {
             Self.warnedQuitChordNeedsRawHID = true
             Diag.notice("Quit chord needs DualSense centre buttons (Create/Mute) that require "
                 + "raw-HID, but raw-HID controller support is OFF - the chord will NOT fire on "
-                + "this DualSense. Enable raw-HID in Settings → Troubleshooting (and grant Input "
+                + "this DualSense. Enable 'Extra DualSense buttons' in Settings → Input (and grant Input "
                 + "Monitoring), or pick a chord that uses GameController-native buttons.",
                 "Controller")
         }
@@ -520,7 +520,7 @@ extension InputForwarder {
         return buttons
     }
 
-    // MARK: - Touchpad surface forwarding (#6)
+    // MARK: - Touchpad surface forwarding
 
     /// One tracked finger contact on a controller touchpad.
     struct TouchpadFinger {
@@ -629,7 +629,7 @@ extension InputForwarder {
         }
     }
 
-    // MARK: - Focus resync (#8)
+    // MARK: - Focus resync
 
     /// Re-send every attached controller's current state to the host. Called
     /// when the stream window regains key focus, so a stick held across a focus

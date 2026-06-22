@@ -4,7 +4,7 @@
 //  The RtpvAddPacket reassembly half of the RTP video queue state machine, split
 //  out of RtpVideoQueue.swift to keep each file under the SwiftLint length limit.
 //  Ports RtpVideoQueue.c RtpvAddPacket: window/duplicate rejection, the bounded
-//  cross-frame reorder hold (Issue 2b), the new-frame / new-FEC-block transition
+//  cross-frame reorder hold, the new-frame / new-FEC-block transition
 //  (unrecoverable-frame reporting + drop, then per-frame buffer-window reset), the
 //  per-packet missing/received counting, and queuePacket (the duplicate/out-of-
 //  sequence detector that latches receivedOosData).
@@ -58,7 +58,7 @@ extension RtpVideoQueue {
             return .rejected
         }
 
-        // Issue 2b: return to the strict (no-hold) regime once the link has run
+        // Return to the strict (no-hold) regime once the link has run
         // clean for the cooldown period since the last out-of-order observation
         // (mirrors moonlight's 5-min SPECULATIVE_RFI_COOLDOWN hysteresis). Uses
         // presentation time (90kHz → µs) so it tracks media time, like the C.
@@ -105,7 +105,7 @@ extension RtpVideoQueue {
             return .rejected
         }
 
-        // Issue 2b: a deferred next-frame packet is held ONLY to give the
+        // A deferred next-frame packet is held ONLY to give the
         // CURRENT frame's late shards time to land. If the incoming datagram is
         // NOT for the current frame (it's another later frame, or even the
         // deferred frame's own next packet), the hold can no longer help - flush
@@ -166,7 +166,7 @@ extension RtpVideoQueue {
                                        receiveTimeUs: UInt64, allowHold: Bool) -> TransitionOutcome {
         let frameIndex = fields.frameIndex
 
-        // Issue 2b - BOUNDED CROSS-FRAME REORDER HOLD. The next frame's first
+        // BOUNDED CROSS-FRAME REORDER HOLD. The next frame's first
         // packet has arrived while the current frame is still incomplete. On
         // a link we've SEEN reorder (receivedOosData), the current frame's
         // late tail/EOF shards are probably microseconds away and FEC can
@@ -313,7 +313,7 @@ extension RtpVideoQueue {
 
     /// A reconstruct succeeded: stage the complete FEC block, then either advance
     /// to the next multi-FEC block or submit the now-complete frame and open the
-    /// next one (RtpVideoQueue.c:795-803, plus the Issue 2b deferred replay).
+    /// next one (RtpVideoQueue.c:795-803, plus the deferred replay).
     private func completeFecBlockOrFrame() {
         stageCompleteFecBlock()
 
@@ -323,7 +323,7 @@ extension RtpVideoQueue {
             submitCompletedFrame()
             currentFrameNumber &+= 1
             multiFecCurrentBlockNumber = 0
-            // Issue 2b: the held current frame just completed via its late
+            // The held current frame just completed via its late
             // shard. Replay the deferred next-frame packet now so the next
             // frame opens normally - strict in-order submit is preserved (we
             // never reorder frames into the depacketizer; we only delayed the
@@ -333,7 +333,7 @@ extension RtpVideoQueue {
         }
     }
 
-    // MARK: - Reorder-hold helpers (Issue 2b)
+    // MARK: - Reorder-hold helpers
 
     /// FEC could still recover the current frame: the data deficit is within the
     /// parity we expect to receive for this block. Never hold a frame that's

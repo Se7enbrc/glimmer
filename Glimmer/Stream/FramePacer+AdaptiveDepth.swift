@@ -61,7 +61,7 @@ extension FramePacer {
         os_unfair_lock_unlock(&lock)
     }
 
-    // MARK: - Adaptive target depth (Issue 2a). All run under `lock`.
+    // MARK: - Adaptive target depth. All run under `lock`.
 
     /// The depth the CURRENT desired target justifies - the value the rate-limited
     /// grow/decay actuator walks `adaptiveTargetDepth` toward. Clamped to

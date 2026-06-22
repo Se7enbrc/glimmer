@@ -109,7 +109,7 @@ final class RtpVideoQueue {
 
     var loggedFirstFecRecovery = false
 
-    // MARK: - Receive-side reorder tolerance (Issue 2b)
+    // MARK: - Receive-side reorder tolerance
     //
     // On a reordering link the tail/EOF data shards of frame N frequently arrive
     // AFTER the SOF of frame N+1 (cross-frame reordering). Declaring loss the
@@ -144,7 +144,7 @@ final class RtpVideoQueue {
     /// in-order link), so a non-reordering stream is byte-identical to before:
     /// zero hold, zero added latency.
     ///
-    /// This is the BASELINE (steady-state) value. PROACTIVE FEC headroom (#3): on a
+    /// This is the BASELINE (steady-state) value. PROACTIVE FEC headroom: on a
     /// SUSTAINED degradation trend the `fecHeadroom` controller widens the live
     /// window in bounded steps (up to 48ms) so the host's existing parity gets more
     /// time to complete a marginal frame via FEC BEFORE it tips into unrecoverable -
@@ -159,7 +159,7 @@ final class RtpVideoQueue {
     /// `internal`: read by the reorder-hold gate in RtpVideoQueue+AddPacket.swift.
     var reorderWindowUs: UInt64 { fecHeadroom.holdWindowUs }
 
-    /// PROACTIVE FEC headroom controller (#3). Driven once per ~2s receive-metrics
+    /// PROACTIVE FEC headroom controller. Driven once per ~2s receive-metrics
     /// window from maybeLogMetrics off the recv-jitter / out-of-order / ENet-
     /// retransmit signals; widens/relaxes `reorderWindowUs` on a sustained trend.
     /// Conservative + bounded + hysteretic by construction (see the type). Owned
@@ -172,7 +172,7 @@ final class RtpVideoQueue {
     /// ~2s window is a single cheap lock far off the per-datagram path.
     private var lastRetransmitTotalSnapshot: UInt64 = 0
     /// Unrecoverable-frame total snapshotted at the last window flush, so the FEC
-    /// headroom controller's LOSS axis (#25) sees the per-WINDOW delta - the
+    /// headroom controller's LOSS axis sees the per-WINDOW delta - the
     /// reactive loss signal alongside this window's `fecRecoveredFramesInWindow`.
     /// Same single-cheap-lock-per-2s-window cost as the retransmit snapshot above.
     private var lastUnrecoverableTotalSnapshot: UInt64 = 0
@@ -317,7 +317,7 @@ final class RtpVideoQueue {
     }
 
     /// Shared parse + dispatch. `isReplay` is true when re-driving a deferred
-    /// cross-frame-reorder packet (Issue 2b): jitter accumulation is skipped so
+    /// cross-frame-reorder packet: jitter accumulation is skipped so
     /// the held datagram isn't double-counted in the receive-smoothness metric.
     @discardableResult
     func dispatchDatagram(_ datagram: [UInt8], receiveTimeUs: UInt64,
@@ -347,7 +347,7 @@ final class RtpVideoQueue {
             accumulateReceiveQuality(seq: seq, receiveTimeUs: receiveTimeUs)
         }
 
-        // Issue 2b: if a previous datagram triggered a cross-frame reorder hold,
+        // If a previous datagram triggered a cross-frame reorder hold,
         // the current frame's reorder window may have elapsed before this
         // datagram arrived. Flush the deferred next-frame packet first if the
         // window is up, so loss is declared no later than reorderWindowUs after
@@ -443,7 +443,7 @@ final class RtpVideoQueue {
                 p50Us: gapQuantile(0.50), p95Us: gapQuantile(0.95), maxUs: gapMaxUs))
         }
 
-        // PROACTIVE FEC headroom (#3): step the reorder-hold window on a SUSTAINED
+        // PROACTIVE FEC headroom: step the reorder-hold window on a SUSTAINED
         // trend in the three receive-side health signals - the recv-jitter we just
         // smoothed, this window's genuine reorders, and the per-WINDOW ENet
         // reliable-retransmit delta. The retransmit counter is incremented on the
@@ -459,7 +459,7 @@ final class RtpVideoQueue {
         let retransmitDelta = retransmitTotalNow >= lastRetransmitTotalSnapshot
             ? Int(retransmitTotalNow - lastRetransmitTotalSnapshot) : 0
         lastRetransmitTotalSnapshot = retransmitTotalNow
-        // INCREMENT 1: when the reconciler is enabled, CONSUME the unified
+        // When the reconciler is enabled, CONSUME the unified
         // jitter→headroom decision EnvSignalController publishes (one short
         // controller-lock pull off this ~2s window - NEVER the per-datagram path)
         // instead of self-deciding from raw jitter, so this controller and the
@@ -478,7 +478,7 @@ final class RtpVideoQueue {
                                                       outOfOrder: windowOutOfOrder,
                                                       retransmits: retransmitDelta)
         }
-        // LOSS AXIS (#25): drive the SEPARATE loss accumulator off this window's
+        // LOSS AXIS: drive the SEPARATE loss accumulator off this window's
         // direct loss evidence - frames the host's parity recovered
         // (`fecRecoveredFramesInWindow`) and frames that went unrecoverable (a
         // per-window delta off the monotonic total). Runs every window regardless

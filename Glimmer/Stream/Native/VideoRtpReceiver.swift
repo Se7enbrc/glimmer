@@ -293,7 +293,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // anonymous instead of mislabeling later unrelated work.
             pthread_setname_np("Glimmer.videoRecv")
             defer { pthread_setname_np("") }
-            // Batched receive (issue #24): up to `cap` datagrams per recvmsg_x
+            // Batched receive: up to `cap` datagrams per recvmsg_x
             // syscall, cutting the ~14k recvfrom/s floor at 4K240 (measurably
             // smoother). Buffers allocated once and reused; handleDatagram
             // copies each out - the win is the syscall COUNT. recvmsg_x is a

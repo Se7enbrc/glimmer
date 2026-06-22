@@ -35,7 +35,7 @@ struct PCsPane: View {
                             .foregroundStyle(.tint)
                         Text("No PCs paired")
                             .font(.headline)
-                        Text("Add a PC to stream from your Mac.")
+                        Text("Pair a PC to stream games to this Mac.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -55,7 +55,7 @@ struct PCsPane: View {
                         initialPairAddress = ""
                         showPairSheet = true
                     } label: {
-                        Label("Pair a new PC", systemImage: "plus.circle.fill")
+                        Label("Pair a PC", systemImage: "plus.circle.fill")
                     }
                     .buttonStyle(StreamButtonStyle())
                     Button("Refresh paired PCs") {
@@ -336,7 +336,7 @@ private struct ChordCaptureSheet: View {
             }
 
             if DualSenseHID.isEnabled == false {
-                Text("Tip: turn on Extra DualSense buttons (Troubleshooting) to record "
+                Text("Tip: turn on Extra DualSense buttons (Settings → Input) to record "
                     + "the Options / Create / Mute buttons.")
                     .font(.caption2).foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)

@@ -102,7 +102,7 @@ extension FramePacer {
     /// watchdog's own 1.75s sustained-trip requirement; measurement (window
     /// rolls) continues throughout, only the verdicts wait.
     static let resumeVerdictHoldSeconds = 0.5
-    /// Warm re-enable floor seed (digest D3): the refined content cadence the
+    /// Warm re-enable floor seed: the refined content cadence the
     /// last STOPPED pacer learned, stashed so a re-enabled pacer can seed from
     /// the truth (a wired-link warm re-enable installed floor=240.0Hz from
     /// the configured fps while content actually ran ~174.4Hz). Statics
@@ -376,7 +376,7 @@ extension FramePacer {
         pinnedFloorHz = .nan
     }
 
-    // MARK: - Warm re-enable cadence stash (digest D3)
+    // MARK: - Warm re-enable cadence stash
 
     /// Stash this pacer's refined content cadence at stop() so the NEXT pacer
     /// - if it is a warm re-enable - seeds its floor from the truth. Only
@@ -395,7 +395,7 @@ extension FramePacer {
 
     /// Adopt the stashed refined cadence into a WARM-HANDOVER pacer before its
     /// link installs (called from start() under `lock`; armWarmHandover ran
-    /// first on the re-enable path, so `warmingUp` distinguishes it). The D3
+    /// first on the re-enable path, so `warmingUp` distinguishes it). This
     /// fix: without this, installLink pinned floor = configured fps (240.0Hz)
     /// while content ran ~174.4 - a dishonest floor for the rebuilt link's
     /// first beats and a wrong `expectedHz` bar for the handover verdict. A

@@ -469,7 +469,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         case .binaryNotFound: return "Streaming library not available."
         case .hostUnreachable(let host): return "Couldn't reach \(host)."
         case .pairingFailed(let reason): return "Pairing failed: \(reason)"
-        // SECURITY (#10): uniform user-visible message regardless of
+        // SECURITY: uniform user-visible message regardless of
         // whether the host rejected because the PIN was wrong or because
         // its signature failed verification (the MITM-detected branch
         // also throws .pairingRejected). The internal log distinguishes;

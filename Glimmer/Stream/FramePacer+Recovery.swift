@@ -115,7 +115,7 @@ extension FramePacer {
             self?.handleTick(link)
         }
         let link = view.displayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
-        // FIX #1 - FORBID macOS from throttling the PRESENT CALLBACK below stream
+        // FORBID macOS from throttling the PRESENT CALLBACK below stream
         // cadence on a static/AFK layer. Without a floor, macOS slows the
         // CADisplayLink callback on a flat layer (NOT a ProMotion display
         // ramp-down - the panel stayed 120Hz; it is the CALLBACK being
@@ -140,7 +140,7 @@ extension FramePacer {
             forStreamIntervalSeconds: self.configuredFrameIntervalSeconds,
             panelMaxHz: panelMax)
         link.preferredFrameRateRange = range
-        // Record the floor we just pinned so the per-tick re-apply (FIX #1) only
+        // Record the floor we just pinned so the per-tick re-apply only
         // re-pins on a real cadence drift past the hysteresis, not on every tick.
         // Re-seeded on every (re)bind / screen change because installLink is the
         // single bind path, so a rebuild onto a different panel re-clamps cleanly.

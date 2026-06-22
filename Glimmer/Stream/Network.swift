@@ -21,12 +21,13 @@
 //    * Our own OpenSSL mutual-TLS HTTP client (ControlTransport) instead of
 //      QNetworkAccessManager - the client cert + host-cert pin run straight
 //      through libssl, no URLSession and no keychain in the path.
-//    * Trust-on-first-use: the very first /serverinfo call goes over plain
-//      HTTP, pulls the host cert out of the response (well - out of the next
-//      HTTPS handshake), pins it, and from then on we refuse to talk HTTPS to
-//      anything that doesn't present *exactly* that cert. This is the same
-//      model moonlight-qt uses; it does NOT do PKI validation, on purpose
-//      (every GameStream/Sunshine host is self-signed).
+//    * NOT trust-on-first-use: the first /serverinfo call goes over plain HTTP
+//      and the next HTTPS handshake exposes the host cert, but we do NOT pin it
+//      there. The pin is bound only AFTER the PIN/RSA pairing handshake has
+//      authenticated the host (see the SECURITY (C2) notes in
+//      NetworkClient+Endpoints.swift and Pairing.swift); from then on we refuse
+//      HTTPS to anything not presenting *exactly* that cert. No PKI validation,
+//      on purpose (every GameStream/Sunshine host is self-signed).
 //    * XMLParser-driven tree builder instead of QXmlStreamReader's pull API.
 //
 //  This file is concurrency-strict. `NetworkClient` is an actor, so all its

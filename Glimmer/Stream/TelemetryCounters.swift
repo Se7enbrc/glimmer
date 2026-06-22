@@ -6,11 +6,8 @@
 //  each unit focused; see that file for the exporter, gate, snapshot type, and
 //  the gate/safety contract.
 //
-//  These counters are ALWAYS live (NOT gated): the increments are unconditional,
-//  sub-microsecond integer adds at already-rare event sites (an IDR request, a
-//  lost frame, one input event), so gating them would buy nothing and risk a
-//  skew between the gate and the site. When the exporter is off (the default),
-//  nothing reads them and they simply accumulate harmlessly.
+//  These counters are always-live, not gated - see the `TelemetryCounters` type
+//  doc below for why.
 //
 //  Code map (this type is split across same-module extension files)
 //  ----------------------------------------------------------------
@@ -253,8 +250,7 @@ final class TelemetryCounters: @unchecked Sendable {
     // integer compares per packet. The PLAYOUT totals are bumped on the audio
     // decode/output path under the lock AudioDecoder already holds for the decode,
     // so they cost nothing extra. The exporter derives per-second rates from the
-    // monotonic deltas and reads the gauges at 1Hz; when telemetry is off nothing
-    // reads them and they simply accumulate harmlessly.
+    // monotonic deltas and reads the gauges at 1Hz.
     //
     /// Audio DATA packets accepted into the queue this session (RtpAudioQueue's
     /// `packetCountAudio`). The exporter derives audio pkts/s + the loss/FEC RATES

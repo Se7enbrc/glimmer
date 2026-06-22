@@ -89,7 +89,7 @@ public enum PinnedCertStore {
     // per-app ACL. For a pinned host cert the read leak is mostly
     // harmless (the cert is public anyway), but the write surface is the
     // problem: a same-UID attacker can swap the pin for their own,
-    // making us trust a MITM host across restarts. Group #9 of the
+    // making us trust a MITM host across restarts. Part of the
     // security pass.
     //
     // New shape: one PEM file per host at

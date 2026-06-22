@@ -37,8 +37,7 @@ extension TelemetryCounters {
         /// Negotiated video codec ("av1" / "hevc" / "h264"), derived from the
         /// stream format mask. The label that lets a multi-host capture answer
         /// "did this session actually go AV1?" - HEVC Main10 and AV1 Main10 are
-        /// otherwise indistinguishable on bit-depth/colorspace/pixel-format
-        /// (issue #23).
+        /// otherwise indistinguishable on bit-depth/colorspace/pixel-format.
         var codec: String
         /// Live output pixel format as a FourCC string (e.g. "x420" = 10-bit
         /// video-range 4:2:0 biplanar, "420v" = 8-bit). The decode-side truth of
