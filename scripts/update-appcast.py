@@ -77,6 +77,10 @@ def main() -> None:
 
     ET.indent(tree, space="  ")
     tree.write(a.appcast, encoding="utf-8", xml_declaration=True)
+    # ET.write leaves no trailing newline; add one so pre-commit's end-of-file-fixer
+    # doesn't reformat the file and abort the publish commit.
+    with open(a.appcast, "a", encoding="utf-8") as f:
+        f.write("\n")
     print(f"  ✓ appcast item {a.short_version} ({a.version})")
 
 

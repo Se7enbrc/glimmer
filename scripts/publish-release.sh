@@ -72,7 +72,12 @@ if git -C "$HERE" diff --quiet -- "$APPCAST"; then
 	echo "  ✓ appcast already current (no change to publish)"
 else
 	git -C "$HERE" add "$APPCAST"
-	git -C "$HERE" commit -m "appcast: Glimmer $SHORT" --quiet
+	# A pre-commit hook may reformat the machine-written appcast and abort the
+	# first commit; re-stage the fixed file and retry once.
+	if ! git -C "$HERE" commit -m "appcast: Glimmer $SHORT" --quiet; then
+		git -C "$HERE" add "$APPCAST"
+		git -C "$HERE" commit -m "appcast: Glimmer $SHORT" --quiet
+	fi
 	git -C "$HERE" push --quiet origin HEAD:main
 	echo "  ✓ appcast committed + pushed to main → $(git -C "$HERE" rev-parse --short HEAD)"
 fi
