@@ -84,7 +84,7 @@ extension FramePacer {
         // the atomic flip hands release back to the due gate. Suppressed wins
         // over warm-up (nothing may present at a hidden layer) - the suppressed
         // branch below keeps its single-newest-frame behavior.
-        if warmingUp && !presentSuppressed {
+        if tickDeficit.warmingUp && !presentSuppressed {
             os_unfair_lock_unlock(&lock)
             presentWarmHandoverFrame(entry)
             return
@@ -178,7 +178,7 @@ extension FramePacer {
             events = clearForSuppressionLocked(now: now)
             if !suppressed {
                 reseedRateWindowLocked(now: now)
-                deficitVerdictHoldUntilHostTime =
+                tickDeficit.deficitVerdictHoldUntilHostTime =
                     now + FramePacer.resumeVerdictHoldSeconds
             }
         }

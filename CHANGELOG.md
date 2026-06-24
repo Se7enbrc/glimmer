@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.6.22 - 2026-06-24
+
+Uses less bandwidth on modern codecs at the same picture quality. The bitrate
+budget is now codec-aware: AV1 and HEVC sessions need fewer bits than H.264 for
+the same result, so Glimmer no longer spends the H.264-sized budget on them
+(roughly 20-33% fewer bytes against a capable host, with no visible change). An
+explicit Custom bitrate is always sent as-is.
+
+Under the hood: the audio and video FEC decoders now share one Reed-Solomon
+solver (and a copy-on-write allocation was removed from the loss-recovery hot
+path), the frame pacer's state was regrouped into cohesive structs behind the
+same single lock, and the release tooling now pins the source tag to the exact
+built commit and stamps the appcast in UTC. A link-state FEC arming-bias
+experiment is present but off by default.
+
 ## 2026.6.21 - 2026-06-22
 
 Clearer recovery when the Wi-Fi helper won't install. macOS occasionally keeps a

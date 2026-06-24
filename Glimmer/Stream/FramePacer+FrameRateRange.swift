@@ -65,7 +65,7 @@ extension FramePacer {
         // Mirror under the lock for the off-main floor-violation detector
         // (FramePacer+TickDeficit.swift) - same dual-write as installLink.
         os_unfair_lock_lock(&lock)
-        pinnedFloorHz = Double(range.minimum)
+        tickDeficit.pinnedFloorHz = Double(range.minimum)
         os_unfair_lock_unlock(&lock)
         Diag.info(
             "FramePacer pinned present floor to requested \(Double(range.minimum))Hz "

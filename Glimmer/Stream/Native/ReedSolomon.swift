@@ -104,6 +104,16 @@ struct ReedSolomon {
         self.matrix = cauchy
     }
 
+    /// Build from an explicit row-major `m[j*ds + i]` parity matrix (fixed non-Cauchy
+    /// profiles, e.g. the audio matrix; see AudioFecDecoder) instead of generating
+    /// Cauchy. nil for bad geometry or `matrix.count != ps*ds`.
+    init?(matrix: [UInt8], dataShards ds: Int, parityShards ps: Int) {
+        guard ds > 0, ps > 0, ds + ps <= 255, matrix.count == ps * ds else { return nil }
+        self.ds = ds
+        self.ps = ps
+        self.matrix = matrix
+    }
+
     // MARK: - GF row ops (rs.c axpy/scal)
 
     /// a[i] ^= coeff * b[i]  (GF mul-add). coeff==0 → no-op; coeff==1 → XOR.
@@ -165,6 +175,30 @@ struct ReedSolomon {
                 a[i] = GF256.exp[lu + Int(GF256.log[Int(av)])]
             }
         }
+    }
+
+    // MARK: - In-place shard mutation (copy-on-write avoidance)
+
+    // Mutate one shard WITHOUT per-op CoW: `var t = shards[i]` double-refs the buffer,
+    // so the next write copies the whole ~1.1KB shard on every axpy/scal during loss
+    // bursts. Assigning `shards[i] = []` first drops that ref so `t` owns it alone.
+
+    @inline(__always)
+    private static func axpyShardInPlace(_ shards: inout [[UInt8]], _ tIdx: Int,
+                                         _ src: [UInt8], _ coeff: UInt8, _ k: Int) {
+        var t = shards[tIdx]
+        shards[tIdx] = []
+        axpyShard(&t, src, coeff, k)
+        shards[tIdx] = t
+    }
+
+    @inline(__always)
+    private static func scalShardInPlace(_ shards: inout [[UInt8]], _ tIdx: Int,
+                                         _ coeff: UInt8, _ k: Int) {
+        var t = shards[tIdx]
+        shards[tIdx] = []
+        scalShard(&t, coeff, k)
+        shards[tIdx] = t
     }
 
     // MARK: - Decode (rs.c reed_solomon_decode + invert_mat)
@@ -263,9 +297,8 @@ struct ReedSolomon {
             for row in 0..<survBase {
                 let coeff = matrix[dr + colPerm[row]]
                 if coeff != 0 {
-                    var target = shards[colPerm[col]]
-                    Self.axpyShard(&target, shards[colPerm[row]], coeff, shardSize)
-                    shards[colPerm[col]] = target
+                    let src = shards[colPerm[row]]
+                    Self.axpyShardInPlace(&shards, colPerm[col], src, coeff, shardSize)
                 }
             }
             col += 1
@@ -282,18 +315,13 @@ struct ReedSolomon {
             // [0, x) are already 0 so this is byte-identical for every value that
             // is ever read, without the out-of-bounds write.
             Self.scal(&wrk, x * unknowns + x, coeff, unknowns - x)
-            do {
-                var target = shards[colPerm[survBase + x]]
-                Self.scalShard(&target, coeff, shardSize)
-                shards[colPerm[survBase + x]] = target
-            }
+            Self.scalShardInPlace(&shards, colPerm[survBase + x], coeff, shardSize)
             if x + 1 < unknowns {
+                let src = shards[colPerm[survBase + x]]
                 for row in (x + 1)..<unknowns {
                     let rowCoeff = wrk[row * unknowns + x]
                     Self.axpy(&wrk, row * unknowns, wrk, x * unknowns, rowCoeff, unknowns)
-                    var target = shards[colPerm[survBase + row]]
-                    Self.axpyShard(&target, shards[colPerm[survBase + x]], rowCoeff, shardSize)
-                    shards[colPerm[survBase + row]] = target
+                    Self.axpyShardInPlace(&shards, colPerm[survBase + row], src, rowCoeff, shardSize)
                 }
             }
         }
@@ -304,9 +332,7 @@ struct ReedSolomon {
             let from = shards[colPerm[survBase + x]]
             for row in 0..<x {
                 let coeff = wrk[row * unknowns + x]
-                var target = shards[colPerm[survBase + row]]
-                Self.axpyShard(&target, from, coeff, shardSize)
-                shards[colPerm[survBase + row]] = target
+                Self.axpyShardInPlace(&shards, colPerm[survBase + row], from, coeff, shardSize)
             }
             x -= 1
         }

@@ -83,8 +83,8 @@ extension FramePacer {
         var changedToHz = 0.0
         os_unfair_lock_lock(&lock)
         let hostNow = CFAbsoluteTimeGetCurrent()
-        lastTickHostTime = hostNow
-        tickCount &+= 1
+        liveness.lastTickHostTime = hostNow
+        liveness.tickCount &+= 1
         // Snapshot the PTS-refined stream interval under the lock so the
         // main-actor floor re-apply reads a consistent value without a
         // second lock acquisition. `streamFrameIntervalSeconds` is written on the
@@ -93,13 +93,13 @@ extension FramePacer {
         let refinedIntervalSeconds = streamFrameIntervalSeconds
         if realizedInterval.isFinite, realizedInterval > 0,
            realizedInterval <= Self.maxRealizedTickDeltaSeconds {
-            refreshIntervalSumSeconds += realizedInterval
-            refreshIntervalSamples &+= 1
-            if !refreshIntervalMinSeconds.isFinite || realizedInterval < refreshIntervalMinSeconds {
-                refreshIntervalMinSeconds = realizedInterval
+            refreshTelemetry.refreshIntervalSumSeconds += realizedInterval
+            refreshTelemetry.refreshIntervalSamples &+= 1
+            if !refreshTelemetry.refreshIntervalMinSeconds.isFinite || realizedInterval < refreshTelemetry.refreshIntervalMinSeconds {
+                refreshTelemetry.refreshIntervalMinSeconds = realizedInterval
             }
-            if !refreshIntervalMaxSeconds.isFinite || realizedInterval > refreshIntervalMaxSeconds {
-                refreshIntervalMaxSeconds = realizedInterval
+            if !refreshTelemetry.refreshIntervalMaxSeconds.isFinite || realizedInterval > refreshTelemetry.refreshIntervalMaxSeconds {
+                refreshTelemetry.refreshIntervalMaxSeconds = realizedInterval
             }
         }
         if vsyncInterval.isFinite, vsyncInterval > 0 {
@@ -107,17 +107,17 @@ extension FramePacer {
             // previous tick's. A >1Hz delta (well above vsync-timing noise)
             // flags a real panel-cadence change - the ProMotion ramp 120↔24, a
             // 60↔120 switch, etc. - without firing on realized skip noise.
-            if lastRefreshIntervalSeconds.isFinite {
-                let prevHz = 1.0 / lastRefreshIntervalSeconds
+            if refreshTelemetry.lastRefreshIntervalSeconds.isFinite {
+                let prevHz = 1.0 / refreshTelemetry.lastRefreshIntervalSeconds
                 let nowHz = 1.0 / vsyncInterval
                 if abs(nowHz - prevHz) > 1.0 {
-                    refreshChangedSinceRead = true
+                    refreshTelemetry.refreshChangedSinceRead = true
                     emitRefreshChange = true
                     changedFromHz = prevHz
                     changedToHz = nowHz
                 }
             }
-            lastRefreshIntervalSeconds = vsyncInterval
+            refreshTelemetry.lastRefreshIntervalSeconds = vsyncInterval
         }
         // Tick-deficit service: roll the realized-rate window when due and
         // advance the deficit / floor-violation / warm-handover machines off

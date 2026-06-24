@@ -144,14 +144,14 @@ extension FramePacer {
     /// once per `rateWindowSeconds`, and only the roller observes transitions.
     func serviceTickDeficitLocked(now: CFTimeInterval) -> [TickDeficitEvent] {
         guard running else { return [] }
-        guard rateWindowStartHostTime.isFinite else {
+        guard tickDeficit.rateWindowStartHostTime.isFinite else {
             // First service after start - seed and measure from here.
-            rateWindowStartHostTime = now
-            rateWindowStartTicks = tickCount
-            rateWindowStartReleases = releaseCount
+            tickDeficit.rateWindowStartHostTime = now
+            tickDeficit.rateWindowStartTicks = liveness.tickCount
+            tickDeficit.rateWindowStartReleases = liveness.releaseCount
             return []
         }
-        let elapsed = now - rateWindowStartHostTime
+        let elapsed = now - tickDeficit.rateWindowStartHostTime
         guard elapsed >= FramePacer.rateWindowSeconds else { return [] }
         // SERVICE-GAP DISCARD: an oversized window spans time nobody was
         // servicing (suppressed span / modal stall) - re-seed and measure only
@@ -161,13 +161,13 @@ extension FramePacer {
             reseedRateWindowLocked(now: now)
             return []
         }
-        let ticksPerS = Double(tickCount &- rateWindowStartTicks) / elapsed
-        let releasesPerS = Double(releaseCount &- rateWindowStartReleases) / elapsed
-        measuredTicksPerSecond = ticksPerS
-        measuredReleasesPerSecond = releasesPerS
-        rateWindowStartHostTime = now
-        rateWindowStartTicks = tickCount
-        rateWindowStartReleases = releaseCount
+        let ticksPerS = Double(liveness.tickCount &- tickDeficit.rateWindowStartTicks) / elapsed
+        let releasesPerS = Double(liveness.releaseCount &- tickDeficit.rateWindowStartReleases) / elapsed
+        tickDeficit.measuredTicksPerSecond = ticksPerS
+        tickDeficit.measuredReleasesPerSecond = releasesPerS
+        tickDeficit.rateWindowStartHostTime = now
+        tickDeficit.rateWindowStartTicks = liveness.tickCount
+        tickDeficit.rateWindowStartReleases = liveness.releaseCount
 
         // Expected tick rate = min(stream Hz, NOMINAL panel Hz). The nominal
         // link duration keeps reading the panel's rated cadence even while
@@ -177,10 +177,10 @@ extension FramePacer {
         // reading as a deficit. Falls back to stream Hz before the first tick.
         let streamHz = streamFrameIntervalSeconds > 0
             ? 1.0 / streamFrameIntervalSeconds : 60.0
-        let nominalHz = lastRefreshIntervalSeconds.isFinite && lastRefreshIntervalSeconds > 0
-            ? 1.0 / lastRefreshIntervalSeconds : streamHz
+        let nominalHz = refreshTelemetry.lastRefreshIntervalSeconds.isFinite && refreshTelemetry.lastRefreshIntervalSeconds > 0
+            ? 1.0 / refreshTelemetry.lastRefreshIntervalSeconds : streamHz
         let expectedHz = min(streamHz, nominalHz)
-        lastExpectedTickHz = expectedHz
+        tickDeficit.lastExpectedTickHz = expectedHz
 
         // Suppressed presentation: the link stops ticking BY DESIGN (window
         // hidden), the exact mirror of the watchdog's suppression bail. A
@@ -194,16 +194,16 @@ extension FramePacer {
         // rolled and the rates updated - but no deficit / floor-violation
         // latch may form off the rebound link's delayed first ticks. Latches
         // are kept cleared so backdating can't reach into the held span.
-        if deficitVerdictHoldUntilHostTime.isFinite {
-            guard now >= deficitVerdictHoldUntilHostTime else {
-                tickDeficitSince = .nan
-                floorViolationSince = .nan
-                floorViolationLogged = false
+        if tickDeficit.deficitVerdictHoldUntilHostTime.isFinite {
+            guard now >= tickDeficit.deficitVerdictHoldUntilHostTime else {
+                tickDeficit.tickDeficitSince = .nan
+                tickDeficit.floorViolationSince = .nan
+                tickDeficit.floorViolationLogged = false
                 return []
             }
-            deficitVerdictHoldUntilHostTime = .nan
+            tickDeficit.deficitVerdictHoldUntilHostTime = .nan
         }
-        if warmingUp {
+        if tickDeficit.warmingUp {
             // A priming rebuilt link is ALREADY direct-presenting (the warm
             // handover path in submit). Engaging the deficit timer or judging
             // the floor against its delayed first ticks would be noise - only
@@ -224,26 +224,26 @@ extension FramePacer {
         // Hysteresis latch on the MEASURED rate. The deficit onset is backdated
         // to the window start: the whole deficient window is measured deficit,
         // so engage (below) and the watchdog's sustained trip both clock from
-        // when the sag actually began, not when we noticed. `tickCount > 0`:
+        // when the sag actually began, not when we noticed. `liveness.tickCount > 0`:
         // before the link's first-ever tick a low window is "link not started
         // yet" (the linkDead watchdog's territory), not a measured sag - keeps
         // a slow cold-start bind from minting a fake deficit breadcrumb.
-        if tickCount > 0, ticksPerS < FramePacer.deficitEnterTickRatio * expectedHz {
-            if !tickDeficitSince.isFinite { tickDeficitSince = now - windowSeconds }
+        if liveness.tickCount > 0, ticksPerS < FramePacer.deficitEnterTickRatio * expectedHz {
+            if !tickDeficit.tickDeficitSince.isFinite { tickDeficit.tickDeficitSince = now - windowSeconds }
         } else if ticksPerS >= FramePacer.deficitExitTickRatio * expectedHz {
-            tickDeficitSince = .nan
+            tickDeficit.tickDeficitSince = .nan
         }
 
-        if deficitModeActive {
-            guard !tickDeficitSince.isFinite else { return [] }
+        if tickDeficit.deficitModeActive {
+            guard !tickDeficit.tickDeficitSince.isFinite else { return [] }
             // Ticks are back (≥0.8× expected for a full window) - hand release
             // back to the real vsync. FULLY self-recovering: nothing latches.
-            deficitModeActive = false
-            let duration = deficitEngagedAt.isFinite ? now - deficitEngagedAt : 0
-            let released = releaseCount &- deficitEngageReleaseCount
-            let repaints = deficitRepaints
-            deficitEngagedAt = .nan
-            lastRepaintHostTime = .nan
+            tickDeficit.deficitModeActive = false
+            let duration = tickDeficit.deficitEngagedAt.isFinite ? now - tickDeficit.deficitEngagedAt : 0
+            let released = liveness.releaseCount &- tickDeficit.deficitEngageReleaseCount
+            let repaints = tickDeficit.deficitRepaints
+            tickDeficit.deficitEngagedAt = .nan
+            tickDeficit.lastRepaintHostTime = .nan
             return [.deficitDisengaged(
                 reason: "ticks recovered", durationSeconds: duration,
                 releases: released, repaints: repaints, ticksPerS: ticksPerS)]
@@ -253,12 +253,12 @@ extension FramePacer {
         // static scene - in neither case is there anything to release. The
         // depth>0 + measured-deficit pair is the same fault signature the
         // watchdog trips on, caught here within ~one window instead of seconds.
-        guard tickDeficitSince.isFinite, !queue.isEmpty else { return [] }
-        deficitModeActive = true
-        deficitEngagedAt = now
-        deficitEngageReleaseCount = releaseCount
-        deficitRepaints = 0
-        lastRepaintHostTime = .nan
+        guard tickDeficit.tickDeficitSince.isFinite, !queue.isEmpty else { return [] }
+        tickDeficit.deficitModeActive = true
+        tickDeficit.deficitEngagedAt = now
+        tickDeficit.deficitEngageReleaseCount = liveness.releaseCount
+        tickDeficit.deficitRepaints = 0
+        tickDeficit.lastRepaintHostTime = .nan
         return [.deficitEngaged(
             ticksPerS: ticksPerS, expectedHz: expectedHz, depth: queue.count)]
     }
@@ -270,23 +270,23 @@ extension FramePacer {
     private func trackFloorViolationLocked(
         now: CFTimeInterval, windowSeconds: Double, ticksPerS: Double
     ) -> [TickDeficitEvent] {
-        let floor = pinnedFloorHz
+        let floor = tickDeficit.pinnedFloorHz
         guard floor.isFinite, floor > 0 else { return [] }
         if ticksPerS < floor * FramePacer.floorViolationRatio {
-            if !floorViolationSince.isFinite { floorViolationSince = now - windowSeconds }
-            if !floorViolationLogged,
-               now - floorViolationSince >= FramePacer.floorViolationNoticeSeconds {
+            if !tickDeficit.floorViolationSince.isFinite { tickDeficit.floorViolationSince = now - windowSeconds }
+            if !tickDeficit.floorViolationLogged,
+               now - tickDeficit.floorViolationSince >= FramePacer.floorViolationNoticeSeconds {
                 // Once per episode - a multi-second collapse logs one NOTICE,
                 // not one per window.
-                floorViolationLogged = true
+                tickDeficit.floorViolationLogged = true
                 return [.floorViolation(ticksPerS: ticksPerS, floorHz: floor)]
             }
             return []
         }
-        let wasLogged = floorViolationLogged
-        let since = floorViolationSince
-        floorViolationSince = .nan
-        floorViolationLogged = false
+        let wasLogged = tickDeficit.floorViolationLogged
+        let since = tickDeficit.floorViolationSince
+        tickDeficit.floorViolationSince = .nan
+        tickDeficit.floorViolationLogged = false
         guard wasLogged, since.isFinite else { return [] }
         return [.floorRecovered(durationSeconds: now - since, ticksPerS: ticksPerS)]
     }
@@ -297,8 +297,8 @@ extension FramePacer {
         ticksPerS: Double, expectedHz: Double
     ) -> [TickDeficitEvent] {
         if ticksPerS >= FramePacer.deficitExitTickRatio * expectedHz {
-            warmHealthyWindowStreak += 1
-            guard warmHealthyWindowStreak >= FramePacer.warmHandoverHealthyWindows else {
+            tickDeficit.warmHealthyWindowStreak += 1
+            guard tickDeficit.warmHealthyWindowStreak >= FramePacer.warmHandoverHealthyWindows else {
                 return []
             }
             // ATOMIC flip under the lock: the very next submit queues instead
@@ -306,12 +306,12 @@ extension FramePacer {
             // went direct), so resetting the cadence base reproduces the clean
             // session-start state - first tick releases immediately and
             // re-seeds the grid from the live link's clock.
-            warmingUp = false
-            warmHealthyWindowStreak = 0
+            tickDeficit.warmingUp = false
+            tickDeficit.warmHealthyWindowStreak = 0
             resetCadenceBaseLocked()
             return [.warmHandoverComplete(ticksPerS: ticksPerS)]
         }
-        warmHealthyWindowStreak = 0
+        tickDeficit.warmHealthyWindowStreak = 0
         return []
     }
 
@@ -322,17 +322,17 @@ extension FramePacer {
     /// call it too, so a deficit episode live at the hide instant disengages
     /// immediately instead of leaving the off-tick timer spinning while hidden.
     func clearForSuppressionLocked(now: CFTimeInterval) -> [TickDeficitEvent] {
-        tickDeficitSince = .nan
-        floorViolationSince = .nan
-        floorViolationLogged = false
-        warmHealthyWindowStreak = 0
-        guard deficitModeActive else { return [] }
-        deficitModeActive = false
-        let duration = deficitEngagedAt.isFinite ? now - deficitEngagedAt : 0
-        let released = releaseCount &- deficitEngageReleaseCount
-        let repaints = deficitRepaints
-        deficitEngagedAt = .nan
-        lastRepaintHostTime = .nan
+        tickDeficit.tickDeficitSince = .nan
+        tickDeficit.floorViolationSince = .nan
+        tickDeficit.floorViolationLogged = false
+        tickDeficit.warmHealthyWindowStreak = 0
+        guard tickDeficit.deficitModeActive else { return [] }
+        tickDeficit.deficitModeActive = false
+        let duration = tickDeficit.deficitEngagedAt.isFinite ? now - tickDeficit.deficitEngagedAt : 0
+        let released = liveness.releaseCount &- tickDeficit.deficitEngageReleaseCount
+        let repaints = tickDeficit.deficitRepaints
+        tickDeficit.deficitEngagedAt = .nan
+        tickDeficit.lastRepaintHostTime = .nan
         return [.deficitDisengaged(
             reason: "presentation suppressed", durationSeconds: duration,
             releases: released, repaints: repaints, ticksPerS: 0)]
@@ -344,36 +344,36 @@ extension FramePacer {
     /// the suppression-clear edge (the deficit machinery must measure only
     /// un-suppressed time) and the oversized-window discard. Under `lock`.
     func reseedRateWindowLocked(now: CFTimeInterval) {
-        rateWindowStartHostTime = now
-        rateWindowStartTicks = tickCount
-        rateWindowStartReleases = releaseCount
-        measuredTicksPerSecond = .nan
-        measuredReleasesPerSecond = .nan
+        tickDeficit.rateWindowStartHostTime = now
+        tickDeficit.rateWindowStartTicks = liveness.tickCount
+        tickDeficit.rateWindowStartReleases = liveness.releaseCount
+        tickDeficit.measuredTicksPerSecond = .nan
+        tickDeficit.measuredReleasesPerSecond = .nan
     }
 
     /// Reset EVERY tick-deficit / warm-handover / floor-violation field and
     /// release the held repaint frame - the stop() reset, colocated with the
     /// state machine it clears so a new field can't be forgotten in a far-away
-    /// teardown list (`deficitVerdictHoldUntilHostTime` nearly was). Under `lock`.
+    /// teardown list (`tickDeficit.deficitVerdictHoldUntilHostTime` nearly was). Under `lock`.
     func resetTickDeficitStateLocked() {
-        rateWindowStartHostTime = .nan
-        rateWindowStartTicks = 0
-        rateWindowStartReleases = 0
-        measuredTicksPerSecond = .nan
-        measuredReleasesPerSecond = .nan
-        lastExpectedTickHz = .nan
-        tickDeficitSince = .nan
-        deficitVerdictHoldUntilHostTime = .nan
-        deficitModeActive = false
-        deficitEngagedAt = .nan
-        deficitRepaints = 0
-        lastRepaintHostTime = .nan
-        lastPresentedSampleBuffer = nil
-        warmingUp = false
-        warmHealthyWindowStreak = 0
-        floorViolationSince = .nan
-        floorViolationLogged = false
-        pinnedFloorHz = .nan
+        tickDeficit.rateWindowStartHostTime = .nan
+        tickDeficit.rateWindowStartTicks = 0
+        tickDeficit.rateWindowStartReleases = 0
+        tickDeficit.measuredTicksPerSecond = .nan
+        tickDeficit.measuredReleasesPerSecond = .nan
+        tickDeficit.lastExpectedTickHz = .nan
+        tickDeficit.tickDeficitSince = .nan
+        tickDeficit.deficitVerdictHoldUntilHostTime = .nan
+        tickDeficit.deficitModeActive = false
+        tickDeficit.deficitEngagedAt = .nan
+        tickDeficit.deficitRepaints = 0
+        tickDeficit.lastRepaintHostTime = .nan
+        tickDeficit.lastPresentedSampleBuffer = nil
+        tickDeficit.warmingUp = false
+        tickDeficit.warmHealthyWindowStreak = 0
+        tickDeficit.floorViolationSince = .nan
+        tickDeficit.floorViolationLogged = false
+        tickDeficit.pinnedFloorHz = .nan
     }
 
     // MARK: - Warm re-enable cadence stash
@@ -395,15 +395,15 @@ extension FramePacer {
 
     /// Adopt the stashed refined cadence into a WARM-HANDOVER pacer before its
     /// link installs (called from start() under `lock`; armWarmHandover ran
-    /// first on the re-enable path, so `warmingUp` distinguishes it). This
+    /// first on the re-enable path, so `tickDeficit.warmingUp` distinguishes it). This
     /// fix: without this, installLink pinned floor = configured fps (240.0Hz)
     /// while content ran ~174.4 - a dishonest floor for the rebuilt link's
     /// first beats and a wrong `expectedHz` bar for the handover verdict. A
-    /// cold session start (warmingUp false) keeps the configured seed - its
+    /// cold session start (tickDeficit.warmingUp false) keeps the configured seed - its
     /// predecessor (if any) is a torn-down SESSION, not the same stream.
     @MainActor
     func adoptStashedRefinedCadenceLocked() {
-        guard warmingUp else { return }
+        guard tickDeficit.warmingUp else { return }
         let stashed = FramePacer.stashedRefinedIntervalSeconds
         let stashedAt = FramePacer.stashedRefinedIntervalAt
         guard stashed.isFinite, stashedAt.isFinite,
@@ -494,20 +494,20 @@ extension FramePacer {
     /// converge on the latest state instead of double-arming.
     func reconcileDeficitTimer() {
         os_unfair_lock_lock(&lock)
-        let want = deficitModeActive && running
+        let want = tickDeficit.deficitModeActive && running
         let interval = streamFrameIntervalSeconds
         os_unfair_lock_unlock(&lock)
-        if want, deficitTimer == nil {
+        if want, tickDeficit.deficitTimer == nil {
             let timer = DispatchSource.makeTimerSource(queue: pacingQueue)
             timer.schedule(
                 deadline: .now() + interval, repeating: interval,
                 leeway: .milliseconds(1))
             timer.setEventHandler { [weak self] in self?.deficitTimerFired() }
-            deficitTimer = timer
+            tickDeficit.deficitTimer = timer
             timer.resume()
-        } else if !want, let timer = deficitTimer {
+        } else if !want, let timer = tickDeficit.deficitTimer {
             timer.cancel()
-            deficitTimer = nil
+            tickDeficit.deficitTimer = nil
         }
     }
 
@@ -520,7 +520,7 @@ extension FramePacer {
     /// at one per stream interval no matter how the two sources interleave).
     func deficitTimerFired() {
         os_unfair_lock_lock(&lock)
-        let active = deficitModeActive && running && !presentSuppressed
+        let active = tickDeficit.deficitModeActive && running && !presentSuppressed
         let interval = streamFrameIntervalSeconds
         os_unfair_lock_unlock(&lock)
         guard active else { return }
@@ -548,16 +548,16 @@ extension FramePacer {
         let now = CFAbsoluteTimeGetCurrent()
         var repaint: CMSampleBuffer?
         os_unfair_lock_lock(&lock)
-        let sinceRelease = lastReleaseHostTime.isFinite
-            ? now - lastReleaseHostTime : .infinity
-        let sinceRepaint = lastRepaintHostTime.isFinite
-            ? now - lastRepaintHostTime : .infinity
-        if deficitModeActive, !presentSuppressed,
+        let sinceRelease = liveness.lastReleaseHostTime.isFinite
+            ? now - liveness.lastReleaseHostTime : .infinity
+        let sinceRepaint = tickDeficit.lastRepaintHostTime.isFinite
+            ? now - tickDeficit.lastRepaintHostTime : .infinity
+        if tickDeficit.deficitModeActive, !presentSuppressed,
            sinceRelease > interval * FramePacer.repaintAfterIdleIntervals,
            sinceRepaint >= interval,
-           let sampleBuffer = lastPresentedSampleBuffer {
-            lastRepaintHostTime = now
-            deficitRepaints &+= 1
+           let sampleBuffer = tickDeficit.lastPresentedSampleBuffer {
+            tickDeficit.lastRepaintHostTime = now
+            tickDeficit.deficitRepaints &+= 1
             repaint = sampleBuffer
         }
         os_unfair_lock_unlock(&lock)
@@ -576,8 +576,8 @@ extension FramePacer {
     /// itself a felt freeze, separate from the original stall).
     func armWarmHandover() {
         os_unfair_lock_lock(&lock)
-        warmingUp = true
-        warmHealthyWindowStreak = 0
+        tickDeficit.warmingUp = true
+        tickDeficit.warmHealthyWindowStreak = 0
         os_unfair_lock_unlock(&lock)
     }
 

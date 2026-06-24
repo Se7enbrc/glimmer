@@ -127,6 +127,16 @@ extension MoonlightManager {
         cfg.coversNotch = streamCoversNotch
         let codecPref = HostCodecPreference.load(for: host.id)
         cfg.videoFormats = codecPref.apply(to: .probedSupported)
+        // Codec-aware WIRE budget: `bitrateKbps` is H.264-anchored, so AV1/HEVC waste
+        // bytes at equal quality. Scale the host-bound budget by codec efficiency;
+        // effectiveBitrateKbps stays the H.264-equivalent quality dial the UI shows.
+        // Custom carries the user's explicit cap verbatim.
+        if case .custom = qualityPreset {
+            // explicit user cap → leave cfg.bitrateKbps == effectiveBitrateKbps
+        } else {
+            let mult = Self.codecBudgetMultiplier(for: cfg.videoFormats)
+            cfg.bitrateKbps = max(5_000, Int((Double(effectiveBitrateKbps) * mult).rounded()))
+        }
         return cfg
     }
 

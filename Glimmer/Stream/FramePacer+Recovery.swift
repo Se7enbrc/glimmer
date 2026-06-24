@@ -148,7 +148,7 @@ extension FramePacer {
         // Mirror the floor under the lock for the off-main floor-violation
         // detector (the rate-window roll can't touch main-actor state).
         os_unfair_lock_lock(&lock)
-        pinnedFloorHz = Double(range.minimum)
+        tickDeficit.pinnedFloorHz = Double(range.minimum)
         os_unfair_lock_unlock(&lock)
         link.add(to: .main, forMode: .common)
         self.setTickProxy(proxy)
@@ -242,23 +242,23 @@ extension FramePacer {
     func refreshWindowSnapshot() -> RefreshWindowSnapshot {
         os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
         defer {
-            refreshIntervalSumSeconds = 0
-            refreshIntervalSamples = 0
-            refreshIntervalMinSeconds = .nan
-            refreshIntervalMaxSeconds = .nan
-            refreshChangedSinceRead = false
+            refreshTelemetry.refreshIntervalSumSeconds = 0
+            refreshTelemetry.refreshIntervalSamples = 0
+            refreshTelemetry.refreshIntervalMinSeconds = .nan
+            refreshTelemetry.refreshIntervalMaxSeconds = .nan
+            refreshTelemetry.refreshChangedSinceRead = false
         }
-        guard refreshIntervalSamples > 0 else {
+        guard refreshTelemetry.refreshIntervalSamples > 0 else {
             return RefreshWindowSnapshot(minHz: nil, avgHz: nil, maxHz: nil,
-                                         changed: refreshChangedSinceRead)
+                                         changed: refreshTelemetry.refreshChangedSinceRead)
         }
-        let avgInterval = refreshIntervalSumSeconds / Double(refreshIntervalSamples)
+        let avgInterval = refreshTelemetry.refreshIntervalSumSeconds / Double(refreshTelemetry.refreshIntervalSamples)
         // A LONGER interval = a LOWER Hz: max interval → min Hz, min interval → max Hz.
-        let minHz = refreshIntervalMaxSeconds > 0 ? 1.0 / refreshIntervalMaxSeconds : nil
-        let maxHz = refreshIntervalMinSeconds > 0 ? 1.0 / refreshIntervalMinSeconds : nil
+        let minHz = refreshTelemetry.refreshIntervalMaxSeconds > 0 ? 1.0 / refreshTelemetry.refreshIntervalMaxSeconds : nil
+        let maxHz = refreshTelemetry.refreshIntervalMinSeconds > 0 ? 1.0 / refreshTelemetry.refreshIntervalMinSeconds : nil
         let avgHz = avgInterval > 0 ? 1.0 / avgInterval : nil
         return RefreshWindowSnapshot(minHz: minHz, avgHz: avgHz, maxHz: maxHz,
-                                     changed: refreshChangedSinceRead)
+                                     changed: refreshTelemetry.refreshChangedSinceRead)
     }
 
     /// One-shot consistent read of the present-side liveness state. ALSO rolls
@@ -270,23 +270,23 @@ extension FramePacer {
         let now = CFAbsoluteTimeGetCurrent()
         os_unfair_lock_lock(&lock)
         let events = serviceTickDeficitLocked(now: now)
-        let sinceTick = lastTickHostTime.isFinite ? now - lastTickHostTime : .infinity
-        let sinceRelease = lastReleaseHostTime.isFinite ? now - lastReleaseHostTime : .infinity
+        let sinceTick = liveness.lastTickHostTime.isFinite ? now - liveness.lastTickHostTime : .infinity
+        let sinceRelease = liveness.lastReleaseHostTime.isFinite ? now - liveness.lastReleaseHostTime : .infinity
         let snapshot = LivenessSnapshot(
             secondsSinceLastTick: sinceTick,
             secondsSinceLastRelease: sinceRelease,
             depth: queue.count,
             running: running,
-            totalTicks: tickCount,
-            totalReleases: releaseCount,
+            totalTicks: liveness.tickCount,
+            totalReleases: liveness.releaseCount,
             streamFrameIntervalSeconds: streamFrameIntervalSeconds,
-            adaptiveTargetDepth: adaptiveTargetDepth,
-            recentTicksPerSecond: measuredTicksPerSecond,
-            recentReleasesPerSecond: measuredReleasesPerSecond,
-            tickDeficitSeconds: tickDeficitSince.isFinite ? now - tickDeficitSince : 0,
-            expectedTickHz: lastExpectedTickHz,
-            tickDeficitModeActive: deficitModeActive,
-            presentRejectStreak: presentRejectStreak)
+            adaptiveTargetDepth: adaptiveDepth.adaptiveTargetDepth,
+            recentTicksPerSecond: tickDeficit.measuredTicksPerSecond,
+            recentReleasesPerSecond: tickDeficit.measuredReleasesPerSecond,
+            tickDeficitSeconds: tickDeficit.tickDeficitSince.isFinite ? now - tickDeficit.tickDeficitSince : 0,
+            expectedTickHz: tickDeficit.lastExpectedTickHz,
+            tickDeficitModeActive: tickDeficit.deficitModeActive,
+            presentRejectStreak: liveness.presentRejectStreak)
         os_unfair_lock_unlock(&lock)
         // Emit breadcrumbs / reconcile the off-tick timer OFF the lock (LogStore
         // takes its own lock; timer ops dispatch) - same discipline as handleTick.
@@ -307,7 +307,7 @@ extension FramePacer {
         os_unfair_lock_lock(&lock)
         let depth = queue.count
         anchorCadenceBaseOnGridLocked(targetTimestamp: target)
-        starvedTickStreak = 0
+        liveness.starvedTickStreak = 0
         os_unfair_lock_unlock(&lock)
         log.warning("FramePacer self-heal: force-release-next-tick (\(reason, privacy: .public)) depth=\(depth, privacy: .public)")
         Diag.notice(
@@ -338,8 +338,8 @@ extension FramePacer {
         queue.removeAll(keepingCapacity: true)
         // Re-seed so a rebuilt link starts clean.
         resetCadenceBaseLocked()
-        starvedTickStreak = 0
-        lastReleaseHostTime = CFAbsoluteTimeGetCurrent()
+        liveness.starvedTickStreak = 0
+        liveness.lastReleaseHostTime = CFAbsoluteTimeGetCurrent()
         os_unfair_lock_unlock(&lock)
 
         for _ in stale { stats.recordPresentationLateDrop() }
@@ -414,7 +414,7 @@ extension FramePacer {
         let discarded = queue.count
         queue.removeAll(keepingCapacity: true)
         resetCadenceBaseLocked()
-        starvedTickStreak = 0
+        liveness.starvedTickStreak = 0
         os_unfair_lock_unlock(&lock)
 
         for _ in 0..<discarded { stats.recordPresentationLateDrop() }

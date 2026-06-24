@@ -94,7 +94,7 @@ extension FramePacer {
         // latched not-due → a hard wedge (observed on a lossy wifi link). See
         // `anchorCadenceBaseOnGridLocked`. Clear the streak - we are presenting.
         anchorCadenceBaseOnGridLocked(targetTimestamp: targetTimestamp)
-        starvedTickStreak = 0
+        liveness.starvedTickStreak = 0
         return BackoffBeat(newest: newest, droppedCount: droppedCount)
     }
 
@@ -107,10 +107,10 @@ extension FramePacer {
     /// and the warm-handover direct present.
     func noteFramePresented(_ sampleBuffer: CMSampleBuffer) {
         os_unfair_lock_lock(&lock)
-        lastReleaseHostTime = CFAbsoluteTimeGetCurrent()
-        releaseCount &+= 1
-        presentRejectStreak = 0
-        lastPresentedSampleBuffer = sampleBuffer
+        liveness.lastReleaseHostTime = CFAbsoluteTimeGetCurrent()
+        liveness.releaseCount &+= 1
+        liveness.presentRejectStreak = 0
+        tickDeficit.lastPresentedSampleBuffer = sampleBuffer
         os_unfair_lock_unlock(&lock)
     }
 
@@ -129,7 +129,7 @@ extension FramePacer {
     /// upstream - can never accumulate toward the ladder's threshold.
     func noteGateReleaseRejected() {
         os_unfair_lock_lock(&lock)
-        presentRejectStreak += 1
+        liveness.presentRejectStreak += 1
         os_unfair_lock_unlock(&lock)
     }
 
@@ -233,16 +233,16 @@ extension FramePacer {
                 // zero added latency.
                 //
                 // STARTUP GATE: do NOT run the grow-hold until cadence has locked
-                // (`releaseCount > startupGrowHoldReleases`). During the first
+                // (`liveness.releaseCount > startupGrowHoldReleases`). During the first
                 // ~0.25s the PTS-median interval is still converging and startup
                 // jitter has transiently inflated the adaptive target; holding
                 // barely-due frames in that window presents half of them late (the
                 // startup chop) and trips the present-stall watchdog. Until cadence
                 // locks we use the normal slack-relaxed test, so the buffer primes
                 // from a clean link's natural slack WITHOUT ever holding a frame late.
-                let cadenceLocked = releaseCount > FramePacer.startupGrowHoldReleases
+                let cadenceLocked = liveness.releaseCount > FramePacer.startupGrowHoldReleases
                 if cadenceLocked && belowTarget
-                    && adaptiveTargetDepth > FramePacer.targetDepth {
+                    && adaptiveDepth.adaptiveTargetDepth > FramePacer.targetDepth {
                     due = sinceLast >= interval
                     // If the head was barely-due (would have presented under the
                     // normal slack test) but we held it to grow, mark it so the
@@ -283,12 +283,12 @@ extension FramePacer {
         refreshReconciledTarget()
 
         os_unfair_lock_lock(&lock)
-        // `!warmingUp`: during a warm handover the queue is empty by design
+        // `!tickDeficit.warmingUp`: during a warm handover the queue is empty by design
         // (submits direct-present until the rebuilt link proves healthy ticks
         // - FramePacer+TickDeficit.swift), so a tick here has nothing to do.
         // Bailing keeps the priming span from polluting the depth samples and
         // stale-repeat counter while real frames are demonstrably flowing.
-        guard running, !warmingUp else {
+        guard running, !tickDeficit.warmingUp else {
             os_unfair_lock_unlock(&lock)
             return
         }
@@ -400,27 +400,27 @@ extension FramePacer {
         var sinceLastForLog: CFTimeInterval = .nan
         var forcedSelfHeal = false
         if wedgedThisTick {
-            starvedTickStreak += 1
+            liveness.starvedTickStreak += 1
             sinceLastForLog = lastPresentMediaTime.isFinite
                 ? targetTimestamp - lastPresentMediaTime : .nan
-            if starvedTickStreak >= FramePacer.starvationFailsafeTicks {
+            if liveness.starvedTickStreak >= FramePacer.starvationFailsafeTicks {
                 // Re-anchor ON the live grid rather than reseeding to `.nan` (which
                 // RE-LATCHES the wedge into the ~15fps limp; telemetry rn~12). On-
                 // grid self-clears the wedge next vsync. See the helper.
                 anchorCadenceBaseOnGridLocked(targetTimestamp: targetTimestamp)
                 forcedSelfHeal = true
-                starvedTickStreak = 0
+                liveness.starvedTickStreak = 0
             }
         } else if toPresent != nil {
-            starvedTickStreak = 0
-            loggedStarvation = false
+            liveness.starvedTickStreak = 0
+            liveness.loggedStarvation = false
         }
         let shouldLogStarvation = wedgedThisTick
-            && starvedTickStreak >= FramePacer.starvationLogTicks
-            && !loggedStarvation
-        if shouldLogStarvation { loggedStarvation = true }
+            && liveness.starvedTickStreak >= FramePacer.starvationLogTicks
+            && !liveness.loggedStarvation
+        if shouldLogStarvation { liveness.loggedStarvation = true }
         let starvationSnapshot = StarvationSnapshot(
-            streak: starvedTickStreak, depth: sampledDepth,
+            streak: liveness.starvedTickStreak, depth: sampledDepth,
             sinceLastMs: sinceLastForLog * 1000, targetTimestamp: targetTimestamp,
             lastPresent: lastPresentMediaTime, intervalMs: streamFrameIntervalSeconds * 1000)
         os_unfair_lock_unlock(&lock)
@@ -537,15 +537,15 @@ extension FramePacer {
         var shouldSignpost = false
         os_unfair_lock_lock(&lock)
         if forced {
-            overTargetReleaseStreak += 1
-            streakSnapshot = overTargetReleaseStreak
+            liveness.overTargetReleaseStreak += 1
+            streakSnapshot = liveness.overTargetReleaseStreak
             // Signpost once, when the streak first crosses the starvation log
             // threshold - a sustained over-target episode is the same
             // self-oscillation signature, surfaced before it could ever reach the
             // failsafe (which it now never will, since we force the release).
-            shouldSignpost = overTargetReleaseStreak == FramePacer.starvationLogTicks
+            shouldSignpost = liveness.overTargetReleaseStreak == FramePacer.starvationLogTicks
         } else if released {
-            overTargetReleaseStreak = 0
+            liveness.overTargetReleaseStreak = 0
         }
         os_unfair_lock_unlock(&lock)
         guard forced else { return }

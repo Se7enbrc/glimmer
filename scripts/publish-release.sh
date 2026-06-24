@@ -27,6 +27,18 @@ APPCAST="appcast.xml"
 "$CREDS" get SPARKLE_ED_PRIVATE_KEY >/dev/null || {
 	echo "ERR: SPARKLE_ED_PRIVATE_KEY missing from $($CREDS path) - run 'make sparkle-keys' once" >&2; exit 1; }
 
+# The release tag is advertised as the GPLv3 source, so it must be the exact commit
+# we built: require local HEAD == origin/main before pinning the tag below.
+git -C "$HERE" fetch --quiet origin main
+HEAD_SHA="$(git -C "$HERE" rev-parse HEAD)"
+MAIN_SHA="$(git -C "$HERE" rev-parse origin/main)"
+[ "$HEAD_SHA" = "$MAIN_SHA" ] || {
+	echo "ERR: local HEAD ($HEAD_SHA) != origin/main ($MAIN_SHA)." >&2
+	echo "  Bump Version.xcconfig, commit, merge to main, then 'git pull --ff-only' before publishing -" >&2
+	echo "  the release tag is the GPLv3 source and must match the built commit." >&2
+	exit 1
+}
+
 echo "▶ Zipping notarized bundle for Sparkle..."
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
@@ -44,21 +56,25 @@ ASSETS=("$ZIP")
 if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
 	gh release upload "$TAG" "${ASSETS[@]}" -R "$REPO" --clobber
 else
-	gh release create "$TAG" "${ASSETS[@]}" -R "$REPO" --title "Glimmer $SHORT" \
+	gh release create "$TAG" "${ASSETS[@]}" -R "$REPO" --target "$HEAD_SHA" --title "Glimmer $SHORT" \
 		--notes "Glimmer $SHORT. Auto-updates via Sparkle; the notarized DMG is attached. Source: this repo at tag $TAG (GPLv3)."
 fi
 echo "  ✓ release published"
 
-echo "▶ Updating the Pages appcast..."
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-gh api "repos/$REPO/contents/$APPCAST" -H "Accept: application/vnd.github.raw" > "$TMP/appcast.xml"
-SHA="$(gh api "repos/$REPO/contents/$APPCAST" --jq '.sha')"
-"$HERE/scripts/update-appcast.py" "$TMP/appcast.xml" \
+# Single source of truth: the committed appcast.xml IS what Pages serves
+# (main:/appcast.xml). Edit it in the tree and commit + push to main (no `gh api`
+# PUT), so the committed copy never drifts. Committed AFTER the tag is pinned.
+echo "▶ Updating the committed appcast (main:/$APPCAST is what Pages serves)..."
+"$HERE/scripts/update-appcast.py" "$HERE/$APPCAST" \
 	--short-version "$SHORT" --version "$BUILD" \
 	--url "$ASSET_URL" --ed-signature "$ED_SIG" --length "$LENGTH" --min-system 26.0
-CONTENT="$(base64 -i "$TMP/appcast.xml" | tr -d '\n')"
-jq -n --arg m "appcast: Glimmer $SHORT" --arg c "$CONTENT" --arg s "$SHA" \
-	'{message:$m, content:$c, sha:$s}' \
-	| gh api -X PUT "repos/$REPO/contents/$APPCAST" --input - --jq '"  ✓ appcast → " + .commit.html_url'
+if git -C "$HERE" diff --quiet -- "$APPCAST"; then
+	echo "  ✓ appcast already current (no change to publish)"
+else
+	git -C "$HERE" add "$APPCAST"
+	git -C "$HERE" commit -m "appcast: Glimmer $SHORT" --quiet
+	git -C "$HERE" push --quiet origin HEAD:main
+	echo "  ✓ appcast committed + pushed to main → $(git -C "$HERE" rev-parse --short HEAD)"
+fi
 
 echo "✅ Published Glimmer $SHORT - Sparkle clients see it within a day (or now via Check for Updates...)."
