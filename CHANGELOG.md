@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.6.23 - 2026-06-24
+
+Restores headroom on AV1 streams. 2026.6.22's codec-aware budget trimmed AV1
+sessions a bit aggressively (a third off the H.264 figure); this softens that to
+match HEVC (~20% off), so busy, high-motion scenes keep more room before the
+encoder feels it - while still using less bandwidth than H.264 at the same
+quality.
+
 ## 2026.6.22 - 2026-06-24
 
 Uses less bandwidth on modern codecs at the same picture quality. The bitrate

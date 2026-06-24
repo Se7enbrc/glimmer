@@ -169,7 +169,7 @@ extension MoonlightManager {
     /// heavy scenes keep headroom; the 5 Mbps floor bounds the low end. Field-tunable.
     static func codecBudgetMultiplier(for formats: VideoFormats) -> Double {
         switch formats.topCodec {
-        case .av1:  return 0.67
+        case .av1:  return 0.80
         case .hevc: return 0.80
         case .h264: return 1.0
         }
