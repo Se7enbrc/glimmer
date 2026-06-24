@@ -162,6 +162,19 @@ extension MoonlightManager {
         bitrateKbps(width: width, height: height, fps: fps, preset: .matchDisplay) / 1000
     }
 
+    // MARK: - Codec-aware budget
+
+    /// Discount on the H.264-anchored `bitrateKbps` budget for the intended top
+    /// codec (HEVC ~25% / AV1 more bits cheaper at equal quality). Conservative so
+    /// heavy scenes keep headroom; the 5 Mbps floor bounds the low end. Field-tunable.
+    static func codecBudgetMultiplier(for formats: VideoFormats) -> Double {
+        switch formats.topCodec {
+        case .av1:  return 0.67
+        case .hevc: return 0.80
+        case .h264: return 1.0
+        }
+    }
+
     // MARK: - Measured bitrate guidance (Tier 1: baked-in)
 
     /// One mode our harness actually measured, and the wire bitrate we

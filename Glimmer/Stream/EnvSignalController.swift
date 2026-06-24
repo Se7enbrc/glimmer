@@ -91,6 +91,11 @@ final class EnvSignalController: @unchecked Sendable {
     /// so no synchronization is needed (the A/B is a compile-in-and-flip dial).
     nonisolated(unsafe) static var reconcilerEnabled = true
 
+    /// FEC arming bias (hardening #5), DEFAULT-OFF for shadow validation. When true,
+    /// caution/distress link state feeds the FecHeadroomController reorder-hold as a
+    /// third escalate axis (receive-side, zero wire bytes). Off → byte-identical.
+    nonisolated(unsafe) static var fecArmingBiasEnabled = false
+
     // MARK: - State
 
     /// The three-level link-condition state. Ordinals are stable (exported as
@@ -110,6 +115,16 @@ final class EnvSignalController: @unchecked Sendable {
             case .clear: return "clear"
             case .caution: return "caution"
             case .distress: return "distress"
+            }
+        }
+
+        /// FEC reorder-hold arming bias (hardening #5): caution → 1 step, distress →
+        /// 2, clear → 0. Combined via max in FecHeadroomController so it only widens.
+        var fecArmingBiasLevel: Int {
+            switch self {
+            case .clear: return 0
+            case .caution: return 1
+            case .distress: return 2
             }
         }
     }
@@ -796,11 +811,9 @@ final class EnvSignalController: @unchecked Sendable {
     //    one audible blip after it (the one-blip-per-upward-ratchet pattern).
     //    Decays via the existing 60s target decay.
     //
-    //  * FEC HEADROOM ARMING BIAS (dark): feed `state != .clear` to
-    //    FecHeadroomController as an additional escalate input. Receive-side
-    //    only - zero extra bytes on the wire, same hard cap. Explicit
-    //    NON-GOAL stays: no bitrate/FEC wire request exists for this host
-    //    profile (see that controller's header).
+    //  * FEC HEADROOM ARMING BIAS (WIRED, DEFAULT-OFF via fecArmingBiasEnabled):
+    //    feeds caution/distress to FecHeadroomController as a third escalate axis.
+    //    Receive-side only - zero wire bytes, same hard cap. Flip on to shadow-validate.
     //
     //  * PACER DEPTH FLOOR +1 (dark, double-gated): raise FramePacer's
     //    adaptive depth floor by one within its existing cap during CAUTION+.

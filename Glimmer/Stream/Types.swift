@@ -311,6 +311,24 @@ public struct VideoFormats: OptionSet, Sendable {
     }
 }
 
+public extension VideoFormats {
+    /// All AV1 profile bits (Main8/Main10 + High 4:4:4 8/10-bit).
+    static let anyAV1: VideoFormats = [.av1, .av1Main10, .av1High8_444, .av1High10_444]
+    /// All HEVC profile bits (Main/Main10 + RExt 4:4:4 8/10-bit).
+    static let anyHEVC: VideoFormats = [.hevc, .hevcMain10, .hevcRext8_444, .hevcRext10_444]
+
+    enum TopCodec: Sendable { case av1, hevc, h264 }
+
+    /// Codec family the host will most likely settle on for this mask (negotiation
+    /// prefers AV1 → HEVC → H.264). Lets bitrate budget be codec-aware pre-launch,
+    /// before the SDP handshake finalizes the exact format.
+    var topCodec: TopCodec {
+        if !isDisjoint(with: .anyAV1) { return .av1 }
+        if !isDisjoint(with: .anyHEVC) { return .hevc }
+        return .h264
+    }
+}
+
 public enum ColorSpace: Sendable {
     case rec601, rec709, rec2020
     var cValue: Int32 {

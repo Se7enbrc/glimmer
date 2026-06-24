@@ -491,10 +491,15 @@ final class RtpVideoQueue {
         lastUnrecoverableTotalSnapshot = unrecoverableTotalNow
         let lossChanged = fecHeadroom.observeLoss(fecRecovered: fecRecoveredFramesInWindow,
                                                   unrecoverable: unrecoverableDelta)
-        if jitterChanged || lossChanged {
+        // ARMING BIAS (hardening #5, DEFAULT-OFF): bias the reorder-hold up on
+        // caution/distress link state - receive-side only, never the pacer depth.
+        let biasLevel = EnvSignalController.fecArmingBiasEnabled
+            ? EnvSignalController.shared.state.fecArmingBiasLevel : 0
+        let biasChanged = fecHeadroom.observeArmingBias(level: biasLevel)
+        if jitterChanged || lossChanged || biasChanged {
             Diag.notice("NativeVideo PROACTIVE FEC headroom: reorder-hold → "
                 + "\(reorderWindowUs / 1000)ms (jitter-lvl \(fecHeadroom.level) "
-                + "loss-lvl \(fecHeadroom.lossLevel)) "
+                + "loss-lvl \(fecHeadroom.lossLevel) bias-lvl \(fecHeadroom.armingBiasLevel)) "
                 + "[recv-jitter=\(String(format: "%.1f", jitterUs / 1000.0))ms "
                 + "ooo=\(windowOutOfOrder) retransmit=\(retransmitDelta) "
                 + "fec-recovered=\(fecRecoveredFramesInWindow) unrecoverable=\(unrecoverableDelta)]",

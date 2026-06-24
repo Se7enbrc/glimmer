@@ -52,7 +52,9 @@ def main() -> None:
 
     item = ET.Element("item")
     ET.SubElement(item, "title").text = a.short_version
-    ET.SubElement(item, "pubDate").text = formatdate(localtime=True)
+    # UTC, not localtime: the appcast is public-by-design, and a local timezone
+    # offset (e.g. -0400) is a free geolocation signal on a pseudonymous project.
+    ET.SubElement(item, "pubDate").text = formatdate(usegmt=True)
     ET.SubElement(item, sk("version")).text = a.version
     ET.SubElement(item, sk("shortVersionString")).text = a.short_version
     ET.SubElement(item, sk("minimumSystemVersion")).text = a.min_system

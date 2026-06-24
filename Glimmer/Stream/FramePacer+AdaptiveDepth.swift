@@ -35,26 +35,26 @@ extension FramePacer {
     func noteMeasuredJitter(_ ms: Double) {
         refreshReconciledTarget()
         os_unfair_lock_lock(&lock)
-        if ms.isFinite, ms >= 0 { measuredJitterMs = ms }
+        if ms.isFinite, ms >= 0 { adaptiveDepth.measuredJitterMs = ms }
         bumpTargetForJitterLocked()
         os_unfair_lock_unlock(&lock)
     }
 
     /// Pull the reconciler's latest published headroom level into
-    /// `reconciledTargetDepth` (mapped `targetDepth + level`, clamped). MUST be
+    /// `adaptiveDepth.reconciledTargetDepth` (mapped `targetDepth + level`, clamped). MUST be
     /// called WITHOUT the pacer lock held - it takes EnvSignalController's lock
     /// (via `.decision`), so calling it under the pacer lock would nest two locks.
     /// No-ops on an unchanged decision generation (the common path costs one
     /// short controller-lock read + a `UInt64` compare). When the reconciler is
-    /// off this leaves `reconciledTargetDepth` untouched - `justifiedDepthLocked`
-    /// ignores it and self-decides off `measuredJitterMs` instead.
+    /// off this leaves `adaptiveDepth.reconciledTargetDepth` untouched - `justifiedDepthLocked`
+    /// ignores it and self-decides off `adaptiveDepth.measuredJitterMs` instead.
     func refreshReconciledTarget() {
         guard EnvSignalController.reconcilerEnabled else { return }
         let decision = EnvSignalController.shared.decision
         os_unfair_lock_lock(&lock)
-        if decision.generation != reconciledDecisionGeneration {
-            reconciledDecisionGeneration = decision.generation
-            reconciledTargetDepth = min(FramePacer.maxTargetDepth,
+        if decision.generation != adaptiveDepth.reconciledDecisionGeneration {
+            adaptiveDepth.reconciledDecisionGeneration = decision.generation
+            adaptiveDepth.reconciledTargetDepth = min(FramePacer.maxTargetDepth,
                                         max(FramePacer.targetDepth,
                                             FramePacer.targetDepth + decision.headroomLevel))
         }
@@ -64,7 +64,7 @@ extension FramePacer {
     // MARK: - Adaptive target depth. All run under `lock`.
 
     /// The depth the CURRENT desired target justifies - the value the rate-limited
-    /// grow/decay actuator walks `adaptiveTargetDepth` toward. Clamped to
+    /// grow/decay actuator walks `adaptiveDepth.adaptiveTargetDepth` toward. Clamped to
     /// [targetDepth, maxTargetDepth].
     ///
     /// RECONCILER ON (the default): the desired depth comes from the UNIFIED
@@ -87,9 +87,9 @@ extension FramePacer {
             // Read ONLY the off-lock-refreshed snapshot - never the controller -
             // so the pacer holds exactly one lock (its own). Already clamped to
             // [targetDepth, maxTargetDepth] by the refresh.
-            return reconciledTargetDepth
+            return adaptiveDepth.reconciledTargetDepth
         }
-        let j = measuredJitterMs
+        let j = adaptiveDepth.measuredJitterMs
         let extra: Int = j <= FramePacer.jitterDeadZoneMs
             ? 0
             : Int(((j - FramePacer.jitterDeadZoneMs)
@@ -106,13 +106,13 @@ extension FramePacer {
     /// rate-limited in `decayTargetLocked`. Called under the lock.
     func bumpTargetForJitterLocked() {
         let justified = justifiedDepthLocked()
-        guard justified > adaptiveTargetDepth else { return }
+        guard justified > adaptiveDepth.adaptiveTargetDepth else { return }
         // Grow ONE step per call so a deeper buffer requires SUSTAINED jitter
         // across multiple windows, never a lone spike.
-        adaptiveTargetDepth = min(adaptiveTargetDepth + 1, justified)
+        adaptiveDepth.adaptiveTargetDepth = min(adaptiveDepth.adaptiveTargetDepth + 1, justified)
         // Arm the shrink clock so the new (higher) depth holds for at least one
         // shrink interval before it can start decaying.
-        lastTargetShrinkTime = CFAbsoluteTimeGetCurrent()
+        adaptiveDepth.lastTargetShrinkTime = CFAbsoluteTimeGetCurrent()
     }
 
     /// Decay the adaptive target back toward the baseline (depth 1) during clean
@@ -128,11 +128,11 @@ extension FramePacer {
         // diagnosis endorsed. RECONCILER ON: the pacer does NOT self-read the
         // shared gauge - `justifiedDepthLocked()` pulls the published headroom
         // level instead (the whole point of the unification: ONE reader of the
-        // jitter signal, not two racing). `measuredJitterMs` then just goes stale
+        // jitter signal, not two racing). `adaptiveDepth.measuredJitterMs` then just goes stale
         // (it feeds only the OFF path), which is harmless.
         if !EnvSignalController.reconcilerEnabled {
             let liveJitter = TelemetryCounters.shared.recvJitterMs
-            if liveJitter.isFinite, liveJitter >= 0 { measuredJitterMs = liveJitter }
+            if liveJitter.isFinite, liveJitter >= 0 { adaptiveDepth.measuredJitterMs = liveJitter }
         }
         // A rising signal/level must be able to GROW the buffer on the tick path
         // too (not only via the explicit note path), so a lossy link absorbs
@@ -140,28 +140,28 @@ extension FramePacer {
         // justifiedDepthLocked(), which is the published level when reconciling.
         bumpTargetForJitterLocked()
 
-        guard adaptiveTargetDepth > FramePacer.targetDepth else {
-            return adaptiveTargetDepth
+        guard adaptiveDepth.adaptiveTargetDepth > FramePacer.targetDepth else {
+            return adaptiveDepth.adaptiveTargetDepth
         }
         // What does CURRENT measured jitter justify? If it still wants the present
         // depth, hold - don't shrink into ongoing, sustained jitter. Because the
         // signal is the ~1s-smoothed RFC-3550 metric, a transient spike clears
         // quickly and the guard below releases, letting the rate-limited shrink
         // run back to 1.
-        guard justifiedDepthLocked() < adaptiveTargetDepth else {
-            return adaptiveTargetDepth
+        guard justifiedDepthLocked() < adaptiveDepth.adaptiveTargetDepth else {
+            return adaptiveDepth.adaptiveTargetDepth
         }
 
         let now = CFAbsoluteTimeGetCurrent()
-        if !lastTargetShrinkTime.isFinite {
-            lastTargetShrinkTime = now
-            return adaptiveTargetDepth
+        if !adaptiveDepth.lastTargetShrinkTime.isFinite {
+            adaptiveDepth.lastTargetShrinkTime = now
+            return adaptiveDepth.adaptiveTargetDepth
         }
-        if now - lastTargetShrinkTime >= FramePacer.targetShrinkInterval {
-            adaptiveTargetDepth -= 1            // one frame per interval
-            lastTargetShrinkTime = now
+        if now - adaptiveDepth.lastTargetShrinkTime >= FramePacer.targetShrinkInterval {
+            adaptiveDepth.adaptiveTargetDepth -= 1            // one frame per interval
+            adaptiveDepth.lastTargetShrinkTime = now
         }
-        return adaptiveTargetDepth
+        return adaptiveDepth.adaptiveTargetDepth
     }
 
     // MARK: - Helpers
@@ -208,9 +208,9 @@ extension FramePacer {
     /// or within the lenient window after one. Lets the post-gap catch-up play
     /// through instead of being trimmed/backed-off to newest. Called under `lock`.
     func inGapRecoveryLocked(now: CFTimeInterval) -> Bool {
-        emptyTickStreak >= FramePacer.gapRecoveryTickThreshold
-            || (lastGapRecoveryTime > 0
-                && now - lastGapRecoveryTime < FramePacer.postDrainLenientSeconds)
+        liveness.emptyTickStreak >= FramePacer.gapRecoveryTickThreshold
+            || (liveness.lastGapRecoveryTime > 0
+                && now - liveness.lastGapRecoveryTime < FramePacer.postDrainLenientSeconds)
     }
 
     /// Trim the FIFO toward the drop ceiling, returning the stalest dropped buffers
@@ -230,12 +230,12 @@ extension FramePacer {
     /// presenting right after an empty streak is the recovery edge. Under `lock`.
     func updateGapRecoveryLocked(presented: Bool, empty: Bool, now: CFTimeInterval) {
         if !presented, empty {
-            emptyTickStreak += 1
+            liveness.emptyTickStreak += 1
         } else {
-            if presented, emptyTickStreak >= FramePacer.gapRecoveryTickThreshold {
-                lastGapRecoveryTime = now
+            if presented, liveness.emptyTickStreak >= FramePacer.gapRecoveryTickThreshold {
+                liveness.lastGapRecoveryTime = now
             }
-            emptyTickStreak = 0
+            liveness.emptyTickStreak = 0
         }
     }
 }
