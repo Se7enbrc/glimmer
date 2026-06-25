@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.6.34 - 2026-06-25
+
+Fixes the bitrate shown under the hero. The spec chip displayed the nominal
+H.264 quality figure, but on AV1/HEVC the stream actually sends ~20% fewer bits
+(the codec-aware budget from 2026.6.22) - so it read e.g. 84 Mbps while the wire
+carried 67. The chip and the spec summary now show the real codec-aware bitrate
+the engine sends.
+
 ## 2026.6.33 - 2026-06-25
 
 Stops the in-stream "Stream stuttering" pill from crying wolf. It had no startup
