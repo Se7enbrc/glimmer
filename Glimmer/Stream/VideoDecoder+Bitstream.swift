@@ -204,51 +204,74 @@ extension VideoDecoder {
     /// Replace every Annex-B start code in `data` with a 4-byte big-endian
     /// length prefix (AVCC / HVCC format). VideoToolbox H.264 / HEVC
     /// decoders consume the AVCC variant.
+    ///
+    /// Single-pass over the source bytes via `withUnsafeBytes` (no `Data ->
+    /// [UInt8] -> Data` triple copy on the hot path): a first scan records each
+    /// NAL's [start, end) and the exact output size, then one pre-sized write
+    /// emits `len32-BE || NAL` for each. Empty NALs (back-to-back start codes)
+    /// are skipped so VT never sees a zero-length unit.
     nonisolated func convertAnnexBToAVCC(_ data: Data) -> Data {
-        var result = Data()
-        result.reserveCapacity(data.count)
-
-        // Scan for start codes, slice out each NAL unit, and re-emit with
-        // a 4-byte length prefix.
-        let bytes = [UInt8](data)
-        var nalStart = -1
-        var i = 0
-        while i < bytes.count {
-            // Look for 00 00 00 01 or 00 00 01.
-            var scLen = 0
-            if i + 3 < bytes.count, bytes[i] == 0, bytes[i + 1] == 0, bytes[i + 2] == 0,
-                bytes[i + 3] == 1 {
-                scLen = 4
-            } else if i + 2 < bytes.count, bytes[i] == 0, bytes[i + 1] == 0, bytes[i + 2] == 1 {
-                scLen = 3
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Data in
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                return Data()
             }
+            let count = raw.count
 
-            if scLen > 0 {
-                if nalStart >= 0 {
-                    let nalLen = i - nalStart
-                    appendAVCCNal(into: &result, bytes: bytes, start: nalStart, length: nalLen)
+            // First pass: collect NAL spans and the exact output length.
+            var nals: [(start: Int, length: Int)] = []
+            var outSize = 0
+            var nalStart = -1
+            var i = 0
+            while i < count {
+                let scLen = startCodeLength(at: i, base: base, count: count)
+                if scLen > 0 {
+                    if nalStart >= 0, i > nalStart {
+                        nals.append((nalStart, i - nalStart))
+                        outSize += 4 + (i - nalStart)
+                    }
+                    i += scLen
+                    nalStart = i
+                } else {
+                    i += 1
                 }
-                i += scLen
-                nalStart = i
-            } else {
-                i += 1
             }
-        }
-        if nalStart >= 0 {
-            let nalLen = bytes.count - nalStart
-            appendAVCCNal(into: &result, bytes: bytes, start: nalStart, length: nalLen)
-        }
+            if nalStart >= 0, count > nalStart {
+                nals.append((nalStart, count - nalStart))
+                outSize += 4 + (count - nalStart)
+            }
 
-        return result
+            // Second pass: one pre-sized write of len32-BE || NAL per unit.
+            var out = Data(count: outSize)
+            out.withUnsafeMutableBytes { (dst: UnsafeMutableRawBufferPointer) in
+                guard let dstBase = dst.baseAddress else { return }
+                var offset = 0
+                for nal in nals {
+                    let lenBE = UInt32(nal.length).bigEndian
+                    withUnsafeBytes(of: lenBE) { lenBytes in
+                        dstBase.advanced(by: offset).copyMemory(from: lenBytes.baseAddress!, byteCount: 4)
+                    }
+                    offset += 4
+                    dstBase.advanced(by: offset)
+                        .copyMemory(from: base.advanced(by: nal.start), byteCount: nal.length)
+                    offset += nal.length
+                }
+            }
+            return out
+        }
     }
 
-    nonisolated func appendAVCCNal(
-        into out: inout Data, bytes: [UInt8], start: Int, length: Int
-    ) {
-        guard length > 0 else { return }
-        var lenBE = UInt32(length).bigEndian
-        withUnsafeBytes(of: &lenBE) { out.append(contentsOf: $0) }
-        out.append(contentsOf: bytes[start..<(start + length)])
+    /// Length of an Annex-B start code at `i` (4 for 00 00 00 01, 3 for
+    /// 00 00 01, 0 if none). Helper so the AVCC scan reads in one place.
+    private nonisolated func startCodeLength(
+        at i: Int, base: UnsafePointer<UInt8>, count: Int
+    ) -> Int {
+        if i + 3 < count, base[i] == 0, base[i + 1] == 0, base[i + 2] == 0, base[i + 3] == 1 {
+            return 4
+        }
+        if i + 2 < count, base[i] == 0, base[i + 1] == 0, base[i + 2] == 1 {
+            return 3
+        }
+        return 0
     }
 
     // MARK: - Sample buffer construction (for VT input)

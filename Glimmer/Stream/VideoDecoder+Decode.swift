@@ -369,9 +369,28 @@ extension VideoDecoder {
     private nonisolated func rebuildParamSetsAndSession(
         newSps: Data?, newPps: Data?, newVps: Data?, format: Int32, pictureData: Data
     ) -> Bool {
-        if let sps = newSps { spsData = stripStartCode(sps) }
-        if let pps = newPps { ppsData = stripStartCode(pps) }
-        if let vps = newVps { vpsData = stripStartCode(vps) }
+        let strippedSps = newSps.map(stripStartCode)
+        let strippedPps = newPps.map(stripStartCode)
+        let strippedVps = newVps.map(stripStartCode)
+
+        // IDENTICAL-REANNOUNCE SKIP. A turbulent HEVC stream re-sends the SAME
+        // SPS/PPS/VPS bytes on every IDR. With a live session whose cached sets
+        // already match byte-for-byte, the rebuild below is a no-op format change
+        // - but the teardown + renderer flush + pacer clearQueue it drives are
+        // not, and they clustered into visible hitches. Skip the whole rebuild
+        // when nothing actually changed. (AV1 carries its config in the OBU, not
+        // these sets, so this guard is inert there.)
+        if decompressionSession != nil, formatDescription != nil,
+           newSps == nil || strippedSps == spsData,
+           newPps == nil || strippedPps == ppsData,
+           newVps == nil || strippedVps == vpsData,
+           (format & StreamProtocol.VIDEO_FORMAT_MASK_AV1) == 0 {
+            return true
+        }
+
+        if let sps = strippedSps { spsData = sps }
+        if let pps = strippedPps { ppsData = pps }
+        if let vps = strippedVps { vpsData = vps }
 
         let rebuilt: Bool
         if (format & StreamProtocol.VIDEO_FORMAT_MASK_H264) != 0 {

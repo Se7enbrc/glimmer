@@ -21,9 +21,9 @@ extension TelemetryRenderer {
         builder.emit("glimmer_fps_received", "Frames received from the network per second.", snap.receivedFps)
         builder.emit("glimmer_fps_decoded", "Frames decoded (VT output) per second.", snap.decodedFps)
         builder.emit("glimmer_fps_rendered", "Frames enqueued to the renderer per second.", snap.renderedFps)
-        builder.emit("glimmer_decode_time_p50_ms", "Decode wall-clock p50 (EMA proxy), ms.", snap.decodeP50Ms)
-        builder.emit("glimmer_decode_time_p95_ms", "Decode wall-clock p95 (estimated), ms.", snap.decodeP95Ms)
-        builder.emit("glimmer_decode_time_max_ms", "Decode wall-clock max (estimated), ms.", snap.decodeMaxMs)
+        // EMA of decode wall-clock (not a quantile). True p50/p95/max tails are
+        // in glimmer_decode_time_p_ms / _idr_ms below.
+        builder.emit("glimmer_decode_time_ema_ms", "Decode wall-clock EMA, ms.", snap.decodeEmaMs)
         builder.emit("glimmer_present_cadence_error_ms",
                      "Mean |present-vs-PTS| cadence error this window, ms.", snap.presentCadenceErrorMs)
         if let onTime = snap.presentOnTimeCount {
