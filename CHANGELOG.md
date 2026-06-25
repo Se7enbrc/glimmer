@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.6.33 - 2026-06-25
+
+Stops the in-stream "Stream stuttering" pill from crying wolf. It had no startup
+grace, so a game's brief launch stutter (loading + display-mode negotiation)
+flashed it immediately, and its thresholds sat close enough to the normal
+high-refresh floor that an occasional dip could trip it. It now waits out the
+launch transient and only shows for hitching clearly above that floor - so it
+stays dark on a healthy session and means something when it appears.
+
 ## 2026.6.32 - 2026-06-25
 
 Drops fewer frames on high-refresh displays. The present-timing tick ran on the

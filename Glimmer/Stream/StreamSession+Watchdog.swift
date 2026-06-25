@@ -670,26 +670,40 @@ private final class PerceivedHitchBox {
     private var prevStale: UInt64 = 0
     private var prevLate: UInt64 = 0
     private var prevTime: CFTimeInterval = 0
+    private var firstTime: CFTimeInterval = 0
 
-    /// True when the PRESENT path is hitching enough for the user to feel it.
-    /// Composite of render-gap ratio, stale-repeats/s, and late-drops/s; the
-    /// banner's own leaky integrator debounces flaps. Counter deltas guard
-    /// against a reconnect resetting the totals (delta only when total >= prev).
+    /// Stream seconds before the pill may show. A title's launch (loading +
+    /// display-mode negotiation) stutters briefly; without this the pill flashes
+    /// the instant a game starts. ~6s covers the launch transient.
+    private let graceSeconds: CFTimeInterval = 6.0
+
+    /// True when the PRESENT path is hitching enough to feel. Thresholds sit WELL
+    /// above the fps==refresh structural floor (a bookmarked false positive showed
+    /// late~6/s, render-gap~0.05, zero real loss) so only a clear burst shows; the
+    /// banner's leaky integrator debounces flaps. Deltas guard a reconnect reset.
     func perceivedHitch(snap: StreamStatsSnapshot) -> Bool {
         let now = CACurrentMediaTime()
+        if firstTime == 0 { firstTime = now }
         let dt = prevTime > 0 ? now - prevTime : 0.25
         prevTime = now
 
-        var hitch = false
-        if let decoded = snap.decodedFps, let rendered = snap.renderedFps, decoded > 0 {
-            if (decoded - rendered) / decoded > 0.12 { hitch = true }
-        }
+        // Advance the rate baselines every tick (incl. during the grace) so the
+        // first post-grace delta isn't a spurious spike.
         let stale = TelemetryCounters.shared.staleFrameRepeatTotal.value
-        if dt > 0, stale >= prevStale, Double(stale - prevStale) / dt > 3.0 { hitch = true }
+        let staleRate = (dt > 0 && stale >= prevStale) ? Double(stale - prevStale) / dt : 0
         prevStale = stale
         let late = snap.presentationLateDrops ?? 0
-        if dt > 0, late >= prevLate, Double(late - prevLate) / dt > 5.0 { hitch = true }
+        let lateRate = (dt > 0 && late >= prevLate) ? Double(late - prevLate) / dt : 0
         prevLate = late
+
+        if now - firstTime < graceSeconds { return false }
+
+        var hitch = false
+        if let decoded = snap.decodedFps, let rendered = snap.renderedFps, decoded > 0 {
+            if (decoded - rendered) / decoded > 0.18 { hitch = true }
+        }
+        if staleRate > 6.0 { hitch = true }
+        if lateRate > 12.0 { hitch = true }
         return hitch
     }
 }
