@@ -42,7 +42,7 @@ extension RtpVideoQueue {
         }
 
         let receiveSize = packetSize + Self.MAX_RTP_HEADER_SIZE
-        guard let rs = ReedSolomon(dataShards: bufferDataPackets, parityShards: bufferParityPackets) else {
+        guard let rs = decoder(dataShards: bufferDataPackets, parityShards: bufferParityPackets) else {
             Diag.error("NativeVideo reed_solomon_new failed (ds=\(bufferDataPackets) ps=\(bufferParityPackets))", Self.cat)
             return -1
         }
@@ -67,6 +67,18 @@ extension RtpVideoQueue {
         }
 
         return 0
+    }
+
+    /// Cauchy decoder for a (dataShards, parityShards) shape, memoized so a loss
+    /// burst over repeating shapes builds each matrix once. `ReedSolomon` is an
+    /// immutable value type whose `decode` only mutates caller-supplied shards, so a
+    /// cached instance is reused safely. nil for invalid geometry (not cached).
+    private func decoder(dataShards ds: Int, parityShards ps: Int) -> ReedSolomon? {
+        let shape = ReedSolomonShape(ds: ds, ps: ps)
+        if let cached = rsDecoderCache[shape] { return cached }
+        guard let rs = ReedSolomon(dataShards: ds, parityShards: ps) else { return nil }
+        rsDecoderCache[shape] = rs
+        return rs
     }
 
     /// Assemble the Reed-Solomon shard array from the pending entries: each shard

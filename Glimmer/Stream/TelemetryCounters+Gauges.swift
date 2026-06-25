@@ -91,10 +91,12 @@ extension TelemetryCounters {
         var lossLevel: Int
         /// Host-driven per-frame FEC percentage of the latest frame.
         var fecPercentage: Int
-        /// Spare parity shards on the WORST frame this window (parity − data
-        /// deficit) - the early warning before a frame goes unrecoverable. On a
-        /// clean window (no recovery) this is the current frame's full parity count.
-        var parityMargin: Int
+        /// Spare parity shards left on the WORST FEC-RECOVERED frame this window
+        /// (parity − data deficit) - the early warning before a frame goes
+        /// unrecoverable. nil on a window with NO recovery: "full parity, nothing
+        /// consumed" is not a margin and must not read as one (it was conflated with
+        /// a real near-miss before).
+        var parityMargin: Int?
     }
 
     /// Publish the FEC-health gauge. Called once per ~2s window by the RTP receive

@@ -476,11 +476,11 @@ struct QualityPane: View {
         .onAppear { awdl.refresh() }
     }
 
-    /// Two-tier bitrate guidance under the slider. Tier 1 is the baked-in
-    /// measured recommendation (harness measurements + 20% headroom - provenance
-    /// on `MoonlightManager.measuredBitrateAnchors`); Tier 2 speaks only when the
-    /// user's own recent sessions for this exact host+mode pressed the
-    /// encoder's ceiling. The closing footnote keeps the budget honest.
+    /// Bitrate guidance under the slider: the baked-in measured recommendation
+    /// (harness measurements + 20% headroom - provenance on
+    /// `MoonlightManager.measuredBitrateAnchors`), with a footnote keeping the wire
+    /// budget honest. (The learned Tier-2 sentence was retired - see
+    /// QualityCalculator: its session-average trigger was unreachable.)
     private var bitrateGuidance: some View {
         let width = moonlight.customWidth
         let height = moonlight.customHeight
@@ -491,13 +491,6 @@ struct QualityPane: View {
             Text("Recommended for \(mode): ~\(recommended) Mbps")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            if let advice = moonlight.learnedBitrateAdvice(
-                hostID: moonlight.selectedHost?.id, width: width, height: height, fps: fps,
-                wireBudgetMbps: moonlight.customBitrateMbps) {
-                Text(advice)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
             Text("The bitrate is a wire budget: the encoder gets 80%, forward-error-correction takes 20%.")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)

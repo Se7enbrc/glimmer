@@ -240,38 +240,13 @@ extension MoonlightManager {
         return last.ratio
     }
 
-    // MARK: - Learned bitrate guidance (Tier 2)
-
-    /// The honest learned sentence for the bitrate control, or nil when
-    /// there is nothing worth saying. Rides the end-of-stream receipt the
-    /// main window stashes per host+mode (`SessionReceiptStore` - ALWAYS-LIVE
-    /// surfaces only, no telemetry-exporter dependency). Speaks ONLY when a
-    /// ≥5-minute session's average goodput pressed the encoder budget -
-    /// ≥ ~90% of wire × 0.8 (the FEC share never reaches the encoder). The
-    /// receipt carries the session average, not a p95, and the average
-    /// includes menu/idle time - so an average at the ceiling is an even
-    /// stronger "raise it" signal. A session comfortably under budget proves
-    /// nothing about the ceiling, so it stays silent rather than imply the
-    /// current setting is "right".
-    ///
-    /// `wireBudgetMbps` is the budget the user is configuring right now (the
-    /// slider value the sentence renders under), not the one the session ran
-    /// with - the receipt doesn't carry its bitrate, and "does my last
-    /// session fit the budget I'm looking at" is the question being asked.
-    func learnedBitrateAdvice(
-        hostID: String?, width: Int, height: Int, fps: Int, wireBudgetMbps: Int
-    ) -> String? {
-        guard let hostID,
-              let receipt = SessionReceiptStore.load(
-                  hostId: hostID, width: width, height: height, refreshHz: fps),
-              receipt.durationSeconds >= SessionReceiptStore.minimumSessionSeconds,
-              let avgMbps = receipt.avgGoodputMbps else { return nil }
-        let encoderBudgetMbps = Double(wireBudgetMbps) * 0.8
-        guard encoderBudgetMbps > 0, avgMbps >= encoderBudgetMbps * 0.9 else { return nil }
-        let mode = "\(Self.resolutionLabel(width: width, height: height))·\(fps)"
-        return "Your recent \(mode) sessions used all of the \(Int(encoderBudgetMbps.rounded())) Mbps "
-            + "budget - raising it will improve heavy scenes."
-    }
+    // Tier-2 LEARNED bitrate advice was RETIRED: its trigger compared the
+    // session-AVERAGE goodput (which includes idle/menu time and tops out well
+    // under the budget in practice) against ~90% of the encoder ceiling, a bar a
+    // session average can't clear, so the sentence never rendered. Re-keying it
+    // off a goodput p95 would need a new always-live percentile accumulator the
+    // receipt doesn't carry (it stores only the byte-total average); deferred as a
+    // design decision rather than left as dead code. Tier-1 measured guidance stands.
 
     // MARK: - Effective config + persistence
 

@@ -39,8 +39,9 @@ extension TelemetryRenderer {
                      "Host-driven per-frame FEC percentage (latest frame).",
                      snap.fecPercentage.map(Double.init))
         builder.emit("glimmer_fec_parity_margin",
-                     "Spare parity shards on the worst frame this window (parity - data deficit); "
-                     + "trends toward 0 before a frame goes unrecoverable.",
+                     "Spare parity shards left on the worst FEC-RECOVERED frame this window "
+                     + "(parity - data deficit); absent on windows with no recovery. Trends "
+                     + "toward 0 before a frame goes unrecoverable.",
                      snap.fecParityMargin.map(Double.init))
         // AWDL helper: awdl0 parked + how hard macOS is fighting it back up. A
         // contested link shows resuppress climbing; a clean one stays ~0.
