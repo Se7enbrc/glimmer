@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.6.38 - 2026-06-25
+
+Launcher polish, and the Wi-Fi helper now stays out of the way on Ethernet.
+
+On a confirmed-wired connection the network helper no longer prompts you to
+enable it AND no longer parks the AirDrop/Continuity radio during a stream -
+which did nothing for a wired session but disabled AirDrop system-wide. Wi-Fi
+sessions are unchanged (that's where it helps).
+
+The bitrate chip and the codec checkmark now update immediately when you change
+a host's codec (they could lag the actual setting). A configured launch app that
+isn't on the selected host is labelled "(not on <host>)". Plus a telemetry
+cardinality cleanup for per-thread CPU.
+
 ## 2026.6.37 - 2026-06-25
 
 Under the hood: a batch of telemetry-accuracy fixes, no change to streaming

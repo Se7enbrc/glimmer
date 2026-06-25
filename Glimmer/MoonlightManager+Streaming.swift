@@ -259,11 +259,14 @@ extension MoonlightManager {
         // lives in the single teardown cleanup site below, gated on
         // `wasStreaming` so it only stamps real sessions.
         isStreaming = true
-        // Park awdl0 for the life of the stream (a no-op unless the user enabled
-        // the network helper). AWDL contention on a single-radio Mac causes the
-        // multi-second Wi-Fi delivery gaps; the helper holds awdl0 down until
+        // Park awdl0 for the life of the stream - but ONLY off a confirmed-wired
+        // route. AWDL contention is a single-radio Wi-Fi problem; on Ethernet,
+        // parking awdl0 just disables AirDrop/Continuity system-wide for nothing.
+        // Wi-Fi/tunnel/unknown still engage (no-op unless the helper is enabled);
         // cleanupAfterStream releases it on every exit path.
-        AWDLHelperManager.shared.suppressForStream()
+        if hostRoute.routeClass != .wired {
+            AWDLHelperManager.shared.suppressForStream()
+        }
         // Cancel the chip poller while the stream is up - the native
         // engine reports its own RTT to the stats overlay, and polling
         // /serverinfo concurrently with the RTSP handshake confuses both
