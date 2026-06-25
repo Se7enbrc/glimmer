@@ -1,0 +1,146 @@
+//
+//  FramePacer+TickThread.swift
+//
+//  The dedicated high-QoS run loop the present tick fires on when
+//  `pacerTickOffMain` is set (the default). On a pristine link ~73% of the
+//  pre-render frame drops were the macOS frame-rate governor STARVING the
+//  CADisplayLink callback: the link was added to the MAIN run loop, so its tick
+//  was delayed whenever the main thread was busy (display_refresh_min_hz dipped
+//  to 48 while the panel held 120). The present itself already runs off-main on
+//  `pacingQueue`; only the cheap timing-capture callback was main-bound. Moving
+//  that callback onto a private userInteractive run loop un-starves it at ZERO
+//  added latency. The link bind/unbind themselves stay on the main actor
+//  (installLink reads the NSView); we hand the live link to this thread to add.
+//  Split out of FramePacer.swift to keep that file under the length limit.
+//
+
+import Foundation
+import QuartzCore
+import os
+
+extension FramePacer {
+    /// UserDefaults key gating whether the CADisplayLink callback fires on the
+    /// private high-QoS run loop (`true`, the default) instead of `.main`. The
+    /// default-true is registered in GlimmerApp; the bool read below sees it.
+    /// Flip to false for an instant fallback to the main-runloop tick (the
+    /// historical path) without a rebuild.
+    static let tickOffMainDefaultsKey = "pacerTickOffMain"
+    static var tickOffMain: Bool {
+        UserDefaults.standard.bool(forKey: tickOffMainDefaultsKey)
+    }
+}
+
+/// Owns the private run loop the CADisplayLink callback fires on when the tick
+/// is moved off the main run loop. One per FramePacer, created lazily on the
+/// first off-main bind and stopped on teardown so no thread leaks across a
+/// reconnect / screen-change rebuild.
+///
+/// `@unchecked Sendable`: the only cross-thread state is `runLoop`/`cfRunLoop`,
+/// published once (under `lock`) by the thread body before any caller reads it
+/// and immutable thereafter. The link add/invalidate are routed back ONTO this
+/// thread via `perform(...)`, so they touch the loop from its owning thread;
+/// `CFRunLoopStop` is documented thread-safe to call from another thread.
+final class PacerTickThread: @unchecked Sendable {
+
+    private var thread: Thread?
+    /// The thread's own RunLoop object (the canonical one for that thread),
+    /// published by the thread body once it is up. Used as the perform target
+    /// so the link add/remove run ON the tick thread. Guarded by `lock` for the
+    /// start handshake; immutable once set.
+    private var runLoop: RunLoop?
+    /// The CF handle for the same loop, so `stop()` can break CFRunLoopRun from
+    /// the caller's thread (CFRunLoopStop is thread-safe).
+    private var cfRunLoop: CFRunLoop?
+    private var lock = os_unfair_lock_s()
+    /// Released by the thread body once the loop is published, so `start()`
+    /// returns only after the run loop can take the link.
+    private let ready = DispatchSemaphore(value: 0)
+
+    /// Spin up the thread + run loop if not already running. Idempotent: a
+    /// rebuild that re-binds onto the same FramePacer reuses the live thread
+    /// rather than spawning a second one. Blocks (briefly) until the run loop
+    /// is ready so the immediately-following `add(_:)` lands on a live loop.
+    func start() {
+        os_unfair_lock_lock(&lock)
+        let alreadyUp = thread != nil
+        os_unfair_lock_unlock(&lock)
+        guard !alreadyUp else { return }
+
+        let tickThread = Thread { [weak self] in
+            guard let self else { return }
+            os_unfair_lock_lock(&self.lock)
+            self.runLoop = RunLoop.current
+            self.cfRunLoop = CFRunLoopGetCurrent()
+            os_unfair_lock_unlock(&self.lock)
+            // Keep the loop alive with a perpetual source (a bare RunLoop returns
+            // immediately with no input source). The link, added later, is the
+            // real source; the port is just the keep-alive so the loop blocks
+            // instead of spinning before the link binds. Added BEFORE signaling
+            // ready so the loop is fully set up when the (waited-on) link add lands.
+            RunLoop.current.add(Port(), forMode: .common)
+            self.ready.signal()
+            // CFRunLoopRun blocks until CFRunLoopStop breaks it; RunLoop.run()'s
+            // no-source early-return is the freeze this avoids.
+            CFRunLoopRun()
+        }
+        tickThread.name = "Glimmer.pacerTick"
+        tickThread.qualityOfService = .userInteractive
+        os_unfair_lock_lock(&lock)
+        thread = tickThread
+        os_unfair_lock_unlock(&lock)
+        tickThread.start()
+        // Bounded wait: the run loop comes up in microseconds. The timeout only
+        // guards a pathological scheduler stall - add(_:) no-ops on a nil loop
+        // and the caller stays on the main-runloop tick path.
+        _ = ready.wait(timeout: .now() + .seconds(2))
+    }
+
+    /// Add the live link to this thread's run loop, ON that thread. Routed via
+    /// `perform(...)` (waitUntilDone) so the source is registered from the loop's
+    /// owning thread - the safe way to mutate a run loop's sources. Removal needs
+    /// no counterpart: the caller `invalidate()`s the link, which detaches it
+    /// from every run loop from any thread.
+    func add(_ link: CADisplayLink) {
+        os_unfair_lock_lock(&lock)
+        let runLoop = runLoop
+        let thread = thread
+        os_unfair_lock_unlock(&lock)
+        guard let runLoop, let thread else { return }
+        let op = LinkRunLoopAdd(link: link, runLoop: runLoop)
+        op.perform(
+            #selector(LinkRunLoopAdd.run), on: thread,
+            with: nil, waitUntilDone: true, modes: [RunLoop.Mode.common.rawValue])
+    }
+
+    /// Stop the run loop and let the thread exit. The link must already be
+    /// `invalidate()`d by the caller (which removes it from this loop); we only
+    /// break CFRunLoopRun so the thread returns. Idempotent.
+    func stop() {
+        os_unfair_lock_lock(&lock)
+        let cf = cfRunLoop
+        runLoop = nil
+        cfRunLoop = nil
+        thread = nil
+        os_unfair_lock_unlock(&lock)
+        guard let cf else { return }
+        CFRunLoopStop(cf)
+    }
+
+    deinit { stop() }
+}
+
+/// Trampoline that runs `link.add(to:forMode:)` on the tick thread. A
+/// CADisplayLink's run-loop sources are safest mutated from the owning thread;
+/// `perform(_:on:)` needs an `@objc` selector, so this small NSObject carries
+/// the operands across.
+private final class LinkRunLoopAdd: NSObject {
+    let link: CADisplayLink
+    let runLoop: RunLoop
+    init(link: CADisplayLink, runLoop: RunLoop) {
+        self.link = link
+        self.runLoop = runLoop
+    }
+    @objc func run() {
+        link.add(to: runLoop, forMode: .common)
+    }
+}

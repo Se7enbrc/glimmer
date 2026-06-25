@@ -143,7 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // mouse deltas are raw 1:1; the non-UI gate reads it via UserDefaults.bool,
         // which needs the registered default to read `true` before first toggle.
         UserDefaults.standard.register(defaults: [
-            MouseAccelerationControl.enabledDefaultsKey: true
+            MouseAccelerationControl.enabledDefaultsKey: true,
+            // Fire the present tick on a private high-QoS run loop (not .main)
+            // so a busy main thread can't starve the CADisplayLink callback.
+            // Flip false for an instant fallback to the main-runloop tick.
+            FramePacer.tickOffMainDefaultsKey: true
         ])
         // Crash recovery: if a prior session died mid-stream with the pointer
         // acceleration linearized, restore the user's saved value now (no-op in

@@ -166,6 +166,7 @@
 		D1000B71 /* StreamSession+Start.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B72 /* StreamSession+Start.swift */; };
 		D1000B73 /* StreamSession+StartSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B74 /* StreamSession+StartSetup.swift */; };
 		D1000BD1 /* FramePacer+TickDeficit.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BD2 /* FramePacer+TickDeficit.swift */; };
+		D1000BE0 /* FramePacer+TickThread.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BE1 /* FramePacer+TickThread.swift */; };
 		D1000BD3 /* VideoDecoder+GovernorRepaint.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BD4 /* VideoDecoder+GovernorRepaint.swift */; };
 		D1000C01 /* StreamWindow+Cursor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000C02 /* StreamWindow+Cursor.swift */; };
 		D1000C11 /* StreamWindow+Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000C12 /* StreamWindow+Views.swift */; };
@@ -390,6 +391,7 @@
 		D1000B72 /* StreamSession+Start.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Start.swift"; sourceTree = "<group>"; };
 		D1000B74 /* StreamSession+StartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StartSetup.swift"; sourceTree = "<group>"; };
 		D1000BD2 /* FramePacer+TickDeficit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickDeficit.swift"; sourceTree = "<group>"; };
+		D1000BE1 /* FramePacer+TickThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickThread.swift"; sourceTree = "<group>"; };
 		D1000BD4 /* VideoDecoder+GovernorRepaint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+GovernorRepaint.swift"; sourceTree = "<group>"; };
 		D1000C02 /* StreamWindow+Cursor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Cursor.swift"; sourceTree = "<group>"; };
 		D1000C12 /* StreamWindow+Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Views.swift"; sourceTree = "<group>"; };
@@ -527,6 +529,7 @@
 				D1000B42 /* FramePacer+AdaptiveDepth.swift */,
 				D1000B52 /* FramePacer+Submit.swift */,
 				D1000BD2 /* FramePacer+TickDeficit.swift */,
+				D1000BE1 /* FramePacer+TickThread.swift */,
 				D1000B62 /* FramePacer+Constants.swift */,
 				D1000079 /* VideoDecoder+Sink.swift */,
 				D1000077 /* VideoDecoder+Session.swift */,
@@ -857,6 +860,7 @@
 				D1000B41 /* FramePacer+AdaptiveDepth.swift in Sources */,
 				D1000B51 /* FramePacer+Submit.swift in Sources */,
 				D1000BD1 /* FramePacer+TickDeficit.swift in Sources */,
+				D1000BE0 /* FramePacer+TickThread.swift in Sources */,
 				D1000B61 /* FramePacer+Constants.swift in Sources */,
 				D100007A /* VideoDecoder+Sink.swift in Sources */,
 				D1000078 /* VideoDecoder+Session.swift in Sources */,
