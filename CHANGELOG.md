@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.6.25 - 2026-06-25
+## 2026.6.25 - 2026-06-24
 
 Smoother audio when the host and Mac clocks drift apart. The drift-tracking
 resampler now catches a clock-skew onset about twice as fast, so the audio
