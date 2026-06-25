@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.6.26 - 2026-06-24
+
+Holds audio together on hosts whose clock drifts hard. The drift resampler's
+correction ceiling was set for a near-perfect clock and could be hit by a host
+whose audio clock runs off by a few hundred parts-per-million - once pinned, it
+could no longer keep the buffer full and the audio would crackle. The ceiling is
+now high enough to absorb the skews real hosts actually show, with margin to
+spare; the rate change stays inaudible.
+
 ## 2026.6.25 - 2026-06-24
 
 Smoother audio when the host and Mac clocks drift apart. The drift-tracking
