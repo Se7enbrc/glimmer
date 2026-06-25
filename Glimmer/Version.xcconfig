@@ -10,5 +10,5 @@
 // because the build is driven by `make` (which passes -xcconfig), the
 // version is NOT set in project.pbxproj - bump it HERE, build with `make`.
 
-MARKETING_VERSION = 2026.6.35
-CURRENT_PROJECT_VERSION = 20260646
+MARKETING_VERSION = 2026.6.36
+CURRENT_PROJECT_VERSION = 20260647

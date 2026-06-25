@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.6.36 - 2026-06-25
+
+Cuts standing audio latency on a wired link. The audio buffer was holding
+roughly 150ms more cushion than a clean wired connection needs - about a
+quarter-second of avoidable A/V lag - because its learned safety floor had been
+trained up to its ceiling by clock-skew corrections (not real audio loss) and
+then couldn't ease back down. On a quiet, healthy wired link the floor now walks
+back down so the buffer drains to a tight, low-latency depth; a link that's
+actually struggling keeps its cushion, and Wi-Fi is unchanged (it needs the
+deeper buffer).
+
 ## 2026.6.35 - 2026-06-25
 
 Six fixes from a deep audit.
