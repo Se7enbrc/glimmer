@@ -156,6 +156,10 @@ struct TelemetrySnapshot: Sendable {
     /// Milliseconds since the last input event. Climbs while idle, snaps to ~0 on
     /// resume - pairs with the edge counter to bracket the idle window.
     var timeSinceLastInputMs: Double?
+    /// CLIENT-SIDE input latency histogram: queue→wire age of merged input on the
+    /// batcher (oldest unflushed entry → flush). A standalone stage, not part of
+    /// `latencyHistograms`; rendered in the input family.
+    var inputLocalLatency: LatencyHistogramSnapshot.Stage?
 
     // display refresh / cadence (ProMotion ramp-down detector)
     var refreshMinHz: Double?

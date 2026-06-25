@@ -156,6 +156,16 @@ final class LatencyHistograms: @unchecked Sendable {
             return (bucketCounts, sumMs, totalCount)
         }
 
+        /// Snapshot as the renderer's value type. Used by standalone stages (e.g.
+        /// the input-local-latency histogram) that aren't part of the composite
+        /// `LatencyHistogramSnapshot`.
+        func snapshotValue() -> LatencyHistogramSnapshot.Stage {
+            let captured = snapshot()
+            return LatencyHistogramSnapshot.Stage(
+                buckets: captured.buckets, boundsMs: bounds,
+                sumMs: captured.sumMs, observationCount: captured.count)
+        }
+
         func reset() {
             os_unfair_lock_lock(lock)
             for index in bucketCounts.indices { bucketCounts[index] = 0 }
@@ -292,6 +302,12 @@ final class FrameTimingTracker: @unchecked Sendable {
     // ---- Instance state (only exists when enabled) ----
 
     let histograms = LatencyHistograms()
+    /// CLIENT-SIDE input latency: the queue→wire age of merged input - how long
+    /// an event waited on the batcher between enqueue and flush. Standalone (not in
+    /// `histograms`) so it stays a Prometheus-only input-family signal without
+    /// threading through the composite-snapshot plumbing. Observed off the present
+    /// path on the batcher queue; the Stage is self-locked, so cross-thread is safe.
+    let inputLocalLatency = LatencyHistograms.Stage()
     /// Both internal (not private): the trace renderer + drop-stub emitter in
     /// TelemetryLatency+Trace.swift are the only cross-file consumers.
     let traceWriter = FrameTraceWriter()

@@ -28,6 +28,15 @@ extension TelemetryRenderer {
                             snap.inputIdleToActiveTotal)
         builder.emit("glimmer_input_since_last_ms",
                      "Milliseconds since the last input event.", snap.timeSinceLastInputMs)
+        // Client-side input latency: queue→wire age of merged input on the batcher
+        // (oldest unflushed entry → flush). The local half of the input path,
+        // independent of host/present clock.
+        if let inputLocal = snap.inputLocalLatency {
+            builder.emitHistogram(
+                "glimmer_latency_input_local_ms",
+                "Client input queue→wire age histogram (batcher enqueue→flush), ms.",
+                stage: inputLocal)
+        }
         // Host rumble dispatched to pad actuators - same Extras sample as the
         // NDJSON rumble fields, riding the input family it correlates with.
         builder.emitCounter("glimmer_rumble_events_total",

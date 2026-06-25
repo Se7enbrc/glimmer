@@ -293,12 +293,12 @@ final class MoonlightManager {
     }
     /// Controller-side quit chord - fires the same path as `quitHotkey`
     /// from the keyboard, but driven by a multi-button hold on the
-    /// gamepad. Defaults to Options (≡) + L1 + R1 - the menu button isn't held
-    /// during action play, so it's awkward to trip mid-game, and (unlike
-    /// Moonlight's Start+Select+L1+R1) it needs no Share/Create button, which
-    /// macOS doesn't expose on a DualSense. Users who prefer keyboard-only can
-    /// pick "None" in Settings.
-    var controllerQuitChord: ControllerQuitChord = .startSelectL1R1 {
+    /// gamepad. Defaults to L1 + R1 + L2 + R2 (hold all four shoulders/triggers):
+    /// every button is GameController-native on every pad - no Create/Share/Mute,
+    /// which macOS drops on a DualSense - so the default fires without the raw-HID
+    /// reader, and the 4-button + 400ms dwell keeps mid-combat trips unlikely.
+    /// Users who prefer keyboard-only can pick "None" in Settings.
+    var controllerQuitChord: ControllerQuitChord = .l1r1l2r2 {
         didSet {
             UserDefaults.standard.set(controllerQuitChord.rawValue, forKey: "controllerQuitChord")
         }
