@@ -111,22 +111,27 @@ extension StreamSession {
             // between), so 4Hz does NOT reintroduce the ±4fps boundary noise a
             // literal 250ms window would; the live gauges refresh at full 4Hz.
             let overlayFpsWindowSeconds = 1.0
+            // Per-second-rate baselines for the perceived-hitch pill, carried
+            // across ticks. Reference type so the timer closure mutates one box.
+            let hitchBox = PerceivedHitchBox()
             let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
                 MainActor.assumeIsolated {
                     guard let dec, let win else { return }
-                    // Auto network-health pill, independent of the stats-HUD
-                    // toggle so a degrading link reaches the user with the HUD
-                    // off. Shown at >= caution; cheap atomic read every tick.
-                    let env = EnvSignalController.shared.state
-                    win.networkBanner.setSustained(
-                        env.rawValue >= EnvSignalController.EnvState.caution.rawValue,
-                        text: env == .distress ? "Network unstable" : "Network degraded")
-                    // Cheap early-out: if the overlay is hidden, skip the
-                    // snapshot read entirely. The decoder's collectors keep
-                    // ticking in the background so a re-enable shows fresh
-                    // numbers immediately.
-                    guard dec.statsOverlayEnabled else { return }
+                    // Cheap stats read FIRST (cached ~1s window) so the pill
+                    // works with the HUD off - the expensive host/controller
+                    // probes below stay gated on `statsOverlayEnabled`.
                     var snap = dec.statsSnapshot(minWindowSeconds: overlayFpsWindowSeconds)
+                    // Auto pill, independent of the stats-HUD toggle so a
+                    // degrading PRESENT path reaches the user with the HUD off.
+                    // Drives off PERCEIVED present-hitching (render-gap / stale
+                    // repeats / late drops), not env_state (which measures link
+                    // contention and anti-correlates with felt stutter).
+                    let composite = hitchBox.perceivedHitch(snap: snap)
+                    win.networkBanner.setSustained(composite, text: "Stream stuttering")
+                    // Cheap early-out: if the overlay is hidden, skip the
+                    // expensive enrichment + HUD render. The decoder's collectors
+                    // keep ticking so a re-enable shows fresh numbers immediately.
+                    guard dec.statsOverlayEnabled else { return }
                     // estimatedRtt() returns nil if the engine isn't connected
                     // (very old GFE versions, or a transient drop, or the native
                     // stub). On nil we leave rtt nil and the row renders as "-".
@@ -655,5 +660,36 @@ extension StreamSession {
         // existing "Stream ended unexpectedly" handler in MoonlightManager.
         bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: -1))
         await stop()
+    }
+}
+
+/// Carries per-second-rate baselines for the perceived-hitch pill across the
+/// 4Hz overlay ticks. MainActor-isolated: only ever touched from the timer body.
+@MainActor
+private final class PerceivedHitchBox {
+    private var prevStale: UInt64 = 0
+    private var prevLate: UInt64 = 0
+    private var prevTime: CFTimeInterval = 0
+
+    /// True when the PRESENT path is hitching enough for the user to feel it.
+    /// Composite of render-gap ratio, stale-repeats/s, and late-drops/s; the
+    /// banner's own leaky integrator debounces flaps. Counter deltas guard
+    /// against a reconnect resetting the totals (delta only when total >= prev).
+    func perceivedHitch(snap: StreamStatsSnapshot) -> Bool {
+        let now = CACurrentMediaTime()
+        let dt = prevTime > 0 ? now - prevTime : 0.25
+        prevTime = now
+
+        var hitch = false
+        if let decoded = snap.decodedFps, let rendered = snap.renderedFps, decoded > 0 {
+            if (decoded - rendered) / decoded > 0.12 { hitch = true }
+        }
+        let stale = TelemetryCounters.shared.staleFrameRepeatTotal.value
+        if dt > 0, stale >= prevStale, Double(stale - prevStale) / dt > 3.0 { hitch = true }
+        prevStale = stale
+        let late = snap.presentationLateDrops ?? 0
+        if dt > 0, late >= prevLate, Double(late - prevLate) / dt > 5.0 { hitch = true }
+        prevLate = late
+        return hitch
     }
 }
