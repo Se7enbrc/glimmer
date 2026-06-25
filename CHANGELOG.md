@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.6.27 - 2026-06-25
+
+Tightens the Wi-Fi network helper so it holds awdl0 down harder during a stream.
+macOS re-raises the AirDrop/Continuity radio on its own schedule; the helper now
+catches that the instant it happens (a kernel routing socket rather than a
+slower poll), strips the interface's IPv6 address, and verifies it actually went
+down - so the radio gets far less chance to hop off your stream's channel and
+stutter it. It also now records how often macOS fought the radio back up
+(visible in telemetry) and logs clearly whether it engaged for each stream.
+
 ## 2026.6.26 - 2026-06-24
 
 Holds audio together on hosts whose clock drifts hard. The drift resampler's

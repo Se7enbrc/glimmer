@@ -20,6 +20,7 @@ import os.log
     func setAWDLDown(_ down: Bool, reason: String, reply: @escaping (Bool) -> Void)
     func currentStatus(reply: @escaping (Bool, Date?) -> Void)
     func ping(reply: @escaping (String) -> Void)
+    func reSuppressCount(reply: @escaping (UInt64) -> Void)
 }
 
 enum HelperConstants {
@@ -94,6 +95,20 @@ actor HelperClient {
             } as? GlimmerHelperProtocol
             guard let proxy else { once.resume(nil); return }
             proxy.currentStatus { isDown, since in once.resume((isDown, since)) }
+        }
+    }
+
+    /// The daemon's whack-a-mole count (macOS re-raises of awdl0 this stream), or
+    /// nil if unreachable. Read on the suppress heartbeat for the contention gauge.
+    func reSuppressCount() async -> UInt64? {
+        await withCheckedContinuation { (cont: CheckedContinuation<UInt64?, Never>) in
+            let once = SingleResume(cont)
+            let proxy = connect().remoteObjectProxyWithErrorHandler { [weak self] _ in
+                Task { await self?.drop() }
+                once.resume(nil)
+            } as? GlimmerHelperProtocol
+            guard let proxy else { once.resume(nil); return }
+            proxy.reSuppressCount { count in once.resume(count) }
         }
     }
 }
@@ -296,11 +311,26 @@ final class AWDLHelperManager: ObservableObject {
     /// it keeps awdl0 down and can detect if we go away (stream end / crash) and
     /// restore it. No-op unless the helper is enabled.
     func suppressForStream() {
-        guard isEnabled else { return }
+        guard isEnabled else {
+            Diag.notice("AWDL helper NOT engaged - state \(String(describing: state)); awdl0 left to macOS", "Stream")
+            return
+        }
+        Diag.notice("AWDL helper engaged - parking awdl0 for the stream", "Stream")
         heartbeatTask?.cancel()
         heartbeatTask = Task { @MainActor in
+            var tick = 0
             while !Task.isCancelled {
                 self.suppressing = await self.client.setAWDLDown(true, reason: "stream")
+                // ~5s: pull the daemon's re-raise count → telemetry gauge + a breadcrumb
+                // when macOS is actively fighting awdl0 back up (link contention).
+                if tick % 5 == 0, let n = await self.client.reSuppressCount() {
+                    TelemetryCounters.shared.setAWDLHelper(
+                        .init(suppressing: self.suppressing, reSuppressTotal: n))
+                    if n > 0 {
+                        Diag.info("AWDL re-suppress \(n) - macOS re-raised awdl0 this stream", "Stream")
+                    }
+                }
+                tick &+= 1
                 try? await Task.sleep(for: .seconds(1))
             }
         }
@@ -314,6 +344,8 @@ final class AWDLHelperManager: ObservableObject {
         Task { @MainActor in
             _ = await client.setAWDLDown(false, reason: "stream-end")
             self.suppressing = false
+            TelemetryCounters.shared.setAWDLHelper(.init(suppressing: false, reSuppressTotal: 0))
+            Diag.info("AWDL helper released awdl0 (stream end)", "Stream")
         }
     }
 }

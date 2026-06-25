@@ -119,6 +119,11 @@ struct TelemetrySnapshot: Sendable {
     /// Spare parity shards on the worst frame this window (parity − deficit).
     var fecParityMargin: Int?
 
+    // AWDL Wi-Fi helper: whether awdl0 is parked this stream and how many times
+    // macOS re-raised it (the contention the helper fights). nil = helper off.
+    var awdlSuppressing: Bool?
+    var awdlReSuppressTotal: UInt64?
+
     // ENet reliable-stream health
     var enetSentReliable: Int?
     var enetOldestUnackedMs: UInt32?

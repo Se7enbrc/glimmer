@@ -109,6 +109,15 @@ extension TelemetryCounters {
         return fecHealthValue
     }
 
+    /// AWDL-helper gauge: awdl0 parked this stream + how many times macOS re-raised
+    /// it (the contention rate the routing-socket suppressor fights). nil when off.
+    struct AWDLHelperSnapshot: Sendable {
+        var suppressing: Bool
+        var reSuppressTotal: UInt64
+    }
+    func setAWDLHelper(_ snapshot: AWDLHelperSnapshot) { awdlHelperState.withLock { $0 = snapshot } }
+    var awdlHelper: AWDLHelperSnapshot? { awdlHelperState.withLock { $0 } }
+
     func setRecvJitterMs(_ ms: Double) {
         os_unfair_lock_lock(jitterLock); recvJitterMsValue = ms; os_unfair_lock_unlock(jitterLock)
     }
