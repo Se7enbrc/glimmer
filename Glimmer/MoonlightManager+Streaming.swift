@@ -53,7 +53,7 @@ extension MoonlightManager {
         let app = host.apps.first(where: { $0.name == defaultAppName })
             ?? host.apps.first(where: { $0.name == "Desktop" })
             ?? host.apps.first
-        if let app { stream(app: app, on: host) }
+        if let app { requestStream(app: app, on: host) }
     }
 
     // MARK: - Hero verb (state-aware primary action)
@@ -108,7 +108,7 @@ extension MoonlightManager {
         guard let host = selectedHost else { return }
         if let name = resumableAppName,
            let app = host.apps.first(where: { $0.name == name }) {
-            stream(app: app, on: host)
+            requestStream(app: app, on: host)
         } else {
             streamDefaultApp()
         }
@@ -178,6 +178,29 @@ extension MoonlightManager {
         info.gfeVersion = host.gfeVersion
         info.pairStatus = .paired      // host is in our local list → already paired
         return info
+    }
+
+    /// UI entry point for a launch. Interposes a takeover check the bare
+    /// `stream(app:on:)` re-entrancy guard can't: if the host is already
+    /// streaming an app that ISN'T this session's, arm `pendingTakeover` so the
+    /// launcher confirms before we /launch over the live occupant. Otherwise
+    /// (idle host, our own session, unknown) stream straight through.
+    func requestStream(app: MoonlightApp, on host: MoonlightHost) {
+        if !isStreaming,
+           let live = hostLiveStatus, live.hostID == host.id,
+           Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
+           case .streamingApp(let occupant) = live.state {
+            pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+            return
+        }
+        stream(app: app, on: host)
+    }
+
+    /// Confirm the armed takeover and launch over the host's current session.
+    func confirmPendingTakeover() {
+        guard let pending = pendingTakeover else { return }
+        pendingTakeover = nil
+        stream(app: pending.app, on: pending.host)
     }
 
     func stream(app: MoonlightApp, on host: MoonlightHost) {

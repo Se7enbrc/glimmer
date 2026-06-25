@@ -93,6 +93,16 @@ public final class StreamWindow {
     /// the window surface. Created hidden; `StreamSession`'s overlay timer
     /// drives visibility and content updates.
     public let statsOverlay: StatsOverlayLayer
+    /// Top-center "Reconnecting..." banner shown over the frozen frame during a
+    /// silent reconnect episode or a watchdog video-hold (the launcher's phase
+    /// chip is occluded by this fullscreen window).
+    public let reconnectBanner: StreamBannerLayer
+    /// Bottom-center "Network unstable" pill, auto-shown when the link enters
+    /// caution/distress - independent of the full stats HUD toggle.
+    public let networkBanner: StreamBannerLayer
+    /// Bottom-center one-time "press <chord> to leave" toast shown on the first
+    /// stream so the quit chord is discoverable (Esc is a game input).
+    public let leaveHintBanner: StreamBannerLayer
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen
@@ -345,6 +355,18 @@ public final class StreamWindow {
         overlay.attach(to: layer)
         overlay.setVisible(false)
 
+        // Transient signal pills (sibling sublayers of the display layer, above
+        // the stats panel). Created hidden; the session drives them on edges.
+        let reconnect = StreamBannerLayer(
+            anchor: .topCenter, accent: NSColor.systemOrange.cgColor)
+        reconnect.attach(to: layer)
+        let network = StreamBannerLayer(
+            anchor: .bottomCenter, accent: NSColor.systemYellow.cgColor)
+        network.attach(to: layer)
+        let leaveHint = StreamBannerLayer(
+            anchor: .bottomCenter, accent: NSColor.white.cgColor)
+        leaveHint.attach(to: layer)
+
         // Install the delegate that overrides fullscreen content size so
         // the window covers the panel's notch reserve zone on notched
         // MacBooks. The delegate is created up-front so its `coversNotch`
@@ -355,6 +377,9 @@ public final class StreamWindow {
         self.window = window
         self.displayLayer = layer
         self.statsOverlay = overlay
+        self.reconnectBanner = reconnect
+        self.networkBanner = network
+        self.leaveHintBanner = leaveHint
         self.displayView = view
         self.streamDelegate = delegate
     }
@@ -393,10 +418,13 @@ public final class StreamWindow {
     public func rebuildDisplayLayer() -> AVSampleBufferDisplayLayer {
         let view = displayView
         let fresh = StreamWindow.makeDisplayLayer(frame: view.bounds)
-        // Re-attach the stats overlay as a sublayer of the NEW root layer before
-        // the swap, so the overlay keeps compositing above the video. attach()
-        // re-parents it (addSublayer removes it from any prior superlayer).
+        // Re-attach the stats overlay + signal pills as sublayers of the NEW
+        // root layer before the swap, so they keep compositing above the video.
+        // attach() re-parents (addSublayer removes from any prior superlayer).
         statsOverlay.attach(to: fresh)
+        reconnectBanner.attach(to: fresh)
+        networkBanner.attach(to: fresh)
+        leaveHintBanner.attach(to: fresh)
         // Swap as the view's root layer - same construction as init so the
         // EDR-direct path is preserved (root layer, not a sublayer of a backing
         // layer). wantsLayer stays true.

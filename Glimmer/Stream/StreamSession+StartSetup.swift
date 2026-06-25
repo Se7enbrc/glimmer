@@ -91,8 +91,20 @@ extension StreamSession {
         // .streaming even if the one-shot .connectionEstablished edge was
         // lost. See the `onFirstDecodedFrame` re-wire in the post-bridge
         // MainActor block.)
+        let quitChordProvider = options.quitHotkeyProvider
         dec.onFirstDecodedFrame = { [weak win] in
             win?.fadeInOnFirstFrame()
+            // One-time discoverability toast: Esc is a game input and the menu
+            // bar is hidden, so the quit chord is otherwise undiscoverable. Show
+            // it once ever, on the first stream, with the LIVE chord string.
+            guard let win, !UserDefaults.standard.bool(forKey: Self.leaveHintShownKey) else { return }
+            UserDefaults.standard.set(true, forKey: Self.leaveHintShownKey)
+            let chord = quitChordProvider().displayString
+            win.leaveHintBanner.setText("Press \(chord) to leave the stream")
+            win.leaveHintBanner.setVisible(true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak win] in
+                win?.leaveHintBanner.setVisible(false)
+            }
         }
         // Stream window moved to another display / its display woke or
         // changed mode → rebind the pacer's CADisplayLink so frames

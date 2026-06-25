@@ -188,6 +188,18 @@ final class MoonlightManager {
     /// keyed by the selected host's id - see `liveStatusForSelected` for the
     /// safe read accessor used by the UI.
     var hostLiveStatus: HostLiveStatus?
+
+    /// Set when a launch would TAKE OVER a session already running on the host
+    /// (someone else streaming, not ours). The launcher binds a confirmation
+    /// dialog to this; confirming calls `stream(app:on:)`, cancelling clears it.
+    /// nil = no takeover pending (the common case streams straight through).
+    var pendingTakeover: PendingTakeover?
+    struct PendingTakeover: Equatable {
+        let app: MoonlightApp
+        let host: MoonlightHost
+        let occupantApp: String
+    }
+
     var showStreamStats: Bool = false {
         didSet { UserDefaults.standard.set(showStreamStats, forKey: "showStreamStats") }
     }

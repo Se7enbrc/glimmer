@@ -72,6 +72,14 @@ extension StreamSession {
         reconnectAttempts = 0
         let deadline = Date().addingTimeInterval(Self.reconnectWindowSeconds)
         bridge?.eventContinuation?.yield(.reconnecting)
+        // Surface the hold over the frozen frame - the launcher's phase chip is
+        // occluded by the fullscreen window, so this banner is the only in-stream
+        // signal that we're holding rather than dead.
+        let winForBanner = window
+        await MainActor.run {
+            winForBanner?.reconnectBanner.setText("Reconnecting...")
+            winForBanner?.reconnectBanner.setVisible(true)
+        }
         Diag.notice(
             "Host closed the live stream (code 0x\(String(UInt32(bitPattern: code), radix: 16))) "
             + "- reconnecting in place, holding the last frame (the host likely restarted "
@@ -100,6 +108,8 @@ extension StreamSession {
                 // the unambiguous "a drop was silently recovered" signal.
                 TelemetryCounters.shared.reconnectTotal.increment()
                 bridge?.eventContinuation?.yield(.reconnected)
+                let winForHide = window
+                await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
                 Diag.notice("reconnected - stream resumed in place", "Stream")
                 // Re-arm the stall latches so a later stall logs/recovers fresh.
                 didLogDecodeOnlyStall = false
@@ -112,6 +122,8 @@ extension StreamSession {
         // Exhausted the budget (or the user quit mid-episode). Give up to a real
         // teardown so the launcher shows the session ended.
         isReconnecting = false
+        let winForGiveup = window
+        await MainActor.run { winForGiveup?.reconnectBanner.setVisible(false) }
         guard isStreaming, !stopInProgress else { return }
         Diag.error(
             "reconnect exhausted after \(reconnectAttempts) attempt(s) - tearing down",

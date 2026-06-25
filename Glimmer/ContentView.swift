@@ -53,6 +53,22 @@ struct MainWindow: View {
             StreamEndedToast()
                 .padding(.top, 16)
         }
+        // Takeover confirmation: launching over a host that's already streaming
+        // someone else's session boots them out, so confirm before we /launch.
+        .confirmationDialog(
+            "Take over the stream?",
+            isPresented: Binding(
+                get: { moonlight.pendingTakeover != nil },
+                set: { if !$0 { moonlight.pendingTakeover = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: moonlight.pendingTakeover
+        ) { _ in
+            Button("Take over", role: .destructive) { moonlight.confirmPendingTakeover() }
+            Button("Cancel", role: .cancel) { moonlight.pendingTakeover = nil }
+        } message: { pending in
+            Text("\(pending.host.displayName) is already streaming \(pending.occupantApp). Starting your stream will end that session.")
+        }
         .background {
             // ⌘1-⌘9 host switching (multi-PC households only) - invisible,
             // window-scoped. See HostSwitchShortcuts for why hidden buttons
@@ -441,7 +457,7 @@ private struct HostHero: View {
         // dead air ("a bit too much") while keeping honest breathing room.
         .frame(height: 248)
         .frame(maxWidth: 520)
-        // Right-click the hero to rename / re-pair / unpair the current PC.
+        // Right-click the hero to rename / set codec / unpair the current PC.
         .modifier(OptionalHostContextMenu(host: host))
     }
 }
@@ -571,7 +587,7 @@ struct MenuBarContent: View {
 
 // MARK: - Shared per-host right-click menu
 
-/// Right-click actions for a paired host (Rename / Trust-new-cert / Unpair),
+/// Right-click actions for a paired host (Rename / Codec / Unpair),
 /// shared by the launcher hero and the Settings PCTile. Right-click is the
 /// canonical affordance (no visible button). Carries its own confirmation
 /// dialogs + rename alert; apply via `.hostContextMenu(host)` with the
@@ -647,7 +663,7 @@ private struct HostContextMenu: ViewModifier {
 }
 
 extension View {
-    /// Attach the shared per-host right-click menu (Rename / Trust / Unpair).
+    /// Attach the shared per-host right-click menu (Rename / Codec / Unpair).
     func hostContextMenu(_ host: MoonlightHost) -> some View {
         modifier(HostContextMenu(host: host))
     }

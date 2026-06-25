@@ -125,6 +125,7 @@
 		D100006C /* InputForwarder+StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006B /* InputForwarder+StreamView.swift */; };
 		D100006E /* StreamWindow+Show.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006D /* StreamWindow+Show.swift */; };
 		D1000070 /* StatsOverlayLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006F /* StatsOverlayLayer.swift */; };
+		D1000E51 /* StreamBannerLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000E50 /* StreamBannerLayer.swift */; };
 		D1000072 /* VideoDecoder+AV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000071 /* VideoDecoder+AV1.swift */; };
 		D1000074 /* VideoDecoder+API.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000073 /* VideoDecoder+API.swift */; };
 		D1000076 /* VideoDecoder+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000075 /* VideoDecoder+Decode.swift */; };
@@ -348,6 +349,7 @@
 		D100006B /* InputForwarder+StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+StreamView.swift"; sourceTree = "<group>"; };
 		D100006D /* StreamWindow+Show.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Show.swift"; sourceTree = "<group>"; };
 		D100006F /* StatsOverlayLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StatsOverlayLayer.swift; sourceTree = "<group>"; };
+		D1000E50 /* StreamBannerLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBannerLayer.swift; sourceTree = "<group>"; };
 		D1000071 /* VideoDecoder+AV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+AV1.swift"; sourceTree = "<group>"; };
 		D1000073 /* VideoDecoder+API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+API.swift"; sourceTree = "<group>"; };
 		D1000075 /* VideoDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Decode.swift"; sourceTree = "<group>"; };
@@ -534,6 +536,7 @@
 				D1000BD4 /* VideoDecoder+GovernorRepaint.swift */,
 				D1000071 /* VideoDecoder+AV1.swift */,
 				D100006F /* StatsOverlayLayer.swift */,
+				D1000E50 /* StreamBannerLayer.swift */,
 				D100006D /* StreamWindow+Show.swift */,
 				D1000C02 /* StreamWindow+Cursor.swift */,
 				D1000C12 /* StreamWindow+Views.swift */,
@@ -863,6 +866,7 @@
 				D1000BD3 /* VideoDecoder+GovernorRepaint.swift in Sources */,
 				D1000072 /* VideoDecoder+AV1.swift in Sources */,
 				D1000070 /* StatsOverlayLayer.swift in Sources */,
+				D1000E51 /* StreamBannerLayer.swift in Sources */,
 				D100006E /* StreamWindow+Show.swift in Sources */,
 				D1000C01 /* StreamWindow+Cursor.swift in Sources */,
 				D1000C11 /* StreamWindow+Views.swift in Sources */,

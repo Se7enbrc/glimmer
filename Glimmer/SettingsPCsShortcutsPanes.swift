@@ -157,7 +157,7 @@ struct PCTile: View {
                     lineWidth: 2
                 )
         }
-        // Shared right-click affordance (Rename / Trust-new-cert / Unpair).
+        // Shared right-click affordance (Rename / Codec / Unpair).
         // Right-click is the canonical path; same menu on the launcher hero.
         .hostContextMenu(host)
     }

@@ -114,6 +114,14 @@ extension StreamSession {
             let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
                 MainActor.assumeIsolated {
                     guard let dec, let win else { return }
+                    // Auto network-health pill, driven INDEPENDENTLY of the
+                    // stats-HUD toggle: a degrading link must reach the user even
+                    // with the full HUD off. env_state >= caution shows it; clear
+                    // hides it. Cheap (an atomic read) so it runs every tick.
+                    let env = EnvSignalController.shared.state
+                    win.networkBanner.setText(
+                        env == .distress ? "Network unstable" : "Network degraded")
+                    win.networkBanner.setVisible(env.rawValue >= EnvSignalController.EnvState.caution.rawValue)
                     // Cheap early-out: if the overlay is hidden, skip the
                     // snapshot read entirely. The decoder's collectors keep
                     // ticking in the background so a re-enable shows fresh
@@ -551,6 +559,9 @@ extension StreamSession {
         didLogDecodeOnlyStall = false
         didAttemptStallRecovery = false
         didLogWatchdogHold = false
+        // Video resumed - drop the hold banner (no-op if it was never shown).
+        let winForHide = window
+        await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
     }
 
     /// Active stall recovery: request an IDR to prompt the host to resume
@@ -598,6 +609,14 @@ extension StreamSession {
         // stop being ACKed) - a connection-loss signal, not a video-stall one.
         if let health = backend.enetHealth(),
            health.sinceLastAckMs < StreamSession.enetAliveHoldThresholdMs {
+            // Show the hold banner over the frozen frame (same surface the
+            // reconnect episode uses) so a paused/held video reads as "holding"
+            // rather than a silent freeze. Hidden again by clearDecodeOnlyStallLatch.
+            let winForHold = window
+            await MainActor.run {
+                winForHold?.reconnectBanner.setText("Reconnecting...")
+                winForHold?.reconnectBanner.setVisible(true)
+            }
             if !didLogWatchdogHold {
                 didLogWatchdogHold = true
                 log.notice(
