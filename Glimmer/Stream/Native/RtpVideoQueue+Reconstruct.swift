@@ -69,10 +69,9 @@ extension RtpVideoQueue {
         return 0
     }
 
-    /// Cauchy decoder for a (dataShards, parityShards) shape, memoized so a loss
-    /// burst over repeating shapes builds each matrix once. `ReedSolomon` is an
-    /// immutable value type whose `decode` only mutates caller-supplied shards, so a
-    /// cached instance is reused safely. nil for invalid geometry (not cached).
+    /// Memoized Cauchy decoder per (ds,ps) shape. Safe to cache: `ReedSolomon` is an
+    /// immutable value type whose `decode` mutates only caller-supplied shards. nil
+    /// for invalid geometry (not cached).
     private func decoder(dataShards ds: Int, parityShards ps: Int) -> ReedSolomon? {
         let shape = ReedSolomonShape(ds: ds, ps: ps)
         if let cached = rsDecoderCache[shape] { return cached }

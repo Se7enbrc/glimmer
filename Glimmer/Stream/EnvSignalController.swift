@@ -93,11 +93,9 @@ final class EnvSignalController: @unchecked Sendable {
 
     // MARK: - Link class
 
-    /// The stream route class. `rawValue` IS the on-the-wire/persistence label
-    /// (`StreamRouteProbe.classify`, the `stream_link` NDJSON field) - so the
-    /// rawValue is used ONLY at that boundary (parse in / publish out); all the
-    /// gating logic below compares the enum, never bare literals. An unrecognized
-    /// label maps to `.unknown` (fail toward the countermeasure).
+    /// The stream route class. `rawValue` IS the wire/persistence label
+    /// (`StreamRouteProbe.classify`, the `stream_link` field) - used ONLY at that
+    /// boundary; gating logic compares the enum. Unknown label → `.unknown` (fail safe).
     enum LinkClass: String {
         case wired, wifi, tunnel, unknown
         init(label: String?) { self = label.flatMap(LinkClass.init(rawValue:)) ?? .unknown }
@@ -623,9 +621,7 @@ final class EnvSignalController: @unchecked Sendable {
             ? sample
             : reconcileSmoothedJitterMs + Self.jitterBaseEwmaWeight * (sample - reconcileSmoothedJitterMs)
 
-        let desiredLevel = desiredHeadroomLevel(
-            smoothedJitterMs: reconcileSmoothedJitterMs,
-            outOfOrder: window.outOfOrder, retransmits: window.retransmit)
+        let desiredLevel = desiredHeadroomLevel(smoothedJitterMs: reconcileSmoothedJitterMs)
 
         lock.lock()
         let changed = desiredLevel != headroomLevelValue
@@ -636,38 +632,16 @@ final class EnvSignalController: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Map the current link state + the three receive-side health signals
-    /// (smoothed jitter, out-of-order, retransmit) to the desired headroom level
-    /// (0...`maxHeadroomLevel`). CLEAR (incl. the wired-pinned case) is the REST
-    /// decision: level 0. Above CLEAR, the published level is the WORST of the
-    /// jitter-derived level and the ooo/retransmit-derived level - so a LOW-jitter
-    /// but reordering/retransmitting window (which `evaluateWindow` already counts
-    /// as degraded) still publishes headroom, honoring the documented 3-signal
-    /// contract instead of riding jitter alone. `max` keeps it bounded at
-    /// `maxHeadroomLevel`; each axis can only widen the hold, never shrink it.
-    private func desiredHeadroomLevel(smoothedJitterMs: Double,
-                                      outOfOrder: UInt64, retransmits: UInt64) -> Int {
+    /// Map link state + smoothed jitter to the desired headroom level (REST=0 on
+    /// CLEAR/wired). JITTER-ONLY on purpose: the FramePacer reads this as target
+    /// DEPTH, so ooo/retransmit drive the FEC reorder axis (which the pacer ignores)
+    /// instead - a deeper present buffer adds latency without aiding loss recovery.
+    private func desiredHeadroomLevel(smoothedJitterMs: Double) -> Int {
         guard state != .clear else { return 0 }
         let overDeadZone = smoothedJitterMs - Self.headroomJitterDeadZoneMs
-        let jitterLevel = overDeadZone > 0
-            ? Int((overDeadZone / Self.headroomJitterMsPerLevel).rounded(.up)) : 0
-        // ooo/retransmit map to one level at the FEC soft-escalate line, two at the
-        // hard-spike line - the same thresholds FecHeadroomController.observeWindow
-        // self-decided on when the reconciler is off.
-        let oooLevel = oooRetransmitLevel(outOfOrder: outOfOrder, retransmits: retransmits)
-        return min(Self.maxHeadroomLevel, max(0, max(jitterLevel, oooLevel)))
-    }
-
-    /// Discrete headroom level from this window's out-of-order + retransmit deltas,
-    /// keyed off FecHeadroomController's soft/hard escalate thresholds: 0 below the
-    /// soft line, 1 at/above it, 2 at/above the hard-spike line.
-    private func oooRetransmitLevel(outOfOrder: UInt64, retransmits: UInt64) -> Int {
-        let hard = outOfOrder >= UInt64(FecHeadroomController.oooHardEscalate)
-            || retransmits >= UInt64(FecHeadroomController.retransmitHardEscalate)
-        if hard { return 2 }
-        let soft = outOfOrder >= UInt64(FecHeadroomController.oooEscalate)
-            || retransmits >= UInt64(FecHeadroomController.retransmitEscalate)
-        return soft ? 1 : 0
+        guard overDeadZone > 0 else { return 0 }
+        let level = Int((overDeadZone / Self.headroomJitterMsPerLevel).rounded(.up))
+        return min(Self.maxHeadroomLevel, max(0, level))
     }
 
     /// Publish the REST decision (headroom level 0, smoothed jitter 0) and clear
