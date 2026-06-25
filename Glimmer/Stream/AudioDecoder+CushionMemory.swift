@@ -447,7 +447,7 @@ extension AudioDecoder {
             if resamplerEpsPpm != 0 {
                 resamplerEpsPpm += max(-Self.resamplerSlewPpm,
                                        min(Self.resamplerSlewPpm, -resamplerEpsPpm))
-                varispeed.rate = Float(1.0 + resamplerEpsPpm * 1e-6)
+                applyVarispeedRate(Float(1.0 + resamplerEpsPpm * 1e-6))
             }
             return
         }
@@ -462,10 +462,17 @@ extension AudioDecoder {
         // Slew-limit the APPLIED offset so the rate (hence pitch) never steps.
         resamplerEpsPpm += max(-Self.resamplerSlewPpm,
                                min(Self.resamplerSlewPpm, targetPpm - resamplerEpsPpm))
-        varispeed.rate = Float(1.0 + resamplerEpsPpm * 1e-6)
+        applyVarispeedRate(Float(1.0 + resamplerEpsPpm * 1e-6))
     }
 
     private func clampResamplerPpm(_ v: Double) -> Double {
         max(-Self.resamplerBoundPpm, min(Self.resamplerBoundPpm, v))
+    }
+
+    /// Apply `varispeed.rate` OFF the player-node completion handler: writing it there
+    /// (holding AVAudio's messenger lock) deadlocks against teardown's
+    /// `playerNode.stop()` (engine lock). The hop breaks it; post-shutdown writes no-op.
+    func applyVarispeedRate(_ rate: Float) {
+        varispeedRateQueue.async { [weak self] in self?.varispeed.rate = rate }
     }
 }

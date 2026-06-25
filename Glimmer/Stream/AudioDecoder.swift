@@ -34,6 +34,11 @@ public final class AudioDecoder: @unchecked Sendable {
     /// one-directional/clicky silence micro-stretch. ε is ppm-scale (the bound is
     /// ±500ppm = ±0.5 cents, inaudible; the slew limit keeps the pitch from stepping).
     let varispeed = AVAudioUnitVarispeed()
+    /// Serial queue for `varispeed.rate` writes — keeps the write (which takes
+    /// AVAudio's engine lock) OFF the completion handler, which holds the messenger
+    /// lock and would deadlock against teardown's `playerNode.stop()`. Non-private:
+    /// `applyVarispeedRate` (the resampler extension) writes through it.
+    let varispeedRateQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.varispeed-rate")
     private var inputFormat: AVAudioFormat?
     private var channelCount: Int = 2
     private var samplesPerFrame: Int = 240         // 5ms at 48kHz, common GFE/Sunshine config
