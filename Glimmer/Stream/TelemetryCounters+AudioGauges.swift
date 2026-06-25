@@ -250,10 +250,11 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// the derive reports absent (absent ≠ 0) until both sides flow again.
     static let freshnessNanos: UInt64 = 2_000_000_000
     /// Sanity bound (ms) on a derived skew: beyond this the anchors are judged
-    /// inconsistent (host RTP discontinuity) and the pair re-latches. 1800ms clears
-    /// deepest cushion (300ms) + a real lip-sync excursion but rejects the railed
-    /// multi-second values a stale anchor produces (the old 10s passed +9583ms).
-    static let sanityBoundMs: Double = 1_800
+    /// inconsistent (host RTP discontinuity) and the pair re-latches. 600ms
+    /// clears the deepest cushion (300ms) + a real lip-sync excursion with margin
+    /// but rejects the railed values a stale anchor produces - the old 1800ms was
+    /// loose enough to pass a −1517ms artifact into the percentile buckets.
+    static let sanityBoundMs: Double = 600
     /// Signed bucket bounds (ms) for the session percentile accumulator -
     /// resolution concentrated around the 0...150ms cushion range where the
     /// lip-sync trade lives, with the ~125ms ITU annoyance threshold bracketed.
@@ -275,6 +276,11 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// candidate families are 4800% apart, so a mis-snap would take a clumping
     /// pathology no real link produces.
     static let audioRateCalibrationNanos: UInt64 = 2_000_000_000
+    /// Outlier-guard jump threshold (ms): a 1Hz sample more than this from the
+    /// running EWMA is rejected once (then re-seeds, so a sustained step is
+    /// accepted on the next tick). Generous - real skew moves slowly (cushion
+    /// ramps tens of ms/s), so only a one-tick artifact clears it.
+    static let outlierJumpMs: Double = 250
 
     private let lock = os_unfair_lock_t.allocate(capacity: 1)
     private var videoLastRtp: UInt32 = 0
@@ -319,6 +325,23 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     private var sampleSum: Double = 0
     private var sampleMin: Double = .infinity
     private var sampleMax: Double = -.infinity
+    // Parallel accumulator for the cushion-SUBTRACTED true clock skew - the real
+    // A/V sync signal (av_skew_ms is dominated by the cushion). Same bucket set
+    // and feeder cadence (the NDJSON tick); summarized alongside av_skew.
+    private var clockBucketCounts = [UInt64](repeating: 0, count: bucketBoundsMs.count)
+    private var clockOverflowCount: UInt64 = 0
+    private var clockSampleCount: UInt64 = 0
+    private var clockSampleSum: Double = 0
+    private var clockSampleMin: Double = .infinity
+    private var clockSampleMax: Double = -.infinity
+    // Outlier guard: an EWMA of accepted av_skew samples + whether one has been
+    // seeded. A single 1Hz sample that jumps more than `outlierJumpMs` from the
+    // running estimate is rejected ONCE (not bucketed) - it re-seeds the
+    // estimate, so a SUSTAINED step passes on the very next tick. Catches a lone
+    // in-bound artifact (a −1517ms reading inside a loose bound) without dropping
+    // legitimate sustained skew.
+    private var skewEwmaMs: Double = 0
+    private var skewEwmaSeeded = false
 
     init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
@@ -416,8 +439,14 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         // TRUE clock skew: same alignment WITHOUT the deliberate cushion
         // (`realFillMs`) baked in - the genuine host↔Mac offset the drift
         // resampler corrects, vs av_skew_ms which is dominated by the cushion.
-        lastTrueClockSkewMs = videoMs - audioMs
-        if accumulate { observeLocked(skewMs) }
+        let clockSkewMs = videoMs - audioMs
+        lastTrueClockSkewMs = clockSkewMs
+        // Outlier guard runs on av_skew (the EWMA target); when it rejects a lone
+        // artifact, drop the paired clock sample too so the two accumulators stay
+        // aligned tick-for-tick.
+        if accumulate, observeLocked(skewMs) {
+            observeClockLocked(clockSkewMs)
+        }
         return skewMs
     }
 
@@ -461,8 +490,18 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         audioRateAnchorNanos = now
     }
 
-    /// Feed one 1Hz sample into the session accumulator. Lock already held.
-    private func observeLocked(_ skewMs: Double) {
+    /// Feed one 1Hz sample into the session accumulator, with the single-sample
+    /// outlier guard. Lock already held. Returns false (and buckets nothing) when
+    /// the sample is rejected as a lone artifact - the EWMA still re-seeds to it,
+    /// so a SUSTAINED step is accepted on the next tick.
+    @discardableResult
+    private func observeLocked(_ skewMs: Double) -> Bool {
+        if skewEwmaSeeded, abs(skewMs - skewEwmaMs) > Self.outlierJumpMs {
+            skewEwmaMs = skewMs // re-seed so a real step isn't rejected twice
+            return false
+        }
+        skewEwmaMs = skewEwmaSeeded ? skewEwmaMs * 0.7 + skewMs * 0.3 : skewMs
+        skewEwmaSeeded = true
         sampleCount &+= 1
         sampleSum += skewMs
         if skewMs < sampleMin { sampleMin = skewMs }
@@ -471,6 +510,22 @@ final class AudioVideoSkewStore: @unchecked Sendable {
             bucketCounts[idx] &+= 1
         } else {
             overflowCount &+= 1 // past the last bound; see the overflow doc
+        }
+        return true
+    }
+
+    /// Feed one 1Hz CUSHION-FREE clock-skew sample into its accumulator. Lock
+    /// already held; mirrors `observeLocked` so the true-sync percentiles use
+    /// the same bucket/overflow discipline as av_skew.
+    private func observeClockLocked(_ skewMs: Double) {
+        clockSampleCount &+= 1
+        clockSampleSum += skewMs
+        if skewMs < clockSampleMin { clockSampleMin = skewMs }
+        if skewMs > clockSampleMax { clockSampleMax = skewMs }
+        if let idx = Self.bucketBoundsMs.firstIndex(where: { skewMs <= $0 }) {
+            clockBucketCounts[idx] &+= 1
+        } else {
+            clockOverflowCount &+= 1
         }
     }
 
@@ -494,42 +549,67 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         return Summary(samples: sampleCount,
                        minMs: sampleMin, maxMs: sampleMax,
                        avgMs: sampleSum / Double(sampleCount),
-                       p50Ms: quantileLocked(0.50),
-                       p95Ms: quantileLocked(0.95),
-                       p99Ms: quantileLocked(0.99),
+                       p50Ms: quantileLocked(0.50, bucketCounts, overflowCount,
+                                             sampleCount, sampleMin, sampleMax),
+                       p95Ms: quantileLocked(0.95, bucketCounts, overflowCount,
+                                             sampleCount, sampleMin, sampleMax),
+                       p99Ms: quantileLocked(0.99, bucketCounts, overflowCount,
+                                             sampleCount, sampleMin, sampleMax),
                        rebases: rebases)
     }
 
-    /// Bucket-interpolated quantile. Lock already held; `sampleCount > 0`
-    /// guaranteed by the caller. Clamped to the exact min/max so a single
-    /// sample never reads as a bucket edge. The OVERFLOW tail is a real
-    /// bucket in the walk - [last bound, exact max] with `overflowCount`
-    /// mass - so a rank landing past the fixed bounds interpolates instead
-    /// of pinning every quantile to the max (the degenerate-quantile half of
-    /// a past av_skew break).
-    private func quantileLocked(_ quantile: Double) -> Double {
-        let rank = quantile * Double(sampleCount)
+    /// Session percentiles of the CUSHION-FREE true clock skew - the real A/V
+    /// sync signal (av_skew is dominated by the cushion). Same shape/discipline
+    /// as `sessionSummary`; nil before any sample. `rebases` is shared (one pair
+    /// epoch feeds both accumulators).
+    func clockSkewSessionSummary() -> Summary? {
+        os_unfair_lock_lock(lock)
+        defer { os_unfair_lock_unlock(lock) }
+        guard clockSampleCount > 0 else { return nil }
+        return Summary(samples: clockSampleCount,
+                       minMs: clockSampleMin, maxMs: clockSampleMax,
+                       avgMs: clockSampleSum / Double(clockSampleCount),
+                       p50Ms: quantileLocked(0.50, clockBucketCounts, clockOverflowCount,
+                                             clockSampleCount, clockSampleMin, clockSampleMax),
+                       p95Ms: quantileLocked(0.95, clockBucketCounts, clockOverflowCount,
+                                             clockSampleCount, clockSampleMin, clockSampleMax),
+                       p99Ms: quantileLocked(0.99, clockBucketCounts, clockOverflowCount,
+                                             clockSampleCount, clockSampleMin, clockSampleMax),
+                       rebases: rebases)
+    }
+
+    /// Bucket-interpolated quantile over a given accumulator. Lock already held;
+    /// `sampleCount > 0` guaranteed by the caller. Clamped to the exact min/max
+    /// so a single sample never reads as a bucket edge. The OVERFLOW tail is a
+    /// real bucket in the walk - [last bound, exact max] with `overflow` mass -
+    /// so a rank landing past the fixed bounds interpolates instead of pinning
+    /// every quantile to the max (the degenerate-quantile half of a past
+    /// av_skew break).
+    private func quantileLocked(_ quantile: Double, _ buckets: [UInt64],
+                                _ overflow: UInt64, _ count: UInt64,
+                                _ minMs: Double, _ maxMs: Double) -> Double {
+        let rank = quantile * Double(count)
         var cumulative: UInt64 = 0
-        var lower = sampleMin
-        for (idx, count) in bucketCounts.enumerated() where count > 0 {
+        var lower = minMs
+        for (idx, bucketCount) in buckets.enumerated() where bucketCount > 0 {
             let upper = Self.bucketBoundsMs[idx]
-            let next = cumulative &+ count
+            let next = cumulative &+ bucketCount
             if Double(next) >= rank {
-                let within = (rank - Double(cumulative)) / Double(count)
+                let within = (rank - Double(cumulative)) / Double(bucketCount)
                 let base = max(lower, Self.lowerEdge(idx))
                 let estimate = base + (upper - base) * within
-                return min(max(estimate, sampleMin), sampleMax)
+                return min(max(estimate, minMs), maxMs)
             }
             cumulative = next
             lower = upper
         }
-        if overflowCount > 0 {
-            let base = max(Self.bucketBoundsMs.last ?? sampleMin, sampleMin)
-            let within = (rank - Double(cumulative)) / Double(overflowCount)
-            let estimate = base + (sampleMax - base) * within
-            return min(max(estimate, sampleMin), sampleMax)
+        if overflow > 0 {
+            let base = max(Self.bucketBoundsMs.last ?? minMs, minMs)
+            let within = (rank - Double(cumulative)) / Double(overflow)
+            let estimate = base + (maxMs - base) * within
+            return min(max(estimate, minMs), maxMs)
         }
-        return sampleMax // floating-point edge backstop; the walk covers all mass
+        return maxMs // floating-point edge backstop; the walk covers all mass
     }
     private static func lowerEdge(_ idx: Int) -> Double {
         idx > 0 ? bucketBoundsMs[idx - 1] : -sanityBoundMs
@@ -559,6 +639,14 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         sampleSum = 0
         sampleMin = .infinity
         sampleMax = -.infinity
+        clockBucketCounts = [UInt64](repeating: 0, count: Self.bucketBoundsMs.count)
+        clockOverflowCount = 0
+        clockSampleCount = 0
+        clockSampleSum = 0
+        clockSampleMin = .infinity
+        clockSampleMax = -.infinity
+        skewEwmaMs = 0
+        skewEwmaSeeded = false
         os_unfair_lock_unlock(lock)
     }
 }

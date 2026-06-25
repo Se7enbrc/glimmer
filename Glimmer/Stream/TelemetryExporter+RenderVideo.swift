@@ -216,6 +216,11 @@ extension TelemetryRenderer {
         builder.emitCounter("glimmer_decoder_recreate_total",
                             "VTDecompressionSession (re)creates (first create + param-rebuilds).",
                             snap.decoderRecreateTotal)
+        builder.emitCounter("glimmer_discontinuity_flush_total",
+                            "Stream-discontinuity flushes (param-set rebuilds that flushed the "
+                            + "renderer + cleared the pacer queue - a real multi-frame skip). 0 on "
+                            + "a healthy wired link; a delta is a mid-stream format change.",
+                            snap.discontinuityFlushTotal)
         guard let state = snap.decodeState else { return }
         builder.emit("glimmer_decode_hw_accelerated",
                      "1 if VideoToolbox confirmed a hardware-accelerated decoder, else 0.",

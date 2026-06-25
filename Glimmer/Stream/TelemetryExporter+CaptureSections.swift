@@ -221,6 +221,8 @@ extension TelemetryExporter {
         add("enet_connect_ms", breakdown.enetConnectMs)
         add("first_frame_ms", breakdown.firstFrameMs)
         add("total_ms", breakdown.totalMs)
+        add("click_to_first_frame_ms", breakdown.clickToFirstFrameMs)
+        add("launch_path_ms", breakdown.launchPathMs)
         return "{" + fields.joined(separator: ",") + "}"
     }
 

@@ -102,6 +102,79 @@ final class DisconnectReasonCounters: @unchecked Sendable {
     }
 }
 
+// MARK: - Click-to-first-frame latch (true click-to-pixels)
+
+/// The TRUE click-to-pixels span the handshake breakdown can't see:
+/// `handshake_total_ms` is anchored at connect-START (inside connectBackend), so
+/// it EXCLUDES the serverinfo + launch + busy-poll legs that run between the
+/// user's click and connect-start. This latch is anchored at the CLICK
+/// (`MoonlightManager.stream()`) and resolved at the first decoded frame, both on
+/// a wall clock (`Date`) the way the existing click anchor is - no cross-actor
+/// monotonic plumbing, and it survives `P2State.reset()` (which the click
+/// precedes). Standalone + self-locked (the `AudioCushionTelemetry` idiom), read
+/// by the exporter without touching the snapshot structs. First writer wins per
+/// edge; `resetForNewSession` clears it.
+final class ConnectTimingTelemetry: @unchecked Sendable {
+    static let shared = ConnectTimingTelemetry()
+
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    /// Wall-clock reference of the user's click; 0 = no click anchored.
+    private var clickReference: Double = 0
+    /// Wall-clock reference of connect-start (for the launch-path leg); 0 = unset.
+    private var connectStartReference: Double = 0
+    private var clickToFirstFrameMsValue: Double = 0
+    private var launchPathMsValue: Double = 0
+    init() { lock.initialize(to: os_unfair_lock_s()) }
+    deinit { lock.deallocate() }
+
+    /// Anchor the click instant. Called from `MoonlightManager.stream()` at the
+    /// user's launch click - before the connect Task spins up. First write wins
+    /// per session (reset clears it).
+    func anchorClick() {
+        let now = Date().timeIntervalSinceReferenceDate
+        os_unfair_lock_lock(lock)
+        if clickReference == 0 { clickReference = now }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Mark connect-start to isolate the launch cost (click → connectStart).
+    /// First write wins; no-op if the click was never anchored.
+    func markConnectStart() {
+        let now = Date().timeIntervalSinceReferenceDate
+        os_unfair_lock_lock(lock)
+        if clickReference > 0, connectStartReference == 0, now >= clickReference {
+            connectStartReference = now
+            launchPathMsValue = (now - clickReference) * 1000.0
+        }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Resolve click → first decoded frame. Called at the `.firstFrame` edge;
+    /// first write wins, no-op without a click anchor.
+    func markFirstFrame() {
+        let now = Date().timeIntervalSinceReferenceDate
+        os_unfair_lock_lock(lock)
+        if clickReference > 0, clickToFirstFrameMsValue == 0, now >= clickReference {
+            clickToFirstFrameMsValue = (now - clickReference) * 1000.0
+        }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Click → first decoded frame (ms), or nil if not yet resolved.
+    var clickToFirstFrameMs: Double? {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        return clickToFirstFrameMsValue != 0 ? clickToFirstFrameMsValue : nil
+    }
+    /// Launch path: click → connect-start (ms), or nil if not yet measured.
+    var launchPathMs: Double? {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        return launchPathMsValue != 0 ? launchPathMsValue : nil
+    }
+    func resetForNewSession() {
+        os_unfair_lock_lock(lock)
+        clickReference = 0; connectStartReference = 0
+        clickToFirstFrameMsValue = 0; launchPathMsValue = 0
+        os_unfair_lock_unlock(lock)
+    }
+}
+
 // MARK: - Handshake breakdown snapshot
 
 /// One session's CONNECT-HANDSHAKE breakdown: the per-stage durations (ms) of the
@@ -124,6 +197,12 @@ struct HandshakeBreakdown: Sendable {
     var firstFrameMs: Double?
     /// Total: connect start → first decoded video frame (the whole cold open).
     var totalMs: Double?
+    /// TRUE click-to-pixels: the user's launch click → first decoded frame, which
+    /// includes the serverinfo + launch + busy-poll legs `totalMs` excludes (it
+    /// anchors at connect-start). From `ConnectTimingTelemetry`.
+    var clickToFirstFrameMs: Double?
+    /// Launch path: click → connect-start, isolating the pre-connect launch cost.
+    var launchPathMs: Double?
     /// True once the first decoded frame landed (so the exporter emits the
     /// one-shot breakdown exactly once, not every tick).
     var complete: Bool = false
@@ -239,6 +318,11 @@ extension TelemetryCounters {
             out.enetConnectMs = msBetween(enetStartNanos, establishedNanos)
             out.firstFrameMs = msBetween(establishedNanos, firstFrameNanos)
             out.totalMs = msBetween(connectStartNanos, firstFrameNanos)
+            // TRUE click-to-pixels + the isolated launch leg, from the wall-clock
+            // click latch (anchored before connect-start, so it sees the legs
+            // totalMs can't). Self-locked; read here off the P2 lock.
+            out.clickToFirstFrameMs = ConnectTimingTelemetry.shared.clickToFirstFrameMs
+            out.launchPathMs = ConnectTimingTelemetry.shared.launchPathMs
             out.complete = firstFrameNanos != 0
             return out
         }

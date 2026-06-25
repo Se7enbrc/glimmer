@@ -45,6 +45,10 @@ struct TelemetrySnapshot: Sendable {
     /// create plus every mid-stream param-rebuild; a short-window `increase()`
     /// brackets a decoder reset that correlates with a present hitch.
     var decoderRecreateTotal: UInt64 = 0
+    /// Stream-discontinuity flushes this session (monotonic): param-set rebuilds
+    /// that flushed the renderer + cleared the pacer queue. 0 on a healthy wired
+    /// link; a nonzero delta is a real mid-stream format change / multi-frame skip.
+    var discontinuityFlushTotal: UInt64 = 0
     /// Live DECODE state: HW-decode confirmation + pixel format + bit depth +
     /// colorspace key. Emitted as a Prometheus info-gauge (labels carry the
     /// state) + NDJSON fields. nil before the first decoded frame.

@@ -95,6 +95,10 @@ extension StreamSession {
         let p2 = TelemetryCounters.shared.p2
         p2.reset()
         p2.anchorConnectStart(TelemetryCounters.monotonicNowNanos())
+        // Mark connect-start on the click latch too, to isolate the launch-path
+        // leg (click → connect-start). The click was anchored earlier, in
+        // stream(); this measures the gap. No-op if telemetry never anchored.
+        ConnectTimingTelemetry.shared.markConnectStart()
     }
 
     /// Called only from GENUINE teardown (user stop / watchdog / connect failure).

@@ -207,11 +207,13 @@ final class LatencyHistograms: @unchecked Sendable {
     /// can be tens of ms), so it gets its own coarse-tailed bound set below.
     let glassToGlass = Stage(bounds: Stage.glassToGlassBoundsMs)
 
-    /// INPUT-TO-PHOTON (estimate): a LOWER BOUND on felt input latency -
-    /// (next-presented-frame-time − last-input-sent-time). Labelled an estimate
-    /// because the host doesn't mark which frame reflects an input. Same wide
-    /// range as glass-to-glass (it includes the full host round trip plus the
-    /// time the input waited for the next frame), so it shares the coarse bounds.
+    /// INPUT-TO-PHOTON (estimate): felt input latency, composed from the SAME
+    /// legs as glass-to-glass (host-encode + ~RTT/2 + client pipeline) for the
+    /// frame that carries an input's response, recorded once per input stamp.
+    /// It therefore reads >= glass_to_glass by construction. Labelled an estimate
+    /// because the host doesn't mark which frame reflects an input. (The prior
+    /// form measured time-to-next-present and read 4-5x BELOW g2g - bounded by
+    /// the frame interval, not the round trip.) Shares the coarse bounds.
     let inputToPhoton = Stage(bounds: Stage.glassToGlassBoundsMs)
 
     func reset() {
@@ -536,14 +538,14 @@ final class FrameTimingTracker: @unchecked Sendable {
         let glassToGlass = computeGlassToGlass(hostEncodeMs: timing.hostEncodeMs, pipelineMs: endToEnd)
         if !warmingUp, let value = glassToGlass { histograms.glassToGlass.observe(value) }
 
-        // INPUT-TO-PHOTON estimate (signal 2): time from the last input batch
-        // we sent to the FIRST present after it - a lower bound on felt input
-        // latency. The host doesn't tell us which frame reflects an input, so
-        // this is explicitly an estimate; each input stamp records at most one
-        // observation (consume-once - see the Composites split), so an idle
-        // stream's static frames can't inflate the metric and a genuinely slow
-        // outlier isn't capped away.
-        let inputToPhoton = computeInputToPhoton(presentNanos: presentNanos)
+        // INPUT-TO-PHOTON estimate (signal 2): the felt input round trip,
+        // composed from the SAME legs as glass-to-glass for THIS input-carrying
+        // frame (host-encode + ~RTT/2 + pipeline), so it can't read below g2g.
+        // Still an estimate (the host doesn't mark which frame reflects an
+        // input); each input stamp records at most one observation (consume-once
+        // - see the Composites split), so an idle stream's static frames can't
+        // inflate it.
+        let inputToPhoton = computeInputToPhoton(presentNanos: presentNanos, glassToGlassMs: glassToGlass)
         if !warmingUp, let value = inputToPhoton { histograms.inputToPhoton.observe(value) }
 
         traceWriter.append(renderTraceLine(TraceRecord(

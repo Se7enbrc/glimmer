@@ -298,7 +298,12 @@ struct SessionReport {
         // A/V SKEW percentiles (SIGN: + = audio late/behind video), from the
         // 1Hz pair-anchored RTP derivation - the lip-sync cost the adaptive
         // cushion silently trades; the cushion-ceiling policy reads THIS line.
+        // NB: av_skew is cushion-INCLUSIVE (its magnitude is mostly the playout
+        // cushion); the cushion-free TRUE sync signal is av_clock_skew_ms below.
         top.append("\"av_skew_ms\":\(avSkewObject())")
+        // A/V CLOCK SKEW percentiles (cushion SUBTRACTED) - the genuine host↔Mac
+        // sync error (~±15ms), vs the cushion-dominated av_skew_ms above.
+        top.append("\"av_clock_skew_ms\":\(avClockSkewObject())")
         // Per-TYPE ignored-control totals - durable here (the teardown Diag
         // NOTICE is lossy: a crash or a still-running session loses it).
         top.append("\"ctrl_ignored_by_type\":\(ctrlIgnoredByTypeObject())")
@@ -394,6 +399,8 @@ struct SessionReport {
         add("enet_connect_ms", breakdown.enetConnectMs)
         add("first_frame_ms", breakdown.firstFrameMs)
         add("total_ms", breakdown.totalMs)
+        add("click_to_first_frame_ms", breakdown.clickToFirstFrameMs)
+        add("launch_path_ms", breakdown.launchPathMs)
         return "{" + parts.joined(separator: ",") + "}"
     }
 
@@ -453,6 +460,25 @@ struct SessionReport {
         return "{" + parts.joined(separator: ",") + "}"
     }
 
+    /// A/V CLOCK-SKEW scorecard line: session percentiles of the CUSHION-FREE
+    /// true clock skew (the genuine host↔Mac sync error the drift resampler
+    /// corrects), from the same pair-anchored derivation as av_skew_ms but
+    /// without the playout cushion baked in. Empty object when the meter never
+    /// had both streams flowing.
+    private func avClockSkewObject() -> String {
+        guard let skew = AudioVideoSkewStore.shared.clockSkewSessionSummary() else { return "{}" }
+        let parts: [String] = [
+            "\"samples\":\(skew.samples)",
+            "\"min\":\(num(skew.minMs))",
+            "\"avg\":\(num(skew.avgMs))",
+            "\"p50\":\(num(skew.p50Ms))",
+            "\"p95\":\(num(skew.p95Ms))",
+            "\"p99\":\(num(skew.p99Ms))",
+            "\"max\":\(num(skew.maxMs))"
+        ]
+        return "{" + parts.joined(separator: ",") + "}"
+    }
+
     /// ENV-SIGNAL shadow scorecard: per-state tick counts (~seconds at the
     /// 1Hz cadence) + the transition total, plus the final per-socket
     /// pings_sent counts (the keepalive cadence judge).
@@ -504,6 +530,7 @@ struct SessionReport {
             // over-target force-releases and the designed suppressed-mode /
             // decode-gated drops.
             ("decoder_recreate", counters.decoderRecreateTotal.value),
+            ("discontinuity_flush", counters.discontinuityFlushTotal.value),
             ("present_stale_repeat", counters.staleFrameRepeatTotal.value),
             ("pacer_over_target_release", counters.pacerOverTargetReleaseTotal.value),
             ("suppressed_drop", counters.suppressedDropTotal.value),

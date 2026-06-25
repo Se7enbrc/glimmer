@@ -72,7 +72,11 @@ extension TelemetryRenderer {
         builder.emit("glimmer_audio_overruns_per_second",
                      "Audio output over-runs per second.", audio.overrunsPerSecond)
         builder.emit("glimmer_audio_clock_drift_ms",
-                     "Audio clock drift vs wall clock, ms signed (+ audio played behind wall time, − ahead). Not a cross-stream A/V delta.",
+                     "Playout slip vs wall clock with the standing buffer cushion SUBTRACTED, ms "
+                     + "signed (wall_elapsed − media_played − buffer_fill; + behind, − ahead): a "
+                     + "constant cushion reads ~0, only a drift TREND shows. Cushion-relative "
+                     + "playout slack over the current segment - not raw clock drift, not a "
+                     + "cross-stream A/V delta.",
                      audio.audioClockDriftMs)
         // The true cross-stream meter the drift line above disclaims: host-RTP
         // positions of last-presented video vs the audio playhead (schedule
@@ -81,7 +85,9 @@ extension TelemetryRenderer {
         // form does, so the two wire forms can never disagree for one tick.
         builder.emit("glimmer_av_skew_ms",
                      "Cross-stream A/V skew, ms signed (+ = audio late/behind video; pair-anchored "
-                     + "host-RTP positions, small constant bias - trend is the signal).",
+                     + "host-RTP positions). CUSHION-INCLUSIVE: its magnitude is dominated by the "
+                     + "playout cushion, NOT sync error - a cushion-inclusive diagnostic. For the "
+                     + "true host↔Mac sync error use glimmer_av_clock_skew_ms below.",
                      extras.avSkewMs)
         // Cushion-subtracted true clock skew from the SAME derive: the genuine
         // host↔Mac clock offset without the deliberate playout cushion baked in.

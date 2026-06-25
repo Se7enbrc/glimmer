@@ -416,6 +416,7 @@ extension VideoDecoder {
         if let renderer = displayLayer?.sampleBufferRenderer {
             renderer.flush()
             OSSignposter.render.emitEvent("DiscontinuityFlush", "trigger=param_rebuild")
+            TelemetryCounters.shared.discontinuityFlushTotal.increment()
         }
         // The pacer's jitter buffer also holds old-format samples; drop them to
         // the freshest so the new keyframe presents without draining stale
