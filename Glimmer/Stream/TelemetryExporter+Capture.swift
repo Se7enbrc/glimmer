@@ -61,11 +61,9 @@ extension TelemetryExporter {
         snap.renderedFps = stats.renderedFps
 
         // StatsCollector tracks an EMA of decode wall-clock, not a per-frame
-        // histogram (true percentiles would need hot-path timing - avoided). We
-        // surface the EMA as p50 and derive p95/max as conservative multiples.
-        snap.decodeP50Ms = stats.avgDecodeTimeMs
-        snap.decodeP95Ms = stats.avgDecodeTimeMs.map { $0 * 1.5 }
-        snap.decodeMaxMs = stats.avgDecodeTimeMs.map { $0 * 2.0 }
+        // histogram. Surface the raw EMA only - the true tail (p95/max) lives in
+        // the glimmer_decode_time_p_ms / _idr_ms histograms, not a multiple of it.
+        snap.decodeEmaMs = stats.avgDecodeTimeMs
 
         snap.presentCadenceErrorMs = stats.avgPresentCadenceErrorMs
         // on-time/late split: derive counts from the on-time percent if present.

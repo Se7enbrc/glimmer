@@ -31,10 +31,9 @@ struct TelemetrySnapshot: Sendable {
     var decodedFps: Double?
     var renderedFps: Double?
 
-    // decode time
-    var decodeP50Ms: Double?
-    var decodeP95Ms: Double?
-    var decodeMaxMs: Double?
+    // decode time: EMA of decode wall-clock (StatsCollector tracks no per-frame
+    // histogram). True quantiles live in glimmer_decode_time_p_ms / _idr_ms.
+    var decodeEmaMs: Double?
 
     // present cadence
     var presentCadenceErrorMs: Double?
