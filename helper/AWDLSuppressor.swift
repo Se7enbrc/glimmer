@@ -132,11 +132,10 @@ final class AWDLSuppressor: @unchecked Sendable {
         }
     }
 
-    /// Down awdl0, strip its IPv6 link-local (macOS re-derives it on re-raise, so
-    /// deleting it raises the cost of coming back), and VERIFY - a few tight retries
-    /// because macOS can re-raise within ms. Returns true once confirmed down.
-    /// `fast`: skip the inter-attempt settle sleep (route fast path - a real
-    /// re-raise re-triggers us, so we don't block the exec queue spinning here).
+    /// Down awdl0 + strip its IPv6 link-local (raises the cost of re-raise),
+    /// retrying tightly since macOS can re-raise within ms. Returns true once
+    /// confirmed down. `fast` skips the settle sleep on the route path, where a
+    /// real re-raise re-triggers us anyway (don't spin the exec queue).
     private func forceDownAwdl(fast: Bool = false) -> Bool {
         for attempt in 0..<Self.maxDownAttempts {
             _ = executeIfconfig(args: [interfaceName, "down"])
@@ -196,9 +195,8 @@ final class AWDLSuppressor: @unchecked Sendable {
         while read(routeFd, &buf, buf.count) > 0 { sawEvent = true }
         guard sawEvent else { return }
         stateLock.lock(); let suppressing = _suppressing; stateLock.unlock()
-        // Hop the blocking ifconfig exec onto execQueue so this read source stays
-        // free to drain the NEXT raise edge. `fast`: skip the inter-attempt sleep
-        // on the route path - we'll be re-triggered if a retry is actually needed.
+        // Hop the blocking ifconfig exec onto execQueue so this read source
+        // stays free to drain the NEXT raise edge.
         if suppressing { execQueue.async { [weak self] in self?.downIfUp(fast: true) } }
     }
 

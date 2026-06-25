@@ -1,14 +1,10 @@
 import Foundation
 import os.log
 
-/// One-shot migration of user data orphaned by the sandbox→unsandbox flip.
-///
-/// While sandboxed, UserDefaults + FileIdentityStore lived under
-/// `~/Library/Containers/io.ugfugl.Glimmer/Data/Library/…`. Unsandboxed, the
-/// same APIs read `~/Library/…` directly, so an updating user silently loses
-/// their paired-hosts list and regenerates identity (forcing a re-pair). This
-/// copies the container's Preferences + Application Support into the host
-/// locations exactly once, never overwriting anything already present.
+/// One-shot rescue of data orphaned by the sandbox→unsandbox flip: while
+/// sandboxed, UserDefaults + FileIdentityStore lived under the container; now
+/// the same APIs read `~/Library/…`. Copy Preferences + Application Support
+/// into the host locations once, never clobbering anything already there.
 enum ContainerMigration {
 
     static let didMigrateKey = "didMigrateFromContainer"

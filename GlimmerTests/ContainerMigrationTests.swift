@@ -1,10 +1,9 @@
 //
 //  ContainerMigrationTests.swift
 //
-//  Covers ContainerMigration.copyTree - the idempotent copy-not-move that
-//  rescues sandbox-container data into the host locations. The full
-//  runIfNeeded() touches the real home dir / CFPreferences, so the unit
-//  scope is the pure tree copy.
+//  Covers ContainerMigration.copyTree (idempotent copy-not-move). The full
+//  runIfNeeded() touches the real home dir / CFPreferences, so the unit scope
+//  stays on the pure tree copy.
 //
 
 import Foundation
