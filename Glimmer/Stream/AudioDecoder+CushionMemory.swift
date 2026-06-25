@@ -213,6 +213,13 @@ extension AudioDecoder {
         let link = key.split(separator: "|").last.map(String.init) ?? "unknown"
         let cap = recordSeedCapMs(forLink: link)
         let clampedTarget = min(max(agedTarget, playoutCushionBaseMs), cap)
+        // WELD REPAIR: a floor at/above the cap (or at/above the target) is a
+        // poisoned record - skew under-runs welded the floor to the cap and froze
+        // the target one step above it. Drop the floor to base so the session
+        // re-learns from a healthy floor instead of re-seeding into the lock.
+        if floor >= cap || floor >= clampedTarget {
+            floor = min(playoutCushionBaseMs, clampedTarget)
+        }
         return (clampedTarget, min(max(floor, 0), clampedTarget))
     }
 
@@ -321,6 +328,20 @@ extension AudioDecoder {
             } else if learnedFloorMs > 0,
                       candidate < learnedFloorMs + Self.playoutCushionStepMs {
                 // FLOOR HOLD: below floor+step needs the floor to decay first.
+                // WIRED RELEASE: on a quiet, healthy resolved-wired link, walk the
+                // floor DOWN one step in step with the target instead of waiting on
+                // the ~10min floor clock (skew under-runs keep re-arming it, so it
+                // never releases). Same quiet window + near-miss evidence the target
+                // decay uses; wifi/tunnel/unknown keep the slow clock untouched.
+                if EnvSignalController.shared.streamLink == "wired" {
+                    learnedFloorMs = max(learnedFloorMs - Self.playoutCushionStepMs,
+                                         Self.playoutCushionBaseMs)
+                    playoutTargetMs = max(candidate, Self.playoutCushionBaseMs)
+                    floorQuietSinceNanos = now
+                    quietSinceNanos = now
+                    quietWindowMinFillMs = .infinity
+                    changed = true
+                }
             } else {
                 playoutTargetMs = max(candidate, Self.playoutCushionBaseMs)
                 quietSinceNanos = now
@@ -358,6 +379,11 @@ extension AudioDecoder {
             // Window over (telemetry off / probe dark): settle on the init
             // key. Not a give-up - learning continues, and the floor's slow
             // decay still walks any borrowed depth down if it was too deep.
+            // Set the link-aware cap from whatever the route reads NOW so a
+            // late/never resolve can't freeze at the tunnel-300 default (only
+            // ever equals-or-lowers the cap; pure field write under the lock).
+            effectiveCushionMaxMs = Self.cushionMaxMs(forLink: EnvSignalController.shared.streamLink)
+            effectiveOverrunCeilingMs = effectiveCushionMaxMs + Self.bufferOverrunCeilingSlackMs
             cushionLinkResolved = true
             audioMeterLock.unlock()
             return
