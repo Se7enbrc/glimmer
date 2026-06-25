@@ -180,11 +180,9 @@ extension MoonlightManager {
         return info
     }
 
-    /// UI entry point for a launch. Interposes a takeover check the bare
-    /// `stream(app:on:)` re-entrancy guard can't: if the host is already
-    /// streaming an app that ISN'T this session's, arm `pendingTakeover` so the
-    /// launcher confirms before we /launch over the live occupant. Otherwise
-    /// (idle host, our own session, unknown) stream straight through.
+    /// UI entry point for a launch. If the host is already streaming an app
+    /// that ISN'T ours, arm `pendingTakeover` for a confirm before we /launch
+    /// over the live occupant; otherwise stream straight through.
     func requestStream(app: MoonlightApp, on host: MoonlightHost) {
         if !isStreaming,
            let live = hostLiveStatus, live.hostID == host.id,

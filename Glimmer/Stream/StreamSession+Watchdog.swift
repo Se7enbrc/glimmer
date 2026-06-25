@@ -114,10 +114,9 @@ extension StreamSession {
             let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
                 MainActor.assumeIsolated {
                     guard let dec, let win else { return }
-                    // Auto network-health pill, driven INDEPENDENTLY of the
-                    // stats-HUD toggle: a degrading link must reach the user even
-                    // with the full HUD off. env_state >= caution shows it; clear
-                    // hides it. Cheap (an atomic read) so it runs every tick.
+                    // Auto network-health pill, independent of the stats-HUD
+                    // toggle so a degrading link reaches the user with the HUD
+                    // off. Shown at >= caution; cheap atomic read every tick.
                     let env = EnvSignalController.shared.state
                     win.networkBanner.setText(
                         env == .distress ? "Network unstable" : "Network degraded")
@@ -609,12 +608,12 @@ extension StreamSession {
         // stop being ACKed) - a connection-loss signal, not a video-stall one.
         if let health = backend.enetHealth(),
            health.sinceLastAckMs < StreamSession.enetAliveHoldThresholdMs {
-            // Show the hold banner over the frozen frame (same surface the
-            // reconnect episode uses) so a paused/held video reads as "holding"
-            // rather than a silent freeze. Hidden again by clearDecodeOnlyStallLatch.
+            // Hold banner over the frozen frame: "Holding..." since the control
+            // link is alive (only video paused) - "Reconnecting..." is reserved
+            // for the real reconnect episode. Hidden by clearDecodeOnlyStallLatch.
             let winForHold = window
             await MainActor.run {
-                winForHold?.reconnectBanner.setText("Reconnecting...")
+                winForHold?.reconnectBanner.setText("Holding...")
                 winForHold?.reconnectBanner.setVisible(true)
             }
             if !didLogWatchdogHold {

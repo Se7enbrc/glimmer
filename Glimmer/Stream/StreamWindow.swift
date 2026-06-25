@@ -363,8 +363,10 @@ public final class StreamWindow {
         let network = StreamBannerLayer(
             anchor: .bottomCenter, accent: NSColor.systemYellow.cgColor)
         network.attach(to: layer)
+        // Stacked above the network pill (both bottomCenter) so the two can't
+        // render on top of each other: 28 inset + 34 height + 10 gap = 72.
         let leaveHint = StreamBannerLayer(
-            anchor: .bottomCenter, accent: NSColor.white.cgColor)
+            anchor: .bottomCenter, accent: NSColor.white.cgColor, inset: 72)
         leaveHint.attach(to: layer)
 
         // Install the delegate that overrides fullscreen content size so
