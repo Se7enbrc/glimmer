@@ -23,6 +23,13 @@ final class AWDLSuppressor: @unchecked Sendable {
     private var pollTimer: DispatchSourceTimer?
     private var _initialDownDone = false
     private var _reSuppressCount = 0
+    /// PF_ROUTE fast path — re-down awdl0 the instant the kernel re-raises it,
+    /// event-driven (no poll) and far lower latency than SCDynamicStore.
+    private var routeFd: Int32 = -1
+    private var routeSource: DispatchSourceRead?
+    /// Tight verify-retry per down: macOS can re-raise within ms, so confirm + retry.
+    private static let maxDownAttempts = 3
+    private static let downRetrySettleUs: UInt32 = 40_000
 
     var suppressing: Bool {
         stateLock.lock(); defer { stateLock.unlock() }
@@ -34,8 +41,15 @@ final class AWDLSuppressor: @unchecked Sendable {
         return _suppressionSince
     }
 
+    /// How many times macOS re-raised awdl0 this stream (the whack-a-mole rate).
+    var reSuppressCount: UInt64 {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return UInt64(_reSuppressCount)
+    }
+
     func start() {
         setupMonitoring()
+        setupRouteSocket()
         startPolling()
         os_log("AWDL suppressor started", log: log, type: .default)
     }
@@ -90,10 +104,7 @@ final class AWDLSuppressor: @unchecked Sendable {
 
     private func downIfUp() {
         guard isInterfaceUp() else { return }
-        guard executeIfconfig(args: [interfaceName, "down"]) else {
-            os_log("Failed to bring %{public}@ down", log: log, type: .error, interfaceName)
-            return
-        }
+        let confirmed = forceDownAwdl()
         stateLock.lock()
         let initial = !_initialDownDone
         _initialDownDone = true
@@ -110,6 +121,75 @@ final class AWDLSuppressor: @unchecked Sendable {
             os_log("%{public}@ re-enabled by macOS (#%ld this stream) - re-suppressed",
                    log: log, type: .default, interfaceName, count)
         }
+        if !confirmed {
+            os_log("%{public}@ STILL up after %d down attempts", log: log, type: .error,
+                   interfaceName, Self.maxDownAttempts)
+        }
+    }
+
+    /// Down awdl0, strip its IPv6 link-local (macOS re-derives it on re-raise, so
+    /// deleting it raises the cost of coming back), and VERIFY - a few tight retries
+    /// because macOS can re-raise within ms. Returns true once confirmed down.
+    private func forceDownAwdl() -> Bool {
+        for attempt in 0..<Self.maxDownAttempts {
+            _ = executeIfconfig(args: [interfaceName, "down"])
+            for addr in ipv6LinkLocalAddrs() {
+                _ = executeIfconfig(args: [interfaceName, "inet6", addr, "delete"])
+            }
+            if !isInterfaceUp() { return true }
+            if attempt < Self.maxDownAttempts - 1 { usleep(Self.downRetrySettleUs) }
+        }
+        return !isInterfaceUp()
+    }
+
+    /// awdl0's current IPv6 addresses in `ifconfig … delete` form (scoped link-local).
+    private func ipv6LinkLocalAddrs() -> [String] {
+        guard let out = captureIfconfig() else { return [] }
+        return out.components(separatedBy: "\n")
+            .filter { $0.contains("inet6") }
+            .compactMap { line -> String? in
+                let parts = line.trimmingCharacters(in: .whitespaces).components(separatedBy: " ")
+                return parts.count > 1 ? parts[1] : nil
+            }
+    }
+
+    private func captureIfconfig() -> String? {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
+        task.arguments = [interfaceName]
+        let pipe = Pipe(); task.standardOutput = pipe; task.standardError = Pipe()
+        do { try task.run(); task.waitUntilExit() } catch { return nil }
+        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+    }
+
+    // MARK: Routing-socket fast path
+
+    /// Listen on a PF_ROUTE socket for kernel interface events and re-down awdl0 the
+    /// instant it's re-raised - event-driven, no polling, far lower latency than
+    /// SCDynamicStore, so the firmware barely gets an AWDL scan window in.
+    private func setupRouteSocket() {
+        let fd = socket(PF_ROUTE, SOCK_RAW, AF_UNSPEC)
+        guard fd >= 0 else { os_log("route socket failed (errno %d)", log: log, type: .error, errno); return }
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK)
+        routeFd = fd
+        let src = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+        src.setEventHandler { [weak self] in self?.drainRouteSocket() }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        routeSource = src
+        os_log("route-socket fast path armed (fd %d)", log: log, type: .default, fd)
+    }
+
+    /// Drain pending routing messages then re-assert the down if awdl0 popped up. We
+    /// don't parse message types - `downIfUp` is the filter (no-op unless awdl0 is
+    /// actually up) - so this stays simple and catches every raise edge.
+    private func drainRouteSocket() {
+        var buf = [UInt8](repeating: 0, count: 4096)
+        var sawEvent = false
+        while read(routeFd, &buf, buf.count) > 0 { sawEvent = true }
+        guard sawEvent else { return }
+        stateLock.lock(); let suppressing = _suppressing; stateLock.unlock()
+        if suppressing { downIfUp() }
     }
 
     /// Restore awdl0 to its normal (up) state once suppression ends - mirror of
@@ -142,6 +222,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         let idle = Date().timeIntervalSince(_lastHeartbeat)
         stateLock.unlock()
         if suppressing {
+            downIfUp()  // 1s backstop re-assert in case the route socket missed an edge
             if idle > 3 {
                 os_log("heartbeat stale %.1fs - releasing awdl0", log: log, type: .default, idle)
                 setSuppressing(false, reason: "heartbeat-timeout")

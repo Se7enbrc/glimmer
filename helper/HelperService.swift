@@ -98,4 +98,8 @@ final class HelperService: NSObject, NSXPCListenerDelegate, GlimmerHelperProtoco
     func ping(reply: @escaping (String) -> Void) {
         reply("glimmer-helper-ok")
     }
+
+    func reSuppressCount(reply: @escaping (UInt64) -> Void) {
+        reply(suppressor.reSuppressCount)
+    }
 }

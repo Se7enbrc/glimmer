@@ -397,6 +397,10 @@ final class TelemetryCounters: @unchecked Sendable {
     let fecHealthLock = os_unfair_lock_t.allocate(capacity: 1)
     var fecHealthValue: FecHealthSnapshot?
 
+    /// AWDL helper gauge (awdl0 parked + macOS re-raise count). Set by
+    /// AWDLHelperManager on the suppress heartbeat; read by the exporter. Self-locked.
+    let awdlHelperState = OSAllocatedUnfairLock<AWDLHelperSnapshot?>(initialState: nil)
+
     /// Host-RUMBLE receipt stamp (the last 0x010b receipt instant) - the detach-
     /// context breadcrumb's rumble-age source (ControllerForwarder.detach).
     /// Self-locked holder (the `P2State` idiom), defined in
@@ -587,6 +591,7 @@ final class TelemetryCounters: @unchecked Sendable {
         os_unfair_lock_lock(gapLock); packetGapValue = nil; os_unfair_lock_unlock(gapLock)
         os_unfair_lock_lock(decodeStateLock); decodeStateValue = nil; os_unfair_lock_unlock(decodeStateLock)
         os_unfair_lock_lock(fecHealthLock); fecHealthValue = nil; os_unfair_lock_unlock(fecHealthLock)
+        awdlHelperState.withLock { $0 = nil }
         os_unfair_lock_lock(audioStateLock)
         audioStateValue = nil; audioBufferFillMinMsValue = .infinity
         os_unfair_lock_unlock(audioStateLock)
