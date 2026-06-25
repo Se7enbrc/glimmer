@@ -15,17 +15,19 @@ import os
 
 extension FramePacer {
 
-    // MARK: - Realized-cadence telemetry state (main actor, metric-only)
+    // MARK: - Realized-cadence telemetry state (tick-confined, metric-only)
 
     /// Previous tick's `targetTimestamp`, so the refresh-window telemetry can
     /// accumulate the REALIZED callback cadence (deltas of successive targets)
     /// rather than the nominal `link.duration`, which reads the panel's rated
-    /// interval even while callbacks are being skipped. Main-actor confined:
-    /// `handleTick` is the only reader/writer. Static because an extension can't
-    /// add instance storage; safe process-wide since exactly one pacer ticks at
-    /// a time (one streaming session), and a stale cross-instance value just
-    /// produces one delta the plausibility bounds in `handleTick` discard.
-    @MainActor static var lastTickTargetTimestamp: CFTimeInterval = .nan
+    /// interval even while callbacks are being skipped. TICK-THREAD confined:
+    /// `handleTick` is the only reader/writer, and the link fires on exactly one
+    /// run loop at a time (the private tick thread, or `.main` in fallback), so
+    /// the reads/writes are serialized with no lock. Static because an extension
+    /// can't add instance storage; safe process-wide since exactly one pacer
+    /// ticks at a time (one streaming session), and a stale cross-instance value
+    /// just produces one delta the plausibility bounds in `handleTick` discard.
+    nonisolated(unsafe) static var lastTickTargetTimestamp: CFTimeInterval = .nan
 
     /// Ceiling for a plausible realized tick delta (seconds). Above this the
     /// gap is a link suspension (backgrounded window), a rebuild, or a stale
@@ -35,12 +37,17 @@ extension FramePacer {
     /// any suspension-scale gap.
     static let maxRealizedTickDeltaSeconds: Double = 0.5
 
-    // MARK: - Vsync tick (main run loop → pacingQueue)
+    // MARK: - Vsync tick (private tick run loop → pacingQueue)
 
-    /// CADisplayLink callback (main run loop). We capture only the cheap link
-    /// timing here, then hand the release decision to the serial pacing queue
-    /// so nothing on the present path runs on the main actor.
-    @MainActor
+    /// CADisplayLink callback. Fires on the private high-QoS tick run loop (the
+    /// `pacerTickOffMain` default; `.main` in fallback) - moved off `.main` so a
+    /// busy main thread can't STARVE this callback (the governor callback-gap
+    /// that trimmed ~73% of clean-link frame drops). We capture only the cheap
+    /// link timing here, then hand the release decision to the serial pacing
+    /// queue. Every shared touch is lock-guarded (telemetry / liveness / deficit
+    /// service) or tick-thread-confined (`lastTickTargetTimestamp`); the one
+    /// main-only access (`reapplyPreferredRangeIfNeeded`, which reads the NSView)
+    /// is hopped to the main actor below. Nothing here runs on the main actor.
     func handleTick(_ link: CADisplayLink) {
         // The link's realized cadence - refresh-agnostic. `duration` is the
         // nominal vsync interval; `targetTimestamp` is when the frame we
@@ -50,12 +57,12 @@ extension FramePacer {
         let target = link.targetTimestamp
         // `duration` is reliably > 0 on a running link; the 1/60 fallback only
         // guards a degenerate first tick. We deliberately use a constant here
-        // (not the shared cadence estimate) so this main-thread read touches no
+        // (not the shared cadence estimate) so this pre-lock read touches no
         // lock-guarded state.
         let vsyncInterval = link.duration > 0 ? link.duration : (1.0 / 60.0)
 
-        // Present-side liveness: stamp that the LINK is alive on the main run
-        // loop. This is the clock the watchdog's "link dead" trip gates on - a
+        // Present-side liveness: stamp that the LINK is alive (on the tick run
+        // loop). This is the clock the watchdog's "link dead" trip gates on - a
         // stopped link (same-screen HDR/VRR mode switch) freezes this value
         // even though VT keeps decoding. Cheap: one lock + two stores.
         //
@@ -137,17 +144,36 @@ extension FramePacer {
         }
 
         // Floor re-apply: the present-callback floor is seeded at install from
-        // the CONFIGURED fps, but the true cadence is learned from PTS deltas once
-        // frames flow (a configured-vs-actual mismatch, or a mid-stream fps change
-        // like 60→120). Re-pin the floor from the refined cadence here - on the
-        // main actor, where the link lives - when it has drifted past the
-        // hysteresis. Cheap: only touches the link object on a real change.
-        reapplyPreferredRangeIfNeeded(refinedIntervalSeconds: refinedIntervalSeconds)
+        // the CONFIGURED fps, but the true cadence is learned from PTS deltas
+        // once frames flow (a configured-vs-actual mismatch, or a mid-stream fps
+        // change like 60→120). It touches the link + NSView, both main-affine, so
+        // it CANNOT run on the tick thread - HOP it to the main actor. The hop is
+        // THROTTLED to ~10Hz (tick-thread-confined timestamp) so a 120-240Hz tick
+        // doesn't flood the main queue with the steady-state no-op check; the real
+        // re-pin rate is ~0.5/s, far under the throttle, and the method's own
+        // hysteresis decides whether to actually rewrite the range, so nothing is
+        // missed. On the `.main` fallback this is already a main-actor context;
+        // the async hop is harmless there too.
+        let sinceReapply = hostNow - Self.lastReapplyHopHostTime
+        if !Self.lastReapplyHopHostTime.isFinite || sinceReapply >= Self.reapplyHopMinInterval {
+            Self.lastReapplyHopHostTime = hostNow
+            let refined = refinedIntervalSeconds
+            DispatchQueue.main.async { [weak self] in
+                self?.reapplyPreferredRangeIfNeeded(refinedIntervalSeconds: refined)
+            }
+        }
 
         pacingQueue.async { [weak self] in
             self?.releaseDueFrame(targetTimestamp: target, vsyncInterval: vsyncInterval)
         }
     }
+
+    /// Min seconds between main-actor `reapplyPreferredRangeIfNeeded` hops, and
+    /// the last hop's host time (tick-thread confined, like
+    /// `lastTickTargetTimestamp`). Throttles the per-tick main hop to ~10Hz - the
+    /// floor re-pin it gates is ~0.5/s, so no real re-pin is delayed meaningfully.
+    static let reapplyHopMinInterval: CFTimeInterval = 0.1
+    nonisolated(unsafe) static var lastReapplyHopHostTime: CFTimeInterval = .nan
 
     // The floor re-apply (`reapplyPreferredRangeIfNeeded`) lives in
     // FramePacer+FrameRateRange.swift alongside the range builders it calls.
@@ -156,13 +182,16 @@ extension FramePacer {
 /// `@objc` shim that forwards the CADisplayLink callback into a Swift closure.
 /// CADisplayLink retains its target, so keeping the proxy separate from
 /// `FramePacer` (which `VideoDecoder` retains) avoids a retain cycle and keeps
-/// the selector signature trivial. Lives on the main actor - the link fires on
-/// the run loop it's added to (`.main`). Declared here with the tick handler it
-/// forwards to (moved out of FramePacer.swift for the length limit).
-@MainActor
-final class DisplayLinkProxy: NSObject {
-    private let onTick: (CADisplayLink) -> Void
-    init(onTick: @escaping (CADisplayLink) -> Void) {
+/// the selector signature trivial. NOT main-actor: the link fires on whichever
+/// run loop it was added to - the private tick thread by default, `.main` in
+/// fallback - so the callback (and `handleTick`, which it forwards to) must run
+/// off-main. `@unchecked Sendable` because the proxy carries only an immutable
+/// `@Sendable` closure across the bind (main actor) → fire (tick thread) hand-off.
+/// Declared here with the tick handler it forwards to (moved out of
+/// FramePacer.swift for the length limit).
+final class DisplayLinkProxy: NSObject, @unchecked Sendable {
+    private let onTick: @Sendable (CADisplayLink) -> Void
+    init(onTick: @escaping @Sendable (CADisplayLink) -> Void) {
         self.onTick = onTick
     }
     @objc func tick(_ link: CADisplayLink) {

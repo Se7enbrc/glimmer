@@ -100,8 +100,9 @@ extension FramePacer {
         // tied to the display the view is currently on and tracks it as the
         // view moves between screens - exactly the binding moonlight-qt builds
         // by hand with CVDisplayLinkCreateWithCGDisplay against the window's
-        // NSScreen. We add it to the main run loop in the common modes so it
-        // keeps firing during tracking loops / modal-ish UI beats.
+        // NSScreen. We add it (in the common modes) to the private tick run loop
+        // by default - the off-main path that un-starves the callback - or to
+        // `.main` when the flag is off; either keeps it firing across UI beats.
         // Reset the cadence base BEFORE the new link starts ticking, so the
         // first tick on the new (possibly discontinuous) timebase re-seeds
         // `lastPresentMediaTime` from this link's clock instead of comparing
@@ -150,7 +151,22 @@ extension FramePacer {
         os_unfair_lock_lock(&lock)
         tickDeficit.pinnedFloorHz = Double(range.minimum)
         os_unfair_lock_unlock(&lock)
-        link.add(to: .main, forMode: .common)
+        // Add the link to the PRIVATE tick run loop (default) so the present
+        // callback isn't starved when the main thread is busy - the governor
+        // callback-gap that trimmed ~73% of clean-link frame drops. `.main` is
+        // the instant fallback (flag off). The thread is created lazily and
+        // reused across rebuilds (installLink is the single rebind path), so a
+        // reconnect / screen change re-adds to it without spawning a second one.
+        // The watchdog's tick-deficit/linkDead net (livenessSnapshot, a Timer)
+        // still fires off-main, so even a non-firing off-main link self-heals.
+        if Self.tickOffMain {
+            let tickThread = pacerTickThread ?? PacerTickThread()
+            pacerTickThread = tickThread
+            tickThread.start()
+            tickThread.add(link)
+        } else {
+            link.add(to: .main, forMode: .common)
+        }
         self.setTickProxy(proxy)
         self.displayLink = link
         // Seed the bound-screen signature so `screenDidChange` can distinguish

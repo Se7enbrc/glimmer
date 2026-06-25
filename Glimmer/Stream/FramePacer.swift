@@ -75,9 +75,12 @@
 //  ---------
 //  * `submit` runs on the VT decode queue (any thread). It only touches the
 //    lock-guarded FIFO + counters.
-//  * The CADisplayLink `@objc` tick fires on the main run loop. It does the
-//    minimum on main (read targetTimestamp/duration, snapshot isStreaming) and
-//    dispatches the dequeue+enqueue to `pacingQueue`.
+//  * The CADisplayLink `@objc` tick fires on a private high-QoS run loop (the
+//    `pacerTickOffMain` default; `.main` in fallback) so a busy main thread
+//    can't starve it. It does the minimum there (read targetTimestamp/duration,
+//    roll the lock-guarded telemetry), hops the lone main-affine touch (the
+//    floor re-apply) to the main actor, and dispatches the dequeue+enqueue to
+//    `pacingQueue`. The link bind/unbind themselves stay on the main actor.
 //  * `start`/`stop`/`screenDidChange` run on the main actor (lifecycle).
 //  All shared mutable state is guarded by a single `os_unfair_lock`, the same
 //  discipline StatsCollector uses. The lock is held only for a handful of
@@ -453,6 +456,26 @@ final class FramePacer: @unchecked Sendable {
     let pacingQueue = DispatchQueue(
         label: "io.ugfugl.Glimmer.video.pacer", qos: .userInteractive)
 
+    // MARK: - Present tick run loop (off-main, default)
+
+    /// The private run loop the tick fires on when `tickOffMain` is set. Created
+    /// lazily in `installLink` (off-main path) and stopped on teardown/`deinit`
+    /// so no thread leaks across a reconnect / screen-change rebuild. Assigned
+    /// only from the main actor (install/teardown); read from `deinit`. NOT
+    /// main-actor isolated so `deinit` can stop it without an actor hop - safe
+    /// because deinit runs only when no other reference (so no thread) survives,
+    /// and `PacerTickThread` is itself `Sendable` with idempotent, locked teardown.
+    /// Nil while the main-runloop fallback is active. The `tickOffMain` flag +
+    /// key live in FramePacer+TickThread.swift with the thread they gate.
+    var pacerTickThread: PacerTickThread?
+
+    deinit {
+        // The link retains its proxy, not us, so deinit means the session is
+        // fully torn down; stop the thread so it can never outlive us. stop()
+        // is idempotent (stop() already ran on the normal teardown path).
+        pacerTickThread?.stop()
+    }
+
     // MARK: - Init
 
     init(stats: StatsCollector, configuredFps: Int32) {
@@ -576,6 +599,12 @@ final class FramePacer: @unchecked Sendable {
         displayLink = nil
         tickProxy = nil
         boundView = nil
+        // Stop the private tick run loop so the thread exits on full teardown.
+        // invalidate() above already detached the link from it. The rebind paths
+        // (screenDidChange / rebuildLink) deliberately KEEP the thread alive -
+        // they re-add through installLink - so only stop() and deinit tear it down.
+        pacerTickThread?.stop()
+        pacerTickThread = nil
         log.info("FramePacer stopped")
         // Mirror to the Diag/LogStore file sink: os_log-only pacer breadcrumbs
         // were structurally invisible postmortem (the glimmer-*.log sink records
