@@ -112,14 +112,10 @@ extension FramePacer {
     /// before the self-heal re-seed clears them).
     static let starvationLogTicks = 4
 
-    /// DUE-GATE slack (seconds): how far BEFORE a full stream interval a barely-not-
-    /// due head may still present this vsync rather than wait a whole one (the classic
-    /// 1.5× judder near fps≈refresh). A small FIXED ms, NOT half a vsync: a half-vsync
-    /// slack scales with refresh, so 120Hz (4.17ms slack) was penalized vs 240Hz
-    /// (2.08ms) for no reason - the slack only needs to cover sub-frame arrival jitter,
-    /// which is refresh-independent. 2ms comfortably absorbs a frame landing a hair
-    /// early at any refresh while staying well under one stream interval, so it never
-    /// under-buffers real jitter (the adaptive depth owns that) nor presents early.
+    /// DUE-GATE slack (seconds): a barely-not-due head may still present this vsync
+    /// rather than wait a whole one (the fps≈refresh 1.5× judder). FIXED ms, not half a
+    /// vsync - that scaled with refresh and penalized 120Hz vs 240Hz; sub-frame arrival
+    /// jitter (all this covers) is refresh-independent. Adaptive depth owns real jitter.
     static let dueGateSlackSeconds = 0.002
 
     /// PRESENT-LOOP BACKOFF threshold (in stream-frame intervals). When the head
