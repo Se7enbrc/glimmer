@@ -147,12 +147,10 @@ extension AudioDecoder {
     /// is below that envelope). Still bounded (worst-case standing latency,
     /// trimmed/decayed back once gaps stop).
     static let playoutCushionMaxMsTunnel: Double = 300
-    /// Adaptive-cushion cap (ms) for a clean WI-FI link - between the wired 150ms
-    /// cap and the 300ms tunnel cap. A clean Wi-Fi link's delivery-gap envelope is
-    /// deeper than wired (contention, power-save) but nowhere near a VPN tunnel's
-    /// multi-hundred-ms gaps, so sharing the 300ms tunnel cap let the ratchet pin
-    /// a clean Wi-Fi link far deeper than it ever needed. 200ms covers Wi-Fi gaps
-    /// with margin; still evidence-keyed and decay-temporary.
+    /// Adaptive-cushion cap (ms) for a clean WI-FI link - between wired 150ms and
+    /// tunnel 300ms. Wi-Fi's gap envelope (contention, power-save) is deeper than
+    /// wired but nowhere near a tunnel's, so the 300ms cap let the ratchet pin it
+    /// far deeper than needed. 200ms covers Wi-Fi gaps; still keyed and decaying.
     static let playoutCushionMaxMsWifi: Double = 200
     /// Slack (ms) the OVER-RUN ceiling sits ABOVE the active cushion cap so a
     /// max-deepened cushion can PRE-ROLL + absorb its post-gap catch-up clump
@@ -180,18 +178,15 @@ extension AudioDecoder {
         }
     }
 
-    /// Half-life (s) of the persisted record's AGE LERP toward base: a learned
-    /// target/floor that hasn't been refreshed lerps halfway back to base every
-    /// ~6h of wall time. A link's loss character drifts (moved rooms, a one-off
-    /// bad night), so a stale deep record shouldn't seed full-depth forever - it
-    /// re-learns from its own evidence each session anyway. Recent records (same
-    /// day) are essentially untouched; a week-old one is most of the way to base.
+    /// Half-life (s) of a persisted record's AGE LERP toward base: an unrefreshed
+    /// target/floor lerps halfway back every ~6h. A link's loss character drifts
+    /// (moved rooms, a one-off bad night), so a stale deep record shouldn't seed
+    /// full-depth forever - it re-learns its own depth each session anyway.
     static let cushionMemoryAgeHalfLifeSeconds: Double = 6 * 3600
 
-    /// The cap (ms) a record learned under `link` may seed at - the record is
-    /// keyed by link, so it can never seed past the cap of its OWN learned class
-    /// (a tunnel-depth never seeds a clean wired link). Unknown-keyed records
-    /// (telemetry-off bring-up) fail toward the deeper tunnel cap as before.
+    /// The cap (ms) a link-keyed record may seed at: its OWN learned class's cap,
+    /// so a tunnel-depth never seeds a clean wired link. Unknown-keyed records
+    /// (telemetry-off bring-up) fail toward the deeper tunnel cap.
     private static func recordSeedCapMs(forLink link: String) -> Double {
         link == "unknown" ? playoutCushionMaxMsTunnel : cushionMaxMs(forLink: link)
     }
@@ -423,12 +418,10 @@ extension AudioDecoder {
             floorQuietSinceNanos = now
             quietWindowMinFillMs = .infinity
         }
-        // CLAMP to the now-resolved link cap on EVERY path: the init seed defaulted
-        // to the deep tunnel cap (or borrowed a deep record during the unknown
-        // window), so a link resolving wired/wifi must immediately tighten both the
-        // standing target and the learned floor to the real cap - not walk down
-        // slowly through the trim (the clean-link pin). The grow ratchet re-earns
-        // any real depth from this link's own under-runs on top.
+        // CLAMP to the now-resolved cap on EVERY path: the seed defaulted deep
+        // (tunnel cap / borrowed record during the unknown window), so a link
+        // resolving wired/wifi tightens target + floor to the real cap at once,
+        // not walking down through the trim. The grow ratchet re-earns real depth.
         playoutTargetMs = max(Self.playoutCushionBaseMs,
                               min(playoutTargetMs, effectiveCushionMaxMs))
         learnedFloorMs = min(learnedFloorMs, effectiveCushionMaxMs)
@@ -480,10 +473,9 @@ extension AudioDecoder {
     /// varispeed rate by the buffer-fill error: the INTEGRAL absorbs the steady
     /// host↔Mac clock offset (its whole job), the PROPORTIONAL answers transient
     /// fill excursions, both slew-limited so the rate (hence pitch) never steps
-    /// audibly. When NOT engaged (pre-roll / re-prime / drain) it forgets the
-    /// estimate and slews back to rate 1.0 so a resumed segment starts neutral -
-    /// the under-run + rebuild machinery owns recovery there. Single caller, so the
-    /// resampler state needs no lock.
+    /// audibly. When NOT engaged (pre-roll / re-prime / drain) it slews back to
+    /// rate 1.0 but HOLDS the integral (the clock offset survives a drain). Single
+    /// caller, so the resampler state needs no lock.
     func driveResampler(fillMs: Double, targetMs: Double, engaged: Bool) {
         // Self-rate-limit to ~4Hz: publishAudioState fires per decoded packet
         // (~200Hz) and drift is ppm-slow, so a fast loop only adds noise.
@@ -492,12 +484,11 @@ extension AudioDecoder {
         lastResamplerUpdateNanos = now
 
         guard engaged else {
-            // Pre-roll / re-prime / drain: the under-run + rebuild machinery owns
-            // recovery, so slew the APPLIED rate back to 1.0 (no pitch step). But
-            // HOLD the integral - the host↔Mac clock offset is physical and survives
-            // a drain, so a re-prime should re-engage with the offset already learned
-            // rather than re-converge from 0 (the slow-drain regression). A gentle
-            // ×0.97/update bleed keeps a long dark stretch from latching a stale value.
+            // Pre-roll / re-prime / drain: slew the APPLIED rate to 1.0 (no pitch
+            // step) but HOLD the integral - the host↔Mac clock offset survives a
+            // drain, so re-engage with it already learned, not re-converged from 0.
+            // The ×0.97 bleed only runs while packets flow (an active re-prime); a
+            // true silence stops calling this, so it can't bleed a real offset away.
             resamplerIntegralPpm *= Self.resamplerIntegralHoldFactor
             if resamplerEpsPpm != 0 {
                 resamplerEpsPpm += max(-Self.resamplerSlewPpm,
