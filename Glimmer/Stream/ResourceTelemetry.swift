@@ -225,18 +225,18 @@ enum ResourceTelemetry {
             name: name, tid: tid, cpuPercent: cpuPercent, qos: qos, qosLabel: qosLabel(qos))
     }
 
-    /// Integer_t index of `phys_footprint` within `task_vm_info` - the kernel
-    /// must return a count past this field or it stays zero-initialized (the
-    /// "reads 0 every session" tell). `resident_size` sits far earlier and is
-    /// always filled, so it's the honest fallback.
-    private static let physFootprintIndex =
-        (MemoryLayout<task_vm_info_data_t>.offset(of: \.phys_footprint) ?? .max)
-        / MemoryLayout<integer_t>.size
+    /// Integer_t count needed to cover ALL of `task_vm_info.phys_footprint` (a
+    /// 64-bit field = 2 units): the count must reach past its END, since covering
+    /// only the low half still reads a partial 0. `resident_size` is the fallback.
+    private static let physFootprintCoverage: Int = {
+        guard let offset = MemoryLayout<task_vm_info_data_t>.offset(of: \.phys_footprint)
+        else { return .max }
+        return (offset + MemoryLayout<UInt64>.size) / MemoryLayout<integer_t>.size
+    }()
 
-    /// Process physical memory footprint (bytes) via `task_vm_info`. Falls back
-    /// to `resident_size` when the kernel returns a short count or a zero
-    /// `phys_footprint`, so the metric carries a real number instead of a dead 0.
-    /// nil only on an outright task_info failure.
+    /// Process physical memory footprint (bytes) via `task_vm_info`, falling back
+    /// to `resident_size` on a short count or zero `phys_footprint` so the metric
+    /// isn't a dead 0. nil only on an outright task_info failure.
     private static func sampleFootprint() -> UInt64? {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(
@@ -247,7 +247,7 @@ enum ResourceTelemetry {
             }
         }
         guard result == KERN_SUCCESS else { return nil }
-        let covered = Int(count) > physFootprintIndex
+        let covered = Int(count) >= physFootprintCoverage
         if covered, info.phys_footprint > 0 { return UInt64(info.phys_footprint) }
         if info.resident_size > 0 { return UInt64(info.resident_size) }
         return nil
@@ -296,14 +296,9 @@ enum ResourceTelemetry {
 /// unexplained judder. Logged once by the exporter on start; never on a hot path.
 enum QoSAudit {
 
-    /// The hot-path thread NAMES we EXPECT to be high-QoS. These are the actual
-    /// `pthread_getname_np` names the receive/control threads set on themselves
-    /// (`Glimmer.videoRecv`/`.audioRecv` via pthread_setname_np, `.enetControl`
-    /// via Thread.name) - NOT DispatchQueue labels, which the OS does not surface
-    /// as pthread names (a queue worker reads back empty → `tid-N`). The earlier
-    /// `io.ugfugl.Glimmer.*` queue-label list matched zero real threads and the
-    /// audit was dead. The `.userInitiated`/`.utility` ping/control queues are
-    /// deliberately omitted - those tiers are CORRECT there and must NOT flag.
+    /// The hot-path thread NAMES we EXPECT to be high-QoS - actual pthread names,
+    /// NOT DispatchQueue labels (which don't surface as pthread names; the old
+    /// queue-label list matched zero threads and deadened the audit).
     static let expectedHotPathLabels = [
         "Glimmer.videoRecv",
         "Glimmer.audioRecv",
@@ -345,10 +340,8 @@ enum QoSAudit {
                 + "off the P-core tier.", category)
         }
         if !matchedHotPath {
-            // None of expectedHotPathLabels matched a live thread. At start this
-            // can be benign pre-roll, but it's ALSO the exact symptom of the
-            // dead-audit bug (names drift out of sync with the threads). Warn so a
-            // future rename is visible instead of silently re-deadening the audit.
+            // No hot-path name matched: benign pre-roll, OR the dead-audit symptom
+            // (names drifted out of sync). Warn so a rename can't silently re-kill it.
             Diag.warn("QoS audit - no hot-path threads (\(expectedHotPathLabels.joined(separator: ", ")))"
                 + " found in this sample; either pre-roll or the expected thread names have "
                 + "drifted out of sync with the receive/control threads.", category)
