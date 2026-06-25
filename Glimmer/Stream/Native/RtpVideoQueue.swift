@@ -109,6 +109,14 @@ final class RtpVideoQueue {
 
     var loggedFirstFecRecovery = false
 
+    /// Cauchy-decoder cache keyed by (dataShards, parityShards). The matrix is a pure
+    /// function of the shape, so rebuilding it per recovered frame (the shape repeats
+    /// across a loss burst) is wasted GF work; memoize by shape. Single receive
+    /// thread, so the plain dictionary needs no lock. `internal`: read/written by the
+    /// reconstruct extension. Bounded by the handful of (ds,ps) shapes a stream uses.
+    var rsDecoderCache: [ReedSolomonShape: ReedSolomon] = [:]
+    struct ReedSolomonShape: Hashable { let ds: Int; let ps: Int }
+
     // MARK: - Receive-side reorder tolerance
     //
     // On a reordering link the tail/EOF data shards of frame N frequently arrive
@@ -491,15 +499,10 @@ final class RtpVideoQueue {
         lastUnrecoverableTotalSnapshot = unrecoverableTotalNow
         let lossChanged = fecHeadroom.observeLoss(fecRecovered: fecRecoveredFramesInWindow,
                                                   unrecoverable: unrecoverableDelta)
-        // ARMING BIAS (hardening #5, DEFAULT-OFF): bias the reorder-hold up on
-        // caution/distress link state - receive-side only, never the pacer depth.
-        let biasLevel = EnvSignalController.fecArmingBiasEnabled
-            ? EnvSignalController.shared.state.fecArmingBiasLevel : 0
-        let biasChanged = fecHeadroom.observeArmingBias(level: biasLevel)
-        if jitterChanged || lossChanged || biasChanged {
+        if jitterChanged || lossChanged {
             Diag.notice("NativeVideo PROACTIVE FEC headroom: reorder-hold → "
                 + "\(reorderWindowUs / 1000)ms (jitter-lvl \(fecHeadroom.level) "
-                + "loss-lvl \(fecHeadroom.lossLevel) bias-lvl \(fecHeadroom.armingBiasLevel)) "
+                + "loss-lvl \(fecHeadroom.lossLevel)) "
                 + "[recv-jitter=\(String(format: "%.1f", jitterUs / 1000.0))ms "
                 + "ooo=\(windowOutOfOrder) retransmit=\(retransmitDelta) "
                 + "fec-recovered=\(fecRecoveredFramesInWindow) unrecoverable=\(unrecoverableDelta)]",
@@ -508,16 +511,17 @@ final class RtpVideoQueue {
 
         // FEC HEALTH gauge (read-only): publish the controller's just-stepped
         // response + the per-frame parity headroom for the dashboard. Pure read-out
-        // - nothing here feeds back into the FEC/reorder logic. `fecPercentage` and
-        // `bufferParityPackets` are the latest frame's (they persist across windows);
-        // `windowMinParityMargin` is this window's worst recovered-frame headroom, or
-        // the current frame's full parity when no recovery occurred.
+        // - nothing here feeds back into the FEC/reorder logic. `fecPercentage` is the
+        // latest frame's (it persists across windows). `parityMargin` is this window's
+        // worst RECOVERED-frame headroom, or nil when no recovery occurred this window
+        // - "full parity, nothing consumed" is not a margin and is published as absent
+        // so the series only carries genuine near-miss evidence.
         counters.setFecHealth(TelemetryCounters.FecHealthSnapshot(
             reorderHoldMs: Double(reorderWindowUs) / 1000.0,
             headroomLevel: fecHeadroom.level,
             lossLevel: fecHeadroom.lossLevel,
             fecPercentage: fecPercentage,
-            parityMargin: windowMinParityMargin == Int.max ? bufferParityPackets : windowMinParityMargin))
+            parityMargin: windowMinParityMargin == Int.max ? nil : windowMinParityMargin))
 
         framesInWindow = 0
         fecRecoveredFramesInWindow = 0

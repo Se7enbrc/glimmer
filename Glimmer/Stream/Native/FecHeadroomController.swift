@@ -204,15 +204,10 @@ struct FecHeadroomController {
     /// Windows since the last loss-axis level change (its dwell guard).
     private var lossWindowsSinceChange = Int.max
 
-    /// FEC arming-bias axis from the link-state reconciler (hardening #5). 0 unless
-    /// EnvSignalController's default-off `fecArmingBiasEnabled` feeds caution/distress
-    /// in. Receive-side only; combined via `max` so it can only widen the hold.
-    private(set) var armingBiasLevel = 0
-
-    /// The level the reorder-hold actually rides: the WORST of the jitter axis, the
-    /// loss axis, and the arming-bias axis. `max` (not sum) keeps the total bounded
-    /// at `maxHoldUs` and means overlapping evidence doesn't double-count.
-    var effectiveLevel: Int { max(level, lossLevel, armingBiasLevel) }
+    /// The level the reorder-hold actually rides: the WORSE of the jitter axis and
+    /// the loss axis. `max` (not sum) keeps the total bounded at `maxHoldUs` and
+    /// means overlapping evidence doesn't double-count.
+    var effectiveLevel: Int { max(level, lossLevel) }
 
     /// The jitter-scaled BASE hold (µs): the clean `baseHoldUs` plus a bounded
     /// widening for the link's standing jitter above `jitterBaseFloorMs`. A
@@ -393,17 +388,6 @@ struct FecHeadroomController {
         return false
     }
 
-    /// Set the arming-bias axis from the link-state reconciler (caution/distress →
-    /// 1/2 steps; hardening #5). Receive-side only, zero wire bytes; 0-clamped and
-    /// default-off, so off → byte-identical. Returns true iff it changed.
-    @discardableResult
-    mutating func observeArmingBias(level newLevel: Int) -> Bool {
-        let clamped = min(Self.maxLevel, max(0, newLevel))
-        let changed = clamped != armingBiasLevel
-        armingBiasLevel = clamped
-        return changed
-    }
-
     /// Reset to baseline. Called when the queue resets its per-window accumulators
     /// for a fresh session so the controller never carries a stale escalation into
     /// a new stream.
@@ -417,6 +401,5 @@ struct FecHeadroomController {
         lossEventRun = 0
         lossClearRun = 0
         lossWindowsSinceChange = Int.max
-        armingBiasLevel = 0
     }
 }

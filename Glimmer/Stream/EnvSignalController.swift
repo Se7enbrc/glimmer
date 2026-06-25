@@ -91,10 +91,17 @@ final class EnvSignalController: @unchecked Sendable {
     /// so no synchronization is needed (the A/B is a compile-in-and-flip dial).
     nonisolated(unsafe) static var reconcilerEnabled = true
 
-    /// FEC arming bias (hardening #5), DEFAULT-OFF for shadow validation. When true,
-    /// caution/distress link state feeds the FecHeadroomController reorder-hold as a
-    /// third escalate axis (receive-side, zero wire bytes). Off → byte-identical.
-    nonisolated(unsafe) static var fecArmingBiasEnabled = false
+    // MARK: - Link class
+
+    /// The stream route class. `rawValue` IS the on-the-wire/persistence label
+    /// (`StreamRouteProbe.classify`, the `stream_link` NDJSON field) - so the
+    /// rawValue is used ONLY at that boundary (parse in / publish out); all the
+    /// gating logic below compares the enum, never bare literals. An unrecognized
+    /// label maps to `.unknown` (fail toward the countermeasure).
+    enum LinkClass: String {
+        case wired, wifi, tunnel, unknown
+        init(label: String?) { self = label.flatMap(LinkClass.init(rawValue:)) ?? .unknown }
+    }
 
     // MARK: - State
 
@@ -115,16 +122,6 @@ final class EnvSignalController: @unchecked Sendable {
             case .clear: return "clear"
             case .caution: return "caution"
             case .distress: return "distress"
-            }
-        }
-
-        /// FEC reorder-hold arming bias (hardening #5): caution → 1 step, distress →
-        /// 2, clear → 0. Combined via max in FecHeadroomController so it only widens.
-        var fecArmingBiasLevel: Int {
-            switch self {
-            case .clear: return 0
-            case .caution: return 1
-            case .distress: return 2
             }
         }
     }
@@ -221,8 +218,9 @@ final class EnvSignalController: @unchecked Sendable {
 
     private let lock = NSLock()
     private var stateValue: EnvState = .clear
-    /// Last published stream route class ("wired"/"wifi"/"tunnel"/"unknown").
-    private var streamLinkValue = "unknown"
+    /// Last published stream route class (a `LinkClass.rawValue`:
+    /// "wired"/"wifi"/"tunnel"/"unknown").
+    private var streamLinkValue = LinkClass.unknown.rawValue
     /// Monotonic instant of the last exporter feed (0 = never) - the cadence
     /// only trusts the route within `routeTrustHorizonNanos` of this.
     private var lastFedNanos: UInt64 = 0
@@ -317,7 +315,7 @@ final class EnvSignalController: @unchecked Sendable {
 
     private func expireRouteClaim() {
         lock.lock()
-        streamLinkValue = "unknown"
+        streamLinkValue = LinkClass.unknown.rawValue
         lastFedNanos = 0
         lock.unlock()
     }
@@ -345,14 +343,14 @@ final class EnvSignalController: @unchecked Sendable {
         lock.unlock()
         let routeFresh = fed != 0 && nowNanos &- fed <= Self.routeTrustHorizonNanos
         guard routeFresh else { return Self.fastPingIntervalSeconds }
-        switch link {
-        case "wired":
+        switch LinkClass(label: link) {
+        case .wired:
             return Self.relaxedPingIntervalSeconds
-        case "wifi":
+        case .wifi:
             if current != .clear { return Self.fastPingIntervalSeconds }
             return isInputIdle(nowNanos: nowNanos)
                 ? Self.fastPingIntervalSeconds : Self.relaxedPingIntervalSeconds
-        default:
+        case .tunnel, .unknown:
             return Self.fastPingIntervalSeconds
         }
     }
@@ -464,16 +462,16 @@ final class EnvSignalController: @unchecked Sendable {
     /// NWPathMonitor participates through `route`: the probe re-probes on
     /// every path change, so a mid-session undock lands here on the next tick.
     func observeCaptureTick(route: StreamRouteSnapshot?, wifi: WiFiSnapshot?) {
-        let link = route?.linkLabel ?? "unknown"
+        let link = LinkClass(label: route?.linkLabel)
         lock.lock()
-        streamLinkValue = link
+        streamLinkValue = link.rawValue  // rawValue ONLY at the publish boundary
         lastFedNanos = DispatchTime.now().uptimeNanoseconds
         lock.unlock()
 
         // A wired route FORCES CLEAR (the spec's gate), immediately and
         // outside the dwell guard - there is no radio to compensate for, and
         // whatever evidence was mid-run no longer describes the stream path.
-        if link == "wired", state != .clear {
+        if link == .wired, state != .clear {
             applyTransition(to: .clear, reason: "stream_link_wired")
             resetRuns()
             // Publish REST immediately (don't wait for the window close): a wired
@@ -550,10 +548,10 @@ final class EnvSignalController: @unchecked Sendable {
     /// satisfies the sustained contract. The classification mirrors
     /// FecHeadroomController.observeWindow - escalate thresholds high, relax
     /// thresholds lower, a neutral dead band that resets BOTH runs.
-    private func evaluateWindow(link: String) {
+    private func evaluateWindow(link: LinkClass) {
         window.rssiP50 = rssiSessionP50()
         window.txP95 = txRateSessionP95()
-        window.radioArmed = link == "wifi" && (window.rssiP50 != nil || window.txP95 != nil)
+        window.radioArmed = link == .wifi && (window.rssiP50 != nil || window.txP95 != nil)
 
         var radioDegraded = false
         var radioQuiet = true
@@ -625,7 +623,9 @@ final class EnvSignalController: @unchecked Sendable {
             ? sample
             : reconcileSmoothedJitterMs + Self.jitterBaseEwmaWeight * (sample - reconcileSmoothedJitterMs)
 
-        let desiredLevel = desiredHeadroomLevel(smoothedJitterMs: reconcileSmoothedJitterMs)
+        let desiredLevel = desiredHeadroomLevel(
+            smoothedJitterMs: reconcileSmoothedJitterMs,
+            outOfOrder: window.outOfOrder, retransmits: window.retransmit)
 
         lock.lock()
         let changed = desiredLevel != headroomLevelValue
@@ -636,18 +636,38 @@ final class EnvSignalController: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Map the current link state + smoothed jitter to the desired headroom
-    /// level (0...`maxHeadroomLevel`). CLEAR (incl. the wired-pinned case) is the
-    /// REST decision: level 0. Above CLEAR, jitter under the dead-zone is still
-    /// level 0 (the link state escalated on radio/co-gap, not jitter, and the
-    /// jitter racer is what the level steps absorb); each `headroomJitterMsPerLevel`
-    /// of jitter excess above the dead-zone adds one level.
-    private func desiredHeadroomLevel(smoothedJitterMs: Double) -> Int {
+    /// Map the current link state + the three receive-side health signals
+    /// (smoothed jitter, out-of-order, retransmit) to the desired headroom level
+    /// (0...`maxHeadroomLevel`). CLEAR (incl. the wired-pinned case) is the REST
+    /// decision: level 0. Above CLEAR, the published level is the WORST of the
+    /// jitter-derived level and the ooo/retransmit-derived level - so a LOW-jitter
+    /// but reordering/retransmitting window (which `evaluateWindow` already counts
+    /// as degraded) still publishes headroom, honoring the documented 3-signal
+    /// contract instead of riding jitter alone. `max` keeps it bounded at
+    /// `maxHeadroomLevel`; each axis can only widen the hold, never shrink it.
+    private func desiredHeadroomLevel(smoothedJitterMs: Double,
+                                      outOfOrder: UInt64, retransmits: UInt64) -> Int {
         guard state != .clear else { return 0 }
         let overDeadZone = smoothedJitterMs - Self.headroomJitterDeadZoneMs
-        guard overDeadZone > 0 else { return 0 }
-        let level = Int((overDeadZone / Self.headroomJitterMsPerLevel).rounded(.up))
-        return min(Self.maxHeadroomLevel, max(0, level))
+        let jitterLevel = overDeadZone > 0
+            ? Int((overDeadZone / Self.headroomJitterMsPerLevel).rounded(.up)) : 0
+        // ooo/retransmit map to one level at the FEC soft-escalate line, two at the
+        // hard-spike line - the same thresholds FecHeadroomController.observeWindow
+        // self-decided on when the reconciler is off.
+        let oooLevel = oooRetransmitLevel(outOfOrder: outOfOrder, retransmits: retransmits)
+        return min(Self.maxHeadroomLevel, max(0, max(jitterLevel, oooLevel)))
+    }
+
+    /// Discrete headroom level from this window's out-of-order + retransmit deltas,
+    /// keyed off FecHeadroomController's soft/hard escalate thresholds: 0 below the
+    /// soft line, 1 at/above it, 2 at/above the hard-spike line.
+    private func oooRetransmitLevel(outOfOrder: UInt64, retransmits: UInt64) -> Int {
+        let hard = outOfOrder >= UInt64(FecHeadroomController.oooHardEscalate)
+            || retransmits >= UInt64(FecHeadroomController.retransmitHardEscalate)
+        if hard { return 2 }
+        let soft = outOfOrder >= UInt64(FecHeadroomController.oooEscalate)
+            || retransmits >= UInt64(FecHeadroomController.retransmitEscalate)
+        return soft ? 1 : 0
     }
 
     /// Publish the REST decision (headroom level 0, smoothed jitter 0) and clear
@@ -666,9 +686,9 @@ final class EnvSignalController: @unchecked Sendable {
 
     /// Apply the run counters to the level - one step at a time, dwell-
     /// guarded, wired pinned to CLEAR (handled at the feed edge).
-    private func advanceStateMachine(link: String) {
+    private func advanceStateMachine(link: LinkClass) {
         if windowsSinceChange != Int.max { windowsSinceChange += 1 }
-        guard link != "wired" else { return }
+        guard link != .wired else { return }
         guard windowsSinceChange >= Self.minDwellWindows else { return }
 
         let current = state
@@ -810,10 +830,6 @@ final class EnvSignalController: @unchecked Sendable {
     //    base/cap envelope) - pays 10ms of latency BEFORE the gap instead of
     //    one audible blip after it (the one-blip-per-upward-ratchet pattern).
     //    Decays via the existing 60s target decay.
-    //
-    //  * FEC HEADROOM ARMING BIAS (WIRED, DEFAULT-OFF via fecArmingBiasEnabled):
-    //    feeds caution/distress to FecHeadroomController as a third escalate axis.
-    //    Receive-side only - zero wire bytes, same hard cap. Flip on to shadow-validate.
     //
     //  * PACER DEPTH FLOOR +1 (dark, double-gated): raise FramePacer's
     //    adaptive depth floor by one within its existing cap during CAUTION+.
