@@ -187,15 +187,9 @@ enum ControlTransport {
         }
     }
 
-    /// Read until the peer closes (we send `Connection: close`) or `Content-Length`
-    /// bytes of body have arrived. The socket's SO_RCVTIMEO bounds a stuck read.
-    ///
-    /// A non-positive read is NOT a blanket "clean EOF": a recv-timeout or transport
-    /// error mid-body must surface as a distinct truncated-read, not slip through as
-    /// a half-body that the XML parser later rejects as "Malformed XML". TLS asks
-    /// SSL_get_error (ZERO_RETURN = clean close-notify EOF; WANT_READ/WANT_WRITE =
-    /// retry; else error); plaintext reads 0 = EOF, -1 = errno (EAGAIN = timeout).
-    /// On EOF we also reject when a known Content-Length was not fully received.
+    /// Read until peer close or `Content-Length` body bytes arrive (SO_RCVTIMEO
+    /// bounds a stuck read). A non-positive read mid-body surfaces as a distinct
+    /// truncatedRead, not a half-body the XML parser later calls "Malformed XML".
     private static func readAll(fd: Int32, ssl: OpaquePointer?) throws -> Data {
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 16 * 1024)
@@ -216,7 +210,14 @@ enum ControlTransport {
                     case SSL_ERROR_ZERO_RETURN:
                         break readLoop   // clean TLS close-notify EOF
                     case SSL_ERROR_WANT_READ, SSL_ERROR_WANT_WRITE:
-                        continue         // retriable (the SO_RCVTIMEO bounds a stall)
+                        // A blocking socket with SO_RCVTIMEO surfaces a recv-timeout
+                        // as WANT_READ; retrying here would spin forever on a silent
+                        // host. Body short of Content-Length = truncated; fail fast.
+                        if bodyShort() {
+                            throw StreamError.truncatedRead(
+                                "TLS recv timed out mid-body (have \(data.count) bytes)")
+                        }
+                        break readLoop
                     default:
                         if bodyShort() {
                             throw StreamError.truncatedRead(

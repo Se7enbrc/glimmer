@@ -70,11 +70,9 @@ extension EnetControlChannel {
             : Self.backpressureAckSilenceFloorMs
         reliableBackloggedFlag = unackedCount > 0 && sinceLastAck > bpThreshold
 
-        // ACK-silence NEAR-MISS: count once per EDGE the silence crosses a deep
-        // RTT multiple (or the floor) while reliables are outstanding - the
-        // recovered near-death blip the dead-peer cutoff never records (one event
-        // hit 9332ms vs the 10000ms envelope and left no trace). Re-arm only after
-        // silence falls back, so a single near-miss is one count, not one-per-tick.
+        // ACK-silence NEAR-MISS: count once per EDGE silence (reliables outstanding)
+        // crosses a deep RTT multiple short of the dead-peer cutoff - the recovered
+        // blip that cutoff never records. Edge-armed, so one near-miss = one count.
         let nearMissThreshold = haveRtt
             ? min(Self.ackSilenceDeadMs - 1,
                   max(Self.ackSilenceNearMissFloorMs,

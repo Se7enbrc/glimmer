@@ -97,17 +97,16 @@ extension StreamSession {
         p2.anchorConnectStart(TelemetryCounters.monotonicNowNanos())
     }
 
-    /// Latch the P2 DISCONNECT REASON when WE initiate the teardown (user stop /
-    /// watchdog stall / connect failure), so the cause is attributed to us rather
-    /// than the host-side terminate that follows. Latches the FIRST concrete
-    /// reason (see `P2State.setDisconnectReason`), so a host terminate arriving
-    /// afterward doesn't overwrite the true cause. Always-live; no-op-safe.
+    /// Called only from GENUINE teardown (user stop / watchdog / connect failure).
+    /// Latches the per-session reason ordinal (first concrete wins) and bumps the
+    /// process-global tally once. Always-live; no-op-safe.
     func noteTelemetryDisconnect(_ reason: DisconnectReason) {
-        // Bump the PROCESS-GLOBAL per-reason counter only when THIS call won the
-        // latch, so a session counts exactly once no matter how many teardown
-        // paths fire. The global survives resetForNewSession (the per-session
-        // ordinal is torn down <1ms later, before a scrape can read it).
-        if let latched = TelemetryCounters.shared.p2.setDisconnectReason(reason) {
+        // Bump the global once, keyed by the latched reason (a host terminate may
+        // have latched it first). The per-terminate latch deliberately does NOT
+        // count, so a recovered silent-reconnect blip never inflates the tally.
+        let p2 = TelemetryCounters.shared.p2
+        p2.setDisconnectReason(reason)
+        if let latched = p2.countGlobalReasonOnce() {
             TelemetryCounters.shared.disconnectByReason.increment(latched)
         }
     }

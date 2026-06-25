@@ -97,10 +97,9 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         server: BackendServerInfo,
         config: BackendStreamConfig
     ) throws {
-        // Synchronous (protocol) entry: block on the bridge thread's completion.
-        // The async actor path (startConnectionAsync) is preferred - it frees the
-        // StreamSession actor instead of parking it on this wait. Kept for protocol
-        // conformance and any non-actor caller.
+        // Synchronous protocol entry: block on the bridge completion. Prefer
+        // startConnectionAsync (frees the actor instead of parking it here); this
+        // is kept for protocol conformance / non-actor callers.
         let bridge = DispatchSemaphore(value: 0)
         let outcomeBox = OutcomeBox()
         runBridgedConnect(server: server, config: config) { outcome in
@@ -111,12 +110,10 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         if let error = outcomeBox.get() { throw error }
     }
 
-    /// ASYNC actor-safe entry: run the same dedicated-thread connect pipeline but
-    /// await a continuation instead of blocking the caller, so the StreamSession
-    /// actor stays responsive (stop/cancel/telemetry) while a hanging host is
-    /// brought up. CANCELLATION: if the awaiting task is cancelled, we interrupt the
-    /// in-flight RTSP/ENet connections so the pipeline unwinds; the continuation is
-    /// resumed exactly once (the bridge-thread completion that follows the interrupt).
+    /// Async actor-safe entry: awaits a continuation instead of blocking, so the
+    /// StreamSession actor stays responsive while a hanging host is brought up. On
+    /// cancellation we interrupt the in-flight connections; the bridge-thread
+    /// completion then resumes the continuation exactly once.
     public func startConnectionAsync(
         server: BackendServerInfo,
         config: BackendStreamConfig
@@ -142,12 +139,10 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         func get() -> Error? { lock.lock(); defer { lock.unlock() }; return value }
     }
 
-    /// Run the connect pipeline on a DEDICATED thread and report the outcome (nil =
-    /// success, else a mapped StreamError) via `completion`, exactly once. The
-    /// blocking `done.wait()` runs on THAT thread, never on a Swift cooperative-pool
-    /// thread (the actor's). The async pipeline runs at .userInitiated and only
-    /// awaits, so it yields its pool thread across each RTSP/ENet suspension. The
-    /// 30s cap guards any unforeseen stall; each sub-stage is individually bounded.
+    /// Run the connect pipeline on a DEDICATED thread, reporting the outcome (nil =
+    /// success) via `completion` exactly once. The blocking `done.wait()` runs on
+    /// THAT thread, never a Swift cooperative-pool thread. The 30s cap guards an
+    /// unforeseen stall; each sub-stage is individually bounded.
     private func runBridgedConnect(
         server: BackendServerInfo,
         config: BackendStreamConfig,
@@ -301,20 +296,14 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
 
     func connectionStarted() {
         Diag.notice("connection established (native)", Self.logCategory)
-        // P2 CONNECT-HANDSHAKE: established edge - bounds the ENet-connect leg and
-        // starts the first-frame leg (established → first decoded frame). The
-        // RECONNECT count is NOT inferred here (the silent-reconnect path resets the
-        // handshake timeline per attempt) - it's bumped at the recovery site
-        // (runReconnectEpisode). Always-live; off any hot path.
+        // P2 established edge: bounds the ENet-connect leg, starts the first-frame
+        // leg. Reconnect is NOT inferred here (silent-reconnect resets the timeline
+        // per attempt) - it's counted at the recovery site (runReconnectEpisode).
         TelemetryCounters.shared.p2.markEstablished()
         let bridge = StreamBridgeContext.current
-        // Observability for the fragile one-shot edge: if the bridge or its
-        // continuation is gone at yield time, this established edge is being
-        // fired into the void (the UI's connecting→streaming promotion would
-        // then rely entirely on the .firstFrame fallback). Surface it instead
-        // of silently dropping it so a genuinely-torn yield is diagnosable.
-        // This is best-effort recovery insurance, NOT the load-bearing path -
-        // the first decoded frame independently promotes the phase.
+        // If the continuation is gone at yield time, this established edge fires
+        // into the void and the UI's connecting→streaming promotion falls back to
+        // .firstFrame; log it so a torn yield is diagnosable (not load-bearing).
         if bridge?.eventContinuation == nil {
             Diag.error("connection established but event continuation is nil "
                 + "(bridge=\(bridge == nil ? "nil" : "live")) - relying on first-frame fallback "
@@ -334,24 +323,15 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         } else {
             Diag.error("connection terminated unexpectedly (native, code \(code))", Self.logCategory)
         }
-        // P2 DISCONNECT REASON (always-live; a terminate is the rarest event). The
-        // host-initiated terminate maps code 0 → clean host close, non-zero → host
-        // error. A user stop / watchdog teardown latches its own reason at its own
-        // site (StreamSession.stop / watchdog) BEFORE this fires, and the latch
-        // keeps the FIRST concrete reason, so this only fills in a host-side cause.
-        if let latched = TelemetryCounters.shared.p2.setDisconnectReason(
-            code == 0 ? .hostClosedClean : .hostError) {
-            TelemetryCounters.shared.disconnectByReason.increment(latched)
-        }
+        // Latch the per-session reason ordinal only (code 0 → clean, else error).
+        // The process-global tally is bumped at genuine teardown, NOT here - a
+        // recoverable terminate may be silently reconnected (would over-count).
+        TelemetryCounters.shared.p2.setDisconnectReason(
+            code == 0 ? .hostClosedClean : .hostError)
         let bridge = StreamBridgeContext.current
-        // DON'T unconditionally yield `.connectionTerminated` to the UI here. The
-        // session classifies the terminate: a recoverable host close on a LIVE
-        // session (Sunshine restarting across a lock / secure-desktop switch, or
-        // a brief blip) drives a SILENT RECONNECT under the frozen frame and
-        // yields `.reconnecting`; only a fatal/give-up terminate yields
-        // `.connectionTerminated`. `handleHostTerminate` owns the input-ready
-        // flip and the teardown. If there's somehow no session, fall back to the
-        // old behavior so a terminate is never swallowed.
+        // Don't yield `.connectionTerminated` directly: handleHostTerminate
+        // classifies it (a recoverable live-session close drives a silent reconnect
+        // under the frozen frame). No session → fall back so it's never swallowed.
         if let session = bridge?.session {
             Task { await session.handleHostTerminate(code: code) }
         } else {
