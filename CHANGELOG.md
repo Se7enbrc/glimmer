@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.6.24 - 2026-06-24
+
+Fixes a rare freeze when a stream drops. If the host cut the connection at just
+the wrong instant - mid audio-playout - the app's audio teardown could deadlock
+against the audio engine, hanging Glimmer so it couldn't reconnect until it was
+force-quit and relaunched. The drift resampler now applies its rate change off
+the audio completion handler, removing the lock-order inversion that caused it.
+
 ## 2026.6.23 - 2026-06-24
 
 Restores headroom on AV1 streams. 2026.6.22's codec-aware budget trimmed AV1
