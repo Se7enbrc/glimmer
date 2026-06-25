@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.6.30 - 2026-06-25
+
+Fixes the in-stream "Network degraded" pill. A brief Wi-Fi co-gap blip could
+flash it, and once shown it could stay stuck on even after the link recovered.
+It now appears only for SUSTAINED degradation - a momentary blip is ignored -
+and reliably fades back out when the link clears.
+
 ## 2026.6.29 - 2026-06-25
 
 Fixes the choppiness in 2026.6.28. One of that release's frame-pacing changes

@@ -118,9 +118,9 @@ extension StreamSession {
                     // toggle so a degrading link reaches the user with the HUD
                     // off. Shown at >= caution; cheap atomic read every tick.
                     let env = EnvSignalController.shared.state
-                    win.networkBanner.setText(
-                        env == .distress ? "Network unstable" : "Network degraded")
-                    win.networkBanner.setVisible(env.rawValue >= EnvSignalController.EnvState.caution.rawValue)
+                    win.networkBanner.setSustained(
+                        env.rawValue >= EnvSignalController.EnvState.caution.rawValue,
+                        text: env == .distress ? "Network unstable" : "Network degraded")
                     // Cheap early-out: if the overlay is hidden, skip the
                     // snapshot read entirely. The decoder's collectors keep
                     // ticking in the background so a re-enable shows fresh
