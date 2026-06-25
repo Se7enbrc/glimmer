@@ -260,6 +260,7 @@ extension TelemetryExporter {
         // P1: reliable-channel retransmit total (monotonic; the climb that precedes
         // a control-stall, paired with the oldest-unacked trend above).
         snap.enetRetransmitTotal = counters.enetRetransmitTotal.value
+        snap.ackSilenceNearMissTotal = counters.ackSilenceNearMissTotal.value
     }
 
     /// Derive the per-second rates from this tick's monotonic-total deltas: pkts/s,

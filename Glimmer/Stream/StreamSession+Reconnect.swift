@@ -44,11 +44,16 @@ extension StreamSession {
         // attempt) must not start a second episode.
         guard !isReconnecting else { return }
 
-        // Recoverable iff the host sent the "server terminated this session"
-        // code AND we'd already reached a live state. A terminate before first
-        // live edge is a failed connect, not an interruption - fall through to
-        // the original teardown so the launcher shows the honest failure.
-        let recoverable = code == Self.recoverableTerminationCode && reachedLiveState
+        // Recoverable iff we'd already reached a live state AND the cause is one we
+        // can resume from: a host terminate in the recoverable set (server restart /
+        // graceful), or OUR OWN ENet dead-peer self-terminate (-1, the radio-doze /
+        // link-blip case). A terminate before the first live edge is a failed
+        // connect, not an interruption - fall through to the honest teardown so the
+        // launcher shows the failure. The 10s dead-peer envelope is unchanged; this
+        // only chooses silent-reconnect over teardown once it has fired.
+        let recoverableCause = Self.recoverableTerminationCodes.contains(code)
+            || code == Self.deadPeerTerminationCode
+        let recoverable = recoverableCause && reachedLiveState
         guard recoverable else {
             bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
             await stop(cause: code == 0 ? .hostClosedClean : .hostError)
@@ -87,6 +92,13 @@ extension StreamSession {
             if await reconnectInPlace() {
                 isReconnecting = false
                 reconnectAttempts = 0
+                // Count the genuine reconnect HERE. The established-edge inference
+                // (markEstablishedReportingReconnect) can't: reconnectInPlace re-runs
+                // connectBackend → anchorTelemetryConnectStart → p2.reset(), which
+                // wipes the established memory before the fresh edge fires, so that
+                // path always reads the reconnect as a first connect. This site is
+                // the unambiguous "a drop was silently recovered" signal.
+                TelemetryCounters.shared.reconnectTotal.increment()
                 bridge?.eventContinuation?.yield(.reconnected)
                 Diag.notice("reconnected - stream resumed in place", "Stream")
                 // Re-arm the stall latches so a later stall logs/recovers fresh.

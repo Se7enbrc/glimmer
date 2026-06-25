@@ -447,9 +447,10 @@ extension MoonlightManager {
                 return detail
             }
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
-        case .sessionFailed, .binaryNotFound:
+        case .sessionFailed, .binaryNotFound, .truncatedRead:
             // Genuinely never reached the host / handshake aborted before
-            // establishment → asleep guidance is honest.
+            // establishment (a truncated control read = the host dropped mid-
+            // response) → asleep guidance is honest.
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
         case .pairingFailed(let detail) where detail.contains("recognize this Mac"):
             // The not-paired disambiguation (NetworkClient.fetchServerInfo) -

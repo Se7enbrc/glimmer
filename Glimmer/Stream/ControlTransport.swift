@@ -189,17 +189,51 @@ enum ControlTransport {
 
     /// Read until the peer closes (we send `Connection: close`) or `Content-Length`
     /// bytes of body have arrived. The socket's SO_RCVTIMEO bounds a stuck read.
+    ///
+    /// A non-positive read is NOT a blanket "clean EOF": a recv-timeout or transport
+    /// error mid-body must surface as a distinct truncated-read, not slip through as
+    /// a half-body that the XML parser later rejects as "Malformed XML". TLS asks
+    /// SSL_get_error (ZERO_RETURN = clean close-notify EOF; WANT_READ/WANT_WRITE =
+    /// retry; else error); plaintext reads 0 = EOF, -1 = errno (EAGAIN = timeout).
+    /// On EOF we also reject when a known Content-Length was not fully received.
     private static func readAll(fd: Int32, ssl: OpaquePointer?) throws -> Data {
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 16 * 1024)
         var contentLength: Int?
         var headerEnd: Int?
-        while true {
+        func bodyShort() -> Bool {
+            guard let headerEnd, let contentLength else { return false }
+            return data.count - headerEnd < contentLength
+        }
+        readLoop: while true {
             let n: Int = buf.withUnsafeMutableBytes { raw in
                 if let ssl { return Int(SSL_read(ssl, raw.baseAddress, Int32(raw.count))) }
                 return read(fd, raw.baseAddress, raw.count)
             }
-            if n <= 0 { break }   // clean close, EOF, or recv timeout
+            if n <= 0 {
+                if let ssl {
+                    switch SSL_get_error(ssl, Int32(n)) {
+                    case SSL_ERROR_ZERO_RETURN:
+                        break readLoop   // clean TLS close-notify EOF
+                    case SSL_ERROR_WANT_READ, SSL_ERROR_WANT_WRITE:
+                        continue         // retriable (the SO_RCVTIMEO bounds a stall)
+                    default:
+                        if bodyShort() {
+                            throw StreamError.truncatedRead(
+                                "TLS read failed mid-body (have \(data.count) bytes)")
+                        }
+                        break readLoop   // error after a complete/headerless body
+                    }
+                } else {
+                    if n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+                        if bodyShort() {
+                            throw StreamError.truncatedRead(
+                                "recv timed out mid-body (have \(data.count) bytes)")
+                        }
+                    }
+                    break readLoop       // plaintext EOF (0) or non-retriable error
+                }
+            }
             data.append(contentsOf: buf[0..<n])
 
             // Once headers are complete, learn Content-Length so we can stop
@@ -212,6 +246,12 @@ enum ControlTransport {
                 }
             }
             if let headerEnd, let contentLength, data.count - headerEnd >= contentLength { break }
+        }
+        // A peer close before a declared Content-Length was met is a truncated body.
+        if bodyShort() {
+            throw StreamError.truncatedRead(
+                "connection closed before Content-Length satisfied "
+                + "(have \(data.count) bytes)")
         }
         return data
     }

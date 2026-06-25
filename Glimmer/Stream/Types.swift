@@ -481,6 +481,10 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     case decoderFailed(String)
     case audioFailed(String)
     case crypto(String)
+    /// A control-channel read ended before the full HTTP body arrived (a recv
+    /// timeout or transport error mid-body), distinct from a clean EOF. Surfaced
+    /// instead of letting a half-read body reach the XML parser as "Malformed XML".
+    case truncatedRead(String)
 
     public var description: String {
         switch self {
@@ -498,6 +502,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         case .decoderFailed(let reason): return "Video decoder failed: \(reason)"
         case .audioFailed(let reason): return "Audio failed: \(reason)"
         case .crypto(let reason): return "Cryptography error: \(reason)"
+        case .truncatedRead(let reason): return "Control connection ended early: \(reason)"
         }
     }
 

@@ -357,6 +357,17 @@ public protocol StreamingBackend: AnyObject, Sendable {
         config: BackendStreamConfig
     ) throws
 
+    /// ASYNC actor-safe connect: same contract as `startConnection`, but awaits
+    /// rather than blocking the caller, so an actor caller stays responsive
+    /// (stop/cancel/telemetry) while a hanging host is brought up. Cancelling the
+    /// awaiting task interrupts the in-flight connect. Defaults to running the
+    /// blocking variant off the caller (a detached task) so non-native backends
+    /// need no change.
+    func startConnectionAsync(
+        server: BackendServerInfo,
+        config: BackendStreamConfig
+    ) async throws
+
     /// Synchronous teardown; drains receive threads. = LiStopConnection().
     func stopConnection()
 
@@ -425,4 +436,23 @@ public extension StreamingBackend {
     /// control channel (NativeBackend) override this; a future C backend would
     /// inherit nil rather than be forced to fabricate the numbers.
     func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? { nil }
+
+    /// Default async connect: run the blocking `startConnection` on a detached task
+    /// so the awaiting caller isn't parked. Cancelling the task interrupts the
+    /// in-flight connect. The native backend overrides this with a continuation that
+    /// drives its dedicated connect thread directly. The `self` capture is safe -
+    /// `StreamingBackend` is `Sendable`.
+    func startConnectionAsync(
+        server: BackendServerInfo,
+        config: BackendStreamConfig
+    ) async throws {
+        try await withTaskCancellationHandler {
+            let task = Task.detached(priority: .userInitiated) {
+                try self.startConnection(server: server, config: config)
+            }
+            try await task.value
+        } onCancel: {
+            interruptConnection()
+        }
+    }
 }

@@ -103,7 +103,13 @@ extension StreamSession {
     /// reason (see `P2State.setDisconnectReason`), so a host terminate arriving
     /// afterward doesn't overwrite the true cause. Always-live; no-op-safe.
     func noteTelemetryDisconnect(_ reason: DisconnectReason) {
-        TelemetryCounters.shared.p2.setDisconnectReason(reason)
+        // Bump the PROCESS-GLOBAL per-reason counter only when THIS call won the
+        // latch, so a session counts exactly once no matter how many teardown
+        // paths fire. The global survives resetForNewSession (the per-session
+        // ordinal is torn down <1ms later, before a scrape can read it).
+        if let latched = TelemetryCounters.shared.p2.setDisconnectReason(reason) {
+            TelemetryCounters.shared.disconnectByReason.increment(latched)
+        }
     }
 
     /// Record a "that felt bad" telemetry bookmark (signal 4). Actor-isolated so

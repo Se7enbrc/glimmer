@@ -63,6 +63,15 @@ extension TelemetryRenderer {
         builder.emitInfo("glimmer_disconnect_reason_info",
                          "Disconnect reason as a label (value always 1).",
                          labels: [("reason", snap.disconnectReason.label)])
+        // PROCESS-GLOBAL per-reason tally: the durable disconnect record. The
+        // per-session ordinal/info above is latched then torn down <1ms later (vs a
+        // 1s scrape), so this monotonic counter family - kept out of the session
+        // reset - is what a scrape actually catches the reason from.
+        builder.emitCounterFamily(
+            "glimmer_disconnect_total",
+            "Disconnects this PROCESS by reason (monotonic; survives session resets).",
+            key: "reason",
+            rows: snap.disconnectByReason.map { (label: $0.label, value: $0.total) })
     }
 
     /// IDR ROUND-TRIP counts + last measured RTT (the distribution is the

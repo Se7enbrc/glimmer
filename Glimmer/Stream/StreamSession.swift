@@ -210,6 +210,19 @@ public actor StreamSession {
     /// frame and silently re-establish, rather than bouncing to the launcher.
     /// Stored signed (the inbound parser hands us a signed Int32).
     static let recoverableTerminationCode: Int32 = Int32(bitPattern: 0x80030023)
+    /// The small SET of TERMINATION codes that are recoverable-on-a-live-session
+    /// (silent reconnect rather than a launcher bounce). Beyond the
+    /// SERVER_TERMINATED_CLOSED above this adds GRACEFUL_TERMINATION (0x80030013,
+    /// host bringing the session down briefly) - both come back in seconds. The
+    /// dead-peer self-terminate (-1) is handled separately (only after live state).
+    static let recoverableTerminationCodes: Set<Int32> = [
+        Int32(bitPattern: 0x80030023), Int32(bitPattern: 0x80030013)
+    ]
+    /// Our OWN ENet dead-peer self-termination code (runControlLoop's ackSilence
+    /// cutoff fires onTerminated(-1)). Recoverable ONLY after a live state: it's the
+    /// radio-doze / link-blip case, exactly what the silent reconnect is for. A -1
+    /// before live is a failed connect and falls through to the honest teardown.
+    static let deadPeerTerminationCode: Int32 = -1
     /// Bound the reconnect episode: at most this many attempts...
     static let reconnectAttemptCap = 5
     /// ...and at most this long wall-clock before we give up and tear down.

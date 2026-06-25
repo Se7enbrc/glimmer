@@ -13,18 +13,35 @@ import Network
 extension EnetControlChannel {
     // MARK: - Public: establish + START_A/B
 
+    /// AGGREGATE wall-clock deadline across the WHOLE ENet handshake (CONNECT +
+    /// START_A + START_B). The three stages are individually 10s-bounded, so the
+    /// pre-existing worst case was ~30s of stacked silence with no aggregate cap
+    /// (healthy p90 is ~1s). This caps the whole sequence well under the 30s outer
+    /// safety net so a half-dead host fails fast instead of stalling the actor for
+    /// the full stack. Each stage's own timeout is clamped to the time remaining.
+    static let handshakeDeadlineMs = 13_000
+
     /// Open the UDP socket, run the CONNECT handshake to VERIFY_CONNECT + ACK,
     /// then send START_A and START_B reliably. Returns once both are ACKed
     /// (= "connected"). Throws at the specific failing stage otherwise.
     func establishAndStart(stage: (String) -> Void,
                            stageDone: (String) -> Void,
                            stageFailed: (String, Int32) -> Void) async throws {
+        let deadline = DispatchTime.now().uptimeNanoseconds
+            + UInt64(Self.handshakeDeadlineMs) * 1_000_000
+        // ms left until the aggregate deadline, floored at 1 so a stage always gets
+        // one bounded tick (it will then immediately time out at the envelope).
+        func remainingMs() -> Int {
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard deadline > now else { return 1 }
+            return max(1, Int((deadline - now) / 1_000_000))
+        }
         // --- ENET_CONNECT stage ---
         stage("ENET_CONNECT")
         do {
             try await openSocket()
             try queueAndSendConnect()
-            try await awaitVerifyConnect(timeoutMs: 10_000)
+            try await awaitVerifyConnect(timeoutMs: min(10_000, remainingMs()))
         } catch {
             stageFailed("ENET_CONNECT", enetCode(error))
             throw error
@@ -34,7 +51,7 @@ extension EnetControlChannel {
         // --- START_A stage ---
         stage("START_A")
         do {
-            try await sendStart(index: 0, label: "START_A")
+            try await sendStart(index: 0, label: "START_A", timeoutMs: min(10_000, remainingMs()))
         } catch {
             stageFailed("START_A", enetCode(error))
             throw error
@@ -44,7 +61,7 @@ extension EnetControlChannel {
         // --- START_B stage ---
         stage("START_B")
         do {
-            try await sendStart(index: 1, label: "START_B")
+            try await sendStart(index: 1, label: "START_B", timeoutMs: min(10_000, remainingMs()))
         } catch {
             stageFailed("START_B", enetCode(error))
             throw error
@@ -262,12 +279,12 @@ extension EnetControlChannel {
     /// Build the encrypted control packet, queue it as a reliable SEND_RELIABLE
     /// on channel 0, send, and wait for its ACK (up to ~10ms loops, like
     /// sendMessageAndDiscardReply). Returns once ACKed or throws on timeout.
-    func sendStart(index: Int, label: String) async throws {
+    func sendStart(index: Int, label: String, timeoutMs: Int = 10_000) async throws {
         let (type, payload) = startPacket(index: index)
         let relSeq = try sendEncryptedControl(
             type: type, payload: payload, channel: Enet.ctrlChannelGeneric, label: label)
         try await awaitAck(channelID: Enet.ctrlChannelGeneric, relSeq: relSeq,
-                           timeoutMs: 10_000, label: label)
+                           timeoutMs: timeoutMs, label: label)
         Diag.notice("ENet \(label) ACKed", Self.logCategory)
     }
 
