@@ -124,15 +124,10 @@ final class FramePacer: @unchecked Sendable {
 
     var lock = os_unfair_lock_s()
 
-    /// DEBUG-only lock-discipline assertions (compiled out in release - zero cost
-    /// and no behavior change). The ~40 fields above all live under this one
-    /// `os_unfair_lock`, and the never-nest invariant is load-bearing:
-    /// `refreshReconciledTarget` takes EnvSignalController's lock, so it MUST run
-    /// OFF this lock. `assertLockHeld` guards the `*Locked` entry (caller forgot
-    /// the lock); `assertLockNotHeld` guards the off-lock refresh (a future caller
-    /// nesting two locks). `os_unfair_lock_assert_owner` traps on the FIRST
-    /// violation in a debug build, so a discipline break is caught at the boundary
-    /// instead of surfacing as a rare deadlock/corruption far away.
+    /// DEBUG-only lock-discipline assertions (compiled out in release). The never-nest
+    /// invariant is load-bearing: `refreshReconciledTarget` takes EnvSignalController's
+    /// lock so it MUST run OFF this one. Traps at the boundary on the first violation
+    /// rather than surfacing as a rare deadlock far away.
     @inline(__always) func assertLockHeld() {
         #if DEBUG
         os_unfair_lock_assert_owner(&lock)
