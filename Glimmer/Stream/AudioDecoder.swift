@@ -101,8 +101,8 @@ public final class AudioDecoder: @unchecked Sendable {
     /// AudioDecoder+CushionMemory.swift). `resamplerIntegralPpm` accumulates the
     /// steady host↔Mac clock offset; the applied `resamplerEpsPpm` slews toward the
     /// PI target so the varispeed rate never steps audibly. Touched only on the
-    /// ~1Hz `publishAudioState` cadence (single caller) so no lock; reset toward 0
-    /// whenever the loop disengages (pre-roll / re-prime / drain).
+    /// ~1Hz `publishAudioState` cadence (single caller) so no lock; HELD (slow-bled,
+    /// not zeroed) across disengage since the clock offset survives a drain.
     var resamplerIntegralPpm: Double = 0
     var resamplerEpsPpm: Double = 0
     /// `DispatchTime` ns of the last PI update - `publishAudioState` (hence
@@ -117,9 +117,14 @@ public final class AudioDecoder: @unchecked Sendable {
     static let resamplerUpdateIntervalNanos: UInt64 = 250_000_000  // ~4Hz; drift is ppm-slow
     static let resamplerDeadbandMs = 1.0    // ignore sub-ms fill noise (integral anti-windup)
     static let resamplerKpPpmPerMs = 3.0    // proportional: answers transient fill excursions
-    static let resamplerKiPpmPerMs = 0.06   // integral: absorbs the steady ppm clock offset (2x for faster catch-up)
+    static let resamplerKiPpmPerMs = 0.18   // integral: absorbs the steady ppm clock offset (the rate-limiter on convergence)
     static let resamplerSlewPpm = 4.0       // max ppm change per update; 16ppm/s still well under audible pitch step
     static let resamplerBoundPpm = 1500.0   // skew-correction ceiling; real host skews seen ~450ppm, so 500 railed
+    /// Per-disengage HOLD factor on the integral. The host↔Mac clock offset is
+    /// physical and unchanged across a drain/re-prime, so the integral is mostly
+    /// kept (a slow ×0.97/update bleed guards a stale estimate) instead of zeroed -
+    /// re-engaging with the offset already learned, not re-converging from 0.
+    static let resamplerIntegralHoldFactor = 0.97
     /// Mirror of `isShutdown` in the METER lock's domain, raised by `shutdown()`
     /// BEFORE `playerNode.stop()`. Stopping a node with a standing cushion fires
     /// the completion handler of EVERY queued buffer (.dataConsumed semantics:

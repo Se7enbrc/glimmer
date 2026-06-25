@@ -152,6 +152,10 @@ extension TelemetryRenderer {
         // exactly this 1Hz cadence; the prom render derives without feeding).
         builder.add("av_skew_ms", AudioVideoSkewStore.shared.deriveSkewMs(
             bufferFillMs: audio.bufferFillMs, accumulate: true))
+        // The cushion-SUBTRACTED true clock skew from the SAME derive above (no
+        // deliberate-cushion bias) - the genuine host↔Mac clock offset the drift
+        // resampler corrects, vs av_skew_ms which reads ~cushion+single-digit ms.
+        builder.add("av_clock_skew_ms", AudioVideoSkewStore.shared.lastTrueClockSkew())
         builder.addCount("av_skew_rebase_total", AudioVideoSkewStore.shared.rebaseTotal)
         // The live learned LOSS FLOOR under the playout target (the decay
         // limit-cycle fix) - absent until first learned, so a floor-held

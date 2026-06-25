@@ -147,6 +147,13 @@ extension AudioDecoder {
     /// is below that envelope). Still bounded (worst-case standing latency,
     /// trimmed/decayed back once gaps stop).
     static let playoutCushionMaxMsTunnel: Double = 300
+    /// Adaptive-cushion cap (ms) for a clean WI-FI link - between the wired 150ms
+    /// cap and the 300ms tunnel cap. A clean Wi-Fi link's delivery-gap envelope is
+    /// deeper than wired (contention, power-save) but nowhere near a VPN tunnel's
+    /// multi-hundred-ms gaps, so sharing the 300ms tunnel cap let the ratchet pin
+    /// a clean Wi-Fi link far deeper than it ever needed. 200ms covers Wi-Fi gaps
+    /// with margin; still evidence-keyed and decay-temporary.
+    static let playoutCushionMaxMsWifi: Double = 200
     /// Slack (ms) the OVER-RUN ceiling sits ABOVE the active cushion cap so a
     /// max-deepened cushion can PRE-ROLL + absorb its post-gap catch-up clump
     /// without tripping the backstop. The runtime ceiling (`effectiveOverrunCeilingMs`)
@@ -166,20 +173,51 @@ extension AudioDecoder {
     /// deep-by-default bring-up policy as the seed - too shallow glitches, too deep
     /// walks down through the trim).
     static func cushionMaxMs(forLink link: String) -> Double {
-        link == "wired" ? playoutCushionMaxMs : playoutCushionMaxMsTunnel
+        switch link {
+        case "wired": return playoutCushionMaxMs
+        case "wifi": return playoutCushionMaxMsWifi
+        default: return playoutCushionMaxMsTunnel
+        }
     }
 
-    /// Read one persisted record, clamped defensively (a hand-edited or
-    /// corrupt default must not seed outside the ladder's own bounds).
+    /// Half-life (s) of the persisted record's AGE LERP toward base: a learned
+    /// target/floor that hasn't been refreshed lerps halfway back to base every
+    /// ~6h of wall time. A link's loss character drifts (moved rooms, a one-off
+    /// bad night), so a stale deep record shouldn't seed full-depth forever - it
+    /// re-learns from its own evidence each session anyway. Recent records (same
+    /// day) are essentially untouched; a week-old one is most of the way to base.
+    static let cushionMemoryAgeHalfLifeSeconds: Double = 6 * 3600
+
+    /// The cap (ms) a record learned under `link` may seed at - the record is
+    /// keyed by link, so it can never seed past the cap of its OWN learned class
+    /// (a tunnel-depth never seeds a clean wired link). Unknown-keyed records
+    /// (telemetry-off bring-up) fail toward the deeper tunnel cap as before.
+    private static func recordSeedCapMs(forLink link: String) -> Double {
+        link == "unknown" ? playoutCushionMaxMsTunnel : cushionMaxMs(forLink: link)
+    }
+
+    /// Read one persisted record, AGE-LERPed toward base and clamped to its own
+    /// link-class cap (the link rides the key). Defensive against hand-edits.
     static func readCushionMemory(key: String) -> (targetMs: Double, floorMs: Double)? {
         guard let dict = UserDefaults.standard.dictionary(forKey: key),
               let target = dict["target_ms"] as? Double, target.isFinite else { return nil }
-        // Clamp to the DEEPEST (tunnel) cap at load: a tunnel session legitimately
-        // learns up to 300ms, and clamping that to the wired 150ms here would lose
-        // it on reload. The runtime link-aware cap (`effectiveCushionMaxMs`) then
-        // governs - a wired session seeded deep walks back down through the trim.
-        let clampedTarget = min(max(target, playoutCushionBaseMs), playoutCushionMaxMsTunnel)
-        let floor = (dict["floor_ms"] as? Double).flatMap { $0.isFinite ? $0 : nil } ?? 0
+        var floor = (dict["floor_ms"] as? Double).flatMap { $0.isFinite ? $0 : nil } ?? 0
+        // AGE LERP: pull a stale target/floor toward base by its wall age (the
+        // link's loss character drifts; a record re-learns its own depth anyway).
+        var agedTarget = target
+        if let saved = dict["saved_at"] as? Double, saved > 0 {
+            let ageSeconds = Date().timeIntervalSinceReferenceDate - saved
+            if ageSeconds > 0 {
+                let keep = pow(0.5, ageSeconds / cushionMemoryAgeHalfLifeSeconds)
+                agedTarget = playoutCushionBaseMs + (target - playoutCushionBaseMs) * keep
+                floor *= keep
+            }
+        }
+        // Clamp to the record's OWN link-class cap (parsed from the key) so a
+        // tunnel-learned depth can never seed a clean wired link.
+        let link = key.split(separator: "|").last.map(String.init) ?? "unknown"
+        let cap = recordSeedCapMs(forLink: link)
+        let clampedTarget = min(max(agedTarget, playoutCushionBaseMs), cap)
         return (clampedTarget, min(max(floor, 0), clampedTarget))
     }
 
@@ -189,7 +227,12 @@ extension AudioDecoder {
     /// persists the lower value, and a seeded spike decays normally next run.
     static func persistCushionMemory(key: String, targetMs: Double, floorMs: Double) {
         guard !key.isEmpty else { return }
-        UserDefaults.standard.set(["target_ms": targetMs, "floor_ms": floorMs], forKey: key)
+        // `saved_at` (wall reference seconds) drives the read-side age lerp - a
+        // record refreshed this session reads near full depth, a stale one decays.
+        UserDefaults.standard.set(
+            ["target_ms": targetMs, "floor_ms": floorMs,
+             "saved_at": Date().timeIntervalSinceReferenceDate],
+            forKey: key)
     }
 
     /// Resolve this session's seed: the init key's own record first; when the
@@ -380,6 +423,15 @@ extension AudioDecoder {
             floorQuietSinceNanos = now
             quietWindowMinFillMs = .infinity
         }
+        // CLAMP to the now-resolved link cap on EVERY path: the init seed defaulted
+        // to the deep tunnel cap (or borrowed a deep record during the unknown
+        // window), so a link resolving wired/wifi must immediately tighten both the
+        // standing target and the learned floor to the real cap - not walk down
+        // slowly through the trim (the clean-link pin). The grow ratchet re-earns
+        // any real depth from this link's own under-runs on top.
+        playoutTargetMs = max(Self.playoutCushionBaseMs,
+                              min(playoutTargetMs, effectiveCushionMaxMs))
+        learnedFloorMs = min(learnedFloorMs, effectiveCushionMaxMs)
         let target = playoutTargetMs
         let floor = learnedFloorMs
         let cap = effectiveCushionMaxMs
@@ -441,9 +493,12 @@ extension AudioDecoder {
 
         guard engaged else {
             // Pre-roll / re-prime / drain: the under-run + rebuild machinery owns
-            // recovery. Forget the drift estimate and slew the rate back to 1.0 so
-            // a resumed segment starts neutral. (Slew, never snap - no pitch step.)
-            resamplerIntegralPpm = 0
+            // recovery, so slew the APPLIED rate back to 1.0 (no pitch step). But
+            // HOLD the integral - the host↔Mac clock offset is physical and survives
+            // a drain, so a re-prime should re-engage with the offset already learned
+            // rather than re-converge from 0 (the slow-drain regression). A gentle
+            // ×0.97/update bleed keeps a long dark stretch from latching a stale value.
+            resamplerIntegralPpm *= Self.resamplerIntegralHoldFactor
             if resamplerEpsPpm != 0 {
                 resamplerEpsPpm += max(-Self.resamplerSlewPpm,
                                        min(Self.resamplerSlewPpm, -resamplerEpsPpm))
