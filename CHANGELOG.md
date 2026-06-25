@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.6.35 - 2026-06-25
+
+Six fixes from a deep audit.
+
+The controller exit chord now works on every gamepad. The default leave-stream
+chord required a button (the DualSense Create button) that macOS doesn't expose,
+so on a DualSense it silently never fired. It's now a four-shoulder/trigger hold
+that's native to every controller, and the in-stream leave hint shows it.
+
+Three correctness fixes: the stream's network/RTT telemetry no longer goes blank
+after a silent reconnect; a rare main-thread stall when the present-timing
+thread is slow to start is closed; and an A/V-skew metric that could disagree
+between its two outputs is now computed once.
+
+Lower input latency - the controller-to-host send no longer lets macOS defer
+each flush by up to a full millisecond.
+
+The in-stream degradation pill is much harder to flicker: it shows only on
+sustained hitching and drains out cleanly.
+
 ## 2026.6.34 - 2026-06-25
 
 Fixes the bitrate shown under the hero. The spec chip displayed the nominal
