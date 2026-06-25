@@ -41,8 +41,12 @@ struct MainWindow: View {
             // so the prompt never fired.
             try? await Task.sleep(for: .seconds(1.0))
             AWDLHelperManager.shared.refresh()
+            // Parking awdl0 only smooths Wi-Fi; on a confirmed wired route it's
+            // a privileged-helper install for nothing. Suppress ONLY on .wired -
+            // Wi-Fi / tunnel / still-resolving unknown still prompt.
             guard !moonlight.hosts.isEmpty,
                   !moonlight.showRawHIDPrompt,
+                  moonlight.hostRoute.routeClass != .wired,
                   AWDLHelperManager.shared.shouldPromptToEnable else { return }
             showAWDLPrompt = true
         }
@@ -629,8 +633,14 @@ private struct HostContextMenu: ViewModifier {
                     Label("Codec", systemImage: "film.stack")
                 }
                 .pickerStyle(.menu)
+                // Two surfaces mount this menu; reload at present-time so a
+                // change on one is reflected in the other's checkmark.
+                .onAppear { codecPref = HostCodecPreference.load(for: host.id) }
                 .onChange(of: codecPref) { _, newValue in
                     HostCodecPreference.save(newValue, for: host.id)
+                    // Spec chip/summary read the codec via UserDefaults; bump
+                    // the observable sentinel so SwiftUI recomputes the Mbps.
+                    moonlight.displayInfoRevision &+= 1
                 }
                 Divider()
                 Button(role: .destructive) {

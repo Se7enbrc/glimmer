@@ -42,6 +42,7 @@ extension MoonlightManager {
     /// for the selected host (AV1/HEVC spend ~20% fewer bits), so the chip/summary
     /// match the wire. Falls back to the H.264 dial when no host is selected.
     var displayBitrateKbps: Int {
+        _ = displayInfoRevision  // codec override writes UserDefaults; bump re-evaluates the chip
         guard let host = selectedHost else { return effectiveBitrateKbps }
         let formats = HostCodecPreference.load(for: host.id).apply(to: .probedSupported)
         return wireBitrateKbps(forFormats: formats)
