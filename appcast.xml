@@ -6,6 +6,14 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.6.38</title>
+      <pubDate>Thu, 25 Jun 2026 23:59:13 GMT</pubDate>
+      <sparkle:version>20260649</sparkle:version>
+      <sparkle:shortVersionString>2026.6.38</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.6.38/Glimmer-2026.6.38.zip" type="application/octet-stream" sparkle:edSignature="fox5cNc53e1FhZbr2M81ocAKxfjbZ6j+lbQPbFFlT37LDH3mwkstJTlhdZh/BbBl92zOJ8eJCMpiaLPKSTXICA==" length="8093646" />
+    </item>
+    <item>
       <title>2026.6.37</title>
       <pubDate>Thu, 25 Jun 2026 23:48:55 GMT</pubDate>
       <sparkle:version>20260648</sparkle:version>
