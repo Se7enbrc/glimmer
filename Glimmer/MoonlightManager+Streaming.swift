@@ -24,18 +24,36 @@ extension MoonlightManager {
     // → HEVC), so showing it risks displaying a value that's simply wrong. Users
     // care that it looks good, not which encoder produced it.
     var streamSpecSummary: String {
-        let mbps = effectiveBitrateKbps / 1000
+        let mbps = displayBitrateKbps / 1000
         let hdrTag = effectiveHDR ? " · HDR" : ""
         return "\(effectiveWidth) × \(effectiveHeight) · \(effectiveFPS) Hz\(hdrTag) · \(mbps) Mbps"
     }
 
     var streamSpecChips: [String] {
-        let mbps = effectiveBitrateKbps / 1000
+        let mbps = displayBitrateKbps / 1000
         var chips = [Self.resolutionLabel(width: effectiveWidth, height: effectiveHeight),
                      "\(effectiveFPS) Hz"]
         if effectiveHDR { chips.append("HDR") }
         chips.append("\(mbps) Mbps")
         return chips
+    }
+
+    /// Codec-aware bitrate the spec surfaces show: what the engine actually sends
+    /// for the selected host (AV1/HEVC spend ~20% fewer bits), so the chip/summary
+    /// match the wire. Falls back to the H.264 dial when no host is selected.
+    var displayBitrateKbps: Int {
+        guard let host = selectedHost else { return effectiveBitrateKbps }
+        let formats = HostCodecPreference.load(for: host.id).apply(to: .probedSupported)
+        return wireBitrateKbps(forFormats: formats)
+    }
+
+    /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
+    /// negotiated codec's efficiency. The spec UI and `nativeStreamConfig` both read
+    /// this so the shown bitrate can't drift from what's sent. Custom is verbatim.
+    func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
+        if case .custom = qualityPreset { return effectiveBitrateKbps }
+        let mult = Self.codecBudgetMultiplier(for: formats)
+        return max(5_000, Int((Double(effectiveBitrateKbps) * mult).rounded()))
     }
 
     // MARK: Streaming
@@ -127,16 +145,10 @@ extension MoonlightManager {
         cfg.coversNotch = streamCoversNotch
         let codecPref = HostCodecPreference.load(for: host.id)
         cfg.videoFormats = codecPref.apply(to: .probedSupported)
-        // Codec-aware WIRE budget: `bitrateKbps` is H.264-anchored, so AV1/HEVC waste
-        // bytes at equal quality. Scale the host-bound budget by codec efficiency;
-        // effectiveBitrateKbps stays the H.264-equivalent quality dial the UI shows.
-        // Custom carries the user's explicit cap verbatim.
-        if case .custom = qualityPreset {
-            // explicit user cap → leave cfg.bitrateKbps == effectiveBitrateKbps
-        } else {
-            let mult = Self.codecBudgetMultiplier(for: cfg.videoFormats)
-            cfg.bitrateKbps = max(5_000, Int((Double(effectiveBitrateKbps) * mult).rounded()))
-        }
+        // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
+        // scaled by the negotiated codec's efficiency. The spec chip reads the same
+        // path so what's shown matches what's sent.
+        cfg.bitrateKbps = wireBitrateKbps(forFormats: cfg.videoFormats)
         return cfg
     }
 
