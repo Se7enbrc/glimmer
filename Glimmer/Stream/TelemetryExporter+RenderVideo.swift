@@ -255,6 +255,10 @@ extension TelemetryRenderer {
                      "Over-target force-releases per second (a spike = the no-network "
                      + "present-stall signature).",
                      extras.pacerOverTargetReleasesPerSecond)
+        builder.emit("glimmer_pacer_over_target_release_ratio",
+                     "Over-target force-releases ÷ total releases this window "
+                     + "(<0.1 steady-state; sustained-high = fps≈refresh self-oscillation).",
+                     extras.pacerOverTargetReleaseRatio)
         builder.emit("glimmer_display_edr_headroom_min",
                      "EDR headroom min this window (1.0 = SDR, >1.0 = HDR engaged).",
                      snap.edrHeadroomMin)

@@ -183,6 +183,7 @@ extension TelemetryRenderer {
         // is the due-gate self-oscillation signature).
         builder.addCount("pacer_over_target_release_total", extras.pacerOverTargetReleaseTotal)
         builder.add("pacer_over_target_releases_per_s", extras.pacerOverTargetReleasesPerSecond)
+        builder.add("pacer_over_target_release_ratio", extras.pacerOverTargetReleaseRatio)
         builder.add("edr_headroom_min", snap.edrHeadroomMin)
         builder.add("edr_headroom_avg", snap.edrHeadroomAvg)
         builder.add("edr_headroom_max", snap.edrHeadroomMax)

@@ -96,6 +96,16 @@ final class LatencyHistograms: @unchecked Sendable {
             1, 2, 4, 6, 8, 10, 12, 16, 20, 25, 30, 40, 50, 66, 90, 132, 200, 300, 528, 1056
         ]
 
+        /// OUTPUT→PRESENT (pacing) bounds. The default `boundsMs` jumps straight
+        /// 16→33→66, a blind ~30ms-wide bucket right where the pacing leg's tail
+        /// lives (a multi-vsync hold lands at 2-5× the 8.33ms vsync, i.e. 17-42ms),
+        /// so p95/p99 had no resolution exactly there. Reuses the fine low/mid edges
+        /// (o2p rests ~0.1-1ms direct) and adds 20/25/40/50 across the tail - same
+        /// concentrate-where-the-signal-lives pattern as `glassToGlassBoundsMs`.
+        static let outputToPresentBoundsMs: [Double] = [
+            0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 25, 33, 40, 50, 66, 132, 264, 528
+        ]
+
         /// The bounds THIS stage buckets against. Per-stage so the fine sub-stage
         /// histograms and the coarse composite ones share one observe/snapshot
         /// path; read by both the Prometheus render and the NDJSON quantile
@@ -161,7 +171,7 @@ final class LatencyHistograms: @unchecked Sendable {
     let receiveToAssemble = Stage()
     let assembleToSubmit = Stage()
     let submitToOutput = Stage()
-    let outputToPresent = Stage()
+    let outputToPresent = Stage(bounds: Stage.outputToPresentBoundsMs)
     let endToEnd = Stage()
 
     /// DECODE time split by frame type (signal: DECODE). The submit→output

@@ -78,8 +78,19 @@ extension TelemetryExporter {
                    let prevTicks = baselines.pacerTicksTotal,
                    let prevReleases = baselines.pacerReleasesTotal,
                    pacing.totalTicks >= prevTicks, pacing.totalReleases >= prevReleases {
+                    let releasesDelta = pacing.totalReleases &- prevReleases
                     extras.pacerTicksPerSecond = Double(pacing.totalTicks &- prevTicks) / dt
-                    extras.pacerReleasesPerSecond = Double(pacing.totalReleases &- prevReleases) / dt
+                    extras.pacerReleasesPerSecond = Double(releasesDelta) / dt
+                    // OVER-TARGET / PRESENT RATIO (steady-state anomaly signal): the
+                    // fraction of this window's releases the due gate had to FORCE
+                    // out as over-target. Healthy steady state is <10%; a sustained
+                    // high ratio is the fps≈refresh self-oscillation / present-stall
+                    // signature, a real signal rather than the absence of one. Derived
+                    // from the SAME window's two release deltas so it's self-consistent.
+                    if releasesDelta > 0 {
+                        let overDelta = overTargetTotal &- baselines.pacerOverTargetReleaseTotal
+                        extras.pacerOverTargetReleaseRatio = Double(overDelta) / Double(releasesDelta)
+                    }
                 }
             }
         }
@@ -146,6 +157,11 @@ extension TelemetrySnapshot {
         /// absence-of-symptom.
         var pacerOverTargetReleaseTotal: UInt64 = 0
         var pacerOverTargetReleasesPerSecond: Double?
+        /// OVER-TARGET / PRESENT RATIO this window (over-target force-releases ÷ total
+        /// releases). <10% steady-state; a sustained high ratio is the fps≈refresh
+        /// self-oscillation signature - normalizes the raw rate against the present
+        /// rate so it reads the same at 60 / 120 / 240 Hz. nil when no releases yet.
+        var pacerOverTargetReleaseRatio: Double?
         /// Designed drops-to-newest while presentation is suppressed, plus the
         /// live 0/1 suppression gauge that gives them (and every other field on
         /// the same line) their context.

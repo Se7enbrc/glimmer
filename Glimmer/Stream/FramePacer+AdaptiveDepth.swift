@@ -50,6 +50,9 @@ extension FramePacer {
     /// ignores it and self-decides off `adaptiveDepth.measuredJitterMs` instead.
     func refreshReconciledTarget() {
         guard EnvSignalController.reconcilerEnabled else { return }
+        // NEVER-NEST invariant: `.decision` takes EnvSignalController's lock, so
+        // this MUST run off the pacer lock (DEBUG-only trap on a future violation).
+        assertLockNotHeld()
         let decision = EnvSignalController.shared.decision
         os_unfair_lock_lock(&lock)
         if decision.generation != adaptiveDepth.reconciledDecisionGeneration {
@@ -83,6 +86,7 @@ extension FramePacer {
     /// excess. 0.09ms wired → depth 1 (passthrough); ~22ms wifi → grows toward the
     /// cap. Byte-identical to today.
     func justifiedDepthLocked() -> Int {
+        assertLockHeld()
         if EnvSignalController.reconcilerEnabled {
             // Read ONLY the off-lock-refreshed snapshot - never the controller -
             // so the pacer holds exactly one lock (its own). Already clamped to
@@ -121,6 +125,7 @@ extension FramePacer {
     /// from `releaseDueFrame` under the lock. Returns the (possibly updated)
     /// effective target so the caller uses one consistent value.
     func decayTargetLocked() -> Int {
+        assertLockHeld()
         // RECONCILER OFF (kill-switch fallback): refresh the measured-jitter
         // signal from the shared gauge each tick, so grow/decay track the live
         // RFC-3550 recv-jitter (0.09ms wired / ~22ms wifi) even if the explicit

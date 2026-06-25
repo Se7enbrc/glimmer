@@ -166,6 +166,7 @@ extension FramePacer {
     func dequeueDueFrameLocked(
         targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, effectiveTarget: Int
     ) -> DueGateResult {
+        assertLockHeld()
         guard !queue.isEmpty else {
             return DueGateResult(toPresent: nil, heldForGrowth: false, forcedOverTarget: false)
         }
@@ -182,6 +183,16 @@ extension FramePacer {
         // untouched. The gate is purely additive: it tightens release only while
         // depth < target.
         let belowTarget = queue.count <= effectiveTarget
+        // GENUINE over-target backlog: one frame ABOVE the trim ceiling
+        // (`effectiveTarget + 1`), i.e. depth ≥ effectiveTarget + 2. At fps==refresh
+        // the NATURAL rest depth is 2 (one in-flight + one arriving) - exactly the
+        // trim ceiling - so `count > effectiveTarget` mis-classified that rest state
+        // as a backlog and force-released ~80% of presents on a clean 120Hz link
+        // (self-oscillating the depth, trimming a few frames/s though recv-jitter was
+        // ~0.04ms). The force-release must fire only on a TRUE backlog that survived
+        // the trim - one ABOVE the ceiling - so the rest depth-2 falls through to the
+        // normal slack-relaxed due logic and the grid stays on-cadence.
+        let overTargetBacklog = queue.count > effectiveTarget + 1
         if lastPresentMediaTime.isFinite {
             let sinceLast = targetTimestamp - lastPresentMediaTime
             // DEFENSIVE CLAMP - the heart of the freeze fix on the gate.
@@ -196,13 +207,13 @@ extension FramePacer {
             // self-corrects on the very NEXT tick instead of wedging.
             if !sinceLast.isFinite || sinceLast < 0 || sinceLast > 1.0 {
                 due = true
-            } else if !belowTarget {
+            } else if overTargetBacklog {
                 // OVER-TARGET SHORT-CIRCUIT - the no-network present-stall fix.
                 // The per-tick trim in `releaseDueFrame` already drop-to-newested
                 // the FIFO down to at most `effectiveTarget + 1`, so reaching here
-                // with `queue.count > effectiveTarget` means a genuine drainable
-                // backlog of exactly one frame ABOVE the adaptive target survived
-                // the trim. On a PRISTINE link the due gate could still latch
+                // with `queue.count > effectiveTarget + 1` means a genuine drainable
+                // backlog ABOVE the trim ceiling survived the trim (a frame landed
+                // this very tick, after the trim ran). On a PRISTINE link the due gate could still latch
                 // not-due against it (the cadence base drifts a hair, or the depth
                 // controller over-drains then re-grows and self-oscillates), so a
                 // decoded-but-unpresented frame piled up while the head was held -
@@ -210,11 +221,11 @@ extension FramePacer {
                 // slow to break it (measured across several episodes, incl. a
                 // ~1s freeze). When there is real backlog over target,
                 // HOLDING is always wrong: force the head out NOW so the backlog
-                // ALWAYS drains. This is strictly additive and only fires above
-                // the adaptive target - the passthrough / jitter-buffer path
-                // (`belowTarget`, i.e. depth <= target) still uses the normal due
-                // logic below and is wholly untouched, so the clean-link rest
-                // state and the grown wifi buffer both behave exactly as before.
+                // ALWAYS drains. This is strictly additive and only fires ABOVE the
+                // trim ceiling - the passthrough / jitter-buffer path AND the
+                // fps==refresh rest depth (≤ effectiveTarget + 1) still use the
+                // normal due logic below and are wholly untouched, so the clean-link
+                // rest state and the grown wifi buffer both behave exactly as before.
                 // The on-grid cadence anchor is preserved: the `if due` tail still
                 // advances `lastPresentMediaTime` to `targetTimestamp`, keeping the
                 // grid aligned, and the timebase-discontinuity clamp above still
@@ -222,8 +233,10 @@ extension FramePacer {
                 due = true
                 forcedOverTarget = true
             } else {
-                // Slack = half a vsync; never negative.
-                let slack = vsyncInterval * 0.5
+                // Slack = a small FIXED ms (not half a vsync, which scaled with
+                // refresh and penalized 120Hz vs 240Hz). Just enough to absorb
+                // sub-frame arrival jitter; see `dueGateSlackSeconds`.
+                let slack = FramePacer.dueGateSlackSeconds
                 let interval = streamFrameIntervalSeconds
                 // GROW: while we're still filling toward the adaptive target,
                 // require the head to be FULLY due (a whole interval elapsed)
