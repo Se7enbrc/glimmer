@@ -45,9 +45,11 @@ extension TelemetryRenderer {
                      snap.fecParityMargin.map(Double.init))
         // AWDL helper: awdl0 parked + how hard macOS is fighting it back up. A
         // contested link shows resuppress climbing; a clean one stays ~0.
+        // Emit 0 (not absent) when the helper never engaged - distinguishes a
+        // disabled/never-parked stream from missing data for degraded-link coverage.
         builder.emit("glimmer_awdl_suppressing",
-                     "awdl0 parked by the Wi-Fi helper this stream (1 = parked, 0 = not).",
-                     snap.awdlSuppressing.map { $0 ? 1.0 : 0.0 })
+                     "awdl0 parked by the Wi-Fi helper this stream (1 = parked, 0 = not/helper off).",
+                     (snap.awdlSuppressing ?? false) ? 1.0 : 0.0)
         builder.emit("glimmer_awdl_resuppress_total",
                      "Times macOS re-raised awdl0 this stream - the AWDL-contention rate the helper fights "
                      + "(per-stream; high on a contested link).",
