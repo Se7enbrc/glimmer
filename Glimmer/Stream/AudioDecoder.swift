@@ -117,8 +117,8 @@ public final class AudioDecoder: @unchecked Sendable {
     static let resamplerUpdateIntervalNanos: UInt64 = 250_000_000  // ~4Hz; drift is ppm-slow
     static let resamplerDeadbandMs = 1.0    // ignore sub-ms fill noise (integral anti-windup)
     static let resamplerKpPpmPerMs = 3.0    // proportional: answers transient fill excursions
-    static let resamplerKiPpmPerMs = 0.03   // integral: absorbs the steady ppm clock offset
-    static let resamplerSlewPpm = 2.0       // max ppm change per update ⇒ rate never steps
+    static let resamplerKiPpmPerMs = 0.06   // integral: absorbs the steady ppm clock offset (2x for faster catch-up)
+    static let resamplerSlewPpm = 4.0       // max ppm change per update; 16ppm/s still well under audible pitch step
     static let resamplerBoundPpm = 500.0    // hard clamp ≫ any real drift (~1 cent worst case)
     /// Mirror of `isShutdown` in the METER lock's domain, raised by `shutdown()`
     /// BEFORE `playerNode.stop()`. Stopping a node with a standing cushion fires
