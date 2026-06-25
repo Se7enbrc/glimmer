@@ -160,11 +160,11 @@ extension FramePacer {
     /// under `lock` from `releaseDueFrame`). Refresh-vs-fps aware: due every tick
     /// at fps==refresh, every Nth tick at fps<refresh (idle ticks re-show the last
     /// frame), every tick at fps>refresh (the trim already dropped the backlog). A
-    /// fixed 2ms of slack avoids the fps≈refresh 1.5x judder; the
+    /// half-vsync of slack avoids the fps≈refresh 1.5x judder; the
     /// grow-without-a-hitch gate tightens that slack only while filling toward a
     /// raised adaptive target. MUTATES queue state - caller must hold the lock.
     func dequeueDueFrameLocked(
-        targetTimestamp: CFTimeInterval, effectiveTarget: Int
+        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, effectiveTarget: Int
     ) -> DueGateResult {
         assertLockHeld()
         guard !queue.isEmpty else {
@@ -183,11 +183,6 @@ extension FramePacer {
         // untouched. The gate is purely additive: it tightens release only while
         // depth < target.
         let belowTarget = queue.count <= effectiveTarget
-        // Over-target backlog test uses the trim ceiling (`effectiveTarget + 1`), not
-        // `effectiveTarget`: at fps==refresh the natural rest depth equals the bare
-        // target, so `> effectiveTarget` mis-read that rest state as backlog and force-
-        // released most presents on a clean link. Only a TRUE over-ceiling build trips.
-        let overTargetBacklog = queue.count > effectiveTarget + 1
         if lastPresentMediaTime.isFinite {
             let sinceLast = targetTimestamp - lastPresentMediaTime
             // DEFENSIVE CLAMP - the heart of the freeze fix on the gate.
@@ -202,20 +197,16 @@ extension FramePacer {
             // self-corrects on the very NEXT tick instead of wedging.
             if !sinceLast.isFinite || sinceLast < 0 || sinceLast > 1.0 {
                 due = true
-            } else if overTargetBacklog {
-                // OVER-TARGET SHORT-CIRCUIT - the no-network present-stall fix.
-                // Steady-state the trim bounds the FIFO to `effectiveTarget + 1`, so
-                // `count > effectiveTarget + 1` is UNREACHABLE then; this fires ONLY in
-                // gap-recovery, whose lenient ceiling is `maxQueuedFrames`. There a real
-                // backlog must always drain, so force the head out NOW. The `if due`
-                // tail re-anchors `lastPresentMediaTime` to keep the grid aligned.
+            } else if !belowTarget {
+                // OVER-TARGET SHORT-CIRCUIT: a real backlog over target survived the
+                // trim - holding is always wrong, so force the head out NOW to drain.
+                // Below-target (passthrough / jitter buffer) keeps the due logic below.
                 due = true
                 forcedOverTarget = true
             } else {
-                // Slack = a small FIXED ms (not half a vsync, which scaled with
-                // refresh and penalized 120Hz vs 240Hz). Just enough to absorb
-                // sub-frame arrival jitter; see `dueGateSlackSeconds`.
-                let slack = FramePacer.dueGateSlackSeconds
+                // Slack = half a vsync; lets a barely-not-due head present now rather
+                // than wait a whole vsync (the fps≈refresh 1.5x judder).
+                let slack = vsyncInterval * 0.5
                 let interval = streamFrameIntervalSeconds
                 // GROW: while we're still filling toward the adaptive target,
                 // require the head to be FULLY due (a whole interval elapsed)
@@ -358,7 +349,7 @@ extension FramePacer {
         // every tick; fps<refresh → due every Nth tick (intermediate ticks re-show
         // the last frame; "every other tick" for 60-on-120 falls out automatically);
         // fps>refresh → the trim above dropped the backlog, release the head every
-        // tick. A fixed 2ms of slack lets a barely-not-due frame present now rather
+        // tick. A half-vsync of slack lets a barely-not-due frame present now rather
         // than wait a whole vsync (the classic 1.5x judder near fps≈refresh); the
         // grow-without-a-hitch gate tightens that slack only while filling a target.
         //
@@ -368,7 +359,8 @@ extension FramePacer {
         // gate. The full decision lives in `dequeueDueFrameLocked` to keep this
         // function within complexity limits.
         let gate = dequeueDueFrameLocked(
-            targetTimestamp: targetTimestamp, effectiveTarget: effectiveTarget)
+            targetTimestamp: targetTimestamp, vsyncInterval: vsyncInterval,
+            effectiveTarget: effectiveTarget)
         toPresent = gate.toPresent
         let heldForGrowth = gate.heldForGrowth
 
