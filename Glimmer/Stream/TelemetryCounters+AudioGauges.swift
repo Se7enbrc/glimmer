@@ -250,8 +250,11 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// the derive reports absent (absent ≠ 0) until both sides flow again.
     static let freshnessNanos: UInt64 = 2_000_000_000
     /// Sanity bound (ms) on a derived skew: beyond this the anchors are judged
-    /// inconsistent (host RTP discontinuity) and the pair re-latches.
-    static let sanityBoundMs: Double = 10_000
+    /// inconsistent (host RTP discontinuity) and the pair re-latches. 1800ms is
+    /// well past the deepest cushion (300ms) + a real lip-sync excursion yet far
+    /// below the multi-second railed values a stale anchor or wrong clock family
+    /// would produce - the old 10s let a +9583ms railed session pass.
+    static let sanityBoundMs: Double = 1_800
     /// Signed bucket bounds (ms) for the session percentile accumulator -
     /// resolution concentrated around the 0...150ms cushion range where the
     /// lip-sync trade lives, with the ~125ms ITU annoyance threshold bracketed.
@@ -292,11 +295,19 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     private var audioRateAnchorNanos: UInt64 = 0
     private var audioTicksPerMs = 1.0
     private var audioRateResolved = false
+    // Two-window snap latch: the measured family must agree across two
+    // consecutive calibration windows before it's latched, so a single
+    // arrival-clumping window can't flip the clock family. nil = no candidate yet.
+    // The first window's measurement re-baselines the rate anchor for the second.
+    private var audioRatePendingFamily: Double?
     /// Latest RESIDENT corrector-inserted silence (ms) in the audio buffer, pushed
     /// by `publishAudioState`. Subtracted from the buffer-fill term in `deriveSkewMs`
     /// so the playhead reflects real media, not inserted silence (see the type doc
     /// + `AudioDecoder.pendingSilenceFrames`). 0 until audio flows / no inserts.
     private var residentSilenceMs: Double = 0
+    /// Cushion-subtracted true clock skew (ms) from the most recent successful
+    /// derive; nil when that derive produced no value (dark/stale/re-anchor/bound).
+    private var lastTrueClockSkewMs: Double?
     // Session accumulator (scorecard percentiles): bucket counts + exact
     // min/max/sum, plus an explicit OVERFLOW count for samples past the last
     // bound so the quantile walk's rank space covers EVERY sample - the old
@@ -375,6 +386,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
               now &- videoNoteNanos <= Self.freshnessNanos,
               now &- audioNoteNanos <= Self.freshnessNanos else {
             anchored = false
+            lastTrueClockSkewMs = nil
             return nil
         }
         resolveAudioClockFamilyLocked(now: now)
@@ -384,6 +396,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
             audioAnchorRtp = audioLastRtp
             if everAnchored { rebases &+= 1 }
             everAnchored = true
+            lastTrueClockSkewMs = nil
             return nil // the anchor tick defines the epoch, measures nothing
         }
         // Wrap-safe modular distances on the two host capture clocks (90kHz
@@ -399,10 +412,25 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         let skewMs = videoMs - audioMs + realFillMs
         guard abs(skewMs) <= Self.sanityBoundMs else {
             anchored = false // discontinuity: re-anchor next tick, never wedge
+            lastTrueClockSkewMs = nil
             return nil
         }
+        // TRUE clock skew: the same alignment WITHOUT the deliberate playout
+        // cushion (`realFillMs`) baked in. `av_skew_ms` reads ~cushion+single-digit
+        // ms because the fill term IS the cushion; subtracting it leaves the genuine
+        // host↔Mac clock offset, the thing the drift resampler actually corrects.
+        lastTrueClockSkewMs = videoMs - audioMs
         if accumulate { observeLocked(skewMs) }
         return skewMs
+    }
+
+    /// The cushion-SUBTRACTED true clock skew (ms, + = audio clock behind video)
+    /// from the most recent `deriveSkewMs` this tick, or nil if that derive did
+    /// not produce a value (dark/stale/re-anchoring/bound trip). Read on the same
+    /// 1Hz cadence right after `deriveSkewMs`; no side effects, no re-anchor.
+    func lastTrueClockSkew() -> Double? {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        return lastTrueClockSkewMs
     }
 
     /// One-shot audio clock-family snap (lock already held; 1Hz cold path):
@@ -423,9 +451,18 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         guard measured > 0 else { return }
         let snapped = Self.audioTicksPerMsCandidates.min {
             abs(log($0 / measured)) < abs(log($1 / measured))
+        } ?? 1.0
+        // TWO-WINDOW HOLD: latch only when a SECOND independent window snaps to
+        // the same family (the first window's measurement re-baselines the rate
+        // anchor for the second). A lone clumping window can't flip the clock.
+        if audioRatePendingFamily == snapped {
+            audioTicksPerMs = snapped
+            audioRateResolved = true
+            return
         }
-        audioTicksPerMs = snapped ?? 1.0
-        audioRateResolved = true
+        audioRatePendingFamily = snapped
+        audioRateAnchorRtp = audioLastRtp
+        audioRateAnchorNanos = now
     }
 
     /// Feed one 1Hz sample into the session accumulator. Lock already held.
@@ -518,6 +555,8 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         audioRateAnchorNanos = 0
         audioTicksPerMs = 1.0
         audioRateResolved = false
+        audioRatePendingFamily = nil
+        lastTrueClockSkewMs = nil
         bucketCounts = [UInt64](repeating: 0, count: Self.bucketBoundsMs.count)
         overflowCount = 0
         sampleCount = 0

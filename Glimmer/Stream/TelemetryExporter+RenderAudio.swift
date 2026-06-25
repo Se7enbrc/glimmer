@@ -84,6 +84,13 @@ extension TelemetryRenderer {
                      + "host-RTP positions, small constant bias - trend is the signal).",
                      AudioVideoSkewStore.shared.deriveSkewMs(
                         bufferFillMs: audio.bufferFillMs, accumulate: false))
+        // Cushion-subtracted true clock skew from the derive just above: the genuine
+        // host↔Mac clock offset without the deliberate playout cushion baked in.
+        builder.emit("glimmer_av_clock_skew_ms",
+                     "Cross-stream A/V clock skew, ms signed, with the deliberate audio playout "
+                     + "cushion SUBTRACTED (+ = audio clock behind video). The host↔Mac clock "
+                     + "offset the drift resampler corrects, vs the cushion-inflated av_skew_ms.",
+                     AudioVideoSkewStore.shared.lastTrueClockSkew())
         builder.emitCounter("glimmer_av_skew_rebase_total",
                             "A/V-skew pair re-anchors after the first (stale stream or RTP "
                             + "discontinuity) - each one steps the skew baseline.",
