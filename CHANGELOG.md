@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.6.37 - 2026-06-25
+
+Under the hood: a batch of telemetry-accuracy fixes, no change to streaming
+behavior. The in-app latency and A/V-sync figures now reflect reality - the
+"input latency" estimate was measuring time-to-next-frame rather than felt
+latency (reading several times too low), and the "A/V skew" number was dominated
+by audio-buffer depth instead of true sync. Adds an honest click-to-first-frame
+measure (the old timer started after the launch handshake) and a few new
+diagnostic counters.
+
 ## 2026.6.36 - 2026-06-25
 
 Cuts standing audio latency on a wired link. The audio buffer was holding
