@@ -47,6 +47,15 @@ extension TelemetryRenderer {
         builder.emit("glimmer_handshake_total_ms",
                      "Whole cold-open: connect start → first decoded frame this session, ms.",
                      handshake.totalMs)
+        builder.emit("glimmer_connect_click_to_first_frame_ms",
+                     "TRUE click-to-pixels: user's launch click → first decoded frame this "
+                     + "session, ms. Includes the serverinfo + launch + busy-poll legs "
+                     + "handshake_total_ms (connect-start anchored) excludes.",
+                     handshake.clickToFirstFrameMs)
+        builder.emit("glimmer_launch_path_ms",
+                     "Launch path: click → connect-start this session, ms - the pre-connect "
+                     + "launch cost handshake_total_ms can't see.",
+                     handshake.launchPathMs)
     }
 
     /// RECONNECT count + disconnect REASON. The reason is BOTH an ordinal gauge

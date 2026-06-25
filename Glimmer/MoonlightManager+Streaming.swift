@@ -242,6 +242,13 @@ extension MoonlightManager {
         // build, so it can't answer "did the user wait >400 ms"). The live
         // edge in handleNativeEvent logs the verdict.
         Self.connectClickedAt = Date()
+        // True click-to-pixels anchor (telemetry): clear any prior session's
+        // latch, then anchor at this launch click - before the connect Task spins
+        // up - the leg handshake_total_ms (connect-start anchored) can't see.
+        // Resolved at the .firstFrame edge. Reset HERE (not in
+        // TelemetryCounters.resetForNewSession, which runs AFTER the click).
+        ConnectTimingTelemetry.shared.resetForNewSession()
+        ConnectTimingTelemetry.shared.anchorClick()
         Self.connectCapsuleShown = false
         Self.connectCancelRequested = false
         // NB: the "last played" timestamp is intentionally NOT written here.

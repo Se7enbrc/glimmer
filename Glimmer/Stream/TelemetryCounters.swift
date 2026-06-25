@@ -246,6 +246,13 @@ final class TelemetryCounters: @unchecked Sendable {
     /// VideoDecoder increments on its quiet-drop path; always-live integer add.
     let decodeGatedDropTotal = Counter()
 
+    /// STREAM-DISCONTINUITY flushes: param-set rebuilds mid-stream that flush the
+    /// renderer + clear the pacer queue (a real multi-frame skip). 0 on a healthy
+    /// wired link (the byte-equal short-circuit holds); a host that mutates param
+    /// sets mid-stream surfaces as a measurable delta. VideoDecoder increments at
+    /// the rebuild's flush site; always-live integer add at an already-rare event.
+    let discontinuityFlushTotal = Counter()
+
     // ---- P1 AUDIO receive-path + playout totals (the OTHER stream) ----
     //
     // All derived purely from the audio RTP we receive + the audio output path -
@@ -569,6 +576,7 @@ final class TelemetryCounters: @unchecked Sendable {
                         ackSilenceNearMissTotal, ctrlIgnoredTotal,
                         decoderRecreateTotal, staleFrameRepeatTotal,
                         pacerOverTargetReleaseTotal, suppressedDropTotal, decodeGatedDropTotal,
+                        discontinuityFlushTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
                         audioFecMismatchTotal, audioUnderrunTotal, audioOverrunTotal,
                         audioTrimTotal, rumbleEventTotal, rumbleDroppedInvalidTotal,

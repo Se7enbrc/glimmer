@@ -61,6 +61,9 @@ extension VideoDecoder {
     /// exactly once per session, behind its own first-frame latch).
     nonisolated static func noteFirstDecodedFrameTelemetry() {
         TelemetryCounters.shared.p2.markFirstFrame(TelemetryCounters.monotonicNowNanos())
+        // Resolve TRUE click-to-pixels at the SAME first-decoded-frame edge as
+        // handshake_total (so the two share an endpoint); no-op without a click.
+        ConnectTimingTelemetry.shared.markFirstFrame()
     }
 
     /// Note a fresh VT-session create for telemetry: bump the always-live recreate

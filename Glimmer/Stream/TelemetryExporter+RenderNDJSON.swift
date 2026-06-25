@@ -171,6 +171,7 @@ extension TelemetryRenderer {
         _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
     ) {
         builder.addCount("decoder_recreate_total", snap.decoderRecreateTotal)
+        builder.addCount("discontinuity_flush_total", snap.discontinuityFlushTotal)
         if let state = snap.decodeState {
             builder.addBool("decode_hw", state.hwDecode)
             builder.addString("decode_pixel_format", state.pixelFormat)

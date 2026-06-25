@@ -111,6 +111,7 @@ extension TelemetryExporter {
         snap.pacerDisabledTotal = counters.pacerDisabledTotal.value
         snap.bookmarkTotal = counters.bookmarkTotal.value
         snap.decoderRecreateTotal = counters.decoderRecreateTotal.value
+        snap.discontinuityFlushTotal = counters.discontinuityFlushTotal.value
         snap.staleFrameRepeatTotal = counters.staleFrameRepeatTotal.value
 
         // P1 DECODE state (HW-decode + pixel format + bit depth + colorspace) +
