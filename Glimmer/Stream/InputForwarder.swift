@@ -213,9 +213,9 @@ public final class InputForwarder {
     /// longer reacting to those combos until the stream ends. That's the
     /// mode power users on dedicated streaming hardware want.
     ///
-    /// Note: the configured quit hotkey (see `quitHotkey`) is detected
-    /// BEFORE this gate, so a Cmd-bearing quit hotkey keeps working
-    /// regardless of capture state (the default ⌃⌥Q carries no Cmd).
+    /// Note: the configured quit hotkey (see `quitHotkey`) is detected BEFORE
+    /// this gate, so it keeps working regardless of capture state - including
+    /// the default ⌃⌥Q, which carries no Cmd and so never reaches the gate.
     public var captureSysKeys: Bool = false
 
     /// Set to true once the native backend's `connectionStarted` callback has

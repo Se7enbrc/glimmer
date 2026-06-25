@@ -195,19 +195,25 @@ private struct HostChooser: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if found.isEmpty && !showManual {
+            // Spinner only while still actively looking. The stalled nudge is
+            // hoisted out so it survives the auto-reveal of the manual field.
+            if found.isEmpty && !showManual && !discoveryStalled {
                 HStack(spacing: 10) {
-                    if !discoveryStalled {
-                        ProgressView().controlSize(.small)
-                        Text("Looking for PCs on your network...")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Image(systemName: "wifi.exclamationmark")
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.orange)
-                        Text("No PCs found yet - enter the address below.")
-                            .foregroundStyle(.secondary)
-                    }
+                    ProgressView().controlSize(.small)
+                    Text("Looking for PCs on your network...")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
+            }
+
+            if found.isEmpty && discoveryStalled {
+                HStack(spacing: 10) {
+                    Image(systemName: "wifi.exclamationmark")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.orange)
+                    Text("No PCs found yet - enter the address below.")
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 8)

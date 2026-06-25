@@ -1,15 +1,11 @@
 //
 //  StreamBannerLayer.swift
 //
-//  A lightweight CALayer text pill that floats over the video, sibling to
-//  StatsOverlayLayer on the AVSampleBufferDisplayLayer. Used for transient,
-//  non-stats signals the user must see WHILE the launcher is occluded by the
-//  fullscreen stream window: the "Reconnecting..." hold banner, the auto
-//  "Network unstable" pill, and the one-time "press X to leave" toast.
-//
-//  Why a separate layer (not a StatsOverlayLayer row): these aren't periodic
-//  metrics - they appear/disappear on engine edges, carry their own colour
-//  accent, and must show regardless of the stats-HUD toggle.
+//  A CALayer text pill floating over the video (sibling to StatsOverlayLayer)
+//  for transient signals the user must see while the launcher is occluded:
+//  reconnect/hold, network-health, and the one-time leave-hint toast. Separate
+//  from the stats panel because these fire on engine edges and must show
+//  regardless of the stats-HUD toggle.
 //
 
 import AppKit
@@ -30,11 +26,14 @@ public final class StreamBannerLayer {
     private let textLayer: CATextLayer
     private let dotLayer: CALayer
     private let anchor: StreamBannerAnchor
-    private let inset: CGFloat = 28
+    /// Distance from the anchored screen edge. Configurable so co-anchored pills
+    /// (e.g. network + leave-hint, both bottomCenter) can stack without overlap.
+    private let inset: CGFloat
     private var visible = false
 
-    public init(anchor: StreamBannerAnchor, accent: CGColor) {
+    public init(anchor: StreamBannerAnchor, accent: CGColor, inset: CGFloat = 28) {
         self.anchor = anchor
+        self.inset = inset
         let bg = CALayer()
         bg.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 0.55)
         bg.cornerRadius = 13

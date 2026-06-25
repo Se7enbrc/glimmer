@@ -193,10 +193,9 @@ extension MoonlightManager {
             } catch let err as StreamError {
                 await client.shutdown()
                 if Task.isCancelled { return }
-                // TLS pin mismatch is its own UX: the readiness chip renders
-                // certMismatch as an amber "Trust needed" tap-to-re-pair state,
-                // not "Asleep" - the host is plainly reachable, the trust
-                // relationship just broke.
+                // TLS pin mismatch is its own UX: the chip renders certMismatch
+                // as an amber "Trust needed" tap-to-re-pair, not "Asleep" - the
+                // host is reachable, only the trust relationship broke.
                 let state: HostLiveStatus.State
                 if case .hostUnreachable(let detail) = err,
                    detail.lowercased().contains("cert") || detail.lowercased().contains("mitm") {
