@@ -66,7 +66,8 @@ extension TelemetryRenderer {
                                     Double(thread.qos), labels: labels)
             }
             builder.emit("glimmer_process_phys_footprint_bytes",
-                         "Process physical memory footprint, bytes (task_vm_info.phys_footprint).",
+                         "Process physical memory footprint, bytes (task_vm_info.phys_footprint, "
+                         + "or resident_size when phys_footprint is unreported).",
                          resource.physFootprintBytes.map(Double.init))
             if let onBattery = resource.onBattery {
                 builder.emit("glimmer_power_on_battery",

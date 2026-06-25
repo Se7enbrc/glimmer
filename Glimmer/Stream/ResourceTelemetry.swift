@@ -71,8 +71,9 @@ struct ResourceSnapshot: Sendable {
     /// worth labelling. Capped (see `ResourceTelemetry.maxThreadsEmitted`) so a
     /// transient thread storm can't bloat a scrape - the cap keeps the busiest.
     var threads: [ThreadResourceSample] = []
-    /// Process physical memory footprint (the number Activity Monitor's "Memory"
-    /// column shows), bytes - `task_vm_info.phys_footprint`. nil on a probe miss.
+    /// Process physical memory footprint, bytes - `task_vm_info.phys_footprint`
+    /// (the Activity Monitor "Memory" number), or `resident_size` when the kernel
+    /// leaves phys_footprint zero. nil on a probe miss.
     var physFootprintBytes: UInt64?
     /// True iff the Mac is on battery (the streaming machine unplugged - a power
     /// budget the scheduler may clamp, correlating with a perf dip). nil if the
@@ -224,7 +225,18 @@ enum ResourceTelemetry {
             name: name, tid: tid, cpuPercent: cpuPercent, qos: qos, qosLabel: qosLabel(qos))
     }
 
-    /// Process physical memory footprint (bytes) via `task_vm_info`. nil on a miss.
+    /// Integer_t index of `phys_footprint` within `task_vm_info` - the kernel
+    /// must return a count past this field or it stays zero-initialized (the
+    /// "reads 0 every session" tell). `resident_size` sits far earlier and is
+    /// always filled, so it's the honest fallback.
+    private static let physFootprintIndex =
+        (MemoryLayout<task_vm_info_data_t>.offset(of: \.phys_footprint) ?? .max)
+        / MemoryLayout<integer_t>.size
+
+    /// Process physical memory footprint (bytes) via `task_vm_info`. Falls back
+    /// to `resident_size` when the kernel returns a short count or a zero
+    /// `phys_footprint`, so the metric carries a real number instead of a dead 0.
+    /// nil only on an outright task_info failure.
     private static func sampleFootprint() -> UInt64? {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(
@@ -235,7 +247,10 @@ enum ResourceTelemetry {
             }
         }
         guard result == KERN_SUCCESS else { return nil }
-        return UInt64(info.phys_footprint)
+        let covered = Int(count) > physFootprintIndex
+        if covered, info.phys_footprint > 0 { return UInt64(info.phys_footprint) }
+        if info.resident_size > 0 { return UInt64(info.resident_size) }
+        return nil
     }
 
     /// AC-vs-battery + charging via IOKit power sources. `onBattery` is nil when no
@@ -281,18 +296,18 @@ enum ResourceTelemetry {
 /// unexplained judder. Logged once by the exporter on start; never on a hot path.
 enum QoSAudit {
 
-    /// The hot-path queue/thread labels we EXPECT to be high-QoS (the
-    /// `.userInteractive` decode/pacer/receive/input/enet threads). Network.swift's
-    /// `.utility` queues are deliberately omitted - they are the control-plane
-    /// reachability probe (a status-pill RTT), not a hot path, so `.utility` there
-    /// is CORRECT and must NOT be flagged. Same for the telemetry/diag `.utility`
-    /// queues.
+    /// The hot-path thread NAMES we EXPECT to be high-QoS. These are the actual
+    /// `pthread_getname_np` names the receive/control threads set on themselves
+    /// (`Glimmer.videoRecv`/`.audioRecv` via pthread_setname_np, `.enetControl`
+    /// via Thread.name) - NOT DispatchQueue labels, which the OS does not surface
+    /// as pthread names (a queue worker reads back empty → `tid-N`). The earlier
+    /// `io.ugfugl.Glimmer.*` queue-label list matched zero real threads and the
+    /// audit was dead. The `.userInitiated`/`.utility` ping/control queues are
+    /// deliberately omitted - those tiers are CORRECT there and must NOT flag.
     static let expectedHotPathLabels = [
-        "io.ugfugl.Glimmer.video.decode",
-        "io.ugfugl.Glimmer.video.pacer",
-        "io.ugfugl.Glimmer.videortp",
-        "io.ugfugl.Glimmer.inputBatcher",
-        "io.ugfugl.Glimmer.enet"]
+        "Glimmer.videoRecv",
+        "Glimmer.audioRecv",
+        "Glimmer.enetControl"]
 
     /// Run the audit over a sample and log the result once. Reports the high-QoS
     /// confirmation for the hot-path threads it can see, and warns for any thread
@@ -301,9 +316,11 @@ enum QoSAudit {
     static func runAndLog(_ snapshot: ResourceSnapshot, category: String) {
         var confirmed: [String] = []
         var demotions: [String] = []
+        var matchedHotPath = false
         for thread in snapshot.threads {
             let isHotPath = expectedHotPathLabels.contains { thread.name.hasPrefix($0) }
             if isHotPath {
+                matchedHotPath = true
                 if ResourceTelemetry.isHighQoS(thread.qos) {
                     confirmed.append("\(thread.name)=\(thread.qosLabel)")
                 } else {
@@ -327,9 +344,14 @@ enum QoSAudit {
                 + demotions.joined(separator: ", ") + " - a hot path may have been demoted "
                 + "off the P-core tier.", category)
         }
-        if confirmed.isEmpty && demotions.isEmpty {
-            Diag.notice("QoS audit - no hot-path threads sampled yet (stream may be "
-                + "pre-roll); will re-confirm via the per-thread telemetry series.", category)
+        if !matchedHotPath {
+            // None of expectedHotPathLabels matched a live thread. At start this
+            // can be benign pre-roll, but it's ALSO the exact symptom of the
+            // dead-audit bug (names drift out of sync with the threads). Warn so a
+            // future rename is visible instead of silently re-deadening the audit.
+            Diag.warn("QoS audit - no hot-path threads (\(expectedHotPathLabels.joined(separator: ", ")))"
+                + " found in this sample; either pre-roll or the expected thread names have "
+                + "drifted out of sync with the receive/control threads.", category)
         }
     }
 }

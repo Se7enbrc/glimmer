@@ -186,6 +186,12 @@ final class IOReportSampler: @unchecked Sendable {
     private var firstSampleOutcomeLogged = false
     private var lastClusterFailure = "no sample attempted"
 
+    /// One-time NOTICE for an Energy Model channel we matched as a package rail
+    /// but whose unit label we don't know how to convert (so it was dropped from
+    /// the sum). Bounded to one per session so a unit/channel drift is visible
+    /// instead of silently undercounting package power (the GPU-rail bug).
+    private var loggedUnknownEnergyUnit = false
+
     /// One-time bring-up/runtime failure NOTICE, through Diag so it lands in
     /// the session log file (the os_log-only Logger here was never even
     /// invoked - structurally invisible postmortem).
@@ -342,13 +348,15 @@ final class IOReportSampler: @unchecked Sendable {
         return parsed
     }
 
-    /// One package-power delta, watts. Sums the top-level "CPU Energy" +
-    /// "GPU Energy" + ANE rails - NOT every Energy Model channel: the group also
-    /// carries the per-core / per-cluster / SRAM sub-rails those aggregates are
-    /// built from (summing all would triple-count) plus DRAM/display/PCIe rails
-    /// outside the conventional package sum. Units are read PER CHANNEL ("CPU
-    /// Energy" is mJ, "GPU Energy" is nJ on the same SoC). nil on the first call
-    /// (baseline), when the group's bring-up failed, and on any hiccup.
+    /// One package-power delta, watts: the CPU + GPU + ANE compute rails - the
+    /// sum powermetrics calls "Combined Power (CPU + GPU + ANE)". Rails are
+    /// matched by PREFIX (CPU/GPU/ANE) rather than an exact "GPU Energy" string:
+    /// the exact match silently dropped the SoC GPU rail (whose label varies),
+    /// leaving package_power_w CPU-only. Sub-rail qualifiers (per-core / SRAM /
+    /// DRAM-PCIe-display) are excluded so the top-level aggregates aren't
+    /// double-counted. Units are read PER CHANNEL (mJ/uJ/nJ on the same SoC); a
+    /// matched rail with an UNKNOWN unit is dropped but logged once. nil on the
+    /// first call (baseline), when the group's bring-up failed, and on any hiccup.
     private func samplePackagePower() -> Double? {
         guard let subscription = energySubscription, let channels = energyChannels,
               let simpleValue = simpleIntegerValue, let unitLabelOf = channelUnitLabel,
@@ -369,21 +377,42 @@ final class IOReportSampler: @unchecked Sendable {
         var watts = 0.0
         var matchedAny = false
         for channel in reportChannels(in: delta) {
-            guard let name = channelName(channel)?.takeUnretainedValue() as String? else { continue }
-            // "ANE" is bare on this SoC, "ANE0/ANE1 ..." on multi-die parts; the
-            // SRAM exclusion keeps a hypothetical "ANE SRAM" sub-rail out.
-            guard name == "CPU Energy" || name == "GPU Energy"
-                    || (name.hasPrefix("ANE") && !name.contains("SRAM")) else { continue }
+            guard let name = channelName(channel)?.takeUnretainedValue() as String?,
+                  isPackageEnergyRail(name) else { continue }
             let value = Double(simpleValue(channel, 0))
             guard value >= 0 else { continue }  // counter reset mid-window - skip.
-            switch unitLabelOf(channel)?.takeUnretainedValue() as String? ?? "" {
+            let unit = unitLabelOf(channel)?.takeUnretainedValue() as String? ?? ""
+            switch unit {
             case "mJ": watts += value / 1e3 / elapsedSeconds; matchedAny = true
             case "uJ": watts += value / 1e6 / elapsedSeconds; matchedAny = true
             case "nJ": watts += value / 1e9 / elapsedSeconds; matchedAny = true
-            default: break  // unknown unit: leave it out rather than guess.
+            default:
+                // Matched rail, unknown unit: drop it rather than guess, but say
+                // so once - a silent drop here is exactly what hid the GPU rail.
+                if !loggedUnknownEnergyUnit {
+                    loggedUnknownEnergyUnit = true
+                    log.notice("IOReport Energy Model rail \"\(name, privacy: .public)\" has unknown unit \"\(unit, privacy: .public)\" - excluded from package_power_w (sum may undercount).")
+                }
             }
         }
         return matchedAny ? watts : nil
+    }
+
+    /// True for a top-level CPU/GPU/ANE compute-energy rail in the Energy Model
+    /// group; false for its per-core/per-cluster/SRAM sub-rails (would
+    /// double-count) and the DRAM/display/PCIe rails (outside the compute sum).
+    /// PREFIX-matched (not the old exact "GPU Energy"): the SoC GPU rail's exact
+    /// label varies, and the exact match silently dropped it - the bug that left
+    /// package_power_w CPU-only. SRAM and per-unit sub-rails (a trailing digit,
+    /// e.g. "GPU0"/"CPU1") are excluded so only the bare aggregates are summed.
+    private func isPackageEnergyRail(_ name: String) -> Bool {
+        let prefixes = ["CPU", "GPU", "ANE"]
+        guard let prefix = prefixes.first(where: { name.hasPrefix($0) }) else { return false }
+        if name.contains("SRAM") { return false }
+        // After the prefix the aggregate is bare ("ANE") or " Energy" ("CPU
+        // Energy"); a digit/letter immediately after the prefix marks a sub-rail.
+        let rest = name.dropFirst(prefix.count)
+        return rest.isEmpty || rest.hasPrefix(" ")
     }
 
     /// One GPU-residency delta, 0...100. The same state-bucket fold as the CPU
