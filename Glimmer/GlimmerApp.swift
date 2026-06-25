@@ -33,6 +33,9 @@ struct GlimmerApp: App {
     @State private var moonlight: MoonlightManager
 
     init() {
+        // MUST precede MoonlightManager(): its init reads ~20 UserDefaults keys,
+        // which the unsandbox-flip orphaned in the old container until this runs.
+        ContainerMigration.runIfNeeded()
         let mgr = MoonlightManager()
         _moonlight = State(wrappedValue: mgr)
         AppDelegate.boundManager = mgr

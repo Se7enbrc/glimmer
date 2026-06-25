@@ -88,11 +88,9 @@ final class HelperService: NSObject, NSXPCListenerDelegate, GlimmerHelperProtoco
         // let a hostile caller fill the log with megabytes of garbage.
         let bounded = String(reason.prefix(128)).replacingOccurrences(of: "\n", with: " ")
         suppressor.setSuppressing(down, reason: bounded)
-        // For a park request, report VERIFIED state (awdl0 actually down) rather
-        // than a blind ack, so the app's published `suppressing` flag can't claim
-        // a parked radio that's still up. The actual down runs async on the
-        // suppressor's queue, so the heartbeat's next tick confirms once it lands.
-        // Release (down=false) just acks - restore success isn't the signal.
+        // Park: report verified state so the app's `suppressing` flag can't
+        // claim a still-up radio (the heartbeat reconfirms as the async down
+        // lands). Release just acks - restore success isn't the signal.
         reply(down ? !suppressor.isInterfaceUp() : true)
     }
 

@@ -288,9 +288,8 @@ final class AWDLHelperManager: ObservableObject {
     func reconcileAfterUpdate() {
         refresh()
         // Ground truth beats the flag: the unsandbox flip can orphan
-        // `enabledIntentKey`, but a live `.enabled`/`.requiresApproval`
-        // registration proves the user wanted it - honour that and re-arm the
-        // flag so the rest of the launch path agrees.
+        // `enabledIntentKey`, but a live registration proves intent - re-arm
+        // the flag so the rest of the launch path agrees.
         let registered = state == .enabled || state == .requiresApproval
         if registered { UserDefaults.standard.set(true, forKey: Self.enabledIntentKey) }
         guard registered || UserDefaults.standard.bool(forKey: Self.enabledIntentKey) else { return }
