@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.6.25 - 2026-06-25
+
+Smoother audio when the host and Mac clocks drift apart. The drift-tracking
+resampler now catches a clock-skew onset about twice as fast, so the audio
+cushion no longer briefly drains during the catch-up - which is what produced
+the occasional crackle on longer sessions. Pitch movement stays inaudible.
+
 ## 2026.6.24 - 2026-06-24
 
 Fixes a rare freeze when a stream drops. If the host cut the connection at just
