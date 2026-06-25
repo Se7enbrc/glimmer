@@ -120,10 +120,9 @@ public final class AudioDecoder: @unchecked Sendable {
     static let resamplerKiPpmPerMs = 0.18   // integral: absorbs the steady ppm clock offset (the rate-limiter on convergence)
     static let resamplerSlewPpm = 4.0       // max ppm change per update; 16ppm/s still well under audible pitch step
     static let resamplerBoundPpm = 1500.0   // skew-correction ceiling; real host skews seen ~450ppm, so 500 railed
-    /// Per-disengage HOLD factor on the integral. The host↔Mac clock offset is
-    /// physical and unchanged across a drain/re-prime, so the integral is mostly
-    /// kept (a slow ×0.97/update bleed guards a stale estimate) instead of zeroed -
-    /// re-engaging with the offset already learned, not re-converging from 0.
+    /// Per-disengage HOLD factor on the integral - the clock offset survives a
+    /// drain, so keep most of it (slow ×0.97 bleed only while packets flow) and
+    /// re-engage with it already learned rather than re-converging from 0.
     static let resamplerIntegralHoldFactor = 0.97
     /// Mirror of `isShutdown` in the METER lock's domain, raised by `shutdown()`
     /// BEFORE `playerNode.stop()`. Stopping a node with a standing cushion fires
