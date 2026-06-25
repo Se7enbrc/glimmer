@@ -89,13 +89,25 @@ public final class StreamBannerLayer {
             layer.isHidden = false
             layer.opacity = 1
         } else {
-            CATransaction.setCompletionBlock { [weak layer] in
-                // Don't hide if a re-show raced in during the fade.
-                if layer?.opacity == 0 { layer?.isHidden = true }
+            // Gate the final hide on the LATEST intent (not opacity): a re-show that
+            // raced in during the fade sets visible=true, so a stale completion can't
+            // un-hide a shown pill - and a real hide always lands.
+            CATransaction.setCompletionBlock { [weak self] in
+                if self?.visible == false { self?.layer.isHidden = true }
             }
             layer.opacity = 0
         }
         CATransaction.commit()
+    }
+
+    /// Sustained-degradation gate for the network pill: a leaky integrator over the
+    /// caller's ticks (the 4Hz overlay timer) so a brief co-gap FLAP never flashes the
+    /// pill - only mostly-sustained caution shows it, and clearing drains it back out.
+    private var degradeLevel = 0
+    public func setSustained(_ degraded: Bool, text: String) {
+        degradeLevel = max(0, min(12, degradeLevel + (degraded ? 1 : -1)))
+        if degradeLevel >= 8 { setText(text); setVisible(true) }   // ~2s sustained
+        else if degradeLevel <= 2 { setVisible(false) }            // hysteresis floor
     }
 
     /// Position the pill against the host's bounds, sizing width to the text.
