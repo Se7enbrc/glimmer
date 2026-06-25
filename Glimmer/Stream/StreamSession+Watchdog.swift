@@ -91,9 +91,6 @@ extension StreamSession {
         let dec = videoDecoder
         let win = window
         let inp = input
-        // Capture the backend so the overlay tick reads RTT through the
-        // protocol (was LiGetEstimatedRttInfo). StreamingBackend is Sendable.
-        let backend = self.backend
         await MainActor.run {
             self.statsOverlayTimer?.invalidate()
             // `Timer.scheduledTimer` registers the timer on the *current*
@@ -132,11 +129,10 @@ extension StreamSession {
                     // expensive enrichment + HUD render. The decoder's collectors
                     // keep ticking so a re-enable shows fresh numbers immediately.
                     guard dec.statsOverlayEnabled else { return }
-                    // estimatedRtt() returns nil if the engine isn't connected
-                    // (very old GFE versions, or a transient drop, or the native
-                    // stub). On nil we leave rtt nil and the row renders as "-".
-                    // Was LiGetEstimatedRttInfo.
-                    if let rttInfo = backend.estimatedRtt() {
+                    // Read RTT through the decoder's LIVE backend (re-pointed on
+                    // reconnect) so it survives a silent reconnect; nil when not
+                    // connected (transient drop / native stub) → row renders "-".
+                    if let rttInfo = dec.telemetryEstimatedRtt() {
                         // RTT is now measured from a HIGH-RES local monotonic clock
                         // (fractional ms, EWMA as Double) - no widen/truncation; the
                         // overlay shows true sub-ms latency uniformly with jitter.

@@ -195,6 +195,14 @@ extension TelemetrySnapshot {
         /// steered toward - fill vs target is the cushion judge (base 30 /
         /// cap 150 / ceiling 190). nil until the playout path stamps it.
         var audioPlayoutTargetMs: Double?
+        /// CROSS-STREAM A/V skew + its cushion-subtracted true clock skew +
+        /// rebase count, derived ONCE per capture tick (`deriveSkewMs` is
+        /// non-idempotent - it latches the epoch and reads its own clock), so the
+        /// Prometheus and NDJSON forms of one tick carry identical values. nil
+        /// while either stream is dark/stale or the pair is (re-)anchoring.
+        var avSkewMs: Double?
+        var avClockSkewMs: Double?
+        var avSkewRebaseTotal: UInt64 = 0
         /// Stream ROUTE (`stream_link`/`stream_if`): which interface the
         /// stream's packets actually traverse, from `StreamRouteProbe` - the
         /// PATH truth next to the wifi_* ASSOCIATION truth. nil only before

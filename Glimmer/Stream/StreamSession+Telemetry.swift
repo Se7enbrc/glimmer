@@ -28,11 +28,11 @@ extension StreamSession {
         // without having gone through the anchor.
         SessionLogFileSink.startIfEnabled(enabled: TelemetryGate.isEnabled)
 
-        // Capture Sendable handles. `backend` is Sendable; `decoder` is a class
-        // whose telemetry accessors are all `nonisolated` + lock-guarded, so the
-        // exporter's utility queue can call them directly. We pass the decoder
-        // weakly so a teardown race can't keep it alive through the closures.
-        let backend = self.backend
+        // Capture the decoder weakly; its telemetry accessors are all
+        // `nonisolated` + lock-guarded, so the exporter's utility queue can call
+        // them directly. RTT / ENet health route through the decoder's LIVE
+        // backend (re-pointed on reconnect) - a by-value backend capture here
+        // went dead after a silent reconnect swapped the backend.
         let source = TelemetrySource(
             videoStats: { [weak decoder] in
                 decoder?.telemetryStatsSnapshot() ?? StreamStatsSnapshot()
@@ -40,8 +40,8 @@ extension StreamSession {
             decoderDrops: { [weak decoder] in decoder?.telemetryDecoderDrops() ?? 0 },
             backpressureDrops: { [weak decoder] in decoder?.telemetryBackpressureDrops() ?? 0 },
             presentationLateDrops: { [weak decoder] in decoder?.telemetryPresentationLateDrops() ?? 0 },
-            estimatedRtt: { backend.estimatedRtt() },
-            enetHealth: { backend.enetHealth() },
+            estimatedRtt: { [weak decoder] in decoder?.telemetryEstimatedRtt() },
+            enetHealth: { [weak decoder] in decoder?.telemetryEnetHealth() },
             pacingLiveness: { [weak decoder] in decoder?.telemetryPacingLiveness() },
             inFlightDecodeBacklog: { [weak decoder] in decoder?.inFlightDecodeBacklog() ?? 0 },
             refreshWindow: { [weak decoder] in decoder?.telemetryRefreshWindow() },

@@ -158,6 +158,18 @@ extension TelemetryExporter {
         // renderers as one value.
         var extras = fillExtras(now: now, pacing: pacing, audioState: audioState)
 
+        // A/V skew is NON-IDEMPOTENT (it latches the pair epoch and reads its own
+        // clock), so derive it EXACTLY ONCE per tick and hand both renderers the
+        // same value - calling it twice (Prometheus + NDJSON) made one wire form
+        // see the anchor's nil and the other the post-anchor value for one tick.
+        // `accumulate:true` keeps the NDJSON percentile accumulator fed (the one
+        // feeder cadence). `lastTrueClockSkew`/`rebaseTotal` read the same derive.
+        let skewStore = AudioVideoSkewStore.shared
+        extras.avSkewMs = skewStore.deriveSkewMs(
+            bufferFillMs: snap.audio?.bufferFillMs, accumulate: true)
+        extras.avClockSkewMs = skewStore.lastTrueClockSkew()
+        extras.avSkewRebaseTotal = skewStore.rebaseTotal
+
         // ROLLING 60s latency window: fold this tick's cumulative bucket
         // snapshot into the per-session ring and carry the windowed difference
         // for the NDJSON `_60s` percentile fields. The cumulative fields stay
