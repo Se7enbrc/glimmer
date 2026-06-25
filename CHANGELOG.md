@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.6.29 - 2026-06-25
+
+Fixes the choppiness in 2026.6.28. One of that release's frame-pacing changes
+misread the present pacer's normal steady-state release as a defect and
+suppressed it, and over-tightened the due-gate timing - so frames missed their
+display tick, the present hold tripled, and the picture repeated and dropped
+frames on a clean link. That behavior change is reverted; the new pacing
+telemetry it added (which is how the regression was caught in a single session)
+is kept.
+
 ## 2026.6.28 - 2026-06-25
 
 A broad polish release - 39 fixes across the engine, the interface, and the

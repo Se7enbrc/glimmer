@@ -112,12 +112,6 @@ extension FramePacer {
     /// before the self-heal re-seed clears them).
     static let starvationLogTicks = 4
 
-    /// DUE-GATE slack (seconds): a barely-not-due head may still present this vsync
-    /// rather than wait a whole one (the fps≈refresh 1.5× judder). FIXED ms, not half a
-    /// vsync - that scaled with refresh and penalized 120Hz vs 240Hz; sub-frame arrival
-    /// jitter (all this covers) is refresh-independent. Adaptive depth owns real jitter.
-    static let dueGateSlackSeconds = 0.002
-
     /// PRESENT-LOOP BACKOFF threshold (in stream-frame intervals). When the head
     /// frame is HOPELESSLY late - its display-time lateness exceeds this many
     /// stream intervals AND a fresher frame is queued behind it - the tick stops
