@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026.6.28 - 2026-06-25
+
+A broad polish release - 39 fixes across the engine, the interface, and the
+instrumentation.
+
+Lower audio latency and tighter lip-sync. The drift resampler now keeps its
+clock-offset estimate across buffer drains and corrects skew several times
+faster, and the playout cushion no longer ratchets to a deep buffer on a clean
+link - together cutting a large chunk of standing audio delay on a good
+connection.
+
+Smoother frames. At fps == display refresh the pacer no longer trims a few
+frames a second it shouldn't, so rendered frame rate matches decoded on a clean
+link.
+
+Sturdier connection. A control-channel read could hang indefinitely if the host
+went silent mid-reply - it now fails fast and recovers; the handshake has an
+overall timeout, more disconnect causes are treated as recoverable, and
+connecting no longer blocks the session.
+
+Keeps your setup across this update. The earlier move to an unsandboxed app left
+existing installs unable to see their paired PCs - this release migrates them
+forward so pairings and trust carry over.
+
+Clearer in-stream feedback. A banner shows over the frozen frame while
+reconnecting or holding; a host with a changed certificate is flagged with a
+real re-pair action instead of a false "Ready"; taking over a PC that's already
+streaming asks first; a first-stream hint shows how to leave fullscreen; and a
+"Network unstable" pill appears on a degrading link.
+
+Under the hood: honest decode-latency telemetry (the old p95/max were
+estimates), a durable disconnect-reason counter, Wi-Fi AWDL suppression that
+engages on the first stream after you enable it, GPU power folded into the power
+metric, and a batch of smaller correctness and observability fixes.
+
 ## 2026.6.27 - 2026-06-25
 
 Tightens the Wi-Fi network helper so it holds awdl0 down harder during a stream.
