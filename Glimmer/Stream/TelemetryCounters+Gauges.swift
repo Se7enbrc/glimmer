@@ -85,17 +85,16 @@ extension TelemetryCounters {
         /// Live reorder-hold window the queue applies (ms): base 24, cap 48 - the
         /// controller's combined response to jitter + loss.
         var reorderHoldMs: Double
-        /// Jitter / out-of-order / retransmit axis level (0 on a clean link).
+        /// Jitter axis level (0 on a clean link). ooo/retransmit ride the separate
+        /// reorder axis; direct loss the loss axis - both fold into the live hold.
         var headroomLevel: Int
         /// Direct-loss axis level (0 on a clean link).
         var lossLevel: Int
         /// Host-driven per-frame FEC percentage of the latest frame.
         var fecPercentage: Int
-        /// Spare parity shards left on the WORST FEC-RECOVERED frame this window
-        /// (parity − data deficit) - the early warning before a frame goes
-        /// unrecoverable. nil on a window with NO recovery: "full parity, nothing
-        /// consumed" is not a margin and must not read as one (it was conflated with
-        /// a real near-miss before).
+        /// Spare parity shards on the WORST FEC-RECOVERED frame this window (parity −
+        /// data deficit) - the early warning before a frame goes unrecoverable. nil
+        /// with NO recovery: "full parity, nothing consumed" is not a near-miss.
         var parityMargin: Int?
     }
 

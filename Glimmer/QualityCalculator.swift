@@ -240,13 +240,9 @@ extension MoonlightManager {
         return last.ratio
     }
 
-    // Tier-2 LEARNED bitrate advice was RETIRED: its trigger compared the
-    // session-AVERAGE goodput (which includes idle/menu time and tops out well
-    // under the budget in practice) against ~90% of the encoder ceiling, a bar a
-    // session average can't clear, so the sentence never rendered. Re-keying it
-    // off a goodput p95 would need a new always-live percentile accumulator the
-    // receipt doesn't carry (it stores only the byte-total average); deferred as a
-    // design decision rather than left as dead code. Tier-1 measured guidance stands.
+    // Tier-2 LEARNED bitrate advice RETIRED: its session-AVERAGE-vs-~90%-ceiling
+    // trigger was unreachable (an average incl. idle time can't clear it). Re-keying
+    // off a goodput p95 needs a percentile accumulator the receipt lacks; deferred.
 
     // MARK: - Effective config + persistence
 

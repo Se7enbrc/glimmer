@@ -204,10 +204,18 @@ struct FecHeadroomController {
     /// Windows since the last loss-axis level change (its dwell guard).
     private var lossWindowsSinceChange = Int.max
 
-    /// The level the reorder-hold actually rides: the WORSE of the jitter axis and
-    /// the loss axis. `max` (not sum) keeps the total bounded at `maxHoldUs` and
-    /// means overlapping evidence doesn't double-count.
-    var effectiveLevel: Int { max(level, lossLevel) }
+    /// Reorder-axis level (0...`maxLevel`), SEPARATE from jitter/loss, combined via
+    /// `max`. ooo/retransmit widen the hold (the 3-signal contract) WITHOUT touching
+    /// the headroomLevel the FramePacer reads as depth (latency, no recovery gain).
+    private(set) var reorderLevel = 0
+    private var reorderEventRun = 0
+    private var reorderClearRun = 0
+    private var reorderWindowsSinceChange = Int.max
+
+    /// The level the reorder-hold actually rides: the WORST of the jitter, loss, and
+    /// reorder axes. `max` (not sum) keeps the total bounded at `maxHoldUs` and means
+    /// overlapping evidence doesn't double-count.
+    var effectiveLevel: Int { max(level, lossLevel, reorderLevel) }
 
     /// The jitter-scaled BASE hold (µs): the clean `baseHoldUs` plus a bounded
     /// widening for the link's standing jitter above `jitterBaseFloorMs`. A
@@ -388,6 +396,44 @@ struct FecHeadroomController {
         return false
     }
 
+    /// REORDER AXIS. Step `reorderLevel` off this window's ooo/retransmit, combined
+    /// via `max` in `holdWindowUs`. Runs every window regardless of the reconciler and
+    /// drives ONLY the reorder-hold (never the pacer-read headroomLevel). Same
+    /// soft/hard thresholds as `observeWindow`; returns true iff the level changed.
+    @discardableResult
+    mutating func observeReorder(outOfOrder: Int, retransmits: Int) -> Bool {
+        if reorderWindowsSinceChange != Int.max { reorderWindowsSinceChange &+= 1 }
+        let degrading = outOfOrder >= Self.oooEscalate || retransmits >= Self.retransmitEscalate
+        let hardSpike = outOfOrder >= Self.oooHardEscalate || retransmits >= Self.retransmitHardEscalate
+        let clean = outOfOrder <= Self.oooRelax && retransmits <= Self.retransmitRelax
+        if degrading {
+            reorderEventRun &+= 1
+            reorderClearRun = 0
+        } else if clean {
+            reorderClearRun &+= 1
+            reorderEventRun = 0
+        } else {
+            reorderEventRun = 0
+            reorderClearRun = 0
+        }
+
+        guard reorderWindowsSinceChange >= Self.minDwellWindows else { return false }
+        let escalateAfter = hardSpike ? Self.sustainedWindowsFast : Self.sustainedWindows
+        if reorderEventRun >= escalateAfter, reorderLevel < Self.maxLevel {
+            reorderLevel &+= 1
+            reorderEventRun = 0
+            reorderWindowsSinceChange = 0
+            return true
+        }
+        if reorderClearRun >= Self.clearWindows, reorderLevel > 0 {
+            reorderLevel -= 1
+            reorderClearRun = 0
+            reorderWindowsSinceChange = 0
+            return true
+        }
+        return false
+    }
+
     /// Reset to baseline. Called when the queue resets its per-window accumulators
     /// for a fresh session so the controller never carries a stale escalation into
     /// a new stream.
@@ -401,5 +447,9 @@ struct FecHeadroomController {
         lossEventRun = 0
         lossClearRun = 0
         lossWindowsSinceChange = Int.max
+        reorderLevel = 0
+        reorderEventRun = 0
+        reorderClearRun = 0
+        reorderWindowsSinceChange = Int.max
     }
 }

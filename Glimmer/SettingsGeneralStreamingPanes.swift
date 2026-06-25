@@ -477,10 +477,8 @@ struct QualityPane: View {
     }
 
     /// Bitrate guidance under the slider: the baked-in measured recommendation
-    /// (harness measurements + 20% headroom - provenance on
-    /// `MoonlightManager.measuredBitrateAnchors`), with a footnote keeping the wire
-    /// budget honest. (The learned Tier-2 sentence was retired - see
-    /// QualityCalculator: its session-average trigger was unreachable.)
+    /// (harness + 20% headroom - provenance on `MoonlightManager.measuredBitrateAnchors`)
+    /// plus the wire-budget footnote. (Learned Tier-2 sentence retired - see QualityCalculator.)
     private var bitrateGuidance: some View {
         let width = moonlight.customWidth
         let height = moonlight.customHeight
