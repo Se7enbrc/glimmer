@@ -201,15 +201,9 @@ extension VideoDecoder {
         return data
     }
 
-    /// Replace every Annex-B start code in `data` with a 4-byte big-endian
-    /// length prefix (AVCC / HVCC format). VideoToolbox H.264 / HEVC
-    /// decoders consume the AVCC variant.
-    ///
-    /// Single-pass over the source bytes via `withUnsafeBytes` (no `Data ->
-    /// [UInt8] -> Data` triple copy on the hot path): a first scan records each
-    /// NAL's [start, end) and the exact output size, then one pre-sized write
-    /// emits `len32-BE || NAL` for each. Empty NALs (back-to-back start codes)
-    /// are skipped so VT never sees a zero-length unit.
+    /// Replace each Annex-B start code with a 4-byte big-endian length prefix
+    /// (AVCC / HVCC, the form VideoToolbox consumes). Scan-then-write over
+    /// `withUnsafeBytes` avoids a `Data -> [UInt8] -> Data` copy per frame.
     nonisolated func convertAnnexBToAVCC(_ data: Data) -> Data {
         data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Data in
             guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else {

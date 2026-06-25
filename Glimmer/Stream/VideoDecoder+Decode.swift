@@ -373,13 +373,9 @@ extension VideoDecoder {
         let strippedPps = newPps.map(stripStartCode)
         let strippedVps = newVps.map(stripStartCode)
 
-        // IDENTICAL-REANNOUNCE SKIP. A turbulent HEVC stream re-sends the SAME
-        // SPS/PPS/VPS bytes on every IDR. With a live session whose cached sets
-        // already match byte-for-byte, the rebuild below is a no-op format change
-        // - but the teardown + renderer flush + pacer clearQueue it drives are
-        // not, and they clustered into visible hitches. Skip the whole rebuild
-        // when nothing actually changed. (AV1 carries its config in the OBU, not
-        // these sets, so this guard is inert there.)
+        // Turbulent HEVC re-sends identical SPS/PPS/VPS on every IDR; the rebuild
+        // is a no-op but its teardown + renderer flush + pacer clearQueue cluster
+        // into hitches, so skip on byte-equal sets. (Inert for AV1: config is OBU.)
         if decompressionSession != nil, formatDescription != nil,
            newSps == nil || strippedSps == spsData,
            newPps == nil || strippedPps == ppsData,
