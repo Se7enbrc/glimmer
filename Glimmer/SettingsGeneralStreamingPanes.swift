@@ -128,6 +128,16 @@ struct GeneralPane: View {
         return out
     }
 
+    /// Display label for a launch option: a stored app that isn't on the selected
+    /// host (set on another PC) is annotated so the picker doesn't imply it'll
+    /// launch here. Display-only - the tag stays the raw name, so scoping is unchanged.
+    private func launchOptionLabel(_ name: String) -> String {
+        guard name != "Desktop",
+              let host = moonlight.selectedHost,
+              !host.apps.contains(where: { $0.name == name }) else { return name }
+        return "\(name) (not on \(host.displayName))"
+    }
+
     var body: some View {
         // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
@@ -177,7 +187,7 @@ struct GeneralPane: View {
                 // is preserved in the list so we don't silently lose it.
                 Picker("On connect, launch", selection: $moonlight.defaultLaunchApp) {
                     ForEach(launchAppOptions, id: \.self) { name in
-                        Text(name).tag(name)
+                        Text(launchOptionLabel(name)).tag(name)
                     }
                 }
                 Text("Right-click the Stream button to pick a different app per connection.")

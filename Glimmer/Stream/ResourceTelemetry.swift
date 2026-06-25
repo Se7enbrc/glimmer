@@ -84,10 +84,10 @@ struct ResourceSnapshot: Sendable {
     var batteryCharging: Bool?
 
     /// A stable, non-empty label for one thread's metric series: the thread name
-    /// when we have one, else `tid-<id>` so an unnamed worker is still a distinct,
-    /// attributable series rather than collapsing into one empty-name bucket.
+    /// when we have one, else "unnamed". Unnamed workers are folded into a single
+    /// aggregate upstream (`sampleThreads`), so per-tid labels never reach a series.
     func threadLabel(_ thread: ThreadResourceSample) -> String {
-        thread.name.isEmpty ? "tid-\(thread.tid)" : thread.name
+        thread.name.isEmpty ? "unnamed" : thread.name
     }
 }
 
@@ -158,12 +158,28 @@ enum ResourceTelemetry {
         }
         var samples: [ThreadResourceSample] = []
         samples.reserveCapacity(Int(threadCount))
+        // Unnamed workers churn a fresh tid each session, so per-tid labels are
+        // unbounded cardinality. Fold them into one "unnamed" aggregate instead.
+        var unnamedCpu = 0.0
+        var unnamedPeak = -1.0
+        var unnamedQoS: Int?
         for index in 0..<Int(threadCount) {
             guard let sample = sampleOne(thread: threads[index]) else { continue }
             // Keep a thread if it's drawing measurable CPU, OR it's one of our
             // named hot-path threads (so its QoS stays auditable even when idle).
             let named = sample.name.hasPrefix("io.ugfugl.Glimmer") || sample.name.hasPrefix("Glimmer.")
-            if sample.cpuPercent >= cpuFloorPercent || named { samples.append(sample) }
+            guard sample.cpuPercent >= cpuFloorPercent || named else { continue }
+            if sample.name.isEmpty {
+                unnamedCpu += sample.cpuPercent
+                if sample.cpuPercent > unnamedPeak { unnamedPeak = sample.cpuPercent; unnamedQoS = sample.qos }
+            } else {
+                samples.append(sample)
+            }
+        }
+        if let qos = unnamedQoS {
+            // One bounded series (qos = the hottest unnamed thread's tier).
+            samples.append(ThreadResourceSample(name: "unnamed", tid: 0,
+                                                cpuPercent: unnamedCpu, qos: qos, qosLabel: qosLabel(qos)))
         }
         samples.sort { $0.cpuPercent > $1.cpuPercent }
         if samples.count > maxThreadsEmitted { samples.removeLast(samples.count - maxThreadsEmitted) }
