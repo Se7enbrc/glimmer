@@ -160,6 +160,12 @@ extension VideoDecoder {
         }
         return snap
     }
+    /// RTT / ENet health through the LIVE backend slot (re-pointed by
+    /// `setBackend` on a silent reconnect) - so the overlay + exporter never read
+    /// a dead pre-reconnect backend (the by-value-capture staleness bug).
+    nonisolated func telemetryEstimatedRtt() -> (rttMs: Double, varianceMs: Double)? { backend?.estimatedRtt() }
+    nonisolated func telemetryEnetHealth()
+        -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? { backend?.enetHealth() }
     nonisolated func telemetryDecoderDrops() -> UInt64 { statsCollector.decoderDropCount() }
     nonisolated func telemetryBackpressureDrops() -> UInt64 { statsCollector.backpressureDropCount() }
     nonisolated func telemetryPresentationLateDrops() -> UInt64 {

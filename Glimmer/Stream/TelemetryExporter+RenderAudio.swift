@@ -76,25 +76,24 @@ extension TelemetryRenderer {
                      audio.audioClockDriftMs)
         // The true cross-stream meter the drift line above disclaims: host-RTP
         // positions of last-presented video vs the audio playhead (schedule
-        // head minus buffer fill), pair-anchored. Derives WITHOUT feeding the
-        // session accumulator - the NDJSON 1Hz tick is the single feeder, so
-        // scrape cadence can never double-count the scorecard percentiles.
+        // head minus buffer fill), pair-anchored. Derived ONCE per tick in
+        // capture() and carried on `extras` - reading the same value the NDJSON
+        // form does, so the two wire forms can never disagree for one tick.
         builder.emit("glimmer_av_skew_ms",
                      "Cross-stream A/V skew, ms signed (+ = audio late/behind video; pair-anchored "
                      + "host-RTP positions, small constant bias - trend is the signal).",
-                     AudioVideoSkewStore.shared.deriveSkewMs(
-                        bufferFillMs: audio.bufferFillMs, accumulate: false))
-        // Cushion-subtracted true clock skew from the derive just above: the genuine
+                     extras.avSkewMs)
+        // Cushion-subtracted true clock skew from the SAME derive: the genuine
         // host↔Mac clock offset without the deliberate playout cushion baked in.
         builder.emit("glimmer_av_clock_skew_ms",
                      "Cross-stream A/V clock skew, ms signed, with the deliberate audio playout "
                      + "cushion SUBTRACTED (+ = audio clock behind video). The host↔Mac clock "
                      + "offset the drift resampler corrects, vs the cushion-inflated av_skew_ms.",
-                     AudioVideoSkewStore.shared.lastTrueClockSkew())
+                     extras.avClockSkewMs)
         builder.emitCounter("glimmer_av_skew_rebase_total",
                             "A/V-skew pair re-anchors after the first (stale stream or RTP "
                             + "discontinuity) - each one steps the skew baseline.",
-                            AudioVideoSkewStore.shared.rebaseTotal)
+                            extras.avSkewRebaseTotal)
         builder.emit("glimmer_audio_resampler_ppm",
                      "Drift resampler applied rate offset, ppm signed (varispeed rate − 1): "
                      + "0 = disengaged, ~the steady host↔Mac clock offset (tens of ppm) when "

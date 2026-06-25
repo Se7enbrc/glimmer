@@ -140,23 +140,19 @@ extension TelemetryRenderer {
         builder.add("audio_clock_drift_ms", audio.audioClockDriftMs)
         // av_skew_ms - the true CROSS-STREAM A/V alignment, deliberately next
         // to the wall-clock drift it must never be confused with. SIGN: + =
-        // audio late (behind video). Derived per the formerly-deferred recipe
-        // (both streams ride the host capture clock; the two hot-path stores
-        // now exist - last-presented video RTP at the renderer-enqueue site,
-        // last-scheduled audio RTP at the decode hand-off) with the buffer
-        // fill converting schedule-head to playhead. Pair-anchored epoch: a
-        // small constant bias rides along - trend and steps are the signal.
-        // Absent (not 0) while either stream is dark/stale or re-anchoring;
-        // rebase_total makes every mid-session re-baseline countable. THIS
-        // call is the accumulating one (the scorecard percentiles feed at
-        // exactly this 1Hz cadence; the prom render derives without feeding).
-        builder.add("av_skew_ms", AudioVideoSkewStore.shared.deriveSkewMs(
-            bufferFillMs: audio.bufferFillMs, accumulate: true))
-        // The cushion-SUBTRACTED true clock skew from the SAME derive above (no
+        // audio late (behind video). Derived ONCE per tick in capture() (the
+        // accumulating derive that feeds the scorecard percentiles at this 1Hz
+        // cadence) and carried on `extras`, so the prom + NDJSON forms of one
+        // tick are byte-identical - calling deriveSkewMs again here re-latched
+        // the non-idempotent epoch and split the two wire forms. Absent (not 0)
+        // while either stream is dark/stale or re-anchoring; rebase_total makes
+        // every mid-session re-baseline countable.
+        builder.add("av_skew_ms", extras.avSkewMs)
+        // The cushion-SUBTRACTED true clock skew from the SAME derive (no
         // deliberate-cushion bias) - the genuine host↔Mac clock offset the drift
         // resampler corrects, vs av_skew_ms which reads ~cushion+single-digit ms.
-        builder.add("av_clock_skew_ms", AudioVideoSkewStore.shared.lastTrueClockSkew())
-        builder.addCount("av_skew_rebase_total", AudioVideoSkewStore.shared.rebaseTotal)
+        builder.add("av_clock_skew_ms", extras.avClockSkewMs)
+        builder.addCount("av_skew_rebase_total", extras.avSkewRebaseTotal)
         // The live learned LOSS FLOOR under the playout target (the decay
         // limit-cycle fix) - absent until first learned, so a floor-held
         // target is legible against the evidence holding it.

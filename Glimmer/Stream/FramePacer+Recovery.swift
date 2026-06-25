@@ -162,8 +162,14 @@ extension FramePacer {
         if Self.tickOffMain {
             let tickThread = pacerTickThread ?? PacerTickThread()
             pacerTickThread = tickThread
-            tickThread.start()
-            tickThread.add(link)
+            // Only route onto the tick thread once its loop is CONFIRMED running;
+            // otherwise add(_:) could block the main actor on an unstarted loop.
+            // Fall back to the main run loop - never to an unconfirmed perform().
+            if tickThread.start() {
+                tickThread.add(link)
+            } else {
+                link.add(to: .main, forMode: .common)
+            }
         } else {
             link.add(to: .main, forMode: .common)
         }
