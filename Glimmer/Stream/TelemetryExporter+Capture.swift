@@ -141,6 +141,9 @@ extension TelemetryExporter {
         // present; this is just a read on the exporter queue). Carries the
         // glass-to-glass + input-to-photon composite stages too.
         snap.latencyHistograms = FrameTimingTracker.shared?.histograms.snapshot()
+        // Client-side input latency (queue→wire age) - a standalone input-family
+        // stage, read off the same tracker on this queue.
+        snap.inputLocalLatency = FrameTimingTracker.shared?.inputLocalLatency.snapshotValue()
 
         // Wi-Fi radio (signal 3): one CoreWLAN read on this queue. Reads the
         // current association only - never a scan - so it cannot disturb the link.

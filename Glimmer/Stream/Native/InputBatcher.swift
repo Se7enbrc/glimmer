@@ -81,6 +81,10 @@ final class InputBatcher: @unchecked Sendable {
     private var relMouseDX: Int = 0
     private var relMouseDY: Int = 0
     private var relMouseDirty = false
+    /// Queue→wire latency stamp: the OLDEST unflushed entry per slot (set on the
+    /// clean→dirty edge, kept across accumulation/supersession, reset at flush) so
+    /// the flush observes the worst-case age, not the freshest survivor.
+    private var relMouseStamp = DispatchTime.now()
 
     /// currentAbsoluteMouseState (InputStream.c:93) - latest-only.
     private var absMouseX: Int16 = 0
@@ -88,6 +92,7 @@ final class InputBatcher: @unchecked Sendable {
     private var absMouseRefW: Int16 = 0
     private var absMouseRefH: Int16 = 0
     private var absMouseDirty = false
+    private var absMouseStamp = DispatchTime.now()
 
     /// currentQueuedControllerPacket[MAX_GAMEPADS] (InputStream.c:80). Per-slot
     /// latest multiController fields + the buttonFlags that batch is built on.
@@ -99,6 +104,9 @@ final class InputBatcher: @unchecked Sendable {
                                    leftStickX: 0, leftStickY: 0,
                                    rightStickX: 0, rightStickY: 0)
         var dirty = false
+        /// Oldest-unflushed stamp - set on the clean→dirty edge, kept on
+        /// supersession, reset at flush. See relMouseStamp.
+        var stamp = DispatchTime.now()
     }
     private var controllers = [ControllerSlot](repeating: ControllerSlot(),
                                                count: Enet.maxGamepads)
@@ -111,6 +119,8 @@ final class InputBatcher: @unchecked Sendable {
         var y: Float = 0
         var z: Float = 0
         var dirty = false
+        /// Oldest-unflushed stamp (set on clean→dirty, reset at flush).
+        var stamp = DispatchTime.now()
     }
     /// MAX_MOTION_EVENTS (InputStream.c) - accel + gyro.
     private static let motionTypeCount = 2
@@ -123,10 +133,13 @@ final class InputBatcher: @unchecked Sendable {
     init(enet: EnetControlChannel) {
         self.enet = enet
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        // Repeating 1ms tick; small leeway lets the OS coalesce timer fires.
+        // Repeating 1ms tick (the wire-rate cap that fixed the peer-reset - keep
+        // it). Leeway is 250us, not the full interval: ~1ms of slack let macOS
+        // defer each flush up to a tick, adding input latency; 250us trades a few
+        // more wakeups for a tighter queue→wire age.
         timer.schedule(deadline: .now() + .nanoseconds(Int(Self.batchIntervalNs)),
                        repeating: .nanoseconds(Int(Self.batchIntervalNs)),
-                       leeway: .nanoseconds(Int(Self.batchIntervalNs)))
+                       leeway: .nanoseconds(250_000))
         timer.setEventHandler { [weak self] in self?.flush() }
         self.timer = timer
         timer.resume()
@@ -153,6 +166,7 @@ final class InputBatcher: @unchecked Sendable {
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
             guard let self else { return }
+            if !self.relMouseDirty { self.relMouseStamp = DispatchTime.now() }
             self.relMouseDX += Int(dx)
             self.relMouseDY += Int(dy)
             self.relMouseDirty = true
@@ -167,6 +181,9 @@ final class InputBatcher: @unchecked Sendable {
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
             guard let self else { return }
+            // Latest-only: keep the oldest stamp (set on the clean→dirty edge);
+            // a superseding sample discards its own newer stamp.
+            if !self.absMouseDirty { self.absMouseStamp = DispatchTime.now() }
             self.absMouseX = x
             self.absMouseY = y
             self.absMouseRefW = refW
@@ -197,6 +214,9 @@ final class InputBatcher: @unchecked Sendable {
                 // Button-flag change ends the batch: emit the pending slot first.
                 self.flushController(slot)
             }
+            // Stamp the oldest unflushed state per slot (clean→dirty edge); a
+            // superseding update in the same batch keeps the older stamp.
+            if !self.controllers[slot].dirty { self.controllers[slot].stamp = DispatchTime.now() }
             self.controllers[slot].num = num
             self.controllers[slot].mask = mask
             self.controllers[slot].buttons = safeButtons
@@ -242,6 +262,7 @@ final class InputBatcher: @unchecked Sendable {
             if !self.motionStates[idx].dirty {
                 self.motionStates[idx].dirty = true
                 self.motionDirtyCount += 1
+                self.motionStates[idx].stamp = DispatchTime.now()  // oldest-unflushed
             }
             self.motionStates[idx].x = x
             self.motionStates[idx].y = y
@@ -346,6 +367,13 @@ final class InputBatcher: @unchecked Sendable {
             TelemetryCounters.shared.inputBatchFlushTotal.increment()
         }
 
+        // Client queue→wire age: observe the OLDEST unflushed entry per drained
+        // slot. Tracker is nil when telemetry is off (gate), so it's one optional
+        // load + (when on) two local DispatchTime reads + a subtract - no behavior
+        // change. Both clocks local (host/present-clock independent).
+        let latencyTracker = FrameTimingTracker.shared
+        let drainNow = latencyTracker != nil ? DispatchTime.now() : nil
+
         // (1) Relative mouse: send the accumulated delta, splitting into Int16
         //     chunks exactly like InputStream.c:379-422.
         if relMouseDirty {
@@ -373,6 +401,7 @@ final class InputBatcher: @unchecked Sendable {
                     channel: Enet.ctrlChannelMouse)
             }
             relMouseDirty = false
+            observeInputAge(from: relMouseStamp, to: drainNow, tracker: latencyTracker)
         }
 
         // (2) Absolute mouse: latest-only.
@@ -382,6 +411,7 @@ final class InputBatcher: @unchecked Sendable {
                                            refW: absMouseRefW, refH: absMouseRefH),
                 channel: Enet.ctrlChannelMouse)
             absMouseDirty = false
+            observeInputAge(from: absMouseStamp, to: drainNow, tracker: latencyTracker)
         }
 
         // (3) Controllers: latest state per dirty slot.
@@ -416,14 +446,26 @@ final class InputBatcher: @unchecked Sendable {
                 } else {
                     _ = enet.sendInputPacketUnreliable(plaintext, channel: channel)
                 }
+                observeInputAge(from: motionStates[idx].stamp, to: drainNow, tracker: latencyTracker)
                 motionStates[idx].dirty = false
             }
             motionDirtyCount = 0
         }
     }
 
+    /// Observe one merged slot's queue→wire age into the input-local-latency
+    /// histogram. No-op when telemetry is off (`drainNow`/`tracker` nil). Both
+    /// clocks are the local monotonic DispatchTime - no host/present clock.
+    private func observeInputAge(from stamp: DispatchTime, to drainNow: DispatchTime?,
+                                 tracker: FrameTimingTracker?) {
+        guard let drainNow, let tracker, drainNow >= stamp else { return }
+        let ageMs = Double(drainNow.uptimeNanoseconds &- stamp.uptimeNanoseconds) / 1_000_000.0
+        tracker.inputLocalLatency.observe(ageMs)
+    }
+
     /// Send the latest pending multiController for `slot` and clear its dirty
-    /// flag. MUST be called on `queue`.
+    /// flag. MUST be called on `queue`. Drain point for both the timer flush and
+    /// the button-change flush, so it resolves its own queue→wire age stamp.
     private func flushController(_ slot: Int) {
         guard let enet else { return }
         let pending = controllers[slot]
@@ -431,6 +473,9 @@ final class InputBatcher: @unchecked Sendable {
             InputEncoder.multiController(num: pending.num, mask: pending.mask,
                                         buttons: pending.buttons, analog: pending.analog),
             channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot))
+        let tracker = FrameTimingTracker.shared
+        observeInputAge(from: pending.stamp,
+                        to: tracker != nil ? DispatchTime.now() : nil, tracker: tracker)
         controllers[slot].dirty = false
     }
 }

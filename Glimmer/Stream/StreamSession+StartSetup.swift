@@ -13,6 +13,7 @@
 
 import Foundation
 import AppKit
+import GameController
 import os
 
 extension StreamSession {
@@ -32,6 +33,35 @@ extension StreamSession {
         let controllerQuitChordProvider: @MainActor () -> ControllerQuitChord
         let customControllerChordProvider: @MainActor () -> Set<ControllerButton>
         let onBackgroundedChanged: (@MainActor (Bool) -> Void)?
+    }
+
+    /// Build the one-time leave-hint string: the keyboard hotkey, plus the
+    /// controller chord when one is set AND a controller is connected. Omits the
+    /// controller clause when its chord depends on a DualSense center button
+    /// macOS drops with raw-HID off - advertising a chord that can't fire is worse
+    /// than silence.
+    static func leaveHintText(
+        hotkey: HotkeyChord, chord: ControllerQuitChord,
+        customChord: Set<ControllerButton>
+    ) -> String {
+        let base = "Press \(hotkey.displayString)"
+        guard chord != .none, !GCController.controllers().isEmpty else {
+            return "\(base) to leave the stream"
+        }
+        // Honesty: a Create/Mute-based chord can't fire on a DualSense without
+        // the raw-HID reader; drop the clause rather than promise it.
+        let needsRawHID: Bool
+        switch chord {
+        case .startSelectL1R1: needsRawHID = true
+        case .custom: needsRawHID = !customChord.isDisjoint(with: [.create, .mute])
+        case .none, .l1r1, .l1r1l2r2, .l3r3: needsRawHID = false
+        }
+        if needsRawHID && !DualSenseHID.isEnabled {
+            return "\(base) to leave the stream"
+        }
+        let chordText = chord == .custom
+            ? ControllerButton.describe(customChord) : chord.displayName
+        return "\(base) (or hold \(chordText) on the controller) to leave"
     }
 
     /// Stand up the window + decoder + input on the main actor and return them.
@@ -91,16 +121,21 @@ extension StreamSession {
         // .streaming even if the one-shot .connectionEstablished edge was
         // lost. See the `onFirstDecodedFrame` re-wire in the post-bridge
         // MainActor block.)
-        let quitChordProvider = options.quitHotkeyProvider
+        let hotkeyProvider = options.quitHotkeyProvider
+        let chordProvider = options.controllerQuitChordProvider
+        let customChordProvider = options.customControllerChordProvider
         dec.onFirstDecodedFrame = { [weak win] in
             win?.fadeInOnFirstFrame()
             // One-time discoverability toast: Esc is a game input and the menu
             // bar is hidden, so the quit chord is otherwise undiscoverable. Show
-            // it once ever, on the first stream, with the LIVE chord string.
+            // it once ever, on the first stream, with the LIVE chord string(s).
             guard let win, !UserDefaults.standard.bool(forKey: Self.leaveHintShownKey) else { return }
             UserDefaults.standard.set(true, forKey: Self.leaveHintShownKey)
-            let chord = quitChordProvider().displayString
-            win.leaveHintBanner.setText("Press \(chord) to leave the stream")
+            let text = Self.leaveHintText(
+                hotkey: hotkeyProvider(),
+                chord: chordProvider(),
+                customChord: customChordProvider())
+            win.leaveHintBanner.setText(text)
             win.leaveHintBanner.setVisible(true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak win] in
                 win?.leaveHintBanner.setVisible(false)

@@ -100,14 +100,16 @@ public final class StreamBannerLayer {
         CATransaction.commit()
     }
 
-    /// Sustained-degradation gate for the network pill: a leaky integrator over the
-    /// caller's ticks (the 4Hz overlay timer) so a brief co-gap FLAP never flashes the
-    /// pill - only mostly-sustained caution shows it, and clearing drains it back out.
-    private var degradeLevel = 0
+    /// Sustained-degradation gate for the network pill: an ASYMMETRIC leaky
+    /// integrator over the caller's ticks (the 4Hz overlay timer). Attack +1.0,
+    /// decay −0.7 over a 0..16 band so a borderline link needs a degraded fraction
+    /// > ~0.41 to latch - isolated trips can't random-walk the pill up - while a
+    /// clean link still self-drains in ~2.5s.
+    private var degradeLevel = 0.0          // range 0..16
     public func setSustained(_ degraded: Bool, text: String) {
-        degradeLevel = max(0, min(12, degradeLevel + (degraded ? 1 : -1)))
-        if degradeLevel >= 8 { setText(text); setVisible(true) }   // ~2s sustained
-        else if degradeLevel <= 2 { setVisible(false) }            // hysteresis floor
+        degradeLevel = max(0, min(16, degradeLevel + (degraded ? 1.0 : -0.7)))
+        if degradeLevel >= 10 { setText(text); setVisible(true) }   // ~2.5s sustained @4Hz
+        else if degradeLevel <= 3 { setVisible(false) }             // self-drains in ~2.5s
     }
 
     /// Position the pill against the host's bounds, sizing width to the text.
