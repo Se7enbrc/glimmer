@@ -259,9 +259,8 @@ struct TelemetrySnapshot: Sendable {
     /// Latest disconnect reason (the live default is `.none` until a terminate).
     var disconnectReason: DisconnectReason = .none
     /// PROCESS-GLOBAL per-reason disconnect totals (label, total), monotonic and
-    /// surviving session resets - re-served every session so a scrape catches the
-    /// reason the <1ms exporter teardown would otherwise hide. Emitted as the
-    /// `glimmer_disconnect_total{reason=...}` counter family.
+    /// surviving session resets - so a scrape catches the reason the <1ms exporter
+    /// teardown would otherwise hide. Emitted as `glimmer_disconnect_total{reason}`.
     var disconnectByReason: [(label: String, total: UInt64)] = []
     /// IDR/RFI round-trip: request/matched counts + the most-recent measured RTT.
     /// The full distribution rides `latencyHistograms.idrRoundTrip`.

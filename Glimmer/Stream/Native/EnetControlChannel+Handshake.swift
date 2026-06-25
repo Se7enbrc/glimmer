@@ -13,12 +13,10 @@ import Network
 extension EnetControlChannel {
     // MARK: - Public: establish + START_A/B
 
-    /// AGGREGATE wall-clock deadline across the WHOLE ENet handshake (CONNECT +
-    /// START_A + START_B). The three stages are individually 10s-bounded, so the
-    /// pre-existing worst case was ~30s of stacked silence with no aggregate cap
-    /// (healthy p90 is ~1s). This caps the whole sequence well under the 30s outer
-    /// safety net so a half-dead host fails fast instead of stalling the actor for
-    /// the full stack. Each stage's own timeout is clamped to the time remaining.
+    /// AGGREGATE wall-clock cap across the whole ENet handshake (CONNECT + START_A
+    /// + START_B). Each stage is 10s-bounded, so without this the worst case was
+    /// ~30s of stacked silence; caps it well under the 30s outer net so a half-dead
+    /// host fails fast. Each stage's timeout is clamped to the time remaining.
     static let handshakeDeadlineMs = 13_000
 
     /// Open the UDP socket, run the CONNECT handshake to VERIFY_CONNECT + ACK,

@@ -177,12 +177,13 @@ extension TelemetryCounters {
         private var enetStartNanos: UInt64 = 0
         private var establishedNanos: UInt64 = 0
         private var firstFrameNanos: UInt64 = 0
-        /// How many connection-established edges this run has seen - 1 after the
-        /// initial connect, ≥2 after a reconnect. Drives the reconnect signal.
-        private var establishedCount: Int = 0
 
         // ---- Disconnect reason (latched at the terminate edge) ----
         private var disconnectReasonValue: DisconnectReason = .none
+        /// One-shot guard: the process-global per-reason counter is bumped at
+        /// most once per session, at genuine teardown - not at the per-terminate
+        /// latch (a recoverable blip latches a reason but must not be counted).
+        private var globalReasonCounted = false
 
         // ---- IDR/RFI round-trip ----
         /// Monotonic instant of the most recent IDR/RFI request we sent that is
@@ -216,17 +217,12 @@ extension TelemetryCounters {
         func markEnetStart(_ now: UInt64) {
             os_unfair_lock_lock(lock); if enetStartNanos == 0 { enetStartNanos = now }; os_unfair_lock_unlock(lock)
         }
-        /// Mark the connection-established edge - anchors the handshake's
-        /// `establishedNanos` leg (first edge only). The reconnect SIGNAL is NOT
-        /// derived here: the silent-reconnect path re-runs `p2.reset()` per attempt
-        /// (via anchorTelemetryConnectStart), wiping `establishedNanos` before the
-        /// fresh edge fires, so an established-edge count can't see a reconnect. The
-        /// genuine reconnect is counted at the recovery site (runReconnectEpisode).
-        /// One lock, off any hot path.
+        /// Anchor the handshake's `establishedNanos` leg (first edge only). The
+        /// reconnect signal is NOT derived here - reconnectInPlace re-runs p2.reset()
+        /// before the fresh edge, so it's counted at the recovery site instead.
         func markEstablished() {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             if establishedNanos == 0 { establishedNanos = TelemetryCounters.monotonicNowNanos() }
-            establishedCount += 1
         }
         func markFirstFrame(_ now: UInt64) {
             os_unfair_lock_lock(lock); if firstFrameNanos == 0 { firstFrameNanos = now }; os_unfair_lock_unlock(lock)
@@ -247,18 +243,25 @@ extension TelemetryCounters {
             return out
         }
 
-        /// Latch the disconnect reason, returning the reason iff THIS call won the
-        /// latch (transitioned from `.none`), else nil. The caller uses the return
-        /// to bump the process-global per-reason counter exactly once per session.
+        /// Latch the per-session disconnect-reason ordinal (the FIRST concrete
+        /// reason wins). Does NOT touch the global counter - a recoverable blip
+        /// latches here but is silently recovered, so counting it would inflate
+        /// the "why sessions ended" tally. Returns true iff this call won.
         @discardableResult
-        func setDisconnectReason(_ reason: DisconnectReason) -> DisconnectReason? {
+        func setDisconnectReason(_ reason: DisconnectReason) -> Bool {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
-            // Latch the FIRST concrete reason: the terminate path can fire from
-            // several call sites back-to-back (host terminate + our teardown), and
-            // the first one to land is the true cause.
-            guard disconnectReasonValue == .none, reason != .none else { return nil }
+            guard disconnectReasonValue == .none, reason != .none else { return false }
             disconnectReasonValue = reason
-            return reason
+            return true
+        }
+
+        /// At GENUINE teardown, return the latched reason for the process-global
+        /// counter exactly once per session (nil if no reason, or already counted).
+        func countGlobalReasonOnce() -> DisconnectReason? {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            guard !globalReasonCounted, disconnectReasonValue != .none else { return nil }
+            globalReasonCounted = true
+            return disconnectReasonValue
         }
         var disconnectReason: DisconnectReason {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
@@ -290,8 +293,7 @@ extension TelemetryCounters {
             os_unfair_lock_lock(lock)
             connectStartNanos = 0; rtspStartNanos = 0; rtspDoneNanos = 0
             enetStartNanos = 0; establishedNanos = 0; firstFrameNanos = 0
-            establishedCount = 0
-            disconnectReasonValue = .none
+            disconnectReasonValue = .none; globalReasonCounted = false
             idrRequestPendingNanos = 0; idrLastRoundTripMs = 0
             os_unfair_lock_unlock(lock)
         }

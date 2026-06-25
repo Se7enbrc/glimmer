@@ -383,10 +383,9 @@ extension StreamSession {
         backend.attachAudioSink(audioDecoder)
 
         do {
-            // ASYNC connect: await the bridge instead of blocking this actor on a
-            // synchronous startConnection. A hanging host no longer freezes the
-            // actor (stop/cancel/telemetry stay live) up to the 30s safety cap;
-            // cancelling this task interrupts the in-flight connect.
+            // Async connect: await the bridge rather than block this actor, so a
+            // hanging host can't freeze stop/cancel/telemetry (bounded by the 30s
+            // cap). Cancelling this task interrupts the in-flight connect.
             try await backend.startConnectionAsync(server: backendServer, config: backendConfig)
         } catch {
             // startConnection failed (RTSP handshake, control connect, etc., or
