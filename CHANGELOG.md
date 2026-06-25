@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.6.32 - 2026-06-25
+
+Drops fewer frames on high-refresh displays. The present-timing tick ran on the
+main thread, where the macOS frame-rate governor could starve it whenever the
+thread was busy - the display link missed callbacks, frames piled up, and the
+pacer trimmed them. On a clean link that was the biggest source of micro-stutter
+(~73% of the dropped frames). The tick now runs on its own high-priority thread
+so it fires on time, at no added latency.
+
 ## 2026.6.31 - 2026-06-25
 
 Makes the in-stream degradation badge honest. It was driven by a link-contention
