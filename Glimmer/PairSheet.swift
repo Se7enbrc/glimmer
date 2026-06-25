@@ -188,14 +188,26 @@ private struct HostChooser: View {
     @State private var found: [HostDiscovery.Discovered] = []
     @State private var manual: String = ""
     @State private var showManual = false
+    /// Flips ~7s into an empty discovery (Bonjour can be blocked on locked-down
+    /// or guest networks). Swaps the spinner copy and auto-reveals the manual
+    /// field so the user isn't stranded on a permanent "Looking for PCs...".
+    @State private var discoveryStalled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if found.isEmpty && !showManual {
                 HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
-                    Text("Looking for PCs on your network...")
-                        .foregroundStyle(.secondary)
+                    if !discoveryStalled {
+                        ProgressView().controlSize(.small)
+                        Text("Looking for PCs on your network...")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: "wifi.exclamationmark")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.orange)
+                        Text("No PCs found yet - enter the address below.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 8)
@@ -263,6 +275,15 @@ private struct HostChooser: View {
                 found = hosts
             }
             await HostDiscovery.shared.stop()
+        }
+        // Bonjour-hostile-network nudge: after ~7s with nothing found and the
+        // user not already in the manual field, surface the fallback path.
+        .task {
+            try? await Task.sleep(nanoseconds: 7_000_000_000)
+            if !Task.isCancelled, found.isEmpty, !showManual {
+                discoveryStalled = true
+                showManual = true
+            }
         }
     }
 

@@ -131,7 +131,7 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     public static let defaultQuit = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "q")
 
     /// Default stats-overlay chord: ⌃⌥S. Chosen because:
-    ///   * It doesn't collide with `defaultQuit` (⌃⌘Q).
+    ///   * It doesn't collide with `defaultQuit` (⌃⌥Q).
     ///   * It carries no `.command` modifier, so it's intercepted BEFORE the
     ///     sys-keys-capture gate in InputForwarder - which means it fires
     ///     whether or not the user has enabled the ⌘-forwarding toggle in
@@ -311,8 +311,9 @@ struct HostLiveStatus: Equatable {
         /// likely powered off or asleep.
         case asleep
         /// HTTPS-only mode, cert pin failed. We deliberately do NOT
-        /// downgrade this to "asleep" - the existing error UI handles it
-        /// with a "trust new cert" path; we just stay quiet on the chip.
+        /// downgrade this to "asleep" - the readiness chip renders this as a
+        /// distinct amber "Trust needed" state whose tap re-pairs (re-pinning
+        /// the new cert).
         case certMismatch
     }
 

@@ -17,6 +17,7 @@ enum ChipPresentation: Equatable {
     case connecting(phase: String)              // amber dot, current handshake phase
     case streamingElsewhere(appName: String)    // blue dot, "Streaming Helldivers 2"
     case asleep                                 // dim gray dot, "Asleep"
+    case certMismatch                           // amber dot, "Trust needed"
     case unknown                                // amber dot, "Checking..." (pre-first-poll)
 
     /// Truncated, single-line label - the chip must stay narrower than the
@@ -33,6 +34,7 @@ enum ChipPresentation: Equatable {
         case .streamingElsewhere(let name):
             return "Streaming \(Self.truncate(name, to: 14))"
         case .asleep: return "Asleep"
+        case .certMismatch: return "Trust needed"
         case .unknown: return "Checking..."
         }
     }
@@ -47,6 +49,7 @@ enum ChipPresentation: Equatable {
         case .connecting(let phase): return phase
         case .streamingElsewhere(let name): return "Host is streaming \(name)"
         case .asleep: return "Host is asleep or unreachable"
+        case .certMismatch: return "Host certificate changed, re-pair to trust it"
         case .unknown: return "Checking host status"
         }
     }
@@ -59,6 +62,7 @@ enum ChipPresentation: Equatable {
         case .connecting: return Color.orange
         case .streamingElsewhere: return Color.blue
         case .asleep: return Color.secondary
+        case .certMismatch: return Color.orange
         case .unknown: return Color.orange
         }
     }
@@ -80,6 +84,10 @@ enum ChipPresentation: Equatable {
 struct ReadinessChip: View {
     @Environment(MoonlightManager.self) private var moonlight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the re-pair sheet the certMismatch chip opens - re-pairing is the
+    /// Trust recovery (it re-pins the host's new cert). Pre-filled with the
+    /// host's address so the user lands on the PIN step, not the chooser.
+    @State private var showRePair = false
 
     /// Resolve the user-facing chip presentation. Priority order matters -
     /// our own session beats the polled host state (we'd rather show the live
@@ -110,7 +118,7 @@ struct ReadinessChip: View {
         case .streamingApp(let name):           return .streamingElsewhere(appName: name)
         case .streamingUnknownApp:              return .streamingElsewhere(appName: "an app")
         case .asleep:                           return .asleep
-        case .certMismatch:                     return .ready(rttMs: live.rttMs)
+        case .certMismatch:                     return .certMismatch
         }
     }
 
@@ -143,8 +151,14 @@ struct ReadinessChip: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .glassEffect(.regular, in: .capsule)
+                // certMismatch chip is the Trust affordance: a click re-pairs
+                // (re-pinning the host's new cert). Inert for every other state.
+                .contentShape(Capsule())
+                .onTapGesture { if chip == .certMismatch { showRePair = true } }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilitySummary(for: chip))
+                .accessibilityAddTraits(chip == .certMismatch ? .isButton : [])
+                .accessibilityHint(chip == .certMismatch ? "Re-pair to trust the new certificate" : "")
 
                 // HDR-active chip: only while a stream is confirmed PQ/HLG
                 // end-to-end (the static SpecChipsRow tag is just the pref).
@@ -174,6 +188,18 @@ struct ReadinessChip: View {
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: presentation)
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: moonlight.nativeHDRActive)
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: moonlight.hostRoute.routeClass)
+        .sheet(isPresented: $showRePair) {
+            // Pre-fill the host's address so the re-pair lands straight on the
+            // PIN step (the initialAddress path that was previously dead).
+            PairSheet(initialAddress: rePairAddress).environment(moonlight)
+        }
+    }
+
+    /// Best-known address for the selected host, used to pre-fill the re-pair
+    /// sheet. Empty when nothing is selected (the sheet then opens the chooser).
+    private var rePairAddress: String {
+        guard let host = moonlight.selectedHost else { return "" }
+        return host.localAddress ?? host.manualAddress ?? ""
     }
 
     /// Chip sentence + route flavour for VoiceOver ("Host ready, round trip
@@ -198,7 +224,7 @@ struct AppIconsRow: View {
             HStack(spacing: 10) {
                 ForEach(apps.prefix(4)) { app in
                     Button {
-                        moonlight.stream(app: app, on: host)
+                        moonlight.requestStream(app: app, on: host)
                     } label: {
                         VStack(spacing: 4) {
                             Image(systemName: app.systemImage)
@@ -422,7 +448,7 @@ struct StreamButton: View {
             if let host = moonlight.selectedHost {
                 ForEach(host.apps) { app in
                     Button {
-                        moonlight.stream(app: app, on: host)
+                        moonlight.requestStream(app: app, on: host)
                     } label: {
                         Label(app.name, systemImage: app.systemImage)
                     }

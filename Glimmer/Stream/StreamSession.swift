@@ -35,6 +35,10 @@ import os
 public actor StreamSession {
     let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Session")
 
+    /// UserDefaults flag: has the one-time "press <chord> to leave" in-stream
+    /// toast been shown? Set true the first time it appears so it's truly once-ever.
+    static let leaveHintShownKey = "glimmer.leaveHintShown"
+
     // Subsystems. VideoDecoder/StreamWindow/InputForwarder are MainActor-bound,
     // so they're lazily created on the main actor in start().
     var videoDecoder: VideoDecoder?
