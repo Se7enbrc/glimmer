@@ -11,7 +11,12 @@ import os.log
 final class AWDLSuppressor: @unchecked Sendable {
     private let interfaceName = "awdl0"
     private let log = OSLog(subsystem: "io.ugfugl.glimmer.helper", category: "AWDL")
+    /// Event-servicing queue: route socket, poll timer, SCDynamicStore handler.
     private let queue = DispatchQueue(label: "io.ugfugl.glimmer.helper.awdl", qos: .userInitiated)
+    /// Interface-mutation queue. Serial (preserves re-suppress-count ordering)
+    /// but SEPARATE from `queue` so the blocking ifconfig execs never stall the
+    /// route socket from servicing the next kernel raise edge.
+    private let execQueue = DispatchQueue(label: "io.ugfugl.glimmer.helper.awdl.exec", qos: .userInitiated)
 
     private var dynamicStore: SCDynamicStore?
     private var runLoopSource: CFRunLoopSource?
@@ -73,14 +78,14 @@ final class AWDLSuppressor: @unchecked Sendable {
             os_log("suppression %{public}@ (reason: %{public}@)", log: log, type: .default,
                    value ? "ON" : "OFF", reason)
         }
-        // Mutate the interface on `queue` (shared with poll + the SCDynamicStore
-        // handler) so concurrent re-suppressions serialize and can't double-count.
+        // Mutate the interface on the serial `execQueue` so concurrent
+        // re-suppressions serialize and can't double-count.
         if value {
-            queue.async { [weak self] in self?.downIfUp() }
+            execQueue.async { [weak self] in self?.downIfUp() }
         } else {
             // Restore awdl0 - just clearing the flag leaves it down until macOS
             // re-raises it, breaking AirDrop/Continuity meanwhile.
-            queue.async { [weak self] in self?.upIfDown() }
+            execQueue.async { [weak self] in self?.upIfDown() }
         }
     }
 
@@ -102,9 +107,9 @@ final class AWDLSuppressor: @unchecked Sendable {
         return false
     }
 
-    private func downIfUp() {
+    private func downIfUp(fast: Bool = false) {
         guard isInterfaceUp() else { return }
-        let confirmed = forceDownAwdl()
+        let confirmed = forceDownAwdl(fast: fast)
         stateLock.lock()
         let initial = !_initialDownDone
         _initialDownDone = true
@@ -130,14 +135,16 @@ final class AWDLSuppressor: @unchecked Sendable {
     /// Down awdl0, strip its IPv6 link-local (macOS re-derives it on re-raise, so
     /// deleting it raises the cost of coming back), and VERIFY - a few tight retries
     /// because macOS can re-raise within ms. Returns true once confirmed down.
-    private func forceDownAwdl() -> Bool {
+    /// `fast`: skip the inter-attempt settle sleep (route fast path - a real
+    /// re-raise re-triggers us, so we don't block the exec queue spinning here).
+    private func forceDownAwdl(fast: Bool = false) -> Bool {
         for attempt in 0..<Self.maxDownAttempts {
             _ = executeIfconfig(args: [interfaceName, "down"])
             for addr in ipv6LinkLocalAddrs() {
                 _ = executeIfconfig(args: [interfaceName, "inet6", addr, "delete"])
             }
             if !isInterfaceUp() { return true }
-            if attempt < Self.maxDownAttempts - 1 { usleep(Self.downRetrySettleUs) }
+            if !fast, attempt < Self.maxDownAttempts - 1 { usleep(Self.downRetrySettleUs) }
         }
         return !isInterfaceUp()
     }
@@ -189,7 +196,10 @@ final class AWDLSuppressor: @unchecked Sendable {
         while read(routeFd, &buf, buf.count) > 0 { sawEvent = true }
         guard sawEvent else { return }
         stateLock.lock(); let suppressing = _suppressing; stateLock.unlock()
-        if suppressing { downIfUp() }
+        // Hop the blocking ifconfig exec onto execQueue so this read source stays
+        // free to drain the NEXT raise edge. `fast`: skip the inter-attempt sleep
+        // on the route path - we'll be re-triggered if a retry is actually needed.
+        if suppressing { execQueue.async { [weak self] in self?.downIfUp(fast: true) } }
     }
 
     /// Restore awdl0 to its normal (up) state once suppression ends - mirror of
@@ -222,7 +232,9 @@ final class AWDLSuppressor: @unchecked Sendable {
         let idle = Date().timeIntervalSince(_lastHeartbeat)
         stateLock.unlock()
         if suppressing {
-            downIfUp()  // 1s backstop re-assert in case the route socket missed an edge
+            // 1s backstop re-assert (in case the route socket missed an edge) -
+            // on execQueue so this poll on `queue` doesn't block servicing.
+            execQueue.async { [weak self] in self?.downIfUp() }
             if idle > 3 {
                 os_log("heartbeat stale %.1fs - releasing awdl0", log: log, type: .default, idle)
                 setSuppressing(false, reason: "heartbeat-timeout")
@@ -287,7 +299,7 @@ final class AWDLSuppressor: @unchecked Sendable {
     }
 
     private func handleStoreChange(keys: [String]) {
-        queue.async { [weak self] in
+        execQueue.async { [weak self] in
             guard let self else { return }
             guard self.suppressing else { return }
             self.downIfUp()

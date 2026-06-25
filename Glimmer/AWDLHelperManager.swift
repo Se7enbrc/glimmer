@@ -286,8 +286,14 @@ final class AWDLHelperManager: ObservableObject {
     /// registration (.notFound / .notRegistered, the known SMAppService failure).
     /// Mirrors `LoginItemManager.reconcile()`; runs only if the user wants it on.
     func reconcileAfterUpdate() {
-        guard UserDefaults.standard.bool(forKey: Self.enabledIntentKey) else { return }
         refresh()
+        // Ground truth beats the flag: the unsandbox flip can orphan
+        // `enabledIntentKey`, but a live `.enabled`/`.requiresApproval`
+        // registration proves the user wanted it - honour that and re-arm the
+        // flag so the rest of the launch path agrees.
+        let registered = state == .enabled || state == .requiresApproval
+        if registered { UserDefaults.standard.set(true, forKey: Self.enabledIntentKey) }
+        guard registered || UserDefaults.standard.bool(forKey: Self.enabledIntentKey) else { return }
         switch state {
         case .enabled:
             log.info("AWDL daemon enabled; new binary loads on the next stream (idle-exit)")
@@ -311,6 +317,10 @@ final class AWDLHelperManager: ObservableObject {
     /// it keeps awdl0 down and can detect if we go away (stream end / crash) and
     /// restore it. No-op unless the helper is enabled.
     func suppressForStream() {
+        // A freshly-approved daemon isn't reflected in `state` until a UI
+        // refresh; re-read the live status so the FIRST stream after enabling
+        // actually parks awdl0 instead of no-op'ing on stale state.
+        refresh()
         guard isEnabled else {
             Diag.notice("AWDL helper NOT engaged - state \(String(describing: state)); awdl0 left to macOS", "Stream")
             return

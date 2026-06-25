@@ -22,6 +22,10 @@ extension MoonlightManager {
     }
 
     func bootstrap() async {
+        // One-shot: rescue UserDefaults + the client identity orphaned in the
+        // old sandbox container by the unsandbox flip. MUST run before anything
+        // reads UserDefaults / FileIdentityStore below.
+        ContainerMigration.runIfNeeded()
         // Self-heal the login item: if the user wants launch-at-login but the
         // registration drifted (invalidated by an app update / move), re-assert
         // it now. This is the fix for "doesn't start after reboot" - the next
