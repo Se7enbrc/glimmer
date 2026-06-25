@@ -97,26 +97,66 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         server: BackendServerInfo,
         config: BackendStreamConfig
     ) throws {
+        // Synchronous (protocol) entry: block on the bridge thread's completion.
+        // The async actor path (startConnectionAsync) is preferred - it frees the
+        // StreamSession actor instead of parking it on this wait. Kept for protocol
+        // conformance and any non-actor caller.
+        let bridge = DispatchSemaphore(value: 0)
+        let outcomeBox = OutcomeBox()
+        runBridgedConnect(server: server, config: config) { outcome in
+            outcomeBox.set(outcome)
+            bridge.signal()
+        }
+        bridge.wait()
+        if let error = outcomeBox.get() { throw error }
+    }
+
+    /// ASYNC actor-safe entry: run the same dedicated-thread connect pipeline but
+    /// await a continuation instead of blocking the caller, so the StreamSession
+    /// actor stays responsive (stop/cancel/telemetry) while a hanging host is
+    /// brought up. CANCELLATION: if the awaiting task is cancelled, we interrupt the
+    /// in-flight RTSP/ENet connections so the pipeline unwinds; the continuation is
+    /// resumed exactly once (the bridge-thread completion that follows the interrupt).
+    public func startConnectionAsync(
+        server: BackendServerInfo,
+        config: BackendStreamConfig
+    ) async throws {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                runBridgedConnect(server: server, config: config) { outcome in
+                    if let error = outcome { cont.resume(throwing: error) } else { cont.resume() }
+                }
+            }
+        } onCancel: {
+            // Unblock the bridge thread's pipeline; its completion resumes the
+            // continuation with the resulting (interrupted) error.
+            interruptConnection()
+        }
+    }
+
+    /// Thread-safe single-slot outcome carrier (nil = success).
+    private final class OutcomeBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: Error?
+        func set(_ error: Error?) { lock.lock(); value = error; lock.unlock() }
+        func get() -> Error? { lock.lock(); defer { lock.unlock() }; return value }
+    }
+
+    /// Run the connect pipeline on a DEDICATED thread and report the outcome (nil =
+    /// success, else a mapped StreamError) via `completion`, exactly once. The
+    /// blocking `done.wait()` runs on THAT thread, never on a Swift cooperative-pool
+    /// thread (the actor's). The async pipeline runs at .userInitiated and only
+    /// awaits, so it yields its pool thread across each RTSP/ENet suspension. The
+    /// 30s cap guards any unforeseen stall; each sub-stage is individually bounded.
+    private func runBridgedConnect(
+        server: BackendServerInfo,
+        config: BackendStreamConfig,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) {
         Diag.notice("native backend: starting connection to \(server.address)", Self.logCategory)
         log.notice("NativeBackend.startConnection → \(server.address, privacy: .public)")
-
-        // startConnection is documented to BLOCK like LiStartConnection (it fires
-        // stage callbacks while running and returns 0/throws). We run the async
-        // pipeline to completion on a private semaphore so the contract holds for
-        // the synchronous caller (StreamSession). The result is carried across
-        // the Task boundary in a Sendable box (a bare mutable capture isn't
-        // Sendable under Swift 6 strict concurrency).
-        //
-        // The pipeline is launched from a DEDICATED thread (not directly from the
-        // caller) and the blocking `done.wait()` runs on THAT dedicated thread, so
-        // the semaphore wait never parks a Swift cooperative-pool thread (the
-        // caller is an actor whose continuation runs on the pool). The async
-        // pipeline itself runs at .userInitiated priority - it only awaits (it does
-        // not block), so it yields its pool thread across each RTSP/ENet suspension
-        // rather than hogging a capped pool thread.
         let resultBox = ErrorBox()
-        let bridge = DispatchSemaphore(value: 0)   // signals when the bridge thread finishes
-        let timedOutBox = AtomicCounter()           // 1 = the bridge timed out
+        let timedOutBox = AtomicCounter()
         let bridgeThread = Thread { [weak self, server, config] in
             let done = DispatchSemaphore(value: 0)
             Task(priority: .userInitiated) { [weak self, server, config] in
@@ -128,31 +168,23 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
                 }
                 done.signal()
             }
-            // Overall safety cap. Each sub-stage is individually bounded, but this
-            // guards any unforeseen stall (a host that accepts the TCP socket then
-            // never responds, or a dropped ENet handshake). On timeout we interrupt
-            // - cancelling the in-flight RTSP/ENet connections so the async pipeline
-            // unwinds - and fail cleanly rather than blocking forever.
             if done.wait(timeout: .now() + 30) == .timedOut {
                 timedOutBox.increment()
             }
-            bridge.signal()
+            if timedOutBox.value > 0 {
+                Diag.error("native backend: connection timed out after 30s - interrupting", Self.logCategory)
+                // Cancel the in-flight RTSP/ENet connections so the still-running
+                // async pipeline unwinds on its own (its weak self-captures no-op
+                // after teardown). We do not block waiting for that unwind.
+                self?.interruptConnection()
+                completion(StreamError.sessionFailed(-1))
+                return
+            }
+            completion(resultBox.get().map { self?.mapToStreamError($0) ?? .sessionFailed(-1) })
         }
         bridgeThread.qualityOfService = .userInitiated
         bridgeThread.name = "Glimmer.nativeConnect"
         bridgeThread.start()
-        bridge.wait()
-        if timedOutBox.value > 0 {
-            Diag.error("native backend: connection timed out after 30s - interrupting", Self.logCategory)
-            // Cancel the in-flight RTSP/ENet connections so the still-running async
-            // pipeline unwinds on its own (its weak self-captures no-op after
-            // teardown). We do not block the caller waiting for that unwind.
-            interruptConnection()
-            throw StreamError.sessionFailed(-1)
-        }
-        if let thrown = resultBox.get() {
-            throw mapToStreamError(thrown)
-        }
     }
 
     /// Thread-safe single-slot error carrier for the synchronous→async bridge.
@@ -270,14 +302,11 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
     func connectionStarted() {
         Diag.notice("connection established (native)", Self.logCategory)
         // P2 CONNECT-HANDSHAKE: established edge - bounds the ENet-connect leg and
-        // starts the first-frame leg (established → first decoded frame). Also the
-        // RECONNECT signal: a SECOND established edge in one run means the link
-        // re-established after a drop, so count it (the first established is the
-        // initial connect, not a reconnect). Both always-live; off any hot path.
-        let p2 = TelemetryCounters.shared.p2
-        if p2.markEstablishedReportingReconnect() {
-            TelemetryCounters.shared.reconnectTotal.increment()
-        }
+        // starts the first-frame leg (established → first decoded frame). The
+        // RECONNECT count is NOT inferred here (the silent-reconnect path resets the
+        // handshake timeline per attempt) - it's bumped at the recovery site
+        // (runReconnectEpisode). Always-live; off any hot path.
+        TelemetryCounters.shared.p2.markEstablished()
         let bridge = StreamBridgeContext.current
         // Observability for the fragile one-shot edge: if the bridge or its
         // continuation is gone at yield time, this established edge is being
@@ -310,7 +339,10 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         // error. A user stop / watchdog teardown latches its own reason at its own
         // site (StreamSession.stop / watchdog) BEFORE this fires, and the latch
         // keeps the FIRST concrete reason, so this only fills in a host-side cause.
-        TelemetryCounters.shared.p2.setDisconnectReason(code == 0 ? .hostClosedClean : .hostError)
+        if let latched = TelemetryCounters.shared.p2.setDisconnectReason(
+            code == 0 ? .hostClosedClean : .hostError) {
+            TelemetryCounters.shared.disconnectByReason.increment(latched)
+        }
         let bridge = StreamBridgeContext.current
         // DON'T unconditionally yield `.connectionTerminated` to the UI here. The
         // session classifies the terminate: a recoverable host close on a LIVE

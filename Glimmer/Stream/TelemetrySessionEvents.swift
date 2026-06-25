@@ -82,6 +82,26 @@ enum DisconnectReason: Int, Sendable {
     }
 }
 
+// MARK: - Process-global disconnect tally (by reason)
+
+/// PROCESS-GLOBAL, monotonic per-reason disconnect counters. One `Counter` per
+/// `DisconnectReason` (excluding `.none`), incremented once per session at the
+/// reason-latch site. Lives on the always-live `TelemetryCounters` singleton and
+/// is DELIBERATELY kept out of `resetForNewSession`, so it survives the <1ms
+/// exporter teardown that races the 1s scrape - the next session re-serves it.
+/// `@unchecked Sendable`: each `Counter` is self-locked.
+final class DisconnectReasonCounters: @unchecked Sendable {
+    private let counters: [DisconnectReason: TelemetryCounters.Counter] = [
+        .userStopped: .init(), .hostClosedClean: .init(), .hostError: .init(),
+        .watchdogStall: .init(), .connectFailed: .init(), .consumerDropped: .init()
+    ]
+    func increment(_ reason: DisconnectReason) { counters[reason]?.increment() }
+    /// Snapshot of (label, total) for every non-zero-defined reason, for the export.
+    func snapshot() -> [(label: String, total: UInt64)] {
+        counters.map { ($0.key.label, $0.value.value) }
+    }
+}
+
 // MARK: - Handshake breakdown snapshot
 
 /// One session's CONNECT-HANDSHAKE breakdown: the per-stage durations (ms) of the
@@ -196,20 +216,17 @@ extension TelemetryCounters {
         func markEnetStart(_ now: UInt64) {
             os_unfair_lock_lock(lock); if enetStartNanos == 0 { enetStartNanos = now }; os_unfair_lock_unlock(lock)
         }
-        /// Mark the connection-established edge and report whether this is a
-        /// RECONNECT (a second-or-later established edge in the same run). The FIRST
-        /// established edge anchors the handshake's `establishedNanos` leg and is
-        /// NOT a reconnect; every subsequent edge is. Returns true iff the caller
-        /// should bump the reconnect counter. One lock, off any hot path.
-        func markEstablishedReportingReconnect() -> Bool {
+        /// Mark the connection-established edge - anchors the handshake's
+        /// `establishedNanos` leg (first edge only). The reconnect SIGNAL is NOT
+        /// derived here: the silent-reconnect path re-runs `p2.reset()` per attempt
+        /// (via anchorTelemetryConnectStart), wiping `establishedNanos` before the
+        /// fresh edge fires, so an established-edge count can't see a reconnect. The
+        /// genuine reconnect is counted at the recovery site (runReconnectEpisode).
+        /// One lock, off any hot path.
+        func markEstablished() {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
-            if establishedNanos == 0 {
-                establishedNanos = TelemetryCounters.monotonicNowNanos()
-                establishedCount = 1
-                return false
-            }
+            if establishedNanos == 0 { establishedNanos = TelemetryCounters.monotonicNowNanos() }
             establishedCount += 1
-            return true
         }
         func markFirstFrame(_ now: UInt64) {
             os_unfair_lock_lock(lock); if firstFrameNanos == 0 { firstFrameNanos = now }; os_unfair_lock_unlock(lock)
@@ -230,13 +247,18 @@ extension TelemetryCounters {
             return out
         }
 
-        func setDisconnectReason(_ reason: DisconnectReason) {
-            os_unfair_lock_lock(lock)
+        /// Latch the disconnect reason, returning the reason iff THIS call won the
+        /// latch (transitioned from `.none`), else nil. The caller uses the return
+        /// to bump the process-global per-reason counter exactly once per session.
+        @discardableResult
+        func setDisconnectReason(_ reason: DisconnectReason) -> DisconnectReason? {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             // Latch the FIRST concrete reason: the terminate path can fire from
             // several call sites back-to-back (host terminate + our teardown), and
             // the first one to land is the true cause.
-            if disconnectReasonValue == .none { disconnectReasonValue = reason }
-            os_unfair_lock_unlock(lock)
+            guard disconnectReasonValue == .none, reason != .none else { return nil }
+            disconnectReasonValue = reason
+            return reason
         }
         var disconnectReason: DisconnectReason {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }

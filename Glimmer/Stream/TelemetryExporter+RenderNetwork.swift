@@ -66,6 +66,10 @@ extension TelemetryRenderer {
         builder.emitCounter("glimmer_enet_retransmit_total",
                             "Reliable-channel retransmits (climbs before a control-stream stall).",
                             snap.enetRetransmitTotal)
+        builder.emitCounter("glimmer_ack_silence_near_miss_total",
+                            "ACK-silence near-misses: silence crossed a deep RTT multiple short "
+                            + "of the 10s dead-peer cutoff and recovered (near-death blip).",
+                            snap.ackSilenceNearMissTotal)
         builder.emitCounter("glimmer_ctrl_ignored_total",
                             "Unknown inbound control datagrams ignored (ACKed, decrypted, discarded).",
                             extras.ctrlIgnoredTotal)

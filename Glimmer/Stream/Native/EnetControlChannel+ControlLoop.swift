@@ -69,6 +69,26 @@ extension EnetControlChannel {
                   Self.backpressureRttMultiple * UInt32(min(rttMs, 1000)))
             : Self.backpressureAckSilenceFloorMs
         reliableBackloggedFlag = unackedCount > 0 && sinceLastAck > bpThreshold
+
+        // ACK-silence NEAR-MISS: count once per EDGE the silence crosses a deep
+        // RTT multiple (or the floor) while reliables are outstanding - the
+        // recovered near-death blip the dead-peer cutoff never records (one event
+        // hit 9332ms vs the 10000ms envelope and left no trace). Re-arm only after
+        // silence falls back, so a single near-miss is one count, not one-per-tick.
+        let nearMissThreshold = haveRtt
+            ? min(Self.ackSilenceDeadMs - 1,
+                  max(Self.ackSilenceNearMissFloorMs,
+                      Self.ackSilenceNearMissRttMultiple * UInt32(min(rttMs, 1000))))
+            : Self.ackSilenceNearMissFloorMs
+        if unackedCount > 0 && sinceLastAck >= nearMissThreshold {
+            if !ackSilenceNearMissArmed {
+                ackSilenceNearMissArmed = true
+                TelemetryCounters.shared.ackSilenceNearMissTotal.increment()
+            }
+        } else if ackSilenceNearMissArmed {
+            ackSilenceNearMissArmed = false
+        }
+
         if unackedCount > 0 && sinceLastAck >= Self.ackSilenceDeadMs {
             Diag.error("ENet peer silent: no ACK in \(sinceLastAck)ms with "
                 + "\(unackedCount) reliable command(s) outstanding "

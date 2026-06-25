@@ -125,6 +125,19 @@ enum TelemetryRenderer {
             out += "\(name)\(labels) \(value)\n"
         }
 
+        /// Emit one counter FAMILY: a `# HELP/# TYPE` header followed by one series
+        /// per (extra-label, value) row, each merging the shared session labels with
+        /// its own extra label. For per-reason/per-bucket counter families.
+        mutating func emitCounterFamily(
+            _ name: String, _ help: String, key: String, rows: [(label: String, value: UInt64)]
+        ) {
+            guard !rows.isEmpty else { return }
+            out += "# HELP \(name) \(help)\n# TYPE \(name) counter\n"
+            for row in rows {
+                out += "\(name){\(sharedPairs),\(key)=\"\(escape(row.label))\"} \(row.value)\n"
+            }
+        }
+
         /// Emit one Prometheus histogram family: `_bucket{le=...}` for each finite
         /// bound plus the `+Inf` bucket, then `_sum` and `_count`. Buckets are
         /// cumulative ("le" semantics) - the tracker already maintains them that

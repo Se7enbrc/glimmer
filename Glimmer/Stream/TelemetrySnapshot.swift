@@ -131,6 +131,10 @@ struct TelemetrySnapshot: Sendable {
     /// `increase()` is the climb that precedes a control-stream stall - pairs with
     /// the oldest-unacked trend (enetOldestUnackedMs) to bracket a wedge.
     var enetRetransmitTotal: UInt64 = 0
+    /// ACK-silence NEAR-MISS edges this session (monotonic): the control loop's ACK
+    /// silence crossed a deep RTT multiple short of the 10s dead-peer cutoff and
+    /// then recovered - the near-death blip the dead-peer counter never records.
+    var ackSilenceNearMissTotal: UInt64 = 0
 
     // pacing
     var pacingQueueDepth: Int?
@@ -254,6 +258,11 @@ struct TelemetrySnapshot: Sendable {
     var reconnectTotal: UInt64 = 0
     /// Latest disconnect reason (the live default is `.none` until a terminate).
     var disconnectReason: DisconnectReason = .none
+    /// PROCESS-GLOBAL per-reason disconnect totals (label, total), monotonic and
+    /// surviving session resets - re-served every session so a scrape catches the
+    /// reason the <1ms exporter teardown would otherwise hide. Emitted as the
+    /// `glimmer_disconnect_total{reason=...}` counter family.
+    var disconnectByReason: [(label: String, total: UInt64)] = []
     /// IDR/RFI round-trip: request/matched counts + the most-recent measured RTT.
     /// The full distribution rides `latencyHistograms.idrRoundTrip`.
     var idrRoundTrip: IdrRoundTripSnapshot?

@@ -370,8 +370,18 @@ final class EnetControlChannel: @unchecked Sendable {
     /// NO earlier give-up: a transient stall must never self-terminate inside this
     /// envelope, or there is nothing to recover into when the air clears.
     static let ackSilenceDeadMs: UInt32 = 10000
+    /// ACK-SILENCE NEAR-MISS threshold (ms): when silence (reliables outstanding)
+    /// crosses this - deep into dead-peer territory but inside the 10s envelope - we
+    /// count a near-miss so the recovered-blip leaves a trace. RTT-relative with a
+    /// fixed floor so a clean LAN never trips it; capped well under the dead cutoff.
+    static let ackSilenceNearMissFloorMs: UInt32 = 3000
+    static let ackSilenceNearMissRttMultiple: UInt32 = 8
     /// Cadence (ms) of the 1Hz control-loop health snapshot.
     static let healthSnapshotIntervalMs: UInt32 = 1000
+    /// Edge latch for the ACK-silence near-miss counter: true while silence is past
+    /// the near-miss threshold so the counter is bumped ONCE per crossing, not per
+    /// tick. Re-armed when silence falls back below the threshold. Control-loop only.
+    var ackSilenceNearMissArmed = false
 
     let stateLock = NSLock()
     let interrupted = ManagedAtomicFlag()

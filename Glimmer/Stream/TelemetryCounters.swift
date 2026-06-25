@@ -102,6 +102,15 @@ final class TelemetryCounters: @unchecked Sendable {
     //      site (sub-2Hz under a healthy link). ----
     let enetRetransmitTotal = Counter()
 
+    /// ACK-SILENCE NEAR-MISS total (signal: P1 NETWORK). Bumped once per EDGE the
+    /// control loop's ACK silence (reliables outstanding) crosses a deep multiple of
+    /// RTT - well past normal in-flight but short of the 10s dead-peer cutoff. The
+    /// counter the near-death blip needs: one event sat at 9332ms vs the 10000ms
+    /// envelope and left no trace because it recovered. Edge-triggered (armed only
+    /// after the silence falls back below the threshold) so a single near-miss is
+    /// one count, not one-per-tick. Always-live integer add on the 20ms control tick.
+    let ackSilenceNearMissTotal = Counter()
+
     /// Unknown inbound CONTROL datagrams ignored (already ACKed + decrypted,
     /// then discarded - e.g. SET_RGB_LED 0x5502, advertised on light-bar pads
     /// but unimplemented). The Diag log suppresses repeats per type so a flood
@@ -492,6 +501,15 @@ final class TelemetryCounters: @unchecked Sendable {
     /// nothing reads it when off). Its own lock keeps the rare lifecycle/recovery
     /// writes off every other counter's lock.
     let p2 = P2State()
+
+    /// PROCESS-GLOBAL, monotonic disconnect tally keyed by reason - the only
+    /// always-live record of WHY sessions ended. The per-session
+    /// `p2.disconnectReason` ordinal is latched then torn down with the exporter
+    /// <1ms later (vs a 1s scrape), so Prometheus only ever caught none/host_error;
+    /// this counter survives `resetForNewSession`, so the NEXT session's listener
+    /// re-serves the accumulated totals. Bumped once per session at the reason
+    /// latch site (`noteTelemetryDisconnect`). Defined in TelemetrySessionEvents.swift.
+    let disconnectByReason = DisconnectReasonCounters()
     /// AUDIO-TTF context: warm/cold host-bring-up classification + the
     /// host-idle covariate. Self-locked, defined in
     /// TelemetryCounters+AudioGauges.swift (the P2State idiom); its
@@ -554,7 +572,8 @@ final class TelemetryCounters: @unchecked Sendable {
                         fecRecoveredFramesTotal, inputEventsTotal, inputBatchFlushTotal,
                         inputIdleToActiveTotal, bookmarkTotal,
                         videoPacketsLostPreFecTotal, videoPacketsOutOfOrderTotal,
-                        videoPacketsDuplicateTotal, enetRetransmitTotal, ctrlIgnoredTotal,
+                        videoPacketsDuplicateTotal, enetRetransmitTotal,
+                        ackSilenceNearMissTotal, ctrlIgnoredTotal,
                         decoderRecreateTotal, staleFrameRepeatTotal,
                         pacerOverTargetReleaseTotal, suppressedDropTotal, decodeGatedDropTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
@@ -564,8 +583,12 @@ final class TelemetryCounters: @unchecked Sendable {
                         videoGapOver20msTotal, videoGapOver50msTotal, videoGapOver100msTotal,
                         audioGapOver20msTotal, audioGapOver50msTotal, audioGapOver100msTotal,
                         enetGapOver20msTotal, enetGapOver50msTotal, enetGapOver100msTotal,
-                        // P2 session-lifecycle counters.
-                        reconnectTotal, idrRoundTripRequestTotal, idrRoundTripMatchedTotal,
+                        // P2 session-lifecycle counters. NOTE: reconnectTotal is
+                        // DELIBERATELY excluded - a silent reconnect re-runs this
+                        // reset mid-run (via anchorTelemetryConnectStart), so keeping
+                        // it here would zero the very count the reconnect is about to
+                        // make. It's run-global like disconnectByReason.
+                        idrRoundTripRequestTotal, idrRoundTripMatchedTotal,
                         corruptionHeuristicTotal] {
             counter.reset()
         }
