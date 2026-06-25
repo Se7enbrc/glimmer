@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.6.31 - 2026-06-25
+
+Makes the in-stream degradation badge honest. It was driven by a link-contention
+signal (Wi-Fi AWDL co-gaps) that the error-correction quietly absorbs - so it
+lit when nothing was wrong and missed the actual picture stutter. It now fires
+on perceived present-side hitching (dropped, late, or repeated frames), so it
+lights when the picture actually stutters and stays dark when the link blips
+harmlessly. Relabeled "Stream stuttering". The link-health signal it used to
+read is still recorded in telemetry.
+
 ## 2026.6.30 - 2026-06-25
 
 Fixes the in-stream "Network degraded" pill. A brief Wi-Fi co-gap blip could
