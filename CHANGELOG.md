@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.6.46 - 2026-06-26
+
+Under the hood: a diagnostic that pinpoints why the present-timing tick
+occasionally fires late on a high-refresh display - distinguishing the timing
+thread being preempted from the OS coalescing the callback. No behavior change;
+it tells the next release which fix is the right one.
+
 ## 2026.6.45 - 2026-06-26
 
 Under the hood: new diagnostics, no change to behavior. Breaks stream-launch
