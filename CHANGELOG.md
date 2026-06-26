@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.6.45 - 2026-06-26
+
+Under the hood: new diagnostics, no change to behavior. Breaks stream-launch
+time into its sub-steps (so a slow start is attributable to the right leg),
+counts network-route changes (e.g. waking on a new Wi-Fi network) and input-path
+backpressure, and adds a controller-delivery latency measure - making the next
+wake/launch hiccup a one-query diagnosis.
+
 ## 2026.6.44 - 2026-06-26
 
 Recovers fast when you wake the Mac mid-stream. Before, waking on a different
