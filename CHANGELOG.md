@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.6.42 - 2026-06-26
+
+Fixes audio dying after a mid-stream reconnect. When the stream silently
+reconnected (a network blip - e.g. waking on a different Wi-Fi network - drops
+and re-establishes the connection underneath you), the audio decoder's shutdown
+flag was set during teardown and never cleared on the rebuild, so audio came
+back muted: the picture resumed but sound didn't, with packets arriving and
+nowhere to play. The flag is now reset on every rebuild, the audio graph
+re-initializes cleanly, and a new diagnostic surfaces a silent-audio state at a
+glance.
+
 ## 2026.6.41 - 2026-06-25
 
 Two controller/overlay fixes.
