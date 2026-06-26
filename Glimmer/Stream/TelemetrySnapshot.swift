@@ -57,6 +57,15 @@ struct TelemetrySnapshot: Sendable {
     /// colorspace key. Emitted as a Prometheus info-gauge (labels carry the
     /// state) + NDJSON fields. nil before the first decoded frame.
     var decodeState: TelemetryCounters.DecodeState?
+    /// Latest VTDecompressionSessionCreate wall-clock cost (ms): the HW-decoder
+    /// bring-up that lands on the first-frame leg. 0 before the first create.
+    var vtSessionCreateMs: Double = 0
+    /// Decoder (re)creates split by cause (monotonic; sum = decoderRecreateTotal):
+    /// the one-time first create, real resolution changes, and colorspace/HDR/
+    /// profile param-rebuilds that kept dims - so a recreate storm names its cause.
+    var decoderRecreateFirstTotal: UInt64 = 0
+    var decoderRecreateResolutionTotal: UInt64 = 0
+    var decoderRecreateColorspaceTotal: UInt64 = 0
 
     // P1 PRESENT stale-frame REPEAT (the invisible stutter: the layer re-showing
     // the last frame when no new frame was due this vsync).

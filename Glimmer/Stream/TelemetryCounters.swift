@@ -203,6 +203,17 @@ final class TelemetryCounters: @unchecked Sendable {
     /// (≤ a handful per session under a healthy link).
     let decoderRecreateTotal = Counter()
 
+    /// Decoder (re)creates SPLIT BY CAUSE (signal: DECODE). Same already-rare
+    /// create site as `decoderRecreateTotal`; these three sum to it. The split
+    /// makes a recreate STORM legible as to cause - a colorspace/HDR flap vs a
+    /// real resolution change vs the one-time first create. Cause is read from
+    /// the format-description dimensions at the rebuild site (resolution change =
+    /// dims changed; otherwise a param-set rebuild that kept dims = colorspace/
+    /// profile/HDR-signaling). Always-live integer adds like their parent.
+    let decoderRecreateFirstTotal = Counter()
+    let decoderRecreateResolutionTotal = Counter()
+    let decoderRecreateColorspaceTotal = Counter()
+
     /// Stale-frame REPEAT count (signal: PRESENT). Bumped on each pacer tick that
     /// fires but presents NO new frame because none was due - the layer re-shows
     /// the last frame. This is the INVISIBLE stutter: at fps<refresh it is the
@@ -352,6 +363,17 @@ final class TelemetryCounters: @unchecked Sendable {
     /// path never touches it.
     let rttLock = os_unfair_lock_t.allocate(capacity: 1)
     var rttMsValue: Double = 0
+
+    // Module-internal (not private) so the gauge accessors in
+    // TelemetryCounters+Gauges.swift can reach these.
+    //
+    /// LATEST VTDecompressionSessionCreate wall-clock cost (ms). HW decoder
+    /// bring-up can't run until the first SPS/PPS, so it lands on the critical
+    /// first-frame leg - this surfaces that one-shot startup cost. Stamped by the
+    /// decode queue at each create (rare); read at 1Hz by the exporter. A plain
+    /// Double behind an unfair lock, last-writer-wins like the other gauges.
+    let vtSessionCreateLock = os_unfair_lock_t.allocate(capacity: 1)
+    var vtSessionCreateMsValue: Double = 0
 
     // Module-internal (not private) so the gauge accessors in
     // TelemetryCounters+Gauges.swift can reach these.
@@ -534,6 +556,7 @@ final class TelemetryCounters: @unchecked Sendable {
         jitterLock.initialize(to: os_unfair_lock_s())
         inputLock.initialize(to: os_unfair_lock_s())
         rttLock.initialize(to: os_unfair_lock_s())
+        vtSessionCreateLock.initialize(to: os_unfair_lock_s())
         gapLock.initialize(to: os_unfair_lock_s())
         decodeStateLock.initialize(to: os_unfair_lock_s())
         fecHealthLock.initialize(to: os_unfair_lock_s())
@@ -544,7 +567,8 @@ final class TelemetryCounters: @unchecked Sendable {
     }
     deinit {
         jitterLock.deallocate(); inputLock.deallocate()
-        rttLock.deallocate(); gapLock.deallocate()
+        rttLock.deallocate(); vtSessionCreateLock.deallocate()
+        gapLock.deallocate()
         decodeStateLock.deallocate(); fecHealthLock.deallocate()
         audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
         presentSuppressedLock.deallocate(); decodeGatedLock.deallocate()
@@ -574,7 +598,9 @@ final class TelemetryCounters: @unchecked Sendable {
                         videoPacketsLostPreFecTotal, videoPacketsOutOfOrderTotal,
                         videoPacketsDuplicateTotal, enetRetransmitTotal,
                         ackSilenceNearMissTotal, ctrlIgnoredTotal,
-                        decoderRecreateTotal, staleFrameRepeatTotal,
+                        decoderRecreateTotal, decoderRecreateFirstTotal,
+                        decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
+                        staleFrameRepeatTotal,
                         pacerOverTargetReleaseTotal, suppressedDropTotal, decodeGatedDropTotal,
                         discontinuityFlushTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
@@ -598,6 +624,7 @@ final class TelemetryCounters: @unchecked Sendable {
         // and the p2 anchor are called back-to-back at the same connect edge).
         setRecvJitterMs(0)
         setRttMs(0)
+        setVtSessionCreateMs(0)
         // Present-suppression + decode-gate gauges: a session starts with a
         // visible stream view, and the present/decode paths re-stamp these at
         // the next suppression/gate edge.

@@ -219,6 +219,22 @@ extension TelemetryRenderer {
         builder.emitCounter("glimmer_decoder_recreate_total",
                             "VTDecompressionSession (re)creates (first create + param-rebuilds).",
                             snap.decoderRecreateTotal)
+        // Same recreates split by CAUSE (sums to the total above): the one-time
+        // first create, a real resolution change, or a colorspace/HDR/profile
+        // param-rebuild that kept the dimensions - so a recreate STORM names its
+        // driver. Cause read from the format-description dimensions at rebuild.
+        builder.emitCounterFamily(
+            "glimmer_decoder_recreate_by_cause_total",
+            "Decoder (re)creates by cause (sums to glimmer_decoder_recreate_total).",
+            key: "cause",
+            rows: [("first_create", snap.decoderRecreateFirstTotal),
+                   ("param_rebuild_resolution", snap.decoderRecreateResolutionTotal),
+                   ("param_rebuild_colorspace", snap.decoderRecreateColorspaceTotal)])
+        // VT-session create wall-clock (ms): the HW-decoder bring-up on the
+        // first-frame leg. 0 before the first create (the emit drops the 0).
+        builder.emit("glimmer_vt_session_create_ms",
+                     "VTDecompressionSessionCreate wall-clock cost, ms (first-frame-leg startup).",
+                     snap.vtSessionCreateMs > 0 ? snap.vtSessionCreateMs : nil)
         builder.emitCounter("glimmer_discontinuity_flush_total",
                             "Stream-discontinuity flushes (param-set rebuilds that flushed the "
                             + "renderer + cleared the pacer queue - a real multi-frame skip). 0 on "

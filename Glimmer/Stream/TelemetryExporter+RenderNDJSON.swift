@@ -171,6 +171,10 @@ extension TelemetryRenderer {
         _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
     ) {
         builder.addCount("decoder_recreate_total", snap.decoderRecreateTotal)
+        builder.addCount("decoder_recreate_first_total", snap.decoderRecreateFirstTotal)
+        builder.addCount("decoder_recreate_resolution_total", snap.decoderRecreateResolutionTotal)
+        builder.addCount("decoder_recreate_colorspace_total", snap.decoderRecreateColorspaceTotal)
+        if snap.vtSessionCreateMs > 0 { builder.add("vt_session_create_ms", snap.vtSessionCreateMs) }
         builder.addCount("discontinuity_flush_total", snap.discontinuityFlushTotal)
         if let state = snap.decodeState {
             builder.addBool("decode_hw", state.hwDecode)

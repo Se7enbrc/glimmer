@@ -19,7 +19,9 @@ extension VideoDecoder {
 
     // MARK: - Decompression session
 
-    nonisolated func ensureDecompressionSession() -> Bool {
+    nonisolated func ensureDecompressionSession(
+        cause: SessionCreateCause = .firstCreate
+    ) -> Bool {
         if decompressionSession != nil { return true }
         guard let formatDesc = formatDescription else { return false }
 
@@ -69,6 +71,11 @@ extension VideoDecoder {
             decompressionOutputCallback: VideoDecoder.decompressionOutputCallback,
             decompressionOutputRefCon: refcon.toOpaque())
 
+        // HW decoder bring-up can't run until the first SPS/PPS, so this create
+        // lands on the critical first-frame leg. Measure it: a signpost interval
+        // for Instruments + a wall-clock ms gauge (glimmer_vt_session_create_ms).
+        let createSignpostState = OSSignposter.decode.beginInterval("VTSessionCreate")
+        let createStart = CFAbsoluteTimeGetCurrent()
         var sessionOut: VTDecompressionSession?
         let status = VTDecompressionSessionCreate(
             allocator: kCFAllocatorDefault,
@@ -77,6 +84,11 @@ extension VideoDecoder {
             imageBufferAttributes: destImageBufferAttrs as CFDictionary,
             outputCallback: &callback,
             decompressionSessionOut: &sessionOut)
+        let createMs = (CFAbsoluteTimeGetCurrent() - createStart) * 1000.0
+        OSSignposter.decode.endInterval(
+            "VTSessionCreate", createSignpostState,
+            "status=\(status, privacy: .public) ms=\(createMs, privacy: .public)")
+        TelemetryCounters.shared.setVtSessionCreateMs(createMs)
 
         guard status == noErr, let session = sessionOut else {
             // No session means no callback will ever consume the refcon -
@@ -107,8 +119,8 @@ extension VideoDecoder {
 
         self.decompressionSession = session
         // Telemetry (opt-in): a fresh VT session was built - bump the recreate
-        // counter + publish the live DECODE state (gate-on). See the helper file.
-        noteSessionCreatedTelemetry(outputPixelFormat: outputPixelFormat)
+        // counter (total + by-cause) + publish the live DECODE state (gate-on).
+        noteSessionCreatedTelemetry(outputPixelFormat: outputPixelFormat, cause: cause)
         return true
     }
 

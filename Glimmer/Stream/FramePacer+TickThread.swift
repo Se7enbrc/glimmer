@@ -61,6 +61,12 @@ final class PacerTickThread: @unchecked Sendable {
     /// Released by the thread body once the loop is published, so `start()`
     /// returns only after the run loop can take the link.
     private let ready = DispatchSemaphore(value: 0)
+    /// Signalled by the thread body the instant `CFRunLoopRun()` returns (the
+    /// loop has exited). `stop()` does a bounded join on it - DEBUG ONLY - to
+    /// assert the high-QoS thread actually unwound (defense-in-depth; release
+    /// teardown never blocks on this). Fresh per spawn so a stale signal from a
+    /// prior run can't satisfy a later join. Guarded by `lock` like the pointers.
+    private var exited = DispatchSemaphore(value: 0)
 
     /// Spin up the thread + run loop if not already running. Idempotent: a
     /// rebuild that re-binds onto the same FramePacer reuses the live thread
@@ -74,6 +80,10 @@ final class PacerTickThread: @unchecked Sendable {
         os_unfair_lock_lock(&lock)
         let alreadyUp = thread != nil
         let alreadyRunning = loopRunning
+        // Fresh exit semaphore for this spawn so a prior run's signal can't
+        // satisfy this run's DEBUG join. Set under the same lock as the pointers.
+        if !alreadyUp { exited = DispatchSemaphore(value: 0) }
+        let exitSignal = exited
         os_unfair_lock_unlock(&lock)
         guard !alreadyUp else { return alreadyRunning }
 
@@ -99,6 +109,9 @@ final class PacerTickThread: @unchecked Sendable {
             // CFRunLoopRun blocks until CFRunLoopStop breaks it; RunLoop.run()'s
             // no-source early-return is the freeze this avoids.
             CFRunLoopRun()
+            // The loop has exited - signal the captured semaphore so a DEBUG join
+            // in stop() can confirm the high-QoS thread actually unwound.
+            exitSignal.signal()
         }
         tickThread.name = "Glimmer.pacerTick"
         tickThread.qualityOfService = .userInteractive
@@ -143,13 +156,24 @@ final class PacerTickThread: @unchecked Sendable {
     func stop() {
         os_unfair_lock_lock(&lock)
         let cf = cfRunLoop
+        let exitSignal = exited
         runLoop = nil
         cfRunLoop = nil
         thread = nil
         loopRunning = false
         os_unfair_lock_unlock(&lock)
+        // Idempotent: a second stop with no live loop has nothing to break or
+        // join - return before touching the (already-signalled-or-unused) exit.
         guard let cf else { return }
         CFRunLoopStop(cf)
+        // DEBUG-only bounded join: confirm the loop actually returned so a missed
+        // CFRunLoopStop (defense-in-depth - the cross-thread stop on this single-
+        // level loop is reliable) would trip the assert instead of silently
+        // orphaning a high-QoS thread. Release teardown SKIPS this entirely.
+        #if DEBUG
+        let r = exitSignal.wait(timeout: .now() + .milliseconds(50))
+        assert(r == .success, "pacer tick thread did not exit")
+        #endif
     }
 
     deinit { stop() }

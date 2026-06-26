@@ -112,6 +112,10 @@ extension TelemetryExporter {
         snap.pacerDisabledTotal = counters.pacerDisabledTotal.value
         snap.bookmarkTotal = counters.bookmarkTotal.value
         snap.decoderRecreateTotal = counters.decoderRecreateTotal.value
+        snap.decoderRecreateFirstTotal = counters.decoderRecreateFirstTotal.value
+        snap.decoderRecreateResolutionTotal = counters.decoderRecreateResolutionTotal.value
+        snap.decoderRecreateColorspaceTotal = counters.decoderRecreateColorspaceTotal.value
+        snap.vtSessionCreateMs = counters.vtSessionCreateMs
         snap.discontinuityFlushTotal = counters.discontinuityFlushTotal.value
         snap.staleFrameRepeatTotal = counters.staleFrameRepeatTotal.value
 
