@@ -479,6 +479,16 @@ extension AudioDecoder {
                 driftMs = wallElapsedMs - mediaPlayedMs - bufferFillMs
             }
         }
+        // MIRROR the resampler-converged verdict into the meter-lock domain so the
+        // cushion shallow-release (completion thread, under the lock) reads it safely
+        // instead of touching this lockless publish-path state. Converged = the loop
+        // is carrying the skew within its real envelope (|integral| bounded AND drift
+        // bounded, or drift not yet measured). Railing ⇒ deep cushion is load-bearing.
+        let driftBounded = driftMs.map { abs($0) <= Self.cushionReleaseDriftBoundMs } ?? true
+        let converged = abs(resamplerIntegralPpm) <= Self.cushionReleaseSkewPpm && driftBounded
+        audioMeterLock.lock()
+        resamplerSkewConverged = converged
+        audioMeterLock.unlock()
         TelemetryCounters.shared.setAudioState(
             TelemetryCounters.AudioState(
                 bufferFillMs: bufferFillMs,

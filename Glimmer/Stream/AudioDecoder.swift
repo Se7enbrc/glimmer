@@ -109,6 +109,13 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `driveResampler`) fires per decoded packet (~200Hz), so the loop rate-limits
     /// itself to ~4Hz off this; drift is ppm-slow and a fast loop only adds noise.
     var lastResamplerUpdateNanos: UInt64 = 0
+    /// METER-LOCK MIRROR of "the resampler is carrying the skew within its real
+    /// envelope" - |integral ppm| <= bound AND clock drift bounded. The resampler PI
+    /// state lives lockless on the publish path, so the cushion SHALLOW-RELEASE (the
+    /// wired floor/target drop) can't read it directly off the completion thread;
+    /// `publishAudioState` snapshots this Bool under the lock. False (railing skew) ⇒
+    /// the deep cushion is LOAD-BEARING ⇒ leave it alone. Guarded by `audioMeterLock`.
+    var resamplerSkewConverged = false
     /// Drift-resampler PI tuning. Conservative starting values: the SLEW limit and the
     /// BOUND are the safety guards (the varispeed rate can never step audibly nor run
     /// away), so the gains can be tuned up in an A/B with no warble risk. The drift to
@@ -124,6 +131,17 @@ public final class AudioDecoder: @unchecked Sendable {
     /// drain, so keep most of it (slow ×0.97 bleed only while packets flow) and
     /// re-engage with it already learned rather than re-converging from 0.
     static let resamplerIntegralHoldFactor = 0.97
+    /// SHALLOW-RELEASE gate: the |integral ppm| ceiling under which the resampler is
+    /// deemed to be CARRYING the skew (not railing), so the wired cushion may converge.
+    /// Real host skews seen ~450ppm; above ~500 the loop is at/near its rail and the
+    /// deep cushion is load-bearing - leave it. (`resamplerBoundPpm` 1500 is the rate
+    /// guard; this lower 500 is the "within real envelope" line.)
+    static let cushionReleaseSkewPpm = 500.0
+    /// SHALLOW-RELEASE gate: the |audio clock drift ms| ceiling under which drift is
+    /// "bounded". A converged link reads ~0; a railing resampler sawtooths to -90..-140ms
+    /// extremes. 60ms sits clear of converged noise yet well under the rail. Drift
+    /// UNKNOWN (pre-anchor) counts as bounded - the ppm gate alone then governs.
+    static let cushionReleaseDriftBoundMs = 60.0
     /// Mirror of `isShutdown` in the METER lock's domain, raised by `shutdown()`
     /// BEFORE `playerNode.stop()`. Stopping a node with a standing cushion fires
     /// the completion handler of EVERY queued buffer (.dataConsumed semantics:

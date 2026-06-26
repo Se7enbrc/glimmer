@@ -256,8 +256,15 @@ extension AudioDecoder {
                 .compactMap { readCushionMemory(key: cushionMemoryKey(host: host, link: $0)) }
                 .max { $0.targetMs < $1.targetMs }
             if let borrowed {
+                // COLD-SEED SANITY: an UNKNOWN link (probe dark on an AP switch) must
+                // not borrow the tunnel-depth of the deepest record - that cold-seeds a
+                // fresh wired session at ~200ms and welds the floor there. Cap the
+                // borrow to the WIRED cap so the unknown bring-up starts in the wired
+                // region; resolveCushionLink re-keys to the real link's record after.
+                let cap = playoutCushionMaxMs
                 return CushionSeed(key: key, host: host, link: link,
-                                   targetMs: borrowed.targetMs, floorMs: borrowed.floorMs,
+                                   targetMs: min(borrowed.targetMs, cap),
+                                   floorMs: min(borrowed.floorMs, cap),
                                    fromMemory: true)
             }
         }
@@ -333,7 +340,12 @@ extension AudioDecoder {
                 // the ~10min floor clock (skew under-runs keep re-arming it, so it
                 // never releases). Same quiet window + near-miss evidence the target
                 // decay uses; wifi/tunnel/unknown keep the slow clock untouched.
-                if EnvSignalController.shared.streamLink == "wired" {
+                // GATE (Change 3): only release while the resampler is CARRYING the
+                // skew (|integral| + drift bounded). If it's railing, the standing
+                // skew is draining the cushion - that depth is load-bearing, so hold
+                // it and let the slow floor clock govern as before.
+                if EnvSignalController.shared.streamLink == "wired",
+                   resamplerSkewConverged {
                     learnedFloorMs = max(learnedFloorMs - Self.playoutCushionStepMs,
                                          Self.playoutCushionBaseMs)
                     playoutTargetMs = max(candidate, Self.playoutCushionBaseMs)
@@ -451,6 +463,20 @@ extension AudioDecoder {
         playoutTargetMs = max(Self.playoutCushionBaseMs,
                               min(playoutTargetMs, effectiveCushionMaxMs))
         learnedFloorMs = min(learnedFloorMs, effectiveCushionMaxMs)
+        // CONFIRMED-WIRED FLOOR DROP (gated): the min()-with-cap above only lowers to
+        // the wired CEILING (150); a session that cold-seeded deep under the unknown
+        // window (probe dark on an AP switch) then welded the floor into that ceiling
+        // via skew under-runs lands here with a ~150ms floor it never EARNED on wire.
+        // With NO real under-run evidence this session, that borrowed depth is
+        // unproven on this link - drop the floor to base NOW (the wired region) so the
+        // ladder re-earns real depth instead of holding a quarter-second of borrowed
+        // lag until the next session's read-time weld repair. A floor already at/under
+        // base is unchanged; real evidence (cushionHadUnderrun) is left untouched.
+        // GATE (Change 3): only when the resampler is carrying the skew - if it's
+        // railing, the deep cushion is LOAD-BEARING and the existing behavior stands.
+        if link == "wired", resamplerSkewConverged, !cushionHadUnderrun {
+            learnedFloorMs = min(learnedFloorMs, Self.playoutCushionBaseMs)
+        }
         let target = playoutTargetMs
         let floor = learnedFloorMs
         let cap = effectiveCushionMaxMs
