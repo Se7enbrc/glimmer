@@ -502,6 +502,13 @@ public final class InputForwarder {
                 for state in attachedControllers.values {
                     sendArrival(state)
                 }
+                // H6: arrival's bundled fallback re-zeroes each pad, so on a
+                // SILENT reconnect/wake the host reads held triggers/sticks as
+                // neutral until the user twitches (valueChangedHandler only fires
+                // on CHANGE). Re-read + re-forward live held state right after the
+                // arrivals (idempotent; covers reconnects that keep the window key
+                // and so never hit the didBecomeKey resync).
+                resyncControllers()
                 installDiagnosticMonitors()
             } else {
                 removeDiagnosticMonitors()
