@@ -122,6 +122,9 @@ final class PacerTickThread: @unchecked Sendable {
             // userInteractive (the pre-realtime path). Gated on the flag.
             if UserDefaults.standard.bool(forKey: Self.realtimeDefaultsKey) {
                 Self.applyRealtimeScheduling()
+            } else {
+                // Flag off: the thread stays userInteractive, so the RT gauge is 0.
+                TelemetryCounters.shared.setPacerTickRealtime(false)
             }
             // CFRunLoopRun blocks until CFRunLoopStop breaks it; RunLoop.run()'s
             // no-source early-return is the freeze this avoids.
@@ -205,6 +208,7 @@ final class PacerTickThread: @unchecked Sendable {
         var timebase = mach_timebase_info_data_t()
         guard mach_timebase_info(&timebase) == KERN_SUCCESS, timebase.numer != 0 else {
             Diag.warn("pacer tick thread: mach_timebase_info failed; staying userInteractive", "Stream.Pacer")
+            TelemetryCounters.shared.setPacerTickRealtime(false)
             return
         }
         // ns -> mach abs-time units. Conservative cadence: a ~4.0ms period covers
@@ -234,6 +238,8 @@ final class PacerTickThread: @unchecked Sendable {
                                   $0, count)
             }
         }
+        // Record the outcome as the queryable RT gauge (1 = RT priority, 0 = not).
+        TelemetryCounters.shared.setPacerTickRealtime(kr == KERN_SUCCESS)
         if kr == KERN_SUCCESS {
             Diag.notice("pacer tick thread: realtime scheduling applied", "Stream.Pacer")
         } else {

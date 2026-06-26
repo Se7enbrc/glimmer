@@ -62,6 +62,12 @@ extension TelemetryRenderer {
         builder.emit("glimmer_pacer_releases_per_second",
                      "Pacer frame releases to the renderer per second.",
                      extras.pacerReleasesPerSecond)
+        // The queryable RT-priority yes/no: 1 once the Mach time-constraint policy
+        // applied on the present-tick thread, 0 if it failed / the flag disabled it.
+        builder.emit("glimmer_pacer_tick_realtime",
+                     "1 if the present-tick thread got Mach time-constraint (real-time) "
+                     + "scheduling, else 0 (failed or flag-disabled).",
+                     extras.pacerTickRealtime ? 1 : 0)
     }
 
     static func promDrops(
@@ -291,6 +297,17 @@ extension TelemetryRenderer {
                             "Stretched present ticks where handleTick ran on time but the "
                             + "vsync delta jumped (macOS coalesced the callback delivery).",
                             snap.tickMissCoalescedTotal)
+        // The FINER split via a direct promptness (lag-behind-vsync) measure - it
+        // names the residual the descheduled/coalesced pair conflates.
+        builder.emitCounter("glimmer_tick_miss_preempted_total",
+                            "Stretched present ticks where handleTick ran a full frame-or-more "
+                            + "behind its vsync (the tick thread was starved - RT not working).",
+                            snap.tickMissPreemptedTotal)
+        builder.emitCounter("glimmer_tick_miss_linkskip_total",
+                            "Stretched present ticks where handleTick ran promptly but the "
+                            + "interval still stretched (the link skipped a vsync delivery - "
+                            + "RT working, residual is the display server).",
+                            snap.tickMissLinkskipTotal)
         builder.emit("glimmer_display_edr_headroom_min",
                      "EDR headroom min this window (1.0 = SDR, >1.0 = HDR engaged).",
                      snap.edrHeadroomMin)

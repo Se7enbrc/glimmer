@@ -194,6 +194,10 @@ extension TelemetryRenderer {
         // Present-tick miss split by cause (descheduled thread vs coalesced callback).
         builder.addCount("tick_miss_descheduled_total", snap.tickMissDescheduledTotal)
         builder.addCount("tick_miss_coalesced_total", snap.tickMissCoalescedTotal)
+        // The finer direct-promptness split (preempted thread vs skipped vsync
+        // delivery) - names the residual the pair above conflates.
+        builder.addCount("tick_miss_preempted_total", snap.tickMissPreemptedTotal)
+        builder.addCount("tick_miss_linkskip_total", snap.tickMissLinkskipTotal)
         builder.add("edr_headroom_min", snap.edrHeadroomMin)
         builder.add("edr_headroom_avg", snap.edrHeadroomAvg)
         builder.add("edr_headroom_max", snap.edrHeadroomMax)
@@ -285,6 +289,9 @@ extension TelemetryRenderer {
         // measure (a ticks/s deficit below the refresh Hz is missed callbacks).
         builder.add("pacer_ticks_per_s", extras.pacerTicksPerSecond)
         builder.add("pacer_releases_per_s", extras.pacerReleasesPerSecond)
+        // 1 = the tick thread got Mach time-constraint (RT) scheduling; the yes/no
+        // the tick_miss_preempted/linkskip split is read against.
+        builder.addBool("pacer_tick_realtime", extras.pacerTickRealtime)
         builder.addCount("drops_decoder", snap.dropsDecoder)
         builder.addCount("drops_backpressure", snap.dropsBackpressure)
         builder.addCount("drops_presentation_late", snap.dropsPresentationLate)
