@@ -193,6 +193,21 @@ extension TelemetryCounters {
         return decodeGatedValue
     }
 
+    /// Stamp the pacer-tick REALTIME gauge. Called once at tick-thread start by
+    /// PacerTickThread (RT-applied success/failure, or the flag-off path) - never
+    /// per frame.
+    func setPacerTickRealtime(_ applied: Bool) {
+        os_unfair_lock_lock(pacerTickRealtimeLock)
+        pacerTickRealtimeValue = applied
+        os_unfair_lock_unlock(pacerTickRealtimeLock)
+    }
+    /// Current pacer-tick realtime state. Read by the exporter on its 1Hz queue
+    /// (never the hot path).
+    var pacerTickRealtime: Bool {
+        os_unfair_lock_lock(pacerTickRealtimeLock); defer { os_unfair_lock_unlock(pacerTickRealtimeLock) }
+        return pacerTickRealtimeValue
+    }
+
     // MARK: - Ignored-control per-type tallies
 
     /// One-call contract for the inbound-control default arm: bump the

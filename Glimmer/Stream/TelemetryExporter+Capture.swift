@@ -120,6 +120,8 @@ extension TelemetryExporter {
         snap.staleFrameRepeatTotal = counters.staleFrameRepeatTotal.value
         snap.tickMissDescheduledTotal = counters.tickMissDescheduledTotal.value
         snap.tickMissCoalescedTotal = counters.tickMissCoalescedTotal.value
+        snap.tickMissPreemptedTotal = counters.tickMissPreemptedTotal.value
+        snap.tickMissLinkskipTotal = counters.tickMissLinkskipTotal.value
 
         // P1 DECODE state (HW-decode + pixel format + bit depth + colorspace) +
         // PRESENT/DISPLAY (EDR trend + HDR/screen/ProMotion). Both read off the

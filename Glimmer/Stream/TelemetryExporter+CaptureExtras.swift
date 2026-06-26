@@ -41,6 +41,9 @@ extension TelemetryExporter {
         // suppressed (decoded, dropped-to-newest) - plus its designed drops.
         extras.decodeGated = counters.decodeGated
         extras.decodeGatedDropTotal = counters.decodeGatedDropTotal.value
+        // RT-applied gauge: did the present-tick thread get Mach time-constraint
+        // scheduling? The yes/no the tick_miss_preempted/linkskip split reads against.
+        extras.pacerTickRealtime = counters.pacerTickRealtime
         extras.rumbleEventTotal = rumbleTotal
         // Defect sibling of the receipt counter (truncated / slot-out-of-range
         // drops). Total only - ~0 in practice, so a per-second rate would be
@@ -177,6 +180,10 @@ extension TelemetrySnapshot {
         /// (previously only reconstructable as rendered+stale).
         var pacerTicksPerSecond: Double?
         var pacerReleasesPerSecond: Double?
+        /// PACER-TICK REALTIME gauge (0/1): 1 once the Mach time-constraint policy
+        /// confirmed on the tick thread, 0 when it failed / the flag left it at
+        /// userInteractive - the yes/no the `tick_miss_*` split is read against.
+        var pacerTickRealtime: Bool = false
         /// DECODE-GATE state (0/1) + the frames quietly dropped while gated -
         /// the third hidden-window state, split from the suppression pair above
         /// so a gated zero-decode span never reads as a decode wedge.

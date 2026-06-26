@@ -168,6 +168,20 @@ extension FramePacer {
             } else {
                 TelemetryCounters.shared.tickMissCoalescedTotal.increment()
             }
+            // FINER split via a DIRECT promptness measure (the entryGap test above
+            // conflates a starved thread with a skipped vsync DELIVERY - both
+            // stretch the gap). `link.timestamp` is the just-passed vsync this
+            // callback fired for, in the same CACurrentMediaTime base; the lag of
+            // `handleTick` behind it separates the two: ran a full frame-or-more
+            // late = thread starved (PREEMPTED, RT not working); ran promptly but
+            // the interval still stretched = the link skipped a vsync (LINKSKIP, RT
+            // working, residual is the display server). One clock read, off-lock.
+            let lag = CACurrentMediaTime() - link.timestamp
+            if lag.isFinite, lag > vsyncInterval {
+                TelemetryCounters.shared.tickMissPreemptedTotal.increment()
+            } else {
+                TelemetryCounters.shared.tickMissLinkskipTotal.increment()
+            }
         }
 
         handleTickDeficitEvents(deficitEvents)

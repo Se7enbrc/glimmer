@@ -80,6 +80,13 @@ struct TelemetrySnapshot: Sendable {
     /// The split picks which of two opposite fixes the residual present gap needs.
     var tickMissDescheduledTotal: UInt64 = 0
     var tickMissCoalescedTotal: UInt64 = 0
+    /// Present-tick MISS split by a DIRECT promptness measure (PREEMPTED = the
+    /// callback ran a full frame-or-more behind its vsync, so the thread was
+    /// starved - RT not working; LINKSKIP = it ran promptly but the interval still
+    /// stretched, so the display server skipped a vsync - RT working). The finer
+    /// split kept alongside the descheduled/coalesced pair for an old-vs-new read.
+    var tickMissPreemptedTotal: UInt64 = 0
+    var tickMissLinkskipTotal: UInt64 = 0
 
     // P1 PRESENT/DISPLAY: EDR-headroom trend + HDR-engaged + screen + ProMotion.
     /// EDR headroom (NSScreen.maximumEDR) min/avg/max over this window. 1.0 = SDR;

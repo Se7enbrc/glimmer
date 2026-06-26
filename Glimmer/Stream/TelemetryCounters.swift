@@ -267,6 +267,20 @@ final class TelemetryCounters: @unchecked Sendable {
     let tickMissDescheduledTotal = Counter()
     let tickMissCoalescedTotal = Counter()
 
+    /// Present-tick MISS split by a DIRECT promptness measure (signal: PRESENT,
+    /// diagnostic). The descheduled/coalesced pair above tests the wall-clock
+    /// entry GAP, which stretches in BOTH thread preemption AND a CADisplayLink
+    /// vsync-delivery skip - so it can't tell "RT failed" from "the display server
+    /// dropped a vsync". This pair tests the LAG of `handleTick` behind its vsync
+    /// instead: PREEMPTED = the callback ran a full frame-or-more late (the thread
+    /// was starved - RT not doing its job); LINKSKIP = it ran promptly but the
+    /// inter-tick interval still stretched (the link didn't deliver a vsync - RT
+    /// working, the residual is the display server). Kept ALONGSIDE the older pair
+    /// for an old-vs-new comparison. Bumped on the tick path (one extra clock read +
+    /// a subtract + a compare); per-session like the sibling present counters.
+    let tickMissPreemptedTotal = Counter()
+    let tickMissLinkskipTotal = Counter()
+
     /// Frames dropped-to-NEWEST while presentation is SUPPRESSED (signal:
     /// PRESENT): the window is backgrounded/occluded, the display link is
     /// deliberately suspended, and the pacer keeps only the newest frame ready
@@ -426,6 +440,15 @@ final class TelemetryCounters: @unchecked Sendable {
     /// as the suppression gauge it extends.
     let decodeGatedLock = os_unfair_lock_t.allocate(capacity: 1)
     var decodeGatedValue = false
+
+    /// PACER-TICK REALTIME gauge (0/1): 1 once `thread_policy_set` confirmed the
+    /// Mach time-constraint (real-time) policy on the present-tick thread, 0 when
+    /// it failed OR the flag left the thread at userInteractive. Stamped ONCE at
+    /// tick-thread start by PacerTickThread (never per frame) and read at 1Hz by
+    /// the exporter - the one-query "are we getting RT priority" yes/no the
+    /// `tick_miss_*` split is read against. Last-writer-wins behind its own lock.
+    let pacerTickRealtimeLock = os_unfair_lock_t.allocate(capacity: 1)
+    var pacerTickRealtimeValue = false
 
     /// Live inter-packet-gap distribution (microseconds) for the microburst
     /// detector. Written once per ~2s receive-metrics window by the RTP path
@@ -597,6 +620,7 @@ final class TelemetryCounters: @unchecked Sendable {
         audioFirstPacketLock.initialize(to: os_unfair_lock_s())
         presentSuppressedLock.initialize(to: os_unfair_lock_s())
         decodeGatedLock.initialize(to: os_unfair_lock_s())
+        pacerTickRealtimeLock.initialize(to: os_unfair_lock_s())
     }
     deinit {
         jitterLock.deallocate(); inputLock.deallocate()
@@ -605,6 +629,7 @@ final class TelemetryCounters: @unchecked Sendable {
         decodeStateLock.deallocate(); fecHealthLock.deallocate()
         audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
         presentSuppressedLock.deallocate(); decodeGatedLock.deallocate()
+        pacerTickRealtimeLock.deallocate()
     }
 
     // The gauge accessors live in same-module extension files (pure moves to
@@ -637,6 +662,7 @@ final class TelemetryCounters: @unchecked Sendable {
                         staleFrameRepeatTotal,
                         pacerOverTargetReleaseTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
+                        tickMissPreemptedTotal, tickMissLinkskipTotal,
                         suppressedDropTotal, decodeGatedDropTotal,
                         discontinuityFlushTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
@@ -666,6 +692,9 @@ final class TelemetryCounters: @unchecked Sendable {
         // the next suppression/gate edge.
         setPresentSuppressed(false)
         setDecodeGated(false)
+        // RT gauge: re-stamped when the next session's tick thread starts (the
+        // reset runs at the connect edge, before the pacer re-binds).
+        setPacerTickRealtime(false)
         // Per-type ignored-control tallies are per-session like the aggregate
         // total; the audio-TTF record resets but its last-stream-end stamp
         // survives (it anchors THIS session's host_idle_s).
