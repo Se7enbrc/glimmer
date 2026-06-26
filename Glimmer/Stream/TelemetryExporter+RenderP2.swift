@@ -65,9 +65,12 @@ extension TelemetryRenderer {
         builder.emitCounter("glimmer_reconnect_total",
                             "Reconnects this run (a connection re-established after a drop).",
                             snap.reconnectTotal)
+        builder.emitCounter("glimmer_wake_total",
+                            "Wakes from sleep this run while a stream was live.",
+                            snap.wakeTotal)
         builder.emit("glimmer_disconnect_reason",
                      "Disconnect reason ordinal (0 none, 1 user, 2 host-clean, 3 host-error, "
-                     + "4 watchdog-stall, 5 connect-failed).",
+                     + "4 watchdog-stall, 5 connect-failed, 6 consumer-dropped, 7 system-sleep).",
                      Double(snap.disconnectReason.rawValue))
         builder.emitInfo("glimmer_disconnect_reason_info",
                          "Disconnect reason as a label (value always 1).",

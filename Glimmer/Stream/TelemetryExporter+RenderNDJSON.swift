@@ -93,6 +93,7 @@ extension TelemetryRenderer {
             builder.add("handshake_total_ms", handshake.totalMs)
         }
         builder.addCount("reconnect_total", snap.reconnectTotal)
+        builder.addCount("wake_total", snap.wakeTotal)
         builder.addInt("disconnect_reason", snap.disconnectReason.rawValue)
         builder.addString("disconnect_reason_label", snap.disconnectReason.label)
         if let idr = snap.idrRoundTrip {

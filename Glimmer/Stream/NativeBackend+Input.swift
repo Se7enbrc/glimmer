@@ -25,6 +25,10 @@ extension NativeBackend {
         withState { enetChannel }?.requestIdrFrame()
     }
 
+    public func wakeReanchorAndPing() {
+        withState { enetChannel }?.reanchorAckAndPing()
+    }
+
     public func hdrMetadata() -> HdrMetadata? { withState { enetChannel }?.hdrMetadata() }
 
     public func launchUrlQueryParameters() -> String { "" }

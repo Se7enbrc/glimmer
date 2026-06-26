@@ -68,6 +68,11 @@ enum DisconnectReason: Int, Sendable {
     /// behaviour masked exactly this case (a dropped consumer reading as
     /// "user_stopped" in the scorecard).
     case consumerDropped = 6
+    /// The Mac woke from sleep and the link was stale (e.g. woke on a different
+    /// Wi-Fi AP); the wake fast-reconnect probe found the peer gone. Stamped
+    /// wake-suspect on willSleep, attributed if the next disconnect has no more
+    /// specific cause.
+    case systemSleep = 7
 
     var label: String {
         switch self {
@@ -78,6 +83,7 @@ enum DisconnectReason: Int, Sendable {
         case .watchdogStall: return "watchdog_stall"
         case .connectFailed: return "connect_failed"
         case .consumerDropped: return "consumer_dropped"
+        case .systemSleep: return "system_sleep"
         }
     }
 }
@@ -93,7 +99,8 @@ enum DisconnectReason: Int, Sendable {
 final class DisconnectReasonCounters: @unchecked Sendable {
     private let counters: [DisconnectReason: TelemetryCounters.Counter] = [
         .userStopped: .init(), .hostClosedClean: .init(), .hostError: .init(),
-        .watchdogStall: .init(), .connectFailed: .init(), .consumerDropped: .init()
+        .watchdogStall: .init(), .connectFailed: .init(), .consumerDropped: .init(),
+        .systemSleep: .init()
     ]
     func increment(_ reason: DisconnectReason) { counters[reason]?.increment() }
     /// Snapshot of (label, total) for every non-zero-defined reason, for the export.

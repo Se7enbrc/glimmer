@@ -176,6 +176,7 @@
 		D1000F10 /* TelemetryLatency+Trace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000F11 /* TelemetryLatency+Trace.swift */; };
 		D1000FA0 /* TelemetryLatency+Composites.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FA1 /* TelemetryLatency+Composites.swift */; };
 		D1000FB1 /* StreamSession+Reconnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FB0 /* StreamSession+Reconnect.swift */; };
+		D1000FC1 /* StreamSession+Wake.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FC0 /* StreamSession+Wake.swift */; };
 		D1A00002 /* MoonlightManager+HostRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00001 /* MoonlightManager+HostRoute.swift */; };
 		D1A00004 /* MoonlightManager+SessionReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00003 /* MoonlightManager+SessionReceipt.swift */; };
 		D2000021 /* EnetWireTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000020 /* EnetWireTests.swift */; };
@@ -401,6 +402,7 @@
 		D1000F11 /* TelemetryLatency+Trace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatency+Trace.swift"; sourceTree = "<group>"; };
 		D1000FA1 /* TelemetryLatency+Composites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatency+Composites.swift"; sourceTree = "<group>"; };
 		D1000FB0 /* StreamSession+Reconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Reconnect.swift"; sourceTree = "<group>"; };
+		D1000FC0 /* StreamSession+Wake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Wake.swift"; sourceTree = "<group>"; };
 		D1A00001 /* MoonlightManager+HostRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+HostRoute.swift"; sourceTree = "<group>"; };
 		D1A00003 /* MoonlightManager+SessionReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+SessionReceipt.swift"; sourceTree = "<group>"; };
 		D2000019 /* GlimmerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlimmerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -567,6 +569,7 @@
 				D1000B74 /* StreamSession+StartSetup.swift */,
 				D1000047 /* StreamSession+Watchdog.swift */,
 				D1000FB0 /* StreamSession+Reconnect.swift */,
+				D1000FC0 /* StreamSession+Wake.swift */,
 				D1000B04 /* StreamSession+PresentTrip.swift */,
 				D10000A2 /* StreamSession+PresentMetric.swift */,
 				D1000080 /* TelemetryExporter.swift */,
@@ -898,6 +901,7 @@
 				D1000B73 /* StreamSession+StartSetup.swift in Sources */,
 				D1000048 /* StreamSession+Watchdog.swift in Sources */,
 				D1000FB1 /* StreamSession+Reconnect.swift in Sources */,
+				D1000FC1 /* StreamSession+Wake.swift in Sources */,
 				D1000B03 /* StreamSession+PresentTrip.swift in Sources */,
 				D10000A1 /* StreamSession+PresentMetric.swift in Sources */,
 				D1000081 /* TelemetryExporter.swift in Sources */,
