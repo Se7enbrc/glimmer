@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.6.47 - 2026-06-26
+
+Kills the residual intermittent stutter on high-refresh displays. The
+present-timing thread (added in 2026.6.32) could still be preempted by the
+system under load, firing its display callback a couple of frames late - a brief
+judder that read as dropped frames even though the connection and decode were
+perfect (diagnosed precisely: the thread was being descheduled, not the panel
+changing refresh). It now runs with real-time scheduling - the same class
+CoreAudio's audio thread uses - so it gets a guaranteed slice every frame and
+can't be shoved off the CPU. No added latency, negligible CPU cost.
+
 ## 2026.6.46 - 2026-06-26
 
 Under the hood: a diagnostic that pinpoints why the present-timing tick
