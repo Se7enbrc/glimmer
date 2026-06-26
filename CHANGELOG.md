@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026.6.50 - 2026-06-26
+
+Robustness pass from a wide audit - several real "works until it doesn't" gaps.
+
+Audio now recovers mid-stream. Switching output device while streaming (AirPods,
+a USB DAC, unplugging HDMI, an OS sample-rate change) used to stop the audio
+engine for good - sound gone until you reconnected. It now detects the change
+and restarts the engine in place, and a stream that comes up with audio
+genuinely failing now says so instead of going silently video-only.
+
+Held controller inputs survive a reconnect. After a silent reconnect or a
+wake-from-sleep, a held trigger/stick/button used to read as released on the
+host until you moved it (ADS dropped, your character stopped, a charge
+cancelled). The real held state is now re-sent on reconnect.
+
+A host that crashes or drops now shows a distinct "ended unexpectedly" message
+with Retry, instead of the same calm toast as a clean quit. A wedged launch now
+gives up after ~22s (was ~55-65s) and Cancel bounces back immediately.
+
+Under the hood: quitting mid-reconnect no longer leaks a background connection;
+the per-session diagnostics trace is now size-capped and old logs are swept (it
+could grow unbounded); release builds refuse to build from an uncommitted tree;
+plus telemetry-accuracy fixes. No change to streaming/latency behavior.
+
 ## 2026.6.49 - 2026-06-26
 
 Release-integrity gate: release builds are now refused from a dirty worktree,

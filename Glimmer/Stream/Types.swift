@@ -462,6 +462,11 @@ public enum StreamEvent: Sendable {
     /// layer is configured for PQ/HLG with EDR. This is the "show the HDR
     /// chip" signal.
     case hdrActive(Bool)
+    /// Audio receive-start failed (H7): the session came up VIDEO-ONLY (the ping
+    /// keeps the A/V session alive, but no audio flows). Non-fatal - the visual
+    /// stream is unaffected - so it rides the event channel rather than aborting
+    /// the connect. Carries a short reason for the log; the UI keeps streaming.
+    case audioFailed(String)
     case log(String)
 }
 

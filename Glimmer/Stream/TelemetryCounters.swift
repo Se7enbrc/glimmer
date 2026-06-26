@@ -356,6 +356,12 @@ final class TelemetryCounters: @unchecked Sendable {
     /// be conflated in a cross-session comparison again. Bumped on the decode
     /// path like its sibling. Always-live integer add.
     let audioTrimTotal = Counter()
+    /// Audio RECEIVE-start failures (H7): `RtpAudioReceiver.startReceive()` threw,
+    /// so this session came up VIDEO-ONLY (the ping keeps the A/V session alive,
+    /// but no audio flows). Previously the throw was caught and dropped with no
+    /// counter and no user signal - a silent audio-dead session. Bumped from the
+    /// pipeline catch alongside the `.audioFailed` event. Always-live integer add.
+    let audioReceiveFailedTotal = Counter()
 
     // ---- Input-activity gauge (last-input instant + idle-edge detection) ----
     //
@@ -667,7 +673,8 @@ final class TelemetryCounters: @unchecked Sendable {
                         discontinuityFlushTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
                         audioFecMismatchTotal, audioUnderrunTotal, audioOverrunTotal,
-                        audioTrimTotal, rumbleEventTotal, rumbleDroppedInvalidTotal,
+                        audioTrimTotal, audioReceiveFailedTotal,
+                        rumbleEventTotal, rumbleDroppedInvalidTotal,
                         // Per-socket gap-event counters.
                         videoGapOver20msTotal, videoGapOver50msTotal, videoGapOver100msTotal,
                         audioGapOver20msTotal, audioGapOver50msTotal, audioGapOver100msTotal,

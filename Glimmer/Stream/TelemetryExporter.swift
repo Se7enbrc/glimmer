@@ -473,6 +473,13 @@ final class TelemetryExporter: @unchecked Sendable {
             log.error("Telemetry: could not create log dir: \(error.localizedDescription, privacy: .public)")
             return
         }
+        // C2: prune the Logs dir BEFORE creating this session's file (so the
+        // newest files - this session's siblings - always survive). A fresh trio
+        // of files was minted every session and never pruned; over months that
+        // dir grows without bound (the per-frame trace alone is ~1.5GB/6h before
+        // the rollover above caps it). Bounded by a total-byte budget + an age
+        // limit, newest-kept.
+        Self.sweepLogsDirectory(dir, log: log)
         // ISO8601 with ':' is filename-legal on APFS; keep the full timestamp so
         // each session's file is unique and sorts chronologically.
         let stamp = isoFormatter.string(from: Date())
@@ -496,6 +503,69 @@ final class TelemetryExporter: @unchecked Sendable {
             // A write failure (disk full, file removed) shouldn't take down the
             // stream - drop the line and keep going.
             log.error("Telemetry NDJSON write failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    // MARK: - C2 Logs-directory sweep
+
+    /// Total-byte budget for `~/Library/Logs/Glimmer` after a sweep. Once the
+    /// dir exceeds this, the OLDEST Glimmer log files are pruned (newest kept)
+    /// until it fits. 300MB holds many sessions of NDJSON + the size-capped
+    /// per-frame trace tails while bounding unbounded growth.
+    private static let logsByteBudget: UInt64 = 300 * 1024 * 1024
+    /// Age limit (seconds): a Glimmer log file older than this is pruned
+    /// regardless of the byte budget. 14 days.
+    private static let logsMaxAgeSeconds: TimeInterval = 14 * 24 * 3600
+
+    /// Prune the Glimmer Logs dir to the age limit + the byte budget, newest
+    /// kept. Touches ONLY our own log files (`telemetry-*` / `glimmer-*` - the
+    /// NDJSON, per-frame trace, session report, and Diag log families) so it can
+    /// never remove anything else in the dir. Best-effort: any error per file is
+    /// swallowed (a failed prune must never break telemetry bring-up). On the
+    /// exporter's `workQueue` (called once at session start) - never a hot path.
+    static func sweepLogsDirectory(_ dir: URL, log: Logger) {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+        guard let entries = try? fm.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return }
+        // Our own log families only - never delete a foreign file.
+        let ours = entries.filter { url in
+            let name = url.lastPathComponent
+            return name.hasPrefix("telemetry-") || name.hasPrefix("glimmer-")
+        }
+        struct Entry { let url: URL; let modified: Date; let size: UInt64 }
+        var files: [Entry] = []
+        for url in ours {
+            guard let values = try? url.resourceValues(forKeys: Set(keys)),
+                  values.isRegularFile == true else { continue }
+            files.append(Entry(url: url,
+                               modified: values.contentModificationDate ?? .distantPast,
+                               size: UInt64(values.fileSize ?? 0)))
+        }
+        let now = Date()
+        var pruned = 0
+        // (1) AGE prune.
+        var survivors: [Entry] = []
+        for entry in files {
+            if now.timeIntervalSince(entry.modified) > logsMaxAgeSeconds {
+                if (try? fm.removeItem(at: entry.url)) != nil { pruned += 1 }
+            } else {
+                survivors.append(entry)
+            }
+        }
+        // (2) BYTE-BUDGET prune: oldest-first until under budget.
+        var total = survivors.reduce(UInt64(0)) { $0 &+ $1.size }
+        if total > logsByteBudget {
+            for entry in survivors.sorted(by: { $0.modified < $1.modified }) {
+                guard total > logsByteBudget else { break }
+                if (try? fm.removeItem(at: entry.url)) != nil {
+                    total &-= entry.size
+                    pruned += 1
+                }
+            }
+        }
+        if pruned > 0 {
+            log.notice("Telemetry: swept \(pruned, privacy: .public) old log file(s) from Logs/Glimmer")
         }
     }
 

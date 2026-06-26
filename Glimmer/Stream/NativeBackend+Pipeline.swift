@@ -325,6 +325,11 @@ extension NativeBackend {
         } catch {
             Diag.error("native backend: audio receive start failed: \(error)", Self.logCategory)
             // Keep the ping alive (it keeps the A/V session up); only receive failed.
+            // H7: surface the video-only state instead of swallowing it - a
+            // queryable counter + a non-fatal event (the visual stream is fine).
+            TelemetryCounters.shared.audioReceiveFailedTotal.increment()
+            StreamBridgeContext.current?.eventContinuation?.yield(
+                .audioFailed("\(error)"))
         }
     }
 

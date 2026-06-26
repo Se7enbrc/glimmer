@@ -120,6 +120,8 @@ extension TelemetryRenderer {
         // FEC blocks dropped on a parity/data size mismatch (counted, never a
         // silent permanent give-up).
         builder.addCount("audio_fec_mismatch_total", extras.audioFecMismatchTotal)
+        // Receive-start failures (H7): >0 with audio dark = video-only session.
+        builder.addCount("audio_receive_failed_total", extras.audioReceiveFailedTotal)
         builder.add("audio_pkts_per_s", audio.packetsPerSecond)
         builder.add("audio_loss_rate", audio.lossRate)
         builder.add("audio_fec_recovery_rate", audio.fecRecoveryRate)

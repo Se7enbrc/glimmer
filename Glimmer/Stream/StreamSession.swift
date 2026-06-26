@@ -229,6 +229,15 @@ public actor StreamSession {
     /// ...and at most this long wall-clock before we give up and tear down.
     static let reconnectWindowSeconds: TimeInterval = 30.0
 
+    // MARK: - Launch deadline (M6)
+
+    /// Overall wall-clock cap on the initial-connect launch path
+    /// (`launchWithBusyRecovery`). Without it the busy-recovery retries stack to
+    /// ~55-65s of "Connecting...". 22s leaves room for one full /launch leg
+    /// (NetworkClient.launchTimeout = 20s) plus the host-idle poll, but bounds the
+    /// stack so the launcher bounces back honestly instead of hanging.
+    static let launchOverallDeadlineSeconds: TimeInterval = 22.0
+
     /// True once this session reached a LIVE state (`.connectionEstablished`).
     /// Gates reconnect: a terminate BEFORE we ever went live is a failed connect,
     /// not a recoverable interruption. Set on the established edge; never reset on

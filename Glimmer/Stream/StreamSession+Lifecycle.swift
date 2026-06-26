@@ -300,12 +300,102 @@ extension StreamSession {
             }
         } catch let first as StreamError {
             log.error("primary launch path failed: \(String(describing: first), privacy: .public)")
+            // M6: a stop()/cancelConnect() can land during the primary leg or the
+            // host-idle poll. The actor sweeps it in at our awaits; re-check here
+            // so the recovery leg (another ~5s poll + 20s /launch) doesn't stack on
+            // a session the user already cancelled - rethrow the first error and
+            // let start()'s teardown win instead.
+            guard isStreaming, !stopInProgress else { throw first }
             // Recovery: race between hint and actual host state. One more
             // cancel + launch covers the "we thought idle but host had an
             // orphan" and the "cancel raced" cases. We deliberately do NOT
             // fall back to /resume here - that's the bug we're closing.
             if let r = try? await tryCancelThenLaunch() { return r }
             throw first
+        }
+    }
+
+    /// True once a teardown has begun - either `stop()` flipped the latch or the
+    /// session is no longer streaming. The launch-deadline watcher polls this so a
+    /// stop()/cancelConnect() landing mid-launch bounces back without waiting out
+    /// the non-cancellable HTTP leg. Actor-isolated so the read is race-free.
+    var isTearingDown: Bool { !isStreaming || stopInProgress }
+
+    /// M6: run `launchWithBusyRecovery` under an overall wall-clock deadline.
+    ///
+    /// ControlTransport's HTTP leg is a blocking socket that isn't cancellation-
+    /// aware (it only unwinds on its own ~20s SO_RCVTIMEO), so we CANNOT rely on
+    /// structurally awaiting the launch - a task-group child or `Task.result`
+    /// await would pin us until that socket timed out, defeating the deadline.
+    /// Instead a first-writer-wins box collects whichever of {launch finished,
+    /// deadline/stop tripped} lands first; the read completes the instant either
+    /// writer fires, so on a timeout/cancel we return PROMPTLY and leave the
+    /// detached launch (now cancelled) to die on its own socket - rather than
+    /// stranding the user at "Connecting..." for ~55-65s. The timeout surfaces as
+    /// `.launchFailed` with honest copy.
+    func launchWithDeadline(
+        network: NetworkClient,
+        appID: Int,
+        config: StreamConfig,
+        hintCurrentGame: Int
+    ) async throws -> LaunchResponse {
+        let deadline = Self.launchOverallDeadlineSeconds
+        let box = FirstResultBox<LaunchResponse>()
+        let launchTask = Task { [self] in
+            do {
+                let r = try await launchWithBusyRecovery(
+                    network: network, appID: appID, config: config,
+                    hintCurrentGame: hintCurrentGame)
+                await box.offer(.success(r))
+            } catch {
+                await box.offer(.failure(error))
+            }
+        }
+        // Watcher: trips on the wall-clock deadline OR a stop()/cancelConnect()
+        // landing mid-launch (the blocking HTTP leg can't be force-aborted, so
+        // without this the user would wait out the full deadline). Polls in 250ms.
+        let watcher = Task { [self] in
+            let end = Date().addingTimeInterval(deadline)
+            while Date() < end {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                if Task.isCancelled { return }
+                if await self.isTearingDown {
+                    await box.offer(.failure(StreamError.launchFailed("Launch cancelled.")))
+                    return
+                }
+            }
+            await box.offer(.failure(StreamError.launchFailed(
+                "Host didn't respond within \(Int(deadline))s - giving up.")))
+        }
+        // Completes as soon as EITHER writer offers; the loser's later offer is
+        // dropped by the box. Don't await the detached tasks structurally.
+        let outcome = await box.value
+        watcher.cancel()
+        // On loss (timeout/cancel won), cancel the launch - best-effort; it dies
+        // on its socket timeout and its late box.offer is a no-op.
+        if case .failure = outcome { launchTask.cancel() }
+        return try outcome.get()
+    }
+}
+
+/// First-writer-wins async box: the first `offer` latches the value and resumes
+/// the (single) pending `value` read; later offers are dropped. Used by M6 to
+/// race a non-cancellable launch against a deadline/stop watcher and return the
+/// instant either lands. Actor-isolated for race-free latching.
+private actor FirstResultBox<T: Sendable> {
+    private var result: Result<T, Error>?
+    private var waiter: CheckedContinuation<Result<T, Error>, Never>?
+
+    func offer(_ value: Result<T, Error>) {
+        guard result == nil else { return }
+        result = value
+        if let waiter { self.waiter = nil; waiter.resume(returning: value) }
+    }
+
+    var value: Result<T, Error> {
+        get async {
+            if let result { return result }
+            return await withCheckedContinuation { cont in waiter = cont }
         }
     }
 }

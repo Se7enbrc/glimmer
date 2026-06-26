@@ -565,6 +565,7 @@ struct SessionReport {
             ("audio_underrun", counters.audioUnderrunTotal.value),
             ("audio_overrun", counters.audioOverrunTotal.value),
             ("audio_trim", counters.audioTrimTotal.value),
+            ("audio_receive_failed", counters.audioReceiveFailedTotal.value),
             // P2 session tallies: the run's reconnect count + the corruption/
             // artifact heuristic total (the white/purple-flash-class tally).
             ("reconnect", counters.reconnectTotal.value),

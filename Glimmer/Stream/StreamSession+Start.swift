@@ -119,7 +119,11 @@ extension StreamSession {
         // already going), then fall back through busy-recovery if the host
         // disagrees. `<currentgame>` parsing is inconsistent across hosts so
         // we treat it as a hint, not gospel.
-        let launch: LaunchResponse = try await launchWithBusyRecovery(
+        // M6: bound the initial-connect launch with an overall deadline so the
+        // busy-recovery retries can't stack to ~55-65s of "Connecting...". The
+        // reconnect path keeps the un-deadlined call - its episode already bounds
+        // the total (attempt cap + window).
+        let launch: LaunchResponse = try await launchWithDeadline(
             network: network, appID: appID, config: config,
             hintCurrentGame: serverInfo.currentGameID
         )
