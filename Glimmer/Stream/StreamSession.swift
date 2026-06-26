@@ -248,6 +248,19 @@ public actor StreamSession {
     var reconnectConfig: StreamConfig?
     var reconnectAppID: Int?
 
+    // MARK: - Wake resilience (sleep/wake fast-reconnect - see +Wake)
+
+    /// NSWorkspace sleep/wake observer tokens, armed when a stream goes live and
+    /// removed in `stop()`. On the workspace notification center (NOT default).
+    var wakeObservers: [NSObjectProtocol] = []
+    /// The bounded post-wake liveness probe (one Task). Cancelled when it
+    /// completes, on stop, and before a new wake re-arms it. Actor-isolated: every
+    /// access (arm/cancel/nil) is on the session actor.
+    var wakeProbeTask: Task<Void, Never>?
+    /// Probe budget multiple of RTT, floored: budget = max(750ms, N·RTT).
+    static let wakeProbeRttMultiple = 4
+    static let wakeProbeFloorMs: UInt64 = 750
+
     /// Present-path self-heal watchdog. Runs at 20 Hz on the main run loop,
     /// INDEPENDENT of the decode-output watchdog above (which is structurally
     /// blind to a stall downstream of VT - a stopped CADisplayLink or a

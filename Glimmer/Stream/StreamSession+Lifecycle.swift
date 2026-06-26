@@ -48,6 +48,11 @@ extension StreamSession {
         stopInProgress = true
         isStreaming = false
 
+        // Remove the sleep/wake observers + cancel any in-flight wake probe FIRST,
+        // so a wake landing mid-teardown can't arm a probe against a dying session
+        // (the probe also re-checks the lifecycle flags, but this is the clean cut).
+        teardownWakeObservers()
+
         log.info("Stream session stopping (cause=\(cause.label, privacy: .public))")
         Diag.notice("Stream session stopping (cause: \(cause.label))", "Stream")
 

@@ -131,6 +131,7 @@ extension TelemetryExporter {
         }
 
         snap.reconnectTotal = counters.reconnectTotal.value
+        snap.wakeTotal = counters.wakeTotal.value
         snap.disconnectReason = p2.disconnectReason
         // Process-global per-reason totals (survive session resets) - the durable
         // record the per-session ordinal can't carry past the <1ms exporter teardown.

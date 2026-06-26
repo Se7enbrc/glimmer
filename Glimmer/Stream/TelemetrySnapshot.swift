@@ -277,6 +277,8 @@ struct TelemetrySnapshot: Sendable {
     var handshake: HandshakeBreakdown?
     /// Reconnect count this run (monotonic) - a second-or-later established edge.
     var reconnectTotal: UInt64 = 0
+    /// Wake-from-sleep count this run (monotonic) - wakes while a stream was live.
+    var wakeTotal: UInt64 = 0
     /// Latest disconnect reason (the live default is `.none` until a terminate).
     var disconnectReason: DisconnectReason = .none
     /// PROCESS-GLOBAL per-reason disconnect totals (label, total), monotonic and

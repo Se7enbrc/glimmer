@@ -174,6 +174,11 @@ final class TelemetryCounters: @unchecked Sendable {
     /// re-establishes its connection after a drop within the same run. The
     /// climb-then-recover pattern that a single "connected" gauge can't show.
     let reconnectTotal = Counter()
+    /// WAKE count (signal: lifecycle): incremented each time the Mac wakes from
+    /// sleep while a stream is live. Run-global (NOT reset per session, like
+    /// `reconnectTotal`); a climb here that precedes a reconnect/disconnect marks
+    /// the wake-on-different-AP stale-link case.
+    let wakeTotal = Counter()
     /// EXPLICIT REQUEST_IDR sends that started a round-trip measurement
     /// (signal: IDR-RTT). RE-BASELINE NOTE: RFI sends no longer arm round-trips
     /// (they ride `rfiTotal`) - conflating them made the pair unreadable (RFI

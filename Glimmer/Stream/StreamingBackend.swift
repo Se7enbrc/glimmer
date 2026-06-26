@@ -392,6 +392,11 @@ public protocol StreamingBackend: AnyObject, Sendable {
     /// has no control channel up. Surfaced ONLY by the opt-in telemetry
     /// exporter; the protocol default returns nil.
     func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)?
+    /// Re-anchor the ENet dead-peer silence clock to NOW and send an immediate
+    /// solicited ping. Called on wake-from-sleep: the silence clock paused during
+    /// the nap, so without this a post-wake probe reads false-fresh. No-op when
+    /// the backend has no control channel up; the protocol default is a no-op.
+    func wakeReanchorAndPing()
     /// = LiRequestIdrFrame.
     func requestIdrFrame()
     /// Host HDR10 mastering metadata. nil when unavailable.
@@ -434,6 +439,9 @@ public extension StreamingBackend {
     /// control channel (NativeBackend) override this; a future C backend would
     /// inherit nil rather than be forced to fabricate the numbers.
     func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? { nil }
+
+    /// Default: no control channel to re-anchor/ping. NativeBackend overrides this.
+    func wakeReanchorAndPing() {}
 
     /// Default async connect: run blocking `startConnection` on a detached task so
     /// the caller isn't parked; cancelling interrupts the in-flight connect. The

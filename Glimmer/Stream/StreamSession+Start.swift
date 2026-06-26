@@ -476,5 +476,10 @@ extension StreamSession {
         guard isStreaming, !stopInProgress else { return }
         // `host` label = the Sunshine server, latched at the connect anchor.
         startTelemetryExporter(decoder: decoder, serverName: telemetryServerName)
+
+        // Arm the sleep/wake fast-reconnect observers now the stream is live;
+        // torn down in stop(). Only armed during a live stream (see +Wake).
+        guard isStreaming, !stopInProgress else { return }
+        armWakeObservers()
     }
 }

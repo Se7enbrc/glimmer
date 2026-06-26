@@ -413,6 +413,7 @@ struct SessionReport {
             "\"disconnect_reason\":\(reason.rawValue)",
             "\"disconnect_reason_label\":\"\(reason.label)\"",
             "\"reconnects\":\(counters.reconnectTotal.value)",
+            "\"wakes\":\(counters.wakeTotal.value)",
             "\"idr_round_trip_requests\":\(counters.idrRoundTripRequestTotal.value)",
             "\"idr_round_trip_matched\":\(counters.idrRoundTripMatchedTotal.value)"
         ]
@@ -562,6 +563,7 @@ struct SessionReport {
             // P2 session tallies: the run's reconnect count + the corruption/
             // artifact heuristic total (the white/purple-flash-class tally).
             ("reconnect", counters.reconnectTotal.value),
+            ("wake", counters.wakeTotal.value),
             ("corruption_heuristic", counters.corruptionHeuristicTotal.value)
         ]
         let entries = pairs.map { "\"\($0.0)\":\($0.1)" }

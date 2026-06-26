@@ -177,6 +177,17 @@ extension EnetControlChannel {
         }
     }
 
+    /// WAKE re-anchor + solicited ping. The dead-peer clock (`lastAckRecvMs`) is
+    /// the service clock, which PAUSES during system sleep, so a post-sleep
+    /// `sinceLastAck` measures from before the nap and would falsely read fresh.
+    /// Re-anchor it to NOW so the silence probe measures awake-silence-from-wake,
+    /// then send an immediate transport ping to solicit a fresh ACK.
+    func reanchorAckAndPing() {
+        withState { lastAckRecvMs = serviceTimeMs }
+        guard !interrupted.isSet, !withState({ disconnected }) else { return }
+        sendEnetPing()
+    }
+
     /// (B) Transport ENet PING (enet_peer_ping, peer.c:446): command
     /// PING|FLAG_ACKNOWLEDGE = 0x85, channel 0xFF, peer-counter relSeq, empty
     /// body. RELIABLE - tracked in sentReliable for ACK/retransmit.
