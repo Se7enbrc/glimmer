@@ -68,6 +68,7 @@ extension TelemetryExporter {
         snap.presentCadenceErrorMs = stats.avgPresentCadenceErrorMs
         // on-time/late split: derive counts from the on-time percent if present.
         if let onTimePct = stats.onTimePresentPercent, let rendered = stats.renderedFps {
+            snap.presentOnTimePercent = onTimePct
             let approxPresents = max(rendered, 0)
             snap.presentOnTimeCount = UInt64((approxPresents * onTimePct / 100.0).rounded())
             snap.presentLateCount = UInt64((approxPresents * (100.0 - onTimePct) / 100.0).rounded())

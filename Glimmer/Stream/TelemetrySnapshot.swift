@@ -39,6 +39,10 @@ struct TelemetrySnapshot: Sendable {
     var presentCadenceErrorMs: Double?
     var presentOnTimeCount: UInt64?
     var presentLateCount: UInt64?
+    /// % of NEW-frame presents that landed on-cadence (on-time / (on-time+late)).
+    /// Excludes structural stale fills, so it reads smoothness independent of
+    /// content-fps vs refresh - the clean judder signal.
+    var presentOnTimePercent: Double?
 
     // P1 DECODE/VT state + counters.
     /// VTDecompressionSession (re)creates this session (monotonic). The first
