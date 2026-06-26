@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.6.51 - 2026-06-26
+
+Magic resolution-aware mouse traversal - fast flicks cover the screen
+consistently at any stream resolution while aim sensitivity stays exactly raw.
+Automatic, no settings.
+
 ## 2026.6.50 - 2026-06-26
 
 Robustness pass from a wide audit - several real "works until it doesn't" gaps.

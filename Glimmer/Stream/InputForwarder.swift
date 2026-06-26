@@ -271,6 +271,14 @@ public final class InputForwarder {
     var mouseResidualX: Double = 0
     var mouseResidualY: Double = 0
 
+    /// Cruise traversal-boost state (see InputForwarder+Cruise.swift). Stored on
+    /// the class because extensions can't add stored properties.
+    /// `lastMoveTimestamp` is the previous batch's NSEvent.timestamp, for the
+    /// inter-batch dt that gates the velocity; `cruiseGMax` is the resolution-
+    /// derived ceiling, set at start and re-set on a reconnect resolution change.
+    var lastMoveTimestamp: TimeInterval = 0
+    var cruiseGMax: Double = 1.0
+
     /// Pull the relative delta out of a mouseMoved NSEvent. Reads the CGEvent
     /// integer fields `kCGMouseEventDeltaX/Y` (valid whether or not the cursor is
     /// associated; NSEvent.deltaX/Y goes silent under associate-false), falling

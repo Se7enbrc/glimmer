@@ -171,6 +171,14 @@ final class TelemetryCounters: @unchecked Sendable {
     /// Always-live like the other counters (the press is a rare, deliberate act).
     let bookmarkTotal = Counter()
 
+    /// CRUISE traversal-boost counters (signal: input, for tuning vKnee against
+    /// real traces). `boosted` = batches where the velocity gate applied gain>1;
+    /// `identity` = active-motion batches that stayed at gain==1 (below the knee
+    /// or stale dt). The ratio is the share of motion that the boost touched.
+    /// Always-live integer adds on the already-coalesced mouse-batch path.
+    let cruiseBoostedBatchesTotal = Counter()
+    let cruiseIdentityBatchesTotal = Counter()
+
     // ---- P2 SESSION-LIFECYCLE event counters (the lifecycle/recovery/quality
     //      signals). All always-live integer adds at already-rare sites (a
     //      reconnect, an IDR request/arrival, a corrupt-frame heuristic hit) - far
@@ -423,6 +431,16 @@ final class TelemetryCounters: @unchecked Sendable {
     let vtSessionCreateLock = os_unfair_lock_t.allocate(capacity: 1)
     var vtSessionCreateMsValue: Double = 0
 
+    // Module-internal (not private) so the gauge accessor in
+    // TelemetryCounters+Gauges.swift can reach these.
+    //
+    /// CRUISE max-gain gauge: the largest traversal-boost gain applied this
+    /// session (1.0 = never boosted). Read with the resolution-derived gMax it
+    /// tops out at, this proves whether real flicks ever cross vFull. A plain
+    /// Double behind an unfair lock; `noteCruiseGain` keeps the running max.
+    let cruiseMaxGainLock = os_unfair_lock_t.allocate(capacity: 1)
+    var cruiseMaxGainValue: Double = 1.0
+
     // Module-internal (not private) so the gauge accessors in
     // TelemetryCounters+Gauges.swift can reach these.
     //
@@ -619,6 +637,7 @@ final class TelemetryCounters: @unchecked Sendable {
         inputLock.initialize(to: os_unfair_lock_s())
         rttLock.initialize(to: os_unfair_lock_s())
         vtSessionCreateLock.initialize(to: os_unfair_lock_s())
+        cruiseMaxGainLock.initialize(to: os_unfair_lock_s())
         gapLock.initialize(to: os_unfair_lock_s())
         decodeStateLock.initialize(to: os_unfair_lock_s())
         fecHealthLock.initialize(to: os_unfair_lock_s())
@@ -631,6 +650,7 @@ final class TelemetryCounters: @unchecked Sendable {
     deinit {
         jitterLock.deallocate(); inputLock.deallocate()
         rttLock.deallocate(); vtSessionCreateLock.deallocate()
+        cruiseMaxGainLock.deallocate()
         gapLock.deallocate()
         decodeStateLock.deallocate(); fecHealthLock.deallocate()
         audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
@@ -660,6 +680,7 @@ final class TelemetryCounters: @unchecked Sendable {
                         fecRecoveredFramesTotal, inputEventsTotal, inputBatchFlushTotal,
                         inputFlushSendBackloggedSkipTotal, inputFlushReliableBackloggedSkipTotal,
                         inputIdleToActiveTotal, bookmarkTotal,
+                        cruiseBoostedBatchesTotal, cruiseIdentityBatchesTotal,
                         videoPacketsLostPreFecTotal, videoPacketsOutOfOrderTotal,
                         videoPacketsDuplicateTotal, enetRetransmitTotal,
                         ackSilenceNearMissTotal, ctrlIgnoredTotal,
@@ -694,6 +715,8 @@ final class TelemetryCounters: @unchecked Sendable {
         setRecvJitterMs(0)
         setRttMs(0)
         setVtSessionCreateMs(0)
+        // Cruise max-gain resets to the unboosted floor (1.0), not 0.
+        os_unfair_lock_lock(cruiseMaxGainLock); cruiseMaxGainValue = 1.0; os_unfair_lock_unlock(cruiseMaxGainLock)
         // Present-suppression + decode-gate gauges: a session starts with a
         // visible stream view, and the present/decode paths re-stamp these at
         // the next suppression/gate edge.

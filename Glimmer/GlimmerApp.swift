@@ -144,6 +144,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // which needs the registered default to read `true` before first toggle.
         UserDefaults.standard.register(defaults: [
             MouseAccelerationControl.enabledDefaultsKey: true,
+            // Cruise: resolution-aware fast-flick traversal boost (raw aim
+            // preserved). Hidden, default-on, no UI - the non-UI gate reads it via
+            // UserDefaults.bool, so it needs the registered default to read `true`.
+            CruiseTraversal.enabledDefaultsKey: true,
             // Fire the present tick on a private high-QoS run loop (not .main)
             // so a busy main thread can't starve the CADisplayLink callback.
             // Flip false for an instant fallback to the main-runloop tick.

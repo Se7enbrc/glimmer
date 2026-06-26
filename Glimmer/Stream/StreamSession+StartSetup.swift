@@ -166,6 +166,8 @@ extension StreamSession {
         // for system keys would surprise the user (Cmd-Tab suddenly
         // stops working mid-game, etc.).
         inp.captureSysKeys = config.captureSysKeys
+        // Cruise ceiling is derived from the stream width (4K→2.0, 1080p→1.0 inert).
+        inp.cruiseGMax = CruiseTraversal.gMax(forStreamWidth: config.width)
         inp.attach(to: win.window)
         // The window installs first responder only after it has
         // become key AND finished its enter-fullscreen transition.

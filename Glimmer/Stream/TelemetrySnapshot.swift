@@ -60,6 +60,8 @@ struct TelemetrySnapshot: Sendable {
     /// Latest VTDecompressionSessionCreate wall-clock cost (ms): the HW-decoder
     /// bring-up that lands on the first-frame leg. 0 before the first create.
     var vtSessionCreateMs: Double = 0
+    /// Largest Cruise traversal-boost gain applied this session (1.0 = unboosted).
+    var cruiseMaxGain: Double = 1.0
     /// Decoder (re)creates split by cause (monotonic; sum = decoderRecreateTotal):
     /// the one-time first create, real resolution changes, and colorspace/HDR/
     /// profile param-rebuilds that kept dims - so a recreate storm names its cause.
@@ -249,6 +251,10 @@ struct TelemetrySnapshot: Sendable {
     /// User "that felt bad" bookmark presses (signal 4). A short-window
     /// `increase()` marks the exact beat the user flagged jank.
     var bookmarkTotal: UInt64 = 0
+    /// Cruise traversal-boost batch counts: boosted (gain>1) vs identity (active
+    /// motion that stayed at gain==1). The split tunes vKnee against real traces.
+    var cruiseBoostedBatchesTotal: UInt64 = 0
+    var cruiseIdentityBatchesTotal: UInt64 = 0
 
     // Per-stage latency histograms. Captured from the FrameTimingTracker's
     // cumulative atomic buckets (one snapshot/tick on the exporter queue - never

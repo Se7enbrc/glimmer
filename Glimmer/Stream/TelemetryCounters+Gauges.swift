@@ -153,6 +153,20 @@ extension TelemetryCounters {
         return vtSessionCreateMsValue
     }
 
+    /// Fold one applied Cruise gain into the per-session max (1.0 = unboosted).
+    /// Called from the mouse-batch path; cheap last-writer-max under the lock.
+    func noteCruiseGain(_ g: Double) {
+        os_unfair_lock_lock(cruiseMaxGainLock)
+        if g > cruiseMaxGainValue { cruiseMaxGainValue = g }
+        os_unfair_lock_unlock(cruiseMaxGainLock)
+    }
+    /// Largest Cruise gain applied this session (1.0 if never boosted). Read by
+    /// the exporter on its 1Hz queue (never the hot path).
+    var cruiseMaxGain: Double {
+        os_unfair_lock_lock(cruiseMaxGainLock); defer { os_unfair_lock_unlock(cruiseMaxGainLock) }
+        return cruiseMaxGainValue
+    }
+
     /// Set/clear the present-suppression gauge. Called at the suppression edges
     /// (backgrounded/occluded ↔ visible) by the present path - never per frame.
     /// The CLEAR edge also arms the latency rig's resume-present tag: the first

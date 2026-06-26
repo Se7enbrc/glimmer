@@ -238,6 +238,29 @@ extension InputForwarder: StreamInputViewDelegate {
             accumDy += delta.dy
         }
 
+        // CRUISE traversal boost (InputForwarder+Cruise.swift). Velocity-gated,
+        // resolution-derived gain on ONLY fast flicks - aim (sub-knee) is untouched.
+        // Runs AFTER the Mac linearization, so it's the only client gain. dt is the
+        // inter-batch interval; v is counts/sec over this batch. Below the knee the
+        // gain is exactly 1.0 and accumDx/Dy are unchanged, so the residual path
+        // below runs byte-for-byte as it does today.
+        let now = event.timestamp
+        if CruiseTraversal.isEnabled, cruiseGMax > 1.0 {
+            let dt = now - lastMoveTimestamp
+            let v = hypot(accumDx, accumDy) / dt
+            let g = CruiseTraversal.gain(velocity: v, dt: dt, gMax: cruiseGMax,
+                                         vKnee: CruiseTraversal.vKnee, vFull: CruiseTraversal.vFull)
+            if g > 1.0 {
+                accumDx *= g
+                accumDy *= g
+                TelemetryCounters.shared.cruiseBoostedBatchesTotal.increment()
+                TelemetryCounters.shared.noteCruiseGain(g)
+            } else if accumDx != 0 || accumDy != 0 {
+                TelemetryCounters.shared.cruiseIdentityBatchesTotal.increment()
+            }
+        }
+        lastMoveTimestamp = now
+
         // The CGEvent path returns integer pixel deltas, so the residual
         // accumulator normally stays at zero and we forward the value as-is.
         // It still carries any sub-pixel fraction forward for the rare
