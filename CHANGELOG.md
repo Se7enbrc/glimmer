@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.6.40 - 2026-06-25
+
+Under the hood, no change to streaming behavior: added diagnostics for the
+hardware decoder's session-create time and the cause of any mid-stream decoder
+rebuilds, plus a debug-build safety check on the present-timing thread's
+shutdown.
+
 ## 2026.6.39 - 2026-06-25
 
 Fixes the "Stream stuttering" badge firing constantly at high refresh. When the
