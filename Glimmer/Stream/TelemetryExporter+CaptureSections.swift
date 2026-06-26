@@ -90,6 +90,7 @@ extension TelemetryExporter {
             audio.audioClockDriftMs = state.audioClockDriftMs
             audio.rePrimeTotal = state.rePrimeTotal
             audio.resamplerPpm = state.resamplerPpm
+            audio.engineRunning = state.engineRunning
         }
         // Windowed MIN buffer-fill: pulled (and reset) directly off its own
         // reset-on-read window so each tick's min covers only that window's troughs

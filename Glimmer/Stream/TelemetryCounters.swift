@@ -494,6 +494,11 @@ final class TelemetryCounters: @unchecked Sendable {
         /// offset (~tens of ppm) - the direct view of the resampler holding the fill
         /// it's steering (vs the av_skew that bounces with video-side timing).
         var resamplerPpm: Double = 0
+        /// AVAudioEngine running mirror (1 = up). Set under the audio meter lock at
+        /// engine start/stop, so a reconnect that re-inits the decoder but fails to
+        /// bring the engine back reads 0 here while packets still flow - the direct
+        /// "playout dead" signal. nil before the engine first starts.
+        var engineRunning: Bool?
     }
     // Module-internal (not private) so the audio accessors in
     // TelemetryCounters+AudioGauges.swift can reach these (and the min-window

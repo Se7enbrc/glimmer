@@ -326,6 +326,10 @@ struct AudioSnapshot: Sendable {
     /// clock offset (tens of ppm) when converged - the direct view of the loop
     /// holding the fill, vs the av_skew that bounces with video-side timing.
     var resamplerPpm: Double?
+    /// AVAudioEngine running (1 = up). 0 with packets still flowing is the
+    /// post-reconnect "playout dead" signature the isShutdown-latch fix targets.
+    /// nil before the engine first starts.
+    var engineRunning: Bool?
     /// Windowed MINIMUM buffer fill this tick (ms) - the trough of the
     /// scheduled-ahead backlog, reset-on-read. The 1Hz `bufferFillMs` gauge can
     /// miss the instantaneous low that precedes an under-run; this is the field that

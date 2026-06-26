@@ -435,6 +435,7 @@ extension AudioDecoder {
         let anchorFramesPlayed = driftAnchorFramesPlayed
         let playedFrames = framesPlayed
         let rePrimes = rePrimeCount
+        let engineUp = engineRunning
         // The adaptive cushion target rides the same gauge: its VALUE only moves
         // on the cold grow/decay edges, but carrying it here (one load under the
         // lock already held) is what lets every exported row judge fill AGAINST
@@ -490,7 +491,10 @@ extension AudioDecoder {
                 rePrimeTotal: rePrimes,
                 // The resampler's applied rate offset (read on this same ~4Hz single-
                 // caller path, no extra lock) - makes the loop visible vs av_skew noise.
-                resamplerPpm: resamplerEpsPpm))
+                resamplerPpm: resamplerEpsPpm,
+                // Engine-running mirror: 1 = AVAudioEngine up. Catches the post-
+                // reconnect "packets flow but playout dead" latch in one query.
+                engineRunning: engineUp))
     }
 
     // MARK: - Audio OUTPUT route (under-run attribution breadcrumbs)
