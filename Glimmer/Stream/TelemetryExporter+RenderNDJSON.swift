@@ -191,6 +191,9 @@ extension TelemetryRenderer {
         builder.addCount("pacer_over_target_release_total", extras.pacerOverTargetReleaseTotal)
         builder.add("pacer_over_target_releases_per_s", extras.pacerOverTargetReleasesPerSecond)
         builder.add("pacer_over_target_release_ratio", extras.pacerOverTargetReleaseRatio)
+        // Present-tick miss split by cause (descheduled thread vs coalesced callback).
+        builder.addCount("tick_miss_descheduled_total", snap.tickMissDescheduledTotal)
+        builder.addCount("tick_miss_coalesced_total", snap.tickMissCoalescedTotal)
         builder.add("edr_headroom_min", snap.edrHeadroomMin)
         builder.add("edr_headroom_avg", snap.edrHeadroomAvg)
         builder.add("edr_headroom_max", snap.edrHeadroomMax)

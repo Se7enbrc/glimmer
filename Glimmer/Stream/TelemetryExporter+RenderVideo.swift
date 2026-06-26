@@ -283,6 +283,14 @@ extension TelemetryRenderer {
                      "Over-target force-releases ÷ total releases this window "
                      + "(<0.1 steady-state; sustained-high = fps≈refresh self-oscillation).",
                      extras.pacerOverTargetReleaseRatio)
+        builder.emitCounter("glimmer_tick_miss_descheduled_total",
+                            "Stretched present ticks where handleTick itself ran late "
+                            + "(the tick thread was descheduled - the CPU starved it).",
+                            snap.tickMissDescheduledTotal)
+        builder.emitCounter("glimmer_tick_miss_coalesced_total",
+                            "Stretched present ticks where handleTick ran on time but the "
+                            + "vsync delta jumped (macOS coalesced the callback delivery).",
+                            snap.tickMissCoalescedTotal)
         builder.emit("glimmer_display_edr_headroom_min",
                      "EDR headroom min this window (1.0 = SDR, >1.0 = HDR engaged).",
                      snap.edrHeadroomMin)
