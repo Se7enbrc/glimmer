@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.6.48 - 2026-06-26
+
+Under the hood: confirms the 2026.6.47 real-time scheduling actually took (a
+queryable flag) and splits any residual present-timing miss into "the timing
+thread was starved" vs "the display didn't hand us a frame in time" - so the
+rare remaining hitch has a precise, named cause instead of a guess. No behavior
+change.
+
 ## 2026.6.47 - 2026-06-26
 
 Kills the residual intermittent stutter on high-refresh displays. The
