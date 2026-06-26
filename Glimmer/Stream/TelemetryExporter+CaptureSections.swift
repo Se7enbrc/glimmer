@@ -132,6 +132,10 @@ extension TelemetryExporter {
 
         snap.reconnectTotal = counters.reconnectTotal.value
         snap.wakeTotal = counters.wakeTotal.value
+        snap.routeChangeTotal = counters.routeChangeTotal.value
+        // Input backpressure-skip totals (monotonic), split by signal.
+        snap.inputFlushSendBackloggedSkipTotal = counters.inputFlushSendBackloggedSkipTotal.value
+        snap.inputFlushReliableBackloggedSkipTotal = counters.inputFlushReliableBackloggedSkipTotal.value
         snap.disconnectReason = p2.disconnectReason
         // Process-global per-reason totals (survive session resets) - the durable
         // record the per-session ordinal can't carry past the <1ms exporter teardown.
@@ -225,6 +229,13 @@ extension TelemetryExporter {
         add("total_ms", breakdown.totalMs)
         add("click_to_first_frame_ms", breakdown.clickToFirstFrameMs)
         add("launch_path_ms", breakdown.launchPathMs)
+        // Launch sub-legs attributing launch_path_ms.
+        add("launch_serverinfo_ms", breakdown.launchServerinfoMs)
+        add("launch_cancel_ms", breakdown.launchCancelMs)
+        add("launch_busy_wait_ms", breakdown.launchBusyWaitMs)
+        add("launch_busy_poll_count", breakdown.launchBusyPollCount)
+        add("launch_ms", breakdown.launchMs)
+        add("launch_build_ms", breakdown.buildMs)
         return "{" + fields.joined(separator: ",") + "}"
     }
 

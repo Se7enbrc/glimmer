@@ -216,7 +216,11 @@ final class InputBatcher: @unchecked Sendable {
             }
             // Stamp the oldest unflushed state per slot (clean→dirty edge); a
             // superseding update in the same batch keeps the older stamp.
-            if !self.controllers[slot].dirty { self.controllers[slot].stamp = DispatchTime.now() }
+            let stampNow = DispatchTime.now()
+            if !self.controllers[slot].dirty { self.controllers[slot].stamp = stampNow }
+            // Observe the pre-hop deliver→enqueue leg (handler entry → here). Take
+            // is a no-op (returns 0) off the GameController path; measurement only.
+            self.observeInputDeliverAge(slot: slot, enqueued: stampNow)
             self.controllers[slot].num = num
             self.controllers[slot].mask = mask
             self.controllers[slot].buttons = safeButtons
@@ -356,7 +360,12 @@ final class InputBatcher: @unchecked Sendable {
     /// latest-state, so they must not drop.
     private func flushLocked() {
         guard let enet else { return }
-        if enet.sendBacklogged || enet.reliableBacklogged { return }
+        if enet.sendBacklogged || enet.reliableBacklogged {
+            // Telemetry: attribute the backpressure skip to which signal fired
+            // (the input p99 tail). Counter only - no behavior change.
+            countBackpressureSkip(enet)
+            return
+        }
 
         // Telemetry: count a flush only when this tick actually drains dirty
         // merged state to the wire (not the no-op ticks that dominate an idle
@@ -461,6 +470,29 @@ final class InputBatcher: @unchecked Sendable {
         guard let drainNow, let tracker, drainNow >= stamp else { return }
         let ageMs = Double(drainNow.uptimeNanoseconds &- stamp.uptimeNanoseconds) / 1_000_000.0
         tracker.inputLocalLatency.observe(ageMs)
+    }
+
+    /// Count a backpressure flush-skip, split by which signal fired (both when
+    /// both asserted). Counter-only telemetry; no behavior change.
+    private func countBackpressureSkip(_ enet: EnetControlChannel) {
+        if enet.sendBacklogged {
+            TelemetryCounters.shared.inputFlushSendBackloggedSkipTotal.increment()
+        }
+        if enet.reliableBacklogged {
+            TelemetryCounters.shared.inputFlushReliableBackloggedSkipTotal.increment()
+        }
+    }
+
+    /// Observe one slot's deliver→enqueue age (controller handler entry → this
+    /// enqueue) into the deliver histogram. ALWAYS takes the per-slot handler
+    /// stamp (clears it even when telemetry's off, so it can't go stale); a no-op
+    /// (0) off the GameController path. Observes only when the tracker exists.
+    private func observeInputDeliverAge(slot: Int, enqueued: DispatchTime) {
+        let entry = InputDeliverStamp.shared.take(slot: slot)
+        guard let tracker = FrameTimingTracker.shared,
+              entry != 0, enqueued.uptimeNanoseconds >= entry else { return }
+        tracker.inputDeliverLatency.observe(
+            Double(enqueued.uptimeNanoseconds &- entry) / 1_000_000.0)
     }
 
     /// Send the latest pending multiController for `slot` and clear its dirty

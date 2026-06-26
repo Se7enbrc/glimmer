@@ -310,6 +310,11 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// threading through the composite-snapshot plumbing. Observed off the present
     /// path on the batcher queue; the Stage is self-locked, so cross-thread is safe.
     let inputLocalLatency = LatencyHistograms.Stage()
+    /// CLIENT-SIDE input DELIVER latency: the pre-hop main-thread leg from the
+    /// GameController valueChangedHandler entry to the batcher slot stamp (the
+    /// deliver→enqueue age `inputLocalLatency` can't see - it starts at enqueue).
+    /// Same self-locked Stage; observed off the present path. Measurement only.
+    let inputDeliverLatency = LatencyHistograms.Stage()
     /// Both internal (not private): the trace renderer + drop-stub emitter in
     /// TelemetryLatency+Trace.swift are the only cross-file consumers.
     let traceWriter = FrameTraceWriter()

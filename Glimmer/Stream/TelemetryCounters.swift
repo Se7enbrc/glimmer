@@ -76,6 +76,12 @@ final class TelemetryCounters: @unchecked Sendable {
     let fecRecoveredFramesTotal = Counter()
     let inputEventsTotal = Counter()
     let inputBatchFlushTotal = Counter()
+    /// Input flush ticks that early-returned because the LOCAL outbound send count
+    /// was over cap (the radio draining slowly) - one cause of the input p99 tail.
+    let inputFlushSendBackloggedSkipTotal = Counter()
+    /// Input flush ticks that early-returned because the HOST stopped draining our
+    /// reliable backlog (ACK silence) - the other cause of the input p99 tail.
+    let inputFlushReliableBackloggedSkipTotal = Counter()
 
     // ---- P1 NETWORK receive-path totals (the exporter derives the per-second
     //      pre-FEC loss / out-of-order / duplicate RATES from deltas of these
@@ -179,6 +185,11 @@ final class TelemetryCounters: @unchecked Sendable {
     /// `reconnectTotal`); a climb here that precedes a reconnect/disconnect marks
     /// the wake-on-different-AP stale-link case.
     let wakeTotal = Counter()
+    /// ROUTE-CHANGE count (signal: lifecycle): incremented each time the stream's
+    /// egress route/link-class flips (the WiFiTelemetry route-change edge that
+    /// already fires an NDJSON event). Run-global (NOT reset per session) so a
+    /// wake-on-a-different-AP is visible in Prometheus, not just the NDJSON/Loki.
+    let routeChangeTotal = Counter()
     /// EXPLICIT REQUEST_IDR sends that started a round-trip measurement
     /// (signal: IDR-RTT). RE-BASELINE NOTE: RFI sends no longer arm round-trips
     /// (they ride `rfiTotal`) - conflating them made the pair unreadable (RFI
@@ -604,6 +615,7 @@ final class TelemetryCounters: @unchecked Sendable {
                         presentStallTotal, frameLossTotal, unrecoverableFrameTotal,
                         pacerDisabledTotal, videoPacketsTotal, videoFramesTotal,
                         fecRecoveredFramesTotal, inputEventsTotal, inputBatchFlushTotal,
+                        inputFlushSendBackloggedSkipTotal, inputFlushReliableBackloggedSkipTotal,
                         inputIdleToActiveTotal, bookmarkTotal,
                         videoPacketsLostPreFecTotal, videoPacketsOutOfOrderTotal,
                         videoPacketsDuplicateTotal, enetRetransmitTotal,

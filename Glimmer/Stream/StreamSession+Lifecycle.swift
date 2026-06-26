@@ -233,6 +233,12 @@ extension StreamSession {
 
         func tryLaunch() async throws -> LaunchResponse {
             log.info("→ /launch (appID=\(appID))")
+            // Telemetry: stamp the /launch leg duration (launch sub-leg).
+            let t0 = Date().timeIntervalSinceReferenceDate
+            defer {
+                ConnectTimingTelemetry.shared.recordLaunchLeg(
+                    launchMs: (Date().timeIntervalSinceReferenceDate - t0) * 1000.0)
+            }
             return try await network.launch(appID: appID, config: config)
         }
 
@@ -247,9 +253,19 @@ extension StreamSession {
         // means the Do command from our subsequent /launch runs against a
         // settled state and wins.
         func waitForHostIdle(maxWait: TimeInterval) async {
-            let deadline = Date().addingTimeInterval(maxWait)
+            // Telemetry: time the whole busy-poll + count its /serverinfo polls so
+            // the up-to-5s wait is attributable (launch_busy_wait_ms / _poll_count).
+            let waitStart = Date()
+            var polls = 0
+            let deadline = waitStart.addingTimeInterval(maxWait)
+            defer {
+                ConnectTimingTelemetry.shared.recordLaunchLeg(
+                    launchBusyWaitMs: Date().timeIntervalSince(waitStart) * 1000.0,
+                    busyPollCount: polls)
+            }
             while Date() < deadline {
                 try? await Task.sleep(nanoseconds: 250_000_000)
+                polls += 1
                 if let info = try? await network.fetchServerInfo(),
                    info.currentGameID == 0 {
                     log.info("Host idle - Undo command completed")
@@ -261,7 +277,11 @@ extension StreamSession {
 
         func tryCancelThenLaunch() async throws -> LaunchResponse {
             log.info("→ /cancel then /launch (forced renegotiation)")
+            // Telemetry: stamp the /cancel leg duration (launch sub-leg).
+            let cancelStart = Date()
             try? await network.cancel()
+            ConnectTimingTelemetry.shared.recordLaunchLeg(
+                cancelMs: Date().timeIntervalSince(cancelStart) * 1000.0)
             // Sunshine's Undo command on Windows hosts can take 1-3s
             // (QRes.exe is synchronous; some user configs include a sleep
             // for display-driver settle time). 5s ceiling is generous but

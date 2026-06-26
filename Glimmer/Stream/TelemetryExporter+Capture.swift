@@ -150,6 +150,7 @@ extension TelemetryExporter {
         // Client-side input latency (queue→wire age) - a standalone input-family
         // stage, read off the same tracker on this queue.
         snap.inputLocalLatency = FrameTimingTracker.shared?.inputLocalLatency.snapshotValue()
+        snap.inputDeliverLatency = FrameTimingTracker.shared?.inputDeliverLatency.snapshotValue()
 
         // Wi-Fi radio (signal 3): one CoreWLAN read on this queue. Reads the
         // current association only - never a scan - so it cannot disturb the link.

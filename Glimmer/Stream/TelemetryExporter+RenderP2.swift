@@ -56,6 +56,25 @@ extension TelemetryRenderer {
                      "Launch path: click → connect-start this session, ms - the pre-connect "
                      + "launch cost handshake_total_ms can't see.",
                      handshake.launchPathMs)
+        // Launch SUB-LEGS attributing launch_path_ms (each absent until stamped).
+        builder.emit("glimmer_launch_serverinfo_ms",
+                     "Launch sub-leg: /serverinfo fetch duration this session, ms.",
+                     handshake.launchServerinfoMs)
+        builder.emit("glimmer_launch_cancel_ms",
+                     "Launch sub-leg: /cancel duration this session, ms.",
+                     handshake.launchCancelMs)
+        builder.emit("glimmer_launch_busy_wait_ms",
+                     "Launch sub-leg: waitForHostIdle busy-poll duration this session, ms.",
+                     handshake.launchBusyWaitMs)
+        builder.emit("glimmer_launch_busy_poll_count",
+                     "Launch sub-leg: /serverinfo polls in waitForHostIdle this session.",
+                     handshake.launchBusyPollCount)
+        builder.emit("glimmer_launch_ms",
+                     "Launch sub-leg: /launch duration this session, ms.",
+                     handshake.launchMs)
+        builder.emit("glimmer_launch_build_ms",
+                     "Launch sub-leg: MainActor subsystem/window build duration this session, ms.",
+                     handshake.buildMs)
     }
 
     /// RECONNECT count + disconnect REASON. The reason is BOTH an ordinal gauge
@@ -68,6 +87,10 @@ extension TelemetryRenderer {
         builder.emitCounter("glimmer_wake_total",
                             "Wakes from sleep this run while a stream was live.",
                             snap.wakeTotal)
+        builder.emitCounter("glimmer_route_change_total",
+                            "Egress route/link-class changes this run (e.g. wake on a "
+                            + "different AP) - the route_change NDJSON event as a counter.",
+                            snap.routeChangeTotal)
         builder.emit("glimmer_disconnect_reason",
                      "Disconnect reason ordinal (0 none, 1 user, 2 host-clean, 3 host-error, "
                      + "4 watchdog-stall, 5 connect-failed, 6 consumer-dropped, 7 system-sleep).",

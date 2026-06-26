@@ -37,6 +37,24 @@ extension TelemetryRenderer {
                 "Client input queue→wire age histogram (batcher enqueue→flush), ms.",
                 stage: inputLocal)
         }
+        // Client input deliver→enqueue age histogram: the pre-hop main-thread leg
+        // (GameController handler entry → batcher slot stamp) the local-latency
+        // histogram above can't see (it starts at enqueue).
+        if let inputDeliver = snap.inputDeliverLatency {
+            builder.emitHistogram(
+                "glimmer_latency_input_deliver_ms",
+                "Client input deliver→enqueue age histogram (controller handler entry → "
+                + "batcher slot stamp), ms.",
+                stage: inputDeliver)
+        }
+        // Input flush ticks skipped by backpressure, split by which signal fired
+        // (the input p99 tail attribution).
+        builder.emitCounter("glimmer_input_flush_backpressure_skips_total",
+                            "Input flush ticks skipped: local outbound send backlog over cap.",
+                            snap.inputFlushSendBackloggedSkipTotal)
+        builder.emitCounter("glimmer_input_flush_backpressure_reliable_skips_total",
+                            "Input flush ticks skipped: host reliable-ACK backlog over cap.",
+                            snap.inputFlushReliableBackloggedSkipTotal)
         // Host rumble dispatched to pad actuators - same Extras sample as the
         // NDJSON rumble fields, riding the input family it correlates with.
         builder.emitCounter("glimmer_rumble_events_total",
