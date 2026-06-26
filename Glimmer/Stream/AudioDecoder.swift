@@ -40,6 +40,11 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `applyVarispeedRate` (the resampler extension) writes through it.
     let varispeedRateQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.varispeed-rate")
     private var inputFormat: AVAudioFormat?
+    /// Last-known engine OUTPUT (hardware) format, captured when the engine
+    /// starts. The config-change handler (H3) compares against this to decide
+    /// whether the output route's format actually moved (so it reconnects
+    /// `varispeed -> mainMixer` only on a real change). Guarded by `stateLock`.
+    private var lastOutputFormat: AVAudioFormat?
     private var channelCount: Int = 2
     private var samplesPerFrame: Int = 240         // 5ms at 48kHz, common GFE/Sunshine config
     private var streams: Int = 1
@@ -345,6 +350,15 @@ public final class AudioDecoder: @unchecked Sendable {
     var routeListenerBlock: AudioObjectPropertyListenerBlock?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
 
+    /// `AVAudioEngineConfigurationChange` observer token (held so `shutdown()`
+    /// can remove it). On a mid-stream output-device/format change AVAudioEngine
+    /// STOPS its outputNode; without this, playout goes silent for the rest of
+    /// the session. The handler re-resolves + reconnects + restarts the engine on
+    /// the `stateLock`-serialized path. Fires on a NOTIFICATION (not a player-node
+    /// completion handler), so a node-prop change there is safe - see `handle
+    /// EngineConfigurationChange`. Lifecycle-guarded by `stateLock`.
+    private var configChangeObserver: NSObjectProtocol?
+
     // MARK: - P1 AUDIO playout MIN-fill telemetry
     //
     // The windowed MIN buffer-fill itself lives in `TelemetryCounters` (a
@@ -508,10 +522,19 @@ public final class AudioDecoder: @unchecked Sendable {
         // Engine-running mirror for the telemetry gauge, set under the meter lock
         // (read there by publishAudioState) - a plain Bool, no AVAudio call.
         audioMeterLock.lock(); engineRunning = engine.isRunning; audioMeterLock.unlock()
+        // Baseline the output (hardware) format so the config-change handler can
+        // tell a real route-format move from a benign notification.
+        lastOutputFormat = engine.outputNode.outputFormat(forBus: 0)
         // Seed + track the audio OUTPUT route for the under-run breadcrumbs.
         // Installed only after the engine is up, so a failed init never leaves a
         // listener behind; `shutdown()` removes it.
         installAudioRouteListener()
+        // H3: recover playout across a mid-stream output-device/format change
+        // (BT/AirPods connect-disconnect, HDMI/DP unplug, USB-DAC removal, OS
+        // sample-rate change), which STOPS the engine's outputNode. Installed
+        // after the engine is up so a failed init never leaves an observer behind;
+        // `shutdown()` removes it.
+        installConfigChangeObserver()
         return 0
     }
 
@@ -534,6 +557,7 @@ public final class AudioDecoder: @unchecked Sendable {
         playerNode.stop()
         engine.stop()
         removeAudioRouteListener()
+        removeConfigChangeObserver()
         if let decoderPtr = decoder {
             opus_multistream_decoder_destroy(decoderPtr)
             decoder = nil
@@ -542,6 +566,92 @@ public final class AudioDecoder: @unchecked Sendable {
         // ref to us; when StreamSession drops its strong reference the bridge
         // sees nil at the next callback (or the bridge itself is released
         // first, which short-circuits earlier).
+    }
+
+    // MARK: - H3/H4 mid-stream audio-config recovery
+    //
+    // On a mid-stream output-device/format change (BT/AirPods connect-disconnect,
+    // HDMI/DP unplug, USB-DAC removal, OS sample-rate change) AVAudioEngine STOPS
+    // its outputNode and posts `AVAudioEngineConfigurationChange` - so without
+    // recovery audio goes silent for the rest of the session. The route listener
+    // only swaps a cached string; this is the actual recovery hop.
+    //
+    // DEADLOCK SAFETY: this fires on a NOTIFICATION, not a player-node completion
+    // handler, so re-arming node properties here is safe - the historical freeze
+    // came from touching AVAudio node props INSIDE a completion handler (which
+    // holds the messenger lock and deadlocked teardown's `playerNode.stop()`).
+    // We serialize on the SAME `stateLock` the decode + shutdown paths use, and
+    // make ZERO node-prop changes from any completion path. `playerNode.stop()`
+    // here flushes the queued buffers' completions, but those run
+    // `meterCompleteOnePlayout`, which makes no AV calls (only `audioMeterLock`).
+
+    /// Register the `AVAudioEngineConfigurationChange` observer. Called once from
+    /// `initDecoderCore` with `stateLock` held (after the engine is up);
+    /// idempotent via the token. The handler runs off a utility queue so the
+    /// notification thread never blocks on `stateLock`.
+    private func installConfigChangeObserver() {
+        guard configChangeObserver == nil else { return }
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            self?.routeListenerQueue.async { self?.handleEngineConfigurationChange() }
+        }
+    }
+
+    /// Remove the config-change observer. Called from `shutdown()` with
+    /// `stateLock` held; safe when never installed.
+    private func removeConfigChangeObserver() {
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
+    }
+
+    /// Re-resolve the output format, reconnect `varispeed -> mainMixer` if it
+    /// moved, restart the engine if it stopped, and re-arm the pre-roll so the
+    /// cushion rebuilds. On the `stateLock`-serialized path (never a completion
+    /// handler). H4: re-samples `engine.isRunning` into the gauge mirror here too.
+    private func handleEngineConfigurationChange() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard !isShutdown, let fmt = inputFormat else { return }
+        let newOutputFormat = engine.outputNode.outputFormat(forBus: 0)
+        let formatMoved = lastOutputFormat.map { $0.sampleRate != newOutputFormat.sampleRate
+            || $0.channelCount != newOutputFormat.channelCount } ?? true
+        lastOutputFormat = newOutputFormat
+        let wasRunning = engine.isRunning
+        if formatMoved {
+            // The output route's format changed: stop the player + reconnect the
+            // graph at our (unchanged) decode format - the mixer/output handle SRC
+            // to the new hardware rate. stop() here fires queued completions on the
+            // meter path (no AV calls), and we hold stateLock so no decode races.
+            playerNode.stop()
+            engine.connect(varispeed, to: engine.mainMixerNode, format: fmt)
+        }
+        if !engine.isRunning {
+            do {
+                try engine.start()
+            } catch {
+                Diag.error("audio engine restart after config change FAILED: "
+                    + "\(error.localizedDescription)", "Stream.Audio")
+            }
+        }
+        // H4: re-sample the engine-running gauge here (the same hop), and RE-ARM
+        // the pre-roll so the cushion rebuilds from the restart rather than the
+        // player resuming on the under-run floor. A plain Bool + state-machine
+        // resets under the meter lock - no AV call.
+        let nowRunning = engine.isRunning
+        audioMeterLock.lock()
+        engineRunning = nowRunning
+        if formatMoved || (!wasRunning && nowRunning) {
+            primed = false
+            playoutStarted = false
+            playoutDrained = false
+            buffersSinceArm = 0
+        }
+        audioMeterLock.unlock()
+        Diag.notice("audio engine config change handled "
+            + "(format \(formatMoved ? "moved" : "same"), running \(nowRunning))", "Stream.Audio")
     }
 
     // MARK: Per-sample decoding

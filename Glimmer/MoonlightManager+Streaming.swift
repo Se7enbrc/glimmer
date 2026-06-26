@@ -585,6 +585,11 @@ extension MoonlightManager {
             streamPhase = .streaming
         case .hdrModeChanged: break  // intent signal only - see .hdrActive
         case .hdrActive(let active): nativeHDRActive = active
+        case .audioFailed:
+            // H7: audio receive failed to start - the session is video-only.
+            // Non-fatal to the visual stream, so stay in the streaming phase;
+            // the failure is already logged + counted at the source.
+            break
         case .log: break
         }
     }

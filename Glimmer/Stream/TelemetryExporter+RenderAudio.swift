@@ -33,6 +33,10 @@ extension TelemetryRenderer {
         builder.emitCounter("glimmer_audio_fec_mismatch_total",
                             "Audio FEC blocks dropped on a parity/data block-size mismatch.",
                             extras.audioFecMismatchTotal)
+        builder.emitCounter("glimmer_audio_receive_failed_total",
+                            "Audio receive-start failures (session came up video-only - "
+                            + "startReceive() threw).",
+                            extras.audioReceiveFailedTotal)
         builder.emit("glimmer_audio_packets_per_second",
                      "Audio data packets accepted per second.", audio.packetsPerSecond)
         builder.emit("glimmer_audio_loss_rate",
