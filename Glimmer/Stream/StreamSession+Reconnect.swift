@@ -149,6 +149,12 @@ extension StreamSession {
         //    frame, the bridge + event stream, and StreamBridgeContext.current.
         await teardownConnectionForReconnect()
 
+        // H5: re-check after the teardown await. stop() flips isStreaming/
+        // stopInProgress synchronously before its own first await, so a guard
+        // evaluated ON the actor between awaits reliably observes a teardown that
+        // slipped in. Bail BEFORE building a fresh backend - nothing to clean up.
+        guard isStreaming, !stopInProgress else { return false }
+
         // 2. Swap in a fresh backend (NativeBackend is one-shot: its connection
         //    state can't be reused and interrupt() latches permanently). Re-point
         //    input + decoder on the MainActor so uplink + IDR requests go to the
@@ -182,10 +188,39 @@ extension StreamSession {
             return false
         }
 
+        // H5: a stop() can land at ANY of the awaits above (~0.8-2.4s of handshake
+        // per attempt, plus the frozen "Reconnecting..." banner invites a quit).
+        // If one did, `fresh` + `net` are now a LIVE ENet/RTP backend on a session
+        // with isStreaming=false and no teardown path - a zombie for the process
+        // lifetime, with the host holding a "busy" session. interruptConnection()
+        // (the permanent latch, drains the receive threads) + drop the client so
+        // no live backend/NetworkClient survives the slipped-in stop. The episode
+        // loop's own re-checks then exit; the existing stop() torn-down everything
+        // else (window/decoder/bridge) already.
+        guard isStreaming, !stopInProgress else {
+            Diag.notice("reconnect: stop slipped in mid-handshake - "
+                + "interrupting the freshly-built backend to kill the zombie connection", "Stream")
+            await tearDownSlippedInReconnect(fresh: fresh, net: net)
+            return false
+        }
+
         // 4. Nudge a keyframe so the fresh VT session repaints over the frozen
         //    frame promptly (Sunshine sends one at start; cheap insurance).
         backend.requestIdrFrame()
         return true
+    }
+
+    /// H5 cleanup: a `stop()` slipped in while this attempt was mid-handshake, so
+    /// the just-built `fresh` backend + `net` client are live on an already-ended
+    /// session. Interrupt the backend (permanent latch; drains the receive threads
+    /// so no callback can fire after) and shut the client so the host drops its
+    /// session record. Only nil `self.network` if it's still the one we built - a
+    /// concurrent stop() may have already nil'd it.
+    private func tearDownSlippedInReconnect(fresh: NativeBackend, net: NetworkClient) async {
+        fresh.interruptConnection()
+        try? await net.cancel()
+        await net.shutdown()
+        if self.network === net { self.network = nil }
     }
 
     /// Connection-only teardown for a reconnect: bring the backend connection
