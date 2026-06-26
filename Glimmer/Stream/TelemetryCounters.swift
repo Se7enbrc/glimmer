@@ -255,6 +255,18 @@ final class TelemetryCounters: @unchecked Sendable {
     /// always-live (a sub-µs integer op, far below the per-vsync budget at 240Hz).
     let pacerOverTargetReleaseTotal = Counter()
 
+    /// Present-tick MISS split by ROOT CAUSE (signal: PRESENT, diagnostic). A
+    /// stretched present tick (>1.5 vsyncs between successive CADisplayLink
+    /// targetTimestamps - the residual ~3.8% present gap) is classified on the
+    /// tick path: DESCHEDULED = `handleTick`'s own wall-clock entry stretched the
+    /// same amount, so the tick thread didn't get the CPU; COALESCED = entry on
+    /// time but the vsync delta jumped, so macOS coalesced the callback delivery.
+    /// The two need OPPOSITE fixes, so the split picks which to ship. Bumped on the
+    /// tick path (sub-µs integer add, far below the per-vsync budget); per-session
+    /// like the sibling present counters.
+    let tickMissDescheduledTotal = Counter()
+    let tickMissCoalescedTotal = Counter()
+
     /// Frames dropped-to-NEWEST while presentation is SUPPRESSED (signal:
     /// PRESENT): the window is backgrounded/occluded, the display link is
     /// deliberately suspended, and the pacer keeps only the newest frame ready
@@ -623,7 +635,9 @@ final class TelemetryCounters: @unchecked Sendable {
                         decoderRecreateTotal, decoderRecreateFirstTotal,
                         decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
                         staleFrameRepeatTotal,
-                        pacerOverTargetReleaseTotal, suppressedDropTotal, decodeGatedDropTotal,
+                        pacerOverTargetReleaseTotal,
+                        tickMissDescheduledTotal, tickMissCoalescedTotal,
+                        suppressedDropTotal, decodeGatedDropTotal,
                         discontinuityFlushTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
                         audioFecMismatchTotal, audioUnderrunTotal, audioOverrunTotal,

@@ -75,6 +75,11 @@ struct TelemetrySnapshot: Sendable {
     /// Stale-frame repeats per second this window - a SPIKE while fps≈refresh is a
     /// real micro-judder (at fps<refresh a steady rate is the normal cadence).
     var staleRepeatsPerSecond: Double?
+    /// Present-tick MISS totals split by root cause (DESCHEDULED = the tick thread
+    /// didn't get the CPU; COALESCED = macOS delayed the CADisplayLink callback).
+    /// The split picks which of two opposite fixes the residual present gap needs.
+    var tickMissDescheduledTotal: UInt64 = 0
+    var tickMissCoalescedTotal: UInt64 = 0
 
     // P1 PRESENT/DISPLAY: EDR-headroom trend + HDR-engaged + screen + ProMotion.
     /// EDR headroom (NSScreen.maximumEDR) min/avg/max over this window. 1.0 = SDR;

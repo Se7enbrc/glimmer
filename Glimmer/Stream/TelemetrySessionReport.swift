@@ -534,6 +534,8 @@ struct SessionReport {
             ("discontinuity_flush", counters.discontinuityFlushTotal.value),
             ("present_stale_repeat", counters.staleFrameRepeatTotal.value),
             ("pacer_over_target_release", counters.pacerOverTargetReleaseTotal.value),
+            ("tick_miss_descheduled", counters.tickMissDescheduledTotal.value),
+            ("tick_miss_coalesced", counters.tickMissCoalescedTotal.value),
             ("suppressed_drop", counters.suppressedDropTotal.value),
             ("drops_decode_gated", counters.decodeGatedDropTotal.value),
             // Per-socket GAP-EVENT tallies (the honest link-health counts the

@@ -118,6 +118,8 @@ extension TelemetryExporter {
         snap.vtSessionCreateMs = counters.vtSessionCreateMs
         snap.discontinuityFlushTotal = counters.discontinuityFlushTotal.value
         snap.staleFrameRepeatTotal = counters.staleFrameRepeatTotal.value
+        snap.tickMissDescheduledTotal = counters.tickMissDescheduledTotal.value
+        snap.tickMissCoalescedTotal = counters.tickMissCoalescedTotal.value
 
         // P1 DECODE state (HW-decode + pixel format + bit depth + colorspace) +
         // PRESENT/DISPLAY (EDR trend + HDR/screen/ProMotion). Both read off the

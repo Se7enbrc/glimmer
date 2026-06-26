@@ -29,6 +29,16 @@ extension FramePacer {
     /// just produces one delta the plausibility bounds in `handleTick` discard.
     nonisolated(unsafe) static var lastTickTargetTimestamp: CFTimeInterval = .nan
 
+    /// Previous `handleTick` WALL-CLOCK entry time (`hostNow`), so a stretched
+    /// realized tick can be split by cause: a wall-clock gap as large as the
+    /// realized stretch means `handleTick` itself ran late (the tick thread was
+    /// DESCHEDULED); an on-time entry against a jumped `targetTimestamp` means
+    /// macOS COALESCED the callback delivery. Tick-thread confined exactly like
+    /// `lastTickTargetTimestamp` (one reader/writer, one run loop at a time); NaN
+    /// until the second tick, suspension-sized after a backgrounded window - the
+    /// same plausibility bounds the realized delta uses exclude both.
+    nonisolated(unsafe) static var lastTickEntryHostTime: CFTimeInterval = .nan
+
     /// Ceiling for a plausible realized tick delta (seconds). Above this the
     /// gap is a link suspension (backgrounded window), a rebuild, or a stale
     /// cross-instance timestamp - not panel cadence - and folding it in would
@@ -134,6 +144,31 @@ extension FramePacer {
         // emitted off-lock below.
         let deficitEvents = serviceTickDeficitLocked(now: hostNow)
         os_unfair_lock_unlock(&lock)
+
+        // DIAGNOSTIC tick-miss classifier (metric-only, no behavior change). A
+        // stretched realized tick (>1.5 vsyncs between successive targetTimestamps)
+        // has two opposite causes needing opposite fixes; split them by whether
+        // `handleTick`'s OWN wall-clock entry stretched the same amount:
+        //   - entry gap also >1.5 vsyncs -> the tick thread was DESCHEDULED
+        //     (handleTick ran late; the CPU starved it).
+        //   - entry on time but the vsync delta jumped -> macOS COALESCED the
+        //     callback delivery on a near-static layer.
+        // All values are tick-thread-local; off-lock, only the counter add (its
+        // own lock) crosses threads. Reuses hostNow/realizedInterval/vsyncInterval -
+        // no extra clock read. `entryGap` shares the realized delta's plausibility
+        // bounds (NaN/first-tick + suspension-sized gaps excluded).
+        let entryGap = hostNow - Self.lastTickEntryHostTime
+        Self.lastTickEntryHostTime = hostNow
+        if realizedInterval.isFinite, realizedInterval > 0,
+           realizedInterval <= Self.maxRealizedTickDeltaSeconds,
+           realizedInterval > 1.5 * vsyncInterval {
+            if entryGap.isFinite, entryGap > 0, entryGap <= Self.maxRealizedTickDeltaSeconds,
+               entryGap > 1.5 * vsyncInterval {
+                TelemetryCounters.shared.tickMissDescheduledTotal.increment()
+            } else {
+                TelemetryCounters.shared.tickMissCoalescedTotal.increment()
+            }
+        }
 
         handleTickDeficitEvents(deficitEvents)
 
