@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.6.41 - 2026-06-25
+
+Two controller/overlay fixes.
+
+The controller exit chord no longer pops the host's on-screen keyboard. The old
+default (L1+R1+L2+R2) leaks the partial combo to the host as you press into it,
+and Steam Big Picture reads that as its show-keyboard shortcut. The default is
+now L3 + R3 (click both sticks) - native on every controller, and its partials
+collide with nothing. (The old chord is still selectable in Settings.)
+
+The "Stream stuttering" pill is now conservative: it lights only on real dropped
+or late frames, not on the normal frame-repeats a high-refresh display does when
+the host sends fewer fps than the panel refreshes - which was lighting it
+constantly at 4K 240 where the picture was actually smooth.
+
 ## 2026.6.40 - 2026-06-25
 
 Under the hood, no change to streaming behavior: added diagnostics for the
