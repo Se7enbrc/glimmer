@@ -147,7 +147,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Fire the present tick on a private high-QoS run loop (not .main)
             // so a busy main thread can't starve the CADisplayLink callback.
             // Flip false for an instant fallback to the main-runloop tick.
-            FramePacer.tickOffMainDefaultsKey: true
+            FramePacer.tickOffMainDefaultsKey: true,
+            // Give that tick thread Mach time-constraint (real-time) scheduling
+            // so the CPU can't preempt it under load. Flip false to fall back to
+            // plain userInteractive (the pre-realtime behavior) without a rebuild.
+            PacerTickThread.realtimeDefaultsKey: true
         ])
         // Crash recovery: if a prior session died mid-stream with the pointer
         // acceleration linearized, restore the user's saved value now (no-op in
