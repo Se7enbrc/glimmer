@@ -66,12 +66,30 @@ extension VideoDecoder {
         ConnectTimingTelemetry.shared.markFirstFrame()
     }
 
+    /// The CAUSE of a fresh VT-session create, for the labeled recreate counters.
+    /// Determined at the rebuild site from the format-description dimensions:
+    /// `firstCreate` (no prior session), `resolution` (dims changed), or
+    /// `colorspace` (a param-set rebuild that kept dims - colorspace/HDR-signaling
+    /// or profile). Codec-profile-only changes that keep resolution fall under
+    /// `colorspace`; the SPS can't be field-split here without a full parse.
+    enum SessionCreateCause {
+        case firstCreate, resolution, colorspace
+    }
+
     /// Note a fresh VT-session create for telemetry: bump the always-live recreate
-    /// counter, and (gate-on only) publish the live DECODE state read back from the
-    /// just-created session. Called unconditionally from
-    /// `ensureDecompressionSession` so its branch stays out of that function.
-    nonisolated func noteSessionCreatedTelemetry(outputPixelFormat: OSType) {
-        TelemetryCounters.shared.decoderRecreateTotal.increment()
+    /// counter (total + the by-cause sibling), and (gate-on only) publish the live
+    /// DECODE state read back from the just-created session. Called unconditionally
+    /// from `ensureDecompressionSession` so its branch stays out of that function.
+    nonisolated func noteSessionCreatedTelemetry(
+        outputPixelFormat: OSType, cause: SessionCreateCause
+    ) {
+        let counters = TelemetryCounters.shared
+        counters.decoderRecreateTotal.increment()
+        switch cause {
+        case .firstCreate: counters.decoderRecreateFirstTotal.increment()
+        case .resolution: counters.decoderRecreateResolutionTotal.increment()
+        case .colorspace: counters.decoderRecreateColorspaceTotal.increment()
+        }
         // Gate: publish the richer state only when telemetry is on (the tracker
         // sentinel is the gate-on signal). Off-path is a single optional load.
         guard FrameTimingTracker.shared != nil else { return }

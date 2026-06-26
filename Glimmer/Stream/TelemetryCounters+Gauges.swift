@@ -140,6 +140,19 @@ extension TelemetryCounters {
         return rttMsValue
     }
 
+    /// Stamp the latest VTDecompressionSessionCreate wall-clock cost (ms).
+    /// Called by the decode queue at each create (rare) - never the hot path.
+    func setVtSessionCreateMs(_ ms: Double) {
+        os_unfair_lock_lock(vtSessionCreateLock); vtSessionCreateMsValue = ms
+        os_unfair_lock_unlock(vtSessionCreateLock)
+    }
+    /// Latest VT-session create cost (ms), 0 if none yet. Read by the exporter on
+    /// its 1Hz queue (never the hot path).
+    var vtSessionCreateMs: Double {
+        os_unfair_lock_lock(vtSessionCreateLock); defer { os_unfair_lock_unlock(vtSessionCreateLock) }
+        return vtSessionCreateMsValue
+    }
+
     /// Set/clear the present-suppression gauge. Called at the suppression edges
     /// (backgrounded/occluded ↔ visible) by the present path - never per frame.
     /// The CLEAR edge also arms the latency rig's resume-present tag: the first

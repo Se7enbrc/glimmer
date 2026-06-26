@@ -384,6 +384,14 @@ extension VideoDecoder {
             return true
         }
 
+        // Capture the prior session/dimensions BEFORE the rebuild tears them down
+        // (the format-description builders nil the session). The cause of the
+        // upcoming create is read off these: no prior session = first create;
+        // changed dims = a real resolution change; same dims = a colorspace/HDR/
+        // profile param-rebuild. The new dims are read back after the rebuild.
+        let hadPriorSession = decompressionSession != nil
+        let priorDims = formatDescription.map(CMVideoFormatDescriptionGetDimensions)
+
         if let sps = strippedSps { spsData = sps }
         if let pps = strippedPps { ppsData = pps }
         if let vps = strippedVps { vpsData = vps }
@@ -399,7 +407,17 @@ extension VideoDecoder {
             rebuilt = false
         }
         guard rebuilt else { return false }
-        guard ensureDecompressionSession() else { return false }
+        // Classify the create cause from the dimension delta (see the capture above).
+        let cause: SessionCreateCause
+        if !hadPriorSession {
+            cause = .firstCreate
+        } else if let priorDims, let newDims = formatDescription.map(CMVideoFormatDescriptionGetDimensions),
+                  priorDims.width != newDims.width || priorDims.height != newDims.height {
+            cause = .resolution
+        } else {
+            cause = .colorspace
+        }
+        guard ensureDecompressionSession(cause: cause) else { return false }
 
         // STREAM DISCONTINUITY FLUSH. A parameter-set rebuild means the format
         // genuinely changed mid-stream (resolution / codec profile / colorspace),
