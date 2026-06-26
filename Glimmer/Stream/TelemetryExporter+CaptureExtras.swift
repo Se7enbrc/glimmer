@@ -68,11 +68,20 @@ extension TelemetryExporter {
         if let prev = prevCaptureTime {
             let dt = Double(now.uptimeNanoseconds &- prev.uptimeNanoseconds) / 1_000_000_000.0
             if dt > 0.05 {
-                extras.pacerOverTargetReleasesPerSecond =
-                    Double(overTargetTotal &- baselines.pacerOverTargetReleaseTotal) / dt
-                extras.audioTrimsPerSecond = Double(trimTotal &- baselines.audioTrimTotal) / dt
-                extras.rumbleEventsPerSecond =
-                    Double(rumbleTotal &- baselines.rumbleEventTotal) / dt
+                // Guard each delta against a reset/wrap: resetForNewSession zeroes
+                // the totals mid-run, so emit only across a monotonic window (skip
+                // + rebaseline below otherwise) - else &- renders a ~2^64 spike.
+                if overTargetTotal >= baselines.pacerOverTargetReleaseTotal {
+                    extras.pacerOverTargetReleasesPerSecond =
+                        Double(overTargetTotal &- baselines.pacerOverTargetReleaseTotal) / dt
+                }
+                if trimTotal >= baselines.audioTrimTotal {
+                    extras.audioTrimsPerSecond = Double(trimTotal &- baselines.audioTrimTotal) / dt
+                }
+                if rumbleTotal >= baselines.rumbleEventTotal {
+                    extras.rumbleEventsPerSecond =
+                        Double(rumbleTotal &- baselines.rumbleEventTotal) / dt
+                }
                 // The liveness totals are PER-PACER (a rebuilt pacer restarts at
                 // 0) and the snapshot is nil while the pacer is disabled - emit
                 // only across a monotonic window with a baseline, skipping (and

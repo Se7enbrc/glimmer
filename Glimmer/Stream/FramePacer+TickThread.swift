@@ -120,6 +120,11 @@ final class PacerTickThread: @unchecked Sendable {
             // apply the Mach time-constraint policy from INSIDE the thread (once)
             // before it blocks. Best-effort - on failure it continues at
             // userInteractive (the pre-realtime path). Gated on the flag.
+            // Breadcrumb the flag's ACTUAL value at the tick thread every session,
+            // so the field tells us why RT never applies (gauge=0, no apply log).
+            Diag.notice("pacer tick realtime flag = "
+                + "\(UserDefaults.standard.bool(forKey: Self.realtimeDefaultsKey)) "
+                + "(key=\(Self.realtimeDefaultsKey))", "Stream.Pacer")
             if UserDefaults.standard.bool(forKey: Self.realtimeDefaultsKey) {
                 Self.applyRealtimeScheduling()
             } else {

@@ -106,7 +106,8 @@ HELPER_TARGET := arm64-apple-macos26.0
         helper-build embed-helper \
         profile profile-signposts setup-notary notarize dmg dist preflight \
         codesign-setup codesign-teardown ensure-signing dev test \
-        creds-init enable-telem disable-telem release-publish sparkle-keys
+        creds-init enable-telem disable-telem release-publish sparkle-keys \
+        guard-clean-tree
 
 # TIER 1 - "everything but publish": the full release pipeline at Release
 # (xcodebuild -> inside-out sign -> embed + re-sign dylibs -> notarize -> staple),
@@ -473,12 +474,21 @@ preflight:
 creds-init:
 	@$(CREDS) init
 
-# Full distribution pipeline: preflight (fail fast, see above) → clean Release
-# → Developer ID sign + embed → notarize + staple → DMG. The DMG's app is
-# stapled, so it passes Gatekeeper offline on any Mac. Non-interactive from any
-# session once the one-time setup is done (creds file + codesign-setup +
-# setup-notary - docs/RELEASE.md).
-dist:
+# Release-integrity gate: refuse to build a release from a dirty worktree. A
+# dirty tree means the bundle can contain uncommitted changes the tag won't
+# capture, so the GPLv3 source at the tag wouldn't reproduce the binary (the .48
+# regression). Catches both unstaged AND staged changes. Reused by dist (and
+# thus release-publish). Commit or stash first.
+guard-clean-tree:
+	@git diff --quiet HEAD || { echo "ERROR: refusing to build a release from a dirty worktree (commit or stash first)"; exit 1; }
+	@git diff --cached --quiet || { echo "ERROR: refusing to build a release with staged changes (commit or stash first)"; exit 1; }
+
+# Full distribution pipeline: clean-tree gate → preflight (fail fast, see above)
+# → clean Release → Developer ID sign + embed → notarize + staple → DMG. The
+# DMG's app is stapled, so it passes Gatekeeper offline on any Mac.
+# Non-interactive from any session once the one-time setup is done (creds file +
+# codesign-setup + setup-notary - docs/RELEASE.md).
+dist: guard-clean-tree
 	$(MAKE) CONFIG=Release preflight clean app notarize dmg
 
 # --- Auto-update publication (Sparkle) -------------------------------------

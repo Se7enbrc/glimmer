@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.6.49 - 2026-06-26
+
+Release-integrity gate: release builds are now refused from a dirty worktree,
+and publishing asserts the committed version at the tag matches the built
+bundle - so the GPLv3 source at a tag always reproduces the binary (closing the
+2026.6.48 dirty-build gap). Adds a per-session diagnostic for why the 2026.6.47
+real-time present scheduling never engages in the field, plus telemetry-accuracy
+fixes: per-second metrics no longer emit a giant spike across a reconnect, the
+real-time gauge no longer lies on reconnect, and the present on-time/late counts
+are now honest per-window gauges instead of non-monotonic counters. No behavior
+change.
+
 ## 2026.6.48 - 2026-06-26
 
 Under the hood: confirms the 2026.6.47 real-time scheduling actually took (a

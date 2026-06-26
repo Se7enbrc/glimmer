@@ -66,7 +66,8 @@ extension TelemetryExporter {
         snap.decodeEmaMs = stats.avgDecodeTimeMs
 
         snap.presentCadenceErrorMs = stats.avgPresentCadenceErrorMs
-        // on-time/late split: derive counts from the on-time percent if present.
+        // on-time/late split: per-window frame counts derived from the on-time
+        // percent. Emitted as GAUGES (not counters - they're not monotonic).
         if let onTimePct = stats.onTimePresentPercent, let rendered = stats.renderedFps {
             snap.presentOnTimePercent = onTimePct
             let approxPresents = max(rendered, 0)
@@ -316,10 +317,19 @@ extension TelemetryExporter {
                         Double(now.uptimeNanoseconds &- foldedAt.uptimeNanoseconds) / 1_000_000_000.0
                     if foldDt > 0.05 { snap.packetsPerSecond = Double(packetsDelta) / foldDt }
                 }
-                snap.inputEventsPerSecond = Double(inputEventsTotal &- prevInputEventsTotal) / dt
-                snap.inputFlushPerSecond = Double(inputFlushTotal &- prevInputFlushTotal) / dt
+                // Guard each delta against a reset/wrap: resetForNewSession zeroes
+                // the totals mid-run, so emit only across a monotonic window (the
+                // prev rebaselines below regardless) - else &- renders a 2^64 spike.
+                if inputEventsTotal >= prevInputEventsTotal {
+                    snap.inputEventsPerSecond = Double(inputEventsTotal &- prevInputEventsTotal) / dt
+                }
+                if inputFlushTotal >= prevInputFlushTotal {
+                    snap.inputFlushPerSecond = Double(inputFlushTotal &- prevInputFlushTotal) / dt
+                }
                 // P1 PRESENT stale-frame repeats/sec (the invisible-stutter rate).
-                snap.staleRepeatsPerSecond = Double(staleRepeatTotal &- prevStaleFrameRepeatTotal) / dt
+                if staleRepeatTotal >= prevStaleFrameRepeatTotal {
+                    snap.staleRepeatsPerSecond = Double(staleRepeatTotal &- prevStaleFrameRepeatTotal) / dt
+                }
                 let framesDelta = framesTotal &- prevFramesTotal
                 if framesDelta > 0 {
                     snap.fecRecoveryRate =

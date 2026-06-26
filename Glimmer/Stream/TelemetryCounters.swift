@@ -692,9 +692,10 @@ final class TelemetryCounters: @unchecked Sendable {
         // the next suppression/gate edge.
         setPresentSuppressed(false)
         setDecodeGated(false)
-        // RT gauge: re-stamped when the next session's tick thread starts (the
-        // reset runs at the connect edge, before the pacer re-binds).
-        setPacerTickRealtime(false)
+        // RT gauge is NOT reset here: it's a THREAD-LIFETIME fact, set once when
+        // the tick thread starts. The thread is REUSED across reconnects (it never
+        // re-applies/re-stamps), so clearing it here would make the gauge lie
+        // inversely on every reconnect. Leave it at its thread-set value.
         // Per-type ignored-control tallies are per-session like the aggregate
         // total; the audio-TTF record resets but its last-stream-end stamp
         // survives (it anchors THIS session's host_idle_s).
