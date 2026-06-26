@@ -153,6 +153,12 @@ extension TelemetryRenderer {
                             "Times the pacer was disabled (present-path give-up).", snap.pacerDisabledTotal)
         builder.emitCounter("glimmer_bookmark_total",
                             "User \"that felt bad\" bookmark presses (jank markers).", snap.bookmarkTotal)
+        builder.emitCounter("glimmer_cruise_boosted_batches_total",
+                            "Mouse batches the Cruise traversal boost scaled (gain>1).",
+                            snap.cruiseBoostedBatchesTotal)
+        builder.emitCounter("glimmer_cruise_identity_batches_total",
+                            "Active-motion mouse batches Cruise left unscaled (gain==1).",
+                            snap.cruiseIdentityBatchesTotal)
     }
 
     /// Per-stage latency HISTOGRAMS (_bucket/_sum/_count). Real Prometheus
@@ -245,6 +251,10 @@ extension TelemetryRenderer {
         builder.emit("glimmer_vt_session_create_ms",
                      "VTDecompressionSessionCreate wall-clock cost, ms (first-frame-leg startup).",
                      snap.vtSessionCreateMs > 0 ? snap.vtSessionCreateMs : nil)
+        // Cruise max gain this session (1.0 = never boosted; drop the inert 1.0).
+        builder.emit("glimmer_cruise_max_gain",
+                     "Largest Cruise traversal-boost gain applied this session.",
+                     snap.cruiseMaxGain > 1.0 ? snap.cruiseMaxGain : nil)
         builder.emitCounter("glimmer_discontinuity_flush_total",
                             "Stream-discontinuity flushes (param-set rebuilds that flushed the "
                             + "renderer + cleared the pacer queue - a real multi-frame skip). 0 on "

@@ -164,6 +164,10 @@ extension StreamSession {
         await MainActor.run {
             inp.setBackend(fresh)
             dec.setBackend(fresh)
+            // Re-derive the Cruise ceiling: reconnect reuses the forwarder and
+            // never re-runs StartSetup, so a mid-session resolution change would
+            // otherwise keep a stale gMax.
+            inp.cruiseGMax = CruiseTraversal.gMax(forStreamWidth: config.width)
         }
 
         // 3. Fresh NetworkClient + full handshake against the restarted host.

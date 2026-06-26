@@ -112,6 +112,9 @@ extension TelemetryExporter {
         snap.unrecoverableFrameTotal = counters.unrecoverableFrameTotal.value
         snap.pacerDisabledTotal = counters.pacerDisabledTotal.value
         snap.bookmarkTotal = counters.bookmarkTotal.value
+        snap.cruiseBoostedBatchesTotal = counters.cruiseBoostedBatchesTotal.value
+        snap.cruiseIdentityBatchesTotal = counters.cruiseIdentityBatchesTotal.value
+        snap.cruiseMaxGain = counters.cruiseMaxGain
         snap.decoderRecreateTotal = counters.decoderRecreateTotal.value
         snap.decoderRecreateFirstTotal = counters.decoderRecreateFirstTotal.value
         snap.decoderRecreateResolutionTotal = counters.decoderRecreateResolutionTotal.value

@@ -518,6 +518,8 @@ struct SessionReport {
             ("present_stall", counters.presentStallTotal.value),
             ("pacer_disabled", counters.pacerDisabledTotal.value),
             ("bookmark", counters.bookmarkTotal.value),
+            ("cruise_boosted_batches", counters.cruiseBoostedBatchesTotal.value),
+            ("cruise_identity_batches", counters.cruiseIdentityBatchesTotal.value),
             // P1 NETWORK session tallies: the run's on-the-wire receive-quality
             // totals (all from the RTP seq of packets WE received) + the reliable
             // retransmit count - the "how was the link this run" line.
