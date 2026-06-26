@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.6.43 - 2026-06-26
+
+Lowers standing audio latency on a clean wired link. Audio kept roughly 150ms
+more buffer than a good wired connection needs - around a quarter-second of
+avoidable lip-sync lag - because the buffer seeded deep whenever the network
+came up "unknown" (e.g. right after waking on a new network) and never converged
+back down. On a clean wired link whose clock is well-behaved, the buffer now
+walks down to a tight, low-latency depth; a link that's actually struggling
+(real underruns or large clock skew) keeps its deeper buffer untouched.
+
 ## 2026.6.42 - 2026-06-26
 
 Fixes audio dying after a mid-stream reconnect. When the stream silently
