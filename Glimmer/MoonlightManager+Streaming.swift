@@ -166,31 +166,71 @@ extension MoonlightManager {
             uniqueId: host.id,
             serverName: host.displayName
         )
-        // PinnedCertStore.load handles file-store + UserDefaults migration
-        // transparently - file wins, UserDefaults fallback migrates
-        // forward + cleans up.
-        let persistedPin = PinnedCertStore.load(forHostID: host.id)
-        if persistedPin == nil {
-            // Diagnostic: a stream attempt against a host record that has
-            // no pin under the canonical key means we're about to go
-            // through TOFU even though the user thinks they're paired.
-            // This was the silent failure mode the pin-key normalization
-            // (#4) was introduced to fix; if it still trips after that
-            // fix lands, the host record's `id` and the pair-time
-            // `server.uniqueId` are out of sync for a reason the fix
-            // didn't cover.
-            log.error(
-                """
-                No pinned cert for host id=\(host.id, privacy: .public) - stream will fall to TOFU. \
-                Check that host.id matches server.uniqueId (the host's `<uniqueid>` from /serverinfo).
-                """
-            )
-        }
-        info.serverCertPEM = persistedPin ?? host.serverCertPEM
+        // H1: the mode-0600 file store is the ONLY authoritative pin source.
+        // `host.serverCertPEM` lives in same-UID-writable UserDefaults
+        // (hosts.N.srvcert) - an attacker can swap it for a MITM cert via
+        // cfprefsd, so we treat it as an untrusted HINT, never a direct pin.
+        info.serverCertPEM = authoritativePin(for: host)
         info.appVersion = host.appVersion
         info.gfeVersion = host.gfeVersion
         info.pairStatus = .paired      // host is in our local list → already paired
         return info
+    }
+
+    /// Resolve the host's TLS pin from the authoritative file store, honoring
+    /// the legacy UserDefaults hint (`host.serverCertPEM`) only as a one-way
+    /// migration source. File ALWAYS wins; a file-vs-hint mismatch is a hard
+    /// error (refuse + force re-pair), never a silent fallback. Returns nil
+    /// when no trustworthy pin exists - the pairStatus gate then forces a
+    /// re-pair rather than pinning a writable value.
+    private func authoritativePin(for host: MoonlightHost) -> String? {
+        let filePin = PinnedCertStore.load(forHostID: host.id)
+        let hint = host.serverCertPEM.flatMap { $0.isEmpty ? nil : $0 }
+
+        if let filePin {
+            // File wins. If the writable hint disagrees, someone moved one of
+            // them - refuse to stream and force a re-pair rather than guess.
+            if let hint, hint != filePin {
+                log.error(
+                    """
+                    Pinned cert for host id=\(host.id, privacy: .public) DISAGREES with the \
+                    UserDefaults hint - refusing to stream and forcing re-pair (possible MITM).
+                    """
+                )
+                return nil
+            }
+            return filePin
+        }
+
+        // No file pin. Migrate the untrusted hint into the file store ONCE,
+        // then read it back from the file store so every later read is
+        // file-only. If the migration write fails, refuse rather than pin a
+        // same-UID-writable value.
+        if let hint {
+            do {
+                try PinnedCertStore.store(pem: hint, forHostID: host.id)
+                return PinnedCertStore.load(forHostID: host.id)
+            } catch {
+                log.error(
+                    """
+                    Failed to migrate the UserDefaults cert hint into the file store for host \
+                    id=\(host.id, privacy: .public): \(error.localizedDescription, privacy: .public) - \
+                    forcing re-pair instead of pinning a writable value.
+                    """
+                )
+                return nil
+            }
+        }
+
+        // Neither store has a pin: stream falls to a forced re-pair (the
+        // pairStatus gate handles it), not TOFU on a writable cert.
+        log.error(
+            """
+            No pinned cert for host id=\(host.id, privacy: .public) - forcing re-pair. \
+            Check that host.id matches server.uniqueId (the host's `<uniqueid>` from /serverinfo).
+            """
+        )
+        return nil
     }
 
     /// UI entry point for a launch. If the host is already streaming an app
@@ -397,9 +437,15 @@ extension MoonlightManager {
             // reach-failure copy is correct there.)
             self.nativeStreamError =
                 Self.connectFailureBanner(for: caughtError, hostName: hostName)
-        } else {
-            self.nativeStreamError = nil
         }
+        // M3: do NOT unconditionally clear nativeStreamError here. A host-side
+        // "ended unexpectedly" terminate (code != 0) already set the banner on
+        // the event loop, and this single teardown runs for BOTH a clean quit
+        // and that host error - unconditionally nilling wiped the banner before
+        // it ever rendered (host crash / power-loss / watchdog stall looked
+        // identical to a clean quit, and Retry went dead). Leaving an already-set
+        // banner in place lets it survive; a clean quit set it to nil up above
+        // (line 273 at stream start) so nothing stale leaks through.
         let wasStreaming = self.isStreaming
         self.streamPhase = .idle
         self.isStreaming = false
