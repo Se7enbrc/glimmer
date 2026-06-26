@@ -219,7 +219,9 @@ final class PacerTickThread: @unchecked Sendable {
         }
         var policy = thread_time_constraint_policy_data_t(
             period: toAbs(4_000_000),       // 4.0ms - covers up to 240Hz
-            computation: toAbs(500_000),    // 0.5ms - cheap timing capture
+            computation: toAbs(1_000_000),  // 1.0ms - tick uses ~0.2ms; headroom
+                                            // so a heavier tick can't overrun and
+                                            // get demoted (it's a ceiling, not spin)
             constraint: toAbs(4_000_000),   // 4.0ms - finish within the vsync
             preemptible: 0)                 // non-preemptible (tiny window)
         // THREAD_TIME_CONSTRAINT_POLICY_COUNT is a C sizeof macro the Swift
