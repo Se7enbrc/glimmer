@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.6.44 - 2026-06-26
+
+Recovers fast when you wake the Mac mid-stream. Before, waking on a different
+Wi-Fi network left the stream's connection stale with no wake handling at all -
+and because the dead-connection timer pauses during sleep, recovery didn't even
+start for ~10 seconds (the black-screen hang). Now, on wake, the app immediately
+re-checks the link and - if the connection has gone silent - reconnects in place
+within about two seconds instead of waiting it out. A healthy wake on the same
+network is untouched.
+
 ## 2026.6.43 - 2026-06-26
 
 Lowers standing audio latency on a clean wired link. Audio kept roughly 150ms
