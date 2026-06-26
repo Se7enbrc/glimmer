@@ -39,6 +39,26 @@ MAIN_SHA="$(git -C "$HERE" rev-parse origin/main)"
 	exit 1
 }
 
+# Version assertion: the committed version at the tag, the built bundle, and the
+# advertised version ($SHORT) must all agree. A dirty .48 shipped with a bundle
+# version that the committed source didn't carry; assert all three match so the
+# tag's GPLv3 source always reproduces the binary. Fail loud on any mismatch.
+COMMITTED_VERSION="$(git -C "$HERE" show "HEAD:Glimmer/Version.xcconfig" \
+	| sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' | tr -d ' ')"
+BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+	"$APP/Contents/Info.plist" 2>/dev/null || true)"
+[ "$COMMITTED_VERSION" = "$SHORT" ] || {
+	echo "ERR: committed MARKETING_VERSION ($COMMITTED_VERSION) at HEAD != advertised version ($SHORT)." >&2
+	echo "  Bump + commit Version.xcconfig so the tag's source matches what you're publishing." >&2
+	exit 1
+}
+[ "$BUNDLE_VERSION" = "$SHORT" ] || {
+	echo "ERR: built bundle CFBundleShortVersionString ($BUNDLE_VERSION) != advertised version ($SHORT)." >&2
+	echo "  Rebuild ('make dist') from the committed version - the bundle is stale." >&2
+	exit 1
+}
+echo "  ✓ version $SHORT matches committed source AND the built bundle"
+
 echo "▶ Zipping notarized bundle for Sparkle..."
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"

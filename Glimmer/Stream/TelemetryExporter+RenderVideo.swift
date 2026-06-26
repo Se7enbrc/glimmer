@@ -29,12 +29,16 @@ extension TelemetryRenderer {
         builder.emit("glimmer_present_on_time_percent",
                      "% of new-frame presents on-cadence (excl. stale fills) - the judder signal.",
                      snap.presentOnTimePercent)
-        if let onTime = snap.presentOnTimeCount {
-            builder.emitCounter("glimmer_present_on_time_total", "Presents that landed on-cadence.", onTime)
-        }
-        if let late = snap.presentLateCount {
-            builder.emitCounter("glimmer_present_late_total", "Presents that landed off-cadence.", late)
-        }
+        // GAUGES, not counters: these are derived per-tick from fps×pct (window-
+        // local frame counts), not monotonic accumulators, so a _total counter
+        // poisoned rate() with a reset on every fps dip. Emit the honest per-window
+        // count as a gauge - the on_time_percent gauge above is the rate signal.
+        builder.emit("glimmer_present_on_time_frames",
+                     "New-frame presents that landed on-cadence this window (count).",
+                     snap.presentOnTimeCount.map(Double.init))
+        builder.emit("glimmer_present_late_frames",
+                     "New-frame presents that landed off-cadence this window (count).",
+                     snap.presentLateCount.map(Double.init))
         builder.emit("glimmer_host_encode_latency_min_ms",
                      "Host capture+encode latency min this window, ms (host idle-ramp visible).",
                      snap.hostEncodeLatencyMinMs)
