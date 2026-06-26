@@ -122,6 +122,7 @@ extension TelemetryRenderer {
         builder.add("audio_pkts_per_s", audio.packetsPerSecond)
         builder.add("audio_loss_rate", audio.lossRate)
         builder.add("audio_fec_recovery_rate", audio.fecRecoveryRate)
+        builder.add("audio_engine_running", audio.engineRunning.map { $0 ? 1.0 : 0.0 })
         builder.add("audio_buffer_fill_ms", audio.bufferFillMs)
         builder.add("audio_resampler_ppm", audio.resamplerPpm)
         builder.add("audio_buffer_fill_min_ms", audio.bufferFillMinMs)

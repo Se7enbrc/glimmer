@@ -40,6 +40,10 @@ extension TelemetryRenderer {
         builder.emit("glimmer_audio_fec_recovery_rate",
                      "Audio FEC-recovery rate this window (recovered/(recovered+accepted)).",
                      audio.fecRecoveryRate)
+        builder.emit("glimmer_audio_engine_running",
+                     "AVAudioEngine running (1 = up). 0 with packets still flowing is the "
+                     + "post-reconnect playout-dead signature (the isShutdown-latch fix).",
+                     audio.engineRunning.map { $0 ? 1.0 : 0.0 })
         builder.emit("glimmer_audio_buffer_fill_ms",
                      "Decoded audio buffered ahead of the playhead, ms (output buffer level).",
                      audio.bufferFillMs)

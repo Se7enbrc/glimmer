@@ -133,6 +133,11 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `isShutdown`; this flag is its only honest view of teardown. Guarded by
     /// `audioMeterLock`.
     var meterShutdown = false
+    /// Mirror of `engine.isRunning` for the `glimmer_audio_engine_running` gauge,
+    /// set under `audioMeterLock` at engine start (initDecoderCore) and cleared in
+    /// shutdown() - so the meter thread reads engine state without touching AVAudio
+    /// off-thread. Proves "packets arriving but playout dead" at a glance.
+    var engineRunning = false
     /// True once at least one buffer has been scheduled (gates under-run detection
     /// so the initial empty state isn't an under-run).
     var playoutStarted = false
@@ -369,6 +374,13 @@ public final class AudioDecoder: @unchecked Sendable {
         driftAnchorNanos = 0; driftAnchorFramesPlayed = 0
         resamplerIntegralPpm = 0; resamplerEpsPpm = 0; varispeed.rate = 1.0
         playoutStarted = false; playoutDrained = false; meterShutdown = false
+        // FIX: clear the teardown latch on RE-init. A reconnect's stopConnection →
+        // shutdown() set `isShutdown = true` and nothing reset it, so post-reconnect
+        // every decoded frame was dropped by the decode guards (packets flow, playout
+        // dead). Re-init under the lock is the honest "this decoder is live again" edge.
+        if isShutdown { Diag.info("audio decoder re-init - isShutdown reset (reconnect)", "Stream.Audio") }
+        isShutdown = false
+        engineRunning = false
         // Cushion / pre-roll state for this session: start paused (no play() at
         // engine start), at the SEEDED adaptive target, re-prime count reset. (The
         // reset-on-read MIN-fill window lives in TelemetryCounters and is cleared by
@@ -448,8 +460,11 @@ public final class AudioDecoder: @unchecked Sendable {
                                 channelLayout: layout)
         inputFormat = fmt
 
-        engine.attach(playerNode)
-        engine.attach(varispeed)
+        // Idempotent on a reconnect re-init: a node already on this engine must not
+        // be re-attached (AVAudio faults on a double-attach). `node.engine == nil`
+        // is the "not attached" test.
+        if playerNode.engine == nil { engine.attach(playerNode) }
+        if varispeed.engine == nil { engine.attach(varispeed) }
         // playerNode → varispeed → mixer. The varispeed resamples the player's
         // output by `rate=1+ε` (driveResampler), pulling the player's buffers at
         // the consumption rate - so completion timing (framesPlayed) still tracks
@@ -464,11 +479,17 @@ public final class AudioDecoder: @unchecked Sendable {
             // so the player starts with headroom instead of on the under-run floor.
             // The node is scheduled-into while paused; `play()` then drains the
             // already-queued cushion gapless.
-            try engine.start()
+            // Only start when not already running (idempotent across a reconnect
+            // re-init that left the engine up).
+            if !engine.isRunning { try engine.start() }
         } catch {
             log.error("AVAudioEngine.start: \(error.localizedDescription)")
+            Diag.error("audio engine start FAILED: \(error.localizedDescription)", "Stream.Audio")
             return -1
         }
+        // Engine-running mirror for the telemetry gauge, set under the meter lock
+        // (read there by publishAudioState) - a plain Bool, no AVAudio call.
+        audioMeterLock.lock(); engineRunning = engine.isRunning; audioMeterLock.unlock()
         // Seed + track the audio OUTPUT route for the under-run breadcrumbs.
         // Installed only after the engine is up, so a failed init never leaves a
         // listener behind; `shutdown()` removes it.
@@ -490,6 +511,7 @@ public final class AudioDecoder: @unchecked Sendable {
         // permanent-pin class). Gate details: `meterCompleteOnePlayout`.
         audioMeterLock.lock()
         meterShutdown = true
+        engineRunning = false   // gauge mirror; a Bool, not an AVAudio call
         audioMeterLock.unlock()
         playerNode.stop()
         engine.stop()
