@@ -673,10 +673,12 @@ private final class PerceivedHitchBox {
     /// the instant a game starts. ~6s covers the launch transient.
     private let graceSeconds: CFTimeInterval = 6.0
 
-    /// True when the PRESENT path is hitching enough to feel. Thresholds sit WELL
-    /// above the fps==refresh structural floor (a bookmarked false positive showed
-    /// late~6/s, render-gap~0.05, zero real loss) so only a clear burst shows; the
-    /// banner's leaky integrator debounces flaps. Deltas guard a reconnect reset.
+    /// True when the PRESENT path is hitching enough to feel. Fires on real frame
+    /// loss (render-gap / late-drops) or JUDDER (presents landing off the ideal
+    /// grid). It deliberately does NOT key on the raw stale-repeat count: when
+    /// content fps < refresh, a panel re-shows each frame to fill idle vsyncs
+    /// (~102/s at 129fps on 240Hz) - that's by design, not a hitch. The banner's
+    /// leaky integrator debounces flaps; deltas guard a reconnect reset.
     func perceivedHitch(snap: StreamStatsSnapshot) -> Bool {
         let now = CACurrentMediaTime()
         if firstTime == 0 { firstTime = now }
@@ -684,7 +686,8 @@ private final class PerceivedHitchBox {
         prevTime = now
 
         // Advance the rate baselines every tick (incl. during the grace) so the
-        // first post-grace delta isn't a spurious spike.
+        // first post-grace delta isn't a spurious spike. staleRate feeds the
+        // present-tick estimate below (rendered + stale fills), not a fire term.
         let stale = TelemetryCounters.shared.staleFrameRepeatTotal.value
         let staleRate = (dt > 0 && stale >= prevStale) ? Double(stale - prevStale) / dt : 0
         prevStale = stale
@@ -695,11 +698,20 @@ private final class PerceivedHitchBox {
         if now - firstTime < graceSeconds { return false }
 
         var hitch = false
+        // Real frame loss: decoded but never rendered.
         if let decoded = snap.decodedFps, let rendered = snap.renderedFps, decoded > 0 {
             if (decoded - rendered) / decoded > 0.18 { hitch = true }
         }
-        if staleRate > 6.0 { hitch = true }
+        // Late drops.
         if lateRate > 12.0 { hitch = true }
+        // Judder: average present landing more than one present-tick off the PTS
+        // grid. Refresh-aware (the tick interval scales with the realized present
+        // rate), so a smooth stream sits well under it at any fps-vs-refresh ratio.
+        if let cad = snap.avgPresentCadenceErrorMs, let rendered = snap.renderedFps {
+            let presentRate = rendered + staleRate
+            let tickMs = presentRate > 1 ? 1000.0 / presentRate : 8.3
+            if cad > tickMs { hitch = true }
+        }
         return hitch
     }
 }

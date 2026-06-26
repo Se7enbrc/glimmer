@@ -26,6 +26,9 @@ extension TelemetryRenderer {
         builder.emit("glimmer_decode_time_ema_ms", "Decode wall-clock EMA, ms.", snap.decodeEmaMs)
         builder.emit("glimmer_present_cadence_error_ms",
                      "Mean |present-vs-PTS| cadence error this window, ms.", snap.presentCadenceErrorMs)
+        builder.emit("glimmer_present_on_time_percent",
+                     "% of new-frame presents on-cadence (excl. stale fills) - the judder signal.",
+                     snap.presentOnTimePercent)
         if let onTime = snap.presentOnTimeCount {
             builder.emitCounter("glimmer_present_on_time_total", "Presents that landed on-cadence.", onTime)
         }

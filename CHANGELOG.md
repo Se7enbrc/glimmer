@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.6.39 - 2026-06-25
+
+Fixes the "Stream stuttering" badge firing constantly at high refresh. When the
+display refreshes faster than the host can send frames - e.g. a 240Hz panel with
+a host that can only encode ~130fps at 4K - the panel re-shows each frame to
+fill the idle refreshes. That's normal and looks smooth, but the badge counted
+those structural repeats as stutter and lit nonstop. It now judges smoothness by
+how EVENLY frames actually reach the screen (present cadence), so it stays dark
+on an even stream at any frame-rate-to-refresh ratio, and still catches real
+judder and dropped frames. (If your stream looks soft at 4K 240, the host likely
+can't encode it - try 4K 120 or a lower resolution; the picture is genuinely
+smooth at the rate it's delivering.)
+
 ## 2026.6.38 - 2026-06-25
 
 Launcher polish, and the Wi-Fi helper now stays out of the way on Ethernet.
