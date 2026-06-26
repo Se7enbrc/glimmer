@@ -177,6 +177,14 @@ struct TelemetrySnapshot: Sendable {
     /// batcher (oldest unflushed entry → flush). A standalone stage, not part of
     /// `latencyHistograms`; rendered in the input family.
     var inputLocalLatency: LatencyHistogramSnapshot.Stage?
+    /// CLIENT-SIDE input DELIVER latency histogram: the pre-hop main-thread leg
+    /// (controller handler entry → batcher slot stamp). Standalone stage, rendered
+    /// in the input family alongside inputLocalLatency.
+    var inputDeliverLatency: LatencyHistogramSnapshot.Stage?
+    /// Input flush ticks skipped by backpressure, split by signal (the input p99
+    /// tail attribution): local radio backlog vs host reliable-ACK silence.
+    var inputFlushSendBackloggedSkipTotal: UInt64 = 0
+    var inputFlushReliableBackloggedSkipTotal: UInt64 = 0
 
     // display refresh / cadence (ProMotion ramp-down detector)
     var refreshMinHz: Double?
@@ -279,6 +287,9 @@ struct TelemetrySnapshot: Sendable {
     var reconnectTotal: UInt64 = 0
     /// Wake-from-sleep count this run (monotonic) - wakes while a stream was live.
     var wakeTotal: UInt64 = 0
+    /// Route/link-class change count this run (monotonic) - the egress-route flip
+    /// (e.g. wake on a different AP) the NDJSON route_change event already marks.
+    var routeChangeTotal: UInt64 = 0
     /// Latest disconnect reason (the live default is `.none` until a terminate).
     var disconnectReason: DisconnectReason = .none
     /// PROCESS-GLOBAL per-reason disconnect totals (label, total), monotonic and

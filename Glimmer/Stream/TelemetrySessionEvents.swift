@@ -131,6 +131,14 @@ final class ConnectTimingTelemetry: @unchecked Sendable {
     private var connectStartReference: Double = 0
     private var clickToFirstFrameMsValue: Double = 0
     private var launchPathMsValue: Double = 0
+    // Launch-path SUB-LEGS (ms), stamped at the real call sites in
+    // launchWithBusyRecovery so the opaque launch_path_ms is attributable.
+    private var serverinfoMsValue: Double = 0
+    private var cancelMsValue: Double = 0
+    private var launchBusyWaitMsValue: Double = 0
+    private var launchBusyPollCountValue: Double = 0
+    private var launchMsValue: Double = 0
+    private var buildMsValue: Double = 0
     init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
@@ -164,6 +172,31 @@ final class ConnectTimingTelemetry: @unchecked Sendable {
         }
         os_unfair_lock_unlock(lock)
     }
+    /// Record a launch sub-leg duration (ms). First non-zero write wins per leg
+    /// (the launch flow runs each leg once); off any hot path. `busyPollCount` is
+    /// the waitForHostIdle poll count for `launch_busy_wait_ms`.
+    func recordLaunchLeg(serverinfoMs: Double? = nil, cancelMs: Double? = nil,
+                         launchBusyWaitMs: Double? = nil, busyPollCount: Int? = nil,
+                         launchMs: Double? = nil, buildMs: Double? = nil) {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        if let ms = serverinfoMs, serverinfoMsValue == 0 { serverinfoMsValue = ms }
+        if let ms = cancelMs, cancelMsValue == 0 { cancelMsValue = ms }
+        if let ms = launchBusyWaitMs, launchBusyWaitMsValue == 0 { launchBusyWaitMsValue = ms }
+        if let count = busyPollCount, launchBusyPollCountValue == 0 { launchBusyPollCountValue = Double(count) }
+        if let ms = launchMs, launchMsValue == 0 { launchMsValue = ms }
+        if let ms = buildMs, buildMsValue == 0 { buildMsValue = ms }
+    }
+    /// Apply the stamped launch sub-legs onto a HandshakeBreakdown (each nil until
+    /// its call site stamped it). Keeps the multi-value read in one lock take.
+    func applyLaunchLegs(to out: inout HandshakeBreakdown) {
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        out.launchServerinfoMs = serverinfoMsValue != 0 ? serverinfoMsValue : nil
+        out.launchCancelMs = cancelMsValue != 0 ? cancelMsValue : nil
+        out.launchBusyWaitMs = launchBusyWaitMsValue != 0 ? launchBusyWaitMsValue : nil
+        out.launchBusyPollCount = launchBusyPollCountValue != 0 ? launchBusyPollCountValue : nil
+        out.launchMs = launchMsValue != 0 ? launchMsValue : nil
+        out.buildMs = buildMsValue != 0 ? buildMsValue : nil
+    }
     /// Click → first decoded frame (ms), or nil if not yet resolved.
     var clickToFirstFrameMs: Double? {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
@@ -178,7 +211,43 @@ final class ConnectTimingTelemetry: @unchecked Sendable {
         os_unfair_lock_lock(lock)
         clickReference = 0; connectStartReference = 0
         clickToFirstFrameMsValue = 0; launchPathMsValue = 0
+        serverinfoMsValue = 0; cancelMsValue = 0; launchBusyWaitMsValue = 0
+        launchBusyPollCountValue = 0; launchMsValue = 0; buildMsValue = 0
         os_unfair_lock_unlock(lock)
+    }
+}
+
+// MARK: - Input deliver-stamp (handler entry → batcher enqueue)
+
+/// MEASUREMENT-ONLY per-slot deliver stamp bridging the MainActor controller
+/// handler to the batcher queue WITHOUT threading a timestamp through the backend
+/// protocol. The GameController valueChangedHandler stamps its entry instant per
+/// slot; the batcher takes (clears) it when it sets the slot's enqueue stamp, so
+/// the delta is the pre-hop main-thread leg. Last-writer-wins per slot is correct
+/// (GC delivers serially per slot on main); a take that finds no stamp is a no-op.
+/// Self-locked standalone (the `ConnectTimingTelemetry` idiom). NO behavior change.
+final class InputDeliverStamp: @unchecked Sendable {
+    static let shared = InputDeliverStamp()
+    private static let maxSlots = 16  // matches Enet.maxGamepads
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var stamps = [UInt64](repeating: 0, count: maxSlots)
+    init() { lock.initialize(to: os_unfair_lock_s()) }
+    deinit { lock.deallocate() }
+
+    /// Stamp the handler-entry instant for `slot` (monotonic ns). First write wins
+    /// until taken, so a coalesced burst keeps the oldest delivered instant.
+    func stamp(slot: Int, nanos: UInt64) {
+        guard slot >= 0, slot < Self.maxSlots else { return }
+        os_unfair_lock_lock(lock)
+        if stamps[slot] == 0 { stamps[slot] = nanos }
+        os_unfair_lock_unlock(lock)
+    }
+    /// Take + clear the stamp for `slot`, or 0 if none is pending.
+    func take(slot: Int) -> UInt64 {
+        guard slot >= 0, slot < Self.maxSlots else { return 0 }
+        os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+        let stamped = stamps[slot]; stamps[slot] = 0
+        return stamped
     }
 }
 
@@ -210,6 +279,15 @@ struct HandshakeBreakdown: Sendable {
     var clickToFirstFrameMs: Double?
     /// Launch path: click → connect-start, isolating the pre-connect launch cost.
     var launchPathMs: Double?
+    /// Launch-path SUB-LEGS attributing launchPathMs: /serverinfo, /cancel, the
+    /// waitForHostIdle busy-poll (+ its poll count), /launch, and the MainActor
+    /// subsystem/window build. Each nil until its call site stamps it.
+    var launchServerinfoMs: Double?
+    var launchCancelMs: Double?
+    var launchBusyWaitMs: Double?
+    var launchBusyPollCount: Double?
+    var launchMs: Double?
+    var buildMs: Double?
     /// True once the first decoded frame landed (so the exporter emits the
     /// one-shot breakdown exactly once, not every tick).
     var complete: Bool = false
@@ -330,6 +408,7 @@ extension TelemetryCounters {
             // totalMs can't). Self-locked; read here off the P2 lock.
             out.clickToFirstFrameMs = ConnectTimingTelemetry.shared.clickToFirstFrameMs
             out.launchPathMs = ConnectTimingTelemetry.shared.launchPathMs
+            ConnectTimingTelemetry.shared.applyLaunchLegs(to: &out)
             out.complete = firstFrameNanos != 0
             return out
         }

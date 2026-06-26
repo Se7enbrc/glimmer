@@ -97,7 +97,11 @@ extension StreamSession {
         // belt-and-braces overlap with stop() on the success / backend-failure
         // paths is harmless.
         defer { if !startHandedOff { shutdownOrphanedNetwork() } }
+        // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
+        let serverinfoStart = Date()
         serverInfo = try await network.fetchServerInfo()
+        ConnectTimingTelemetry.shared.recordLaunchLeg(
+            serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
         // swiftlint:disable:next line_length
         log.info("fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) codecSupport=0x\(String(serverInfo.serverCodecSupport.rawValue, radix: 16))")
         if serverInfo.pairStatus != .paired {
@@ -137,6 +141,9 @@ extension StreamSession {
         // connection so the decoder's VideoSink has an
         // AVSampleBufferDisplayLayer to enqueue into the moment frames
         // start arriving.
+        // Telemetry: stamp the MainActor subsystem/window build leg, isolating it
+        // from the launch network legs above (build_ms).
+        let buildStart = Date()
         let setup: (StreamWindow, InputForwarder, VideoDecoder) =
             await buildStreamSubsystems(StreamSetupOptions(
                 config: config,
@@ -148,6 +155,8 @@ extension StreamSession {
                 controllerQuitChordProvider: controllerQuitChordProvider,
                 customControllerChordProvider: customControllerChordProvider,
                 onBackgroundedChanged: onBackgroundedChanged))
+        ConnectTimingTelemetry.shared.recordLaunchLeg(
+            buildMs: Date().timeIntervalSince(buildStart) * 1000.0)
         self.window = setup.0
         self.input = setup.1
         self.videoDecoder = setup.2

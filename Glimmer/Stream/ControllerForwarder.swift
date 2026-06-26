@@ -610,6 +610,10 @@ extension InputForwarder {
         // GameController invokes this on the main queue; assume MainActor so
         // Swift 6 strict concurrency is satisfied.
         gamepad.extendedGamepad?.valueChangedHandler = { [weak self] (pad, _) in
+            // Stamp handler-entry FIRST (measurement-only): the batcher takes this
+            // to observe the pre-hop main-thread deliver→enqueue leg. No work moves.
+            InputDeliverStamp.shared.stamp(
+                slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.sendGamepadUpdate(pad: pad, slot: slot)
