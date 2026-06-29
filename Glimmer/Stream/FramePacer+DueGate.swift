@@ -149,9 +149,10 @@ extension FramePacer {
         if willPresent(beat.newest.sampleBuffer) {
             noteFramePresented(beat.newest.sampleBuffer)
         } else {
-            // The renderer refused the freshest frame too - feed the reject
-            // streak so a latched-unready renderer steers the ladder to the
-            // flush (see noteGateReleaseRejected).
+            // The renderer refused the freshest frame too - nothing fresh reached
+            // the screen, so this IS a felt gap (a successful drop-to-newest is not).
+            // Feed the reject streak so a latched-unready renderer steers to flush.
+            stats.recordPresentationGap()
             noteGateReleaseRejected()
         }
     }

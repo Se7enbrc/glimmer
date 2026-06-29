@@ -87,6 +87,10 @@ extension TelemetryRenderer {
             builder.emitCounter("glimmer_drops_presentation_late_total",
                                 "Frames dropped (pacer could not present in time).", value)
         }
+        if let value = snap.presentationGaps {
+            builder.emitCounter("glimmer_present_perceived_gaps_total",
+                                "Perceived present gaps (renderer showed nothing fresh) - the badge's felt-stutter signal.", value)
+        }
         builder.emitCounter("glimmer_drops_suppressed_total",
                             "Frames dropped-to-newest while presentation was suppressed (designed).",
                             extras.suppressedDropTotal)

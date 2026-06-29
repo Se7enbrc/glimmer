@@ -176,6 +176,7 @@ struct TelemetrySnapshot: Sendable {
     var dropsDecoder: UInt64?
     var dropsBackpressure: UInt64?
     var dropsPresentationLate: UInt64?
+    var presentationGaps: UInt64?
 
     // input
     var inputEventsPerSecond: Double?
@@ -412,6 +413,8 @@ struct TelemetrySource: Sendable {
     var decoderDrops: @Sendable () -> UInt64
     var backpressureDrops: @Sendable () -> UInt64
     var presentationLateDrops: @Sendable () -> UInt64
+    /// Perceived present gaps (renderer showed nothing fresh) - the felt-stutter signal.
+    var presentationGaps: @Sendable () -> UInt64
     /// ENet RTT (fractional ms, high-res local clock) + reliable-stream health.
     var estimatedRtt: @Sendable () -> (rttMs: Double, varianceMs: Double)?
     var enetHealth: @Sendable () -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)?

@@ -149,6 +149,9 @@ public struct StreamStatsSnapshot: Sendable {
     /// cause, distinct from decoder and renderer-backpressure drops. Session-
     /// cumulative; surfaced in the Smoothness row's suffix when non-zero.
     public var presentationLateDrops: UInt64?
+    /// Perceived present gaps (renderer showed nothing fresh) - the badge's
+    /// felt-stutter signal. Session-cumulative; catch-up discards don't count.
+    public var presentationGaps: UInt64?
 
     /// Live audio-config label ("Stereo", "5.1 surround", "7.1 surround").
     /// Read from the session-active AudioConfig - post-codec-agent the

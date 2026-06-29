@@ -40,6 +40,7 @@ extension StreamSession {
             decoderDrops: { [weak decoder] in decoder?.telemetryDecoderDrops() ?? 0 },
             backpressureDrops: { [weak decoder] in decoder?.telemetryBackpressureDrops() ?? 0 },
             presentationLateDrops: { [weak decoder] in decoder?.telemetryPresentationLateDrops() ?? 0 },
+            presentationGaps: { [weak decoder] in decoder?.telemetryPresentationGaps() ?? 0 },
             estimatedRtt: { [weak decoder] in decoder?.telemetryEstimatedRtt() },
             enetHealth: { [weak decoder] in decoder?.telemetryEnetHealth() },
             pacingLiveness: { [weak decoder] in decoder?.telemetryPacingLiveness() },

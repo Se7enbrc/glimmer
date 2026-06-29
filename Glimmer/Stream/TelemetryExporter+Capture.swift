@@ -90,6 +90,7 @@ extension TelemetryExporter {
         snap.dropsDecoder = source.decoderDrops()
         snap.dropsBackpressure = source.backpressureDrops()
         snap.dropsPresentationLate = source.presentationLateDrops()
+        snap.presentationGaps = source.presentationGaps()
 
         fillRates(into: &snap, now: now)
         fillAuxiliarySignals(into: &snap, stats: stats)

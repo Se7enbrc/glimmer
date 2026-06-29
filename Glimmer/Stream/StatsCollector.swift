@@ -157,6 +157,10 @@ final class StatsCollector: @unchecked Sendable {
     /// drops (VT rejected the bitstream) and renderer-backpressure drops (the
     /// OS renderer queue was full). Session-cumulative.
     var presentationLateDrops: UInt64 = 0
+    /// Perceived present GAPS: a drop where the renderer showed nothing fresh
+    /// (drop-to-newest it also refused) - the felt-stutter signal. Catch-up
+    /// discards that DID present a newer frame are NOT counted. Session-cumulative.
+    var presentationGaps: UInt64 = 0
 
     /// On-cadence presents this window: |cadence error| within tolerance of the
     /// stream's frame interval. Reset each snapshot alongside the FPS window.
@@ -240,6 +244,7 @@ final class StatsCollector: @unchecked Sendable {
         totalDecoderDropped = 0
         rendererBackpressureDrops = 0
         presentationLateDrops = 0
+        presentationGaps = 0
         onTimePresents = 0
         latePresents = 0
         presentCadenceErrorMsSum = 0
@@ -323,6 +328,7 @@ final class StatsCollector: @unchecked Sendable {
         snap.pacingQueueDepth = lastPacingDepth
         snap.pacingQueueDepthMax = maxPacingDepth
         snap.presentationLateDrops = presentationLateDrops
+        snap.presentationGaps = presentationGaps
 
         return snap
     }

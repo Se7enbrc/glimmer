@@ -664,6 +664,7 @@ extension StreamSession {
 @MainActor
 private final class PerceivedHitchBox {
     private var prevLate: UInt64 = 0
+    private var prevGap: UInt64 = 0
     private var prevTime: CFTimeInterval = 0
     private var firstTime: CFTimeInterval = 0
 
@@ -672,11 +673,12 @@ private final class PerceivedHitchBox {
     /// the instant a game starts. ~6s covers the launch transient.
     private let graceSeconds: CFTimeInterval = 6.0
 
-    /// True when the PRESENT path is dropping frames the user would feel - keyed
-    /// ONLY on unambiguous loss (render-gap + late-drops). NOT on stale-repeats
-    /// or cadence error: at content fps < refresh the panel re-shows frames to
-    /// fill idle vsyncs (smooth by design) and cadence tracks the vsync grid, so
-    /// both mis-fire. The banner's leaky integrator debounces; delta guards a reset.
+    /// True when the PRESENT path drops frames the user would feel. Render-gap
+    /// (decoded-but-never-rendered) catches sustained starvation; the late-drop
+    /// burst is gated on a PERCEIVED GAP (renderer showed nothing fresh) so healthy
+    /// wifi jitter - drop-to-newest that DOES present - no longer mis-fires.
+    /// Stale-repeats and cadence stay excluded (normal at fps<refresh); the
+    /// banner's leaky integrator debounces; deltas guard a reconnect reset.
     func perceivedHitch(snap: StreamStatsSnapshot) -> Bool {
         let now = CACurrentMediaTime()
         if firstTime == 0 { firstTime = now }
@@ -686,16 +688,20 @@ private final class PerceivedHitchBox {
         let late = snap.presentationLateDrops ?? 0
         let lateRate = (dt > 0 && late >= prevLate) ? Double(late - prevLate) / dt : 0
         prevLate = late
+        let gap = snap.presentationGaps ?? 0
+        let gapped = gap > prevGap   // a real gap (renderer showed nothing) this tick
+        prevGap = gap
 
         if now - firstTime < graceSeconds { return false }
 
         var hitch = false
-        // Real frame loss: decoded but never rendered.
+        // Real frame loss: decoded but never rendered (sustained starvation).
         if let decoded = snap.decodedFps, let rendered = snap.renderedFps, decoded > 0 {
             if (decoded - rendered) / decoded > 0.18 { hitch = true }
         }
-        // Late drops.
-        if lateRate > 12.0 { hitch = true }
+        // Late-drop burst - but only when the renderer actually showed nothing
+        // fresh. A drop-to-newest that catches up isn't a felt stutter.
+        if lateRate > 12.0 && gapped { hitch = true }
         return hitch
     }
 }

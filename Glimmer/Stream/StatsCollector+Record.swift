@@ -262,6 +262,23 @@ extension StatsCollector {
         return presentationLateDrops
     }
 
+    /// Record a PERCEIVED present gap: a drop where the present path showed nothing
+    /// fresh (drop-to-newest the renderer also refused) - the felt-stutter signal,
+    /// distinct from catch-up discards (which DID present a newer frame).
+    func recordPresentationGap() {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        presentationGaps &+= 1
+    }
+
+    /// Total perceived present gaps since reset(). Exported as the badge's
+    /// felt-stutter telemetry signal.
+    func presentationGapCount() -> UInt64 {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return presentationGaps
+    }
+
     /// Sample the pacing queue depth once per link tick. Updates the live gauge
     /// and the window peak. Called from FramePacer on the pacing queue at the
     /// display's vsync rate (60-240 Hz).

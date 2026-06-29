@@ -171,6 +171,9 @@ extension VideoDecoder {
     nonisolated func telemetryPresentationLateDrops() -> UInt64 {
         statsCollector.presentationLateDropCount()
     }
+    nonisolated func telemetryPresentationGaps() -> UInt64 {
+        statsCollector.presentationGapCount()
+    }
     /// Pacer present-side liveness (adaptive depth, queue depth) for the
     /// exporter; nil when pacing isn't up. `livenessSnapshot()` is lock-guarded.
     nonisolated func telemetryPacingLiveness() -> FramePacer.LivenessSnapshot? {
