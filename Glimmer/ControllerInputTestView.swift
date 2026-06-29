@@ -47,7 +47,10 @@ final class ControllerMonitor {
         // Create / Mute) that GameController doesn't deliver - same source the
         // stream uses. ONLY when the user has opted in (gates the Input
         // Monitoring prompt). Refresh the view when they change.
-        if DualSenseHID.isEnabled {
+        // Don't install during a live stream: onChange is a single-owner slot the
+        // stream's ControllerForwarder holds, so grabbing it here would drop the
+        // stream's center-button uplink until a resync.
+        if DualSenseHID.isEnabled, !isStreaming() {
             DualSenseHID.shared.onChange = { [weak self] in self?.revision &+= 1 }
             DualSenseHID.shared.retain()
             hidRetained = true

@@ -461,7 +461,7 @@ extension AudioDecoder {
         let bufferFillMs = Double(aheadFrames) / rate * 1000.0
         // Drive the drift-tracking resampler (self-rate-limited to ~4Hz inside):
         // steers the varispeed rate by the buffer-fill error to absorb the host↔Mac
-        // clock skew. Single caller, so the resampler state needs no lock.
+        // clock skew. Its PI state is audioMeterLock-guarded (two callers).
         driveResampler(fillMs: bufferFillMs, targetMs: targetMs, engaged: resamplerEngaged)
         var driftMs: Double?
         // Measure drift over the CURRENT playout segment only: wall and media-played
@@ -485,9 +485,13 @@ extension AudioDecoder {
         // is carrying the skew within its real envelope (|integral| bounded AND drift
         // bounded, or drift not yet measured). Railing ⇒ deep cushion is load-bearing.
         let driftBounded = driftMs.map { abs($0) <= Self.cushionReleaseDriftBoundMs } ?? true
-        let converged = abs(resamplerIntegralPpm) <= Self.cushionReleaseSkewPpm && driftBounded
+        // Read the PI state under the meter lock (driveResampler mutates it under the
+        // same lock) so the converged verdict + the published ppm can't tear against
+        // the completion-thread driveResampler call.
         audioMeterLock.lock()
+        let converged = abs(resamplerIntegralPpm) <= Self.cushionReleaseSkewPpm && driftBounded
         resamplerSkewConverged = converged
+        let appliedPpm = resamplerEpsPpm
         audioMeterLock.unlock()
         TelemetryCounters.shared.setAudioState(
             TelemetryCounters.AudioState(
@@ -499,9 +503,8 @@ extension AudioDecoder {
                 // it isn't carried here; the exporter pulls it directly.
                 bufferFillMinMs: nil,
                 rePrimeTotal: rePrimes,
-                // The resampler's applied rate offset (read on this same ~4Hz single-
-                // caller path, no extra lock) - makes the loop visible vs av_skew noise.
-                resamplerPpm: resamplerEpsPpm,
+                // The resampler's applied rate offset - makes the loop visible vs av_skew noise.
+                resamplerPpm: appliedPpm,
                 // Engine-running mirror: 1 = AVAudioEngine up. Catches the post-
                 // reconnect "packets flow but playout dead" latch in one query.
                 engineRunning: engineUp))

@@ -85,11 +85,10 @@ final class EnvSignalController: @unchecked Sendable {
     /// When FALSE both actuators fall back to their CURRENT self-deciding
     /// behavior, unchanged - the old code paths stay reachable behind this flag,
     /// so the build compiles to "identical to today" with the flag off. A simple
-    /// process-global flag (read on the actuators' own ticks, set at most once at
-    /// bring-up) so we can A/B without a rebuild. `nonisolated(unsafe)`: a plain
-    /// Bool read/write is tear-free and it is not flipped mid-window in practice,
-    /// so no synchronization is needed (the A/B is a compile-in-and-flip dial).
-    nonisolated(unsafe) static var reconcilerEnabled = true
+    /// process-global flag, read on the actuators' own ticks. A compile-time
+    /// constant (`let`): there is no runtime writer, so the A/B is a flip-and-
+    /// rebuild dial - concurrency-safe by immutability, no `nonisolated(unsafe)`.
+    static let reconcilerEnabled = true
 
     // MARK: - Link class
 

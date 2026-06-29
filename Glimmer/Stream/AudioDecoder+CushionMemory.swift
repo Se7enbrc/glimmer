@@ -526,41 +526,47 @@ extension AudioDecoder {
     /// host↔Mac clock offset (its whole job), the PROPORTIONAL answers transient
     /// fill excursions, both slew-limited so the rate (hence pitch) never steps
     /// audibly. When NOT engaged (pre-roll / re-prime / drain) it slews back to
-    /// rate 1.0 but HOLDS the integral (the clock offset survives a drain). Single
-    /// caller, so the resampler state needs no lock.
+    /// rate 1.0 but HOLDS the integral (the clock offset survives a drain). PI
+    /// state is `audioMeterLock`-guarded (both publishAudioState callers).
     func driveResampler(fillMs: Double, targetMs: Double, engaged: Bool) {
+        // PI state guarded by `audioMeterLock` (this runs from both publishAudioState
+        // callers - decode path AND completion handler). Apply the computed rate
+        // after unlocking, since applyVarispeedRate only enqueues onto its queue.
+        audioMeterLock.lock()
         // Self-rate-limit to ~4Hz: publishAudioState fires per decoded packet
         // (~200Hz) and drift is ppm-slow, so a fast loop only adds noise.
         let now = DispatchTime.now().uptimeNanoseconds
-        guard now &- lastResamplerUpdateNanos >= Self.resamplerUpdateIntervalNanos else { return }
+        guard now &- lastResamplerUpdateNanos >= Self.resamplerUpdateIntervalNanos else {
+            audioMeterLock.unlock(); return
+        }
         lastResamplerUpdateNanos = now
 
-        guard engaged else {
+        var rateToApply: Float?
+        if !engaged {
             // Pre-roll / re-prime / drain: slew the APPLIED rate to 1.0 (no pitch
             // step) but HOLD the integral - the host↔Mac clock offset survives a
             // drain, so re-engage with it already learned, not re-converged from 0.
-            // The ×0.97 bleed only runs while packets flow (an active re-prime); a
-            // true silence stops calling this, so it can't bleed a real offset away.
             resamplerIntegralPpm *= Self.resamplerIntegralHoldFactor
             if resamplerEpsPpm != 0 {
                 resamplerEpsPpm += max(-Self.resamplerSlewPpm,
                                        min(Self.resamplerSlewPpm, -resamplerEpsPpm))
-                applyVarispeedRate(Float(1.0 + resamplerEpsPpm * 1e-6))
+                rateToApply = Float(1.0 + resamplerEpsPpm * 1e-6)
             }
-            return
+        } else {
+            // Fill above the cushion setpoint ⇒ too much buffered ⇒ consume faster
+            // (rate > 1). INTEGRAL absorbs the steady ppm offset; PROPORTIONAL answers
+            // transient excursions; the deadband stops accrual on sub-ms noise.
+            let error = fillMs - targetMs
+            let e = abs(error) < Self.resamplerDeadbandMs ? 0 : error
+            resamplerIntegralPpm = clampResamplerPpm(resamplerIntegralPpm + Self.resamplerKiPpmPerMs * e)
+            let targetPpm = clampResamplerPpm(Self.resamplerKpPpmPerMs * e + resamplerIntegralPpm)
+            // Slew-limit the APPLIED offset so the rate (hence pitch) never steps.
+            resamplerEpsPpm += max(-Self.resamplerSlewPpm,
+                                   min(Self.resamplerSlewPpm, targetPpm - resamplerEpsPpm))
+            rateToApply = Float(1.0 + resamplerEpsPpm * 1e-6)
         }
-        // Fill above the cushion setpoint ⇒ too much buffered ⇒ consume faster
-        // (rate > 1). The INTEGRAL absorbs the steady ppm clock offset (its whole
-        // job); the PROPORTIONAL term answers transient fill excursions. The
-        // deadband stops the integral accruing on sub-ms noise once converged.
-        let error = fillMs - targetMs
-        let e = abs(error) < Self.resamplerDeadbandMs ? 0 : error
-        resamplerIntegralPpm = clampResamplerPpm(resamplerIntegralPpm + Self.resamplerKiPpmPerMs * e)
-        let targetPpm = clampResamplerPpm(Self.resamplerKpPpmPerMs * e + resamplerIntegralPpm)
-        // Slew-limit the APPLIED offset so the rate (hence pitch) never steps.
-        resamplerEpsPpm += max(-Self.resamplerSlewPpm,
-                               min(Self.resamplerSlewPpm, targetPpm - resamplerEpsPpm))
-        applyVarispeedRate(Float(1.0 + resamplerEpsPpm * 1e-6))
+        audioMeterLock.unlock()
+        if let rateToApply { applyVarispeedRate(rateToApply) }
     }
 
     private func clampResamplerPpm(_ v: Double) -> Double {

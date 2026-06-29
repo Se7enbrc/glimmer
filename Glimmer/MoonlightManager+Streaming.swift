@@ -314,7 +314,9 @@ extension MoonlightManager {
         hostStatusTask?.cancel()
         hostStatusTask = nil
 
-        Task { await beforeStreamStart() }
+        // Synchronous (not a Task): a fire-and-forget restore from the prior session
+        // could otherwise land after this mute and un-mute the new stream.
+        beforeStreamStart()
 
         let cfg = nativeStreamConfig(for: host)
         let info = nativeServerInfo(for: host)
@@ -512,7 +514,7 @@ extension MoonlightManager {
         }) {
             main.makeKeyAndOrderFront(nil)
         }
-        Task { await self.afterStreamEnd() }
+        afterStreamEnd()
     }
 
     /// Map a start()-throw error to an honest user-facing banner. The

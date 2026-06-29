@@ -34,7 +34,9 @@ extension StreamSession {
         // don't spew sends at a gone backend. It re-arms on the next
         // `.connectionEstablished` (handleConnectionEdge → setReady(true)).
         let inp = input
-        Task { @MainActor in inp?.setReady(false) }
+        // FIFO main-queue hop (NOT Task{}) so this pause can't reorder ahead of the
+        // reconnect's setReady(true) - see handleConnectionEdge.
+        DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
 
         // Nothing to recover if the user is already tearing down, or we're not
         // (or no longer) the live session.

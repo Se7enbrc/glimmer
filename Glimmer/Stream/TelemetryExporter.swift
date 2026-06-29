@@ -251,7 +251,7 @@ final class TelemetryExporter: @unchecked Sendable {
             // Install the engine EVENT sink so components with no handle to this
             // exporter (the audio receiver) can land event rows in the NDJSON.
             // Gate-on path only (this whole exporter is), cleared in `stop()`.
-            Self.eventSink = self
+            Self.eventSinkBox.withLock { $0 = self }
             // Flush EVENT rows that fired BEFORE this exporter came up (a warm
             // host's audio_ttf beats the exporter by construction, losing its TTF
             // row by tens of ms). Each row keeps its true event-time stamp; the
@@ -292,7 +292,7 @@ final class TelemetryExporter: @unchecked Sendable {
             // Clear the engine EVENT sink first: a row posted after this lands
             // in the pre-start pen (cleared at the next connect edge) instead
             // of racing the file close below.
-            Self.eventSink = nil
+            Self.eventSinkBox.withLock { $0 = nil }
             self.captureTimer?.cancel()
             self.captureTimer = nil
             self.listener?.cancel()
@@ -395,15 +395,10 @@ final class TelemetryExporter: @unchecked Sendable {
     // MARK: - Engine EVENT sink (audio_ttf / audio_pending)
 
     /// Process-global handle for EVENT rows from engine components that have no
-    /// path to this session's exporter instance: the bookmark chord reaches
-    /// `recordBookmark` through StreamSession (which owns the exporter), but the
-    /// audio receiver sits behind the native backend with no such owner chain.
-    /// `start()` installs the live exporter, `stop()` clears it - the same
-    /// install/clear + `nonisolated(unsafe)` single-writer discipline as
-    /// `FrameTimingTracker.shared` (written only at session start/teardown, read
-    /// at rare event sites). nil whenever telemetry is off (the exporter is never
-    /// built), so an off-path emitter pays one optional load and nothing else.
-    nonisolated(unsafe) private static var eventSink: TelemetryExporter?
+    /// Engine EVENT sink: installed by `start()`, cleared by `stop()`, read by
+    /// `recordEvent` from any thread - so `eventSinkBox` guards the slot (an
+    /// unsynchronized load racing the teardown release would be a use-after-free).
+    private static let eventSinkBox = OSAllocatedUnfairLock<TelemetryExporter?>(initialState: nil)
 
     /// Bounded holding pen for EVENT rows that fire BEFORE the exporter's sink
     /// is installed. The audio receiver spins up mid-handshake while the
@@ -450,7 +445,7 @@ final class TelemetryExporter: @unchecked Sendable {
     /// (see `PreStartEventBuffer`) and flushed at `start()`, so a pre-start
     /// one-shot is no longer lost; no-op-safe before the file is open.
     static func recordEvent(_ fields: [String]) {
-        guard let exporter = eventSink else {
+        guard let exporter = eventSinkBox.withLock({ $0 }) else {
             preStartEvents.append(fields)
             return
         }

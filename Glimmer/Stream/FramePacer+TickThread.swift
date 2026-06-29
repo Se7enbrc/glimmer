@@ -67,6 +67,10 @@ final class PacerTickThread: @unchecked Sendable {
     /// the loop runs, so a `perform(waitUntilDone:true)` against them could block
     /// forever on an unstarted loop. `add()` and `start()` gate on this instead.
     private var loopRunning = false
+    /// Set true (under `lock`) by `stop()`; re-checked by the thread body just
+    /// before `CFRunLoopRun()`. A stop during bring-up fires CFRunLoopStop into a
+    /// not-yet-running loop (lost), so the thread skips the run rather than orphan.
+    private var stopRequested = false
     private var lock = os_unfair_lock_s()
     /// Released by the thread body once the loop is published, so `start()`
     /// returns only after the run loop can take the link.
@@ -131,6 +135,13 @@ final class PacerTickThread: @unchecked Sendable {
                 // Flag off: the thread stays userInteractive, so the RT gauge is 0.
                 TelemetryCounters.shared.setPacerTickRealtime(false)
             }
+            // A stop() during bring-up may have fired CFRunLoopStop before the loop
+            // ran (lost) - re-check under the lock and skip the run so the thread
+            // can't block forever on a missed stop.
+            os_unfair_lock_lock(&self.lock)
+            let aborted = self.stopRequested
+            os_unfair_lock_unlock(&self.lock)
+            if aborted { exitSignal.signal(); return }
             // CFRunLoopRun blocks until CFRunLoopStop breaks it; RunLoop.run()'s
             // no-source early-return is the freeze this avoids.
             CFRunLoopRun()
@@ -180,6 +191,7 @@ final class PacerTickThread: @unchecked Sendable {
     /// break CFRunLoopRun so the thread returns. Idempotent.
     func stop() {
         os_unfair_lock_lock(&lock)
+        stopRequested = true
         let cf = cfRunLoop
         let exitSignal = exited
         runLoop = nil
@@ -237,9 +249,13 @@ final class PacerTickThread: @unchecked Sendable {
         // overlay doesn't expose; derive the integer_t-word count from the struct.
         let count = mach_msg_type_number_t(
             MemoryLayout<thread_time_constraint_policy_data_t>.stride / MemoryLayout<integer_t>.stride)
+        // mach_thread_self() returns a +1 send right; balance it so each tick-thread
+        // spawn doesn't leak a thread-port reference.
+        let machThread = mach_thread_self()
+        defer { mach_port_deallocate(mach_task_self_, machThread) }
         let kr = withUnsafeMutablePointer(to: &policy) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                thread_policy_set(mach_thread_self(), thread_policy_flavor_t(THREAD_TIME_CONSTRAINT_POLICY),
+                thread_policy_set(machThread, thread_policy_flavor_t(THREAD_TIME_CONSTRAINT_POLICY),
                                   $0, count)
             }
         }

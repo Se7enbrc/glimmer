@@ -164,12 +164,11 @@ enum Diag {
 /// handle + flush timer are confined to `flushQueue`.
 final class SessionLogFileSink: @unchecked Sendable {
 
-    /// Gate-checked singleton. Non-nil ONLY while a telemetry/debug session has it
-    /// installed; read on the (warm, not tight-inner-loop) logging path as
-    /// `SessionLogFileSink.shared`. `nonisolated(unsafe)`: written only at session
-    /// start/teardown (single writer, well-ordered against the reads), the same
-    /// discipline `FrameTimingTracker.shared` uses.
-    nonisolated(unsafe) static var shared: SessionLogFileSink?
+    /// Gate-checked singleton, non-nil only while a telemetry/debug session has it
+    /// installed. `sharedBox` guards the slot: an unsynchronized load racing
+    /// teardown's release of the previous sink would be an ARC use-after-free.
+    private static let sharedBox = OSAllocatedUnfairLock<SessionLogFileSink?>(initialState: nil)
+    static var shared: SessionLogFileSink? { sharedBox.withLock { $0 } }
 
     /// Install a fresh sink iff the gate is on. Called from the session's
     /// telemetry wiring. No-op (nothing installed, `shared` stays nil ⇒ hot path
@@ -177,17 +176,27 @@ final class SessionLogFileSink: @unchecked Sendable {
     /// so this type has no dependency direction into the Stream module.
     static func startIfEnabled(enabled: Bool) {
         guard enabled else { return }
-        guard shared == nil else { return }
-        let sink = SessionLogFileSink()
-        sink.open()
-        shared = sink
+        // Check-and-install under the lock so concurrent enables can't both create
+        // a sink. open() runs off-lock; it only dispatches onto flushQueue.
+        let sink: SessionLogFileSink? = sharedBox.withLock { box in
+            guard box == nil else { return nil }
+            let created = SessionLogFileSink()
+            box = created
+            return created
+        }
+        sink?.open()
     }
 
     /// Tear down + clear the singleton. Flushes whatever is pending and closes the
     /// file, so the per-session log is complete. Idempotent.
     static func stop() {
-        let sink = shared
-        shared = nil
+        // Take the sink out of the slot (releasing the box's strong ref) before
+        // closing off-lock, so no reader observes a half-released reference.
+        let sink = sharedBox.withLock { box -> SessionLogFileSink? in
+            let previous = box
+            box = nil
+            return previous
+        }
         sink?.close()
     }
 

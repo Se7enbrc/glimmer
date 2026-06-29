@@ -224,15 +224,16 @@ public final class VideoDecoder {
     /// so the static VT callback closure can record from the decode queue.
     nonisolated let statsCollector = StatsCollector()
 
-    // The streaming engine. Injected by StreamSession on the main actor before
-    // the stream starts (alongside attach). IDR requests and HDR-metadata pulls
-    // go through `backend?`. Read from the nonisolated decode-queue (IDR) and
-    // from the main actor (HDR refresh);
-    // it's written once on MainActor before any backend callback can fire, then only
-    // read - the same single-writer / read-everywhere discipline as the other
-    // nonisolated(unsafe) state in this file. Optional so a pre-attach decode
-    // path (impossible today) degrades to a no-op rather than crashing.
-    nonisolated(unsafe) var backend: StreamingBackend?
+    // The streaming engine: set at stream start and re-pointed by setBackend on a
+    // silent reconnect while the decode queue (IDR) / main actor (HDR refresh) read
+    // it, so the reference load/store is `backendLock`-guarded (mirrors `_displayLayer`;
+    // StreamingBackend isn't Sendable, so OSAllocatedUnfairLock<T> can't hold it).
+    let backendLock = NSLock()
+    nonisolated(unsafe) var _backend: StreamingBackend?
+    nonisolated var backend: StreamingBackend? {
+        get { backendLock.lock(); defer { backendLock.unlock() }; return _backend }
+        set { backendLock.lock(); defer { backendLock.unlock() }; _backend = newValue }
+    }
 
     // Display layer. Set on the main actor before stream start, dropped on
     // teardown. The decode queue reads it from the VT output callback;

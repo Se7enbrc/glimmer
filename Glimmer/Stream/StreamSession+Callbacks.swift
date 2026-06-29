@@ -29,7 +29,10 @@ extension StreamSession {
             // reset until a full stop().
             reachedLiveState = true
             let inp = input
-            Task { @MainActor in inp?.setReady(true) }
+            // FIFO main-queue hop (NOT Task{}, which has no inter-task ordering): a
+            // terminate's setReady(false) must not reorder ahead of this establish
+            // and leave input stuck disabled after a reconnect.
+            DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(true) } }
             if let state = connectFlowState {
                 OSSignposter.network.endInterval(
                     "ConnectFlow", state, "outcome=established")
@@ -37,7 +40,7 @@ extension StreamSession {
             }
         case .connectionTerminated:
             let inp = input
-            Task { @MainActor in inp?.setReady(false) }
+            DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
         default:
             break
         }

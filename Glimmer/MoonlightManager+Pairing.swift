@@ -18,11 +18,11 @@ extension MoonlightManager {
 
     // MARK: Stream lifecycle hooks
 
-    func beforeStreamStart() async {
+    func beforeStreamStart() {
         if muteMacWhileStreaming { muteMac() }
     }
 
-    func afterStreamEnd() async {
+    func afterStreamEnd() {
         // Keyed off the did-mute latch inside restoreMac() (prePausedMacVolume
         // non-nil), NOT the live muteMacWhileStreaming flag: the toggle can be
         // flipped OFF mid-stream, and the old flag-gated restore then left the
@@ -95,6 +95,10 @@ extension MoonlightManager {
     /// pins the resulting server cert, and persists the pairing so future
     /// streams skip straight to /launch.
     func pair(hostnameOrIP: String, pin: String) async {
+        // Re-entrancy guard: a double-tap must not launch two concurrent handshakes
+        // against Sunshine's single-session pairing state. Race-free - this check and
+        // the `pairingInFlight = true` below run synchronously on the main actor.
+        guard !pairingInFlight else { return }
         let pattern = #"^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$"#
         guard hostnameOrIP.range(of: pattern, options: .regularExpression) != nil,
               hostnameOrIP.count <= 253,

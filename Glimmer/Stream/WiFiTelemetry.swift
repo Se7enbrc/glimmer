@@ -276,21 +276,30 @@ final class StreamRouteProbe: @unchecked Sendable {
     /// `start()`; everything lands on this probe's own queue.
     func start() {
         queue.async { [weak self] in self?.probeAndPublish() }
-        let monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { [weak self] _ in
+        let newMonitor = NWPathMonitor()
+        newMonitor.pathUpdateHandler = { [weak self] _ in
             // Path changes fire for ANY route-table event (dock/undock, VPN up,
             // Wi-Fi join) - re-probe each time; the change-detection below
             // dedupes, so a same-route update costs a few syscalls and no row.
             self?.probeAndPublish()
         }
-        monitor.start(queue: queue)
-        self.monitor = monitor
+        newMonitor.start(queue: queue)
+        // Guard the slot with stateLock (like every other field) and cancel any prior
+        // monitor before replacing it, so a re-start can't leak one or double-probe.
+        stateLock.lock()
+        let old = monitor
+        monitor = newMonitor
+        stateLock.unlock()
+        old?.cancel()
     }
 
     /// Stop the path monitor. Idempotent; called from the exporter's `stop()`.
     func stop() {
-        monitor?.cancel()
+        stateLock.lock()
+        let old = monitor
         monitor = nil
+        stateLock.unlock()
+        old?.cancel()
     }
 
     /// The latest route snapshot for this capture tick. Lock-guarded read; if

@@ -277,12 +277,11 @@ final class LatencyHistograms: @unchecked Sendable {
 /// histograms + trace writer are themselves Sendable.
 final class FrameTimingTracker: @unchecked Sendable {
 
-    /// The gate-checked singleton. `start()` installs it iff telemetry is on;
-    /// `stop()` clears it. Read on the hot path as `FrameTimingTracker.shared`.
-    /// `nonisolated(unsafe)`: written only at session start/teardown (single
-    /// writer, well-ordered against the reads), read everywhere - the same
-    /// discipline the decoder's other `nonisolated(unsafe)` slots use.
-    nonisolated(unsafe) static var shared: FrameTimingTracker?
+    /// The gate-checked singleton, installed by `start()` iff telemetry is on and
+    /// cleared by `stop()`. `sharedBox` guards the slot: a per-frame read racing
+    /// teardown's release of the previous tracker would be an ARC use-after-free.
+    private static let sharedBox = OSAllocatedUnfairLock<FrameTimingTracker?>(initialState: nil)
+    static var shared: FrameTimingTracker? { sharedBox.withLock { $0 } }
 
     /// Install a fresh tracker iff the gate is on, and start its trace writer.
     /// Called from the exporter's `start()`. No-op (and nothing installed) when
@@ -291,13 +290,16 @@ final class FrameTimingTracker: @unchecked Sendable {
         guard TelemetryGate.isEnabled else { return }
         let tracker = FrameTimingTracker(sessionId: sessionId)
         tracker.traceWriter.start(isoStamp: isoStamp)
-        shared = tracker
+        sharedBox.withLock { $0 = tracker }
     }
 
     /// Tear down + clear the singleton. Flushes + closes the trace writer.
     static func stop() {
-        let tracker = shared
-        shared = nil
+        let tracker = sharedBox.withLock { box -> FrameTimingTracker? in
+            let previous = box
+            box = nil
+            return previous
+        }
         tracker?.traceWriter.stop()
     }
 

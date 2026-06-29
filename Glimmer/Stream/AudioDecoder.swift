@@ -105,9 +105,9 @@ public final class AudioDecoder: @unchecked Sendable {
     /// Drift-resampler PI state (the loop lives in `driveResampler`,
     /// AudioDecoder+CushionMemory.swift). `resamplerIntegralPpm` accumulates the
     /// steady host↔Mac clock offset; the applied `resamplerEpsPpm` slews toward the
-    /// PI target so the varispeed rate never steps audibly. Touched only on the
-    /// ~1Hz `publishAudioState` cadence (single caller) so no lock; HELD (slow-bled,
-    /// not zeroed) across disengage since the clock offset survives a drain.
+    /// PI target so the varispeed rate never steps audibly. Guarded by
+    /// `audioMeterLock` (publishAudioState drives it from two threads); HELD
+    /// (slow-bled, not zeroed) across disengage since the offset survives a drain.
     var resamplerIntegralPpm: Double = 0
     var resamplerEpsPpm: Double = 0
     /// `DispatchTime` ns of the last PI update - `publishAudioState` (hence
