@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.6.52 - 2026-06-29
+
+Reliability pass from a full concurrency audit - a class of rare races that
+could surface as a crash on disconnect, audio drift, held input after a
+reconnect, or a stream coming up muted.
+
+Closed a recurring pattern where a per-session object (the diagnostics log sink,
+frame-timing tracker, telemetry event sink, decoder backend handle) could be
+torn down on one thread while another was still reading it - the kind of
+use-after-free that only bites under an unlucky disconnect. The audio
+drift-corrector's internal state is now properly synchronized, the frame pacer's
+real-time thread can no longer be orphaned if a stream stops the instant it
+starts, input no longer stays stuck disabled after a silent reconnect, and
+starting a new stream right after the last one can't leave it muted.
+
 ## 2026.6.51 - 2026-06-26
 
 Magic resolution-aware mouse traversal - fast flicks cover the screen
