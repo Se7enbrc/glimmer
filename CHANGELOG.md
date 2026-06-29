@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.6.53 - 2026-06-29
+
+The "Stream stuttering" badge is now much harder to fool. On a healthy Wi-Fi
+link with normal jitter, the player drops a stale frame and immediately shows
+the freshest one - a catch-up you never see, not a stutter - yet the badge used
+to count those and light up anyway. It now lights only when the screen actually
+held on a frame (a real hitch), so a smooth-but-jittery stream stops getting
+flagged. Genuine stutters - sustained dropped or held frames - still trip it.
+
 ## 2026.6.52 - 2026-06-29
 
 Reliability pass from a full concurrency audit - a class of rare races that
