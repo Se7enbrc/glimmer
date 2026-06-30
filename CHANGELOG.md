@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.6.54 - 2026-06-30
+
+Reliability + smoothness pass from a deep code review.
+
+The adaptive jitter buffer is working again on the default install. It steers
+the playout buffer deeper on a jittery link to absorb hitches, but it had
+quietly gone dormant unless diagnostics were enabled - so a normal install sat
+at the shallowest depth and never adapted. It now tracks live network jitter
+directly, so a wifi or congested link gets the deeper buffer it needs.
+
+Plus a batch of edge-case fixes: quitting mid-stream no longer leaves the Mac's
+pointer acceleration overridden; audio recovers if the output device isn't ready
+the instant you switch it; a connection that fails right as the stream window
+opens can't steal focus or hide the cursor; waking on a high-latency link
+reconnects faster; the pairing success screen's buttons are clickable again; a
+stale error no longer names the wrong host after switching machines; and the
+reconnect banner is announced to VoiceOver.
+
 ## 2026.6.53 - 2026-06-29
 
 The "Stream stuttering" badge is now much harder to fool. On a healthy Wi-Fi
