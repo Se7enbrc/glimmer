@@ -132,9 +132,22 @@ extension MoonlightManager {
         )
         info.pairStatus = .unpaired
 
+        // Reachability first, in its OWN catch: a connectivity failure (host offline /
+        // wrong address / DNS / TLS) gets a host-named message, distinct from a
+        // PIN/handshake failure - and fires BEFORE any PIN exchange, so no oracle leaks.
+        let network = NetworkClient(server: info)
+        let fetched: ServerInfo
         do {
-            let network = NetworkClient(server: info)
-            let fetched = try await network.fetchServerInfo()
+            fetched = try await network.fetchServerInfo()
+        } catch {
+            log.error("Pairing: couldn't reach host=\(hostnameOrIP, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private)")
+            pairingPhase = .failure("Couldn't reach \(hostnameOrIP). Make sure it's on and on this network.")
+            Diag.error("Pairing: host unreachable", "Pairing")
+            pairingInFlight = false
+            return
+        }
+
+        do {
             if fetched.pairStatus == .paired {
                 pairingPhase = .success("Already paired with \(hostnameOrIP). ✓")
                 pairingInFlight = false

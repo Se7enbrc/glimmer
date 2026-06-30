@@ -102,12 +102,6 @@ extension FramePacer {
         let hostNow = CFAbsoluteTimeGetCurrent()
         liveness.lastTickHostTime = hostNow
         liveness.tickCount &+= 1
-        // Snapshot the PTS-refined stream interval under the lock so the
-        // main-actor floor re-apply reads a consistent value without a
-        // second lock acquisition. `streamFrameIntervalSeconds` is written on the
-        // decode/pacing queue (submit's median refine); this is the only place we
-        // read it main-side.
-        let refinedIntervalSeconds = streamFrameIntervalSeconds
         if realizedInterval.isFinite, realizedInterval > 0,
            realizedInterval <= Self.maxRealizedTickDeltaSeconds {
             refreshTelemetry.refreshIntervalSumSeconds += realizedInterval
@@ -206,9 +200,8 @@ extension FramePacer {
         let sinceReapply = hostNow - Self.lastReapplyHopHostTime
         if !Self.lastReapplyHopHostTime.isFinite || sinceReapply >= Self.reapplyHopMinInterval {
             Self.lastReapplyHopHostTime = hostNow
-            let refined = refinedIntervalSeconds
             DispatchQueue.main.async { [weak self] in
-                self?.reapplyPreferredRangeIfNeeded(refinedIntervalSeconds: refined)
+                self?.reapplyPreferredRangeIfNeeded()
             }
         }
 

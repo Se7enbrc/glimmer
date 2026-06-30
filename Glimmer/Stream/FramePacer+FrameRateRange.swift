@@ -33,10 +33,9 @@ extension FramePacer {
     /// frameskip gap). The requested refresh is fixed per session, so this re-pins
     /// once (matching install) then early-returns. `preferred`/`maximum` stay at the
     /// panel max - the top end is never given up; only the anti-throttle FLOOR is
-    /// held at the requested rate. `refinedIntervalSeconds` is now unused (the due
-    /// gate still paces from the raw median, untouched).
+    /// held at the requested rate.
     @MainActor
-    func reapplyPreferredRangeIfNeeded(refinedIntervalSeconds: Double) {
+    func reapplyPreferredRangeIfNeeded() {
         guard let link = displayLink, let view = boundView else { return }
         // Item-9 'link installed' replay - one optional load + identity compare
         // per tick in the steady state; see the helper for the WHY.
