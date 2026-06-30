@@ -319,6 +319,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// UserDefaults key ("prefix.host|link") the cushion memory persists
     /// under. Set at init from the seed; rewritten once if the link resolves.
     var cushionSeedKey = ""
+    /// Resolved link class ("wired"/"wifi"/"tunnel"/"unknown"), cached under
+    /// audioMeterLock at resolve time so the RT completion path reads it WITHOUT
+    /// nesting EnvSignal's lock under the meter lock.
+    var cushionLinkClass = "unknown"
     /// Host half of the seed key, kept so the one-shot link resolve can rebuild
     /// the key without re-reading the route latch.
     var cushionHostLabel = "unknown"
@@ -349,6 +353,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// and Diag, so it can never contend the decode/teardown path.
     var routeListenerBlock: AudioObjectPropertyListenerBlock?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
+    /// Bounded retry counter for an engine restart that threw because the new
+    /// output device wasn't ready that instant (route handoff). stateLock-guarded.
+    private var engineRestartRetries = 0
+    private static let maxEngineRestartRetries = 5
 
     /// `AVAudioEngineConfigurationChange` observer token (held so `shutdown()`
     /// can remove it). On a mid-stream output-device/format change AVAudioEngine
@@ -611,6 +619,34 @@ public final class AudioDecoder: @unchecked Sendable {
     /// moved, restart the engine if it stopped, and re-arm the pre-roll so the
     /// cushion rebuilds. On the `stateLock`-serialized path (never a completion
     /// handler). H4: re-samples `engine.isRunning` into the gauge mirror here too.
+    /// Schedule a bounded, backed-off retry of the engine restart on the route
+    /// queue. Called under stateLock from the config-change catch, so a transient
+    /// device-not-ready throw on an AirPods/HDMI/DAC handoff self-heals.
+    private func scheduleEngineRestartRetry() {
+        guard engineRestartRetries < Self.maxEngineRestartRetries else {
+            Diag.error("audio engine restart gave up after \(engineRestartRetries) retries", "Stream.Audio")
+            return
+        }
+        engineRestartRetries += 1
+        let attempt = engineRestartRetries
+        routeListenerQueue.asyncAfter(deadline: .now() + 0.3 * Double(attempt)) { [weak self] in
+            self?.retryEngineStart(attempt: attempt)
+        }
+    }
+
+    private func retryEngineStart(attempt: Int) {
+        stateLock.lock(); defer { stateLock.unlock() }
+        guard !isShutdown, !engine.isRunning, inputFormat != nil else { return }
+        do {
+            try engine.start()
+            engineRestartRetries = 0
+            Diag.notice("audio engine restart retry \(attempt) succeeded", "Stream.Audio")
+        } catch {
+            Diag.error("audio engine restart retry \(attempt) failed: \(error.localizedDescription)", "Stream.Audio")
+            scheduleEngineRestartRetry()
+        }
+    }
+
     private func handleEngineConfigurationChange() {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -631,9 +667,11 @@ public final class AudioDecoder: @unchecked Sendable {
         if !engine.isRunning {
             do {
                 try engine.start()
+                engineRestartRetries = 0
             } catch {
                 Diag.error("audio engine restart after config change FAILED: "
                     + "\(error.localizedDescription)", "Stream.Audio")
+                scheduleEngineRestartRetry()
             }
         }
         // H4: re-sample the engine-running gauge here (the same hop), and RE-ARM

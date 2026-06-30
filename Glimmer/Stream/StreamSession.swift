@@ -266,9 +266,12 @@ public actor StreamSession {
     /// completes, on stop, and before a new wake re-arms it. Actor-isolated: every
     /// access (arm/cancel/nil) is on the session actor.
     var wakeProbeTask: Task<Void, Never>?
-    /// Probe budget multiple of RTT, floored: budget = max(750ms, N·RTT).
+    /// Probe budget multiple of RTT, clamped: budget = clamp(N·RTT, 750ms, 2.5s).
     static let wakeProbeRttMultiple = 4
     static let wakeProbeFloorMs: UInt64 = 750
+    /// Ceiling so a high-RTT link doesn't probe SLOWER than the ~10s dead-peer
+    /// envelope this fast-path exists to beat.
+    static let wakeProbeCeilingMs: UInt64 = 2_500
 
     /// Present-path self-heal watchdog. Runs at 20 Hz on the main run loop,
     /// INDEPENDENT of the decode-output watchdog above (which is structurally

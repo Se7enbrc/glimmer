@@ -129,12 +129,16 @@ extension StreamSession {
             // One-time discoverability toast: Esc is a game input and the menu
             // bar is hidden, so the quit chord is otherwise undiscoverable. Show
             // it once ever, on the first stream, with the LIVE chord string(s).
-            guard let win, !UserDefaults.standard.bool(forKey: Self.leaveHintShownKey) else { return }
-            UserDefaults.standard.set(true, forKey: Self.leaveHintShownKey)
+            // Show once per UNIQUE chord config: keying on the hint TEXT (not a
+            // one-time bool) re-surfaces it after the user rebinds the hotkey/chord,
+            // since Esc is game input and the menu bar is hidden (no rediscovery).
+            guard let win else { return }
             let text = Self.leaveHintText(
                 hotkey: hotkeyProvider(),
                 chord: chordProvider(),
                 customChord: customChordProvider())
+            guard UserDefaults.standard.string(forKey: Self.leaveHintShownKey) != text else { return }
+            UserDefaults.standard.set(text, forKey: Self.leaveHintShownKey)
             win.leaveHintBanner.setText(text)
             win.leaveHintBanner.setVisible(true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak win] in

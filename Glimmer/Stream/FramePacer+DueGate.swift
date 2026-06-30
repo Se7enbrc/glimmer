@@ -203,7 +203,10 @@ extension FramePacer {
                 // trim - holding is always wrong, so force the head out NOW to drain.
                 // Below-target (passthrough / jitter buffer) keeps the due logic below.
                 due = true
-                forcedOverTarget = true
+                // Only LABEL it forced-over-target (the oscillation signal) when the
+                // backlog exceeds the +1 trim slack - count == target+1 is benign
+                // bunching, not oscillation, so don't mislabel it.
+                forcedOverTarget = queue.count > effectiveTarget + 1
             } else {
                 // Slack = half a vsync; lets a barely-not-due head present now rather
                 // than wait a whole vsync (the fps≈refresh 1.5x judder).

@@ -85,8 +85,9 @@ extension StreamSession {
     private func startWakeProbe() {
         wakeProbeTask?.cancel()
         let rtt = backend.estimatedRtt()?.rttMs ?? Double(Self.wakeProbeFloorMs)
-        let budgetMs = max(Self.wakeProbeFloorMs,
-                           UInt64(Double(Self.wakeProbeRttMultiple) * rtt))
+        let budgetMs = min(Self.wakeProbeCeilingMs,
+                           max(Self.wakeProbeFloorMs,
+                               UInt64(Double(Self.wakeProbeRttMultiple) * rtt)))
         wakeProbeTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: budgetMs * 1_000_000)
             guard !Task.isCancelled, let self else { return }
@@ -103,7 +104,13 @@ extension StreamSession {
         guard isStreaming, reachedLiveState, !stopInProgress, !isReconnecting else { return }
         // sinceLastAck is measured from the wake re-anchor (handleSystemWake reset
         // it to NOW), so silence ≥ budget means the peer never answered the probe.
-        guard let health = backend.enetHealth() else { return }
+        // nil health = the backend can't even report ENet liveness post-wake; treat
+        // that as a stale link too (reconnect is recoverable) rather than silently
+        // giving up the probe.
+        guard let health = backend.enetHealth() else {
+            await handleHostTerminate(code: Self.deadPeerTerminationCode)
+            return
+        }
         if UInt64(health.sinceLastAckMs) >= budgetMs {
             Diag.notice("Wake probe: no ACK in \(health.sinceLastAckMs)ms (budget "
                 + "\(budgetMs)ms) - link is stale, reconnecting in place.", "Stream")

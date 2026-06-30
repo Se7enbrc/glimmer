@@ -70,8 +70,8 @@ extension FramePacer {
     /// grow/decay actuator walks `adaptiveDepth.adaptiveTargetDepth` toward. Clamped to
     /// [targetDepth, maxTargetDepth].
     ///
-    /// RECONCILER ON (the default): the desired depth comes from the UNIFIED
-    /// jitter→headroom decision EnvSignalController publishes - `targetDepth +
+    /// RECONCILER ON, *after it has published a decision*: the desired depth comes
+    /// from the UNIFIED jitter→headroom decision EnvSignalController publishes - `targetDepth +
     /// headroomLevel` - so the pacer and the FEC reorder-hold walk off ONE shared
     /// level instead of each reading `recvJitterMs` independently. headroomLevel 0
     /// (clear / jitter under the dead-zone) → depth 1 (REST), each level up → +1
@@ -87,7 +87,11 @@ extension FramePacer {
     /// cap. Byte-identical to today.
     func justifiedDepthLocked() -> Int {
         assertLockHeld()
-        if EnvSignalController.reconcilerEnabled {
+        // Use the reconciler's published depth ONLY after it has published a real
+        // decision (generation > 0). Telemetry-off builds never run the reconciler
+        // (it's fed only by the opt-in exporter), so generation stays 0 - fall
+        // through to the always-live self-decide path so the buffer still adapts.
+        if EnvSignalController.reconcilerEnabled, adaptiveDepth.reconciledDecisionGeneration > 0 {
             // Read ONLY the off-lock-refreshed snapshot - never the controller -
             // so the pacer holds exactly one lock (its own). Already clamped to
             // [targetDepth, maxTargetDepth] by the refresh.
@@ -135,7 +139,10 @@ extension FramePacer {
         // level instead (the whole point of the unification: ONE reader of the
         // jitter signal, not two racing). `adaptiveDepth.measuredJitterMs` then just goes stale
         // (it feeds only the OFF path), which is harmless.
-        if !EnvSignalController.reconcilerEnabled {
+        // Self-decide whenever the reconciler isn't actually driving us - disabled,
+        // OR enabled-but-not-yet-published (telemetry off): refresh the live jitter
+        // so grow/decay track recvJitterMs instead of going stale pinned at REST.
+        if !EnvSignalController.reconcilerEnabled || adaptiveDepth.reconciledDecisionGeneration == 0 {
             let liveJitter = TelemetryCounters.shared.recvJitterMs
             if liveJitter.isFinite, liveJitter >= 0 { adaptiveDepth.measuredJitterMs = liveJitter }
         }

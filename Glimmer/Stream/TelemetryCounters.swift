@@ -42,7 +42,7 @@ import os
 final class TelemetryCounters: @unchecked Sendable {
     static let shared = TelemetryCounters()
 
-    /// One monotonic counter. NSLock-guarded UInt64 - matches the codebase's
+    /// One monotonic counter. os_unfair_lock-guarded UInt64 - matches the codebase's
     /// existing AtomicCounter style; the few inc/read sites are not a tight inner
     /// loop (per loss event / per frame, never per packet on the hot path).
     final class Counter: @unchecked Sendable {

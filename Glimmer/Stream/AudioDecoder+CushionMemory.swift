@@ -344,7 +344,7 @@ extension AudioDecoder {
                 // skew (|integral| + drift bounded). If it's railing, the standing
                 // skew is draining the cushion - that depth is load-bearing, so hold
                 // it and let the slow floor clock govern as before.
-                if EnvSignalController.shared.streamLink == "wired",
+                if cushionLinkClass == "wired",
                    resamplerSkewConverged {
                     learnedFloorMs = max(learnedFloorMs - Self.playoutCushionStepMs,
                                          Self.playoutCushionBaseMs)
@@ -394,8 +394,10 @@ extension AudioDecoder {
             // Set the link-aware cap from whatever the route reads NOW so a
             // late/never resolve can't freeze at the tunnel-300 default (only
             // ever equals-or-lowers the cap; pure field write under the lock).
-            effectiveCushionMaxMs = Self.cushionMaxMs(forLink: EnvSignalController.shared.streamLink)
+            let resolvedLink = EnvSignalController.shared.streamLink
+            effectiveCushionMaxMs = Self.cushionMaxMs(forLink: resolvedLink)
             effectiveOverrunCeilingMs = effectiveCushionMaxMs + Self.bufferOverrunCeilingSlackMs
+            cushionLinkClass = resolvedLink
             cushionLinkResolved = true
             audioMeterLock.unlock()
             return
@@ -422,6 +424,7 @@ extension AudioDecoder {
         guard !cushionLinkResolved else { audioMeterLock.unlock(); return }
         cushionLinkResolved = true
         cushionSeedKey = key
+        cushionLinkClass = link
         // Refresh the LINK-AWARE caps now the route is real (the init seed defaulted
         // to the deeper tunnel cap; a resolved-wired link tightens it back to 150ms).
         effectiveCushionMaxMs = Self.cushionMaxMs(forLink: link)

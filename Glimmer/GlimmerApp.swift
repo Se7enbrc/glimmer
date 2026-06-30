@@ -224,6 +224,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         moonlight?.shutdown()
+        // Cmd-Q / menu Quit mid-stream skips the session's stop()/exitCapturedMode(),
+        // so the SYSTEM-WIDE pointer-acceleration override would survive process exit.
+        // Restore it synchronously (idempotent; no-op when nothing is overridden).
+        MouseAccelerationControl.restoreOrphanedOverride()
         return .terminateNow
     }
 

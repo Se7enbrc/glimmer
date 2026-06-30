@@ -85,9 +85,9 @@ struct PairSheet: View {
         // the freshly-paired host so the launcher lands on it.
         .task(id: isSuccess) {
             guard isSuccess else { return }
+            // No auto-dismiss: the success screen shows Done / "Stream now" buttons,
+            // and a 900ms auto-close made them unclickable. The user dismisses it.
             selectPairedHost()
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            if !Task.isCancelled { dismiss() }
         }
     }
 

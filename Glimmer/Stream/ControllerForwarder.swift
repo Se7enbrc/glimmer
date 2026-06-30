@@ -661,10 +661,9 @@ extension InputForwarder {
 
 // MARK: - Local numeric helper
 
-// Duplicated from InputForwarder.swift's fileprivate extension. Swift forbids
-// reaching into the original from another file at fileprivate scope, and
-// promoting it to internal would let the helper leak across the whole target.
-// A local copy keeps the access surface tight.
+// File-local clamp helper. A fileprivate extension can't be shared across files,
+// and promoting it to internal would leak the helper across the whole target, so
+// each file that needs it keeps a tight local copy.
 fileprivate extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)

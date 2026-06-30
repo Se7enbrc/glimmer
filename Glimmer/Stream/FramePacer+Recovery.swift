@@ -436,6 +436,9 @@ extension FramePacer {
         let discarded = queue.count
         queue.removeAll(keepingCapacity: true)
         resetCadenceBaseLocked()
+        // Drop the last-presented frame too, so a governor repaint after this flush
+        // (e.g. a format/discontinuity change) can't re-commit a stale old-format frame.
+        tickDeficit.lastPresentedSampleBuffer = nil
         liveness.starvedTickStreak = 0
         os_unfair_lock_unlock(&lock)
 

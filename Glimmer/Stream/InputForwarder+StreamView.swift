@@ -394,11 +394,3 @@ extension HotkeyChord {
 }
 
 // `vkScanCode(forCarbonKeyCode:)` lives in KeyboardScanMap.swift.
-
-// MARK: - Small numeric helpers
-
-fileprivate extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
-    }
-}

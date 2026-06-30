@@ -267,6 +267,9 @@ extension MoonlightManager {
         // previous host's "Streaming X" tag during the first poll for the
         // newly-selected machine. Then kick a fresh poll.
         hostLiveStatus = nil
+        // Clear any stale stream error so a prior host's red banner doesn't linger
+        // and name the wrong machine after switching hosts.
+        nativeStreamError = nil
         restartHostStatusPolling()
     }
 

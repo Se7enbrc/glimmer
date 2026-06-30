@@ -178,7 +178,10 @@ extension StreamWindow {
             )
             // No Space animation; install input + cursor capture next runloop.
             DispatchQueue.main.async { [weak self] in
-                self?.onDidBecomeReadyForInput?()
+                // didClose guard like every sibling: a connect that fails/cancels
+                // before this runs must not re-capture a torn-down session.
+                guard let self, !self.didClose else { return }
+                self.onDidBecomeReadyForInput?()
             }
         } else {
             // Path B: Space-based fullscreen → safe-area framing.
@@ -236,7 +239,9 @@ extension StreamWindow {
         //    left without an installed first responder and the user's
         //    hotkeys never fire. A 1.5s backstop covers it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self else { return }
+            // didClose guard: close() keeps the window alive ~250ms for the fade,
+            // so a connect that failed at ~1-1.5s must not steal focus back here.
+            guard let self, !self.didClose else { return }
             let win = self.window
             let isKey = win.isKeyWindow
             let isFullscreen = win.styleMask.contains(.fullScreen)
