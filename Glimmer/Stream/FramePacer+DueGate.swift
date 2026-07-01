@@ -169,6 +169,11 @@ extension FramePacer {
     ) -> DueGateResult {
         assertLockHeld()
         guard !queue.isEmpty else {
+            // Content gap (nothing queued to present): break the cadence-metric
+            // baseline so the next post-gap present isn't scored a pacing miss.
+            // Desktop idle / fps<content reads healthy; a full-queue game still
+            // scores every beat because its queue never drains.
+            prevPresentMediaTimeForMetric = .nan
             return DueGateResult(toPresent: nil, heldForGrowth: false, forcedOverTarget: false)
         }
         var heldForGrowth = false
