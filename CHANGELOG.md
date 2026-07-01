@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.7.0 - 2026-07-01
+
+Smoothness reads honest at the desktop, and clearer pairing errors.
+
+When no game is running, the desktop often sits at a low, sparse frame rate -
+nothing is wrong, there just aren't many frames to pace. The stats overlay's
+smoothness reading used to plummet in that state (as low as single digits) even
+though the picture was perfectly steady, because it scored the long idle gaps
+between frames as if the player had paced them late. It now recognizes a content
+gap - no frame was waiting to be shown - as distinct from a genuine pacing miss,
+so an idle or low-frame-rate desktop reads healthy while a running game that
+actually drops its cadence still shows it. The "Stream stuttering" badge is
+unchanged.
+
+Pairing also tells you more when it can't connect: if the host is offline, at
+the wrong address, or not on your network, the error now names the host and says
+to check it's on and reachable - distinct from an actual pairing or PIN failure,
+which stays a deliberately vague "try again."
+
 ## 2026.6.54 - 2026-06-30
 
 Reliability + smoothness pass from a deep code review.
