@@ -19,7 +19,7 @@ import SwiftUI
 /// on shows a plain-language explanation BEFORE macOS's "Input Monitoring"
 /// prompt, so that scary system dialog is never a surprise.
 struct RawHIDControl: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @State private var showExplain = false
     /// "Working" = reports are actually arriving. The TCC check
     /// (IOHIDCheckAccess) can read not-granted even while reports flow, which
@@ -36,14 +36,14 @@ struct RawHIDControl: View {
     }
 
     var body: some View {
-        if moonlight.rawHIDControllerEnabled {
+        if model.rawHIDControllerEnabled {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Label(working ? "On" : "On - waiting for permission",
                           systemImage: working ? "checkmark.circle.fill" : "hourglass")
                         .foregroundStyle(working ? .green : .secondary)
                     Spacer()
-                    Button("Turn Off") { moonlight.rawHIDControllerEnabled = false }
+                    Button("Turn Off") { model.rawHIDControllerEnabled = false }
                 }
                 if !working { permissionCard }
             }
@@ -55,7 +55,7 @@ struct RawHIDControl: View {
                     Button("Enable") { enable() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text(MoonlightManager.rawHIDExplanation)
+                    Text(AppModel.rawHIDExplanation)
                 }
         }
     }
@@ -83,7 +83,7 @@ struct RawHIDControl: View {
     }
 
     private func enable() {
-        moonlight.rawHIDControllerEnabled = true
+        model.rawHIDControllerEnabled = true
         // For a never-asked user this prompts and grants; for a denied/stale
         // entry it no-ops, so the permission card guides them to System Settings.
         if !DualSenseHID.accessGranted { Self.registerAndOpen() }

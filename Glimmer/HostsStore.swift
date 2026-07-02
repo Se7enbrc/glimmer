@@ -11,7 +11,7 @@
 import Foundation
 import os.log
 
-extension MoonlightManager {
+extension AppModel {
 
     // MARK: - Migration from moonlight-qt
 
@@ -92,7 +92,7 @@ extension MoonlightManager {
             return
         }
 
-        var loaded: [MoonlightHost] = []
+        var loaded: [Host] = []
         for i in 1...count {
             let hostname = defaults.string(forKey: "hosts.\(i).hostname") ?? ""
             let appsCount = defaults.integer(forKey: "hosts.\(i).apps.size")
@@ -104,14 +104,14 @@ extension MoonlightManager {
             let local = defaults.string(forKey: "hosts.\(i).localaddress")
             let manual = defaults.string(forKey: "hosts.\(i).manualaddress")
 
-            var apps: [MoonlightApp] = []
+            var apps: [LibraryApp] = []
             for j in 1...appsCount {
                 let appName = defaults.string(forKey: "hosts.\(i).apps.\(j).name") ?? "Untitled"
                 let appId = defaults.integer(forKey: "hosts.\(i).apps.\(j).id")
                 let hdr = defaults.bool(forKey: "hosts.\(i).apps.\(j).hdr")
                 let hidden = defaults.bool(forKey: "hosts.\(i).apps.\(j).hidden")
                 if hidden { continue }
-                apps.append(MoonlightApp(id: appId, name: appName, hdr: hdr, hidden: hidden))
+                apps.append(LibraryApp(id: appId, name: appName, hdr: hdr, hidden: hidden))
             }
 
             let lastKey = "glimmer.lastConnected.\(uuid)"
@@ -132,7 +132,7 @@ extension MoonlightManager {
             let appVer  = readPEM("hosts.\(i).appversion")
             let gfeVer  = readPEM("hosts.\(i).gfeversion")
 
-            loaded.append(MoonlightHost(
+            loaded.append(Host(
                 id: uuid,
                 name: hostname,
                 customName: customName,
@@ -166,7 +166,7 @@ extension MoonlightManager {
     /// matching the moonlight-qt schema. An empty/whitespace name clears the
     /// override (the tile falls back to the real hostname). Keyed by UUID like
     /// `unpair`, since hostname can differ from displayName for renamed hosts.
-    func renameHost(_ host: MoonlightHost, to newName: String) {
+    func renameHost(_ host: Host, to newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         let defaults = UserDefaults.standard
         let count = defaults.integer(forKey: "hosts.size")
@@ -260,7 +260,7 @@ extension MoonlightManager {
         loadHosts()
     }
 
-    func selectHost(_ host: MoonlightHost) {
+    func selectHost(_ host: Host) {
         selectedHost = host
         UserDefaults.standard.set(host.id, forKey: "glimmer.selectedHostID")
         // Wipe the cached chip status so the UI doesn't briefly show the
@@ -290,7 +290,7 @@ extension MoonlightManager {
     /// duplicated, or corrupt record (e.g. left over from the namespace
     /// migration) still ends up gone. Safe to call repeatedly; a no-op once the
     /// host is already clean.
-    func unpair(_ host: MoonlightHost) {
+    func unpair(_ host: Host) {
         let defaults = UserDefaults.standard
 
         // --- Unconditional, id-keyed cleanup (runs even if no slot matches) ---

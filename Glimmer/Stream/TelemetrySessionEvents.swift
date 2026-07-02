@@ -115,7 +115,7 @@ final class DisconnectReasonCounters: @unchecked Sendable {
 /// `handshake_total_ms` is anchored at connect-START (inside connectBackend), so
 /// it EXCLUDES the serverinfo + launch + busy-poll legs that run between the
 /// user's click and connect-start. This latch is anchored at the CLICK
-/// (`MoonlightManager.stream()`) and resolved at the first decoded frame, both on
+/// (`AppModel.stream()`) and resolved at the first decoded frame, both on
 /// a wall clock (`Date`) the way the existing click anchor is - no cross-actor
 /// monotonic plumbing, and it survives `P2State.reset()` (which the click
 /// precedes). Standalone + self-locked (the `AudioCushionTelemetry` idiom), read
@@ -142,7 +142,7 @@ final class ConnectTimingTelemetry: @unchecked Sendable {
     init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
-    /// Anchor the click instant. Called from `MoonlightManager.stream()` at the
+    /// Anchor the click instant. Called from `AppModel.stream()` at the
     /// user's launch click - before the connect Task spins up. First write wins
     /// per session (reset clears it).
     func anchorClick() {

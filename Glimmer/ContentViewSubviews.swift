@@ -82,7 +82,7 @@ enum ChipPresentation: Equatable {
 }
 
 struct ReadinessChip: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Drives the re-pair sheet the certMismatch chip opens - re-pairing is the
     /// Trust recovery (it re-pins the host's new cert). Pre-filled with the
@@ -98,15 +98,15 @@ struct ReadinessChip: View {
         // so checking it first pulsed a green "Streaming" through the entire
         // handshake - including connects that never establish. Typed switch:
         // the String shim reads "Streaming" for the .streaming phase.
-        if case .connecting(let stage) = moonlight.streamPhase {
+        if case .connecting(let stage) = model.streamPhase {
             return .connecting(phase: stage)
         }
-        if moonlight.isStreaming { return .streamingOurs }
-        guard moonlight.selectedHost != nil else { return .noPC }
+        if model.isStreaming { return .streamingOurs }
+        guard model.selectedHost != nil else { return .noPC }
 
         // Polled live snapshot → chip state. The host-id guard in
         // `publishLiveStatus` already scopes it to the selected host.
-        guard let live = moonlight.hostLiveStatus else { return .unknown }
+        guard let live = model.hostLiveStatus else { return .unknown }
         // Aged-out samples (the host stopped answering /serverinfo a while
         // back) shouldn't keep lying about a stream that ended hours ago.
         if Date().timeIntervalSince(live.capturedAt) > HostLiveStatus.stale {
@@ -142,7 +142,7 @@ struct ReadinessChip: View {
                         .truncationMode(.tail)
                     // Quiet route glyph - bolt / Wi-Fi arcs - riding the
                     // ALWAYS-ON HostRouteMonitor, never the gate-on probe.
-                    if case .ready = chip, let glyph = moonlight.hostRoute.glyphSystemName {
+                    if case .ready = chip, let glyph = model.hostRoute.glyphSystemName {
                         Image(systemName: glyph)
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)
@@ -164,7 +164,7 @@ struct ReadinessChip: View {
                 // end-to-end (the static SpecChipsRow tag is just the pref).
                 // Intentionally NOT glass - a vivid status badge should pop
                 // (Apple's HIG carves badges out of the glass-everything rule).
-                if moonlight.nativeHDRActive {
+                if model.nativeHDRActive {
                     Text("HDR")
                         .font(.caption2.weight(.bold))
                         .tracking(0.5)
@@ -186,19 +186,19 @@ struct ReadinessChip: View {
             }
         }
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: presentation)
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: moonlight.nativeHDRActive)
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: moonlight.hostRoute.routeClass)
+        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.nativeHDRActive)
+        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.hostRoute.routeClass)
         .sheet(isPresented: $showRePair) {
             // Pre-fill the host's address so the re-pair lands straight on the
             // PIN step (the initialAddress path that was previously dead).
-            PairSheet(initialAddress: rePairAddress).environment(moonlight)
+            PairSheet(initialAddress: rePairAddress).environment(model)
         }
     }
 
     /// Best-known address for the selected host, used to pre-fill the re-pair
     /// sheet. Empty when nothing is selected (the sheet then opens the chooser).
     private var rePairAddress: String {
-        guard let host = moonlight.selectedHost else { return "" }
+        guard let host = model.selectedHost else { return "" }
         return host.localAddress ?? host.manualAddress ?? ""
     }
 
@@ -206,7 +206,7 @@ struct ReadinessChip: View {
     /// 12 milliseconds, over Wi-Fi") - mirrors the sighted glyph's gating.
     private func accessibilitySummary(for chip: ChipPresentation) -> String {
         guard case .ready = chip,
-              let route = moonlight.hostRoute.accessibilityDescription else {
+              let route = model.hostRoute.accessibilityDescription else {
             return chip.accessibility
         }
         return "\(chip.accessibility), \(route)"
@@ -214,9 +214,9 @@ struct ReadinessChip: View {
 }
 
 struct AppIconsRow: View {
-    let apps: [MoonlightApp]
-    let host: MoonlightHost
-    @Environment(MoonlightManager.self) private var moonlight
+    let apps: [LibraryApp]
+    let host: Host
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // One glass composite for the row - see ReadinessChip's container note.
@@ -224,7 +224,7 @@ struct AppIconsRow: View {
             HStack(spacing: 10) {
                 ForEach(apps.prefix(4)) { app in
                     Button {
-                        moonlight.requestStream(app: app, on: host)
+                        model.requestStream(app: app, on: host)
                     } label: {
                         VStack(spacing: 4) {
                             Image(systemName: app.systemImage)
@@ -241,7 +241,7 @@ struct AppIconsRow: View {
                                     // agrees with the hero button's verb.
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                                         .stroke(
-                                            app.name == moonlight.heroTargetAppName ? Color.accentColor : Color.clear,
+                                            app.name == model.heroTargetAppName ? Color.accentColor : Color.clear,
                                             lineWidth: 2
                                         )
                                 }
@@ -253,7 +253,7 @@ struct AppIconsRow: View {
                         .frame(width: 70)
                     }
                     .buttonStyle(.plain)
-                    .help(moonlight.isStreaming
+                    .help(model.isStreaming
                         ? "Finish the current stream first" : "Stream \(app.name)")
                 }
             }
@@ -262,20 +262,20 @@ struct AppIconsRow: View {
         // a click would spawn a SECOND concurrent session - stream()'s
         // re-entrancy guard is the wall, this is the honest affordance. Dim
         // as the visual cue (.plain buttons don't restyle on disable).
-        .disabled(moonlight.isStreaming)
-        .opacity(moonlight.isStreaming ? 0.45 : 1.0)
-        .animation(.snappy(duration: 0.3), value: moonlight.isStreaming)
+        .disabled(model.isStreaming)
+        .opacity(model.isStreaming ? 0.45 : 1.0)
+        .animation(.snappy(duration: 0.3), value: model.isStreaming)
     }
 }
 
 struct SpecChipsRow: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // One glass composite for the row - see ReadinessChip's container note.
         GlassEffectContainer(spacing: 6) {
             HStack(spacing: 6) {
-                ForEach(moonlight.streamSpecChips, id: \.self) { chip in
+                ForEach(model.streamSpecChips, id: \.self) { chip in
                     Text(chip)
                         .font(.caption.weight(.medium))
                         .padding(.horizontal, 10)
@@ -331,14 +331,14 @@ struct StreamButtonStyle: ButtonStyle {
 }
 
 struct StreamButton: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var isConnecting: Bool = false
 
     /// The success haptic belongs on the actual "we're live" beat - this flag
     /// gives sensoryFeedback a precise connectionEstablished edge, not a tap.
     private var isLive: Bool {
-        moonlight.streamPhase == .streaming
+        model.streamPhase == .streaming
     }
 
     /// Four button states, depending on session lifecycle and selection:
@@ -360,10 +360,10 @@ struct StreamButton: View {
     }
     private var role: ButtonRole {
         if isConnecting { return .connecting }
-        if moonlight.isStreaming, moonlight.nativeStreamBackgrounded {
+        if model.isStreaming, model.nativeStreamBackgrounded {
             return .liveBackgrounded
         }
-        if moonlight.selectedHost == nil { return .noPC }
+        if model.selectedHost == nil { return .noPC }
         return .connect
     }
 
@@ -371,9 +371,9 @@ struct StreamButton: View {
         Button {
             switch role {
             case .noPC: break                                  // disabled - copy is the affordance
-            case .connect: moonlight.streamHeroApp()
-            case .connecting: moonlight.cancelConnect()        // the working exit from a stuck connect
-            case .liveBackgrounded: moonlight.resumeStreamWindow()
+            case .connect: model.streamHeroApp()
+            case .connecting: model.cancelConnect()        // the working exit from a stuck connect
+            case .liveBackgrounded: model.resumeStreamWindow()
             }
         } label: {
             HStack(spacing: 10) {
@@ -420,7 +420,7 @@ struct StreamButton: View {
                         // Bounce on the live edge (curtain rises). Suppressed
                         // under Reduce Motion; the success haptic still fires.
                         .symbolEffect(.bounce, value: reduceMotion ? false : isLive)
-                    Text(moonlight.heroActionLabel)
+                    Text(model.heroActionLabel)
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(1)
                         .contentTransition(.opacity)
@@ -440,20 +440,20 @@ struct StreamButton: View {
         // .connecting stays ENABLED - it's the cancel affordance.
         .disabled(
             role == .noPC ||
-            (role == .connect && moonlight.isStreaming)
+            (role == .connect && model.isStreaming)
         )
         // Success haptic on the actual establish edge, not on click.
         .sensoryFeedback(.success, trigger: isLive)
         .contextMenu {
-            if let host = moonlight.selectedHost {
+            if let host = model.selectedHost {
                 ForEach(host.apps) { app in
                     Button {
-                        moonlight.requestStream(app: app, on: host)
+                        model.requestStream(app: app, on: host)
                     } label: {
                         Label(app.name, systemImage: app.systemImage)
                     }
                     // Same second-concurrent-session gate as the app tiles.
-                    .disabled(moonlight.isStreaming)
+                    .disabled(model.isStreaming)
                 }
             }
         }
@@ -468,7 +468,7 @@ struct StreamButton: View {
                 : role == .connect ? "Right-click to choose an app" : ""
         )
         .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: isConnecting)
-        .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: moonlight.isStreaming)
+        .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: model.isStreaming)
     }
 
     /// Steady primary line during connect. Prefers the SESSION's own friendly
@@ -476,11 +476,11 @@ struct StreamButton: View {
     /// captured at stream() entry): ⌘1-⌘9 can re-point `selectedHost`
     /// mid-handshake, and the capsule must keep naming the PC it's dialling.
     private var connectingPrimary: String {
-        if let stage = moonlight.nativeStreamPhase,
+        if let stage = model.nativeStreamPhase,
            stage.hasPrefix("Connecting to ") || stage == "Cancelling..." {
             return stage
         }
-        if let name = moonlight.selectedHost?.displayName {
+        if let name = model.selectedHost?.displayName {
             return "Connecting to \(name)..."
         }
         return "Connecting..."
@@ -491,7 +491,7 @@ struct StreamButton: View {
     /// stripping whatever the primary already carries ("Connecting to X..."
     /// duplicates, the "Cancelling..." repaint).
     private var connectingSubtext: String? {
-        guard let stage = moonlight.nativeStreamPhase, !stage.isEmpty else { return nil }
+        guard let stage = model.nativeStreamPhase, !stage.isEmpty else { return nil }
         if stage == connectingPrimary { return nil }
         if stage.hasPrefix("Connecting to ") || stage == "Connecting..." { return nil }
         return stage
@@ -501,7 +501,7 @@ struct StreamButton: View {
 // MARK: - Empty pairing state
 
 struct EmptyPairingState: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showPair = false
 
@@ -562,7 +562,7 @@ struct EmptyPairingState: View {
         }
         .padding(40)
         .sheet(isPresented: $showPair) {
-            PairSheet().environment(moonlight)
+            PairSheet().environment(model)
         }
     }
 }
@@ -570,23 +570,23 @@ struct EmptyPairingState: View {
 // MARK: - Stream-ended toast (disconnect beat)
 
 /// Brief "Stream ended" acknowledgement above the launcher content, driven
-/// off `MoonlightManager.streamEndedToastVisible`; auto-dismisses after a
+/// off `AppModel.streamEndedToastVisible`; auto-dismisses after a
 /// short hold (the stream window's own fade is missable from a Cmd-Tab).
 /// Thin material, no icon, monochrome - Apple's first-party toasts (AirPods
 /// connect, volume HUD) are deliberately understated.
 struct StreamEndedToast: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         Group {
-            if moonlight.streamEndedToastVisible {
+            if model.streamEndedToastVisible {
                 VStack(spacing: 2) {
                     Text("Stream ended")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.primary)
                     // Session receipt - one quiet line ("2h 12m · 12 ms
                     // median"), only when the stash kept one (≥5 min sessions).
-                    if let line = moonlight.lastSessionReceiptToastLine {
+                    if let line = model.lastSessionReceiptToastLine {
                         Text(line)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -604,10 +604,10 @@ struct StreamEndedToast: View {
                 // for the new content; the flag reset in stream() is the other
                 // half - the flag actually FALLS between cycles now, so a
                 // repeat end gets a fresh task, not a half-spent hold.
-                .task(id: moonlight.lastSessionReceipt) {
+                .task(id: model.lastSessionReceipt) {
                     // VoiceOver never reaches a 2-4 s transient by focus
                     // navigation - announce the beat + receipt explicitly.
-                    let line = moonlight.lastSessionReceiptToastLine
+                    let line = model.lastSessionReceiptToastLine
                     AccessibilityNotification.Announcement(
                         line.map { "Stream ended. \($0)" } ?? "Stream ended"
                     ).post()
@@ -615,12 +615,12 @@ struct StreamEndedToast: View {
                     let hold: UInt64 = line == nil ? 2_000_000_000 : 4_000_000_000
                     try? await Task.sleep(nanoseconds: hold)
                     if !Task.isCancelled {
-                        moonlight.streamEndedToastVisible = false
+                        model.streamEndedToastVisible = false
                     }
                 }
             }
         }
         .animation(.snappy(duration: 0.30, extraBounce: 0.1),
-                   value: moonlight.streamEndedToastVisible)
+                   value: model.streamEndedToastVisible)
     }
 }

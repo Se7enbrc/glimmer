@@ -379,7 +379,7 @@ extension InputForwarder: StreamInputViewDelegate {
 }
 
 // MARK: - HotkeyChord matching
-// HotkeyChord is defined in MoonlightManager.swift - reused here so the user's
+// HotkeyChord is defined in AppModel.swift - reused here so the user's
 // chosen combos (quit, stats, ...) apply in-stream without a separate config
 // path. One match function handles every chord-style hotkey we intercept.
 

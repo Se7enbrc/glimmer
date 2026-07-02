@@ -61,7 +61,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 }
 
 struct SettingsRoot: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @State private var selection: SettingsPane = .general
 
     /// Panes shown in the sidebar. All are always present now: Diagnostics holds

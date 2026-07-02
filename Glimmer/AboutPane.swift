@@ -23,7 +23,7 @@ private enum AboutLink {
 }
 
 struct AboutPane: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // First-party utility tone - see System Settings ▸ About, Disk
@@ -75,11 +75,11 @@ struct AboutPane: View {
                             .gesture(
                                 TapGesture()
                                     .modifiers(.option)
-                                    .onEnded { moonlight.showDiagnostics.toggle() }
+                                    .onEnded { model.showDiagnostics.toggle() }
                             )
                             // Option-cursor hint that something lives here,
                             // without spelling it out.
-                            .help(moonlight.showDiagnostics
+                            .help(model.showDiagnostics
                                   ? "Option-click to hide the developer tools"
                                   : "")
                     }

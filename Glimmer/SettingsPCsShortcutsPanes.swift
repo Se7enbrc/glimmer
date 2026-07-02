@@ -15,14 +15,14 @@ import SwiftUI
 // MARK: - PCs
 
 struct PCsPane: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @State private var showPairSheet = false
     @State private var initialPairAddress: String = ""
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if moonlight.hosts.isEmpty {
+                if model.hosts.isEmpty {
                     // Unified with the launcher's EmptyPairingState - same
                     // tone (calm, plain) so a user landing here from the
                     // launcher's empty state doesn't experience copy
@@ -43,9 +43,9 @@ struct PCsPane: View {
                     .padding(.vertical, 32)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 280), spacing: 14)], spacing: 14) {
-                        ForEach(moonlight.hosts) { host in
+                        ForEach(model.hosts) { host in
                             PCTile(host: host)
-                                .environment(moonlight)
+                                .environment(model)
                         }
                     }
                 }
@@ -59,7 +59,7 @@ struct PCsPane: View {
                     }
                     .buttonStyle(StreamButtonStyle())
                     Button("Refresh paired PCs") {
-                        moonlight.loadHosts()
+                        model.loadHosts()
                     }
                     .buttonStyle(.glass)
                 }
@@ -69,7 +69,7 @@ struct PCsPane: View {
         }
         .sheet(isPresented: $showPairSheet) {
             PairSheet(initialAddress: initialPairAddress)
-                .environment(moonlight)
+                .environment(model)
                 // Sheets on macOS 26 read better with the Tahoe glass
                 // backdrop - `.thinMaterial` matches the Settings window
                 // chrome so the PIN tiles' tinted glass layers cleanly on
@@ -80,8 +80,8 @@ struct PCsPane: View {
 }
 
 struct PCTile: View {
-    let host: MoonlightHost
-    @Environment(MoonlightManager.self) private var moonlight
+    let host: Host
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -93,12 +93,12 @@ struct PCTile: View {
                     .foregroundStyle(.white)
                 Spacer()
                 Button {
-                    moonlight.selectHost(host)
+                    model.selectHost(host)
                 } label: {
-                    Image(systemName: host.id == moonlight.selectedHost?.id ? "star.fill" : "star")
+                    Image(systemName: host.id == model.selectedHost?.id ? "star.fill" : "star")
                         .symbolRenderingMode(.hierarchical)
                         .contentTransition(.symbolEffect(.replace))
-                        .foregroundStyle(host.id == moonlight.selectedHost?.id ? Color.yellow : .secondary)
+                        .foregroundStyle(host.id == model.selectedHost?.id ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Make default")
@@ -151,7 +151,7 @@ struct PCTile: View {
             // white stroke.
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(
-                    host.id == moonlight.selectedHost?.id
+                    host.id == model.selectedHost?.id
                         ? Color.accentColor.opacity(0.85)
                         : Color.clear,
                     lineWidth: 2
@@ -186,7 +186,7 @@ struct PCTile: View {
 // MARK: - Shortcuts
 
 struct ShortcutsPane: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
     // Default-ON: linearize the Mac's mouse acceleration while a stream is
     // focused so only the game's own sensitivity shapes aim. Key mirrors
@@ -195,17 +195,17 @@ struct ShortcutsPane: View {
     @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
     var body: some View {
-        // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
+        // @Bindable shim - surfaces $model.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
         // alone exposes the value but not per-property Bindings).
-        @Bindable var moonlight = moonlight
+        @Bindable var model = model
         Form {
             Section("In-stream shortcuts") {
-                HotkeyRow(label: "Leave the stream", hotkey: $moonlight.quitHotkey)
+                HotkeyRow(label: "Leave the stream", hotkey: $model.quitHotkey)
                 Text("Press this combo at any time during a stream to return to Glimmer.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                HotkeyRow(label: "Show or hide stream stats", hotkey: $moonlight.statsHotkey)
+                HotkeyRow(label: "Show or hide stream stats", hotkey: $model.statsHotkey)
                 // Session-scoped on purpose: the hotkey flips the overlay
                 // only for the current stream. The next stream starts from
                 // the stats-overlay toggle in Quality.
@@ -218,17 +218,17 @@ struct ShortcutsPane: View {
                 // Hold-to-quit chord on the gamepad. Fires the same path as
                 // the keyboard quit hotkey above - useful for couch
                 // streaming where the keyboard isn't reachable.
-                Picker("Hold to leave the stream", selection: $moonlight.controllerQuitChord) {
+                Picker("Hold to leave the stream", selection: $model.controllerQuitChord) {
                     ForEach(ControllerQuitChord.allCases, id: \.self) { chord in
                         Text(chord.displayName).tag(chord)
                     }
                 }
-                if moonlight.controllerQuitChord == .custom {
+                if model.controllerQuitChord == .custom {
                     HStack {
-                        Text(moonlight.customControllerChord.isEmpty
+                        Text(model.customControllerChord.isEmpty
                              ? "No chord recorded yet"
-                             : ControllerButton.describe(moonlight.customControllerChord))
-                            .foregroundStyle(moonlight.customControllerChord.isEmpty ? .secondary : .primary)
+                             : ControllerButton.describe(model.customControllerChord))
+                            .foregroundStyle(model.customControllerChord.isEmpty ? .secondary : .primary)
                         Spacer()
                         Button("Record...") { showChordCapture = true }
                     }
@@ -243,7 +243,7 @@ struct ShortcutsPane: View {
             // so all raw input lives in one place. Shown when a pad is connected
             // or the feature is already on (its off-switch must not vanish with
             // the pad). RawHIDControl is defined in TroubleshootingPane.swift.
-            if moonlight.controllerConnected || moonlight.rawHIDControllerEnabled {
+            if model.controllerConnected || model.rawHIDControllerEnabled {
                 Section {
                     RawHIDControl()
                 } header: {
@@ -257,7 +257,7 @@ struct ShortcutsPane: View {
             }
 
             Section("macOS keys") {
-                Toggle(isOn: $moonlight.captureSysKeys) {
+                Toggle(isOn: $model.captureSysKeys) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Use ⌘ shortcuts inside the game (this Mac stops answering them)")
                             .fontWeight(.medium)
@@ -290,7 +290,7 @@ struct ShortcutsPane: View {
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showChordCapture) {
-            ChordCaptureSheet().environment(moonlight)
+            ChordCaptureSheet().environment(model)
         }
     }
 }
@@ -302,7 +302,7 @@ struct ShortcutsPane: View {
 /// the chord. Reuses the input-test ControllerMonitor (to engage GameController
 /// value updates) + the DualSense raw-HID reader for the center buttons.
 private struct ChordCaptureSheet: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var current: Set<ControllerButton> = []
     /// Sticky union of every button held during this recording - so releasing
@@ -416,8 +416,8 @@ private struct ChordCaptureSheet: View {
     }
 
     private func save() {
-        moonlight.customControllerChord = captured
-        moonlight.controllerQuitChord = .custom
+        model.customControllerChord = captured
+        model.controllerQuitChord = .custom
         dismiss()
     }
 }

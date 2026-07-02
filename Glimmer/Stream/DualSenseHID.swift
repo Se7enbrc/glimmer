@@ -160,7 +160,7 @@ final class DualSenseHID: @unchecked Sendable {
         IOHIDManagerSetDeviceMatchingMultiple(manager, matches as CFArray)
     }
 
-    /// Opt-in gate (mirrors MoonlightManager.rawHIDControllerEnabled). Read
+    /// Opt-in gate (mirrors AppModel.rawHIDControllerEnabled). Read
     /// from non-UI code (ControllerForwarder) so the raw-HID reader - and its
     /// Input Monitoring prompt - only ever engage when the user has turned the
     /// feature on in Settings.

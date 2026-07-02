@@ -1,7 +1,7 @@
 //
-//  MoonlightManager+Pairing.swift
+//  AppModel+Pairing.swift
 //
-//  Stream lifecycle hooks, pairing (PIN + pair flow), the Sunshine web-UI opener, and the menu-bar accessors. Split out of MoonlightManager.swift to keep each unit focused.
+//  Stream lifecycle hooks, pairing (PIN + pair flow), the Sunshine web-UI opener, and the menu-bar accessors. Split out of AppModel.swift to keep each unit focused.
 //
 
 import Foundation
@@ -14,7 +14,7 @@ import Observation
 import ServiceManagement
 import os.log
 
-extension MoonlightManager {
+extension AppModel {
 
     // MARK: Stream lifecycle hooks
 

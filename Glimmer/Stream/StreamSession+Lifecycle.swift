@@ -60,7 +60,7 @@ extension StreamSession {
         // session numbers BEFORE anything tears down - estimatedRtt() reads
         // the ENet control channel's always-live EWMA, which dies with the
         // connection, and the collector's byte total resets on the next
-        // session. The UI side (MoonlightManager's teardown cleanup)
+        // session. The UI side (AppModel's teardown cleanup)
         // finalizes the receipt after the event stream drains, which this
         // stop() strictly happens-before. See SessionReceiptStore.
         SessionReceiptStore.captureStreamEnd(
@@ -186,7 +186,7 @@ extension StreamSession {
         // Finish the event stream BEFORE we drop the bridge - once
         // bridge.eventContinuation goes nil, any final yields from C-thread
         // callbacks become no-ops. finish() signals end-of-stream to the
-        // consumer's `for await` loop, which is how MoonlightManager learns
+        // consumer's `for await` loop, which is how AppModel learns
         // a stream is over.
         bridge?.eventContinuation?.finish()
         bridge?.eventContinuation = nil

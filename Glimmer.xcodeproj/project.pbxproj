@@ -17,7 +17,7 @@
 		82EEF25A701FD81C0CDC8240 /* HostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6B7F5AA2DBCDB1B8D9A413 /* HostsStore.swift */; };
 		A10000001 /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000011 /* GlimmerApp.swift */; };
 		A10000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012 /* ContentView.swift */; };
-		A10000003 /* MoonlightManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000013 /* MoonlightManager.swift */; };
+		A10000003 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000013 /* AppModel.swift */; };
 		A10000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000014 /* Assets.xcassets */; };
 		A10000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000017 /* SettingsView.swift */; };
 		A1000009A /* PairSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000009B /* PairSheet.swift */; };
@@ -27,7 +27,7 @@
 		A100012A /* LogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100012B /* LogStore.swift */; };
 		A100013A /* ControllerInputTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100013B /* ControllerInputTestView.swift */; };
 		A100014A /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B /* LogViewerView.swift */; };
-		A100015A /* MoonlightManager+Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015B /* MoonlightManager+Audio.swift */; };
+		A100015A /* AppModel+Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015B /* AppModel+Audio.swift */; };
 		A100016A /* ContentViewSubviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016B /* ContentViewSubviews.swift */; };
 		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
 		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
@@ -115,9 +115,9 @@
 		D1000058 /* Types+StatsSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000057 /* Types+StatsSnapshot.swift */; };
 		D100005A /* Identity+Loading.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000059 /* Identity+Loading.swift */; };
 		D100005C /* Identity+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005B /* Identity+Crypto.swift */; };
-		D100005E /* MoonlightManager+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005D /* MoonlightManager+Lifecycle.swift */; };
-		D1000060 /* MoonlightManager+Streaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005F /* MoonlightManager+Streaming.swift */; };
-		D1000062 /* MoonlightManager+Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000061 /* MoonlightManager+Pairing.swift */; };
+		D100005E /* AppModel+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005D /* AppModel+Lifecycle.swift */; };
+		D1000060 /* AppModel+Streaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005F /* AppModel+Streaming.swift */; };
+		D1000062 /* AppModel+Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000061 /* AppModel+Pairing.swift */; };
 		D1000064 /* NetworkClient+Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000063 /* NetworkClient+Endpoints.swift */; };
 		D1000066 /* NetworkClient+Request.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000065 /* NetworkClient+Request.swift */; };
 		D1000068 /* Network+Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000067 /* Network+Support.swift */; };
@@ -178,8 +178,8 @@
 		D1000FA0 /* TelemetryLatency+Composites.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FA1 /* TelemetryLatency+Composites.swift */; };
 		D1000FB1 /* StreamSession+Reconnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FB0 /* StreamSession+Reconnect.swift */; };
 		D1000FC1 /* StreamSession+Wake.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FC0 /* StreamSession+Wake.swift */; };
-		D1A00002 /* MoonlightManager+HostRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00001 /* MoonlightManager+HostRoute.swift */; };
-		D1A00004 /* MoonlightManager+SessionReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00003 /* MoonlightManager+SessionReceipt.swift */; };
+		D1A00002 /* AppModel+HostRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00001 /* AppModel+HostRoute.swift */; };
+		D1A00004 /* AppModel+SessionReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00003 /* AppModel+SessionReceipt.swift */; };
 		D2000021 /* EnetWireTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000020 /* EnetWireTests.swift */; };
 		D2000023 /* ReedSolomonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000022 /* ReedSolomonTests.swift */; };
 		D2000025 /* InputEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000024 /* InputEncoderTests.swift */; };
@@ -245,7 +245,7 @@
 		A10000010 /* Glimmer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glimmer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000011 /* GlimmerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
 		A10000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		A10000013 /* MoonlightManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonlightManager.swift; sourceTree = "<group>"; };
+		A10000013 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		A10000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A10000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000016 /* Glimmer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Glimmer.entitlements; sourceTree = "<group>"; };
@@ -257,7 +257,7 @@
 		A100012B /* LogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStore.swift; sourceTree = "<group>"; };
 		A100013B /* ControllerInputTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerInputTestView.swift; sourceTree = "<group>"; };
 		A100014B /* LogViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerView.swift; sourceTree = "<group>"; };
-		A100015B /* MoonlightManager+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Audio.swift"; sourceTree = "<group>"; };
+		A100015B /* AppModel+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Audio.swift"; sourceTree = "<group>"; };
 		A100016B /* ContentViewSubviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewSubviews.swift; sourceTree = "<group>"; };
 		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
 		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
@@ -343,9 +343,9 @@
 		D1000057 /* Types+StatsSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+StatsSnapshot.swift"; sourceTree = "<group>"; };
 		D1000059 /* Identity+Loading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Identity+Loading.swift"; sourceTree = "<group>"; };
 		D100005B /* Identity+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Identity+Crypto.swift"; sourceTree = "<group>"; };
-		D100005D /* MoonlightManager+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Lifecycle.swift"; sourceTree = "<group>"; };
-		D100005F /* MoonlightManager+Streaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Streaming.swift"; sourceTree = "<group>"; };
-		D1000061 /* MoonlightManager+Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+Pairing.swift"; sourceTree = "<group>"; };
+		D100005D /* AppModel+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Lifecycle.swift"; sourceTree = "<group>"; };
+		D100005F /* AppModel+Streaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming.swift"; sourceTree = "<group>"; };
+		D1000061 /* AppModel+Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Pairing.swift"; sourceTree = "<group>"; };
 		D1000063 /* NetworkClient+Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Endpoints.swift"; sourceTree = "<group>"; };
 		D1000065 /* NetworkClient+Request.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Request.swift"; sourceTree = "<group>"; };
 		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Network+Support.swift"; sourceTree = "<group>"; };
@@ -406,8 +406,8 @@
 		D1000FA1 /* TelemetryLatency+Composites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatency+Composites.swift"; sourceTree = "<group>"; };
 		D1000FB0 /* StreamSession+Reconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Reconnect.swift"; sourceTree = "<group>"; };
 		D1000FC0 /* StreamSession+Wake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Wake.swift"; sourceTree = "<group>"; };
-		D1A00001 /* MoonlightManager+HostRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+HostRoute.swift"; sourceTree = "<group>"; };
-		D1A00003 /* MoonlightManager+SessionReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MoonlightManager+SessionReceipt.swift"; sourceTree = "<group>"; };
+		D1A00001 /* AppModel+HostRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+HostRoute.swift"; sourceTree = "<group>"; };
+		D1A00003 /* AppModel+SessionReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SessionReceipt.swift"; sourceTree = "<group>"; };
 		D2000019 /* GlimmerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlimmerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D2000020 /* EnetWireTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnetWireTests.swift; sourceTree = "<group>"; };
 		D2000022 /* ReedSolomonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReedSolomonTests.swift; sourceTree = "<group>"; };
@@ -515,13 +515,13 @@
 				A100012B /* LogStore.swift */,
 				A100013B /* ControllerInputTestView.swift */,
 				A100014B /* LogViewerView.swift */,
-				A100015B /* MoonlightManager+Audio.swift */,
+				A100015B /* AppModel+Audio.swift */,
 				A100016B /* ContentViewSubviews.swift */,
 				A100017B /* SettingsGeneralStreamingPanes.swift */,
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
 				A100019B /* AboutPane.swift */,
 				A100011B /* DualSenseHID.swift */,
-				A10000013 /* MoonlightManager.swift */,
+				A10000013 /* AppModel.swift */,
 				A10000014 /* Assets.xcassets */,
 				A10000015 /* Info.plist */,
 				A10000016 /* Glimmer.entitlements */,
@@ -555,11 +555,11 @@
 				D1000067 /* Network+Support.swift */,
 				D1000065 /* NetworkClient+Request.swift */,
 				D1000063 /* NetworkClient+Endpoints.swift */,
-				D1000061 /* MoonlightManager+Pairing.swift */,
-				D100005F /* MoonlightManager+Streaming.swift */,
-				D1A00001 /* MoonlightManager+HostRoute.swift */,
-				D1A00003 /* MoonlightManager+SessionReceipt.swift */,
-				D100005D /* MoonlightManager+Lifecycle.swift */,
+				D1000061 /* AppModel+Pairing.swift */,
+				D100005F /* AppModel+Streaming.swift */,
+				D1A00001 /* AppModel+HostRoute.swift */,
+				D1A00003 /* AppModel+SessionReceipt.swift */,
+				D100005D /* AppModel+Lifecycle.swift */,
 				D100005B /* Identity+Crypto.swift */,
 				D1000059 /* Identity+Loading.swift */,
 				D1000057 /* Types+StatsSnapshot.swift */,
@@ -852,13 +852,13 @@
 				A100012A /* LogStore.swift in Sources */,
 				A100013A /* ControllerInputTestView.swift in Sources */,
 				A100014A /* LogViewerView.swift in Sources */,
-				A100015A /* MoonlightManager+Audio.swift in Sources */,
+				A100015A /* AppModel+Audio.swift in Sources */,
 				A100016A /* ContentViewSubviews.swift in Sources */,
 				A100017A /* SettingsGeneralStreamingPanes.swift in Sources */,
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
 				A100011A /* DualSenseHID.swift in Sources */,
-				A10000003 /* MoonlightManager.swift in Sources */,
+				A10000003 /* AppModel.swift in Sources */,
 				AB00000002 /* Types.swift in Sources */,
 				D1000002 /* StreamingBackend.swift in Sources */,
 				D100007C /* FramePacer.swift in Sources */,
@@ -889,11 +889,11 @@
 				D1000068 /* Network+Support.swift in Sources */,
 				D1000066 /* NetworkClient+Request.swift in Sources */,
 				D1000064 /* NetworkClient+Endpoints.swift in Sources */,
-				D1000062 /* MoonlightManager+Pairing.swift in Sources */,
-				D1000060 /* MoonlightManager+Streaming.swift in Sources */,
-				D1A00002 /* MoonlightManager+HostRoute.swift in Sources */,
-				D1A00004 /* MoonlightManager+SessionReceipt.swift in Sources */,
-				D100005E /* MoonlightManager+Lifecycle.swift in Sources */,
+				D1000062 /* AppModel+Pairing.swift in Sources */,
+				D1000060 /* AppModel+Streaming.swift in Sources */,
+				D1A00002 /* AppModel+HostRoute.swift in Sources */,
+				D1A00004 /* AppModel+SessionReceipt.swift in Sources */,
+				D100005E /* AppModel+Lifecycle.swift in Sources */,
 				D100005C /* Identity+Crypto.swift in Sources */,
 				D100005A /* Identity+Loading.swift in Sources */,
 				D1000058 /* Types+StatsSnapshot.swift in Sources */,

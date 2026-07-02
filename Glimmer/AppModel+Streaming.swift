@@ -1,7 +1,7 @@
 //
-//  MoonlightManager+Streaming.swift
+//  AppModel+Streaming.swift
 //
-//  Spec UI accessors and the streaming entry points: native config + server info, stream(app:on:), and native StreamEvent handling. Split out of MoonlightManager.swift to keep each unit focused.
+//  Spec UI accessors and the streaming entry points: native config + server info, stream(app:on:), and native StreamEvent handling. Split out of AppModel.swift to keep each unit focused.
 //
 
 import Foundation
@@ -14,7 +14,7 @@ import Observation
 import ServiceManagement
 import os.log
 
-extension MoonlightManager {
+extension AppModel {
 
     // MARK: - Spec UI accessors
 
@@ -137,7 +137,7 @@ extension MoonlightManager {
     /// The codec set is the probed client capability capped by the host's
     /// override (right-click → Codec; Automatic by default, which negotiates
     /// AV1 → HEVC → H.264 against what the host can actually encode).
-    func nativeStreamConfig(for host: MoonlightHost) -> StreamConfig {
+    func nativeStreamConfig(for host: Host) -> StreamConfig {
         persistQualitySettings()
         var cfg = StreamConfig(width: effectiveWidth, height: effectiveHeight,
                                fps: effectiveFPS, bitrateKbps: effectiveBitrateKbps)
@@ -153,14 +153,14 @@ extension MoonlightManager {
         return cfg
     }
 
-    /// Convert a paired MoonlightHost into the engine's ServerInfo. The
+    /// Convert a paired Host into the engine's ServerInfo. The
     /// serverCertPEM seeds TLS pinning so we don't have to re-discover it
     /// over HTTP first. We prefer Glimmer's own persisted pin (written by
     /// `PairingClient.runPairingFlow` after the RSA-verified handshake) over
     /// the moonlight-qt migrated copy. Both are equivalent pairing outputs,
     /// but only the Glimmer-side pin has been validated by our pairing flow
     /// in this app's lifetime. Internal so HostStatusPoller.swift can call it.
-    func nativeServerInfo(for host: MoonlightHost) -> ServerInfo {
+    func nativeServerInfo(for host: Host) -> ServerInfo {
         var info = ServerInfo(
             address: host.localAddress ?? host.manualAddress ?? host.name,
             uniqueId: host.id,
@@ -183,7 +183,7 @@ extension MoonlightManager {
     /// error (refuse + force re-pair), never a silent fallback. Returns nil
     /// when no trustworthy pin exists - the pairStatus gate then forces a
     /// re-pair rather than pinning a writable value.
-    private func authoritativePin(for host: MoonlightHost) -> String? {
+    private func authoritativePin(for host: Host) -> String? {
         let filePin = PinnedCertStore.load(forHostID: host.id)
         let hint = host.serverCertPEM.flatMap { $0.isEmpty ? nil : $0 }
 
@@ -236,7 +236,7 @@ extension MoonlightManager {
     /// UI entry point for a launch. If the host is already streaming an app
     /// that ISN'T ours, arm `pendingTakeover` for a confirm before we /launch
     /// over the live occupant; otherwise stream straight through.
-    func requestStream(app: MoonlightApp, on host: MoonlightHost) {
+    func requestStream(app: LibraryApp, on host: Host) {
         if !isStreaming,
            let live = hostLiveStatus, live.hostID == host.id,
            Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
@@ -254,7 +254,7 @@ extension MoonlightManager {
         stream(app: pending.app, on: pending.host)
     }
 
-    func stream(app: MoonlightApp, on host: MoonlightHost) {
+    func stream(app: LibraryApp, on host: Host) {
         // RE-ENTRANCY GUARD. The native backend runs ONE session at a time
         // (StreamBridgeContext.current is a single process-global slot), and
         // a second entry here would corrupt it wholesale: a second
@@ -404,7 +404,7 @@ extension MoonlightManager {
     /// isolation; named so the entry path stays readable and the cleanup
     /// stays one site - never duplicate any of this elsewhere (a second
     /// "cleanup" is how zombie state is made).
-    private func cleanupAfterStream(host: MoonlightHost, caughtError: Error?) {
+    private func cleanupAfterStream(host: Host, caughtError: Error?) {
         if caughtError != nil, Self.connectCancelRequested {
             // The user cancelled this connect from the capsule -
             // start()'s throw is the teardown ARRIVING, not a failure
@@ -485,7 +485,7 @@ extension MoonlightManager {
             self.streamEndedToastVisible = true
             // Stamp "last played" with the stream-END time (now),
             // not the start time. This is the value HostsStore reads
-            // back into `MoonlightHost.lastConnected` for both the
+            // back into `Host.lastConnected` for both the
             // launcher's "last played N ago" label and most-recent-host
             // ordering - writing it at end keeps this host most-recent
             // while making the relative-time label read time-since-end.
@@ -569,7 +569,7 @@ extension MoonlightManager {
     /// the SESSION's host captured at stream() entry - never `selectedHost`,
     /// which the ⌘1-⌘9 shortcuts and the toolbar pill can re-point mid-flight
     /// (failure copy resolved at event time then names the wrong machine).
-    func handleNativeEvent(_ event: StreamEvent, host: MoonlightHost) {
+    func handleNativeEvent(_ event: StreamEvent, host: Host) {
         // Stage names are engineering jargon ("Starting RTSP handshake"). Keep
         // them in logs but show the user a friendly "Connecting to <host>..."
         // through the whole handshake.

@@ -1,7 +1,7 @@
 //
 //  StreamingState.swift
 //
-//  Typed phase enums used by `MoonlightManager` to drive UI affordances
+//  Typed phase enums used by `AppModel` to drive UI affordances
 //  during pairing and streaming. Pre-refactor the same information was
 //  carried by stringly-typed `String?` published properties; the UI then
 //  string-matched for "✓" / "Streaming" to recover the phase. The enums
@@ -17,7 +17,7 @@ import Foundation
 ///
 /// Each non-`idle` case carries the localized status text we display while
 /// in that phase - old call sites read this through the `pairingMessage`
-/// computed shim on `MoonlightManager` (kept for back-compat during the
+/// computed shim on `AppModel` (kept for back-compat during the
 /// gradual UI migration). New call sites should switch on the phase
 /// directly.
 enum PairingPhase: Equatable {

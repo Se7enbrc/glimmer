@@ -47,7 +47,7 @@ public enum CertFingerprint {
 // MARK: - Pinned cert storage key (canonical form)
 //
 // Pinning is split across call sites - Pairing.swift writes the pin
-// after a successful pair, MoonlightManager.nativeServerInfo /
+// after a successful pair, AppModel.nativeServerInfo /
 // HostsStore.unpair / HostsStore.saveHost read or delete it.
 // All MUST hash to the same UserDefaults key for the pin to actually
 // authenticate a TLS handshake. The previous shape used `host.id` for
@@ -62,7 +62,7 @@ public enum CertFingerprint {
 // Canonical key: the host's `<uniqueid>` from `/serverinfo`. We now parse
 // it in `NetworkClient.fetchServerInfo` and seed it onto ServerInfo, so
 // `server.uniqueId` is the right value at pair time. The lookup side
-// (`MoonlightManager.nativeServerInfo`) uses `host.id`, which for migrated
+// (`AppModel.nativeServerInfo`) uses `host.id`, which for migrated
 // hosts is the qt UUID - same value the host emits in `/serverinfo`. The
 // fresh-pair fallback (no qt migration) is the hostname on both sides, so
 // the keys still align.

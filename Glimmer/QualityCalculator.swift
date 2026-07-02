@@ -5,13 +5,13 @@
 //  Moonlight's `StreamingPreferences::getDefaultBitrate` shape (resolution
 //  table × frame-rate factor × preset multiplier) and the smart-defaults
 //  display probe (panel-native pixel grid via Core Graphics). Originally
-//  inline in `MoonlightManager.swift`.
+//  inline in `AppModel.swift`.
 //
 
 import AppKit
 import Foundation
 
-extension MoonlightManager {
+extension AppModel {
 
     // MARK: - Display probe
 

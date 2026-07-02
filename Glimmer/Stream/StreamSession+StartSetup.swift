@@ -223,7 +223,7 @@ extension StreamSession {
         }
         // Stats-overlay toggle. Flips a MainActor-isolated bool on the
         // VideoDecoder (read by the render loop) but intentionally does
-        // NOT touch `MoonlightManager.showStreamStats` - the toggle is
+        // NOT touch `AppModel.showStreamStats` - the toggle is
         // session-scoped so the user's persisted preference is what the
         // next stream starts with. Capture the decoder weakly so the
         // InputForwarder's closure doesn't extend its lifetime past

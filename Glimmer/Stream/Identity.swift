@@ -210,7 +210,7 @@ public actor IdentityManager {
         try load().uniqueID
     }
 
-    /// Bootstrap step - call this early (from MoonlightManager.bootstrap()) so
+    /// Bootstrap step - call this early (from AppModel.bootstrap()) so
     /// the identity setup happens during launch, not on the user's first
     /// stream click. Idempotent.
     public func preflight() async {

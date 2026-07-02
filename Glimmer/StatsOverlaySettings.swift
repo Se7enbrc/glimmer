@@ -20,24 +20,24 @@ private struct ThresholdRow<Value> {
 }
 
 struct StatsThresholdsEditor: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     var body: some View {
-        @Bindable var moonlight = moonlight
+        @Bindable var model = model
         VStack(alignment: .leading, spacing: 14) {
             metric(
                 title: "Frame rate",
                 warn: ThresholdRow(
                     label: "Warn below",
                     binding: Binding(
-                        get: { moonlight.statsThresholds.fpsWarningBelow },
-                        set: { moonlight.statsThresholds.fpsWarningBelow = $0 }),
+                        get: { model.statsThresholds.fpsWarningBelow },
+                        set: { model.statsThresholds.fpsWarningBelow = $0 }),
                     unit: "FPS"),
                 crit: ThresholdRow(
                     label: "Critical below",
                     binding: Binding(
-                        get: { moonlight.statsThresholds.fpsCriticalBelow },
-                        set: { moonlight.statsThresholds.fpsCriticalBelow = $0 }),
+                        get: { model.statsThresholds.fpsCriticalBelow },
+                        set: { model.statsThresholds.fpsCriticalBelow = $0 }),
                     unit: "FPS"),
                 range: 0...360, step: 1)
 
@@ -70,21 +70,21 @@ struct StatsThresholdsEditor: View {
                 warn: ThresholdRow(
                     label: "Warn above",
                     binding: Binding(
-                        get: { moonlight.statsThresholds.dropsWarningAbove },
-                        set: { moonlight.statsThresholds.dropsWarningAbove = $0 }),
+                        get: { model.statsThresholds.dropsWarningAbove },
+                        set: { model.statsThresholds.dropsWarningAbove = $0 }),
                     unit: "%"),
                 crit: ThresholdRow(
                     label: "Critical above",
                     binding: Binding(
-                        get: { moonlight.statsThresholds.dropsCriticalAbove },
-                        set: { moonlight.statsThresholds.dropsCriticalAbove = $0 }),
+                        get: { model.statsThresholds.dropsCriticalAbove },
+                        set: { model.statsThresholds.dropsCriticalAbove = $0 }),
                     unit: "%"),
                 range: 0...100, step: 0.5)
 
             HStack {
                 Spacer()
                 Button("Restore defaults") {
-                    moonlight.statsThresholds = .default
+                    model.statsThresholds = .default
                 }
                 .controlSize(.small)
             }
@@ -93,12 +93,12 @@ struct StatsThresholdsEditor: View {
         .padding(.top, 6)
     }
 
-    /// Bridge a `Binding<UInt32>` keypath into MoonlightManager's
+    /// Bridge a `Binding<UInt32>` keypath into AppModel's
     /// `statsThresholds` (Stepper needs a non-optional value type).
     private func uintBinding(_ keyPath: WritableKeyPath<StatsThresholds, UInt32>) -> Binding<Int> {
         Binding(
-            get: { Int(moonlight.statsThresholds[keyPath: keyPath]) },
-            set: { moonlight.statsThresholds[keyPath: keyPath] = UInt32(max(0, $0)) }
+            get: { Int(model.statsThresholds[keyPath: keyPath]) },
+            set: { model.statsThresholds[keyPath: keyPath] = UInt32(max(0, $0)) }
         )
     }
 

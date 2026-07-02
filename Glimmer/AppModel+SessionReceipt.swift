@@ -1,5 +1,5 @@
 //
-//  MoonlightManager+SessionReceipt.swift
+//  AppModel+SessionReceipt.swift
 //
 //  The end-of-stream session receipt: a small per-(host, mode) record stashed
 //  in UserDefaults when a session ends. Two readers: the launcher's "Stream
@@ -28,13 +28,13 @@
 //  experiments and failed launches, and would poison the guidance numbers.
 //
 //  Lifecycle (three writers, one rendezvous):
-//    1. `markStreamStart`  - MoonlightManager.stream(), arms the latch with
+//    1. `markStreamStart`  - AppModel.stream(), arms the latch with
 //                            the session's identity (host + requested mode).
 //    2. `markSessionLive`  - first .connectionEstablished / .firstFrame edge,
 //                            stamps the wall clock the duration counts from.
 //    3. `captureStreamEnd` - the ONE engine-side hook (StreamSession.stop(),
 //                            before the backend tears down), grabs RTT+bytes.
-//    4. `finalizeSession`  - MoonlightManager's teardown cleanup, builds the
+//    4. `finalizeSession`  - AppModel's teardown cleanup, builds the
 //                            receipt, gates ≥ 5 min, writes the blob.
 //
 

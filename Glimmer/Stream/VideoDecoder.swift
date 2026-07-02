@@ -160,7 +160,7 @@ public final class VideoDecoder {
     /// be drawn on top of the next rendered frame.
     ///
     /// This value is session-scoped on purpose. `StreamSession.start` seeds
-    /// it from `MoonlightManager.showStreamStats` (the user's persisted
+    /// it from `AppModel.showStreamStats` (the user's persisted
     /// preference) and the configured stats hotkey toggles it from inside
     /// the stream - but the toggled value never round-trips back into
     /// UserDefaults. Rationale: a user who flips stats on with the hotkey

@@ -2,7 +2,7 @@
 //  DiagnosticsPane.swift
 //
 //  Settings → Diagnostics. The single hideable home for the debug/tuning wires.
-//  HIDDEN by default (gated on `MoonlightManager.showDiagnostics`, which the
+//  HIDDEN by default (gated on `AppModel.showDiagnostics`, which the
 //  sidebar consults) and only revealed by an option-click on the version line in
 //  About - normal users never see this. It houses:
 //    * the Telemetry opt-in toggle (the gate `TelemetryGate.isEnabled` reads at
@@ -19,7 +19,7 @@ import AppKit
 import SwiftUI
 
 struct DiagnosticsPane: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     /// DEBUG opt-in for the per-session Diag FILE sink (`SessionLogFileSink`).
     /// The file mirrors INFO+ by default (testing measured 30-105k lines/hr
@@ -38,9 +38,9 @@ struct DiagnosticsPane: View {
     }
 
     var body: some View {
-        // @Bindable shim - surfaces $moonlight.x bindings from the @Observable
+        // @Bindable shim - surfaces $model.x bindings from the @Observable
         // environment value (matches the other Settings panes).
-        @Bindable var moonlight = moonlight
+        @Bindable var model = model
         Form {
             // Always-visible support surface (formerly the Troubleshooting pane):
             // a live controller input test + the in-app log viewer. These need to
@@ -71,9 +71,9 @@ struct DiagnosticsPane: View {
             // About version line (showDiagnostics). Telemetry + tuning live behind
             // it so normal users never trip the opt-in toggles; the support
             // surface above is always available either way.
-            if moonlight.showDiagnostics {
+            if model.showDiagnostics {
                 Section {
-                    Toggle(isOn: $moonlight.telemetryEnabled) {
+                    Toggle(isOn: $model.telemetryEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Performance telemetry").fontWeight(.medium)
                             Text("Exposes per-second stream metrics over a local "

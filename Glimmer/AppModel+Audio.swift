@@ -1,17 +1,17 @@
 //
-//  MoonlightManager+Audio.swift
+//  AppModel+Audio.swift
 //
 //  "Mute the Mac while streaming" - captures the default output device's
 //  virtual main volume on stream start, drops it to zero, and restores it on
 //  stop. CoreAudio rather than an osascript shell-out. Split out of
-//  MoonlightManager.swift to keep the core type under the body-length limit.
+//  AppModel.swift to keep the core type under the body-length limit.
 //
 
 import AudioToolbox
 import CoreAudio
 import Foundation
 
-extension MoonlightManager {
+extension AppModel {
     // Capture the system output level on stream start, drop it to zero, and
     // restore it on stop. Backed by CoreAudio (see systemVolume/setSystemVolume).
     //

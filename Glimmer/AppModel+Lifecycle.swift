@@ -1,7 +1,7 @@
 //
-//  MoonlightManager+Lifecycle.swift
+//  AppModel+Lifecycle.swift
 //
-//  App-delegate attach, launch bootstrap, the live host-refresh loop, custom-bitrate auto-tracking, and shutdown. Split out of MoonlightManager.swift to keep each unit focused.
+//  App-delegate attach, launch bootstrap, the live host-refresh loop, custom-bitrate auto-tracking, and shutdown. Split out of AppModel.swift to keep each unit focused.
 //
 
 import Foundation
@@ -14,16 +14,16 @@ import Observation
 import ServiceManagement
 import os.log
 
-extension MoonlightManager {
+extension AppModel {
 
     func attach(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
-        appDelegate.moonlight = self
+        appDelegate.model = self
     }
 
     func bootstrap() async {
         // ContainerMigration.runIfNeeded() runs earlier, in GlimmerApp.init(),
-        // before MoonlightManager reads any UserDefaults.
+        // before AppModel reads any UserDefaults.
         // Self-heal the login item: if the user wants launch-at-login but the
         // registration drifted (invalidated by an app update / move), re-assert
         // it now. This is the fix for "doesn't start after reboot" - the next

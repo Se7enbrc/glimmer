@@ -1,5 +1,5 @@
 //
-//  MoonlightManager+HostRoute.swift
+//  AppModel+HostRoute.swift
 //
 //  Always-on route classification for the SELECTED host - feeds the quiet
 //  bolt / Wi-Fi glyph on the launcher's readiness chip ("Ready · 12 ms ⚡").
@@ -23,7 +23,7 @@ import SwiftUI
 import Observation
 
 /// Live wired/Wi-Fi classification of the kernel route toward one host.
-/// Owned by `MoonlightManager` (see `hostRoute`), re-pointed by the launcher
+/// Owned by `AppModel` (see `hostRoute`), re-pointed by the launcher
 /// via `refreshHostRoute()` whenever the selected host changes.
 @MainActor
 @Observable
@@ -105,7 +105,7 @@ final class HostRouteMonitor {
     }
 }
 
-extension MoonlightManager {
+extension AppModel {
 
     /// The destination `refreshHostRoute()` monitors for the current
     /// selection - the same fallback chain `nativeServerInfo(for:)` dials, so

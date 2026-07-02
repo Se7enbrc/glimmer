@@ -167,7 +167,7 @@ public final class StreamWindow {
 
     /// Called whenever the window's "is it currently visible or sitting
     /// orderOut'd in the background?" state flips. The session owner wires
-    /// this to MoonlightManager so the launcher can show a "Back to stream"
+    /// this to AppModel so the launcher can show a "Back to stream"
     /// affordance while the stream window is hidden.
     public var onBackgroundedChanged: (@MainActor (Bool) -> Void)?
 

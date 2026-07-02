@@ -30,14 +30,14 @@ private let launchedAtLogin = ProcessInfo.processInfo.arguments.contains("--laun
 @main
 struct GlimmerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var moonlight: MoonlightManager
+    @State private var model: AppModel
 
     init() {
-        // MUST precede MoonlightManager(): its init reads ~20 UserDefaults keys,
+        // MUST precede AppModel(): its init reads ~20 UserDefaults keys,
         // which the unsandbox-flip orphaned in the old container until this runs.
         ContainerMigration.runIfNeeded()
-        let mgr = MoonlightManager()
-        _moonlight = State(wrappedValue: mgr)
+        let mgr = AppModel()
+        _model = State(wrappedValue: mgr)
         AppDelegate.boundManager = mgr
     }
 
@@ -46,7 +46,7 @@ struct GlimmerApp: App {
         // brings the existing one to front instead of spawning a duplicate.
         Window("Glimmer", id: "main") {
             MainWindow()
-                .environment(moonlight)
+                .environment(model)
                 // Honest minimums: the hero caps at 520pt + 64pt surface
                 // padding (~584), and the empty state's copy wraps at 440 -
                 // 720×500 keeps every layout intact with no truncation.
@@ -85,7 +85,7 @@ struct GlimmerApp: App {
 
         Settings {
             SettingsRoot()
-                .environment(moonlight)
+                .environment(model)
                 .frame(minWidth: 720, minHeight: 480)
                 // Settings reads a notch lighter than the main window so
                 // the sidebar / content materials layer cleanly on top.
@@ -94,10 +94,10 @@ struct GlimmerApp: App {
 
         MenuBarExtra {
             MenuBarContent()
-                .environment(moonlight)
+                .environment(model)
                 .background(OpenWindowCapture())
         } label: {
-            if let symbol = moonlight.menuBarSystemImageName {
+            if let symbol = model.menuBarSystemImageName {
                 Image(systemName: symbol)
             } else {
                 Image("MenuBarIcon")
@@ -110,7 +110,7 @@ struct GlimmerApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Hand-off slot set by `GlimmerApp.init` so AppDelegate can reach the
     /// manager before any SwiftUI view body runs.
-    nonisolated(unsafe) static var boundManager: MoonlightManager?
+    nonisolated(unsafe) static var boundManager: AppModel?
 
     /// Captured SwiftUI `openWindow(id: "main")` invocation. Set by
     /// `OpenWindowCapture` the first time MainWindow appears; used by
@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// will rebuild from the WindowGroup on openWindow).
     nonisolated(unsafe) static var openMainWindow: (@MainActor () -> Void)?
 
-    weak var moonlight: MoonlightManager?
+    weak var model: AppModel?
 
     /// NSWindow open/close observers wired in applicationWillFinishLaunching
     /// to toggle `NSApp.activationPolicy` between `.regular` (Dock icon
@@ -163,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MouseAccelerationControl.restoreOrphanedOverride()
 
         if let mgr = Self.boundManager {
-            self.moonlight = mgr
+            self.model = mgr
             mgr.attach(appDelegate: self)
             Task { await mgr.bootstrap() }
         }
@@ -223,7 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        moonlight?.shutdown()
+        model?.shutdown()
         // Cmd-Q / menu Quit mid-stream skips the session's stop()/exitCapturedMode(),
         // so the SYSTEM-WIDE pointer-acceleration override would survive process exit.
         // Restore it synchronously (idempotent; no-op when nothing is overridden).
@@ -235,8 +235,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Launchpad reopen - NOT on every app activation (Cmd-Tab, in-app
     /// window clicks).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if moonlight?.isStreaming == true {
-            moonlight?.resumeStreamWindow()
+        if model?.isStreaming == true {
+            model?.resumeStreamWindow()
             return false
         }
         NSApp.activate()

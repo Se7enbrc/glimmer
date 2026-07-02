@@ -93,7 +93,7 @@ enum LoginItemManager {
 // MARK: - General
 
 struct GeneralPane: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     @AppStorage("launchMinimized") private var launchMinimized: Bool = false
 
@@ -117,11 +117,11 @@ struct GeneralPane: View {
     private var launchAppOptions: [String] {
         var seen = Set<String>()
         var out: [String] = []
-        for name in ["Desktop"] + (moonlight.selectedHost?.apps.map(\.name) ?? [])
+        for name in ["Desktop"] + (model.selectedHost?.apps.map(\.name) ?? [])
         where seen.insert(name).inserted {
             out.append(name)
         }
-        let current = moonlight.defaultLaunchApp
+        let current = model.defaultLaunchApp
         if !current.isEmpty, seen.insert(current).inserted {
             out.append(current)
         }
@@ -133,16 +133,16 @@ struct GeneralPane: View {
     /// launch here. Display-only - the tag stays the raw name, so scoping is unchanged.
     private func launchOptionLabel(_ name: String) -> String {
         guard name != "Desktop",
-              let host = moonlight.selectedHost,
+              let host = model.selectedHost,
               !host.apps.contains(where: { $0.name == name }) else { return name }
         return "\(name) (not on \(host.displayName))"
     }
 
     var body: some View {
-        // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
+        // @Bindable shim - surfaces $model.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
         // alone exposes the value but not per-property Bindings).
-        @Bindable var moonlight = moonlight
+        @Bindable var model = model
         Form {
             Section {
                 // Outcome-first labels: what the user feels, with the
@@ -173,7 +173,7 @@ struct GeneralPane: View {
                         Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
                     }
                 }
-                Toggle("Mute this Mac while streaming", isOn: $moonlight.muteMacWhileStreaming)
+                Toggle("Mute this Mac while streaming", isOn: $model.muteMacWhileStreaming)
                 Text("Keeps game audio on the gaming PC's output only; this Mac stays silent "
                     + "for the length of the stream.")
                     .font(.footnote)
@@ -185,7 +185,7 @@ struct GeneralPane: View {
                 // present as a baseline; a stored choice missing from
                 // the host's live applist (host offline at config time)
                 // is preserved in the list so we don't silently lose it.
-                Picker("On connect, launch", selection: $moonlight.defaultLaunchApp) {
+                Picker("On connect, launch", selection: $model.defaultLaunchApp) {
                     ForEach(launchAppOptions, id: \.self) { name in
                         Text(launchOptionLabel(name)).tag(name)
                     }
@@ -242,7 +242,7 @@ enum CommonResolution: CaseIterable {
 }
 
 struct QualityPane: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     /// The privileged AWDL network helper (parks awdl0 during streams). Shared
     /// singleton so this toggle and the stream lifecycle drive one instance.
@@ -267,31 +267,31 @@ struct QualityPane: View {
     /// stream config, the bitrate guidance, and the session-receipt mode
     /// keys. The binding still only commits on editing end (never per
     /// keystroke), so the clamp can't fight a transient mid-edit value.
-    /// Bounds mirror the init()-time heal in MoonlightManager.
+    /// Bounds mirror the init()-time heal in AppModel.
     private func clampCustomResolution() {
-        if moonlight.customWidth < 640 { moonlight.customWidth = 640 }
-        if moonlight.customWidth > 7680 { moonlight.customWidth = 7680 }
-        if moonlight.customHeight < 480 { moonlight.customHeight = 480 }
-        if moonlight.customHeight > 4320 { moonlight.customHeight = 4320 }
+        if model.customWidth < 640 { model.customWidth = 640 }
+        if model.customWidth > 7680 { model.customWidth = 7680 }
+        if model.customHeight < 480 { model.customHeight = 480 }
+        if model.customHeight > 4320 { model.customHeight = 4320 }
     }
     /// FPS clamp: 30..240. Sunshine + GFE both refuse anything outside
     /// this band; clamping at the UI saves a confused stream-failure
     /// trip. Same every-commit .onChange wiring as the resolution clamp.
     private func clampCustomFPS() {
-        if moonlight.customFPS < 30 { moonlight.customFPS = 30 }
-        if moonlight.customFPS > 240 { moonlight.customFPS = 240 }
+        if model.customFPS < 30 { model.customFPS = 30 }
+        if model.customFPS > 240 { model.customFPS = 240 }
     }
 
     var body: some View {
-        // @Bindable shim - surfaces $moonlight.x bindings from an @Observable
+        // @Bindable shim - surfaces $model.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
         // alone exposes the value but not per-property Bindings).
-        @Bindable var moonlight = moonlight
+        @Bindable var model = model
         Form {
             // Header is "Preset" now that the pane itself is named Quality -
             // "Quality" twice in a row read as a stutter.
             Section("Preset") {
-                Picker("", selection: $moonlight.qualityPreset) {
+                Picker("", selection: $model.qualityPreset) {
                     ForEach(QualityPreset.allCases) { preset in
                         VStack(alignment: .leading) {
                             Text(preset.displayName).fontWeight(.medium)
@@ -309,7 +309,7 @@ struct QualityPane: View {
                 // meaningful on built-in notched panels; elsewhere the safe-area
                 // inset is zero and the toggle is a no-op. Snapshotted at session
                 // start, so the next-stream caveat lives in the description.
-                Toggle("Fill the notch", isOn: $moonlight.streamCoversNotch)
+                Toggle("Fill the notch", isOn: $model.streamCoversNotch)
                     .toggleStyle(.switch)
                     .help("Covers the whole panel on notched MacBooks; a sliver of the image hides behind the camera notch.")
                 Text("Fills the whole panel on notched MacBooks - a thin strip of the picture "
@@ -318,7 +318,7 @@ struct QualityPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            if moonlight.qualityPreset == .custom {
+            if model.qualityPreset == .custom {
                 Section("Custom overrides") {
                     HStack {
                         Text("Resolution")
@@ -330,8 +330,8 @@ struct QualityPane: View {
                         Menu {
                             ForEach(CommonResolution.allCases, id: \.self) { res in
                                 Button("\(res.width) × \(res.height) · \(res.shortLabel)") {
-                                    moonlight.customWidth = res.width
-                                    moonlight.customHeight = res.height
+                                    model.customWidth = res.width
+                                    model.customHeight = res.height
                                 }
                             }
                         } label: {
@@ -342,56 +342,56 @@ struct QualityPane: View {
                         .menuIndicator(.hidden)
                         .help("Common resolutions")
                         .fixedSize()
-                        TextField("", value: $moonlight.customWidth, format: .number)
+                        TextField("", value: $model.customWidth, format: .number)
                             .frame(width: 70)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
-                            .onChange(of: moonlight.customWidth) { _, _ in clampCustomResolution() }
+                            .onChange(of: model.customWidth) { _, _ in clampCustomResolution() }
                         Text("×").foregroundStyle(.secondary)
-                        TextField("", value: $moonlight.customHeight, format: .number)
+                        TextField("", value: $model.customHeight, format: .number)
                             .frame(width: 70)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
-                            .onChange(of: moonlight.customHeight) { _, _ in clampCustomResolution() }
+                            .onChange(of: model.customHeight) { _, _ in clampCustomResolution() }
                     }
                     HStack {
                         Text("Refresh rate")
                         Spacer()
-                        TextField("", value: $moonlight.customFPS, format: .number)
+                        TextField("", value: $model.customFPS, format: .number)
                             .frame(width: 60)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
-                            .onChange(of: moonlight.customFPS) { _, _ in clampCustomFPS() }
+                            .onChange(of: model.customFPS) { _, _ in clampCustomFPS() }
                         Text("Hz").foregroundStyle(.secondary)
                     }
                     Toggle("Keep bitrate matched automatically (follows resolution and refresh)",
-                           isOn: $moonlight.customBitrateAuto)
+                           isOn: $model.customBitrateAuto)
                         .help("Recomputes the bitrate whenever resolution or refresh changes. Turn off to set your own.")
                     HStack {
                         Text("Bitrate")
                         Spacer()
                         Slider(value: Binding(
-                            get: { Double(moonlight.customBitrateMbps) },
-                            set: { moonlight.customBitrateMbps = Int($0) }
+                            get: { Double(model.customBitrateMbps) },
+                            set: { model.customBitrateMbps = Int($0) }
                         ), in: 5...200, step: 1)
                         .frame(width: 200)
-                        .disabled(moonlight.customBitrateAuto)
-                        Text("\(moonlight.customBitrateMbps) Mbps")
+                        .disabled(model.customBitrateAuto)
+                        Text("\(model.customBitrateMbps) Mbps")
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                             .frame(width: 80, alignment: .trailing)
                     }
                     bitrateGuidance
                     Toggle("Brighter highlights, deeper color (needs HDR on host and display)",
-                           isOn: $moonlight.customHDR)
+                           isOn: $model.customHDR)
                         .help("HDR - sends a 10-bit high-dynamic-range stream when the host and this display both support it.")
                     HStack {
-                        Text("Currently driving: \(moonlight.currentDisplayDescription)")
+                        Text("Currently driving: \(model.currentDisplayDescription)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("Use native resolution") {
-                            moonlight.snapCustomToDisplay()
+                            model.snapCustomToDisplay()
                         }
                         .buttonStyle(.borderless)
                     }
@@ -400,10 +400,10 @@ struct QualityPane: View {
 
             Section {
                 Toggle("Watch the stream's health while you play (small overlay over the picture)",
-                       isOn: $moonlight.showStreamStats)
+                       isOn: $model.showStreamStats)
                 // Footnote tracks the actual configured chord so it stays
                 // accurate if the user rebinds the hotkey in Shortcuts.
-                Text("Ping, frame rate, decode time. Press \(moonlight.statsHotkey.displayString) "
+                Text("Ping, frame rate, decode time. Press \(model.statsHotkey.displayString) "
                     + "(configurable in Shortcuts) while streaming to toggle the overlay.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -411,13 +411,13 @@ struct QualityPane: View {
                 // InputForwarder claims mouse events mid-stream). Position +
                 // preset + custom rows stay editable even when the overlay is
                 // off, so it's gating display, not configuration.
-                Picker("Overlay position", selection: $moonlight.streamStatsCorner) {
+                Picker("Overlay position", selection: $model.streamStatsCorner) {
                     ForEach(StatsOverlayCorner.allCases, id: \.self) { corner in
                         Text(corner.displayName).tag(corner)
                     }
                 }
 
-                Picker("Overlay detail", selection: $moonlight.statsOverlayPreset) {
+                Picker("Overlay detail", selection: $model.statsOverlayPreset) {
                     ForEach(StatsOverlayPreset.allCases, id: \.self) { preset in
                         VStack(alignment: .leading) {
                             Text(preset.displayName).fontWeight(.medium)
@@ -430,7 +430,7 @@ struct QualityPane: View {
                 }
                 .pickerStyle(.inline)
 
-                if moonlight.statsOverlayPreset == .custom {
+                if model.statsOverlayPreset == .custom {
                     StatsCustomRowsPicker()
                 }
 
@@ -475,7 +475,7 @@ struct QualityPane: View {
             }
 
             Section("Your next stream") {
-                Text(moonlight.streamSpecSummary)
+                Text(model.streamSpecSummary)
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -487,14 +487,14 @@ struct QualityPane: View {
     }
 
     /// Bitrate guidance under the slider: the baked-in measured recommendation
-    /// (harness + 20% headroom - provenance on `MoonlightManager.measuredBitrateAnchors`)
+    /// (harness + 20% headroom - provenance on `AppModel.measuredBitrateAnchors`)
     /// plus the wire-budget footnote. (Learned Tier-2 sentence retired - see QualityCalculator.)
     private var bitrateGuidance: some View {
-        let width = moonlight.customWidth
-        let height = moonlight.customHeight
-        let fps = moonlight.customFPS
-        let mode = "\(MoonlightManager.resolutionLabel(width: width, height: height))·\(fps)"
-        let recommended = moonlight.recommendedBitrateMbps(width: width, height: height, fps: fps)
+        let width = model.customWidth
+        let height = model.customHeight
+        let fps = model.customFPS
+        let mode = "\(AppModel.resolutionLabel(width: width, height: height))·\(fps)"
+        let recommended = model.recommendedBitrateMbps(width: width, height: height, fps: fps)
         return VStack(alignment: .leading, spacing: 4) {
             Text("Recommended for \(mode): ~\(recommended) Mbps")
                 .font(.footnote)
@@ -532,7 +532,7 @@ struct QualityPane: View {
 // most cleanly as its own view. Reads + writes the manager directly via
 // @Environment; no separate binding plumbing.
 struct StatsCustomRowsPicker: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     /// Row catalogue grouped by section for display. The order here
     /// matches the rendering order in StreamStatsSnapshot.rows() - the
@@ -604,12 +604,12 @@ struct StatsCustomRowsPicker: View {
     /// UserDefaults persistence kicks in on every toggle.
     private func rowBinding(for kind: StatsRow.Kind) -> Binding<Bool> {
         Binding(
-            get: { moonlight.statsOverlayCustomRows.contains(kind) },
+            get: { model.statsOverlayCustomRows.contains(kind) },
             set: { isOn in
                 if isOn {
-                    moonlight.statsOverlayCustomRows.insert(kind)
+                    model.statsOverlayCustomRows.insert(kind)
                 } else {
-                    moonlight.statsOverlayCustomRows.remove(kind)
+                    model.statsOverlayCustomRows.remove(kind)
                 }
             }
         )

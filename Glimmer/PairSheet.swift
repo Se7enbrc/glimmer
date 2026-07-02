@@ -15,7 +15,7 @@ import Network
 import SwiftUI
 
 struct PairSheet: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var hostnameOrIP: String
     @State private var pin: String = ""
@@ -32,7 +32,7 @@ struct PairSheet: View {
     }
 
     private var isSuccess: Bool {
-        if case .success = moonlight.pairingPhase { return true }
+        if case .success = model.pairingPhase { return true }
         return false
     }
 
@@ -98,7 +98,7 @@ struct PairSheet: View {
                 .foregroundStyle(.secondary)
             PINTiles(pin: pin)
                 .onAppear {
-                    if pin.isEmpty { pin = moonlight.generatePairingPIN() }
+                    if pin.isEmpty { pin = model.generatePairingPIN() }
                     // Showing the code IS the start of pairing - the handshake
                     // must be open on the host for the typed PIN to land.
                     startPairing()
@@ -108,9 +108,9 @@ struct PairSheet: View {
                 .foregroundStyle(.secondary)
         }
 
-        if let msg = moonlight.pairingMessage, !isSuccess {
+        if let msg = model.pairingMessage, !isSuccess {
             HStack(spacing: 8) {
-                if moonlight.pairingInFlight {
+                if model.pairingInFlight {
                     ProgressView().controlSize(.small)
                 } else if msg.lowercased().contains("fail")
                             || msg.lowercased().contains("couldn't")
@@ -135,7 +135,7 @@ struct PairSheet: View {
                 Spacer()
                 Button("Stream now") {
                     selectPairedHost()
-                    moonlight.streamDefaultApp()
+                    model.streamDefaultApp()
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -153,27 +153,27 @@ struct PairSheet: View {
                 // Manual retry - pairing normally auto-starts with the code.
                 Button("Retry") { startPairing() }
                     .buttonStyle(StreamButtonStyle())
-                    .disabled(moonlight.pairingInFlight)
+                    .disabled(model.pairingInFlight)
             }
         }
     }
 
     private func startPairing() {
-        guard !moonlight.pairingInFlight, !isSuccess,
+        guard !model.pairingInFlight, !isSuccess,
               !hostnameOrIP.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return }
-        if pin.count != 4 { pin = moonlight.generatePairingPIN() }
-        Task { await moonlight.pair(hostnameOrIP: hostnameOrIP, pin: pin) }
+        if pin.count != 4 { pin = model.generatePairingPIN() }
+        Task { await model.pair(hostnameOrIP: hostnameOrIP, pin: pin) }
     }
 
     private func selectPairedHost() {
         let typed = hostnameOrIP.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let host = moonlight.hosts.first(where: {
+        if let host = model.hosts.first(where: {
             [$0.name, $0.displayName, $0.localAddress, $0.manualAddress]
                 .compactMap { $0 }
                 .contains { $0.caseInsensitiveCompare(typed) == .orderedSame }
         }) {
-            moonlight.selectHost(host)
+            model.selectHost(host)
         }
     }
 }

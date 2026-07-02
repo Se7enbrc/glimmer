@@ -173,7 +173,7 @@ extension StreamSession {
                     // toggle) takes effect on the next 1Hz refresh - no
                     // need to restart the stream to see the new layout.
                     // The provider closure resolves through
-                    // MoonlightManager.effectiveStatsRows, which routes
+                    // AppModel.effectiveStatsRows, which routes
                     // through statsOverlayPreset + statsOverlayCustomRows.
                     let enabled = statsRowsProvider()
                     let thresholds = statsThresholdsProvider()
@@ -653,7 +653,7 @@ extension StreamSession {
         noteTelemetryDisconnect(.watchdogStall)
         // Reuse `connectionTerminated` with a sentinel error code so UI
         // can show a "host became unreachable" message. -1 maps to the
-        // existing "Stream ended unexpectedly" handler in MoonlightManager.
+        // existing "Stream ended unexpectedly" handler in AppModel.
         bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: -1))
         await stop()
     }

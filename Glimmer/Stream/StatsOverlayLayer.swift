@@ -82,7 +82,7 @@ public final class StatsOverlayLayer {
 
     /// Which screen corner the overlay anchors to. Defaults to the
     /// historical top-left position; the session owner re-sets this from
-    /// `MoonlightManager.streamStatsCorner` at stream-start time. The
+    /// `AppModel.streamStatsCorner` at stream-start time. The
     /// setter re-flows the layout immediately if we're already attached
     /// to a host layer.
     public var corner: StatsOverlayCorner = .topLeft {

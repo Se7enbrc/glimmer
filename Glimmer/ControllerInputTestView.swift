@@ -89,7 +89,7 @@ final class ControllerMonitor {
 }
 
 struct ControllerInputTest: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @State private var monitor: ControllerMonitor?
 
     var body: some View {
@@ -113,7 +113,7 @@ struct ControllerInputTest: View {
             }
         }
         .onAppear {
-            let monitor = ControllerMonitor(isStreaming: { moonlight.isStreaming })
+            let monitor = ControllerMonitor(isStreaming: { model.isStreaming })
             monitor.start()
             self.monitor = monitor
         }

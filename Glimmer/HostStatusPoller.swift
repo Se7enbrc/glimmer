@@ -5,13 +5,13 @@
 //  selected host's HTTP port for an RTT, then if reachable pulls /serverinfo
 //  to learn idle-vs-busy. Cancellation hooks live on the manager so lifecycle
 //  edges (host change, app activation, stream start/end) funnel through
-//  `restartHostStatusPolling()`. Originally inline in `MoonlightManager.swift`.
+//  `restartHostStatusPolling()`. Originally inline in `AppModel.swift`.
 //
 
 import AppKit
 import Foundation
 
-extension MoonlightManager {
+extension AppModel {
 
     /// Cancel any in-flight chip poller and spin up a fresh one for the
     /// currently selected host. Single source of truth for the chip's

@@ -4,15 +4,15 @@ import AppKit
 // MARK: - Main Window
 
 struct MainWindow: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
 
     var body: some View {
-        @Bindable var moonlight = moonlight
+        @Bindable var model = model
         return Group {
-            if moonlight.hosts.isEmpty {
+            if model.hosts.isEmpty {
                 EmptyPairingState()
             } else {
                 ConnectSurface()
@@ -21,11 +21,11 @@ struct MainWindow: View {
         // One-time proactive offer when a DualSense is connected (see
         // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
-        .alert("Enable enhanced DualSense buttons?", isPresented: $moonlight.showRawHIDPrompt) {
-            Button("Enable") { moonlight.enableRawHIDFromPrompt() }
-            Button("Cancel", role: .cancel) { moonlight.declineRawHIDPrompt() }
+        .alert("Enable enhanced DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
+            Button("Enable") { model.enableRawHIDFromPrompt() }
+            Button("Cancel", role: .cancel) { model.declineRawHIDPrompt() }
         } message: {
-            Text(MoonlightManager.rawHIDExplanation)
+            Text(AppModel.rawHIDExplanation)
         }
         // One-time launch nudge to enable Wi-Fi stutter protection. Only for
         // users who've paired a PC (skips first-run onboarding), never while the
@@ -44,9 +44,9 @@ struct MainWindow: View {
             // Parking awdl0 only smooths Wi-Fi; on a confirmed wired route it's
             // a privileged-helper install for nothing. Suppress ONLY on .wired -
             // Wi-Fi / tunnel / still-resolving unknown still prompt.
-            guard !moonlight.hosts.isEmpty,
-                  !moonlight.showRawHIDPrompt,
-                  moonlight.hostRoute.routeClass != .wired,
+            guard !model.hosts.isEmpty,
+                  !model.showRawHIDPrompt,
+                  model.hostRoute.routeClass != .wired,
                   AWDLHelperManager.shared.shouldPromptToEnable else { return }
             showAWDLPrompt = true
         }
@@ -62,14 +62,14 @@ struct MainWindow: View {
         .confirmationDialog(
             "Take over the stream?",
             isPresented: Binding(
-                get: { moonlight.pendingTakeover != nil },
-                set: { if !$0 { moonlight.pendingTakeover = nil } }
+                get: { model.pendingTakeover != nil },
+                set: { if !$0 { model.pendingTakeover = nil } }
             ),
             titleVisibility: .visible,
-            presenting: moonlight.pendingTakeover
+            presenting: model.pendingTakeover
         ) { _ in
-            Button("Take over", role: .destructive) { moonlight.confirmPendingTakeover() }
-            Button("Cancel", role: .cancel) { moonlight.pendingTakeover = nil }
+            Button("Take over", role: .destructive) { model.confirmPendingTakeover() }
+            Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
         } message: { pending in
             Text("\(pending.host.displayName) is already streaming \(pending.occupantApp). Starting your stream will end that session.")
         }
@@ -84,15 +84,15 @@ struct MainWindow: View {
         // runs monitor(nil), leaving the parked UDP socket watching the
         // forgotten host's route until quit. Key on emptiness; release it
         // (selectedHost is nil here → monitor(address: nil), the teardown).
-        .task(id: moonlight.hosts.isEmpty) {
-            if moonlight.hosts.isEmpty { moonlight.refreshHostRoute() }
+        .task(id: model.hosts.isEmpty) {
+            if model.hosts.isEmpty { model.refreshHostRoute() }
         }
         .toolbar {
             // Single navigation pill merging the host dropdown with the
             // Settings gear. With zero hosts paired the host menu has nothing
             // to point at, so the pill collapses to a standalone gear button.
             ToolbarItem(placement: .navigation) {
-                if moonlight.hosts.isEmpty {
+                if model.hosts.isEmpty {
                     Button {
                         openSettings()
                     } label: {
@@ -116,12 +116,12 @@ struct MainWindow: View {
 /// menu is open (shortcuts never register), and app-level `.commands` would
 /// also fire from Settings. Capped at nine - ⌘0 reads as "reset".
 private struct HostSwitchShortcuts: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     var body: some View {
-        if moonlight.hosts.count > 1 {
-            ForEach(Array(moonlight.hosts.prefix(9).enumerated()), id: \.element.id) { index, host in
-                Button("") { moonlight.selectHost(host) }
+        if model.hosts.count > 1 {
+            ForEach(Array(model.hosts.prefix(9).enumerated()), id: \.element.id) { index, host in
+                Button("") { model.selectHost(host) }
                     .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                     .opacity(0)
                     .frame(width: 0, height: 0)
@@ -135,7 +135,7 @@ private struct HostSwitchShortcuts: View {
 // MARK: - Connect surface
 
 private struct ConnectSurface: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// True while we're between "user pressed Stream" and "stream window
@@ -146,8 +146,8 @@ private struct ConnectSurface: View {
     /// Suppressed while the stream window is just hiding in the background -
     /// the StreamButton's "Back to stream" role owns that affordance.
     private var isConnecting: Bool {
-        guard case .connecting = moonlight.streamPhase else { return false }
-        guard !moonlight.nativeStreamBackgrounded else { return false }
+        guard case .connecting = model.streamPhase else { return false }
+        guard !model.nativeStreamBackgrounded else { return false }
         return true
     }
 
@@ -167,8 +167,8 @@ private struct ConnectSurface: View {
     /// stuck connect stranded the user on a dimmed, button-less launcher.
     /// Handoff (and the dim) now begin at the live edge, as documented.
     private var isHandedOff: Bool {
-        guard moonlight.isStreaming, !moonlight.nativeStreamBackgrounded else { return false }
-        if case .connecting = moonlight.streamPhase { return false }
+        guard model.isStreaming, !model.nativeStreamBackgrounded else { return false }
+        if case .connecting = model.streamPhase { return false }
         return true
     }
 
@@ -179,7 +179,7 @@ private struct ConnectSurface: View {
             ConnectBanner()
                 .padding(.horizontal, 4)
 
-            HostHero(host: moonlight.selectedHost)
+            HostHero(host: model.selectedHost)
                 .scaleEffect((showsConnectingUI && !reduceMotion) ? 1.04 : 1.0)
                 .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: showsConnectingUI)
 
@@ -225,15 +225,15 @@ private struct ConnectSurface: View {
                 // Ground truth for the connect-hold adjudication INFO at the
                 // live edge ("capsule shown" vs "suppressed") - reported from
                 // the actual flip, not inferred from the span.
-                moonlight.noteConnectCapsuleShown()
+                model.noteConnectCapsuleShown()
             }
         }
         // Keep the route glyph pointed at the selected host's CURRENT
         // address - keyed on the resolved address, NOT selectedHost?.id:
         // re-pairing after a DHCP move rewrites the address under the SAME
         // uuid, so an id-keyed task never re-fired (glyph watched a dead IP).
-        .task(id: moonlight.selectedHostRouteAddress) {
-            moonlight.refreshHostRoute()
+        .task(id: model.selectedHostRouteAddress) {
+            model.refreshHostRoute()
         }
     }
 }
@@ -245,16 +245,16 @@ private struct ConnectSurface: View {
 /// version, when known, shows here as a footnote-weight breadcrumb - Apple's
 /// first-party pattern (System Settings → About) of surfacing version subtly.
 private struct ContextFooter: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     var body: some View {
-        let host = moonlight.selectedHost
+        let host = model.selectedHost
         let parts: [String] = {
             var segments: [String] = []
             // `lastPlayedDescription` is already lowercase at the source
             // (see Host.swift) - sentence-case relative-time per macOS HIG.
             if let lp = host?.lastPlayedDescription { segments.append(lp) }
-            if let version = moonlight.hostLiveStatus?.sunshineVersion,
+            if let version = model.hostLiveStatus?.sunshineVersion,
                !version.isEmpty, host != nil {
                 // Leading Major.Minor.Patch of /serverinfo's appversion -
                 // both products emit a long GFE-shaped string ("7.1.431.0").
@@ -282,14 +282,14 @@ private struct ContextFooter: View {
 /// Tip-style banner above the hero card. Shows for stream errors. Stays out
 /// of the way otherwise.
 private struct ConnectBanner: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         Group {
             // The "stream is in the background" affordance lives on the
             // StreamButton itself ("Back to stream" role), so the banner only
             // handles the load-bearing recovery case: stream errors.
-            if let err = moonlight.nativeStreamError, !err.isEmpty {
+            if let err = model.nativeStreamError, !err.isEmpty {
                 HStack(alignment: .center, spacing: 12) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 16, weight: .bold))
@@ -302,16 +302,16 @@ private struct ConnectBanner: View {
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Retry") {
-                        moonlight.nativeStreamError = nil
+                        model.nativeStreamError = nil
                         // The hero verb's target, NOT streamDefaultApp(): the
                         // failed launch stamped lastPlayedApp at start, so the
                         // hero above still reads "Stream <app>" - a Retry that
                         // launched the default app would contradict it.
-                        moonlight.streamHeroApp()
+                        model.streamHeroApp()
                     }
                     .buttonStyle(.glass)
                     .controlSize(.small)
-                    .disabled(moonlight.selectedHost == nil || moonlight.isStreaming)
+                    .disabled(model.selectedHost == nil || model.isStreaming)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -328,7 +328,7 @@ private struct ConnectBanner: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: moonlight.nativeStreamError)
+        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.nativeStreamError)
     }
 }
 
@@ -336,17 +336,17 @@ private struct ConnectBanner: View {
 /// via `ControlGroup`, which picks up the macOS 26 Liquid Glass toolbar
 /// material and renders one segmented pill with a hairline divider.
 private struct HostAndSettingsPill: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         ControlGroup {
             Menu {
-                ForEach(moonlight.hosts) { host in
+                ForEach(model.hosts) { host in
                     Button {
-                        moonlight.selectHost(host)
+                        model.selectHost(host)
                     } label: {
-                        if host.id == moonlight.selectedHost?.id {
+                        if host.id == model.selectedHost?.id {
                             Label(host.displayName, systemImage: "checkmark")
                         } else {
                             Text(host.displayName)
@@ -357,7 +357,7 @@ private struct HostAndSettingsPill: View {
                 HStack(spacing: 6) {
                     Image(systemName: "display")
                         .symbolRenderingMode(.hierarchical)
-                    Text(moonlight.selectedHost?.displayName ?? "Choose PC")
+                    Text(model.selectedHost?.displayName ?? "Choose PC")
                         .lineLimit(1)
                 }
             }
@@ -393,8 +393,8 @@ var accentSurfaceGradient: LinearGradient {
 }
 
 private struct HostHero: View {
-    let host: MoonlightHost?
-    @Environment(MoonlightManager.self) private var moonlight
+    let host: Host?
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -469,7 +469,7 @@ private struct HostHero: View {
 /// Applies the shared host right-click menu only when a host is selected
 /// (the hero shows an empty state otherwise).
 private struct OptionalHostContextMenu: ViewModifier {
-    let host: MoonlightHost?
+    let host: Host?
     func body(content: Content) -> some View {
         if let host {
             content.hostContextMenu(host)
@@ -485,7 +485,7 @@ private struct OptionalHostContextMenu: ViewModifier {
 // MARK: - Menu bar content
 
 struct MenuBarContent: View {
-    @Environment(MoonlightManager.self) private var moonlight
+    @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
@@ -505,23 +505,23 @@ struct MenuBarContent: View {
                 Label("Open Glimmer", systemImage: "macwindow")
             }
 
-            if let host = moonlight.selectedHost {
+            if let host = model.selectedHost {
                 Section("Connected to \(host.displayName)") {
                     Button {
-                        moonlight.streamDefaultApp()
+                        model.streamDefaultApp()
                         activate()
                     } label: {
-                        Label("Stream \(moonlight.defaultAppName)", systemImage: "play.fill")
+                        Label("Stream \(model.defaultAppName)", systemImage: "play.fill")
                     }
-                    .disabled(moonlight.isStreaming)
+                    .disabled(model.isStreaming)
 
-                    if moonlight.hosts.count > 1 {
+                    if model.hosts.count > 1 {
                         Menu {
-                            ForEach(moonlight.hosts) { host in
+                            ForEach(model.hosts) { host in
                                 Button {
-                                    moonlight.selectHost(host)
+                                    model.selectHost(host)
                                 } label: {
-                                    if host.id == moonlight.selectedHost?.id {
+                                    if host.id == model.selectedHost?.id {
                                         Label(host.displayName, systemImage: "checkmark")
                                     } else {
                                         Text(host.displayName)
@@ -541,7 +541,7 @@ struct MenuBarContent: View {
 
             // Controller battery charm - shown whenever a pad reporting battery
             // is connected to the Mac (sampled on menu open).
-            if let battery = moonlight.menuBarControllerBattery {
+            if let battery = model.menuBarControllerBattery {
                 Section("Controller") {
                     Label(
                         "\(battery.percent)% battery\(battery.charging ? " · charging" : "")",
@@ -595,16 +595,16 @@ struct MenuBarContent: View {
 /// shared by the launcher hero and the Settings PCTile. Right-click is the
 /// canonical affordance (no visible button). Carries its own confirmation
 /// dialogs + rename alert; apply via `.hostContextMenu(host)` with the
-/// MoonlightManager in the environment.
+/// AppModel in the environment.
 private struct HostContextMenu: ViewModifier {
-    let host: MoonlightHost
-    @Environment(MoonlightManager.self) private var moonlight
+    let host: Host
+    @Environment(AppModel.self) private var model
     @State private var showUnpairConfirm = false
     @State private var showRename = false
     @State private var draftName = ""
     @State private var codecPref: HostCodecPreference
 
-    init(host: MoonlightHost) {
+    init(host: Host) {
         self.host = host
         _codecPref = State(initialValue: HostCodecPreference.load(for: host.id))
     }
@@ -640,7 +640,7 @@ private struct HostContextMenu: ViewModifier {
                     HostCodecPreference.save(newValue, for: host.id)
                     // Spec chip/summary read the codec via UserDefaults; bump
                     // the observable sentinel so SwiftUI recomputes the Mbps.
-                    moonlight.displayInfoRevision &+= 1
+                    model.displayInfoRevision &+= 1
                 }
                 Divider()
                 Button(role: .destructive) {
@@ -651,9 +651,9 @@ private struct HostContextMenu: ViewModifier {
             }
             .alert("Rename \(host.name)", isPresented: $showRename) {
                 TextField("Display name", text: $draftName)
-                Button("Save") { moonlight.renameHost(host, to: draftName) }
+                Button("Save") { model.renameHost(host, to: draftName) }
                 Button("Use default name", role: .destructive) {
-                    moonlight.renameHost(host, to: "")
+                    model.renameHost(host, to: "")
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
@@ -664,7 +664,7 @@ private struct HostContextMenu: ViewModifier {
                 isPresented: $showUnpairConfirm,
                 titleVisibility: .visible
             ) {
-                Button("Unpair", role: .destructive) { moonlight.unpair(host) }
+                Button("Unpair", role: .destructive) { model.unpair(host) }
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("Glimmer will forget this PC and leave a clean state. You can pair again at any time.")
@@ -674,7 +674,7 @@ private struct HostContextMenu: ViewModifier {
 
 extension View {
     /// Attach the shared per-host right-click menu (Rename / Codec / Unpair).
-    func hostContextMenu(_ host: MoonlightHost) -> some View {
+    func hostContextMenu(_ host: Host) -> some View {
         modifier(HostContextMenu(host: host))
     }
 }

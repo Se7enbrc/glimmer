@@ -108,7 +108,7 @@ public enum StatsOverlayPreset: String, CaseIterable, Codable, Sendable {
 }
 
 /// The curated row sets behind the overlay presets. Defined as static
-/// constants so MoonlightManager and the SettingsView subtitle / checkbox
+/// constants so AppModel and the SettingsView subtitle / checkbox
 /// code all reach the same values without duplicating the literals.
 public enum StatsOverlayDefaults {
     /// Minimal preset - exactly three rows: am I getting frames (render
@@ -142,7 +142,7 @@ public enum StatsOverlayDefaults {
 // MARK: - Stats overlay color thresholds
 
 /// User-configurable thresholds that drive the row health colors (white →
-/// yellow → red). Persisted to UserDefaults via MoonlightManager. Defaults
+/// yellow → red). Persisted to UserDefaults via AppModel. Defaults
 /// are calibrated to "when does this actually start to feel bad" rather
 /// than to rounding noise above a target - a 60Hz stream measuring 58fps
 /// is fine, a 60Hz stream measuring 29fps is unplayable.
@@ -198,7 +198,7 @@ public struct StatsThresholds: Sendable, Equatable, Codable {
 
 /// Where the in-stream stats overlay anchors itself, with a 20pt inset
 /// from the chosen corner. Persisted to UserDefaults under
-/// "streamStatsCorner" via MoonlightManager. A right-click context menu
+/// "streamStatsCorner" via AppModel. A right-click context menu
 /// on the overlay layer isn't viable because mouse events during a
 /// stream are claimed by InputForwarder and forwarded to the host (the
 /// cursor is hidden, right-click is a game input, not a launcher

@@ -12,13 +12,13 @@ import Foundation
 /// A paired Sunshine/GeForce Experience host known to Glimmer. Mirrors the
 /// shape of the moonlight-qt-persisted host blob so the one-shot migration
 /// in `HostsStore.migrateFromMoonlightQtIfNeeded` can copy values verbatim.
-struct MoonlightHost: Identifiable, Hashable {
+struct Host: Identifiable, Hashable {
     let id: String  // uuid from Moonlight, or hostname fallback
     let name: String
     let customName: String?
     let localAddress: String?
     let manualAddress: String?
-    let apps: [MoonlightApp]
+    let apps: [LibraryApp]
     let lastConnected: Date?
     let serverCertPEM: String?    // pinned from moonlight-qt's hosts.N.srvcert (migration)
     let appVersion: String?
@@ -49,7 +49,7 @@ struct MoonlightHost: Identifiable, Hashable {
 }
 
 /// One launchable app on a paired host (Sunshine's "applist" entries).
-struct MoonlightApp: Identifiable, Hashable {
+struct LibraryApp: Identifiable, Hashable {
     let id: Int
     let name: String
     let hdr: Bool
@@ -241,7 +241,7 @@ public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
     // NOTE: `.home` (the PS / Guide / "menu" button) was removed - macOS
     // gamecontrollerd reserves that button for system gestures, so it never
     // reliably reached the app as a quit chord. A persisted `.home` decodes to
-    // nil and falls back to the default (see MoonlightManager load), so this is
+    // nil and falls back to the default (see AppModel load), so this is
     // a clean removal with no migration step.
 
     public var displayName: String {

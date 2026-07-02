@@ -377,7 +377,7 @@ public struct ServerInfo: Sendable {
     ///      cert.
     ///   2. The persisted pin from a prior pairing
     ///      (`glimmer.pinnedCert.<uniqueId>` in UserDefaults), seeded in
-    ///      via `MoonlightManager.nativeServerInfo`. Same trust level as
+    ///      via `AppModel.nativeServerInfo`. Same trust level as
     ///      (1) because that's how it landed in storage.
     ///   3. A `<PlainCert>` value picked up during an unpaired
     ///      /serverinfo call. INFORMATIONAL ONLY - not bound as a pin.

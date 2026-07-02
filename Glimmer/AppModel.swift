@@ -1,11 +1,11 @@
 //
-//  MoonlightManager.swift
+//  AppModel.swift
 //
 //  ObservableObject that owns the UI's view of paired hosts, quality
 //  settings, pairing state, and stream lifecycle. This file is the class
 //  core (published properties + orchestration). The split is:
 //
-//    * Models/Host.swift      - MoonlightHost, MoonlightApp, QualityPreset,
+//    * Models/Host.swift      - Host, LibraryApp, QualityPreset,
 //                               HotkeyChord, HostLiveStatus
 //    * HostsStore.swift       - UserDefaults read/write of the host list,
 //                               moonlight-qt migration, unpair/retrust
@@ -33,14 +33,14 @@ import os.log
 // fires.
 @MainActor
 @Observable
-final class MoonlightManager {
+final class AppModel {
 
     @ObservationIgnored let log = Logger(
-        subsystem: "io.ugfugl.Glimmer", category: "MoonlightManager")
+        subsystem: "io.ugfugl.Glimmer", category: "AppModel")
 
     // Hosts
-    var hosts: [MoonlightHost] = []
-    var selectedHost: MoonlightHost?
+    var hosts: [Host] = []
+    var selectedHost: Host?
 
     // Stream lifecycle
     var isStreaming = false
@@ -173,12 +173,12 @@ final class MoonlightManager {
     /// attempt never went live or ran under the stash threshold. Assigned in
     /// the teardown cleanup right before `streamEndedToastVisible` flips so
     /// the toast's first render already carries its "2h 12m · 12 ms median"
-    /// line. Persistence contract: MoonlightManager+SessionReceipt.swift.
+    /// line. Persistence contract: AppModel+SessionReceipt.swift.
     var lastSessionReceipt: SessionReceipt?
 
     /// Always-on route monitor for the SELECTED host (the readiness chip's
     /// quiet bolt / Wi-Fi glyph). Deliberately independent of the gate-on
-    /// telemetry probe - see MoonlightManager+HostRoute.swift. Re-pointed by
+    /// telemetry probe - see AppModel+HostRoute.swift. Re-pointed by
     /// the launcher via `refreshHostRoute()` as the selection changes.
     let hostRoute = HostRouteMonitor()
 
@@ -195,8 +195,8 @@ final class MoonlightManager {
     /// nil = no takeover pending (the common case streams straight through).
     var pendingTakeover: PendingTakeover?
     struct PendingTakeover: Equatable {
-        let app: MoonlightApp
-        let host: MoonlightHost
+        let app: LibraryApp
+        let host: Host
         let occupantApp: String
     }
 
@@ -306,7 +306,7 @@ final class MoonlightManager {
 
     /// User-recorded buttons backing the `.custom` quit chord (press the buttons,
     /// we store them - issue #9). Persisted as JSON.
-    var customControllerChord: Set<ControllerButton> = MoonlightManager.loadCustomChord() {
+    var customControllerChord: Set<ControllerButton> = AppModel.loadCustomChord() {
         didSet {
             if let data = try? JSONEncoder().encode(customControllerChord) {
                 UserDefaults.standard.set(data, forKey: "customControllerChord")
@@ -428,7 +428,7 @@ final class MoonlightManager {
     /// String-typed read shim for UI code that hasn't migrated.
     var pairingPhase: PairingPhase = .idle
 
-    // `pairingMessage` (the String shim over `pairingPhase`) lives in MoonlightManager+Pairing.swift.
+    // `pairingMessage` (the String shim over `pairingPhase`) lives in AppModel+Pairing.swift.
 
     // Persisted stream config - held here so the UI's "Your next stream"
     // summary stays truthful without depending on moonlight-qt's UserDefaults
@@ -609,6 +609,6 @@ final class MoonlightManager {
 
     /// Pre-mute capture of the system output level. Non-nil doubles as the
     /// did-mute LATCH: the stream-end restore keys off THIS, never the live
-    /// toggle - see MoonlightManager+Audio.swift for the full contract.
+    /// toggle - see AppModel+Audio.swift for the full contract.
     @ObservationIgnored var prePausedMacVolume: Float?
 }
