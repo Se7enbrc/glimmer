@@ -107,9 +107,8 @@ enum QualityPreset: String, CaseIterable, Identifiable {
 /// A single user-configurable in-stream hotkey: modifier flags + one character
 /// key. One type covers every chord-shaped intercept Glimmer fires at the
 /// SwiftUI layer (currently: quit-stream, toggle-stats-overlay). The JSON
-/// shape is identical to the legacy `QuitHotkey` blob persisted in
-/// UserDefaults under `"quitHotkey"`, so the typealias round-trips without
-/// a migration step.
+/// shape matches the blob historically persisted under the UserDefaults key
+/// `"quitHotkey"`, so stored chords decode without a migration step.
 public struct HotkeyChord: Codable, Equatable, Sendable {
     public var ctrl: Bool
     public var alt: Bool
@@ -156,10 +155,6 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     ///     opt-in diagnostic session.
     public static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")
 
-    /// Source-compat shim: existing call sites that read `.default` still
-    /// resolve to the quit chord. New code should prefer the explicit name.
-    public static let `default` = defaultQuit
-
     var displayString: String {
         var parts: [String] = []
         if ctrl { parts.append("⌃") }
@@ -180,11 +175,6 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
         return parts.joined(separator: "+")
     }
 }
-
-/// Legacy spelling preserved as a typealias so the persisted JSON blob's
-/// type identity (and any pre-existing callers we miss) keeps working
-/// without a forced migration. New code should refer to `HotkeyChord`.
-public typealias QuitHotkey = HotkeyChord
 
 /// A single capturable controller button, used for the user-recorded custom
 /// quit chord. Covers everything ControllerForwarder can read (GameController

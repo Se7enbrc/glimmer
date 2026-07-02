@@ -476,7 +476,7 @@ struct StreamButton: View {
     /// captured at stream() entry): ⌘1-⌘9 can re-point `selectedHost`
     /// mid-handshake, and the capsule must keep naming the PC it's dialling.
     private var connectingPrimary: String {
-        if let stage = model.nativeStreamPhase,
+        if case .connecting(let stage) = model.streamPhase,
            stage.hasPrefix("Connecting to ") || stage == "Cancelling..." {
             return stage
         }
@@ -491,7 +491,7 @@ struct StreamButton: View {
     /// stripping whatever the primary already carries ("Connecting to X..."
     /// duplicates, the "Cancelling..." repaint).
     private var connectingSubtext: String? {
-        guard let stage = model.nativeStreamPhase, !stage.isEmpty else { return nil }
+        guard case .connecting(let stage) = model.streamPhase, !stage.isEmpty else { return nil }
         if stage == connectingPrimary { return nil }
         if stage.hasPrefix("Connecting to ") || stage == "Connecting..." { return nil }
         return stage

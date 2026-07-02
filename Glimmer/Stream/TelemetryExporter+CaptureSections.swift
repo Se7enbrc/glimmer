@@ -196,9 +196,10 @@ extension TelemetryExporter {
             // steadyPingInterval), flagged so fast-while-active windows
             // self-explain.
             "\"keepalive_caution_forces_fast\":true",
-            // The env-signal layer ships SHADOW: state machine + exports live,
-            // every actuation dark except the keepalive gate above.
-            "\"env_shadow_mode\":true",
+            // True only when the env state moves no dial beyond the keepalive
+            // gate above. With the reconciler live it also drives the pacer
+            // depth + FEC reorder-hold headroom, so shadow reads false.
+            "\"env_shadow_mode\":\(!EnvSignalController.reconcilerEnabled)",
             "\"audio_cushion_base_ms\":\(Int(AudioDecoder.playoutCushionBaseMs))",
             "\"audio_cushion_step_ms\":\(Int(AudioDecoder.playoutCushionStepMs))",
             "\"audio_cushion_max_ms\":\(Int(AudioDecoder.playoutCushionMaxMs))",

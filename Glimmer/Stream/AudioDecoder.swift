@@ -136,6 +136,14 @@ public final class AudioDecoder: @unchecked Sendable {
     /// drain, so keep most of it (slow ×0.97 bleed only while packets flow) and
     /// re-engage with it already learned rather than re-converging from 0.
     static let resamplerIntegralHoldFactor = 0.97
+    /// True once the loop has run at least one ENGAGED tick this session. The
+    /// disengage hold-bleed applies only after this: a pre-roll must not bleed
+    /// a persisted per-host skew seed before the loop ever engages with it.
+    var resamplerEverEngaged = false
+    /// Skew-save throttle state (audioMeterLock): the last opportunistic
+    /// per-host persist, so a stable integral writes at most ~1/min.
+    var lastResamplerSkewSaveNanos: UInt64 = 0
+    var lastSavedResamplerSkewPpm: Double = .nan
     /// SHALLOW-RELEASE gate: the |integral ppm| ceiling under which the resampler is
     /// deemed to be CARRYING the skew (not railing), so the wired cushion may converge.
     /// Real host skews seen ~450ppm; above ~500 the loop is at/near its rail and the
@@ -407,12 +415,22 @@ public final class AudioDecoder: @unchecked Sendable {
         // + route latch); seeding the target from per-host memory makes the cold
         // pre-roll build last session's learned depth, not re-pay 5-8 startup blips.
         let seed = Self.loadCushionSeed()
+        // Per-host skew seed: start the resampler's integral at the persisted
+        // converged clock offset so the session begins pre-corrected instead of
+        // re-drifting into the first minutes' underruns (the ratchet feed).
+        let skewSeedPpm = Self.loadResamplerSkewSeed(host: seed.host)
+        if skewSeedPpm != 0 {
+            Diag.notice("audio resampler skew seed: \(Int(skewSeedPpm.rounded()))ppm "
+                + "from per-host memory - starts pre-converged", "Stream.Audio")
+        }
         let seedNowNanos = DispatchTime.now().uptimeNanoseconds
         audioMeterLock.lock()
         meterSampleRate = Double(sampleRate)
         framesScheduled = 0; framesPlayed = 0
         driftAnchorNanos = 0; driftAnchorFramesPlayed = 0
-        resamplerIntegralPpm = 0; resamplerEpsPpm = 0; varispeed.rate = 1.0
+        resamplerIntegralPpm = skewSeedPpm; resamplerEpsPpm = 0; varispeed.rate = 1.0
+        resamplerEverEngaged = false
+        lastResamplerSkewSaveNanos = 0; lastSavedResamplerSkewPpm = .nan
         playoutStarted = false; playoutDrained = false; meterShutdown = false
         // FIX: clear the teardown latch on RE-init. A reconnect's stopConnection →
         // shutdown() set `isShutdown = true` and nothing reset it, so post-reconnect

@@ -373,6 +373,17 @@ final class FramePacer: @unchecked Sendable {
         /// pinned preferredFrameRateRange floor >1s - direct governor evidence).
         var floorViolationSince: CFTimeInterval = .nan
         var floorViolationLogged = false
+        /// FLOOR-VIOLATION ASSIST: true while the off-tick timer is armed to
+        /// fill the governor's 0.5-0.9x dead band (ticks throttled below the
+        /// pinned floor but above the hard-deficit ratio - the field's
+        /// most-frequent judder signature, logged for weeks with no response).
+        var floorAssistActive = false
+        var floorAssistEngagedAt: CFTimeInterval = .nan
+        var floorAssistEngageReleaseCount: UInt64 = 0
+        /// Continuous healthy time (ticks back at/above the floor ratio) before
+        /// the assist stands down - rides the observed 1-3s violate/clear flap
+        /// through as ONE episode instead of cycling the timer with it.
+        var floorAssistHealthySince: CFTimeInterval = .nan
         /// Lock-guarded mirror of the main-actor `appliedFloorHz`, written wherever
         /// the range is (re)applied, so the off-main rate-window roll can compare
         /// realized ticks against the pinned floor without an actor hop.

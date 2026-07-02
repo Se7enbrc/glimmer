@@ -78,6 +78,10 @@ extension FramePacer {
     /// fires it - sustained for `floorViolationNoticeSeconds`.
     static let floorViolationRatio = 0.9
     static let floorViolationNoticeSeconds = 1.0
+    /// Continuous healthy seconds (ticks ≥ the floor ratio) before the
+    /// floor-violation ASSIST disengages. 3s spans the measured 1-3s
+    /// violate/clear flap so one throttle episode arms the timer once.
+    static let floorAssistExitHealthySeconds = 3.0
     /// Repaint the current frame during a deficit only after this many stream
     /// intervals without a REAL release (a real release is itself a commit, so
     /// repaints matter only when the host also faded / the queue ran dry).
@@ -131,6 +135,8 @@ extension FramePacer {
             repaints: UInt64, ticksPerS: Double)
         case floorViolation(ticksPerS: Double, floorHz: Double)
         case floorRecovered(durationSeconds: Double, ticksPerS: Double)
+        case floorAssistEngaged(ticksPerS: Double, floorHz: Double, depth: Int)
+        case floorAssistDisengaged(reason: String, durationSeconds: Double, releases: UInt64, ticksPerS: Double)
         case warmHandoverComplete(ticksPerS: Double)
     }
 
@@ -272,23 +278,67 @@ extension FramePacer {
     ) -> [TickDeficitEvent] {
         let floor = tickDeficit.pinnedFloorHz
         guard floor.isFinite, floor > 0 else { return [] }
+        var events: [TickDeficitEvent] = []
         if ticksPerS < floor * FramePacer.floorViolationRatio {
             if !tickDeficit.floorViolationSince.isFinite { tickDeficit.floorViolationSince = now - windowSeconds }
-            if !tickDeficit.floorViolationLogged,
-               now - tickDeficit.floorViolationSince >= FramePacer.floorViolationNoticeSeconds {
+            tickDeficit.floorAssistHealthySince = .nan
+            let sustained = now - tickDeficit.floorViolationSince >= FramePacer.floorViolationNoticeSeconds
+            if !tickDeficit.floorViolationLogged, sustained {
                 // Once per episode - a multi-second collapse logs one NOTICE,
                 // not one per window.
                 tickDeficit.floorViolationLogged = true
-                return [.floorViolation(ticksPerS: ticksPerS, floorHz: floor)]
+                events.append(.floorViolation(ticksPerS: ticksPerS, floorHz: floor))
             }
-            return []
+            // ASSIST: a sustained violation in the dead band between the floor
+            // ratio (0.9x) and the hard-deficit enter (0.5x) got a breadcrumb
+            // and NO response - at 120fps content that is ~12 releases/s
+            // slipping a vsync, the field's dominant felt-judder signature.
+            // Arm the SAME off-tick timer the hard deficit uses; the due gate
+            // dedupes, so it only fills the beats the throttled link misses.
+            // Queue guard mirrors the deficit engage: an empty queue is an
+            // upstream drought, nothing to release.
+            if sustained, !tickDeficit.floorAssistActive,
+               !tickDeficit.deficitModeActive, !queue.isEmpty {
+                tickDeficit.floorAssistActive = true
+                tickDeficit.floorAssistEngagedAt = now
+                tickDeficit.floorAssistEngageReleaseCount = liveness.releaseCount
+                events.append(.floorAssistEngaged(
+                    ticksPerS: ticksPerS, floorHz: floor, depth: queue.count))
+            }
+            return events
         }
         let wasLogged = tickDeficit.floorViolationLogged
         let since = tickDeficit.floorViolationSince
         tickDeficit.floorViolationSince = .nan
         tickDeficit.floorViolationLogged = false
-        guard wasLogged, since.isFinite else { return [] }
-        return [.floorRecovered(durationSeconds: now - since, ticksPerS: ticksPerS)]
+        if wasLogged, since.isFinite {
+            events.append(.floorRecovered(durationSeconds: now - since, ticksPerS: ticksPerS))
+        }
+        if tickDeficit.floorAssistActive {
+            if !tickDeficit.floorAssistHealthySince.isFinite {
+                tickDeficit.floorAssistHealthySince = now - windowSeconds
+            }
+            if now - tickDeficit.floorAssistHealthySince >= FramePacer.floorAssistExitHealthySeconds {
+                events.append(disengageFloorAssistLocked(
+                    reason: "ticks recovered", now: now, ticksPerS: ticksPerS))
+            }
+        }
+        return events
+    }
+
+    /// Stand the floor-violation assist down and mint its breadcrumb. Under `lock`.
+    private func disengageFloorAssistLocked(
+        reason: String, now: CFTimeInterval, ticksPerS: Double
+    ) -> TickDeficitEvent {
+        tickDeficit.floorAssistActive = false
+        let duration = tickDeficit.floorAssistEngagedAt.isFinite
+            ? now - tickDeficit.floorAssistEngagedAt : 0
+        let released = liveness.releaseCount &- tickDeficit.floorAssistEngageReleaseCount
+        tickDeficit.floorAssistEngagedAt = .nan
+        tickDeficit.floorAssistHealthySince = .nan
+        return .floorAssistDisengaged(
+            reason: reason, durationSeconds: duration,
+            releases: released, ticksPerS: ticksPerS)
     }
 
     /// Warm-handover verdict: cut over to paced release only after the rebuilt
@@ -326,16 +376,22 @@ extension FramePacer {
         tickDeficit.floorViolationSince = .nan
         tickDeficit.floorViolationLogged = false
         tickDeficit.warmHealthyWindowStreak = 0
-        guard tickDeficit.deficitModeActive else { return [] }
+        var events: [TickDeficitEvent] = []
+        if tickDeficit.floorAssistActive {
+            events.append(disengageFloorAssistLocked(
+                reason: "presentation suppressed", now: now, ticksPerS: 0))
+        }
+        guard tickDeficit.deficitModeActive else { return events }
         tickDeficit.deficitModeActive = false
         let duration = tickDeficit.deficitEngagedAt.isFinite ? now - tickDeficit.deficitEngagedAt : 0
         let released = liveness.releaseCount &- tickDeficit.deficitEngageReleaseCount
         let repaints = tickDeficit.deficitRepaints
         tickDeficit.deficitEngagedAt = .nan
         tickDeficit.lastRepaintHostTime = .nan
-        return [.deficitDisengaged(
+        events.append(.deficitDisengaged(
             reason: "presentation suppressed", durationSeconds: duration,
-            releases: released, repaints: repaints, ticksPerS: 0)]
+            releases: released, repaints: repaints, ticksPerS: 0))
+        return events
     }
 
     /// Re-seed the realized-rate window from `now` and void the published
@@ -373,6 +429,10 @@ extension FramePacer {
         tickDeficit.warmHealthyWindowStreak = 0
         tickDeficit.floorViolationSince = .nan
         tickDeficit.floorViolationLogged = false
+        tickDeficit.floorAssistActive = false
+        tickDeficit.floorAssistEngagedAt = .nan
+        tickDeficit.floorAssistEngageReleaseCount = 0
+        tickDeficit.floorAssistHealthySince = .nan
         tickDeficit.pinnedFloorHz = .nan
     }
 
@@ -469,6 +529,30 @@ extension FramePacer {
                     + "\(String(format: "%.0f", duration * 1000))ms - ticks back at "
                     + "\(String(format: "%.1f", ticksPerS))/s",
                     "Stream.Pacer")
+            case let .floorAssistEngaged(ticksPerS, floorHz, depth):
+                reconcile = true
+                log.notice(
+                    // swiftlint:disable:next line_length
+                    "FramePacer floor-violation ASSIST engaged - ticks \(ticksPerS, privacy: .public)/s vs \(floorHz, privacy: .public)Hz floor, depth=\(depth, privacy: .public); off-tick timer filling missed beats")
+                Diag.notice(
+                    "FramePacer floor-violation ASSIST engaged - ticks "
+                    + "\(String(format: "%.1f", ticksPerS))/s vs "
+                    + "\(String(format: "%.1f", floorHz))Hz floor, depth=\(depth); "
+                    + "off-tick timer filling missed beats",
+                    "Stream.Pacer")
+                OSSignposter.render.emitEvent(
+                    "PacerFloorAssistEngaged",
+                    "ticksPerS=\(ticksPerS, privacy: .public) depth=\(depth, privacy: .public)")
+            case let .floorAssistDisengaged(reason, duration, releases, ticksPerS):
+                reconcile = true
+                Diag.info(
+                    "FramePacer floor-violation ASSIST disengaged (\(reason)) after "
+                    + "\(String(format: "%.0f", duration * 1000))ms - \(releases) releases "
+                    + "during assist, ticks \(String(format: "%.1f", ticksPerS))/s",
+                    "Stream.Pacer")
+                OSSignposter.render.emitEvent(
+                    "PacerFloorAssistDisengaged",
+                    "durationMs=\(duration * 1000, privacy: .public) releases=\(releases, privacy: .public)")
             case let .warmHandoverComplete(ticksPerS):
                 log.notice(
                     // swiftlint:disable:next line_length
@@ -494,7 +578,7 @@ extension FramePacer {
     /// converge on the latest state instead of double-arming.
     func reconcileDeficitTimer() {
         os_unfair_lock_lock(&lock)
-        let want = tickDeficit.deficitModeActive && running
+        let want = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive) && running
         let interval = streamFrameIntervalSeconds
         os_unfair_lock_unlock(&lock)
         if want, tickDeficit.deficitTimer == nil {
@@ -520,7 +604,8 @@ extension FramePacer {
     /// at one per stream interval no matter how the two sources interleave).
     func deficitTimerFired() {
         os_unfair_lock_lock(&lock)
-        let active = tickDeficit.deficitModeActive && running && !presentSuppressed
+        let active = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive)
+            && running && !presentSuppressed
         let interval = streamFrameIntervalSeconds
         os_unfair_lock_unlock(&lock)
         guard active else { return }
@@ -552,7 +637,7 @@ extension FramePacer {
             ? now - liveness.lastReleaseHostTime : .infinity
         let sinceRepaint = tickDeficit.lastRepaintHostTime.isFinite
             ? now - tickDeficit.lastRepaintHostTime : .infinity
-        if tickDeficit.deficitModeActive, !presentSuppressed,
+        if tickDeficit.deficitModeActive || tickDeficit.floorAssistActive, !presentSuppressed,
            sinceRelease > interval * FramePacer.repaintAfterIdleIntervals,
            sinceRepaint >= interval,
            let sampleBuffer = tickDeficit.lastPresentedSampleBuffer {

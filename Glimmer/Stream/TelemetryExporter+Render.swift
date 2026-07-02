@@ -84,7 +84,7 @@ enum TelemetryRenderer {
         promDisplay(&builder, snap, extras)
         promAudio(&builder, snap, extras)
         promWiFi(&builder, snap)
-        // ENV-SIGNAL shadow state + the conditional-keepalive judge counters
+        // ENV-SIGNAL state + the conditional-keepalive judge counters
         // (pings_sent / live cadence) - rendered right after the radio family
         // they gate on (TelemetryExporter+RenderNetwork.swift).
         promEnvSignal(&builder, extras)

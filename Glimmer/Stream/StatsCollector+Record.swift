@@ -185,7 +185,35 @@ extension StatsCollector {
         // for BOTH paced and direct presents - so the present-path watchdog and
         // fps_rendered both source from the actual screen-update moment and
         // never gap on a pacer disable/re-enable transition.
-        lastPresentTime = CFAbsoluteTimeGetCurrent()
+        let now = CFAbsoluteTimeGetCurrent()
+        lastPresentTime = now
+        // Perceived-gap judge: a drought since the last present with frames
+        // still ARRIVING in between means the screen held while content flowed
+        // (loss storm / decode starvation / pacing wedge) - a felt gap. Sparse
+        // content (nothing arrived) never counts; a designed-idle span
+        // (window backgrounded) clears the baseline instead of being judged.
+        if gapJudgingExcluded {
+            gapBaselineTime = 0
+        } else {
+            if gapBaselineTime > 0,
+               now - gapBaselineTime > Self.perceivedGapSeconds,
+               receivedFrames &- gapBaselineReceived >= Self.perceivedGapMinReceived {
+                presentationGaps &+= 1
+            }
+            gapBaselineTime = now
+            gapBaselineReceived = receivedFrames
+        }
+    }
+
+    /// Exclude presentation droughts from the perceived-gap judge while the
+    /// window is DESIGNED idle (backgrounded/occluded: receive continues,
+    /// presents stop). The first present after clearing re-seeds the baseline
+    /// un-judged, so the hidden span can never mint a false gap.
+    func setGapJudgingExcluded(_ excluded: Bool) {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        gapJudgingExcluded = excluded
+        if excluded { gapBaselineTime = 0 }
     }
 
     /// Record a frame dropped because the AVSampleBufferVideoRenderer was
@@ -262,8 +290,10 @@ extension StatsCollector {
         return presentationLateDrops
     }
 
-    /// Record a PERCEIVED present gap: a drop where the present path showed nothing
-    /// fresh (drop-to-newest the renderer also refused) - the felt-stutter signal,
+    /// Record a PERCEIVED present gap from the pacer's backoff path: the
+    /// drop-to-newest's replacement was ALSO refused, so nothing fresh reached
+    /// the screen. The drought-with-content-arriving case is counted inline in
+    /// `recordRendererEnqueue` - together they are the felt-stutter signal,
     /// distinct from catch-up discards (which DID present a newer frame).
     func recordPresentationGap() {
         os_unfair_lock_lock(&lock)

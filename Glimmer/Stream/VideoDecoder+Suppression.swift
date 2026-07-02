@@ -89,6 +89,7 @@ extension VideoDecoder {
                 "present suppressed (window backgrounded/occluded) - pacer holds newest frame only, IDR escalation off",
                 "Stream")
             TelemetryCounters.shared.setPresentSuppressed(true)
+            statsCollector.setGapJudgingExcluded(true)
             framePacer?.setPresentSuppressed(true)
             framePacer?.dropToNewest(reason: "present_suppressed")
             // Arm stage 2: if the window stays hidden past the gate delay,
@@ -109,6 +110,7 @@ extension VideoDecoder {
                 "present un-suppressed (window refocused) - retained newest frame presents, single IDR resync",
                 "Stream")
             TelemetryCounters.shared.setPresentSuppressed(false)
+            statsCollector.setGapJudgingExcluded(false)
             framePacer?.setPresentSuppressed(false)
             framePacer?.dropToNewest(reason: "present_resync")
             // Stand down stage 2 BEFORE the resync below: cancel a pending

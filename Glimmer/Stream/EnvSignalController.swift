@@ -1,7 +1,7 @@
 //
 //  EnvSignalController.swift
 //
-//  The ENV-SIGNAL adaptive layer - SHADOW MODE. A CLEAR/CAUTION/DISTRESS
+//  The ENV-SIGNAL adaptive layer. A CLEAR/CAUTION/DISTRESS
 //  link-condition state machine fed once per telemetry capture tick (~1Hz)
 //  with the stream ROUTE (StreamRouteProbe - the honest stream_link, re-probed
 //  on every NWPathMonitor change), the associated-radio physics (RSSI / PHY
@@ -34,12 +34,14 @@
 //   * radio: RSSI ≤ session-p50 − 8dB, or tx-rate ≤ 0.5× session-p95 -
 //     armed only on a wifi stream route, only after a ~1min baseline warmup.
 //
-//  SHADOW MODE (the contract for this pass): the state machine RUNS and
-//  EXPORTS (env_state / env_state_changes_total / pings_sent counters, plus
-//  an `env_state` NDJSON event with the evidence vector + a Diag NOTICE on
-//  every transition) but ACTUATES nothing - except the single approved live
-//  actuation below. The state machine is judged against felt events for one
-//  full session BEFORE any further dial moves; see "Future actuations".
+//  LIVE ACTUATIONS (the shadow-mode contract of the original pass is
+//  superseded): the state machine RUNS, EXPORTS (env_state /
+//  env_state_changes_total / pings_sent counters, plus an `env_state` NDJSON
+//  event with the evidence vector + a Diag NOTICE on every transition), and
+//  moves TWO dials - the conditional keepalive cadence (#1 below) and, with
+//  `reconcilerEnabled`, the unified jitter→headroom decision consumed by the
+//  FramePacer adaptive depth and the FEC reorder-hold. Anything further stays
+//  dark; see "Future actuations".
 //
 //  LIVE ACTUATION #1 - CONDITIONAL KEEPALIVE (`steadyPingInterval()`):
 //  75ms steady ping cadence only when stream_link == wifi AND (input-idle OR
@@ -689,7 +691,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// Publish a state change: bump the counter, log the recoverable-state
     /// NOTICE (quiet - never warn/error for a state the machine recovers
     /// from), and emit the `env_state` NDJSON event WITH the evidence vector
-    /// so the shadow session is judgeable post-hoc.
+    /// so the session is judgeable post-hoc.
     private func applyTransition(to next: EnvState, reason: String) {
         let previous: EnvState
         lock.lock()
@@ -699,8 +701,8 @@ final class EnvSignalController: @unchecked Sendable {
         guard previous != next else { return }
         windowsSinceChange = 0
         stateChangesTotal.increment()
-        Diag.notice("ENV \(previous.label) → \(next.label) (\(reason)) - shadow mode, "
-            + "no dial moved (keepalive cadence aside)", Self.cat)
+        Diag.notice("ENV \(previous.label) → \(next.label) (\(reason)) - gates keepalive "
+            + "cadence + reconciler headroom", Self.cat)
         var fields = [
             "\"event\":\"env_state\"",
             "\"from\":\"\(previous.label)\"",
@@ -790,7 +792,7 @@ final class EnvSignalController: @unchecked Sendable {
         windowsSinceChange = Int.max
     }
 
-    // MARK: - Future actuations (LISTED BUT DARK - the shadow-mode contract)
+    // MARK: - Future actuations (LISTED BUT DARK)
     //
     // Every candidate below is an EXISTING, bounded, reversible dial. None is
     // wired; each gets enabled ONE AT A TIME, only after a full shadow

@@ -138,7 +138,7 @@ extension TelemetryRenderer {
                      "Inter-packet arrival gap max this window, microseconds.", snap.packetGapMaxUs)
     }
 
-    /// ENV-SIGNAL shadow state + the conditional-keepalive judge family: the
+    /// ENV-SIGNAL state + the conditional-keepalive judge family: the
     /// CLEAR/CAUTION/DISTRESS ordinal (with its label), the transition count,
     /// the LIVE keepalive cadence, and the per-socket pings_sent counters -
     /// the counters that make a keepalive-cadence change judgeable from data.
@@ -149,7 +149,7 @@ extension TelemetryRenderer {
         if let ordinal = extras.envStateOrdinal {
             builder.emitLabeled(
                 "glimmer_env_state",
-                "Env-signal link state ordinal (0 clear, 1 caution, 2 distress) - SHADOW mode.",
+                "Env-signal link state ordinal (0 clear, 1 caution, 2 distress) - gates keepalive cadence + reconciler headroom.",
                 Double(ordinal), labels: [("state", extras.envStateLabel ?? "unknown")])
         }
         if let changes = extras.envStateChangesTotal {

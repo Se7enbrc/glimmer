@@ -185,11 +185,11 @@ struct SessionAggregate {
         activeLatency = activeLatency.map { LatencyRollingWindow.sum($0, plus: delta) } ?? delta
     }
 
-    // ---- ENV-SIGNAL shadow-session judge inputs ----
+    // ---- ENV-SIGNAL judge inputs ----
     /// Ticks (~seconds) spent in each env state (index = the state ordinal:
     /// clear/caution/distress) + the final transition count - "how long was
     /// each state, and how often did it move" is the scorecard half of
-    /// judging the shadow state machine against felt events.
+    /// judging the state machine against felt events.
     var envStateSeconds = [Int](repeating: 0, count: 3)
     var envStateChangesTotal: UInt64 = 0
 
@@ -307,7 +307,7 @@ struct SessionReport {
         // Per-TYPE ignored-control totals - durable here (the teardown Diag
         // NOTICE is lossy: a crash or a still-running session loses it).
         top.append("\"ctrl_ignored_by_type\":\(ctrlIgnoredByTypeObject())")
-        // ENV-SIGNAL shadow scorecard: seconds-in-state + transition count -
+        // ENV-SIGNAL scorecard: seconds-in-state + transition count -
         // the per-session judge for the state machine (DISTRESS seconds are
         // EXCLUDED from present-path quality reads, never added).
         top.append("\"env\":\(envObject())")
@@ -480,7 +480,7 @@ struct SessionReport {
         return "{" + parts.joined(separator: ",") + "}"
     }
 
-    /// ENV-SIGNAL shadow scorecard: per-state tick counts (~seconds at the
+    /// ENV-SIGNAL scorecard: per-state tick counts (~seconds at the
     /// 1Hz cadence) + the transition total, plus the final per-socket
     /// pings_sent counts (the keepalive cadence judge).
     private func envObject() -> String {

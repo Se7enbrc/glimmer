@@ -122,22 +122,8 @@ final class AppModel {
 
     /// Connection lifecycle published from the native engine. Drives the
     /// connect-banner, the StreamButton role, and the ReadinessChip's
-    /// transitional state. See `StreamPhase` for the case set;
-    /// `nativeStreamPhase` is a string-typed read shim for UI code that
-    /// hasn't migrated to switching on the enum.
+    /// transitional state. See `StreamPhase` for the case set.
     var streamPhase: StreamPhase = .idle
-
-    /// String-typed read shim for code that hasn't migrated to switching
-    /// on `streamPhase`. Read-only; writers go through `streamPhase`.
-    var nativeStreamPhase: String? {
-        switch streamPhase {
-        case .idle:                       return nil
-        case .connecting(let stage):      return stage
-        case .streaming:                  return "Streaming"
-        case .disconnecting:              return nil
-        case .error:                      return nil
-        }
-    }
 
     /// True when a stream is running but its window has been orderOut'd
     /// because the user Cmd-Tabbed away. The launcher UI shows a "Back to
@@ -266,8 +252,7 @@ final class AppModel {
 
     var quitHotkey: HotkeyChord = .defaultQuit {
         didSet {
-            // UserDefaults key matches the legacy QuitHotkey typealias so
-            // previously-stored chords still decode.
+            // Historical UserDefaults key - previously-stored chords still decode.
             if let data = try? JSONEncoder().encode(quitHotkey) {
                 UserDefaults.standard.set(data, forKey: "quitHotkey")
             }

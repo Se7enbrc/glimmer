@@ -404,7 +404,7 @@ extension TelemetryRenderer {
             builder.addString("stream_link", routeSnapshot.linkLabel)
             builder.addString("stream_if", routeSnapshot.interfaceName)
         }
-        // ENV-SIGNAL shadow state + the conditional-keepalive judge fields -
+        // ENV-SIGNAL state + the conditional-keepalive judge fields -
         // they ride the link section because the link IS their evidence.
         // Transitions additionally get their own `event:"env_state"` row with
         // the full evidence vector (see EnvSignalController).

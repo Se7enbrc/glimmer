@@ -112,7 +112,7 @@ extension TelemetryExporter {
         return extras
     }
 
-    /// Sample the ENV-SIGNAL shadow state + the keepalive cadence + the
+    /// Sample the ENV-SIGNAL state + the keepalive cadence + the
     /// per-socket pings_sent counters for this tick. Called AFTER
     /// `observeCaptureTick` so the row carries the state the tick produced.
     /// The pings/s rates derive from deltas like every other per_s field, but
@@ -246,7 +246,7 @@ extension TelemetrySnapshot {
         /// bad" view next to the cumulative "was bad" one. nil when the
         /// latency rig has no data this tick.
         var latencyRolling60s: LatencyHistogramSnapshot?
-        /// ENV-SIGNAL shadow state (0 clear / 1 caution / 2 distress) + label
+        /// ENV-SIGNAL state (0 clear / 1 caution / 2 distress) + label
         /// + transition count, the LIVE keepalive cadence (ms), and the
         /// per-socket pings_sent counters + per-second rates - the cadence
         /// judge for evaluating keepalive-interval changes from data. nil only

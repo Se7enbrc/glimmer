@@ -157,10 +157,29 @@ final class StatsCollector: @unchecked Sendable {
     /// drops (VT rejected the bitstream) and renderer-backpressure drops (the
     /// OS renderer queue was full). Session-cumulative.
     var presentationLateDrops: UInt64 = 0
-    /// Perceived present GAPS: a drop where the renderer showed nothing fresh
-    /// (drop-to-newest it also refused) - the felt-stutter signal. Catch-up
-    /// discards that DID present a newer frame are NOT counted. Session-cumulative.
+    /// Perceived present GAPS - the felt-stutter signal. Counted when (a) a
+    /// drop-to-newest's replacement was ALSO refused by the renderer, or (b) a
+    /// present landed after a drought > `perceivedGapSeconds` during which
+    /// frames were still ARRIVING (loss storm / decode starvation / pacing
+    /// wedge - the screen held while content flowed). Sparse content (desktop
+    /// idle: nothing arriving) and designed-idle spans (window backgrounded)
+    /// are excluded. Session-cumulative.
     var presentationGaps: UInt64 = 0
+    /// Present-drought baseline for the perceived-gap check: wall-clock + the
+    /// receivedFrames total at the last judged present. 0 = re-seed (session
+    /// start, or the first present after a designed-idle span).
+    var gapBaselineTime: CFAbsoluteTime = 0
+    var gapBaselineReceived: UInt64 = 0
+    /// True while presentation is DESIGNED idle (window backgrounded/occluded:
+    /// receive continues, presents stop). Droughts spanning it never count.
+    var gapJudgingExcluded = false
+    /// A present this long after the previous one, with frames still arriving
+    /// in between, is a felt gap. 100ms is ~unambiguous at any content rate;
+    /// sub-100ms microstutter stays the cadence metric's job.
+    static let perceivedGapSeconds: CFAbsoluteTime = 0.100
+    /// Minimum frames RECEIVED inside the drought for it to count - proves
+    /// content was flowing (a single frame at the boundary doesn't).
+    static let perceivedGapMinReceived: UInt64 = 2
 
     /// On-cadence presents this window: |cadence error| within tolerance of the
     /// stream's frame interval. Reset each snapshot alongside the FPS window.
@@ -245,6 +264,9 @@ final class StatsCollector: @unchecked Sendable {
         rendererBackpressureDrops = 0
         presentationLateDrops = 0
         presentationGaps = 0
+        gapBaselineTime = 0
+        gapBaselineReceived = 0
+        gapJudgingExcluded = false
         onTimePresents = 0
         latePresents = 0
         presentCadenceErrorMsSum = 0

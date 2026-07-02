@@ -199,7 +199,7 @@ extension TelemetryExporter {
             extras.latencyRolling60s = Self.captureBaselines.latencyRolling.advance(with: histograms)
         }
 
-        // ENV-SIGNAL (shadow mode): fold this tick's route/radio/gap evidence
+        // ENV-SIGNAL: fold this tick's route/radio/gap evidence
         // into the CLEAR/CAUTION/DISTRESS state machine (transitions Diag-log
         // and emit `env_state` events with their evidence vector; the ONLY
         // live actuation is the conditional keepalive cadence), then carry
@@ -224,7 +224,7 @@ extension TelemetryExporter {
         if let histograms = snap.latencyHistograms {
             sessionAggregate.foldLatency(histograms, active: segment == .active)
         }
-        // Seconds-in-state for the scorecard (the shadow-session judge wants
+        // Seconds-in-state for the scorecard (the env-signal judge wants
         // "how long was each state" next to the transition count).
         if let ordinal = extras.envStateOrdinal {
             sessionAggregate.noteEnvState(

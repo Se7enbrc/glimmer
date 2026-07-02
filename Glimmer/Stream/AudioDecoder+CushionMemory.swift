@@ -237,6 +237,49 @@ extension AudioDecoder {
             forKey: key)
     }
 
+    // MARK: - Resampler skew persistence (per host)
+
+    /// UserDefaults key prefix; full key = prefix + host. The host↔Mac clock
+    /// offset is a property of the two CLOCKS, not the link, so it is keyed by
+    /// host alone (unlike the cushion's host|link records).
+    static let resamplerSkewKeyPrefix = "audioResamplerSkew."
+    /// Read-side age half-life. Crystal skew is hardware-stable across days; a
+    /// week halves a stale record toward 0 so junk can't outlive its host.
+    static let resamplerSkewAgeHalfLifeSeconds: Double = 7 * 24 * 3600
+    /// Below this |ppm| neither persist nor seed - the PI re-converges from 0
+    /// in seconds at that scale and the write is churn.
+    static let resamplerSkewMinPersistPpm = 20.0
+    /// Min ns between opportunistic saves (driveResampler's engaged branch).
+    static let resamplerSkewSaveIntervalNanos: UInt64 = 60_000_000_000
+
+    static func resamplerSkewKey(host: String) -> String {
+        resamplerSkewKeyPrefix + host
+    }
+
+    /// Aged, clamped per-host skew seed, or 0 (no / stale / junk record). The
+    /// clamp to `cushionReleaseSkewPpm` keeps a seed inside the converged
+    /// envelope (stored values already are; this guards edited plists), so a
+    /// seeded session never starts in the "railing" shallow-release lockout.
+    static func loadResamplerSkewSeed(host: String) -> Double {
+        guard host != "unknown",
+              let dict = UserDefaults.standard.dictionary(forKey: resamplerSkewKey(host: host)),
+              let ppm = dict["ppm"] as? Double, ppm.isFinite,
+              let savedAt = dict["saved_at"] as? Double else { return 0 }
+        let age = max(0, Date().timeIntervalSinceReferenceDate - savedAt)
+        let aged = ppm * pow(0.5, age / resamplerSkewAgeHalfLifeSeconds)
+        let clamped = max(-cushionReleaseSkewPpm, min(cushionReleaseSkewPpm, aged))
+        return abs(clamped) >= resamplerSkewMinPersistPpm ? clamped : 0
+    }
+
+    /// Persist a converged skew for this host. Callers gate on the converged
+    /// envelope + the save throttle (driveResampler); this only checks identity.
+    static func persistResamplerSkew(host: String, ppm: Double) {
+        guard host != "unknown", ppm.isFinite else { return }
+        UserDefaults.standard.set(
+            ["ppm": ppm, "saved_at": Date().timeIntervalSinceReferenceDate],
+            forKey: resamplerSkewKey(host: host))
+    }
+
     /// Resolve this session's seed: the init key's own record first; when the
     /// link is still unknown, BORROW the deepest of the link-split records
     /// (deep-by-default fails toward a few ms of extra audio latency that the
@@ -545,11 +588,16 @@ extension AudioDecoder {
         lastResamplerUpdateNanos = now
 
         var rateToApply: Float?
+        var skewPpmToPersist: Double?
         if !engaged {
             // Pre-roll / re-prime / drain: slew the APPLIED rate to 1.0 (no pitch
             // step) but HOLD the integral - the host↔Mac clock offset survives a
             // drain, so re-engage with it already learned, not re-converged from 0.
-            resamplerIntegralPpm *= Self.resamplerIntegralHoldFactor
+            // The bleed waits for the FIRST engaged tick: a pre-roll must not
+            // erode a persisted per-host skew seed the loop hasn't used yet.
+            if resamplerEverEngaged {
+                resamplerIntegralPpm *= Self.resamplerIntegralHoldFactor
+            }
             if resamplerEpsPpm != 0 {
                 resamplerEpsPpm += max(-Self.resamplerSlewPpm,
                                        min(Self.resamplerSlewPpm, -resamplerEpsPpm))
@@ -559,6 +607,7 @@ extension AudioDecoder {
             // Fill above the cushion setpoint ⇒ too much buffered ⇒ consume faster
             // (rate > 1). INTEGRAL absorbs the steady ppm offset; PROPORTIONAL answers
             // transient excursions; the deadband stops accrual on sub-ms noise.
+            resamplerEverEngaged = true
             let error = fillMs - targetMs
             let e = abs(error) < Self.resamplerDeadbandMs ? 0 : error
             resamplerIntegralPpm = clampResamplerPpm(resamplerIntegralPpm + Self.resamplerKiPpmPerMs * e)
@@ -567,9 +616,26 @@ extension AudioDecoder {
             resamplerEpsPpm += max(-Self.resamplerSlewPpm,
                                    min(Self.resamplerSlewPpm, targetPpm - resamplerEpsPpm))
             rateToApply = Float(1.0 + resamplerEpsPpm * 1e-6)
+            // Opportunistic per-host skew persist (throttled ~1/min, ≥5ppm delta):
+            // a stable integral within the converged envelope IS the host↔Mac
+            // clock offset - save it so the NEXT session seeds pre-converged
+            // (initDecoderCore). Railing values (> the converged line) never
+            // persist, so junk can't poison a future seed.
+            let magnitude = abs(resamplerIntegralPpm)
+            if magnitude >= Self.resamplerSkewMinPersistPpm,
+               magnitude <= Self.cushionReleaseSkewPpm,
+               now &- lastResamplerSkewSaveNanos >= Self.resamplerSkewSaveIntervalNanos,
+               !(abs(resamplerIntegralPpm - lastSavedResamplerSkewPpm) < 5.0) {
+                lastResamplerSkewSaveNanos = now
+                lastSavedResamplerSkewPpm = resamplerIntegralPpm
+                skewPpmToPersist = resamplerIntegralPpm
+            }
         }
         audioMeterLock.unlock()
         if let rateToApply { applyVarispeedRate(rateToApply) }
+        if let skewPpmToPersist {
+            Self.persistResamplerSkew(host: cushionHostLabel, ppm: skewPpmToPersist)
+        }
     }
 
     private func clampResamplerPpm(_ v: Double) -> Double {
