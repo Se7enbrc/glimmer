@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026.7.2 - 2026-07-02
+
+Smoother streams when macOS throttles the display clock, honest stutter
+accounting, and audio that starts in sync.
+
+macOS sometimes throttles the display callback below the rate the stream asked
+for (commonly on battery); frames then slip a beat every few seconds - a subtle,
+persistent judder. The pacer now notices the throttle within a second and fills
+the missed beats from its own timer until the display clock recovers, so the
+stream stays smooth through it.
+
+The "felt stutter" telemetry signal now counts what you actually see: a screen
+that visibly held while frames were still arriving (a bad network moment, a
+decode stall). It previously required a rare double-fault and had never fired in
+practice; the stutter badge's thresholds are unchanged.
+
+Audio now remembers each PC's clock offset. Every computer's clock runs a hair
+fast or slow, and the player learns the difference to keep audio buffered
+tightly - but that learning restarted from zero every session, leaving the first
+minutes prone to audio blips while it re-converged. The learned offset is now
+saved per PC and applied from the first second of the next stream.
+
 ## 2026.7.1 - 2026-07-02
 
 Internal naming cleanup - nothing you can see changes.
