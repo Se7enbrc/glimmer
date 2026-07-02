@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.7.1 - 2026-07-02
+
+Internal naming cleanup - nothing you can see changes.
+
+Glimmer's streaming engine has been first-party Swift for a while now, so the
+app's core types no longer carry the "Moonlight" name they were first sketched
+under. This release renames them to plainer, protocol-neutral names. Your paired
+PCs, quality settings, and pairing all carry over untouched - there is nothing
+to redo. Moonlight is still credited in About; the transport is ported from its
+open-source code.
+
 ## 2026.7.0 - 2026-07-01
 
 Smoothness reads honest at the desktop, and clearer pairing errors.
