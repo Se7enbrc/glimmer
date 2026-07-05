@@ -15,10 +15,9 @@ brief quiet moment instead of a cascade.
 That same opening cascade also had a lasting cost: it taught the player a
 falsely deep "floor," which quietly held audio a fifth of a second behind for
 the rest of the session and carried over to the next one. Startup no longer
-teaches the floor, and a floor that got stuck that way is now repaired on read
-
-- so audio latency settles back down during quiet play the way it was always
-  meant to.
+teaches the floor, and a floor that got stuck that way is now repaired on read,
+so audio latency settles back down during quiet play the way it was always meant
+to.
 
 ## 2026.7.2 - 2026-07-02
 
