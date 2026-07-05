@@ -213,11 +213,14 @@ extension AudioDecoder {
         let link = key.split(separator: "|").last.map(String.init) ?? "unknown"
         let cap = recordSeedCapMs(forLink: link)
         let clampedTarget = min(max(agedTarget, playoutCushionBaseMs), cap)
-        // WELD REPAIR: a floor at/above the cap (or at/above the target) is a
-        // poisoned record - skew under-runs welded the floor to the cap and froze
-        // the target one step above it. Drop the floor to base so the session
-        // re-learns from a healthy floor instead of re-seeding into the lock.
-        if floor >= cap || floor >= clampedTarget {
+        // WELD REPAIR: a floor at/near the cap (or at/above the target) is a
+        // poisoned record - cascade under-runs weld the floor toward the cap and
+        // freeze the target against it (a 180-on-cap-200 floor blocked decay for
+        // a whole session while escaping the old >=cap test). Drop the floor to
+        // base so the session re-learns from a healthy floor instead of
+        // re-seeding into the lock. 0.85x: legit steady-state floors sit far
+        // below the cap; only a weld lives in the top band.
+        if floor >= cap * 0.85 || floor >= clampedTarget {
             floor = min(playoutCushionBaseMs, clampedTarget)
         }
         return (clampedTarget, min(max(floor, 0), clampedTarget))
@@ -289,7 +292,12 @@ extension AudioDecoder {
         let host = StreamRouteProbe.currentLatchedHost ?? "unknown"
         let link = EnvSignalController.shared.streamLink
         let key = cushionMemoryKey(host: host, link: link)
-        if let record = readCushionMemory(key: key) {
+        // The |unknown bucket is BORROW-ONLY: a legacy `host|unknown` record
+        // (written by pre-resolve sessions) direct-hitting here seeded 40ms
+        // while the real wifi record held 97ms - the shallow prime that set
+        // off the 2026-07-05 startup drain cascade. Real links direct-hit;
+        // unknown goes straight to the deepest-of-wifi/wired borrow.
+        if link != "unknown", let record = readCushionMemory(key: key) {
             return CushionSeed(key: key, host: host, link: link,
                                targetMs: record.targetMs, floorMs: record.floorMs,
                                fromMemory: true)
@@ -343,10 +351,15 @@ extension AudioDecoder {
     /// for the caller to commit off the lock.
     func cushionNoteUnderrunLocked(now: UInt64, failedTargetMs: Double) -> CushionMemoryWrite {
         cushionHadUnderrun = true
-        learnedFloorMs = learnedFloorMs <= 0
-            ? failedTargetMs
-            : learnedFloorMs + Self.cushionFloorEwmaWeight * (failedTargetMs - learnedFloorMs)
-        learnedFloorMs = min(learnedFloorMs, effectiveCushionMaxMs)
+        // STARTUP GATE: boot-ramp drains (host pacing sub-realtime) must not
+        // teach the floor - a 15s cascade welded a 180ms floor that blocked
+        // decay for a whole session. The target ratchet already grew above.
+        if now >= floorLearnGateUntilNanos {
+            learnedFloorMs = learnedFloorMs <= 0
+                ? failedTargetMs
+                : learnedFloorMs + Self.cushionFloorEwmaWeight * (failedTargetMs - learnedFloorMs)
+            learnedFloorMs = min(learnedFloorMs, effectiveCushionMaxMs)
+        }
         floorQuietSinceNanos = now
         quietWindowMinFillMs = .infinity
         return CushionMemoryWrite(key: cushionSeedKey, targetMs: playoutTargetMs,
@@ -412,7 +425,14 @@ extension AudioDecoder {
     /// Commit a captured write OUTSIDE the meter lock: UserDefaults (its own
     /// lock; never nested under the meter's) + the 1Hz floor gauge.
     func commitCushionMemory(_ write: CushionMemoryWrite) {
-        Self.persistCushionMemory(key: write.key, targetMs: write.targetMs, floorMs: write.floorMs)
+        // Never persist under an |unknown key: that learning is unlabeled (link
+        // class unresolved - telemetry off / probe dark), and a stale |unknown
+        // record later short-circuits the seed (the 40ms-vs-97ms 2026-07-05
+        // cascade). Learning continues in-memory; once the resolve re-keys,
+        // writes land in the real link's bucket.
+        if !write.key.hasSuffix("|unknown") {
+            Self.persistCushionMemory(key: write.key, targetMs: write.targetMs, floorMs: write.floorMs)
+        }
         AudioCushionTelemetry.shared.setFloorMs(write.floorMs)
     }
 
@@ -522,6 +542,19 @@ extension AudioDecoder {
         // railing, the deep cushion is LOAD-BEARING and the existing behavior stands.
         if link == "wired", resamplerSkewConverged, !cushionHadUnderrun {
             learnedFloorMs = min(learnedFloorMs, Self.playoutCushionBaseMs)
+        }
+        // RESOLVE TOP-UP: adopting a deeper target than the standing fill used
+        // to "materialize at the next re-prime (<=1 blip)" - but the host feeds
+        // sub-realtime at startup (startup-pacing=paced), so the deficit taught
+        // itself through a drain CASCADE instead. Arm the one-shot flag; the
+        // next decode-path maybePrime closes the gap with the silence backfill
+        // (zero further blips). AV work never happens here - this can run on
+        // the completion thread.
+        let aheadFrames = framesScheduled &- framesPlayed
+        let aheadMs = meterSampleRate > 0
+            ? Double(aheadFrames) / meterSampleRate * 1000.0 : 0
+        if primed, playoutTargetMs - aheadMs >= Self.playoutCushionStepMs {
+            pendingResolveTopUp = true
         }
         let target = playoutTargetMs
         let floor = learnedFloorMs

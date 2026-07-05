@@ -297,6 +297,19 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `DispatchTime` ns deadline of the post-(re)prime gate grace: both backlog
     /// gates stand down until this instant. Guarded by `audioMeterLock`.
     var gateGraceUntilNanos: UInt64 = 0
+    /// One-shot flag armed by the link resolve when adopting a deeper target
+    /// leaves standing fill a step+ short: the next DECODE-path `maybePrime`
+    /// tops the cushion up via the silence backfill instead of letting the
+    /// host's paced startup inflow teach the deficit through a drain cascade
+    /// (~9 audible blips, 2026-07-05). Guarded by `audioMeterLock`; the AV
+    /// work stays on the decode path.
+    var pendingResolveTopUp = false
+    /// `DispatchTime` ns deadline of the startup floor-learning gate, armed at
+    /// the COLD-START prime: drains in the host's boot-ramp window are pacing
+    /// artifacts, not link character - letting them teach the floor welded
+    /// 180ms in and blocked decay for a whole session. The target ratchet
+    /// still applies; only the floor EWMA waits. Guarded by `audioMeterLock`.
+    var floorLearnGateUntilNanos: UInt64 = 0
     /// `DispatchTime` ns anchor of the current under-run-free stretch (drives the
     /// cushion decay). Reset on every under-run edge AND on each decay step, so each
     /// 10ms step back down requires its own full quiet window. Guarded by
@@ -460,6 +473,7 @@ public final class AudioDecoder: @unchecked Sendable {
         quietWindowMinFillMs = .infinity
         rePrimeCount = 0
         lastTrimNanos = 0; gateGraceUntilNanos = 0
+        pendingResolveTopUp = false; floorLearnGateUntilNanos = 0
         quietSinceNanos = seedNowNanos
         floorQuietSinceNanos = seedNowNanos
         rebuildIsReprime = false

@@ -54,6 +54,12 @@ extension AudioDecoder {
     /// the BREADCRUMB rate so a cascade can't flood the 2000-entry Diag ring -
     /// edges suppressed by the limit ride the next line as a count.
     static let underrunNoticeMinIntervalNanos: UInt64 = 1_000_000_000
+    /// Startup floor-learning gate (ns after the cold-start prime): the host
+    /// feeds sub-realtime for its first seconds (startup-pacing=paced, ~15s
+    /// measured), so drains in this window are boot-ramp artifacts. 45s covers
+    /// the measured ramp with margin. Target ratchet + underrun counting stay
+    /// live; only the floor EWMA waits.
+    static let startupFloorGateNanos: UInt64 = 45_000_000_000
 
     // MARK: - P1 AUDIO meter (buffer fill / under-run / over-run / A/V drift)
 
@@ -128,6 +134,12 @@ extension AudioDecoder {
             playoutStarted = true
             driftAnchorNanos = DispatchTime.now().uptimeNanoseconds
             driftAnchorFramesPlayed = framesPlayed
+            // COLD START: arm the floor-learning gate. Drains inside the host's
+            // boot-ramp window (paced sub-realtime inflow) must not teach the
+            // per-link floor - see cushionNoteUnderrunLocked.
+            if !rebuildIsReprime {
+                floorLearnGateUntilNanos = driftAnchorNanos &+ Self.startupFloorGateNanos
+            }
             // Arm the gate grace on this same edge (cold start or post-drain
             // restart): the next ~250ms of arrivals are the cushion (re)build - the
             // catch-up clump the link just proved it needs - so neither the trim nor
@@ -183,7 +195,25 @@ extension AudioDecoder {
     /// across an AV call).
     func maybePrime(format: AVAudioFormat) {
         audioMeterLock.lock()
-        if primed { audioMeterLock.unlock(); return }
+        if primed {
+            // RESOLVE TOP-UP (one-shot, armed by resolveCushionLink): the link
+            // resolve adopted a target deeper than the standing fill. Close the
+            // deficit NOW with the silence backfill - this is the decode path
+            // (stateLock held), the one place AV calls are serialized against
+            // shutdown - instead of letting the host's paced startup inflow
+            // drain-cascade the difference audibly.
+            guard pendingResolveTopUp else { audioMeterLock.unlock(); return }
+            pendingResolveTopUp = false
+            let aheadFrames = framesScheduled &- framesPlayed
+            let aheadMs = meterSampleRate > 0
+                ? Double(aheadFrames) / meterSampleRate * 1000.0 : 0
+            let deficitMs = playoutTargetMs - aheadMs
+            audioMeterLock.unlock()
+            if deficitMs >= Self.playoutCushionStepMs {
+                backfillCushion(deficitMs: deficitMs, format: format)
+            }
+            return
+        }
         let aheadFrames = framesScheduled &- framesPlayed
         let aheadMs = meterSampleRate > 0 ? Double(aheadFrames) / meterSampleRate * 1000.0 : 0
         if aheadMs >= playoutTargetMs {
