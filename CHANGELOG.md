@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.7.3 - 2026-07-05
+
+A much smoother first half-minute, and audio that stops hoarding latency.
+
+Streams used to open with a rough patch: the audio cushion started shallower
+than the connection had already learned it needed, and the host feeds audio
+slower than real time for its first seconds - so the opening of a session could
+blip audibly several times over ~15 seconds while the buffer taught itself back
+up. The cushion now starts at the link's real learned depth and tops itself up
+the moment the connection type is confirmed, so a session opens with at most one
+brief quiet moment instead of a cascade.
+
+That same opening cascade also had a lasting cost: it taught the player a
+falsely deep "floor," which quietly held audio a fifth of a second behind for
+the rest of the session and carried over to the next one. Startup no longer
+teaches the floor, and a floor that got stuck that way is now repaired on read
+
+- so audio latency settles back down during quiet play the way it was always
+  meant to.
+
 ## 2026.7.2 - 2026-07-02
 
 Smoother streams when macOS throttles the display clock, honest stutter
