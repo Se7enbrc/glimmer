@@ -113,13 +113,15 @@ extension InputForwarder: StreamInputViewDelegate {
         // Ignore auto-repeated keys; the host generates its own repeats.
         guard !event.isARepeat, isReady else { return true }
         guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return true }
+        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
         let rc = backend?.sendKeyboard(
-            keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
+            keyCode: wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_DOWN),
             modifiers: Int8(bitPattern: modifierByte(from: mods)),
             flags: 0
         ) ?? -2
         record("LiSendKeyboardEvent2(down)", rc)
+        heldKeys.insert(wireCode)
         return true
     }
 
@@ -137,13 +139,15 @@ extension InputForwarder: StreamInputViewDelegate {
         }
 
         guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return }
+        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
         let rc = backend?.sendKeyboard(
-            keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
+            keyCode: wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_UP),
             modifiers: Int8(bitPattern: modifierByte(from: mods)),
             flags: 0
         ) ?? -2
         record("LiSendKeyboardEvent2(up)", rc)
+        heldKeys.remove(wireCode)
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
@@ -307,16 +311,20 @@ extension InputForwarder: StreamInputViewDelegate {
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
         guard isReady else { return }
+        let hostButton = button(for: event)
         let rc = backend?.sendMouseButton(
-            action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: button(for: event)) ?? -2
+            action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: hostButton) ?? -2
         record("LiSendMouseButtonEvent(press)", rc)
+        heldMouseButtons.insert(hostButton)
     }
 
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent) {
         guard isReady else { return }
+        let hostButton = button(for: event)
         let rc = backend?.sendMouseButton(
-            action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button(for: event)) ?? -2
+            action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: hostButton) ?? -2
         record("LiSendMouseButtonEvent(release)", rc)
+        heldMouseButtons.remove(hostButton)
     }
 
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent) {

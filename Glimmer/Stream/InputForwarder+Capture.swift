@@ -96,11 +96,13 @@ extension InputForwarder {
             object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                // Release cursor when the user Cmd-Tabs away or the system
-                // grabs focus for a sheet. We do NOT raise keys here - the
-                // window-resign path can be a transient (e.g. notification
-                // banner) and we want held game keys to survive it. The
-                // gate against orphan modifiers is in detach().
+                // Release the cursor AND raise all held input when focus
+                // leaves. The physical key-up goes to whatever now owns focus
+                // (Cmd-Tab target, an app stealing foreground), so without the
+                // raise the host keeps a held W pressed and the game walks
+                // forever. A key still physically held on refocus stays lost
+                // until re-pressed - predictable, and what upstream clients do.
+                self?.raiseAllHeldInputs(reason: "focus loss")
                 self?.exitCapturedMode()
             }
         }

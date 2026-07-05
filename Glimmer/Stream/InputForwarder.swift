@@ -36,8 +36,9 @@
 //     not collapse simultaneous presses), and the responder chain hands each
 //     to `keyDown(with:)`/`keyUp(with:)` independently. With four fingers on
 //     four keys we send four down events; lifting any one sends exactly one
-//     up event for that key. `releaseStuckModifiers()` is called ONLY in
-//     `detach()` (stream teardown) so it never resets state mid-game.
+//     up event for that key. `raiseAllHeldInputs()` (keys + buttons +
+//     modifiers) fires only on focus loss and `detach()` (stream teardown),
+//     so state never resets mid-game while the window stays key.
 //     `lastModFlags` is diffed against the new mask in `flagsChanged` so we
 //     only emit modifier transitions, not modifier state on every key. This
 //     matches moonlight-qt's `m_KeysDown` QSet semantics.
@@ -462,9 +463,9 @@ public final class InputForwarder {
     }
 
     public func detach() {
-        // Send key-up for any modifiers we believe are pressed so we don't
-        // leave the host with phantom-held modifiers if we tear down mid-press.
-        releaseStuckModifiers()
+        // Raise every held key/button/modifier so a mid-press teardown can't
+        // leave the host with phantom-held input.
+        raiseAllHeldInputs(reason: "stream teardown")
 
         // Disengage relative-aim mode + remove gesture defaults.
         // `exitCapturedMode()` RE-ASSOCIATES the cursor
@@ -571,6 +572,47 @@ public final class InputForwarder {
     /// Last-seen modifier mask, so we can diff against the previous flagsChanged
     /// event and emit per-modifier down/up.
     var lastModFlags: NSEvent.ModifierFlags = []
+
+    /// Wire keycodes (0x8000|VK, exactly as sent) of non-modifier keys the host
+    /// currently holds DOWN, and the mouse buttons it holds pressed. NKRO
+    /// forwarding stays stateless per-event; these sets exist solely so a focus
+    /// loss / teardown can raise everything - when another app steals focus
+    /// mid-hold, the physical key-up is delivered to the thief, so without a
+    /// raise the host keeps a held W pressed and the game walks forever.
+    /// Main-thread only (all key/mouse handling is).
+    var heldKeys: Set<Int16> = []
+    var heldMouseButtons: Set<Int32> = []
+
+    /// Send key-up / button-release for everything we believe the host holds,
+    /// then clear the bookkeeping (modifiers included, via
+    /// releaseStuckModifiers). Called on the window-resign edge and detach().
+    /// A key still physically held on refocus stays released until re-pressed
+    /// - the predictable trade (matching upstream clients' raise-on-focus-loss).
+    func raiseAllHeldInputs(reason: String) {
+        let keyCount = heldKeys.count
+        let buttonCount = heldMouseButtons.count
+        if isReady {
+            for code in heldKeys {
+                let rc = backend?.sendKeyboard(
+                    keyCode: code, action: Int8(StreamProtocol.KEY_ACTION_UP),
+                    modifiers: 0, flags: 0) ?? -2
+                record("LiSendKeyboardEvent2(raise-all)", rc)
+            }
+            for button in heldMouseButtons {
+                let rc = backend?.sendMouseButton(
+                    action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
+                record("LiSendMouseButtonEvent(raise-all)", rc)
+            }
+            if keyCount + buttonCount > 0 {
+                Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
+                    + "mouse button(s) on \(reason) - the physical release would have "
+                    + "gone to the newly focused app", "Stream")
+            }
+        }
+        heldKeys.removeAll()
+        heldMouseButtons.removeAll()
+        releaseStuckModifiers()
+    }
 
     func modifierByte(from flags: NSEvent.ModifierFlags) -> UInt8 {
         var b: Int32 = 0
