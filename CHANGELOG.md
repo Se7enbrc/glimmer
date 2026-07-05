@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.7.4 - 2026-07-05
+
+No more stuck keys when something steals focus mid-game.
+
+If another app grabbed the foreground while you were holding a key - say W,
+walking forward - the key's release went to that app instead of the stream, so
+the game kept the key pressed indefinitely: you walked on until you clicked back
+in and pressed it again. The stream now releases every held key and mouse button
+the moment its window loses focus, so a focus steal stops your character instead
+of committing it to a wall. A key you're still holding when you click back in
+picks up again on the next press.
+
 ## 2026.7.3 - 2026-07-05
 
 A much smoother first half-minute, and audio that stops hoarding latency.
