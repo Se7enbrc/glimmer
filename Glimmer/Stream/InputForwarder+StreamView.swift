@@ -266,10 +266,25 @@ extension InputForwarder: StreamInputViewDelegate {
         if CruiseTraversal.isEnabled, cruiseGMax > 1.0 {
             let dt = now - lastMoveTimestamp
             if dt > 0 && dt <= 0.1 {
-                let v = hypot(accumDx, accumDy) / dt
-                // Seed fresh on the first batch after a gap (ema cleared below)
-                // so onset reads the true velocity; blend within continuous motion.
-                cruiseVelocityEma = cruiseVelocityEma > 0 ? 0.5 * v + 0.5 * cruiseVelocityEma : v
+                // SPIKE GUARDS (the 2026-07-19 "crazy sensitive" episode):
+                // device-rate delivery (~1ms dragged events) makes a few counts
+                // read as thousands of counts/s; the EMA then HELD that spike,
+                // boosting real aim at gMax until a >100ms gap reset it ("stopped
+                // on refocus"). Guards: dt floored to half a 120Hz frame (a
+                // tiny-dt batch can't mint absurd velocity - understates, never
+                // overstates), EMA clamped just above vFull (gain saturates
+                // there; more is pure spike memory), and deceleration blends
+                // fast (0.7 new) so boost deflates within ~2 batches of the
+                // hand slowing while attack keeps the de-jittering 0.5 blend.
+                let v = hypot(accumDx, accumDy) / max(dt, 0.004)
+                if cruiseVelocityEma <= 0 {
+                    cruiseVelocityEma = v
+                } else if v >= cruiseVelocityEma {
+                    cruiseVelocityEma = 0.5 * v + 0.5 * cruiseVelocityEma
+                } else {
+                    cruiseVelocityEma = 0.7 * v + 0.3 * cruiseVelocityEma
+                }
+                cruiseVelocityEma = min(cruiseVelocityEma, CruiseTraversal.vFull * 1.5)
             } else {
                 cruiseVelocityEma = 0
             }
