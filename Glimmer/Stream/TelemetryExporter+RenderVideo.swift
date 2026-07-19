@@ -295,6 +295,36 @@ extension TelemetryRenderer {
         builder.emit("glimmer_present_stale_repeats_per_second",
                      "Stale-frame repeats per second (spike at fps≈refresh = micro-judder).",
                      snap.staleRepeatsPerSecond)
+        builder.emitCounter("glimmer_present_stale_empty_total",
+                            "Stale beats with an EMPTY pacer queue (starve half of the "
+                            + "clump-then-starve oscillation; not_due = repeat_total - this).",
+                            snap.staleEmptyQueueTotal)
+        builder.emitCounter("glimmer_present_gap_drought_total",
+                            "Perceived gaps from a >100ms hold with frames still arriving "
+                            + "(remainder of perceived_gaps_total is renderer-reject).",
+                            snap.presentGapDroughtTotal)
+        builder.emitCounter("glimmer_audio_near_miss_total",
+                            "Steady-state audio fill dips under ~15ms without a full drain - "
+                            + "cushion margin erosion before it is audible.",
+                            snap.audioNearMissTotal)
+        // Pipeline cadence (clump forensics): inter-arrival histograms at three
+        // boundaries. Compare the three to locate where clumping is born
+        // (wire/receive vs depacketizer vs VideoToolbox).
+        if let stage = snap.pipelineReceiveCadence {
+            builder.emitHistogram("glimmer_cadence_receive_ms",
+                                  "Inter-arrival between consecutive frames at RECEIVE "
+                                  + "(last packet), ms.", stage: stage)
+        }
+        if let stage = snap.pipelineAssembleCadence {
+            builder.emitHistogram("glimmer_cadence_assemble_ms",
+                                  "Inter-arrival between consecutive frames at ASSEMBLE "
+                                  + "(depacketizer output), ms.", stage: stage)
+        }
+        if let stage = snap.pipelineOutputCadence {
+            builder.emitHistogram("glimmer_cadence_output_ms",
+                                  "Inter-arrival between consecutive frames at VT OUTPUT "
+                                  + "(decode complete), ms.", stage: stage)
+        }
         builder.emitCounter("glimmer_pacer_over_target_release_total",
                             "Over-target force-releases (zero in steady state; the due-gate "
                             + "self-oscillation breaker).",

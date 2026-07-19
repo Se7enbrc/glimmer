@@ -123,6 +123,9 @@ extension TelemetryExporter {
         snap.vtSessionCreateMs = counters.vtSessionCreateMs
         snap.discontinuityFlushTotal = counters.discontinuityFlushTotal.value
         snap.staleFrameRepeatTotal = counters.staleFrameRepeatTotal.value
+        snap.staleEmptyQueueTotal = counters.staleEmptyQueueTotal.value
+        snap.presentGapDroughtTotal = counters.presentGapDroughtTotal.value
+        snap.audioNearMissTotal = counters.audioNearMissTotal.value
         snap.tickMissDescheduledTotal = counters.tickMissDescheduledTotal.value
         snap.tickMissCoalescedTotal = counters.tickMissCoalescedTotal.value
         snap.tickMissPreemptedTotal = counters.tickMissPreemptedTotal.value
@@ -160,6 +163,15 @@ extension TelemetryExporter {
         // stage, read off the same tracker on this queue.
         snap.inputLocalLatency = FrameTimingTracker.shared?.inputLocalLatency.snapshotValue()
         snap.inputDeliverLatency = FrameTimingTracker.shared?.inputDeliverLatency.snapshotValue()
+        // Pipeline cadence (clump forensics) + cruise forensics - standalone
+        // stages on the same tracker, read on this queue.
+        snap.pipelineReceiveCadence = FrameTimingTracker.shared?.receiveCadence.snapshotValue()
+        snap.pipelineAssembleCadence = FrameTimingTracker.shared?.assembleCadence.snapshotValue()
+        snap.pipelineOutputCadence = FrameTimingTracker.shared?.outputCadence.snapshotValue()
+        snap.cruiseVelocityMove = FrameTimingTracker.shared?.cruiseVelocityMove.snapshotValue()
+        snap.cruiseVelocityDrag = FrameTimingTracker.shared?.cruiseVelocityDrag.snapshotValue()
+        snap.cruiseGainMove = FrameTimingTracker.shared?.cruiseGainMove.snapshotValue()
+        snap.cruiseGainDrag = FrameTimingTracker.shared?.cruiseGainDrag.snapshotValue()
 
         // Wi-Fi radio (signal 3): one CoreWLAN read on this queue. Reads the
         // current association only - never a scan - so it cannot disturb the link.

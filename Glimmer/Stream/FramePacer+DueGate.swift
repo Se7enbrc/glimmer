@@ -498,17 +498,21 @@ extension FramePacer {
     /// and the over-target force-release telemetry. Called OFF the gate's lock
     /// (caller unlocked). See each sub-helper for its rationale.
     func recordPerTickPresentSignals(_ gate: DueGateResult, depth: Int) {
-        recordStaleRepeatIfNeeded(gate.toPresent == nil)
+        recordStaleRepeatIfNeeded(gate.toPresent == nil, queueEmpty: depth == 0)
         recordOverTargetReleaseIfNeeded(gate, depth: depth)
     }
 
     /// Bump the stale-frame REPEAT counter (signal: PRESENT) when a running tick
     /// presented no new frame - the layer re-shows the last one (the invisible
-    /// stutter). Kept off `releaseDueFrame` so its branch doesn't grow that
-    /// already-large function. Always-live sub-µs integer add; the exporter
-    /// derives a repeats/sec rate from the monotonic total.
-    func recordStaleRepeatIfNeeded(_ repeated: Bool) {
-        if repeated { TelemetryCounters.shared.staleFrameRepeatTotal.increment() }
+    /// stutter). The EMPTY-queue subset counts separately: with frames queued a
+    /// stale beat is a benign not-due idle tick (fps<refresh cadence), but an
+    /// empty queue means this beat's content hadn't arrived - the starve half
+    /// of the clump-then-starve oscillation. Always-live sub-µs integer adds;
+    /// the exporter derives per-second rates from the monotonic totals.
+    func recordStaleRepeatIfNeeded(_ repeated: Bool, queueEmpty: Bool) {
+        guard repeated else { return }
+        TelemetryCounters.shared.staleFrameRepeatTotal.increment()
+        if queueEmpty { TelemetryCounters.shared.staleEmptyQueueTotal.increment() }
     }
 
     /// OVER-TARGET force-release observability (the no-network present-stall fix).

@@ -317,6 +317,50 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// deliver→enqueue age `inputLocalLatency` can't see - it starts at enqueue).
     /// Same self-locked Stage; observed off the present path. Measurement only.
     let inputDeliverLatency = LatencyHistograms.Stage()
+
+    /// PIPELINE CADENCE (clump forensics): inter-arrival between CONSECUTIVE
+    /// frames at three boundaries - receive (last packet), assemble
+    /// (depacketizer output), and VT output. At 120fps every stage should tick
+    /// ~8.3ms; mass below ~4ms = frames arriving in clumps, mass above ~12ms =
+    /// the matching starve. Comparing the three locates WHERE clumping is born
+    /// (wire/receive vs depacketizer vs VideoToolbox) - the measured ~14/s
+    /// over-target churn + ~3/s stale beats on a smooth wire (recv jitter
+    /// 0.3ms) made that the open question. Deltas > 1s are treated as content
+    /// gaps and skipped, not cadence.
+    static let cadenceBoundsMs: [Double] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20, 25, 33, 50, 66, 132
+    ]
+    let receiveCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
+    let assembleCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
+    let outputCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
+
+    /// CRUISE forensics (units are counts/sec and gain multipliers, NOT ms -
+    /// the Stage bucketing is unit-agnostic). Velocity distribution split MOVE
+    /// vs DRAG, plus the applied gain per boosted batch, same split. The split
+    /// is load-bearing: menu drag-pans and held-button aim (ADS/spray) share
+    /// the drag path, so any drag-specific band tune (owner-reported slow menu
+    /// drags) needs this distribution first.
+    static let cruiseVelocityBounds: [Double] = [
+        250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000,
+        3500, 4000, 5000, 7000, 10000
+    ]
+    static let cruiseGainBounds: [Double] = [
+        1.02, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.98, 2.0, 2.67, 4.0
+    ]
+    let cruiseVelocityMove = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseVelocityBounds)
+    let cruiseVelocityDrag = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseVelocityBounds)
+    let cruiseGainMove = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
+    let cruiseGainDrag = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
+
+    /// Last-seen stage timestamps for the cadence deltas. Guarded by `mapLock`
+    /// (stamped on the same calls that touch the in-flight map).
+    private var lastReceiveNanos: UInt64 = 0
+    private var lastAssembleNanos: UInt64 = 0
+    private var lastOutputNanos: UInt64 = 0
+    /// Cadence deltas above this are a content gap (idle desktop, scene load),
+    /// not delivery cadence - skipped so they can't pollute the histogram sum.
+    private static let cadenceGapCutoffNanos: UInt64 = 1_000_000_000
+
     /// Both internal (not private): the trace renderer + drop-stub emitter in
     /// TelemetryLatency+Trace.swift are the only cross-file consumers.
     let traceWriter = FrameTraceWriter()
@@ -440,6 +484,13 @@ final class FrameTimingTracker: @unchecked Sendable {
                             isIDR: isIDR,
                             hostEncodeMs: Double(hostEncodeTenthsMs) / 10.0)
         os_unfair_lock_lock(mapLock)
+        // Cadence deltas for the receive + assemble boundaries (clump
+        // forensics). Captured under the map lock we already hold; observed
+        // after unlock (the Stage has its own lock).
+        let prevReceive = lastReceiveNanos
+        let prevAssemble = lastAssembleNanos
+        lastReceiveNanos = receiveNanos
+        lastAssembleNanos = assembleNanos
         if inFlight[rtpTimestamp] == nil {
             insertionOrder.append(rtpTimestamp)
         }
@@ -453,7 +504,16 @@ final class FrameTimingTracker: @unchecked Sendable {
             if let dropped = inFlight.removeValue(forKey: stale) { evicted.append((stale, dropped)) }
         }
         os_unfair_lock_unlock(mapLock)
+        observeCadence(receiveCadence, prev: prevReceive, now: receiveNanos)
+        observeCadence(assembleCadence, prev: prevAssemble, now: assembleNanos)
         if !evicted.isEmpty { emitDropStubs(evicted) }
+    }
+
+    /// Observe one inter-arrival delta into a cadence stage; skips the first
+    /// event (no prev), out-of-order stamps, and content-gap deltas (> 1s).
+    private func observeCadence(_ stage: LatencyHistograms.Stage, prev: UInt64, now: UInt64) {
+        guard prev > 0, now > prev, now &- prev < Self.cadenceGapCutoffNanos else { return }
+        stage.observe(Double(now &- prev) / 1_000_000.0)
     }
 
     /// Stage t_submit. Called just before VTDecompressionSessionDecodeFrame
@@ -474,10 +534,13 @@ final class FrameTimingTracker: @unchecked Sendable {
         guard rtpTimestamp != 0 else { return }
         let now = DispatchTime.now().uptimeNanoseconds
         os_unfair_lock_lock(mapLock)
+        let prevOutput = lastOutputNanos
+        lastOutputNanos = now
         if inFlight[rtpTimestamp] != nil {
             inFlight[rtpTimestamp]?.outputNanos = now
         }
         os_unfair_lock_unlock(mapLock)
+        observeCadence(outputCadence, prev: prevOutput, now: now)
     }
 
     /// Stage t_present. Called the instant the frame is enqueued to the renderer

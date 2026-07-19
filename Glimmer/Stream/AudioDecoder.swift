@@ -304,6 +304,9 @@ public final class AudioDecoder: @unchecked Sendable {
     /// (~9 audible blips, 2026-07-05). Guarded by `audioMeterLock`; the AV
     /// work stays on the decode path.
     var pendingResolveTopUp = false
+    /// Near-miss dip latch (see AudioDecoder+Meter's near-miss thresholds).
+    /// Guarded by `audioMeterLock`.
+    var nearMissLatched = false
     /// `DispatchTime` ns deadline of the startup floor-learning gate, armed at
     /// the COLD-START prime: drains in the host's boot-ramp window are pacing
     /// artifacts, not link character - letting them teach the floor welded
@@ -474,6 +477,7 @@ public final class AudioDecoder: @unchecked Sendable {
         rePrimeCount = 0
         lastTrimNanos = 0; gateGraceUntilNanos = 0
         pendingResolveTopUp = false; floorLearnGateUntilNanos = 0
+        nearMissLatched = false
         quietSinceNanos = seedNowNanos
         floorQuietSinceNanos = seedNowNanos
         rebuildIsReprime = false

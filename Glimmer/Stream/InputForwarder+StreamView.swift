@@ -237,7 +237,13 @@ extension InputForwarder: StreamInputViewDelegate {
         // drained events, so dt must span to the last of them - measuring to the
         // first event inflated the batch velocity whenever coalescing engaged.
         var batchTimestamp = event.timestamp
-        while let queued = window?.nextEvent(matching: .mouseMoved,
+        // Drags route through this handler too (StreamInputView forwards all
+        // *MouseDragged here) - include them in the coalesce mask so a drag
+        // batches identically to free motion instead of one-event-per-NSEvent.
+        let motionMask: NSEvent.EventTypeMask = [
+            .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged
+        ]
+        while let queued = window?.nextEvent(matching: motionMask,
                                              until: Date.distantPast,
                                              inMode: .eventTracking,
                                              dequeue: true) {
@@ -269,6 +275,17 @@ extension InputForwarder: StreamInputViewDelegate {
             }
             let g = CruiseTraversal.gain(velocity: cruiseVelocityEma, dt: dt, gMax: cruiseGMax,
                                          vKnee: CruiseTraversal.vKnee, vFull: CruiseTraversal.vFull)
+            // Cruise forensics (telemetry-on only): velocity + gain
+            // distributions split MOVE vs DRAG - the data a drag-specific band
+            // tune needs (menu drag-pans vs held-button aim share this path).
+            if let tracker = FrameTimingTracker.shared, cruiseVelocityEma > 0 {
+                let isDrag = event.type != .mouseMoved
+                (isDrag ? tracker.cruiseVelocityDrag : tracker.cruiseVelocityMove)
+                    .observe(cruiseVelocityEma)
+                if g > 1.0 {
+                    (isDrag ? tracker.cruiseGainDrag : tracker.cruiseGainMove).observe(g)
+                }
+            }
             if g > 1.0 {
                 accumDx *= g
                 accumDy *= g

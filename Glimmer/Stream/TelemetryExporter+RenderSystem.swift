@@ -47,6 +47,26 @@ extension TelemetryRenderer {
                 + "batcher slot stamp), ms.",
                 stage: inputDeliver)
         }
+        // Cruise forensics: batch-velocity + applied-gain distributions, split
+        // MOVE vs DRAG (menu drag-pans vs held-button aim share the drag path,
+        // so a drag-specific band tune needs this split). Units are counts/sec
+        // and gain multipliers - not ms; the histogram bucketing is unit-agnostic.
+        if let stage = snap.cruiseVelocityMove {
+            builder.emitHistogram("glimmer_cruise_velocity_move",
+                                  "Mouse batch velocity (counts/sec), free motion.", stage: stage)
+        }
+        if let stage = snap.cruiseVelocityDrag {
+            builder.emitHistogram("glimmer_cruise_velocity_drag",
+                                  "Mouse batch velocity (counts/sec), button-held drags.", stage: stage)
+        }
+        if let stage = snap.cruiseGainMove {
+            builder.emitHistogram("glimmer_cruise_gain_move",
+                                  "Applied Cruise gain per boosted batch, free motion.", stage: stage)
+        }
+        if let stage = snap.cruiseGainDrag {
+            builder.emitHistogram("glimmer_cruise_gain_drag",
+                                  "Applied Cruise gain per boosted batch, button-held drags.", stage: stage)
+        }
         // Input flush ticks skipped by backpressure, split by which signal fired
         // (the input p99 tail attribution).
         builder.emitCounter("glimmer_input_flush_backpressure_skips_total",

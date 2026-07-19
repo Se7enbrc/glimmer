@@ -249,6 +249,26 @@ final class TelemetryCounters: @unchecked Sendable {
     /// sub-µs integer op, far below the per-vsync budget even at 240Hz).
     let staleFrameRepeatTotal = Counter()
 
+    /// STALE beats where the pacer queue was EMPTY (signal: PRESENT) - the
+    /// starvation subset of `staleFrameRepeatTotal`. A stale beat with frames
+    /// queued is a benign not-due idle tick (fps<refresh cadence); an EMPTY
+    /// queue means content for this beat hadn't arrived - the clump-then-starve
+    /// oscillation's visible half. not_due = staleFrameRepeatTotal − this.
+    let staleEmptyQueueTotal = Counter()
+
+    /// PERCEIVED-GAP cause split (signal: PRESENT): the DROUGHT subset of
+    /// `presentationGaps` - a present landed after a >100ms hold with frames
+    /// still arriving (loss storm / decode starvation / pacing wedge). The
+    /// remainder (total − this) is the backoff-then-renderer-reject path.
+    let presentGapDroughtTotal = Counter()
+
+    /// AUDIO NEAR-MISS (signal: AUDIO) - steady-state playout fill dipped below
+    /// ~15ms without fully draining (latched per dip; re-arms above 30ms).
+    /// Margin erosion visible BEFORE it becomes an audible under-run: a rising
+    /// rate here with zero under-runs means the cushion is thinning toward the
+    /// edge (skew, gap texture) and the resampler/ratchet are living close.
+    let audioNearMissTotal = Counter()
+
     /// OVER-TARGET force-release count (signal: PRESENT). Bumped on each pacer tick
     /// where the due gate would have latched not-due against a GENUINE drainable
     /// backlog (one frame above the adaptive jitter-buffer target that survived the
@@ -686,7 +706,8 @@ final class TelemetryCounters: @unchecked Sendable {
                         ackSilenceNearMissTotal, ctrlIgnoredTotal,
                         decoderRecreateTotal, decoderRecreateFirstTotal,
                         decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
-                        staleFrameRepeatTotal,
+                        staleFrameRepeatTotal, staleEmptyQueueTotal, audioNearMissTotal,
+                        presentGapDroughtTotal,
                         pacerOverTargetReleaseTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
                         tickMissPreemptedTotal, tickMissLinkskipTotal,

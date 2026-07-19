@@ -54,6 +54,12 @@ extension AudioDecoder {
     /// the BREADCRUMB rate so a cascade can't flood the 2000-entry Diag ring -
     /// edges suppressed by the limit ride the next line as a count.
     static let underrunNoticeMinIntervalNanos: UInt64 = 1_000_000_000
+    /// Near-miss fill thresholds (ms): a steady-state trough below the first
+    /// latches one `audioNearMissTotal` count; fill must recover above the
+    /// second to re-arm, so one dip counts exactly once.
+    static let nearMissFillMs: Double = 15
+    static let nearMissRearmFillMs: Double = 30
+
     /// Startup floor-learning gate (ns after the cold-start prime): the host
     /// feeds sub-realtime for its first seconds (startup-pacing=paced, ~15s
     /// measured), so drains in this window are boot-ramp artifacts. 45s covers
@@ -89,6 +95,20 @@ extension AudioDecoder {
         // conflated again. Gated on `primed` so it never starves the pre-roll, and on
         // `!playoutDrained` so a segment rebuilding its cushion after a drain isn't
         // trimmed before it can re-prime.
+        // NEAR-MISS latch (margin telemetry): steady-state fill dipping under
+        // ~15ms without fully draining - erosion visible BEFORE it's audible.
+        // Latched per dip (re-arms above 30ms) so one trough counts once. The
+        // counter is a leaf atomic, safe under the meter lock.
+        if primed && !playoutDrained {
+            if aheadMs < Self.nearMissFillMs {
+                if !nearMissLatched {
+                    nearMissLatched = true
+                    TelemetryCounters.shared.audioNearMissTotal.increment()
+                }
+            } else if aheadMs > Self.nearMissRearmFillMs {
+                nearMissLatched = false
+            }
+        }
         if primed && !playoutDrained && aheadMs >= playoutTargetMs + Self.playoutTrimHysteresisMs {
             // Clock reads live only inside the would-trim/would-drop branches - the
             // steady-state path at/below target stays clock-free.

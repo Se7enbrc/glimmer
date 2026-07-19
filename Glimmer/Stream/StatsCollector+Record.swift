@@ -199,6 +199,10 @@ extension StatsCollector {
                now - gapBaselineTime > Self.perceivedGapSeconds,
                receivedFrames &- gapBaselineReceived >= Self.perceivedGapMinReceived {
                 presentationGaps &+= 1
+                // Cause split for the exporter: this is the DROUGHT path
+                // (content arriving, screen held) - the backoff-reject path
+                // increments only the total. Leaf atomic; safe under our lock.
+                TelemetryCounters.shared.presentGapDroughtTotal.increment()
             }
             gapBaselineTime = now
             gapBaselineReceived = receivedFrames

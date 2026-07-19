@@ -77,6 +77,26 @@ struct TelemetrySnapshot: Sendable {
     /// Stale-frame repeats per second this window - a SPIKE while fps≈refresh is a
     /// real micro-judder (at fps<refresh a steady rate is the normal cadence).
     var staleRepeatsPerSecond: Double?
+    /// EMPTY-QUEUE subset of the stale repeats (the starve half of the
+    /// clump-then-starve oscillation; not_due = total − this).
+    var staleEmptyQueueTotal: UInt64 = 0
+    /// DROUGHT subset of the perceived present gaps (content arriving, screen
+    /// held >100ms); remainder is the backoff-then-renderer-reject path.
+    var presentGapDroughtTotal: UInt64 = 0
+    /// Steady-state audio fill dips under ~15ms that did NOT fully drain -
+    /// cushion margin erosion visible before it becomes an audible under-run.
+    var audioNearMissTotal: UInt64 = 0
+    /// PIPELINE CADENCE histograms (clump forensics): inter-arrival between
+    /// consecutive frames at receive / assemble / VT-output. Standalone stages.
+    var pipelineReceiveCadence: LatencyHistogramSnapshot.Stage?
+    var pipelineAssembleCadence: LatencyHistogramSnapshot.Stage?
+    var pipelineOutputCadence: LatencyHistogramSnapshot.Stage?
+    /// CRUISE forensics: batch velocity (counts/sec) + applied gain, split
+    /// move vs drag. Standalone stages; units are not ms.
+    var cruiseVelocityMove: LatencyHistogramSnapshot.Stage?
+    var cruiseVelocityDrag: LatencyHistogramSnapshot.Stage?
+    var cruiseGainMove: LatencyHistogramSnapshot.Stage?
+    var cruiseGainDrag: LatencyHistogramSnapshot.Stage?
     /// Present-tick MISS totals split by root cause (DESCHEDULED = the tick thread
     /// didn't get the CPU; COALESCED = macOS delayed the CADisplayLink callback).
     /// The split picks which of two opposite fixes the residual present gap needs.
