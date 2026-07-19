@@ -36,12 +36,28 @@ enum CruiseTraversal {
     static let referenceWidth: Double = 1920
     /// Defaults for the velocity gate (counts/sec). Below `vKnee` the gain is
     /// exactly 1.0; at/above `vFull` it is the full `gMax`; between, a smoothstep.
-    /// Re-tuned from 1400/4500 on 14d of field data: real flicks peak ~3200
-    /// counts/s, so half of all sessions never reached full gain (max 1.06-1.57)
-    /// and fast aim above 1400 was getting nibbled - the "mushy" mid-band. The
-    /// 2000/3200 band keeps aim raw to 2000 and puts real flicks AT gMax.
-    static let defaultVKnee: Double = 2000
-    static let defaultVFull: Double = 3200
+    /// CALIBRATION NOTE: earlier bands (1400/4500, then 2000/3200) were tuned
+    /// against the old per-batch dist/dt estimator, whose tiny-dt spikes read
+    /// ~2x high. Under the honest windowed estimator the field distribution is
+    /// p50~220 / p90~750 / p99~1770 with precision aim topping out ~920, so
+    /// 1100/1800 keeps aim raw with margin and puts real flicks AT gMax
+    /// (validated live 2026-07-19; the 2000 knee left the boost engaging on
+    /// ~0.03% of batches - effectively off).
+    static let defaultVKnee: Double = 1100
+    static let defaultVFull: Double = 1800
+
+    /// DRAG-DELTA compensation: macOS (observed on the 27.0 beta) damps
+    /// *MouseDragged deltas relative to free mouseMoved for the same physical
+    /// motion - owner-verified by matched-speed swipes (button held travels
+    /// visibly less; the drag/move velocity histograms read ~0.6-0.7x). Scale
+    /// button-held batch deltas back up so drag aim matches free aim. Hidden
+    /// live-read tunable; 1.0 disables. Clamped so a bad write can't run away.
+    static let dragDeltaScaleDefaultsKey = "cruiseDragDeltaScale"
+    static let defaultDragDeltaScale: Double = 1.35
+    static var dragDeltaScale: Double {
+        let v = UserDefaults.standard.double(forKey: dragDeltaScaleDefaultsKey)
+        return v > 0 ? min(max(v, 0.5), 3.0) : defaultDragDeltaScale
+    }
 
     /// Whether the feature is on (default true).
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledDefaultsKey) }

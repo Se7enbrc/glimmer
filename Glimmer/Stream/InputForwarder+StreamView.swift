@@ -253,6 +253,19 @@ extension InputForwarder: StreamInputViewDelegate {
             batchTimestamp = queued.timestamp
         }
 
+        // DRAG-DELTA compensation (before Cruise, so the velocity gate sees the
+        // corrected motion): macOS damps dragged deltas vs free motion for the
+        // same hand speed (owner-verified matched-speed swipes, macOS 27 beta).
+        // Scale button-held batches back to parity; 1.0 disables.
+        let isDragBatch = event.type != .mouseMoved
+        if isDragBatch {
+            let scale = CruiseTraversal.dragDeltaScale
+            if scale != 1.0 {
+                accumDx *= scale
+                accumDy *= scale
+            }
+        }
+
         // CRUISE traversal boost (InputForwarder+Cruise.swift). Velocity-gated,
         // resolution-derived gain on ONLY fast flicks - aim (sub-knee) is untouched.
         // Runs AFTER the Mac linearization, so it's the only client gain. dt is the
@@ -291,11 +304,10 @@ extension InputForwarder: StreamInputViewDelegate {
             // distributions split MOVE vs DRAG - the data a drag-specific band
             // tune needs (menu drag-pans vs held-button aim share this path).
             if let tracker = FrameTimingTracker.shared, velocity > 0 {
-                let isDrag = event.type != .mouseMoved
-                (isDrag ? tracker.cruiseVelocityDrag : tracker.cruiseVelocityMove)
+                (isDragBatch ? tracker.cruiseVelocityDrag : tracker.cruiseVelocityMove)
                     .observe(velocity)
                 if g > 1.0 {
-                    (isDrag ? tracker.cruiseGainDrag : tracker.cruiseGainMove).observe(g)
+                    (isDragBatch ? tracker.cruiseGainDrag : tracker.cruiseGainMove).observe(g)
                 }
             }
             if g > 1.0 {
