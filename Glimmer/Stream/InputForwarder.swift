@@ -279,12 +279,15 @@ public final class InputForwarder {
     /// derived ceiling, set at start and re-set on a reconnect resolution change.
     var lastMoveTimestamp: TimeInterval = 0
     var cruiseGMax: Double = 1.0
-    /// Short EMA of batch velocity feeding the Cruise gate. Per-batch
-    /// instantaneous velocity jitters ~±30% at 120Hz event cadence, flickering
-    /// the gain through the ramp band (part of the "mushy" feel). Seeded to the
-    /// raw velocity on a post-gap batch so flick ONSET keeps zero added lag;
-    /// the smoothing only acts within continuous motion.
-    var cruiseVelocityEma: Double = 0
+    /// WINDOWED velocity estimator feeding the Cruise gate: exponentially
+    /// weighted Σdistance/Σtime over a ~30ms window. Robust BY CONSTRUCTION to
+    /// variable event-delivery cadence - a device-rate 1ms batch contributes
+    /// tiny distance AND tiny time, so the ratio can never spike (the 07-19
+    /// "crazy sensitive" incident) nor understate under a dt floor (the
+    /// follow-up chop: per-batch distance/dt flapped 4x as macOS alternated
+    /// coalesced and per-event delivery). Both accums decay by exp(-dt/30ms).
+    var cruiseDistAccum: Double = 0
+    var cruiseTimeAccum: Double = 0
 
     /// Pull the relative delta out of a mouseMoved NSEvent. Reads the CGEvent
     /// integer fields `kCGMouseEventDeltaX/Y` (valid whether or not the cursor is

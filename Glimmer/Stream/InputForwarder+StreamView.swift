@@ -265,38 +265,35 @@ extension InputForwarder: StreamInputViewDelegate {
         let now = batchTimestamp
         if CruiseTraversal.isEnabled, cruiseGMax > 1.0 {
             let dt = now - lastMoveTimestamp
+            var velocity: Double = 0
             if dt > 0 && dt <= 0.1 {
-                // SPIKE GUARDS (the 2026-07-19 "crazy sensitive" episode):
-                // device-rate delivery (~1ms dragged events) makes a few counts
-                // read as thousands of counts/s; the EMA then HELD that spike,
-                // boosting real aim at gMax until a >100ms gap reset it ("stopped
-                // on refocus"). Guards: dt floored to half a 120Hz frame (a
-                // tiny-dt batch can't mint absurd velocity - understates, never
-                // overstates), EMA clamped just above vFull (gain saturates
-                // there; more is pure spike memory), and deceleration blends
-                // fast (0.7 new) so boost deflates within ~2 batches of the
-                // hand slowing while attack keeps the de-jittering 0.5 blend.
-                let v = hypot(accumDx, accumDy) / max(dt, 0.004)
-                if cruiseVelocityEma <= 0 {
-                    cruiseVelocityEma = v
-                } else if v >= cruiseVelocityEma {
-                    cruiseVelocityEma = 0.5 * v + 0.5 * cruiseVelocityEma
-                } else {
-                    cruiseVelocityEma = 0.7 * v + 0.3 * cruiseVelocityEma
+                // WINDOWED velocity (~30ms exponential window of Σdist/Σtime):
+                // immune to delivery-cadence variation by construction. A 1ms
+                // device-rate batch adds tiny distance AND tiny time, so the
+                // ratio can neither spike (the "crazy sensitive" incident) nor
+                // understate (the dt-floor chop: per-batch dist/dt flapped 4x
+                // as macOS alternated coalesced and per-event delivery). Needs
+                // ≥4ms of accumulated window before the gate trusts it, so a
+                // post-gap first batch stays identity.
+                let decay = exp(-dt / 0.030)
+                cruiseDistAccum = cruiseDistAccum * decay + hypot(accumDx, accumDy)
+                cruiseTimeAccum = cruiseTimeAccum * decay + dt
+                if cruiseTimeAccum >= 0.004 {
+                    velocity = cruiseDistAccum / cruiseTimeAccum
                 }
-                cruiseVelocityEma = min(cruiseVelocityEma, CruiseTraversal.vFull * 1.5)
             } else {
-                cruiseVelocityEma = 0
+                cruiseDistAccum = 0
+                cruiseTimeAccum = 0
             }
-            let g = CruiseTraversal.gain(velocity: cruiseVelocityEma, dt: dt, gMax: cruiseGMax,
+            let g = CruiseTraversal.gain(velocity: velocity, dt: dt, gMax: cruiseGMax,
                                          vKnee: CruiseTraversal.vKnee, vFull: CruiseTraversal.vFull)
             // Cruise forensics (telemetry-on only): velocity + gain
             // distributions split MOVE vs DRAG - the data a drag-specific band
             // tune needs (menu drag-pans vs held-button aim share this path).
-            if let tracker = FrameTimingTracker.shared, cruiseVelocityEma > 0 {
+            if let tracker = FrameTimingTracker.shared, velocity > 0 {
                 let isDrag = event.type != .mouseMoved
                 (isDrag ? tracker.cruiseVelocityDrag : tracker.cruiseVelocityMove)
-                    .observe(cruiseVelocityEma)
+                    .observe(velocity)
                 if g > 1.0 {
                     (isDrag ? tracker.cruiseGainDrag : tracker.cruiseGainMove).observe(g)
                 }

@@ -130,11 +130,12 @@ extension InputForwarder {
         guard !isMouseCaptured else { return }
         mouseResidualX = 0
         mouseResidualY = 0
-        // Reset the Cruise inter-batch clock AND the velocity EMA so the first
-        // post-focus motion reads a stale dt (>0.1s) and forces gain==1.0 -
-        // never a spurious or carried-over boost on resume.
+        // Reset the Cruise inter-batch clock AND the windowed-velocity accums
+        // so the first post-focus motion reads a stale dt (>0.1s) and forces
+        // gain==1.0 - never a spurious or carried-over boost on resume.
         lastMoveTimestamp = 0
-        cruiseVelocityEma = 0
+        cruiseDistAccum = 0
+        cruiseTimeAccum = 0
         // Disassociate: the OS stops moving the system cursor; HID motion still
         // arrives as relative deltas on the CGEvent layer. The return value is
         // a CGError; on the (vanishingly unlikely) failure we still proceed -
