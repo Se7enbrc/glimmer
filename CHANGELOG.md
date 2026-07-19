@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.7.5 - 2026-07-19
+
+Mouse feel settles on honest and raw, drags match free aim again, and battery
+streams stop chugging.
+
+Click-and-drag aim now travels the same as free aim. The macOS 27 beta delivers
+held-button mouse motion smaller than free motion for the same physical
+movement - precision aim while holding a button felt heavy and under-traveled.
+Glimmer now measures for this and scales drag motion back to parity.
+
+The "magic" fast-flick traversal boost is now off by default. Field data settled
+an honest question: at 4K, a quick combat aim-flick and a cross-screen traversal
+flick are the same speed and size to any detector, so any automatic boost
+eventually boosts your aim - felt twice as sudden sensitivity jumps. Raw,
+predictable 1:1 aim everywhere wins. (The machinery remains for the adventurous
+via hidden settings.)
+
+Streams on battery stop chugging. When macOS throttles the display clock below
+the stream's frame rate (common on battery, sometimes even plugged in), ~13
+frames a second had nowhere to land and playback ran rough. The pacer now
+detects content outrunning the display clock and fills the missing beats from
+its own timer, holding steady until the display genuinely recovers.
+
+Under the hood: a much deeper self-diagnosis toolkit - frame-delivery cadence
+histograms at three pipeline stages, stutter and gap counters that name their
+cause, audio-margin tracking that sees trouble before it is audible,
+mouse-motion distributions, and battery/low-power state - so the next "something
+feels off" gets answered from data in minutes.
+
 ## 2026.7.4 - 2026-07-05
 
 No more stuck keys when something steals focus mid-game.
