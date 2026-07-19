@@ -279,6 +279,12 @@ public final class InputForwarder {
     /// derived ceiling, set at start and re-set on a reconnect resolution change.
     var lastMoveTimestamp: TimeInterval = 0
     var cruiseGMax: Double = 1.0
+    /// Short EMA of batch velocity feeding the Cruise gate. Per-batch
+    /// instantaneous velocity jitters ~±30% at 120Hz event cadence, flickering
+    /// the gain through the ramp band (part of the "mushy" feel). Seeded to the
+    /// raw velocity on a post-gap batch so flick ONSET keeps zero added lag;
+    /// the smoothing only acts within continuous motion.
+    var cruiseVelocityEma: Double = 0
 
     /// Pull the relative delta out of a mouseMoved NSEvent. Reads the CGEvent
     /// integer fields `kCGMouseEventDeltaX/Y` (valid whether or not the cursor is

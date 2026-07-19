@@ -36,8 +36,12 @@ enum CruiseTraversal {
     static let referenceWidth: Double = 1920
     /// Defaults for the velocity gate (counts/sec). Below `vKnee` the gain is
     /// exactly 1.0; at/above `vFull` it is the full `gMax`; between, a smoothstep.
-    static let defaultVKnee: Double = 1400
-    static let defaultVFull: Double = 4500
+    /// Re-tuned from 1400/4500 on 14d of field data: real flicks peak ~3200
+    /// counts/s, so half of all sessions never reached full gain (max 1.06-1.57)
+    /// and fast aim above 1400 was getting nibbled - the "mushy" mid-band. The
+    /// 2000/3200 band keeps aim raw to 2000 and puts real flicks AT gMax.
+    static let defaultVKnee: Double = 2000
+    static let defaultVFull: Double = 3200
 
     /// Whether the feature is on (default true).
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledDefaultsKey) }

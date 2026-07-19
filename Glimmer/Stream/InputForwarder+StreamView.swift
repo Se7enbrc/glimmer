@@ -233,6 +233,10 @@ extension InputForwarder: StreamInputViewDelegate {
         let initialDeltas = mouseDelta(from: event)
         var accumDx = initialDeltas.dx
         var accumDy = initialDeltas.dy
+        // Track the LAST coalesced event's timestamp: the deltas sum through the
+        // drained events, so dt must span to the last of them - measuring to the
+        // first event inflated the batch velocity whenever coalescing engaged.
+        var batchTimestamp = event.timestamp
         while let queued = window?.nextEvent(matching: .mouseMoved,
                                              until: Date.distantPast,
                                              inMode: .eventTracking,
@@ -240,19 +244,30 @@ extension InputForwarder: StreamInputViewDelegate {
             let delta = mouseDelta(from: queued)
             accumDx += delta.dx
             accumDy += delta.dy
+            batchTimestamp = queued.timestamp
         }
 
         // CRUISE traversal boost (InputForwarder+Cruise.swift). Velocity-gated,
         // resolution-derived gain on ONLY fast flicks - aim (sub-knee) is untouched.
         // Runs AFTER the Mac linearization, so it's the only client gain. dt is the
-        // inter-batch interval; v is counts/sec over this batch. Below the knee the
-        // gain is exactly 1.0 and accumDx/Dy are unchanged, so the residual path
-        // below runs byte-for-byte as it does today.
-        let now = event.timestamp
+        // inter-batch interval; the gate reads a SHORT velocity EMA (per-batch
+        // instantaneous v jitters ~±30%, flickering the gain through the ramp -
+        // the mushy feel). A post-gap batch seeds the EMA to the raw v, so flick
+        // onset carries zero added lag. Below the knee the gain is exactly 1.0
+        // and accumDx/Dy are unchanged, so the residual path below runs
+        // byte-for-byte as it does today.
+        let now = batchTimestamp
         if CruiseTraversal.isEnabled, cruiseGMax > 1.0 {
             let dt = now - lastMoveTimestamp
-            let v = hypot(accumDx, accumDy) / dt
-            let g = CruiseTraversal.gain(velocity: v, dt: dt, gMax: cruiseGMax,
+            if dt > 0 && dt <= 0.1 {
+                let v = hypot(accumDx, accumDy) / dt
+                // Seed fresh on the first batch after a gap (ema cleared below)
+                // so onset reads the true velocity; blend within continuous motion.
+                cruiseVelocityEma = cruiseVelocityEma > 0 ? 0.5 * v + 0.5 * cruiseVelocityEma : v
+            } else {
+                cruiseVelocityEma = 0
+            }
+            let g = CruiseTraversal.gain(velocity: cruiseVelocityEma, dt: dt, gMax: cruiseGMax,
                                          vKnee: CruiseTraversal.vKnee, vFull: CruiseTraversal.vFull)
             if g > 1.0 {
                 accumDx *= g
