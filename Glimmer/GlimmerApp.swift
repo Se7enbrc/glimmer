@@ -144,10 +144,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // which needs the registered default to read `true` before first toggle.
         UserDefaults.standard.register(defaults: [
             MouseAccelerationControl.enabledDefaultsKey: true,
-            // Cruise: resolution-aware fast-flick traversal boost (raw aim
-            // preserved). Hidden, default-on, no UI - the non-UI gate reads it via
-            // UserDefaults.bool, so it needs the registered default to read `true`.
-            CruiseTraversal.enabledDefaultsKey: true,
+            // Cruise: resolution-aware fast-flick traversal boost. DEFAULT OFF
+            // as of 2026-07-19: at 4K, combat aim snaps and traversal flicks
+            // occupy the same velocity AND distance range (field histograms:
+            // aim snaps 1100-1800 counts/s, flicks p99 ~1770, distances
+            // overlap), so any velocity-gated boost eventually boosts aim -
+            // two "crazy sensitivity" incidents in one day. Raw everywhere
+            // wins until a discriminator that can't misfire exists. The
+            // machinery + hidden knobs stay for opt-in experimentation.
+            CruiseTraversal.enabledDefaultsKey: false,
             // Fire the present tick on a private high-QoS run loop (not .main)
             // so a busy main thread can't starve the CADisplayLink callback.
             // Flip false for an instant fallback to the main-runloop tick.
