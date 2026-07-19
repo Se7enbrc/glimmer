@@ -47,6 +47,16 @@ extension TelemetryRenderer {
                 + "batcher slot stamp), ms.",
                 stage: inputDeliver)
         }
+        if let onBattery = snap.onBattery {
+            builder.emit("glimmer_on_battery",
+                         "1 while the providing power source is the internal battery.",
+                         onBattery ? 1 : 0)
+        }
+        if let lowPower = snap.lowPowerMode {
+            builder.emit("glimmer_low_power_mode",
+                         "1 while macOS Low Power Mode is enabled.",
+                         lowPower ? 1 : 0)
+        }
         // Cruise forensics: batch-velocity + applied-gain distributions, split
         // MOVE vs DRAG (menu drag-pans vs held-button aim share the drag path,
         // so a drag-specific band tune needs this split). Units are counts/sec

@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import IOKit.ps
 
 extension TelemetryExporter {
 
@@ -176,6 +177,14 @@ extension TelemetryExporter {
         // Wi-Fi radio (signal 3): one CoreWLAN read on this queue. Reads the
         // current association only - never a scan - so it cannot disturb the link.
         snap.wifi = wifi.sample()
+
+        // Power state: on-battery + Low Power Mode, 1Hz on this queue. The
+        // correlation labels for governor tick-throttle (the ~106-ticks-on-
+        // 120fps chug): if on_battery predicts it reliably, padding can be
+        // pre-armed at session start instead of waiting for the measured sag.
+        let powerSource = IOPSGetProvidingPowerSourceType(nil)?.takeRetainedValue() as String?
+        snap.onBattery = powerSource == kIOPMBatteryPowerKey
+        snap.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
         // Build attribution (signal 5a): the compile-time git SHA + build date.
         snap.buildCommit = BuildInfo.commit

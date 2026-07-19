@@ -380,10 +380,14 @@ final class FramePacer: @unchecked Sendable {
         var floorAssistActive = false
         var floorAssistEngagedAt: CFTimeInterval = .nan
         var floorAssistEngageReleaseCount: UInt64 = 0
-        /// Continuous healthy time (ticks back at/above the floor ratio) before
-        /// the assist stands down - rides the observed 1-3s violate/clear flap
-        /// through as ONE episode instead of cycling the timer with it.
+        /// Continuous healthy time (ticks back at/above the assist exit ratio)
+        /// before the assist stands down - rides the observed 1-3s throttle
+        /// flap through as ONE episode instead of cycling the timer with it.
         var floorAssistHealthySince: CFTimeInterval = .nan
+        /// When realized ticks first ran below the content-overrate engage
+        /// ratio (vs expectedHz). `.nan` = not short. Drives the assist engage
+        /// independently of the floor-violation breadcrumb latch.
+        var assistShortSince: CFTimeInterval = .nan
         /// Lock-guarded mirror of the main-actor `appliedFloorHz`, written wherever
         /// the range is (re)applied, so the off-main rate-window roll can compare
         /// realized ticks against the pinned floor without an actor hop.

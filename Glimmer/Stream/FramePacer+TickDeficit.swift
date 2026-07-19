@@ -78,10 +78,16 @@ extension FramePacer {
     /// fires it - sustained for `floorViolationNoticeSeconds`.
     static let floorViolationRatio = 0.9
     static let floorViolationNoticeSeconds = 1.0
-    /// Continuous healthy seconds (ticks ≥ the floor ratio) before the
-    /// floor-violation ASSIST disengages. 3s spans the measured 1-3s
-    /// violate/clear flap so one throttle episode arms the timer once.
+    /// Continuous healthy seconds (ticks ≥ the assist exit ratio) before the
+    /// ASSIST disengages. 3s spans the measured 1-3s throttle flap so one
+    /// episode arms the timer once.
     static let floorAssistExitHealthySeconds = 3.0
+    /// CONTENT-OVERRATE assist band, vs expectedHz = min(stream, nominal).
+    /// Engage below 0.95x sustained; exit at/above 0.97x sustained. Brackets
+    /// the governor's ~0.9x hover point (ticks 106-108 on 120fps content)
+    /// that the old floor-ratio latch straddled and flapped on.
+    static let assistEngageRatio = 0.95
+    static let assistExitRatio = 0.97
     /// Repaint the current frame during a deficit only after this many stream
     /// intervals without a REAL release (a real release is itself a commit, so
     /// repaints matter only when the host also faded / the queue ran dry).
@@ -205,6 +211,7 @@ extension FramePacer {
                 tickDeficit.tickDeficitSince = .nan
                 tickDeficit.floorViolationSince = .nan
                 tickDeficit.floorViolationLogged = false
+                tickDeficit.assistShortSince = .nan
                 return []
             }
             tickDeficit.deficitVerdictHoldUntilHostTime = .nan
@@ -219,7 +226,7 @@ extension FramePacer {
         var events = trackDeficitLocked(
             now: now, windowSeconds: elapsed, ticksPerS: ticksPerS, expectedHz: expectedHz)
         events.append(contentsOf: trackFloorViolationLocked(
-            now: now, windowSeconds: elapsed, ticksPerS: ticksPerS))
+            now: now, windowSeconds: elapsed, ticksPerS: ticksPerS, expectedHz: expectedHz))
         return events
     }
 
@@ -274,14 +281,15 @@ extension FramePacer {
     /// proves the floor is being overridden, answering the re-pin co-trigger
     /// question one battery repro session could not). Under `lock`.
     private func trackFloorViolationLocked(
-        now: CFTimeInterval, windowSeconds: Double, ticksPerS: Double
+        now: CFTimeInterval, windowSeconds: Double, ticksPerS: Double, expectedHz: Double
     ) -> [TickDeficitEvent] {
         let floor = tickDeficit.pinnedFloorHz
         guard floor.isFinite, floor > 0 else { return [] }
         var events: [TickDeficitEvent] = []
+        // Floor-violation NOTICE (governor evidence breadcrumb) - unchanged,
+        // floor-based, decoupled from the assist below.
         if ticksPerS < floor * FramePacer.floorViolationRatio {
             if !tickDeficit.floorViolationSince.isFinite { tickDeficit.floorViolationSince = now - windowSeconds }
-            tickDeficit.floorAssistHealthySince = .nan
             let sustained = now - tickDeficit.floorViolationSince >= FramePacer.floorViolationNoticeSeconds
             if !tickDeficit.floorViolationLogged, sustained {
                 // Once per episode - a multi-second collapse logs one NOTICE,
@@ -289,38 +297,53 @@ extension FramePacer {
                 tickDeficit.floorViolationLogged = true
                 events.append(.floorViolation(ticksPerS: ticksPerS, floorHz: floor))
             }
-            // ASSIST: a sustained violation in the dead band between the floor
-            // ratio (0.9x) and the hard-deficit enter (0.5x) got a breadcrumb
-            // and NO response - at 120fps content that is ~12 releases/s
-            // slipping a vsync, the field's dominant felt-judder signature.
-            // Arm the SAME off-tick timer the hard deficit uses; the due gate
-            // dedupes, so it only fills the beats the throttled link misses.
-            // Queue guard mirrors the deficit engage: an empty queue is an
-            // upstream drought, nothing to release.
-            if sustained, !tickDeficit.floorAssistActive,
+        } else {
+            let wasLogged = tickDeficit.floorViolationLogged
+            let since = tickDeficit.floorViolationSince
+            tickDeficit.floorViolationSince = .nan
+            tickDeficit.floorViolationLogged = false
+            if wasLogged, since.isFinite {
+                events.append(.floorRecovered(durationSeconds: now - since, ticksPerS: ticksPerS))
+            }
+        }
+        // ASSIST: CONTENT-OVERRATE hold. Engage when realized ticks run
+        // sustained below 0.95x of expectedHz (= min(stream, nominal) - so
+        // fps<refresh setups never read short); exit only after 3s at/above
+        // 0.97x. The old latch keyed off the 0.9x FLOOR ratio, which a
+        // governor-throttled panel straddles exactly (ticks 106-108 vs a 120
+        // floor = 0.883-0.90) - the assist flapped in and out while ~13
+        // content frames/s had no present slot (the measured chug). The
+        // engage/exit band brackets the boundary so it cannot straddle, and
+        // holds regardless of WHY ticks are short (battery governor, AC
+        // thermal, coalescing). Same off-tick timer; due gate dedupes.
+        guard expectedHz.isFinite, expectedHz > 0 else { return events }
+        if ticksPerS < expectedHz * FramePacer.assistEngageRatio {
+            if !tickDeficit.assistShortSince.isFinite { tickDeficit.assistShortSince = now - windowSeconds }
+            tickDeficit.floorAssistHealthySince = .nan
+            if now - tickDeficit.assistShortSince >= FramePacer.floorViolationNoticeSeconds,
+               !tickDeficit.floorAssistActive,
                !tickDeficit.deficitModeActive, !queue.isEmpty {
                 tickDeficit.floorAssistActive = true
                 tickDeficit.floorAssistEngagedAt = now
                 tickDeficit.floorAssistEngageReleaseCount = liveness.releaseCount
                 events.append(.floorAssistEngaged(
-                    ticksPerS: ticksPerS, floorHz: floor, depth: queue.count))
+                    ticksPerS: ticksPerS, floorHz: expectedHz, depth: queue.count))
             }
-            return events
-        }
-        let wasLogged = tickDeficit.floorViolationLogged
-        let since = tickDeficit.floorViolationSince
-        tickDeficit.floorViolationSince = .nan
-        tickDeficit.floorViolationLogged = false
-        if wasLogged, since.isFinite {
-            events.append(.floorRecovered(durationSeconds: now - since, ticksPerS: ticksPerS))
-        }
-        if tickDeficit.floorAssistActive {
-            if !tickDeficit.floorAssistHealthySince.isFinite {
-                tickDeficit.floorAssistHealthySince = now - windowSeconds
-            }
-            if now - tickDeficit.floorAssistHealthySince >= FramePacer.floorAssistExitHealthySeconds {
-                events.append(disengageFloorAssistLocked(
-                    reason: "ticks recovered", now: now, ticksPerS: ticksPerS))
+        } else {
+            tickDeficit.assistShortSince = .nan
+            if ticksPerS >= expectedHz * FramePacer.assistExitRatio {
+                if tickDeficit.floorAssistActive {
+                    if !tickDeficit.floorAssistHealthySince.isFinite {
+                        tickDeficit.floorAssistHealthySince = now - windowSeconds
+                    }
+                    if now - tickDeficit.floorAssistHealthySince >= FramePacer.floorAssistExitHealthySeconds {
+                        events.append(disengageFloorAssistLocked(
+                            reason: "ticks recovered", now: now, ticksPerS: ticksPerS))
+                    }
+                }
+            } else {
+                // 0.95-0.97x: hold whatever state we're in, accrue nothing.
+                tickDeficit.floorAssistHealthySince = .nan
             }
         }
         return events
@@ -375,6 +398,7 @@ extension FramePacer {
         tickDeficit.tickDeficitSince = .nan
         tickDeficit.floorViolationSince = .nan
         tickDeficit.floorViolationLogged = false
+        tickDeficit.assistShortSince = .nan
         tickDeficit.warmHealthyWindowStreak = 0
         var events: [TickDeficitEvent] = []
         if tickDeficit.floorAssistActive {
@@ -429,6 +453,7 @@ extension FramePacer {
         tickDeficit.warmHealthyWindowStreak = 0
         tickDeficit.floorViolationSince = .nan
         tickDeficit.floorViolationLogged = false
+        tickDeficit.assistShortSince = .nan
         tickDeficit.floorAssistActive = false
         tickDeficit.floorAssistEngagedAt = .nan
         tickDeficit.floorAssistEngageReleaseCount = 0

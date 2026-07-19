@@ -86,6 +86,11 @@ struct TelemetrySnapshot: Sendable {
     /// Steady-state audio fill dips under ~15ms that did NOT fully drain -
     /// cushion margin erosion visible before it becomes an audible under-run.
     var audioNearMissTotal: UInt64 = 0
+    /// Power state (1Hz): governor-throttle correlation labels. `onBattery` =
+    /// providing source is the internal battery; `lowPowerMode` = the user
+    /// toggle. Together they test "battery predicts the ~106-tick throttle".
+    var onBattery: Bool?
+    var lowPowerMode: Bool?
     /// PIPELINE CADENCE histograms (clump forensics): inter-arrival between
     /// consecutive frames at receive / assemble / VT-output. Standalone stages.
     var pipelineReceiveCadence: LatencyHistogramSnapshot.Stage?
