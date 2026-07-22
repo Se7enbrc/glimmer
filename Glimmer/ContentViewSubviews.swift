@@ -310,46 +310,39 @@ struct HostPowerControls: View {
 struct AppIconsRow: View {
     let apps: [LibraryApp]
     let host: Host
+    @Binding var isExpanded: Bool
     @Environment(AppModel.self) private var model
 
+    private let columns = Array(
+        repeating: GridItem(.fixed(70), spacing: 10),
+        count: 4
+    )
+
     var body: some View {
-        // One glass composite for the row - see ReadinessChip's container note.
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                ForEach(apps.prefix(4)) { app in
-                    Button {
-                        model.requestStream(app: app, on: host)
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: app.systemImage)
-                                .font(.system(size: 18, weight: .medium))
-                                .symbolRenderingMode(.hierarchical)
-                                .frame(width: 44, height: 44)
-                                .glassEffect(
-                                    .regular.interactive(),
-                                    in: .rect(cornerRadius: 10)
-                                )
-                                .overlay {
-                                    // Accent ring for the hero target (resume
-                                    // app, else default) so the ring always
-                                    // agrees with the hero button's verb.
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(
-                                            app.name == model.heroTargetAppName ? Color.accentColor : Color.clear,
-                                            lineWidth: 2
-                                        )
-                                }
-                            Text(app.name)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+        VStack(spacing: 8) {
+            // One glass composite for the app tiles - see ReadinessChip's
+            // container note. The compact view preserves the four-app scan;
+            // expanding swaps it for a complete four-column grid.
+            GlassEffectContainer(spacing: 10) {
+                if isExpanded {
+                    LazyVGrid(columns: columns, alignment: .center, spacing: 12) {
+                        ForEach(apps) { app in
+                            appTile(app)
                         }
-                        .frame(width: 70)
                     }
-                    .buttonStyle(.plain)
-                    .help(model.isStreaming
-                        ? "Finish the current stream first" : "Stream \(app.name)")
+                } else {
+                    HStack(spacing: 10) {
+                        ForEach(apps.prefix(4)) { app in
+                            appTile(app)
+                        }
+                        if apps.count > 4 {
+                            expandButton
+                        }
+                    }
                 }
+            }
+            if isExpanded {
+                collapseButton
             }
         }
         // Tiles park while a session exists (connecting, live, backgrounded):
@@ -359,6 +352,87 @@ struct AppIconsRow: View {
         .disabled(model.isStreaming)
         .opacity(model.isStreaming ? 0.45 : 1.0)
         .animation(.snappy(duration: 0.3), value: model.isStreaming)
+    }
+
+    private func appTile(_ app: LibraryApp) -> some View {
+        Button {
+            model.requestStream(app: app, on: host)
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: app.systemImage)
+                    .font(.system(size: 18, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(
+                        .regular.interactive(),
+                        in: .rect(cornerRadius: 10)
+                    )
+                    .overlay {
+                        // Accent ring for the hero target (resume app, else
+                        // default) so it always agrees with the hero button.
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(
+                                app.name == model.heroTargetAppName ? Color.accentColor : Color.clear,
+                                lineWidth: 2
+                            )
+                    }
+                Text(app.name)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            // A `.plain` Button only hit-tests its label. Fill the grid cell
+            // inside the label, not merely on the outer Button, so padding
+            // around the icon and name launches the app too.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: 70, height: 70)
+        .help(model.isStreaming
+            ? "Finish the current stream first" : "Stream \(app.name)")
+    }
+
+    private var expandButton: some View {
+        Button { isExpanded = true } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
+                Text("+\(apps.count - 4)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+            .frame(width: 70, height: 70)
+        .help("Show all \(apps.count) apps")
+        .accessibilityLabel("Show all \(apps.count) apps")
+        .accessibilityValue("Collapsed")
+        .accessibilityHint("Expands the host app list")
+    }
+
+    private var collapseButton: some View {
+        Button { isExpanded = false } label: {
+            VStack {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 22)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+            .frame(width: 44, height: 44)
+        .help("Show fewer apps")
+        .accessibilityLabel("Show fewer apps")
+        .accessibilityValue("Expanded")
+        .accessibilityHint("Collapses the host app list")
     }
 }
 
