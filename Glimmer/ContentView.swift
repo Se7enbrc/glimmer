@@ -429,6 +429,21 @@ private struct HostHero: View {
             // Top-left readiness chip
             ReadinessChip()
                 .padding(14)
+                // Luna gate re-evaluation rides the always-present chip (the
+                // power cluster renders NOTHING un-gated, so it can't
+                // bootstrap itself): refresh devices + reconcile the persisted
+                // host→device binding on host change (revocation vanishes the
+                // controls here or on app-foreground).
+                .task(id: host?.id) {
+                    guard let host else { return }
+                    await LunaPower.shared.reevaluate(for: host, model: model)
+                }
+
+            // Top-right Luna power cluster (renders nothing unless the hard
+            // gate passes - see HostPowerControls / docs/LUNA_POWER.md).
+            HostPowerControls()
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
 
             // Centered content
             VStack(spacing: 12) {

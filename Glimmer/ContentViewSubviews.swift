@@ -88,8 +88,6 @@ struct ReadinessChip: View {
     /// Trust recovery (it re-pins the host's new cert). Pre-filled with the
     /// host's address so the user lands on the PIN step, not the chooser.
     @State private var showRePair = false
-    /// Pending destructive power verb ("off"/"reboot") awaiting confirmation.
-    @State private var confirmPowerVerb: String?
 
     /// Resolve the user-facing chip presentation. Priority order matters -
     /// our own session beats the polled host state (we'd rather show the live
@@ -185,13 +183,6 @@ struct ReadinessChip: View {
                         .transition(.scale.combined(with: .opacity))
                         .accessibilityLabel("HDR active")
                 }
-
-                // Luna power controls (spec: docs/LUNA_POWER.md). HARD GATE:
-                // these views exist ONLY when a usable luna binary matched
-                // this host's MAC to a permission-granted UpSnap device -
-                // gatedDevice(for:) is nil otherwise, and NOTHING renders (no
-                // disabled states, zero footprint on machines without luna).
-                powerControls(chip: chip)
             }
         }
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: presentation)
@@ -202,66 +193,96 @@ struct ReadinessChip: View {
             // PIN step (the initialAddress path that was previously dead).
             PairSheet(initialAddress: rePairAddress).environment(model)
         }
-        // Gate re-evaluation: refresh the device list + reconcile the
-        // persisted host→device binding whenever the selected host changes
-        // (revocation makes controls vanish here or on app-foreground).
-        .task(id: model.selectedHost?.id) {
-            guard let host = model.selectedHost else { return }
-            await LunaPower.shared.reevaluate(for: host, model: model)
+    }
+
+    /// Best-known address for the selected host, used to pre-fill the re-pair
+    /// sheet. Empty when nothing is selected (the sheet then opens the chooser).
+    private var rePairAddress: String {
+        guard let host = model.selectedHost else { return "" }
+        return host.localAddress ?? host.manualAddress ?? ""
+    }
+
+    /// Chip sentence + route flavour for VoiceOver ("Host ready, round trip
+    /// 12 milliseconds, over Wi-Fi") - mirrors the sighted glyph's gating.
+    private func accessibilitySummary(for chip: ChipPresentation) -> String {
+        guard case .ready = chip,
+              let route = model.hostRoute.accessibilityDescription else {
+            return chip.accessibility
+        }
+        return "\(chip.accessibility), \(route)"
+    }
+}
+
+/// Compact Luna power cluster, pinned top-TRAILING on the hero (the status
+/// chip owns the top-leading corner; actions live right). HARD GATE (spec:
+/// docs/LUNA_POWER.md): renders NOTHING unless a usable luna matched this
+/// host's MAC to a permission-granted UpSnap device. One quiet power-glyph
+/// menu - offline offers a plain Wake (Wake & Connect owns the hero CTA);
+/// online offers Sleep / Restart / Shut Down behind confirmation. A non-wake
+/// action in flight shows a small progress capsule (the hero CTA carries the
+/// wake progress).
+struct HostPowerControls: View {
+    @Environment(AppModel.self) private var model
+    /// Pending destructive verb ("off"/"reboot") awaiting confirmation.
+    @State private var confirmPowerVerb: String?
+
+    private enum Phase { case offline, online }
+
+    /// Power-relevant host phase off fresh polled truth; nil (no controls)
+    /// while connecting/streaming or when the sample is stale/unknown.
+    private var phase: Phase? {
+        if case .connecting = model.streamPhase { return nil }
+        if model.isStreaming { return nil }
+        guard let host = model.selectedHost,
+              let live = model.hostLiveStatus, live.hostID == host.id,
+              Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale else {
+            return nil
+        }
+        switch live.state {
+        case .asleep: return .offline
+        case .idle: return .online
+        default: return nil
         }
     }
 
-    /// The gated power UI. Offline (asleep): Wake & Connect + Wake, replaced
-    /// by a "Waking…" capsule while luna's synchronous wake runs (~36s cold).
-    /// Online (ready): a compact power menu (Sleep / Restart / Shut Down,
-    /// destructive verbs behind confirmationDialog). Any luna failure surfaces
-    /// as a one-line subtext from the CLI's stderr.
-    @ViewBuilder
-    private func powerControls(chip: ChipPresentation) -> some View {
+    var body: some View {
         if let host = model.selectedHost,
            let device = LunaPower.shared.gatedDevice(for: host) {
-            if LunaPower.shared.actionInFlight.contains(host.id) {
+            if let verb = LunaPower.shared.actionInFlight[host.id], verb != "on" {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini)
-                    Text(chip == .asleep ? "Waking…" : "Working…")
+                    Text(verb == "off" ? "Shutting Down…"
+                         : verb == "sleep" ? "Sleeping…" : "Restarting…")
                         .font(.caption.weight(.medium))
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                .padding(.vertical, 5)
                 .glassEffect(.regular, in: .capsule)
-            } else if chip == .asleep {
-                Button("Wake & Connect") {
-                    model.wakeHost(host, device: device, thenConnect: true)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                Button("Wake") {
-                    model.wakeHost(host, device: device, thenConnect: false)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                if let reason = LunaPower.shared.lastActionError[host.id] {
-                    Text(reason)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            } else if case .ready = chip {
+            } else if let phase, LunaPower.shared.actionInFlight[host.id] == nil {
                 Menu {
-                    Button("Sleep") { model.powerAction("sleep", host: host, device: device) }
-                    Button("Restart…") { confirmPowerVerb = "reboot" }
-                    Divider()
-                    Button("Shut Down…", role: .destructive) { confirmPowerVerb = "off" }
+                    switch phase {
+                    case .offline:
+                        Button("Wake") {
+                            model.wakeHost(host, device: device, thenConnect: false)
+                        }
+                    case .online:
+                        Button("Sleep") {
+                            model.powerAction("sleep", host: host, device: device)
+                        }
+                        Button("Restart…") { confirmPowerVerb = "reboot" }
+                        Divider()
+                        Button("Shut Down…", role: .destructive) { confirmPowerVerb = "off" }
+                    }
                 } label: {
                     Image(systemName: "power")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .frame(width: 26, height: 26)
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .fixedSize()
-                .glassEffect(.regular, in: .capsule)
+                .glassEffect(.regular, in: .circle)
                 .accessibilityLabel("Host power menu")
                 .confirmationDialog(
                     confirmPowerVerb == "off" ? "Shut down \(host.displayName)?"
@@ -283,23 +304,6 @@ struct ReadinessChip: View {
                 }
             }
         }
-    }
-
-    /// Best-known address for the selected host, used to pre-fill the re-pair
-    /// sheet. Empty when nothing is selected (the sheet then opens the chooser).
-    private var rePairAddress: String {
-        guard let host = model.selectedHost else { return "" }
-        return host.localAddress ?? host.manualAddress ?? ""
-    }
-
-    /// Chip sentence + route flavour for VoiceOver ("Host ready, round trip
-    /// 12 milliseconds, over Wi-Fi") - mirrors the sighted glyph's gating.
-    private func accessibilitySummary(for chip: ChipPresentation) -> String {
-        guard case .ready = chip,
-              let route = model.hostRoute.accessibilityDescription else {
-            return chip.accessibility
-        }
-        return "\(chip.accessibility), \(route)"
     }
 }
 
@@ -447,14 +451,36 @@ struct StreamButton: View {
         case connect
         case connecting
         case liveBackgrounded
+        /// Host asleep + Luna power gate passed: the hero CTA becomes the one
+        /// obvious action ("Wake & Connect") instead of a dead Stream button.
+        case wake
+        /// luna's synchronous wake in flight (~36s cold) - progress, disabled.
+        case waking
     }
     private var role: ButtonRole {
         if isConnecting { return .connecting }
         if model.isStreaming, model.nativeStreamBackgrounded {
             return .liveBackgrounded
         }
-        if model.selectedHost == nil { return .noPC }
+        guard let host = model.selectedHost else { return .noPC }
+        if LunaPower.shared.gatedDevice(for: host) != nil {
+            if LunaPower.shared.actionInFlight[host.id] == "on" { return .waking }
+            if hostIsAsleep(host), LunaPower.shared.actionInFlight[host.id] == nil {
+                return .wake
+            }
+        }
         return .connect
+    }
+
+    /// Fresh polled truth says the selected host is asleep (mirrors the
+    /// readiness chip's staleness rules).
+    private func hostIsAsleep(_ host: Host) -> Bool {
+        guard let live = model.hostLiveStatus, live.hostID == host.id,
+              Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale else {
+            return false
+        }
+        if case .asleep = live.state { return true }
+        return false
     }
 
     var body: some View {
@@ -464,6 +490,12 @@ struct StreamButton: View {
             case .connect: model.streamHeroApp()
             case .connecting: model.cancelConnect()        // the working exit from a stuck connect
             case .liveBackgrounded: model.resumeStreamWindow()
+            case .wake:
+                if let host = model.selectedHost,
+                   let device = LunaPower.shared.gatedDevice(for: host) {
+                    model.wakeHost(host, device: device, thenConnect: true)
+                }
+            case .waking: break                                // progress - luna confirms, no cancel
             }
         } label: {
             HStack(spacing: 10) {
@@ -502,6 +534,30 @@ struct StreamButton: View {
                     Text("Back to stream")
                         .font(.system(size: 17, weight: .semibold))
                         .contentTransition(.opacity)
+                case .wake:
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Wake & Connect")
+                            .font(.system(size: 17, weight: .semibold))
+                            .contentTransition(.opacity)
+                        // A failed wake surfaces luna's one-line reason here,
+                        // right under the retry affordance.
+                        if let host = model.selectedHost,
+                           let reason = LunaPower.shared.lastActionError[host.id] {
+                            Text(reason)
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                case .waking:
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Waking \(model.selectedHost?.displayName ?? "host")…")
+                        .font(.system(size: 16, weight: .semibold))
+                        .lineLimit(1)
+                        .contentTransition(.opacity)
                 case .connect:
                     // Static play glyph + the manager's hero verb (an icon/
                     // label swap here would flash inside the 400 ms hold).
@@ -530,6 +586,7 @@ struct StreamButton: View {
         // .connecting stays ENABLED - it's the cancel affordance.
         .disabled(
             role == .noPC ||
+            role == .waking ||
             (role == .connect && model.isStreaming)
         )
         // Success haptic on the actual establish edge, not on click.

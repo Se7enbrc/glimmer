@@ -49,9 +49,10 @@ final class LunaPower {
     /// Cached permission-scoped device list + fetch stamp (short TTL).
     private(set) var devices: [Device] = []
     @ObservationIgnored private var devicesFetchedAt: Date?
-    /// Host ids with a power action in flight (drives the "Waking…" state and
-    /// disables the tile's power controls while one runs).
-    private(set) var actionInFlight: Set<String> = []
+    /// Power action in flight, keyed host id → verb ("on"/"off"/"sleep"/
+    /// "reboot"). Drives the hero's "Waking…" state vs the trailing cluster's
+    /// progress capsule, and disables controls while one runs.
+    private(set) var actionInFlight: [String: String] = [:]
     /// Last action error, keyed by host id (surfaced as tile subtext; cleared
     /// on the next action or gate re-evaluation).
     private(set) var lastActionError: [String: String] = [:]
@@ -183,9 +184,9 @@ final class LunaPower {
     /// re-fetch so a revoked grant closes the gate promptly.
     func perform(_ verb: String, deviceID: String, hostID: String) async throws {
         guard let binary = binaryURL else { throw LunaError.failed("luna not available") }
-        actionInFlight.insert(hostID)
+        actionInFlight[hostID] = verb
         lastActionError[hostID] = nil
-        defer { actionInFlight.remove(hostID) }
+        defer { actionInFlight[hostID] = nil }
         do {
             let timeout: TimeInterval = verb == "on" ? 200 : 90
             let out = try await Self.run(
