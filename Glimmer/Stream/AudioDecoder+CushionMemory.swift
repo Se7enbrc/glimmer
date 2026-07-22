@@ -179,10 +179,14 @@ extension AudioDecoder {
     }
 
     /// Half-life (s) of a persisted record's AGE LERP toward base: an unrefreshed
-    /// target/floor lerps halfway back every ~6h. A link's loss character drifts
-    /// (moved rooms, a one-off bad night), so a stale deep record shouldn't seed
-    /// full-depth forever - it re-learns its own depth each session anyway.
-    static let cushionMemoryAgeHalfLifeSeconds: Double = 6 * 3600
+    /// target/floor lerps halfway back every ~3 DAYS. Was 6h - which fully aged a
+    /// learned wifi depth to base across any >1-day gap, so every next session
+    /// re-learned the cushion through 5 audible under-runs over ~70s (measured
+    /// 2026-07-21 wifi: seed 30ms → ratchet-walk to 80ms). A link's gap character
+    /// is stable across days on a tuned network; the quiet decay (1 step/min)
+    /// already walks off any overshoot within minutes, so aging is the slow
+    /// backstop for a MOVED/changed link, not the primary corrector.
+    static let cushionMemoryAgeHalfLifeSeconds: Double = 72 * 3600
 
     /// The cap (ms) a link-keyed record may seed at: its OWN learned class's cap,
     /// so a tunnel-depth never seeds a clean wired link. Unknown-keyed records
@@ -500,7 +504,11 @@ extension AudioDecoder {
                 playoutTargetMs = max(playoutTargetMs, stored.targetMs)
                 learnedFloorMs = max(learnedFloorMs, stored.floorMs)
             } else {
-                playoutTargetMs = stored.targetMs
+                // An aged-out record must not UNDERCUT what the live link
+                // demands: adopt the deeper of the stored depth and the
+                // jitter-aware cold seed (clean link ⇒ coldSeedMs == base ⇒
+                // byte-identical to the plain adoption).
+                playoutTargetMs = max(stored.targetMs, coldSeedMs)
                 learnedFloorMs = stored.floorMs
             }
             quietSinceNanos = now

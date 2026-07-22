@@ -61,11 +61,12 @@ extension AudioDecoder {
     static let nearMissRearmFillMs: Double = 30
 
     /// Startup floor-learning gate (ns after the cold-start prime): the host
-    /// feeds sub-realtime for its first seconds (startup-pacing=paced, ~15s
-    /// measured), so drains in this window are boot-ramp artifacts. 45s covers
-    /// the measured ramp with margin. Target ratchet + underrun counting stay
-    /// live; only the floor EWMA waits.
-    static let startupFloorGateNanos: UInt64 = 45_000_000_000
+    /// feeds sub-realtime for its first seconds and the wifi link runs its own
+    /// warm-up (EnvSignal co-gap cautions to ~t+80s measured 2026-07-21, with
+    /// ramp under-runs at t+67-77s teaching the floor past the old 45s gate).
+    /// 90s covers the measured ramp with margin. Target ratchet + underrun
+    /// counting stay live; only the floor EWMA waits.
+    static let startupFloorGateNanos: UInt64 = 90_000_000_000
 
     // MARK: - P1 AUDIO meter (buffer fill / under-run / over-run / A/V drift)
 
