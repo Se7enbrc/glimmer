@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.7.7 - 2026-07-22
+
+Wake your PC from the couch - power controls appear when your setup supports
+them, and a sleeping PC is recognized in seconds.
+
+If your gaming PC is managed by UpSnap and the `luna` command-line tool is set
+up on your Mac, Glimmer's host card now grows power controls: with the PC
+asleep, the big stream button becomes **Wake & Connect** - one tap wakes the
+machine (confirmed, not fire-and-forget), waits for Sunshine to answer, and
+starts your stream; a quiet power menu in the corner offers plain Wake, and -
+while the PC is online - Sleep, Restart, and Shut Down behind confirmations. No
+luna, or a PC that UpSnap hasn't granted you? Nothing appears at all - no
+buttons, no settings, zero clutter. Glimmer never touches your UpSnap
+credentials; the identity check is the host's hardware address, learned
+automatically while the PC is online.
+
+Recognizing a sleeping PC is also much faster: opening the app used to sit on
+"Checking…" for half a minute before admitting the host was asleep. A cold start
+now reads Asleep after a single missed probe (about two seconds), while a
+briefly-hiccuping online host keeps the old benefit of the doubt.
+
 ## 2026.7.6 - 2026-07-22
 
 Streams open quiet, and packet reorders become a checked guarantee.
