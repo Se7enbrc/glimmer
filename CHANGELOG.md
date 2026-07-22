@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.7.6 - 2026-07-22
+
+Streams open quiet, and packet reorders become a checked guarantee.
+
+The audio cushion now remembers what it learned for days instead of hours. Its
+per-connection memory used to fade out in about six hours, so any stream after a
+day away re-learned its buffer depth the audible way - several small sound blips
+across the first minute. The memory now holds for days, starts no shallower than
+what the live connection indicates, and the opening minute no longer teaches the
+buffer bad long-term habits.
+
+Wi-Fi packet reordering is now tracked as a guarantee instead of a statistic. On
+any shared airwave a small number of packets arrive slightly out of order -
+that's radio physics, not a fault - and what matters is only that each one
+arrives inside the window the stream already holds open for it. Glimmer now
+measures exactly how late every reordered packet is, proves it landed inside the
+window, and counts the only thing worth alarming on: one that didn't.
+
 ## 2026.7.5 - 2026-07-19
 
 Mouse feel settles on honest and raw, drags match free aim again, and battery
