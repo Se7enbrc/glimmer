@@ -299,6 +299,14 @@ extension TelemetryExporter {
             snap.awdlSuppressing = awdl.suppressing
             snap.awdlReSuppressTotal = awdl.reSuppressTotal
         }
+        if let reorder = counters.reorderDisplacement {
+            snap.reorderDispMaxMs = reorder.maxMs
+            snap.reorderDispMaxPackets = reorder.maxPackets
+            snap.reorderDispHoldMs = reorder.holdMs
+        }
+        snap.reorderHoldExceededTotal = counters.reorderHoldExceededTotal.value
+        snap.reorderDisplacementMsHist = FrameTimingTracker.shared?.reorderDisplacementMs.snapshotValue()
+        snap.reorderDisplacementPacketsHist = FrameTimingTracker.shared?.reorderDisplacementPackets.snapshotValue()
         // Refresh the live RTT gauge the per-frame glass-to-glass computation
         // reads at present (~RTT/2 for the transit leg). Done here on the 1Hz
         // queue, never the hot path; the present-side read is the only hot-path

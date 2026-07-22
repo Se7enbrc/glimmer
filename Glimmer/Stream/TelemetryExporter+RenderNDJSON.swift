@@ -234,6 +234,8 @@ extension TelemetryRenderer {
         builder.add("fec_loss_level", snap.fecLossLevel.map(Double.init))
         builder.add("fec_percentage", snap.fecPercentage.map(Double.init))
         builder.add("fec_parity_margin", snap.fecParityMargin.map(Double.init))
+        builder.add("reorder_disp_max_ms", snap.reorderDispMaxMs)
+        builder.add("reorder_hold_exceeded", Double(snap.reorderHoldExceededTotal))
         builder.add("pkts_per_s", snap.packetsPerSecond)
         // FRACTIONAL ms (high-res local clock): emit the Double with decimals via
         // `add` (jsonNumber → %.3f) instead of truncating to Int, so a sub-ms RTT

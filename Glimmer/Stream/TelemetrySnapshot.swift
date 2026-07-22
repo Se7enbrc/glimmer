@@ -86,6 +86,15 @@ struct TelemetrySnapshot: Sendable {
     /// Steady-state audio fill dips under ~15ms that did NOT fully drain -
     /// cushion margin erosion visible before it becomes an audible under-run.
     var audioNearMissTotal: UInt64 = 0
+    /// REORDER-DISPLACEMENT invariant (measurement only): session-max lateness
+    /// of reordered packets vs the live reorder hold, the violation counter,
+    /// and the distributions. margin = holdMs − maxMs is derived at render.
+    var reorderDispMaxMs: Double?
+    var reorderDispMaxPackets: Int?
+    var reorderDispHoldMs: Double?
+    var reorderHoldExceededTotal: UInt64 = 0
+    var reorderDisplacementMsHist: LatencyHistogramSnapshot.Stage?
+    var reorderDisplacementPacketsHist: LatencyHistogramSnapshot.Stage?
     /// Power state (1Hz): governor-throttle correlation labels. `onBattery` =
     /// providing source is the internal battery; `lowPowerMode` = the user
     /// toggle. Together they test "battery predicts the ~106-tick throttle".

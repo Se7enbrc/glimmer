@@ -60,7 +60,16 @@ extension RtpVideoQueue {
             } else {
                 // Forward jump: the gap beyond +1 is pre-FEC loss.
                 let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
-                if jump > 1 { windowLostPreFec += (jump - 1) }
+                if jump > 1 {
+                    windowLostPreFec += (jump - 1)
+                    // Anchor the open gap for reorder-displacement: this packet
+                    // is the overtaker; a late filler measures against its
+                    // arrival. Newest gap wins the single slot.
+                    gapOpenLowSeq = Self.u16(Int(seqHighestSeen) + 1)
+                    gapOpenHighSeq = Self.u16(Int(seq) - 1)
+                    gapOpenAtUs = receiveTimeUs
+                    haveOpenGap = true
+                }
                 seqHighestSeen = seq
                 rememberSeq(seq)
             }
@@ -92,6 +101,7 @@ extension RtpVideoQueue {
                     // spike arbitrarily far in the future.
                     pendingReorderCredit += 1
                 }
+                recordReorderDisplacement(seq: seq, receiveTimeUs: receiveTimeUs)
                 rememberSeq(seq)
             }
         }

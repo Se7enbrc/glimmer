@@ -286,6 +286,10 @@ struct SessionReport {
         top.append("\"latency\":\(latencyObject(aggregate.activeLatency ?? histograms))")
         top.append("\"latency_raw\":\(latencyObject(histograms))")
         top.append("\"events\":\(eventsObject())")
+        // REORDER-DISPLACEMENT invariant: how late reorders arrived vs the hold
+        // that must outlast them. hold_exceeded > 0 is the only alertable value;
+        // an empty block (wired, no reorders) omits the quantiles cleanly.
+        top.append("\"reorder_displacement\":\(reorderDisplacementObject())")
         top.append("\"worst_windows\":\(worstWindowsObject())")
         // P2 SESSION-LIFECYCLE: the connect-handshake breakdown + the disconnect
         // reason - the "how did this run open and why did it end" line.
@@ -384,6 +388,32 @@ struct SessionReport {
             stage("idr_round_trip", histograms.idrRoundTrip)
         ].compactMap { $0 }
         return "{" + entries.joined(separator: ",") + "}"
+    }
+
+    /// REORDER-DISPLACEMENT block: quantiles from the tracker's displacement
+    /// histogram (present only when reorders occurred - a wired session emits
+    /// counts + hold + exceeded with no quantiles, so downstream jq never
+    /// divides by zero), plus the always-live session maxes and the invariant
+    /// violation counter.
+    private func reorderDisplacementObject() -> String {
+        var parts: [String] = []
+        if let disp = counters.reorderDisplacement {
+            parts.append("\"hold_ms\":\(num(disp.holdMs))")
+            parts.append("\"max_ms\":\(num(disp.maxMs))")
+            parts.append("\"max_packets\":\(disp.maxPackets)")
+        }
+        parts.append("\"hold_exceeded\":\(counters.reorderHoldExceededTotal.value)")
+        if let stage = FrameTimingTracker.shared?.reorderDisplacementMs.snapshotValue(),
+           stage.hasObservations {
+            parts.append("\"count\":\(stage.observationCount)")
+            if let value = TelemetryRenderer.histogramQuantile(0.50, stage: stage) {
+                parts.append("\"p50_ms\":\(num(value))")
+            }
+            if let value = TelemetryRenderer.histogramQuantile(0.999, stage: stage) {
+                parts.append("\"p999_ms\":\(num(value))")
+            }
+        }
+        return "{" + parts.joined(separator: ",") + "}"
     }
 
     /// P2 CONNECT-HANDSHAKE breakdown - per-stage cold-open timing (ms). Read off

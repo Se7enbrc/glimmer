@@ -29,6 +29,34 @@ extension TelemetryRenderer {
         builder.emit("glimmer_fec_reorder_hold_ms",
                      "Live FEC reorder-hold window the receiver applies, ms (base 24, cap 48).",
                      snap.fecReorderHoldMs)
+        // REORDER-DISPLACEMENT invariant: displacement < hold, checked per
+        // reorder. The margin gauge (hold − session max) and the violation
+        // counter are the ONLY reorder signals worth alerting on - the raw ooo
+        // count is a physics floor on shared spectrum.
+        builder.emit("glimmer_reorder_displacement_max_ms",
+                     "Session-max lateness of a reordered packet, ms.",
+                     snap.reorderDispMaxMs)
+        builder.emit("glimmer_reorder_displacement_max_packets",
+                     "Session-max lateness of a reordered packet, sequence slots.",
+                     snap.reorderDispMaxPackets.map(Double.init))
+        if let hold = snap.reorderDispHoldMs, let maxMs = snap.reorderDispMaxMs {
+            builder.emit("glimmer_reorder_hold_margin_ms",
+                         "Reorder-hold invariant margin: live hold − session-max displacement "
+                         + "(negative = a reorder outlived the hold).",
+                         hold - maxMs)
+        }
+        builder.emitCounter("glimmer_reorder_hold_exceeded_total",
+                            "Reorders whose displacement exceeded the live hold (promoted to "
+                            + "pre-FEC loss) - the alertable invariant violation.",
+                            snap.reorderHoldExceededTotal)
+        if let stage = snap.reorderDisplacementMsHist {
+            builder.emitHistogram("glimmer_reorder_displacement_ms",
+                                  "Reordered-packet lateness distribution, ms.", stage: stage)
+        }
+        if let stage = snap.reorderDisplacementPacketsHist {
+            builder.emitHistogram("glimmer_reorder_displacement_packets",
+                                  "Reordered-packet lateness distribution, sequence slots.", stage: stage)
+        }
         builder.emit("glimmer_fec_headroom_level",
                      "FEC headroom jitter/out-of-order/retransmit axis level (0 = clean link).",
                      snap.fecHeadroomLevel.map(Double.init))

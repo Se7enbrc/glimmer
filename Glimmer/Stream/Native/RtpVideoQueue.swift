@@ -204,8 +204,9 @@ final class RtpVideoQueue {
     /// counted once when the frame is submitted/dropped).
     var currentFrameNeededFec = false
     /// Datagrams seen in the window (for a packets/s sanity figure).
-    private var packetsInWindow = 0
-    private var metricsWindowStartUs: UInt64 = 0
+    var packetsInWindow = 0
+    // Module-internal: the ReorderStats extension reads the window anchor.
+    var metricsWindowStartUs: UInt64 = 0
     private static let metricsWindowUs: UInt64 = 2_000_000  // 2s
 
     // --- P1 NETWORK receive-quality accumulators (Track B, opt-in telemetry).
@@ -252,6 +253,22 @@ final class RtpVideoQueue {
     /// pure reorder never double-counts as loss across the boundary. Persists across
     /// the window reset (it is a debt against future loss, not a per-window tally).
     var pendingReorderCredit = 0
+    /// REORDER-DISPLACEMENT (measurement only - the hold value is untouched).
+    /// Single-slot open-gap anchor: when a forward jump opens a sequence gap,
+    /// remember its seq range + the overtaking packet's arrival time, so a late
+    /// filler's displacement-ms is EXACT (now − overtake time). A newer gap
+    /// overwrites the slot (single-digit-ms Block-Ack releases make overlap
+    /// rare; mis-attribution reads a NEWER anchor = shorter displacement, an
+    /// optimistic bias the seq-distance fallback bounds). Persists across the
+    /// window reset like the reorder credit (gaps straddle boundaries).
+    var gapOpenLowSeq: UInt16 = 0
+    var gapOpenHighSeq: UInt16 = 0
+    var gapOpenAtUs: UInt64 = 0
+    var haveOpenGap = false
+    /// Session-lifetime displacement stats (receive-thread only; flushed to the
+    /// gauge each ~2s window alongside the FEC health snapshot).
+    var reorderDispSessionMaxMs: Double = 0
+    var reorderDispSessionMaxPackets = 0
     /// Recent seqs for duplicate vs reorder disambiguation. A small ring of the
     /// last seqs seen this window: a behind-highest arrival that's in the ring is a
     /// DUPLICATE, otherwise a genuine reorder. Bounded + cleared per window so it
@@ -521,6 +538,10 @@ final class RtpVideoQueue {
             lossLevel: fecHeadroom.lossLevel,
             fecPercentage: fecPercentage,
             parityMargin: windowMinParityMargin == Int.max ? nil : windowMinParityMargin))
+
+        // Reorder-displacement gauge (session maxes + live hold) - same ~2s
+        // cadence, same read-only contract as the FEC health snapshot above.
+        publishReorderDisplacementGauge()
 
         framesInWindow = 0
         fecRecoveredFramesInWindow = 0

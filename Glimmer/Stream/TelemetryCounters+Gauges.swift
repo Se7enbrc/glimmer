@@ -110,6 +110,25 @@ extension TelemetryCounters {
         return fecHealthValue
     }
 
+    /// REORDER-DISPLACEMENT gauge: session-max lateness of reordered packets
+    /// (ms + packets) and the live hold, so the exporter emits the invariant
+    /// margin (hold − max) without touching the receive thread. Published each
+    /// ~2s window from RtpVideoQueue; nil before the first window.
+    struct ReorderDisplacementSnapshot: Sendable {
+        var maxMs: Double
+        var maxPackets: Int
+        var holdMs: Double
+    }
+    func setReorderDisplacement(_ snapshot: ReorderDisplacementSnapshot) {
+        os_unfair_lock_lock(reorderDispLock); reorderDispValue = snapshot; os_unfair_lock_unlock(reorderDispLock)
+    }
+    /// Latest reorder-displacement gauge, or nil before the first window. Read
+    /// by the exporter on its 1Hz queue.
+    var reorderDisplacement: ReorderDisplacementSnapshot? {
+        os_unfair_lock_lock(reorderDispLock); defer { os_unfair_lock_unlock(reorderDispLock) }
+        return reorderDispValue
+    }
+
     /// AWDL-helper gauge: awdl0 parked this stream + how many times macOS re-raised
     /// it (the contention rate the routing-socket suppressor fights). nil when off.
     struct AWDLHelperSnapshot: Sendable {

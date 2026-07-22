@@ -256,6 +256,13 @@ final class TelemetryCounters: @unchecked Sendable {
     /// oscillation's visible half. not_due = staleFrameRepeatTotal − this.
     let staleEmptyQueueTotal = Counter()
 
+    /// REORDER-HOLD invariant violations (signal: NETWORK): a reordered packet
+    /// whose measured displacement exceeded the live reorder hold - it outlived
+    /// its release window and was promoted to pre-FEC loss. THE only reorder
+    /// signal worth alerting on (the raw ooo count is a physics floor on shared
+    /// spectrum; displacement < hold is the checked invariant).
+    let reorderHoldExceededTotal = Counter()
+
     /// PERCEIVED-GAP cause split (signal: PRESENT): the DROUGHT subset of
     /// `presentationGaps` - a present landed after a >100ms hold with frames
     /// still arriving (loss storm / decode starvation / pacing wedge). The
@@ -525,6 +532,10 @@ final class TelemetryCounters: @unchecked Sendable {
     // TelemetryCounters+Gauges.swift. Module-internal so those accessors reach it.
     let fecHealthLock = os_unfair_lock_t.allocate(capacity: 1)
     var fecHealthValue: FecHealthSnapshot?
+    // Live REORDER-DISPLACEMENT gauge storage (session max ms/packets + the
+    // live hold); value type + accessors in TelemetryCounters+Gauges.swift.
+    let reorderDispLock = os_unfair_lock_t.allocate(capacity: 1)
+    var reorderDispValue: ReorderDisplacementSnapshot?
 
     /// AWDL helper gauge (awdl0 parked + macOS re-raise count). Set by
     /// AWDLHelperManager on the suppress heartbeat; read by the exporter. Self-locked.
@@ -707,7 +718,7 @@ final class TelemetryCounters: @unchecked Sendable {
                         decoderRecreateTotal, decoderRecreateFirstTotal,
                         decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
                         staleFrameRepeatTotal, staleEmptyQueueTotal, audioNearMissTotal,
-                        presentGapDroughtTotal,
+                        presentGapDroughtTotal, reorderHoldExceededTotal,
                         pacerOverTargetReleaseTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
                         tickMissPreemptedTotal, tickMissLinkskipTotal,

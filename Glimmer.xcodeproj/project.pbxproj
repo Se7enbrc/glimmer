@@ -148,6 +148,7 @@
 		D10000CD /* TelemetryFrameTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CC /* TelemetryFrameTrace.swift */; };
 		D10000CF /* TelemetryExporter+Capture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CE /* TelemetryExporter+Capture.swift */; };
 		D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */; };
+		D10000EA /* RtpVideoQueue+ReorderStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000E9 /* RtpVideoQueue+ReorderStats.swift */; };
 		D10000E1 /* DisplayTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000E0 /* DisplayTelemetry.swift */; };
 		D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000E2 /* VideoDecoder+DecodeTelemetry.swift */; };
 		D10000F1 /* TelemetrySessionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F0 /* TelemetrySessionEvents.swift */; };
@@ -376,6 +377,7 @@
 		D10000CC /* TelemetryFrameTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetryFrameTrace.swift; sourceTree = "<group>"; };
 		D10000CE /* TelemetryExporter+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+Capture.swift"; sourceTree = "<group>"; };
 		D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+ReceiveQuality.swift"; sourceTree = "<group>"; };
+		D10000E9 /* RtpVideoQueue+ReorderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+ReorderStats.swift"; sourceTree = "<group>"; };
 		D10000E0 /* DisplayTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/DisplayTelemetry.swift; sourceTree = "<group>"; };
 		D10000E2 /* VideoDecoder+DecodeTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+DecodeTelemetry.swift"; sourceTree = "<group>"; };
 		D10000F0 /* TelemetrySessionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetrySessionEvents.swift; sourceTree = "<group>"; };
@@ -626,6 +628,7 @@
 				D1000021 /* VideoDepacketizer.swift */,
 				D1000023 /* RtpVideoQueue.swift */,
 				D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */,
+				D10000E9 /* RtpVideoQueue+ReorderStats.swift */,
 				D1000D10 /* RtpVideoQueue+AddPacket.swift */,
 				D1000D20 /* RtpVideoQueue+Reconstruct.swift */,
 				D1000F00 /* FecHeadroomController.swift */,
@@ -960,6 +963,7 @@
 				D1000022 /* VideoDepacketizer.swift in Sources */,
 				D1000024 /* RtpVideoQueue.swift in Sources */,
 				D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */,
+				D10000EA /* RtpVideoQueue+ReorderStats.swift in Sources */,
 				D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */,
 				D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */,
 				D1000F01 /* FecHeadroomController.swift in Sources */,
