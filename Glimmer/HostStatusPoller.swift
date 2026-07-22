@@ -103,13 +103,28 @@ extension AppModel {
     /// `HostLiveStatus.stale` age-out still falls back to "Checking..." - the
     /// honest "we genuinely don't know anymore" path.)
     func publishUnreachable(hostID: String, expectedHostID: String) async {
-        let streak: Int = await MainActor.run { [weak self] in
-            guard let self else { return 0 }
+        let (streak, hasFreshLastGood): (Int, Bool) = await MainActor.run { [weak self] in
+            guard let self else { return (0, false) }
             self.hostUnreachableStreak += 1
-            return self.hostUnreachableStreak
+            // Is there a FRESH last-good status this miss would be protecting?
+            // The 3-strike bar exists so a transient blip can't slander a host
+            // that was answering moments ago (the post-/cancel window). With
+            // nothing published yet (app launch / host switch: the chip is
+            // stuck on "Checking..."), that protection protects nothing - it
+            // just delays the honest Asleep (and the wake controls behind it)
+            // by ~30-40s.
+            let live = self.hostLiveStatus
+            let fresh = live != nil
+                && live?.hostID == hostID
+                && live?.state != .unknown
+                && Date().timeIntervalSince(live?.capturedAt ?? .distantPast) <= HostLiveStatus.stale
+            return (self.hostUnreachableStreak, fresh)
         }
-        // Hold last-good until the host is confirmed unreachable - no flap.
-        guard streak >= Self.asleepProbeThreshold else { return }
+        // Steady state: hold last-good until confirmed unreachable - no flap.
+        // Cold start (no fresh last-good): ONE 2s miss publishes Asleep now;
+        // if the host was merely blipping, the next probe (≤10s) corrects to
+        // Ready - a far cheaper error than 40s of "Checking...".
+        guard streak >= (hasFreshLastGood ? Self.asleepProbeThreshold : 1) else { return }
         await publishLiveStatus(HostLiveStatus(
             hostID: hostID,
             state: .asleep,
