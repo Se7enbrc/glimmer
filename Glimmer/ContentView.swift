@@ -173,40 +173,42 @@ private struct ConnectSurface: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Banner sits above the hero so it can't be missed. NOT behind
-            // the 400 ms hold: errors must surface the instant they exist.
-            ConnectBanner()
-                .padding(.horizontal, 4)
+        ScrollView(.vertical) {
+            VStack(spacing: 16) {
+                // Banner sits above the hero so it can't be missed. NOT behind
+                // the 400 ms hold: errors must surface the instant they exist.
+                ConnectBanner()
+                    .padding(.horizontal, 4)
 
-            HostHero(host: model.selectedHost)
-                .scaleEffect((showsConnectingUI && !reduceMotion) ? 1.04 : 1.0)
-                .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: showsConnectingUI)
+                HostHero(host: model.selectedHost)
+                    .scaleEffect((showsConnectingUI && !reduceMotion) ? 1.04 : 1.0)
+                    .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: showsConnectingUI)
 
-            // Spec chips stay put during connect. The StreamButton below
-            // morphs into the calm "Connecting to <host>... / stage" capsule -
-            // the ONE connecting surface (a separate phase line would flash
-            // duplicate affordances on fast connects).
-            SpecChipsRow()
+                // Spec chips stay put during connect. The StreamButton below
+                // morphs into the calm "Connecting to <host>... / stage" capsule -
+                // the ONE connecting surface (a separate phase line would flash
+                // duplicate affordances on fast connects).
+                SpecChipsRow()
 
-            // Hide the StreamButton entirely while the stream window owns
-            // the foreground - a disabled "Streaming..." button would just
-            // duplicate the stream window's presence and compete for visual
-            // weight against the dimmed hero. (Connecting is NOT handed off,
-            // so the capsule below stays mounted through the handshake.)
-            if !isHandedOff {
-                StreamButton(isConnecting: showsConnectingUI)
-                    .frame(maxWidth: 380)
-                    .padding(.top, 2)
-                    .transition(.opacity)
+                // Hide the StreamButton entirely while the stream window owns
+                // the foreground - a disabled "Streaming..." button would just
+                // duplicate the stream window's presence and compete for visual
+                // weight against the dimmed hero. (Connecting is NOT handed off,
+                // so the capsule below stays mounted through the handshake.)
+                if !isHandedOff {
+                    StreamButton(isConnecting: showsConnectingUI)
+                        .frame(maxWidth: 380)
+                        .padding(.top, 2)
+                        .transition(.opacity)
+                }
+
+                ContextFooter()
+
             }
-
-            ContextFooter()
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 20)
         }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 20)
         // Hand off to the stream window: dim Glimmer's content so the
         // fullscreen surface visibly takes over and reverses on disconnect.
         .opacity(isHandedOff ? 0.4 : 1.0)
@@ -395,6 +397,7 @@ var accentSurfaceGradient: LinearGradient {
 private struct HostHero: View {
     let host: Host?
     @Environment(AppModel.self) private var model
+    @State private var appsExpanded = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -465,7 +468,7 @@ private struct HostHero: View {
                 // END - the hero copy used to duplicate it AND disagree).
 
                 if let host, !host.apps.isEmpty {
-                    AppIconsRow(apps: host.apps, host: host)
+                    AppIconsRow(apps: host.apps, host: host, isExpanded: $appsExpanded)
                         .padding(.top, 6)
                 }
             }
@@ -473,10 +476,14 @@ private struct HostHero: View {
             .padding(.vertical, 22)
             .padding(.horizontal, 24)
         }
-        // 248pt (was 270): content measures ~218pt, so this trims the hero's
-        // dead air ("a bit too much") while keeping honest breathing room.
-        .frame(height: 248)
+        // The compact presentation retains its 248pt footprint; an expanded
+        // app grid grows naturally so every host app remains reachable.
+        .frame(minHeight: 248)
         .frame(maxWidth: 520)
+        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: appsExpanded)
+        // App-list expansion is scoped to the host currently on screen. A
+        // host switch always starts in the compact four-app presentation.
+        .onChange(of: host?.id) { _, _ in appsExpanded = false }
         // Right-click the hero to rename / set codec / unpair the current PC.
         .modifier(OptionalHostContextMenu(host: host))
     }
