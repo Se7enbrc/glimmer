@@ -143,9 +143,10 @@ extension AppModel {
                 serverCertPEM: srvCert,
                 appVersion: appVer,
                 gfeVersion: gfeVer,
-                // Future: moonlight-qt doesn't persist host MAC; populate
-                // from /serverinfo's `<mac>` field when we wire that up.
-                macAddress: nil
+                // Backfilled from /serverinfo's `<mac>` on every successful
+                // poll/pair (only learnable while the host is online).
+                macAddress: defaults.string(forKey: "hosts.\(i).mac"),
+                lunaDeviceId: defaults.string(forKey: "hosts.\(i).lunadevice")
             ))
         }
 
@@ -159,6 +160,50 @@ extension AppModel {
         } else {
             selectedHost = hosts.first
         }
+    }
+
+    /// Find the `hosts.N` slot index for a host id (uuid, hostname fallback) -
+    /// the shared lookup renameHost pioneered. 0 = no match.
+    private func hostSlot(for hostID: String, defaults: UserDefaults) -> Int {
+        let count = defaults.integer(forKey: "hosts.size")
+        guard count > 0 else { return 0 }
+        for i in 1...count {
+            let uuid = defaults.string(forKey: "hosts.\(i).uuid") ?? ""
+            let hostname = defaults.string(forKey: "hosts.\(i).hostname") ?? ""
+            if uuid == hostID || (uuid.isEmpty && hostname == hostID) { return i }
+        }
+        return 0
+    }
+
+    /// Backfill/refresh a host's MAC from a successful /serverinfo. Zeroed or
+    /// empty MACs are rejected (the Luna gate fails closed on them, and a
+    /// zeroed refresh must not clobber a previously-learned real MAC). Reloads
+    /// the in-memory list only when the stored value actually changed.
+    func updateHostMac(hostID: String, mac: String?) {
+        guard let normalized = LunaPower.normalizeMac(mac) else { return }
+        let defaults = UserDefaults.standard
+        let slot = hostSlot(for: hostID, defaults: defaults)
+        guard slot > 0 else { return }
+        let key = "hosts.\(slot).mac"
+        guard defaults.string(forKey: key) != normalized else { return }
+        defaults.set(normalized, forKey: key)
+        loadHosts()
+    }
+
+    /// Persist (or clear, with nil) the host → UpSnap device binding the Luna
+    /// gate resolved. Reloads only on change.
+    func bindLunaDevice(hostID: String, deviceID: String?) {
+        let defaults = UserDefaults.standard
+        let slot = hostSlot(for: hostID, defaults: defaults)
+        guard slot > 0 else { return }
+        let key = "hosts.\(slot).lunadevice"
+        guard defaults.string(forKey: key) != deviceID else { return }
+        if let deviceID {
+            defaults.set(deviceID, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+        loadHosts()
     }
 
     /// Set (or clear) a user-facing custom name for a host. Persists into the
@@ -204,7 +249,7 @@ extension AppModel {
     /// (re-pair), otherwise appends a new slot. `apps` come from /applist.
     func saveHost(uuid: String, hostname: String, address: String,
                   serverCertPEM: String?, appVersion: String?, gfeVersion: String?,
-                  apps: [PairedApp]) {
+                  apps: [PairedApp], macAddress: String? = nil) {
         let defaults = UserDefaults.standard
         let count = defaults.integer(forKey: "hosts.size")
 
@@ -230,6 +275,11 @@ extension AppModel {
         if let pem = serverCertPEM { defaults.set(pem, forKey: "\(prefix).srvcert") }
         if let appVersion { defaults.set(appVersion, forKey: "\(prefix).appversion") }
         if let gfeVersion { defaults.set(gfeVersion, forKey: "\(prefix).gfeversion") }
+        // Pair-time MAC capture (the host is online right now - the only time
+        // it's learnable). Zeroed/absent leaves any earlier value in place.
+        if let mac = LunaPower.normalizeMac(macAddress) {
+            defaults.set(mac, forKey: "\(prefix).mac")
+        }
         // Don't clobber a user's custom name on re-pair.
         if defaults.object(forKey: "\(prefix).customname") == nil {
             defaults.set(false, forKey: "\(prefix).customname")

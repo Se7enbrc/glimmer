@@ -172,6 +172,10 @@ extension AppModel {
                     guard let self,
                           let host = self.selectedHost,
                           host.id == expectedHostID else { return [:] }
+                    // MAC backfill (the Luna power gate's Glimmer half): every
+                    // successful /serverinfo refreshes the stored MAC - the
+                    // only time it's learnable is while the host is online.
+                    self.updateHostMac(hostID: expectedHostID, mac: info.macAddress)
                     return Dictionary(uniqueKeysWithValues: host.apps.map { ($0.id, $0.name) })
                 }
 

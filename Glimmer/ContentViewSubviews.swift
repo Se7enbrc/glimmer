@@ -88,6 +88,8 @@ struct ReadinessChip: View {
     /// Trust recovery (it re-pins the host's new cert). Pre-filled with the
     /// host's address so the user lands on the PIN step, not the chooser.
     @State private var showRePair = false
+    /// Pending destructive power verb ("off"/"reboot") awaiting confirmation.
+    @State private var confirmPowerVerb: String?
 
     /// Resolve the user-facing chip presentation. Priority order matters -
     /// our own session beats the polled host state (we'd rather show the live
@@ -183,6 +185,13 @@ struct ReadinessChip: View {
                         .transition(.scale.combined(with: .opacity))
                         .accessibilityLabel("HDR active")
                 }
+
+                // Luna power controls (spec: docs/LUNA_POWER.md). HARD GATE:
+                // these views exist ONLY when a usable luna binary matched
+                // this host's MAC to a permission-granted UpSnap device -
+                // gatedDevice(for:) is nil otherwise, and NOTHING renders (no
+                // disabled states, zero footprint on machines without luna).
+                powerControls(chip: chip)
             }
         }
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: presentation)
@@ -192,6 +201,87 @@ struct ReadinessChip: View {
             // Pre-fill the host's address so the re-pair lands straight on the
             // PIN step (the initialAddress path that was previously dead).
             PairSheet(initialAddress: rePairAddress).environment(model)
+        }
+        // Gate re-evaluation: refresh the device list + reconcile the
+        // persisted host→device binding whenever the selected host changes
+        // (revocation makes controls vanish here or on app-foreground).
+        .task(id: model.selectedHost?.id) {
+            guard let host = model.selectedHost else { return }
+            await LunaPower.shared.reevaluate(for: host, model: model)
+        }
+    }
+
+    /// The gated power UI. Offline (asleep): Wake & Connect + Wake, replaced
+    /// by a "Waking…" capsule while luna's synchronous wake runs (~36s cold).
+    /// Online (ready): a compact power menu (Sleep / Restart / Shut Down,
+    /// destructive verbs behind confirmationDialog). Any luna failure surfaces
+    /// as a one-line subtext from the CLI's stderr.
+    @ViewBuilder
+    private func powerControls(chip: ChipPresentation) -> some View {
+        if let host = model.selectedHost,
+           let device = LunaPower.shared.gatedDevice(for: host) {
+            if LunaPower.shared.actionInFlight.contains(host.id) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text(chip == .asleep ? "Waking…" : "Working…")
+                        .font(.caption.weight(.medium))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .glassEffect(.regular, in: .capsule)
+            } else if chip == .asleep {
+                Button("Wake & Connect") {
+                    model.wakeHost(host, device: device, thenConnect: true)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                Button("Wake") {
+                    model.wakeHost(host, device: device, thenConnect: false)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                if let reason = LunaPower.shared.lastActionError[host.id] {
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } else if case .ready = chip {
+                Menu {
+                    Button("Sleep") { model.powerAction("sleep", host: host, device: device) }
+                    Button("Restart…") { confirmPowerVerb = "reboot" }
+                    Divider()
+                    Button("Shut Down…", role: .destructive) { confirmPowerVerb = "off" }
+                } label: {
+                    Image(systemName: "power")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .glassEffect(.regular, in: .capsule)
+                .accessibilityLabel("Host power menu")
+                .confirmationDialog(
+                    confirmPowerVerb == "off" ? "Shut down \(host.displayName)?"
+                                              : "Restart \(host.displayName)?",
+                    isPresented: Binding(
+                        get: { confirmPowerVerb != nil },
+                        set: { if !$0 { confirmPowerVerb = nil } }
+                    ),
+                    titleVisibility: .visible
+                ) {
+                    Button(confirmPowerVerb == "off" ? "Shut Down" : "Restart",
+                           role: .destructive) {
+                        if let verb = confirmPowerVerb {
+                            model.powerAction(verb, host: host, device: device)
+                        }
+                        confirmPowerVerb = nil
+                    }
+                    Button("Cancel", role: .cancel) { confirmPowerVerb = nil }
+                }
+            }
         }
     }
 

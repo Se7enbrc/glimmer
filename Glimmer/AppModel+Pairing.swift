@@ -179,7 +179,7 @@ extension AppModel {
                 serverCertPEM: paired.serverCertPEM,
                 appVersion: paired.appVersion,
                 gfeVersion: paired.gfeVersion,
-                apps: apps)
+                apps: apps, macAddress: paired.macAddress)
             pairingPhase = .success("Paired with \(hostnameOrIP) ✓")
             Diag.notice("Pairing succeeded", "Pairing")
         } catch let err as StreamError {

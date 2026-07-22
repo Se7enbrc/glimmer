@@ -118,6 +118,8 @@
 		D100005E /* AppModel+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005D /* AppModel+Lifecycle.swift */; };
 		D1000060 /* AppModel+Streaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005F /* AppModel+Streaming.swift */; };
 		D1000062 /* AppModel+Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000061 /* AppModel+Pairing.swift */; };
+		E20000A4 /* AppModel+Power.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000A3 /* AppModel+Power.swift */; };
+		E20000A2 /* LunaPower.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000A1 /* LunaPower.swift */; };
 		D1000064 /* NetworkClient+Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000063 /* NetworkClient+Endpoints.swift */; };
 		D1000066 /* NetworkClient+Request.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000065 /* NetworkClient+Request.swift */; };
 		D1000068 /* Network+Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000067 /* Network+Support.swift */; };
@@ -185,6 +187,7 @@
 		D2000023 /* ReedSolomonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000022 /* ReedSolomonTests.swift */; };
 		D2000025 /* InputEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000024 /* InputEncoderTests.swift */; };
 		D2000CR2 /* CruiseTraversalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000CR1 /* CruiseTraversalTests.swift */; };
+		E20000A6 /* LunaGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000A5 /* LunaGateTests.swift */; };
 		D2000027 /* SdpCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000026 /* SdpCodecTests.swift */; };
 		D2000031 /* StreamCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000030 /* StreamCryptoTests.swift */; };
 		D2000033 /* PairingCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000032 /* PairingCryptoTests.swift */; };
@@ -347,6 +350,8 @@
 		D100005D /* AppModel+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Lifecycle.swift"; sourceTree = "<group>"; };
 		D100005F /* AppModel+Streaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming.swift"; sourceTree = "<group>"; };
 		D1000061 /* AppModel+Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Pairing.swift"; sourceTree = "<group>"; };
+		E20000A3 /* AppModel+Power.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Power.swift"; sourceTree = "<group>"; };
+		E20000A1 /* LunaPower.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LunaPower.swift"; sourceTree = "<group>"; };
 		D1000063 /* NetworkClient+Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Endpoints.swift"; sourceTree = "<group>"; };
 		D1000065 /* NetworkClient+Request.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Request.swift"; sourceTree = "<group>"; };
 		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Network+Support.swift"; sourceTree = "<group>"; };
@@ -415,6 +420,7 @@
 		D2000022 /* ReedSolomonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReedSolomonTests.swift; sourceTree = "<group>"; };
 		D2000024 /* InputEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEncoderTests.swift; sourceTree = "<group>"; };
 		D2000CR1 /* CruiseTraversalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CruiseTraversalTests.swift; sourceTree = "<group>"; };
+		E20000A5 /* LunaGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LunaGateTests.swift"; sourceTree = "<group>"; };
 		D2000026 /* SdpCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdpCodecTests.swift; sourceTree = "<group>"; };
 		D2000030 /* StreamCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamCryptoTests.swift; sourceTree = "<group>"; };
 		D2000032 /* PairingCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCryptoTests.swift; sourceTree = "<group>"; };
@@ -558,6 +564,8 @@
 				D1000065 /* NetworkClient+Request.swift */,
 				D1000063 /* NetworkClient+Endpoints.swift */,
 				D1000061 /* AppModel+Pairing.swift */,
+				E20000A3 /* AppModel+Power.swift */,
+				E20000A1 /* LunaPower.swift */,
 				D100005F /* AppModel+Streaming.swift */,
 				D1A00001 /* AppModel+HostRoute.swift */,
 				D1A00003 /* AppModel+SessionReceipt.swift */,
@@ -701,6 +709,7 @@
 				D2000022 /* ReedSolomonTests.swift */,
 				D2000024 /* InputEncoderTests.swift */,
 				D2000CR1 /* CruiseTraversalTests.swift */,
+				E20000A5 /* LunaGateTests.swift */,
 				D2000026 /* SdpCodecTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
 				D2000032 /* PairingCryptoTests.swift */,
@@ -893,6 +902,8 @@
 				D1000066 /* NetworkClient+Request.swift in Sources */,
 				D1000064 /* NetworkClient+Endpoints.swift in Sources */,
 				D1000062 /* AppModel+Pairing.swift in Sources */,
+				E20000A4 /* AppModel+Power.swift in Sources */,
+				E20000A2 /* LunaPower.swift in Sources */,
 				D1000060 /* AppModel+Streaming.swift in Sources */,
 				D1A00002 /* AppModel+HostRoute.swift in Sources */,
 				D1A00004 /* AppModel+SessionReceipt.swift in Sources */,
@@ -1026,6 +1037,7 @@
 				D2000023 /* ReedSolomonTests.swift in Sources */,
 				D2000025 /* InputEncoderTests.swift in Sources */,
 				D2000CR2 /* CruiseTraversalTests.swift in Sources */,
+				E20000A6 /* LunaGateTests.swift in Sources */,
 				D2000027 /* SdpCodecTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
 				D2000033 /* PairingCryptoTests.swift in Sources */,
