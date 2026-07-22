@@ -431,10 +431,11 @@ private struct HostHero: View {
                 .padding(14)
                 // Luna gate re-evaluation rides the always-present chip (the
                 // power cluster renders NOTHING un-gated, so it can't
-                // bootstrap itself): refresh devices + reconcile the persisted
-                // host→device binding on host change (revocation vanishes the
-                // controls here or on app-foreground).
-                .task(id: host?.id) {
+                // bootstrap itself). Keyed on the POLL TICK, not just the host
+                // id, so the gate self-heals every ~10s poll - the 60s device
+                // TTL bounds actual luna spawns to ~1/min; revocation vanishes
+                // the controls here or on app-foreground.
+                .task(id: "\(host?.id ?? "")|\(model.hostLiveStatus?.capturedAt.timeIntervalSinceReferenceDate ?? 0)") {
                     guard let host else { return }
                     await LunaPower.shared.reevaluate(for: host, model: model)
                 }

@@ -82,7 +82,14 @@ final class LunaPower {
                 }
             }
         }
-        Task { await refreshBinary() }
+        // Initial probe + device fetch. The foreground observer above can MISS
+        // the launch activation (this singleton initializes lazily, usually
+        // after didBecomeActive already fired), so init must fully bootstrap
+        // the gate itself - binary AND devices.
+        Task {
+            await refreshBinary()
+            await refreshDevicesIfStale()
+        }
     }
 
     // MARK: - Gate
@@ -100,7 +107,13 @@ final class LunaPower {
     /// revocation case). Called from the tile when a host renders offline/online
     /// and before any power action.
     func reevaluate(for host: Host, model: AppModel) async {
-        guard binaryURL != nil else { return }
+        // Self-bootstrapping: an early caller racing init's probe must not
+        // strand the gate closed until the next foreground - re-probe here
+        // (cheap: file-exists + one `luna version` when a candidate exists).
+        if binaryURL == nil {
+            await refreshBinary()
+            guard binaryURL != nil else { return }
+        }
         await refreshDevicesIfStale()
         let matched = gatedDevice(for: host)
         if matched?.id != host.lunaDeviceId {
