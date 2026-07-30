@@ -304,7 +304,21 @@ struct SdpBuilder {
         // min(..., adjustedBitrate) keeps the floor at/below the peak even for a
         // very low configured bitrate (where 10 Mbps could otherwise exceed it
         // and invert the range).
-        let minBitrate = min(max(10_000, adjustedBitrate / 2), adjustedBitrate)
+        //
+        // REMOTE FLOOR: half-peak is a sane LAN floor - the link can carry the
+        // peak, so VQOS only needs trim room. On a REMOTE path that same floor
+        // can EXCEED what the path delivers, which leaves the host no legal rate
+        // that fits: an 84 Mbps ask yields a 33.6 Mbps floor, and a captured
+        // tunnel session sustained 6-14 Mbps of goodput against it - so every
+        // rate VQOS was permitted to choose overran the link and the encoder had
+        // no way down. On remote, drop the floor to a genuinely deliverable rate
+        // instead of anchoring it to the (unreachable) peak.
+        //
+        // The CEILING is untouched, so an abundant remote link (fast fibre + a
+        // VPN) still climbs exactly as high as it did before. This only ever
+        // widens the range DOWNWARD - it never forces a lower rate, it just
+        // stops forbidding one.
+        let minBitrate = config.vqosFloorKbps(peakKbps: adjustedBitrate)
         attrs.append(("x-nv-vqos[0].bw.minimumBitrateKbps", "\(minBitrate)"))
         attrs.append(("x-nv-vqos[0].bw.maximumBitrateKbps", "\(adjustedBitrate)"))
         attrs.append(("x-ml-video.configuredBitrateKbps", "\(config.bitrate)"))

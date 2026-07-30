@@ -141,6 +141,19 @@ public struct BackendStreamConfig: Sendable {
         streamingRemotely == StreamProtocol.STREAM_CFG_REMOTE
     }
 
+    /// The VQOS bitrate floor to advertise, given the peak we just computed.
+    /// LAN anchors the floor to half the peak (the link can carry the peak, so
+    /// VQOS only needs trim room). Remote drops to a genuinely deliverable rate,
+    /// because a half-peak floor can sit above what the path delivers and leave
+    /// the host no legal rate that fits. Never above the peak, so the advertised
+    /// range can't invert on a very low configured bitrate.
+    public func vqosFloorKbps(peakKbps: Int) -> Int {
+        let floor = isRemoteSession
+            ? StreamPathMTU.remoteMinimumBitrateKbps
+            : max(10_000, peakKbps / 2)
+        return min(floor, peakKbps)
+    }
+
     /// The video packet size to ADVERTISE in the SDP: the configured size on a
     /// LAN, clamped to what the probed path can carry unfragmented on a remote
     /// one. See StreamPathMTU.swift for why this clamp used to be dead code.

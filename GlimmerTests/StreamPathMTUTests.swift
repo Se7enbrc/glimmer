@@ -141,6 +141,68 @@ struct StreamPathMTUTests {
         #expect(text.contains("x-nv-video[0].packetSize:1024"))
     }
 
+    // MARK: - VQOS adaptation window
+
+    private func vqosRange(remote: Int32, bitrateKbps: Int32) -> (min: Int, max: Int) {
+        var config = BackendStreamConfig(
+            width: 1920, height: 1080, fps: 60, bitrate: bitrateKbps,
+            packetSize: 1392, streamingRemotely: remote,
+            audioConfiguration: 0x00010002,
+            supportedVideoFormats: 0, clientRefreshRateX100: 6000,
+            colorSpace: 1, colorRange: 0, encryptionFlags: 0,
+            remoteInputAesKey: [UInt8](repeating: 0, count: 16),
+            remoteInputAesIv: [UInt8](repeating: 0, count: 16))
+        config.pathMTU = 1280
+        let builder = SdpBuilder(
+            config: config, videoPort: 47998, urlSafeAddr: "10.0.0.5",
+            addrFamilyToken: "IPv4", rtspClientVersion: 14,
+            negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0,
+            appVersionQuad: [7, 1, 450, 0])
+        let text = String(data: builder.build(), encoding: .utf8) ?? ""
+        func value(_ key: String) -> Int {
+            guard let r = text.range(of: "\(key):") else { return -1 }
+            let rest = text[r.upperBound...].prefix(while: { $0.isNumber })
+            return Int(rest) ?? -1
+        }
+        return (value("x-nv-vqos[0].bw.minimumBitrateKbps"),
+                value("x-nv-vqos[0].bw.maximumBitrateKbps"))
+    }
+
+    /// LAN keeps the half-peak floor - unchanged behaviour.
+    @Test func lanVqosFloorIsHalfPeak() {
+        let range = vqosRange(remote: StreamProtocol.STREAM_CFG_LOCAL, bitrateKbps: 84_000)
+        #expect(range.max == 67_200)          // 84000 * 0.80
+        #expect(range.min == 33_600)          // half the peak
+    }
+
+    /// The bug: on a remote path the half-peak floor (33.6 Mbps) sat ABOVE the
+    /// 6-14 Mbps the captured tunnel actually delivered, so no rate VQOS was
+    /// allowed to pick could fit the link. The remote floor must be genuinely
+    /// reachable.
+    @Test func remoteVqosFloorDropsToADeliverableRate() {
+        let range = vqosRange(remote: StreamProtocol.STREAM_CFG_REMOTE, bitrateKbps: 84_000)
+        #expect(range.min == StreamPathMTU.remoteMinimumBitrateKbps)
+        #expect(range.min == 5_000)
+        #expect(range.min < 14_000)           // below the measured tunnel goodput
+    }
+
+    /// Do no harm: the remote CEILING is untouched, so an abundant remote link
+    /// still climbs as high as it did before. Only the floor moves.
+    @Test func remoteCeilingIsUnchangedByTheWiderFloor() {
+        let lan = vqosRange(remote: StreamProtocol.STREAM_CFG_LOCAL, bitrateKbps: 84_000)
+        let remote = vqosRange(remote: StreamProtocol.STREAM_CFG_REMOTE, bitrateKbps: 84_000)
+        // Remote subtracts moonlight's 500 kbps headroom from the peak; that is
+        // the ONLY ceiling difference, and it predates this change.
+        #expect(remote.max == lan.max - 500)
+        #expect(remote.min < lan.min)
+    }
+
+    /// A configured bitrate below the remote floor must not invert the range.
+    @Test func remoteFloorNeverExceedsThePeak() {
+        let range = vqosRange(remote: StreamProtocol.STREAM_CFG_REMOTE, bitrateKbps: 4_000)
+        #expect(range.min <= range.max)
+    }
+
     /// STREAM_CFG_AUTO must never reach the SDP builder as "remote" - the
     /// resolution happens at connect. If an unresolved AUTO ever leaks through,
     /// it is treated as local (the pre-existing behaviour), so this pins that
