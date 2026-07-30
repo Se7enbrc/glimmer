@@ -233,4 +233,119 @@ struct StreamPathMTUTests {
         let text = sdp(remote: StreamProtocol.STREAM_CFG_AUTO, packetSize: 1392)
         #expect(text.contains("x-nv-video[0].packetSize:1392"))
     }
+
+    // MARK: - Connect-time quality gate (RTT → bitrate ceiling)
+
+    /// A LAN keeps the full demand-based ask - the gate must be invisible there.
+    @Test func lanRttKeepsFullBitrate() {
+        let path = StreamPathProbe(interfaceName: "en0", mtu: 1500, isTunnel: false, rtt: RttStats(samples: [1.2]))
+        #expect(!path.isRemotePath)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 84_000)
+    }
+
+    /// An RTT no local network produces means remote, whatever the interface
+    /// looks like. Wired LAN is 0.5-2ms and LAN wifi 2-10ms; 45ms has left the
+    /// building.
+    @Test func highRttAloneClassifiesRemote() {
+        let path = StreamPathProbe(interfaceName: "en0", mtu: 1500, isTunnel: false, rtt: RttStats(samples: [45]))
+        #expect(path.isRemotePath)
+    }
+
+    /// The live case: ~50 ms tunnel → 0.50 → 84 becomes 42 Mbps. The host's
+    /// encoder was independently measured running 37-50 Mbps on this same path,
+    /// so the ceiling lands where reality already was.
+    @Test func fiftyMsTunnelHalvesTheAsk() {
+        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: RttStats(samples: [50]))
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 42_000)
+    }
+
+    @Test func rttBandsAreMonotonicallyStricter() {
+        let bands: [(Double, Double)] = [(1, 1.00), (9.9, 1.00), (10, 0.75),
+                                         (29, 0.75), (30, 0.50), (59, 0.50),
+                                         (60, 0.35), (250, 0.35)]
+        for (rtt, expected) in bands {
+            #expect(StreamPathMTU.bitrateCeilingFraction(rttMs: rtt) == expected,
+                    "RTT \(rtt)ms should map to \(expected)")
+        }
+    }
+
+    /// An unmeasured RTT must cap NOTHING. A failed probe is "unknown", never
+    /// "bad" - the same contract as the MTU clamp.
+    @Test func unmeasuredRttCapsNothing() {
+        #expect(StreamPathMTU.bitrateCeilingFraction(rttMs: nil) == 1.0)
+        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: nil)
+        // Still remote (tunnel), but with no RTT there is no basis to cap.
+        #expect(path.isRemotePath)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 84_000)
+    }
+
+    /// However distant the host, never ask below the floor.
+    @Test func capNeverGoesBelowTheFloor() {
+        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: RttStats(samples: [300]))
+        let capped = StreamPathMTU.cappedBitrateKbps(configured: 20_000, path: path)
+        #expect(capped == StreamPathMTU.minimumBitrateKbps)
+    }
+
+    /// The gate only ever moves DOWNWARD.
+    @Test func capIsNeverAnIncrease() {
+        for rtt in [0.5, 5.0, 15.0, 45.0, 120.0] {
+            let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true,
+                                       rtt: RttStats(samples: [rtt]))
+            #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) <= 84_000)
+        }
+    }
+
+    // MARK: - RTT distribution (p95 is what the gate bands on)
+
+    /// The gate must key on the TAIL. A link whose floor looks fine but whose
+    /// tail is 10x worse is bufferbloated and will stutter; banding on min would
+    /// hide exactly that, which is the whole reason p95 is the chosen statistic.
+    @Test func gateBandsOnTheTailNotTheFloor() throws {
+        // A realistically bloated link: the floor still looks like a LAN (8 ms)
+        // but a quarter of the samples are stuck behind a full queue. Note this
+        // needs a SUSTAINED tail, not one spike - a single outlier in 20 is
+        // exactly 5% and p95 correctly sits at the boundary rather than chasing
+        // it, which is the statistic behaving as intended.
+        let samples = Array(repeating: 8.0, count: 15) + Array(repeating: 120.0, count: 5)
+        let stats = try #require(RttStats(samples: samples))
+        #expect(stats.minMs == 8)
+        #expect(stats.p95Ms == 120)
+        let path = StreamPathProbe(interfaceName: "en0", mtu: 1500, isTunnel: false, rtt: stats)
+        // Banding on min would call this local and cap nothing. On p95 it is
+        // correctly treated as a distant/congested path.
+        #expect(path.isRemotePath)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) < 84_000)
+        #expect(stats.tailRatio == 15)
+    }
+
+    @Test func percentilesAreOrdered() throws {
+        let stats = try #require(RttStats(samples: [50, 10, 30, 20, 40]))
+        #expect(stats.minMs == 10)
+        #expect(stats.minMs <= stats.p50Ms)
+        #expect(stats.p50Ms <= stats.p95Ms)
+        #expect(stats.count == 5)
+    }
+
+    /// A clean low-latency path has a tail that matches its floor, so nothing
+    /// is capped - the do-no-harm case.
+    @Test func cleanLanDistributionCapsNothing() throws {
+        let stats = try #require(RttStats(samples: Array(repeating: 1.1, count: 20)))
+        let path = StreamPathProbe(interfaceName: "en0", mtu: 1500, isTunnel: false, rtt: stats)
+        #expect(!path.isRemotePath)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 84_000)
+        #expect(stats.tailRatio == 1)
+    }
+
+    /// No samples means no knowledge - never a verdict.
+    @Test func emptySampleSetYieldsNoStats() {
+        #expect(RttStats(samples: []) == nil)
+    }
+
+    /// The live path measured 33-43ms across samples; whatever the draw, it must
+    /// land in one band and produce a stable answer.
+    @Test func measuredTunnelSpreadLandsInOneBand() {
+        let stats = RttStats(samples: [33.2, 37.6, 38.1, 40.0, 42.6])
+        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: stats)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 42_000)
+    }
 }

@@ -212,7 +212,7 @@ extension StreamSession {
             // tunnel-flap case this whole clamp exists for), so remoteness and
             // the advertised packet size are resolved fresh, never inherited.
             let backendConfig = makeBackendConfig(
-                config: config, launch: launch, hostAddress: serverInfo.address)
+                config: config, launch: launch, server: serverInfo)
             // duringReconnect: connectBackend's failure path must NOT run the
             // full stop() (that would blank the frozen frame + bounce to the
             // launcher) - it cancels the failed launch and throws so we retry.

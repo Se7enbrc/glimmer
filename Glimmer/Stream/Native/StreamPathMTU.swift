@@ -51,14 +51,114 @@ struct StreamPathProbe: Sendable {
     var mtu: Int?
     /// utun*/ipsec*/ppp* - the kernel routed us through a tunnel.
     var isTunnel: Bool = false
+    /// Latency distribution to the host, from TCP handshakes (SYN → SYN-ACK is
+    /// exactly one RTT). nil when unmeasured or unreachable.
+    var rtt: RttStats?
+
+    /// The single number the gate bands on: the TAIL, not the floor. See RttStats.
+    var rttMs: Double? { rtt?.p95Ms }
 
     /// True when this path should be treated as a remote/Internet session:
-    /// a tunnel, or any route whose MTU is below standard Ethernet. Both mean
-    /// a LAN-tuned 1392-byte video packet no longer fits.
+    /// a tunnel, a route whose MTU is below standard Ethernet, or an RTT no
+    /// local network produces. Any of the three means a LAN-tuned 1392-byte
+    /// video packet no longer fits and a LAN-tuned bitrate is not defensible.
     var isRemotePath: Bool {
         if isTunnel { return true }
         if let mtu, mtu < StreamPathMTU.standardEthernetMTU { return true }
+        if let rttMs, rttMs >= StreamPathMTU.localRttCeilingMs { return true }
         return false
+    }
+}
+
+/// A latency distribution measured before ANNOUNCE. `min` is the closest thing
+/// to the path's true propagation delay (a sample can only ever be inflated by
+/// queueing, never deflated below the wire time); `p95` is the TAIL, which is
+/// what actually hurts a stream - a link with min 20 ms and p95 200 ms is badly
+/// bufferbloated and will stutter, and judging it by `min` alone would hide
+/// that. The gate bands on p95 for exactly that reason; min and p50 are carried
+/// for diagnosis and to make bloat visible as the spread between them.
+struct RttStats: Sendable, Equatable {
+    var minMs: Double
+    var p50Ms: Double
+    var p95Ms: Double
+    var count: Int
+
+    /// Nil for an empty sample set - absent knowledge stays absent.
+    init?(samples: [Double]) {
+        guard !samples.isEmpty else { return nil }
+        let sorted = samples.sorted()
+        func percentile(_ quantile: Double) -> Double {
+            let idx = Int((Double(sorted.count - 1) * quantile).rounded())
+            return sorted[max(0, min(sorted.count - 1, idx))]
+        }
+        minMs = sorted[0]
+        p50Ms = percentile(0.50)
+        p95Ms = percentile(0.95)
+        count = sorted.count
+    }
+
+    /// How much worse the tail is than the floor. >2x on a path whose floor is
+    /// already high is the bufferbloat signature.
+    var tailRatio: Double { minMs > 0 ? p95Ms / minMs : 1 }
+}
+
+/// Samples RTT continuously on a background queue for the life of the
+/// pre-connect window, so the measurement rides wall-clock we are ALREADY
+/// spending (the /launch round trip alone measured 1383 ms, RTSP another ~960 ms)
+/// instead of adding any. Start it right after /serverinfo; harvest it just
+/// before the SDP is built.
+///
+/// THREADING: `start`/`harvest` are called from the session actor; the sampling
+/// loop owns its own queue and the sample array is lock-guarded.
+final class RttSampler: @unchecked Sendable {
+    private let host: String
+    private let port: UInt16
+    private let queue = DispatchQueue(label: "io.ugfugl.Glimmer.rttSampler", qos: .utility)
+    private let lock = NSLock()
+    private var samples: [Double] = []
+    private var stopped = false
+
+    /// Gap between handshakes. Loose enough that we are not hammering the host's
+    /// web port, tight enough to accumulate a usable distribution across a
+    /// ~1-2 s pre-connect window.
+    private static let intervalMs: UInt32 = 60
+    /// Hard cap so a pathologically slow launch can't sample forever.
+    private static let maxSamples = 40
+
+    /// Starts sampling immediately - there is no useful window between
+    /// construction and the first sample, and the loop captures self WEAKLY, so
+    /// the sampler going out of scope (an early throw on the connect path) ends
+    /// it on the next iteration without any explicit teardown.
+    init(host: String, port: UInt16) {
+        self.host = host
+        self.port = port
+        start()
+    }
+
+    private func start() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            while true {
+                lock.lock()
+                let done = stopped || samples.count >= Self.maxSamples
+                lock.unlock()
+                if done { return }
+                if let sample = StreamPathMTU.measureOneRttMs(host: host, port: port) {
+                    lock.lock(); samples.append(sample); lock.unlock()
+                }
+                usleep(Self.intervalMs * 1000)
+            }
+        }
+    }
+
+    /// Stop sampling and return the distribution gathered so far (nil if the
+    /// probe never succeeded - e.g. a host that refuses the port).
+    func harvest() -> RttStats? {
+        lock.lock()
+        stopped = true
+        let collected = samples
+        lock.unlock()
+        return RttStats(samples: collected)
     }
 }
 
@@ -88,14 +188,77 @@ enum StreamPathMTU {
     /// misconfigured one.
     static let minimumPacketSize = 512
 
+    /// Above this RTT we are not on a local network, whatever the interface
+    /// says. Wired LAN round-trips land at 0.5-2 ms and LAN wifi at 2-10 ms;
+    /// anything at or beyond 10 ms has left the building. Used both to classify
+    /// the path and as the first band of the bitrate ceiling below.
+    static let localRttCeilingMs: Double = 10
+
+    /// RTT → fraction of the demand-based bitrate we are willing to ASK FOR.
+    ///
+    /// RTT is not a capacity measurement and this does not pretend to be one.
+    /// It is a RISK gate, and it is defensible on its own terms:
+    ///   * The demand-based anchors in QualityCalculator (84 Mbps at
+    ///     3024x1964@120) were measured on a LAN harness. Asking for a
+    ///     LAN-measured rate over a 50 ms path is not a considered choice, it is
+    ///     just the absence of one.
+    ///   * Higher RTT means more hops and a higher chance of a shared or
+    ///     congested segment - the paths that actually drop bursts.
+    ///   * Loss costs MORE at high RTT: an RFI/IDR recovery round trip scales
+    ///     with RTT, so at 50 ms a single reference break is ~100 ms of damaged
+    ///     output - 12 frames at 120fps. The same loss rate hurts proportionally
+    ///     more the further away the host is, so backing off the rate that
+    ///     PRODUCES the loss is the right direction.
+    ///
+    /// Sanity-checked against the field: on a ~50 ms tunnel this yields 0.50,
+    /// i.e. 84 -> 42 Mbps, and the host's encoder was independently measured
+    /// running at 37-50 Mbps on that same path. The ceiling lands where reality
+    /// already was, so it costs nothing that was actually being delivered.
+    static func bitrateCeilingFraction(rttMs: Double?) -> Double {
+        guard let rttMs else { return 1.0 }      // unmeasured: change nothing
+        switch rttMs {
+        case ..<localRttCeilingMs: return 1.00   // LAN
+        case ..<30:                return 0.75   // same metro / good VPN
+        case ..<60:                return 0.50   // regional
+        default:                   return 0.35   // distant
+        }
+    }
+
+    /// The bitrate to ASK FOR, given the configured (demand-based) value and the
+    /// probed path. A local path returns `configured` untouched.
+    static func cappedBitrateKbps(configured: Int, path: StreamPathProbe) -> Int {
+        guard path.isRemotePath else { return configured }
+        let fraction = bitrateCeilingFraction(rttMs: path.rttMs)
+        guard fraction < 1.0 else { return configured }
+        return max(minimumBitrateKbps, Int((Double(configured) * fraction).rounded()))
+    }
+
+    /// Never ask for less than this however distant the host - below it the
+    /// stream is not worth starting, and the honest outcome is a bad stream the
+    /// user can see rather than a silently crippled one.
+    static let minimumBitrateKbps = 10_000
+
+    /// How long to wait for the RTT probe's TCP handshake before giving up.
+    /// Deliberately tight: this sits on the connect path, and an unmeasured RTT
+    /// is a safe answer (it caps nothing), so waiting is worse than not knowing.
+    private static let rttProbeTimeoutMs: Int32 = 400
+
+    /// How many handshakes to sample before taking the minimum. Three costs
+    /// ~120 ms on a 40 ms path - about 4% of the measured 3.0 s click-to-first-
+    /// frame - and a LAN exits after the first (see `sampledRttMs`).
+    private static let rttProbeSamples = 3
+
     /// The port is irrelevant to route selection (connect() on UDP only picks
     /// the egress interface), so the discard port keeps the intent obvious.
     private static let probePort: UInt16 = 9
 
-    /// Resolve the egress interface + MTU for `host`. `host` must be an IP
-    /// literal (the address RTSP already resolved); a hostname yields an empty
-    /// probe rather than a blocking lookup.
-    static func probe(host: String) -> StreamPathProbe {
+    /// Resolve the egress interface, MTU and RTT for `host`. `host` must be an
+    /// IP literal (the address RTSP already resolved); a hostname yields an
+    /// empty probe rather than a blocking lookup. `rttPort` is a TCP port the
+    /// host is known to be listening on (the RTSP port) - the handshake to it
+    /// is the RTT sample and nothing is ever sent on the connection.
+    static func probe(host: String, rttPort: UInt16? = nil,
+                      rtt preCollected: RttStats? = nil) -> StreamPathProbe {
         guard let (dest, len, family) = UdpPinger.makeSockaddr(
             for: NWEndpoint.Host(host), port: probePort) else {
             return StreamPathProbe()
@@ -104,9 +267,73 @@ enum StreamPathMTU {
               let name = interfaceName(matching: local) else {
             return StreamPathProbe()
         }
+        // Prefer the distribution the pre-connect sampler already gathered on
+        // wall-clock we were spending anyway. Only fall back to a synchronous
+        // burst when there is none (the reconnect path, which has no free
+        // window to sample across).
+        let rtt = preCollected ?? rttPort.flatMap { burstRtt(host: host, port: $0) }
         return StreamPathProbe(interfaceName: name,
                                mtu: mtu(ofInterface: name),
-                               isTunnel: isTunnelName(name))
+                               isTunnel: isTunnelName(name),
+                               rtt: rtt)
+    }
+
+    /// SYNCHRONOUS fallback for the reconnect path, which has no pre-connect
+    /// window to sample across. A handful of back-to-back handshakes - enough to
+    /// place the band, not enough for a real p95, which is precisely why the
+    /// primary path uses `RttSampler` over the free wall-clock instead.
+    ///
+    /// EARLY EXIT: if the first sample is already under the local ceiling we are
+    /// on a LAN, the gate will cap nothing, and further samples cannot change
+    /// that - so a local session pays exactly one ~1 ms handshake.
+    private static func burstRtt(host: String, port: UInt16) -> RttStats? {
+        var samples: [Double] = []
+        for _ in 0..<rttProbeSamples {
+            guard let sample = measureOneRttMs(host: host, port: port) else { continue }
+            samples.append(sample)
+            if sample < localRttCeilingMs { break }   // LAN - no cap possible
+        }
+        return RttStats(samples: samples)
+    }
+
+    /// One TCP handshake, timed. SYN → SYN-ACK is exactly one round trip, with
+    /// no TLS and no application bytes on top, so it is the cleanest RTT sample
+    /// available before ANNOUNCE - unlike timing an HTTPS request, which folds
+    /// in the TLS handshake's extra round trips and the host's own think time.
+    ///
+    /// The socket is closed immediately; no data is ever written. A failure or
+    /// timeout returns nil, which the caller treats as "unknown" and caps
+    /// nothing - never as "bad".
+    static func measureOneRttMs(host: String, port: UInt16) -> Double? {
+        guard let (dest, len, family) = UdpPinger.makeSockaddr(
+            for: NWEndpoint.Host(host), port: port) else { return nil }
+        var destCopy = dest
+        let fd = socket(family, SOCK_STREAM, 0)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        // Non-blocking connect + poll, so a black-holed path costs the timeout
+        // rather than the kernel's multi-second SYN retry schedule.
+        let flags = fcntl(fd, F_GETFL, 0)
+        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else { return nil }
+        let start = DispatchTime.now().uptimeNanoseconds
+        let rc = withUnsafePointer(to: &destCopy) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, len)
+            }
+        }
+        if rc != 0 {
+            guard errno == EINPROGRESS else { return nil }
+            var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            guard poll(&pfd, 1, rttProbeTimeoutMs) == 1 else { return nil }
+            // POLLOUT alone isn't success - a refused connection also wakes the
+            // poll. Ask the socket for its error before trusting the timing.
+            var soError: Int32 = 0
+            var soLen = socklen_t(MemoryLayout<Int32>.size)
+            guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &soLen) == 0,
+                  soError == 0 else { return nil }
+        }
+        let elapsed = DispatchTime.now().uptimeNanoseconds &- start
+        return Double(elapsed) / 1_000_000.0
     }
 
     /// What we should ADVERTISE to the host given the configured size, whether
