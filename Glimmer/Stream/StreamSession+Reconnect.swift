@@ -184,7 +184,11 @@ extension StreamSession {
             let launch = try await launchWithBusyRecovery(
                 network: net, appID: appID, config: config,
                 hintCurrentGame: serverInfo.currentGameID)
-            let backendConfig = makeBackendConfig(config: config, launch: launch)
+            // Re-probe the path on reconnect: the route may have moved (the
+            // tunnel-flap case this whole clamp exists for), so remoteness and
+            // the advertised packet size are resolved fresh, never inherited.
+            let backendConfig = makeBackendConfig(
+                config: config, launch: launch, hostAddress: serverInfo.address)
             // duringReconnect: connectBackend's failure path must NOT run the
             // full stop() (that would blank the frozen frame + bounce to the
             // launcher) - it cancels the failed launch and throws so we retry.
