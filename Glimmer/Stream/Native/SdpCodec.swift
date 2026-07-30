@@ -258,9 +258,15 @@ struct SdpBuilder {
         // sizing happen without IP_DONTFRAG (which would hard-fail oversized
         // packets instead of letting them fragment). LAN sessions keep the
         // full configured size.
-        let advertisedPacketSize = config.streamingRemotely == 1
-            ? min(config.packetSize, 1024) : config.packetSize
-        attrs.append(("x-nv-video[0].packetSize", "\(advertisedPacketSize)"))
+        //
+        // `streamingRemotely` is now RESOLVED at connect (StreamSession
+        // .makeBackendConfig runs StreamPathMTU.probe for `.auto`), so this
+        // branch actually fires on a tunnelled path instead of never - see
+        // StreamPathMTU.swift for why it was dead. When the probe also read the
+        // egress MTU, the clamp tightens further for a path narrower than the
+        // ~1280 the flat 1024 assumes (this machine has utun interfaces at MTU
+        // 1000); pathMTU == 0 means "unreadable" and keeps the flat 1024.
+        attrs.append(("x-nv-video[0].packetSize", "\(config.advertisedVideoPacketSize)"))
         attrs.append(("x-nv-video[0].rateControlMode", "4"))
         attrs.append(("x-nv-video[0].timeoutLengthMs", "7000"))
         // framesWithInvalidRefThreshold "0" is the moonlight-common-c default,
@@ -281,7 +287,7 @@ struct SdpBuilder {
         // than it can sustain, and the minimumBitrateKbps floor below still gives
         // VQOS room to drop under loss.
         var adjustedBitrate = Int(Double(config.bitrate) * 0.80)
-        if config.streamingRemotely == 1 {
+        if config.isRemoteSession {
             if adjustedBitrate > 500 { adjustedBitrate -= 500 }
         }
         if adjustedBitrate > 200_000 { adjustedBitrate = 200_000 }
@@ -307,7 +313,7 @@ struct SdpBuilder {
         attrs.append(("x-nv-vqos[0].videoQualityScoreUpdateTime", "5000"))
 
         // qosTrafficType: LOCAL → "5"/"4"; remote → "0"/"0".
-        if config.streamingRemotely == 1 {
+        if config.isRemoteSession {
             attrs.append(("x-nv-vqos[0].qosTrafficType", "0"))
             attrs.append(("x-nv-aqos.qosTrafficType", "0"))
         } else {

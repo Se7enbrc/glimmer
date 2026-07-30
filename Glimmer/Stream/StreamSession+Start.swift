@@ -129,7 +129,7 @@ extension StreamSession {
         )
 
         // --- 3) Build the backend stream config -------------------------
-        let backendConfig = makeBackendConfig(config: config, launch: launch)
+        let backendConfig = makeBackendConfig(config: config, launch: launch, hostAddress: serverInfo.address)
 
         // Diagnostic so "are we actually streaming at the right refresh rate"
         // is a one-line question. requestedFps is what we tell Sunshine;
@@ -309,15 +309,39 @@ extension StreamSession {
     /// gcmKey/gcmKeyId are the 16-byte per-session AES key + IV-id from the
     /// launch handshake.
     func makeBackendConfig(
-        config: StreamConfig, launch: LaunchResponse
+        config: StreamConfig, launch: LaunchResponse, hostAddress: String
     ) -> BackendStreamConfig {
-        BackendStreamConfig(
+        // Resolve `.auto` from the route we will actually egress on. Without
+        // this, `.auto` (STREAM_CFG_AUTO = 2) never equals STREAM_CFG_REMOTE and
+        // every remote-only SDP behaviour - the 1024 packet-size clamp, the
+        // remote bitrate headroom, the remote qosTrafficType - stays dead, so a
+        // 1392-byte LAN packet gets advertised onto a 1280-MTU tunnel and every
+        // video packet fragments. An explicit .local/.remote from the caller is
+        // honoured as-is; only `.auto` consults the probe.
+        let path = config.remoteness == .auto
+            ? StreamPathMTU.probe(host: hostAddress) : StreamPathProbe()
+        let resolvedRemoteness: Remoteness
+        switch config.remoteness {
+        case .local, .remote:
+            resolvedRemoteness = config.remoteness
+        case .auto:
+            resolvedRemoteness = path.isRemotePath ? .remote : .local
+        }
+        if config.remoteness == .auto {
+            log.info("""
+                Path probe: if=\(path.interfaceName ?? "?", privacy: .public) \
+                mtu=\(path.mtu ?? -1, privacy: .public) \
+                tunnel=\(path.isTunnel, privacy: .public) \
+                → remoteness=\(resolvedRemoteness == .remote ? "remote" : "local", privacy: .public)
+                """)
+        }
+        return BackendStreamConfig(
             width: Int32(config.width),
             height: Int32(config.height),
             fps: Int32(config.fps),
             bitrate: Int32(config.bitrateKbps),
             packetSize: Int32(config.packetSize),
-            streamingRemotely: config.remoteness.cValue,
+            streamingRemotely: resolvedRemoteness.cValue,
             audioConfiguration: config.audio.cValue,
             supportedVideoFormats: config.videoFormats.rawValue,
             clientRefreshRateX100: Int32(config.fps * 100),
@@ -325,7 +349,8 @@ extension StreamSession {
             colorRange: config.colorRange.cValue,
             encryptionFlags: config.encryption.encryptionFlags,
             remoteInputAesKey: [UInt8](launch.gcmKey),
-            remoteInputAesIv: [UInt8](launch.gcmKeyId))
+            remoteInputAesIv: [UInt8](launch.gcmKeyId),
+            pathMTU: Int32(path.mtu ?? 0))
     }
 
     /// Emit the one-line stream-config diagnostic on the main actor (it reads

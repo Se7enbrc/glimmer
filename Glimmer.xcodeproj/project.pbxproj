@@ -92,6 +92,7 @@
 		D1000024 /* RtpVideoQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000023 /* RtpVideoQueue.swift */; };
 		D1000026 /* VideoRtpReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000025 /* VideoRtpReceiver.swift */; };
 		D1000028 /* UdpPinger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000027 /* UdpPinger.swift */; };
+		D1B00002 /* StreamPathMTU.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B00001 /* StreamPathMTU.swift */; };
 		D1000030 /* InputEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000029 /* InputEncoder.swift */; };
 		D1000032 /* AudioFecDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000031 /* AudioFecDecoder.swift */; };
 		D1000034 /* RtpAudioQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000033 /* RtpAudioQueue.swift */; };
@@ -189,6 +190,7 @@
 		D2000CR2 /* CruiseTraversalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000CR1 /* CruiseTraversalTests.swift */; };
 		E20000A6 /* LunaGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000A5 /* LunaGateTests.swift */; };
 		D2000027 /* SdpCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000026 /* SdpCodecTests.swift */; };
+		D2B00002 /* StreamPathMTUTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00001 /* StreamPathMTUTests.swift */; };
 		D2000031 /* StreamCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000030 /* StreamCryptoTests.swift */; };
 		D2000033 /* PairingCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000032 /* PairingCryptoTests.swift */; };
 		D2000035 /* ParserHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000034 /* ParserHelperTests.swift */; };
@@ -324,6 +326,7 @@
 		D1000023 /* RtpVideoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpVideoQueue.swift; sourceTree = "<group>"; };
 		D1000025 /* VideoRtpReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoRtpReceiver.swift; sourceTree = "<group>"; };
 		D1000027 /* UdpPinger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/UdpPinger.swift; sourceTree = "<group>"; };
+		D1B00001 /* StreamPathMTU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/StreamPathMTU.swift; sourceTree = "<group>"; };
 		D1000029 /* InputEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputEncoder.swift; sourceTree = "<group>"; };
 		D1000031 /* AudioFecDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/AudioFecDecoder.swift; sourceTree = "<group>"; };
 		D1000033 /* RtpAudioQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpAudioQueue.swift; sourceTree = "<group>"; };
@@ -422,6 +425,7 @@
 		D2000CR1 /* CruiseTraversalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CruiseTraversalTests.swift; sourceTree = "<group>"; };
 		E20000A5 /* LunaGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LunaGateTests.swift"; sourceTree = "<group>"; };
 		D2000026 /* SdpCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdpCodecTests.swift; sourceTree = "<group>"; };
+		D2B00001 /* StreamPathMTUTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPathMTUTests.swift; sourceTree = "<group>"; };
 		D2000030 /* StreamCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamCryptoTests.swift; sourceTree = "<group>"; };
 		D2000032 /* PairingCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCryptoTests.swift; sourceTree = "<group>"; };
 		D2000034 /* ParserHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserHelperTests.swift; sourceTree = "<group>"; };
@@ -642,6 +646,7 @@
 				D1000F00 /* FecHeadroomController.swift */,
 				D1000025 /* VideoRtpReceiver.swift */,
 				D1000027 /* UdpPinger.swift */,
+				D1B00001 /* StreamPathMTU.swift */,
 				D1000029 /* InputEncoder.swift */,
 				D1000037 /* InputBatcher.swift */,
 				D1000031 /* AudioFecDecoder.swift */,
@@ -711,6 +716,7 @@
 				D2000CR1 /* CruiseTraversalTests.swift */,
 				E20000A5 /* LunaGateTests.swift */,
 				D2000026 /* SdpCodecTests.swift */,
+				D2B00001 /* StreamPathMTUTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
 				D2000032 /* PairingCryptoTests.swift */,
 				D2000034 /* ParserHelperTests.swift */,
@@ -980,6 +986,7 @@
 				D1000F01 /* FecHeadroomController.swift in Sources */,
 				D1000026 /* VideoRtpReceiver.swift in Sources */,
 				D1000028 /* UdpPinger.swift in Sources */,
+				D1B00002 /* StreamPathMTU.swift in Sources */,
 				D1000030 /* InputEncoder.swift in Sources */,
 				D1000038 /* InputBatcher.swift in Sources */,
 				D1000032 /* AudioFecDecoder.swift in Sources */,
@@ -1039,6 +1046,7 @@
 				D2000CR2 /* CruiseTraversalTests.swift in Sources */,
 				E20000A6 /* LunaGateTests.swift in Sources */,
 				D2000027 /* SdpCodecTests.swift in Sources */,
+				D2B00002 /* StreamPathMTUTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
 				D2000033 /* PairingCryptoTests.swift in Sources */,
 				D2000035 /* ParserHelperTests.swift in Sources */,
