@@ -25,6 +25,13 @@ extension StreamSession {
     /// (the closures are `@MainActor`, matching the builder's isolation).
     struct StreamSetupOptions {
         let config: StreamConfig
+        /// The bitrate we ACTUALLY asked the host for, after the connect-time
+        /// quality gate. NOT `config.bitrateKbps`, which is the pre-gate demand
+        /// figure: reporting that one made the overlay and the
+        /// `negotiated_bitrate_mbps` telemetry claim 67.2 Mbps while the session
+        /// was really running at a gated 33.6, which is exactly the kind of lie
+        /// that costs an hour of diagnosis.
+        let negotiatedBitrateKbps: Int
         let initialStatsOverlay: Bool
         let initialStatsCorner: StatsOverlayCorner
         let quitHotkeyProvider: @MainActor () -> HotkeyChord
@@ -102,7 +109,7 @@ extension StreamSession {
         inp.controllerQuitChordProvider = options.controllerQuitChordProvider
         inp.customControllerChordProvider = options.customControllerChordProvider
         dec.statsOverlayEnabled = initialStatsOverlay
-        dec.setNegotiatedBitrateKbps(config.bitrateKbps)
+        dec.setNegotiatedBitrateKbps(options.negotiatedBitrateKbps)
         dec.setActiveAudioConfigLabel(config.audio.displayLabel)
         win.statsOverlay.corner = initialStatsCorner
         // Seed the overlay's visibility from the initial state so the
