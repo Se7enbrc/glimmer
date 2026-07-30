@@ -14,6 +14,15 @@ fifteen minutes while video kept arriving, because none of it could be
 reassembled. Glimmer now measures the actual route to your PC when a stream
 starts and sizes packets to fit it. Streaming on a local network is unchanged.
 
+Glimmer now also checks the connection quality before a stream starts. During
+the moment it already spends contacting your PC, it measures how long
+round-trips are taking - not the best case, but the slow tail, which is what
+actually causes stutter - and if your PC is far away or the path is congested,
+it asks for a bitrate that path can realistically carry instead of the one your
+resolution would want on a local network. Streaming on a local network is
+unaffected, and if the measurement doesn't succeed for any reason, nothing is
+capped.
+
 Two related fixes for weak connections. Glimmer was telling your PC it could
 never encode below about half the requested bitrate - which, on a link that
 couldn't carry even that, left your PC no setting that would work. It can now
