@@ -197,12 +197,20 @@ struct SdpCodecTests {
         #expect(sdp.contains("a=x-nv-video[0].packetSize:1392 \r\n"))
     }
 
-    @Test func buildRemoteClampsPacketSizeAndQos() {
+    @Test func buildRemoteSetsQosAndEchoesTheResolvedPacketSize() {
         let sdp = sdpString(builder(format: StreamProtocol.VIDEO_FORMAT_H264, remote: 1))
         #expect(sdp.contains("a=x-nv-vqos[0].qosTrafficType:0 \r\n"))
         #expect(sdp.contains("a=x-nv-aqos.qosTrafficType:0 \r\n"))
-        // Remote session clamps packetSize to 1024 (min(1392, 1024)).
-        #expect(sdp.contains("a=x-nv-video[0].packetSize:1024 \r\n"))
+        // The builder no longer derives its own packet size. The remote clamp
+        // moved UPSTREAM to StreamSession.makeBackendConfig, because the same
+        // resolved number must reach the host, the receive buffer, AND the
+        // Reed-Solomon shard length the FEC reconstructor rebuilds recovered
+        // packets at - advertising one size while reconstructing at another
+        // corrupts every FEC-recovered frame (see StreamPathMTUTests'
+        // advertisedSizeIsExactlyTheStoredSizeUsedForFecReconstruction).
+        // This config carries the LAN 1392, so 1392 is what must be advertised;
+        // the clamp itself is covered in StreamPathMTUTests.
+        #expect(sdp.contains("a=x-nv-video[0].packetSize:1392 \r\n"))
     }
 
     @Test func buildMaxNumReferenceFramesDefaultsToOneWithoutRfi() {

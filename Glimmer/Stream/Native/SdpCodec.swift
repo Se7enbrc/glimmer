@@ -259,14 +259,14 @@ struct SdpBuilder {
         // packets instead of letting them fragment). LAN sessions keep the
         // full configured size.
         //
-        // `streamingRemotely` is now RESOLVED at connect (StreamSession
-        // .makeBackendConfig runs StreamPathMTU.probe for `.auto`), so this
-        // branch actually fires on a tunnelled path instead of never - see
-        // StreamPathMTU.swift for why it was dead. When the probe also read the
-        // egress MTU, the clamp tightens further for a path narrower than the
-        // ~1280 the flat 1024 assumes (this machine has utun interfaces at MTU
-        // 1000); pathMTU == 0 means "unreadable" and keeps the flat 1024.
-        attrs.append(("x-nv-video[0].packetSize", "\(config.advertisedVideoPacketSize)"))
+        // The clamp is APPLIED UPSTREAM now, in StreamSession.makeBackendConfig,
+        // so `config.packetSize` is already the resolved value and this line
+        // simply echoes it. That is deliberate and load-bearing: the same number
+        // has to reach the host, the receive buffer, AND the Reed-Solomon shard
+        // length the FEC reconstructor rebuilds recovered packets at. Advertising
+        // one size while reconstructing at another corrupts every FEC-recovered
+        // frame (see makeBackendConfig).
+        attrs.append(("x-nv-video[0].packetSize", "\(config.packetSize)"))
         attrs.append(("x-nv-video[0].rateControlMode", "4"))
         attrs.append(("x-nv-video[0].timeoutLengthMs", "7000"))
         // framesWithInvalidRefThreshold "0" is the moonlight-common-c default,

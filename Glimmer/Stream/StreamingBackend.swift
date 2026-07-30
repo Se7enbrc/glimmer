@@ -97,12 +97,6 @@ public struct BackendStreamConfig: Sendable {
     public var colorSpace: Int32
     public var colorRange: Int32
     public var encryptionFlags: Int32
-    /// MTU of the interface the stream will egress on, from the connect-time
-    /// `StreamPathMTU.probe`; 0 when the probe could not answer. Used ONLY to
-    /// size the packet size we ADVERTISE in the SDP - `packetSize` above stays
-    /// the configured value because it also sizes the receive buffer, which
-    /// must keep headroom for a host that ignores our request.
-    public var pathMTU: Int32 = 0
     /// Exactly 16 bytes.
     public var remoteInputAesKey: [UInt8]
     /// Exactly 16 bytes.
@@ -113,10 +107,8 @@ public struct BackendStreamConfig: Sendable {
         packetSize: Int32, streamingRemotely: Int32, audioConfiguration: Int32,
         supportedVideoFormats: Int32, clientRefreshRateX100: Int32,
         colorSpace: Int32, colorRange: Int32, encryptionFlags: Int32,
-        remoteInputAesKey: [UInt8], remoteInputAesIv: [UInt8],
-        pathMTU: Int32 = 0
+        remoteInputAesKey: [UInt8], remoteInputAesIv: [UInt8]
     ) {
-        self.pathMTU = pathMTU
         self.width = width
         self.height = height
         self.fps = fps
@@ -152,15 +144,6 @@ public struct BackendStreamConfig: Sendable {
             ? StreamPathMTU.remoteMinimumBitrateKbps
             : max(10_000, peakKbps / 2)
         return min(floor, peakKbps)
-    }
-
-    /// The video packet size to ADVERTISE in the SDP: the configured size on a
-    /// LAN, clamped to what the probed path can carry unfragmented on a remote
-    /// one. See StreamPathMTU.swift for why this clamp used to be dead code.
-    public var advertisedVideoPacketSize: Int {
-        StreamPathMTU.advertisedPacketSize(
-            configured: Int(packetSize), isRemote: isRemoteSession,
-            mtu: pathMTU > 0 ? Int(pathMTU) : nil)
     }
 }
 

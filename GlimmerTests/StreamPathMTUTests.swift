@@ -98,8 +98,8 @@ struct StreamPathMTUTests {
 
     // MARK: - SdpBuilder integration (the attribute actually put on the wire)
 
-    private func sdp(remote: Int32, pathMTU: Int32, packetSize: Int32 = 1392) -> String {
-        var config = BackendStreamConfig(
+    private func sdp(remote: Int32, packetSize: Int32) -> String {
+        let config = BackendStreamConfig(
             width: 1920, height: 1080, fps: 60, bitrate: 20000,
             packetSize: packetSize, streamingRemotely: remote,
             audioConfiguration: 0x00010002,
@@ -107,7 +107,6 @@ struct StreamPathMTUTests {
             colorSpace: 1, colorRange: 0, encryptionFlags: 0,
             remoteInputAesKey: [UInt8](repeating: 0, count: 16),
             remoteInputAesIv: [UInt8](repeating: 0, count: 16))
-        config.pathMTU = pathMTU
         let builder = SdpBuilder(
             config: config, videoPort: 47998, urlSafeAddr: "10.0.0.5",
             addrFamilyToken: "IPv4", rtspClientVersion: 14,
@@ -117,34 +116,57 @@ struct StreamPathMTUTests {
     }
 
     @Test func lanSessionAdvertises1392() {
-        let text = sdp(remote: StreamProtocol.STREAM_CFG_LOCAL, pathMTU: 1500)
+        let text = sdp(remote: StreamProtocol.STREAM_CFG_LOCAL, packetSize: 1392)
         #expect(text.contains("x-nv-video[0].packetSize:1392"))
     }
 
     /// The bug this whole change exists for: a resolved-remote tunnel session
     /// must advertise 1024, not the LAN 1392.
     @Test func remoteTunnelSessionAdvertises1024() {
-        let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, pathMTU: 1280)
+        let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, packetSize: 1024)
         #expect(text.contains("x-nv-video[0].packetSize:1024"))
         #expect(!text.contains("x-nv-video[0].packetSize:1392"))
     }
 
     @Test func remoteNarrowTunnelAdvertisesMTUDerivedSize() {
-        let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, pathMTU: 1000)
+        let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, packetSize: 872)
         #expect(text.contains("x-nv-video[0].packetSize:872"))
     }
 
-    /// pathMTU == 0 means the probe could not read an MTU; the flat remote size
-    /// still applies.
+    /// An unreadable MTU falls back to the flat remote size, which is what
+    /// makeBackendConfig then stores.
     @Test func remoteWithoutMTUReadingStillClamps() {
-        let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, pathMTU: 0)
+        let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, packetSize: 1024)
         #expect(text.contains("x-nv-video[0].packetSize:1024"))
+    }
+
+    /// REGRESSION (shipped in 2026.7.8-rc1, purple/white HDR corruption).
+    ///
+    /// `packetSize` is not merely a buffer bound - it is the Reed-Solomon SHARD
+    /// LENGTH the FEC reconstructor rebuilds recovered packets at
+    /// (`RtpVideoQueue+Reconstruct`: `receiveSize = packetSize + MAX_RTP_HEADER_SIZE`
+    /// and `length: packetSize + dataOffset`). rc1 advertised a clamped 1024 to
+    /// the host while leaving the client reconstructing at 1392, so every
+    /// FEC-recovered packet was rebuilt at the wrong length and fed garbage to
+    /// VideoToolbox - 883 corruption events in 196s on a lossy tunnel, and zero
+    /// on the previous build. A clean link never shows it, because it never
+    /// exercises FEC recovery.
+    ///
+    /// The invariant: ONE resolved size reaches the SDP, the receive buffer, and
+    /// the FEC math. `BackendStreamConfig.packetSize` IS that value, and the SDP
+    /// echoes it rather than re-deriving its own.
+    @Test func advertisedSizeIsExactlyTheStoredSizeUsedForFecReconstruction() {
+        for size: Int32 in [512, 872, 1024, 1392] {
+            let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, packetSize: size)
+            #expect(text.contains("x-nv-video[0].packetSize:\(size)"),
+                    "SDP must advertise exactly the stored packetSize \(size); any divergence corrupts every FEC-recovered frame")
+        }
     }
 
     // MARK: - VQOS adaptation window
 
     private func vqosRange(remote: Int32, bitrateKbps: Int32) -> (min: Int, max: Int) {
-        var config = BackendStreamConfig(
+        let config = BackendStreamConfig(
             width: 1920, height: 1080, fps: 60, bitrate: bitrateKbps,
             packetSize: 1392, streamingRemotely: remote,
             audioConfiguration: 0x00010002,
@@ -152,7 +174,6 @@ struct StreamPathMTUTests {
             colorSpace: 1, colorRange: 0, encryptionFlags: 0,
             remoteInputAesKey: [UInt8](repeating: 0, count: 16),
             remoteInputAesIv: [UInt8](repeating: 0, count: 16))
-        config.pathMTU = 1280
         let builder = SdpBuilder(
             config: config, videoPort: 47998, urlSafeAddr: "10.0.0.5",
             addrFamilyToken: "IPv4", rtspClientVersion: 14,
@@ -208,7 +229,7 @@ struct StreamPathMTUTests {
     /// it is treated as local (the pre-existing behaviour), so this pins that
     /// the builder tests the REMOTE constant specifically and not `!= LOCAL`.
     @Test func unresolvedAutoIsTreatedAsLocalByTheBuilder() {
-        let text = sdp(remote: StreamProtocol.STREAM_CFG_AUTO, pathMTU: 1280)
+        let text = sdp(remote: StreamProtocol.STREAM_CFG_AUTO, packetSize: 1392)
         #expect(text.contains("x-nv-video[0].packetSize:1392"))
     }
 }
