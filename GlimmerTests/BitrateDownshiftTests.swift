@@ -154,16 +154,16 @@ struct BitrateDownshiftTests {
         }
     }
 
-    /// A fresh stream starts with a full budget - the state is per-session.
-    @Test func resetRestoresTheBudget() {
-        var controller = BitrateDownshiftController()
-        controller.recordDownshift(atUptime: 100)
-        controller.recordDownshift(atUptime: 300)
-        #expect(controller.downshiftCount == 2)
-        controller.resetForNewSession()
+    /// A fresh stream starts with a full budget - the state is per-session by
+    /// construction (StreamSession is built per launch and owns this), so a new
+    /// controller must begin unspent. The budget deliberately SURVIVES a
+    /// reconnect, including a downshift's own; otherwise a link that kept
+    /// failing would downshift forever.
+    @Test func freshControllerStartsWithAFullBudget() {
+        let controller = BitrateDownshiftController()
         #expect(controller.downshiftCount == 0)
         let d = controller.evaluate(isRemote: true, decodeIdle: stalled, receiveIdle: receiving,
-                           currentKbps: configuredKbps, nowUptime: 400)
+                                    currentKbps: configuredKbps, nowUptime: 400)
         #expect(d == .downshift(toKbps: 50_400))
     }
 
