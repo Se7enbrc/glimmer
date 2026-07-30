@@ -293,34 +293,33 @@ struct SdpBuilder {
         if adjustedBitrate > 200_000 { adjustedBitrate = 200_000 }
         attrs.append(("x-nv-video[0].initialBitrateKbps", "\(adjustedBitrate)"))
         attrs.append(("x-nv-video[0].initialPeakBitrateKbps", "\(adjustedBitrate)"))
-        // Give Sunshine's host-side VQOS a RANGE to adapt within instead of
-        // pinning min==max (which left it no room to drop bitrate when it
-        // detects loss - the bandwidth estimator could only hold or stall). The
-        // floor is half the peak, never below 10 Mbps, so the host can step the
-        // encoder down under sustained loss and recover frame delivery rather
-        // than shipping a fixed rate into a degraded path. This is host-driven
-        // ABR only - there is no client→host bitrate message in this profile, so
-        // the client never drives the rate; we just widen the advertised window.
-        // min(..., adjustedBitrate) keeps the floor at/below the peak even for a
-        // very low configured bitrate (where 10 Mbps could otherwise exceed it
-        // and invert the range).
+        // THERE IS NO HOST-SIDE ABR. This range was previously described here as
+        // giving "Sunshine's host-side VQOS a RANGE to adapt within" so it could
+        // "step the encoder down under sustained loss". That is not true, and it
+        // was checked against Sunshine's source rather than inferred:
         //
-        // REMOTE FLOOR: half-peak is a sane LAN floor - the link can carry the
-        // peak, so VQOS only needs trim room. On a REMOTE path that same floor
-        // can EXCEED what the path delivers, which leaves the host no legal rate
-        // that fits: an 84 Mbps ask yields a 33.6 Mbps floor, and a captured
-        // tunnel session sustained 6-14 Mbps of goodput against it - so every
-        // rate VQOS was permitted to choose overran the link and the encoder had
-        // no way down. On remote, drop the floor to a genuinely deliverable rate
-        // instead of anchoring it to the (unreachable) peak.
+        //   * `minimumBitrateKbps` appears ZERO times in the whole Sunshine tree
+        //     - it is never parsed, so the floor we send here is inert.
+        //   * `cmd_announce` (src/rtsp.cpp) reads
+        //     `x-nv-vqos[0].bw.maximumBitrateKbps` into `config.monitor.bitrate`
+        //     and then OVERWRITES it with `x-ml-video.configuredBitrateKbps`
+        //     when that is non-zero - which we always send. So the number the
+        //     host actually encodes at is the raw configured bitrate below, not
+        //     the 0.80-adjusted peak (this matches moonlight, which sends the
+        //     same pair).
+        //   * Nothing in Sunshine mutates the bitrate after ANNOUNCE.
         //
-        // The CEILING is untouched, so an abundant remote link (fast fibre + a
-        // VPN) still climbs exactly as high as it did before. This only ever
-        // widens the range DOWNWARD - it never forces a lower rate, it just
-        // stops forbidding one.
-        let minBitrate = config.vqosFloorKbps(peakKbps: adjustedBitrate)
+        // So the encoder rate is FIXED for the session, and the only lever that
+        // changes it is a new SDP - i.e. a reconnect (BitrateDownshiftController).
+        // The attributes stay because they are part of the wire format moonlight
+        // sends and the host parses one of them; they are not a control channel.
+        // The floor keeps its original shape - half the peak, never below 10
+        // Mbps, never above the peak so the range can't invert on a very low
+        // configured bitrate - purely so the SDP stays well-formed.
+        let minBitrate = min(max(10_000, adjustedBitrate / 2), adjustedBitrate)
         attrs.append(("x-nv-vqos[0].bw.minimumBitrateKbps", "\(minBitrate)"))
         attrs.append(("x-nv-vqos[0].bw.maximumBitrateKbps", "\(adjustedBitrate)"))
+        // THE number Sunshine actually encodes at (it overwrites the max above).
         attrs.append(("x-ml-video.configuredBitrateKbps", "\(config.bitrate)"))
 
         attrs.append(("x-nv-vqos[0].fec.enable", "1"))
