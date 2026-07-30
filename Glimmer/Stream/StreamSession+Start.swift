@@ -108,6 +108,14 @@ extension StreamSession {
             throw StreamError.pairingFailed("Host is not paired. Use the pair sheet first.")
         }
 
+        // Start sampling latency NOW, so the distribution accumulates across the
+        // /launch + RTSP wall-clock we are about to spend anyway (measured: 1383
+        // ms and ~960 ms respectively). Harvested in makeBackendConfig just
+        // before the SDP is built, which is the last moment the bitrate can be
+        // chosen - after ANNOUNCE it is fixed for the session. Costs no added
+        // connect latency; a LAN's samples simply never trip the gate.
+        let rttSampler = RttSampler(host: serverInfo.address, port: UInt16(serverInfo.httpsPort))
+
         // --- 2) Decide launch vs. resume vs. quit-then-launch -----------
         // GameStream hosts only run one session at a time. If a previous
         // attempt left the host busy (orphan session) or someone else is
@@ -129,7 +137,8 @@ extension StreamSession {
         )
 
         // --- 3) Build the backend stream config -------------------------
-        let backendConfig = makeBackendConfig(config: config, launch: launch, hostAddress: serverInfo.address)
+        let backendConfig = makeBackendConfig(
+            config: config, launch: launch, server: serverInfo, rtt: rttSampler.harvest())
 
         // Diagnostic so "are we actually streaming at the right refresh rate"
         // is a one-line question. requestedFps is what we tell Sunshine;
@@ -309,7 +318,8 @@ extension StreamSession {
     /// gcmKey/gcmKeyId are the 16-byte per-session AES key + IV-id from the
     /// launch handshake.
     func makeBackendConfig(
-        config: StreamConfig, launch: LaunchResponse, hostAddress: String
+        config: StreamConfig, launch: LaunchResponse, server: ServerInfo,
+        rtt: RttStats? = nil
     ) -> BackendStreamConfig {
         // Resolve `.auto` from the route we will actually egress on. Without
         // this, `.auto` (STREAM_CFG_AUTO = 2) never equals STREAM_CFG_REMOTE and
@@ -319,7 +329,8 @@ extension StreamSession {
         // video packet fragments. An explicit .local/.remote from the caller is
         // honoured as-is; only `.auto` consults the probe.
         let path = config.remoteness == .auto
-            ? StreamPathMTU.probe(host: hostAddress) : StreamPathProbe()
+            ? StreamPathMTU.probe(host: server.address,
+                                  rttPort: UInt16(server.httpsPort), rtt: rtt) : StreamPathProbe()
         let resolvedRemoteness: Remoteness
         switch config.remoteness {
         case .local, .remote:
@@ -327,13 +338,36 @@ extension StreamSession {
         case .auto:
             resolvedRemoteness = path.isRemotePath ? .remote : .local
         }
+        // CONNECT-TIME QUALITY GATE. The demand-based bitrate from
+        // QualityCalculator answers "what does this resolution need?" - it was
+        // measured on a LAN harness and never asks what the PATH will deliver.
+        // Asking for a LAN-measured 84 Mbps over a 50 ms tunnel is not a
+        // considered choice, it is the absence of one. Since bitrate is fixed at
+        // ANNOUNCE (no client→host rate message exists, and the host never
+        // changes it after), choosing well HERE is the only cheap lever there is.
+        let cappedBitrateKbps = StreamPathMTU.cappedBitrateKbps(
+            configured: config.bitrateKbps, path: path)
         if config.remoteness == .auto {
             log.info("""
                 Path probe: if=\(path.interfaceName ?? "?", privacy: .public) \
                 mtu=\(path.mtu ?? -1, privacy: .public) \
                 tunnel=\(path.isTunnel, privacy: .public) \
-                → remoteness=\(resolvedRemoteness == .remote ? "remote" : "local", privacy: .public)
+                rtt=p95 \(path.rtt.map { String(format: "%.0f", $0.p95Ms) } ?? "?", privacy: .public)ms \
+                (min \(path.rtt.map { String(format: "%.0f", $0.minMs) } ?? "?", privacy: .public) \
+                p50 \(path.rtt.map { String(format: "%.0f", $0.p50Ms) } ?? "?", privacy: .public) \
+                n=\(path.rtt?.count ?? 0, privacy: .public)) \
+                → remoteness=\(resolvedRemoteness == .remote ? "remote" : "local", privacy: .public) \
+                bitrate=\(config.bitrateKbps, privacy: .public)→\(cappedBitrateKbps, privacy: .public)kbps
                 """)
+        }
+        if cappedBitrateKbps < config.bitrateKbps {
+            Diag.notice(
+                "Link quality gate: p95 \(path.rttMs.map { String(format: "%.0f", $0) } ?? "?")ms RTT "
+                + "(min \(path.rtt.map { String(format: "%.0f", $0.minMs) } ?? "?")ms, "
+                + "\(path.rtt?.count ?? 0) samples) over "
+                + "\(path.isTunnel ? "a tunnel" : "this path") - asking for "
+                + "\(cappedBitrateKbps / 1000) Mbps instead of \(config.bitrateKbps / 1000) "
+                + "(a LAN-measured rate isn't a defensible ask at this distance).", "Stream")
         }
         // Latch for the downshift tier. Set on EVERY build - including each
         // reconnect - so a route that moved mid-session is re-judged, never
@@ -357,7 +391,7 @@ extension StreamSession {
             width: Int32(config.width),
             height: Int32(config.height),
             fps: Int32(config.fps),
-            bitrate: Int32(config.bitrateKbps),
+            bitrate: Int32(cappedBitrateKbps),
             packetSize: Int32(resolvedPacketSize),
             streamingRemotely: resolvedRemoteness.cValue,
             audioConfiguration: config.audio.cValue,
