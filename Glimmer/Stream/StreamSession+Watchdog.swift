@@ -274,6 +274,14 @@ extension StreamSession {
                     Task { [weak self] in await self?.attemptDecodeStallRecovery(decodeIdle: decodeIdle) }
                 }
 
+                // Past the IDR nudge: bits arriving, none decoding, long enough
+                // that keyframes have plainly failed - on a remote path the rate
+                // is the only thing left to change (see +Downshift).
+                if decodeIdle >= BitrateDownshiftController.stallSecondsBeforeDownshift {
+                    Task { [weak self] in await self?.considerBitrateDownshift(
+                        decodeIdle: decodeIdle, receiveIdle: receiveIdle) }
+                }
+
                 // Hard trip: decode silent past the teardown threshold.
                 // Regardless of reception state - bytes-only-no-decode for
                 // 10s is just as broken as silent-everything from the
@@ -559,6 +567,7 @@ extension StreamSession {
         didLogDecodeOnlyStall = false
         didAttemptStallRecovery = false
         didLogWatchdogHold = false
+        didLogDownshiftDecision = false
         // Video resumed - drop the hold banner (no-op if it was never shown).
         let winForHide = window
         await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }

@@ -257,6 +257,20 @@ public actor StreamSession {
     var reconnectConfig: StreamConfig?
     var reconnectAppID: Int?
 
+    // MARK: - Mid-session bitrate downshift (see BitrateDownshiftController)
+
+    /// Whether the connect-time path probe resolved this session to remote.
+    /// Latched in `makeBackendConfig` and re-latched on every reconnect, so a
+    /// route that moves mid-session (the tunnel-flap case) is re-judged rather
+    /// than inherited. Gates the downshift tier - a LAN that can't carry its own
+    /// rate is a different fault.
+    var isRemotePathSession = false
+    /// Per-session downshift budget + cooldown.
+    var downshift = BitrateDownshiftController()
+    /// Latched so the "why we did NOT downshift" reason logs once per stall
+    /// episode rather than once a second. Cleared by `clearDecodeOnlyStallLatch`.
+    var didLogDownshiftDecision = false
+
     // MARK: - Wake resilience (sleep/wake fast-reconnect - see +Wake)
 
     /// NSWorkspace sleep/wake observer tokens, armed when a stream goes live and

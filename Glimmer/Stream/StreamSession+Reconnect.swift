@@ -66,11 +66,35 @@ extension StreamSession {
         await runReconnectEpisode(code: code)
     }
 
+    /// SELF-INITIATED reconnect to apply a lowered bitrate (see
+    /// BitrateDownshiftController). Unlike `handleHostTerminate`, the host has
+    /// NOT closed anything - the connection is live but useless, carrying video
+    /// we cannot decode. We tear it down ourselves and rebuild from the config
+    /// the caller just rewrote.
+    ///
+    /// Reuses the same episode machinery, so the user experience is the existing
+    /// one: the frozen last frame is held under a banner while the rebuild runs,
+    /// and video resumes in place. The banner text is the one difference - this
+    /// is a deliberate quality change, not a fault, and saying so is the honest
+    /// thing to put on screen.
+    func runDownshiftReconnect(toKbps: Int) async {
+        guard isStreaming, !stopInProgress, !isReconnecting else { return }
+        // The live-but-useless connection must come down before the rebuild; the
+        // episode's first `reconnectInPlace` calls `teardownConnectionForReconnect`
+        // which is idempotent, so we do NOT pre-tear here - we just stop feeding
+        // the dead uplink, exactly as the host-terminate path does.
+        let inp = input
+        DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
+        await runReconnectEpisode(
+            code: Self.deadPeerTerminationCode,
+            bannerText: "Connection is weak - lowering quality to \(toKbps / 1000) Mbps...")
+    }
+
     /// Drive a bounded reconnect episode: hold the frozen frame, retry the
     /// in-place rebuild with a short backoff until it succeeds or we exhaust the
     /// attempt/time budget, then resume (`.reconnected`) or give up (real
     /// teardown). MainActor work happens inside `reconnectInPlace`.
-    private func runReconnectEpisode(code: Int32) async {
+    private func runReconnectEpisode(code: Int32, bannerText: String = "Reconnecting...") async {
         isReconnecting = true
         reconnectAttempts = 0
         let deadline = Date().addingTimeInterval(Self.reconnectWindowSeconds)
@@ -80,11 +104,11 @@ extension StreamSession {
         // signal that we're holding rather than dead.
         let winForBanner = window
         await MainActor.run {
-            winForBanner?.reconnectBanner.setText("Reconnecting...")
+            winForBanner?.reconnectBanner.setText(bannerText)
             winForBanner?.reconnectBanner.setVisible(true)
             // VoiceOver can't reach a CALayer banner by focus - announce the
             // reconnect explicitly (the most safety-critical in-stream state).
-            AccessibilityNotification.Announcement("Reconnecting").post()
+            AccessibilityNotification.Announcement(bannerText).post()
         }
         Diag.notice(
             "Host closed the live stream (code 0x\(String(UInt32(bitPattern: code), radix: 16))) "

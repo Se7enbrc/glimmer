@@ -335,6 +335,10 @@ extension StreamSession {
                 → remoteness=\(resolvedRemoteness == .remote ? "remote" : "local", privacy: .public)
                 """)
         }
+        // Latch for the downshift tier. Set on EVERY build - including each
+        // reconnect - so a route that moved mid-session is re-judged, never
+        // inherited from the original connect.
+        isRemotePathSession = resolvedRemoteness == .remote
         return BackendStreamConfig(
             width: Int32(config.width),
             height: Int32(config.height),
