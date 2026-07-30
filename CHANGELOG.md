@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026.7.8 - 2026-07-30
+
+Streaming over a VPN is far more reliable, and a weak link no longer freezes the
+picture indefinitely.
+
+If you stream to your PC over a tunnel - Tailscale, WireGuard, or similar -
+Glimmer was sizing every video packet for a local network. Those packets are too
+big for a tunnel, so each one had to be split in two on the way to you, and
+losing either half lost the whole packet. On an already-marginal connection that
+multiplied the damage: in one captured session the picture stopped entirely for
+fifteen minutes while video kept arriving, because none of it could be
+reassembled. Glimmer now measures the actual route to your PC when a stream
+starts and sizes packets to fit it. Streaming on a local network is unchanged.
+
+Two related fixes for weak connections. Glimmer was telling your PC it could
+never encode below about half the requested bitrate - which, on a link that
+couldn't carry even that, left your PC no setting that would work. It can now
+drop as low as the connection genuinely needs. And if a remote connection still
+can't carry the stream, Glimmer lowers the quality and reconnects in place
+rather than holding a frozen frame forever: you'll see a brief pause and a note
+that quality is being reduced, then the picture returns. It steps down at most
+twice, never on a local network, and never raises the quality back on its own.
+
 ## 2026.7.7 - 2026-07-22
 
 Wake your PC from the couch - power controls appear when your setup supports
