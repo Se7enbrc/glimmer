@@ -151,15 +151,15 @@ struct BitrateDownshiftController: Sendable {
     /// Book a downshift that actually happened. Only the caller knows whether the
     /// reconnect was really initiated, so the budget is spent here, not in
     /// `evaluate`.
+    ///
+    /// There is deliberately no `reset`: the budget is per-session by
+    /// CONSTRUCTION, because `StreamSession` is built fresh for every stream
+    /// launch (AppModel+Streaming) and this is one of its stored properties. A
+    /// reconnect - including a downshift's own - reuses the same session, which
+    /// is exactly right: the budget must survive it, or a link that keeps
+    /// failing would downshift forever.
     mutating func recordDownshift(atUptime: Double) {
         downshiftCount += 1
         lastDownshiftUptime = atUptime
-    }
-
-    /// Forget the cooldown/budget for a brand-new session. The controller is
-    /// per-session state; a fresh stream starts with a full budget.
-    mutating func resetForNewSession() {
-        downshiftCount = 0
-        lastDownshiftUptime = nil
     }
 }
