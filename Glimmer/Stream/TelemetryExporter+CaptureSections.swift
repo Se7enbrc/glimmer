@@ -170,12 +170,39 @@ extension TelemetryExporter {
     /// cadence lived only in a code comment), the audio cushion targets, and
     /// the input idle-gap. Extend this list whenever a new experiment dial
     /// ships; the cost is one row per session. On `workQueue` (from `start()`).
+    /// The connect-time link gate's decision (StreamPathMTU.latchGateDecision).
+    /// Empty when no connect has happened this process run. These belong in the
+    /// NDJSON specifically because the session `.log` does not start capturing
+    /// until the backend connects, so the gate's own Diag line is never written
+    /// there - and the gate silently changes picture quality, which makes
+    /// "what did it decide, and why" a question the durable artifact has to be
+    /// able to answer on its own.
+    private var linkGateFields: [String] {
+        guard let gate = StreamPathMTU.currentGateDecision else { return [] }
+        var fields: [String] = [
+            "\"gate_stream_if\":\"\(TelemetryRenderer.jsonStringEscape(gate.interfaceName ?? "?"))\"",
+            "\"gate_tunnel\":\(gate.isTunnel)",
+            "\"gate_packet_size\":\(gate.packetSize)",
+            "\"gate_bitrate_configured_kbps\":\(gate.configuredBitrateKbps)",
+            "\"gate_bitrate_asked_kbps\":\(gate.askedBitrateKbps)"
+        ]
+        if let mtu = gate.mtu { fields.append("\"gate_path_mtu\":\(mtu)") }
+        if let rtt = gate.rtt {
+            fields.append("\"gate_rtt_min_ms\":" + TelemetryRenderer.jsonNumber(rtt.minMs))
+            fields.append("\"gate_rtt_p50_ms\":" + TelemetryRenderer.jsonNumber(rtt.p50Ms))
+            fields.append("\"gate_rtt_p95_ms\":" + TelemetryRenderer.jsonNumber(rtt.p95Ms))
+            fields.append("\"gate_rtt_samples\":\(rtt.count)")
+        }
+        return fields
+    }
+
     func writeConfigEvent() {
         let fields: [String] = [
             "\"ts\":\"\(isoFormatter.string(from: Date()))\"",
             "\"session\":\"\(sessionId)\"",
             "\"event\":\"config\"",
-            "\"build_commit\":\"\(TelemetryRenderer.jsonStringEscape(BuildInfo.commit))\"",
+            "\"build_commit\":\"\(TelemetryRenderer.jsonStringEscape(BuildInfo.commit))\""
+        ] + linkGateFields + [
             // The keepalive is CONDITIONAL (EnvSignalController): both cadence
             // dials + the policy flag, so the session file self-describes the
             // regimes it could run; the live per-row value is

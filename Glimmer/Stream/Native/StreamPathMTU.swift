@@ -162,7 +162,44 @@ final class RttSampler: @unchecked Sendable {
     }
 }
 
+/// What the connect-time gate actually decided, latched for the telemetry
+/// exporter. This exists because the per-session diagnostic log
+/// (`glimmer-<ts>.log`) does not begin capturing until the backend starts
+/// connecting - every `Diag` line emitted while the config is still being built,
+/// including this gate's and the pre-existing "Stream config:" line, lands in a
+/// blind spot. The gate now silently changes picture quality, so leaving its
+/// decision unrecorded in the durable artifact is not acceptable: it cost an
+/// hour of "did it even fire?" the first time.
+struct LinkGateDecision: Sendable {
+    var interfaceName: String?
+    var mtu: Int?
+    var isTunnel: Bool
+    var rtt: RttStats?
+    var configuredBitrateKbps: Int
+    var askedBitrateKbps: Int
+    var packetSize: Int
+}
+
 enum StreamPathMTU {
+
+    // MARK: - Gate decision latch (see LinkGateDecision)
+
+    nonisolated(unsafe) private static var latchedGate: LinkGateDecision?
+    private static let gateLock = NSLock()
+
+    /// Latch the decision at the connect edge, BEFORE the exporter exists.
+    /// One writer, at a rare lifecycle edge - the `StreamRouteProbe.latchHost`
+    /// discipline.
+    static func latchGateDecision(_ decision: LinkGateDecision) {
+        gateLock.lock(); latchedGate = decision; gateLock.unlock()
+    }
+
+    /// The decision for the session being connected, read once by the exporter's
+    /// config-event writer. nil before the first connect this process run.
+    static var currentGateDecision: LinkGateDecision? {
+        gateLock.lock(); defer { gateLock.unlock() }
+        return latchedGate
+    }
 
     /// Standard Ethernet MTU. At or above this on a non-tunnel interface we are
     /// on a LAN and the configured (1392) packet size stands.

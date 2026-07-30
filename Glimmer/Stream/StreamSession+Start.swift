@@ -160,6 +160,7 @@ extension StreamSession {
         let setup: (StreamWindow, InputForwarder, VideoDecoder) =
             await buildStreamSubsystems(StreamSetupOptions(
                 config: config,
+                negotiatedBitrateKbps: Int(backendConfig.bitrate),
                 initialStatsOverlay: initialStatsOverlay,
                 initialStatsCorner: initialStatsCorner,
                 quitHotkeyProvider: quitHotkeyProvider,
@@ -387,6 +388,12 @@ extension StreamSession {
             configured: config.packetSize,
             isRemote: resolvedRemoteness == .remote,
             mtu: path.mtu)
+        // Latch the whole decision for the telemetry config event - the session
+        // log doesn't capture anything emitted this early (see LinkGateDecision).
+        StreamPathMTU.latchGateDecision(LinkGateDecision(
+            interfaceName: path.interfaceName, mtu: path.mtu, isTunnel: path.isTunnel,
+            rtt: path.rtt, configuredBitrateKbps: config.bitrateKbps,
+            askedBitrateKbps: cappedBitrateKbps, packetSize: resolvedPacketSize))
         return BackendStreamConfig(
             width: Int32(config.width),
             height: Int32(config.height),
