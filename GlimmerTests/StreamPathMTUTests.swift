@@ -163,7 +163,7 @@ struct StreamPathMTUTests {
         }
     }
 
-    // MARK: - VQOS adaptation window
+    // MARK: - VQOS bitrate range
 
     private func vqosRange(remote: Int32, bitrateKbps: Int32) -> (min: Int, max: Int) {
         let config = BackendStreamConfig(
@@ -189,37 +189,38 @@ struct StreamPathMTUTests {
                 value("x-nv-vqos[0].bw.maximumBitrateKbps"))
     }
 
-    /// LAN keeps the half-peak floor - unchanged behaviour.
-    @Test func lanVqosFloorIsHalfPeak() {
-        let range = vqosRange(remote: StreamProtocol.STREAM_CFG_LOCAL, bitrateKbps: 84_000)
-        #expect(range.max == 67_200)          // 84000 * 0.80
-        #expect(range.min == 33_600)          // half the peak
-    }
-
-    /// The bug: on a remote path the half-peak floor (33.6 Mbps) sat ABOVE the
-    /// 6-14 Mbps the captured tunnel actually delivered, so no rate VQOS was
-    /// allowed to pick could fit the link. The remote floor must be genuinely
-    /// reachable.
-    @Test func remoteVqosFloorDropsToADeliverableRate() {
-        let range = vqosRange(remote: StreamProtocol.STREAM_CFG_REMOTE, bitrateKbps: 84_000)
-        #expect(range.min == StreamPathMTU.remoteMinimumBitrateKbps)
-        #expect(range.min == 5_000)
-        #expect(range.min < 14_000)           // below the measured tunnel goodput
-    }
-
-    /// Do no harm: the remote CEILING is untouched, so an abundant remote link
-    /// still climbs as high as it did before. Only the floor moves.
-    @Test func remoteCeilingIsUnchangedByTheWiderFloor() {
+    /// The advertised VQOS range is IDENTICAL for local and remote, and the
+    /// floor keeps its original half-peak shape.
+    ///
+    /// An earlier revision of this branch lowered the remote floor to 5 Mbps on
+    /// the theory that it gave "Sunshine's host-side VQOS room to step down".
+    /// That theory is false, and was checked against Sunshine's source rather
+    /// than inferred: `minimumBitrateKbps` appears ZERO times in the whole
+    /// Sunshine tree, so the floor is never parsed; `cmd_announce` reads
+    /// `maximumBitrateKbps` and then overwrites it with
+    /// `x-ml-video.configuredBitrateKbps`; and nothing mutates the bitrate after
+    /// ANNOUNCE. The encoder rate is FIXED for the session. Changing the floor
+    /// was a no-op, and the field data agreed - the encoder never went near it.
+    ///
+    /// This test exists to stop the idea being re-introduced: if the range ever
+    /// diverges by remoteness again, it is dead code dressed as a feature.
+    @Test func vqosFloorRuleDoesNotVaryByRemoteness() {
         let lan = vqosRange(remote: StreamProtocol.STREAM_CFG_LOCAL, bitrateKbps: 84_000)
         let remote = vqosRange(remote: StreamProtocol.STREAM_CFG_REMOTE, bitrateKbps: 84_000)
-        // Remote subtracts moonlight's 500 kbps headroom from the peak; that is
-        // the ONLY ceiling difference, and it predates this change.
-        #expect(remote.max == lan.max - 500)
-        #expect(remote.min < lan.min)
+        #expect(lan.max == 67_200)               // 84000 * 0.80
+        #expect(remote.max == lan.max - 500)     // moonlight's remote headroom
+        // The floor is half the peak in BOTH cases - the same rule. The two
+        // numbers differ only because the remote PEAK is 500 lower, not because
+        // the floor is computed differently. That is the property to protect: a
+        // remoteness-dependent floor would be dead code (Sunshine never reads it).
+        #expect(lan.min == lan.max / 2)
+        #expect(remote.min == remote.max / 2)
+        #expect(lan.min == 33_600)
+        #expect(remote.min == 33_350)
     }
 
-    /// A configured bitrate below the remote floor must not invert the range.
-    @Test func remoteFloorNeverExceedsThePeak() {
+    /// The floor must never exceed the peak, or the advertised range inverts.
+    @Test func vqosFloorNeverExceedsThePeak() {
         let range = vqosRange(remote: StreamProtocol.STREAM_CFG_REMOTE, bitrateKbps: 4_000)
         #expect(range.min <= range.max)
     }

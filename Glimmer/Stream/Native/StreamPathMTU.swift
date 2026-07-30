@@ -81,15 +81,6 @@ enum StreamPathMTU {
     /// already documented as the remote clamp. Proven on real WAN paths.
     static let remotePacketSize = 1024
 
-    /// The VQOS bitrate FLOOR advertised on a remote session (kbps). Not a cap
-    /// and not a target - it is the lowest rate the host is PERMITTED to fall
-    /// back to. The LAN floor is anchored to half the peak, which on a remote
-    /// path can sit above what the path actually delivers and leave the encoder
-    /// no legal way down (see SdpBuilder). 5 Mbps carries 720p60 comfortably, so
-    /// it is a real fallback rather than a token one, and the host only ever
-    /// descends this far if its own estimator says the link needs it.
-    static let remoteMinimumBitrateKbps = 5_000
-
     /// Never advertise a payload smaller than this, however small the probed
     /// MTU: below it the per-packet header overhead dominates and the host's
     /// FEC blocks get pathological. A path this narrow cannot carry a stream
