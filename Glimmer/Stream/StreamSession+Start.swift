@@ -339,12 +339,26 @@ extension StreamSession {
         // reconnect - so a route that moved mid-session is re-judged, never
         // inherited from the original connect.
         isRemotePathSession = resolvedRemoteness == .remote
+        // ONE packet size, resolved here and used EVERYWHERE - the SDP we
+        // advertise, the receive buffer, and (load-bearing) the Reed-Solomon
+        // shard length the FEC reconstructor rebuilds recovered packets at
+        // (RtpVideoQueue+Reconstruct). Advertising one size while reconstructing
+        // at another rebuilds every FEC-recovered packet at the wrong length and
+        // feeds garbage to the decoder - visible as the purple/white HDR
+        // corruption, and ONLY on a lossy link, because a clean one never
+        // exercises FEC recovery. The receive buffer adds its own headroom on
+        // top (packetSize + 64, + MAX_RTP_HEADER_SIZE), so a smaller value is
+        // safe there; there is no case for keeping the two apart.
+        let resolvedPacketSize = StreamPathMTU.advertisedPacketSize(
+            configured: config.packetSize,
+            isRemote: resolvedRemoteness == .remote,
+            mtu: path.mtu)
         return BackendStreamConfig(
             width: Int32(config.width),
             height: Int32(config.height),
             fps: Int32(config.fps),
             bitrate: Int32(config.bitrateKbps),
-            packetSize: Int32(config.packetSize),
+            packetSize: Int32(resolvedPacketSize),
             streamingRemotely: resolvedRemoteness.cValue,
             audioConfiguration: config.audio.cValue,
             supportedVideoFormats: config.videoFormats.rawValue,
@@ -353,8 +367,7 @@ extension StreamSession {
             colorRange: config.colorRange.cValue,
             encryptionFlags: config.encryption.encryptionFlags,
             remoteInputAesKey: [UInt8](launch.gcmKey),
-            remoteInputAesIv: [UInt8](launch.gcmKeyId),
-            pathMTU: Int32(path.mtu ?? 0))
+            remoteInputAesIv: [UInt8](launch.gcmKeyId))
     }
 
     /// Emit the one-line stream-config diagnostic on the main actor (it reads
