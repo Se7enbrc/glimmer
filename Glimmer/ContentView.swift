@@ -210,7 +210,18 @@ private struct ConnectSurface: View {
         // down into was the empty area under the footer. The window now sizes to
         // this column (see .windowResizability in GlimmerApp), so there is no
         // leftover height to absorb and nothing to pin against.
-        .padding(.horizontal, 32)
+        // 80pt sides -> a 680pt window around the 520pt card. Bisected between
+        // two values checked on screen: 32 (584 window) read as cramped, the
+        // card nearly touching the frame; 130 (780, matching 7.7's default
+        // width) read as too big. The VERTICAL padding stays tight - the space
+        // under the footer was the part that read as waste, and 7.7's own top
+        // margin was 20.
+        //
+        // This is THE margin dial. It must stay in step with GlimmerApp's
+        // window minWidth (520 + 2x this): a floor below the real content width
+        // leaves the window a range to be dragged through, which is how the
+        // margins got squeezed flat once already.
+        .padding(.horizontal, 80)
         .padding(.vertical, 20)
         // TAKE THE IDEAL HEIGHT, NOT THE OFFERED ONE. Removing the Spacer was
         // not enough on its own: StreamButton's label carries

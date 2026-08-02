@@ -312,43 +312,40 @@ struct AppIconsRow: View {
     let host: Host
     @Environment(AppModel.self) private var model
 
+    /// Most tiles the row will ever show inline. Five 70pt tiles span
+    /// 5x70 + 4x10 = 390 inside the hero's 472pt content box, so the row stays
+    /// one comfortable line at the card's FIXED width.
+    private static let maxInlineTiles = 5
+
+    /// Apps shown as tiles. At or under the inline cap every app gets one; past
+    /// it the last slot is spent on the overflow menu instead of a tile, so the
+    /// row is never wider than `maxInlineTiles`.
+    private var inlineApps: [LibraryApp] {
+        apps.count <= Self.maxInlineTiles
+            ? apps
+            : Array(apps.prefix(Self.maxInlineTiles - 1))
+    }
+
+    private var overflowApps: [LibraryApp] {
+        apps.count <= Self.maxInlineTiles
+            ? []
+            : Array(apps.dropFirst(Self.maxInlineTiles - 1))
+    }
+
     var body: some View {
         // One glass composite for the row - see ReadinessChip's container note.
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
-                ForEach(apps.prefix(4)) { app in
-                    Button {
-                        model.requestStream(app: app, on: host)
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: app.systemImage)
-                                .font(.system(size: 18, weight: .medium))
-                                .symbolRenderingMode(.hierarchical)
-                                .frame(width: 44, height: 44)
-                                .glassEffect(
-                                    .regular.interactive(),
-                                    in: .rect(cornerRadius: 10)
-                                )
-                                .overlay {
-                                    // Accent ring for the hero target (resume
-                                    // app, else default) so the ring always
-                                    // agrees with the hero button's verb.
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(
-                                            app.name == model.heroTargetAppName ? Color.accentColor : Color.clear,
-                                            lineWidth: 2
-                                        )
-                                }
-                            Text(app.name)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        .frame(width: 70)
-                    }
-                    .buttonStyle(.plain)
-                    .help(model.isStreaming
-                        ? "Finish the current stream first" : "Stream \(app.name)")
+                ForEach(inlineApps) { app in
+                    appTile(app)
+                }
+                // Overflow goes in a MENU, not an expanding grid. The launcher
+                // window is sized to its content and deliberately not resizable,
+                // so anything that grows the card has to grow the window - which
+                // is what made the expand-in-place grid untenable. A menu opens
+                // OVER the window and costs no layout at all.
+                if !overflowApps.isEmpty {
+                    overflowMenu
                 }
             }
         }
@@ -359,6 +356,79 @@ struct AppIconsRow: View {
         .disabled(model.isStreaming)
         .opacity(model.isStreaming ? 0.45 : 1.0)
         .animation(.snappy(duration: 0.3), value: model.isStreaming)
+    }
+
+    private func appTile(_ app: LibraryApp) -> some View {
+        Button {
+            model.requestStream(app: app, on: host)
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: app.systemImage)
+                    .font(.system(size: 18, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
+                    .overlay {
+                        // Accent ring for the hero target (resume app, else
+                        // default) so the ring always agrees with the hero
+                        // button's verb.
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(
+                                app.name == model.heroTargetAppName ? Color.accentColor : Color.clear,
+                                lineWidth: 2
+                            )
+                    }
+                Text(app.name)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            // A `.plain` Button only hit-tests its LABEL, so without this the
+            // padding around the icon and name was dead space. Fill the declared
+            // 70pt slot inside the label and claim it as the content shape.
+            // (Salvaged from #49, which got this part right.)
+            .frame(width: 70, height: 70)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(model.isStreaming
+            ? "Finish the current stream first" : "Stream \(app.name)")
+    }
+
+    /// The overflow dropdown: every app past the inline cap, in source order.
+    /// Reads as one more tile in the row, but opens a native menu over the
+    /// window instead of resizing anything.
+    private var overflowMenu: some View {
+        Menu {
+            ForEach(overflowApps) { app in
+                Button {
+                    model.requestStream(app: app, on: host)
+                } label: {
+                    Label(app.name, systemImage: app.systemImage)
+                }
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 18, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
+                Text("\(overflowApps.count) more")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(width: 70, height: 70)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 70, height: 70)
+        .help(model.isStreaming
+            ? "Finish the current stream first"
+            : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
+        .accessibilityLabel("\(overflowApps.count) more apps")
     }
 }
 

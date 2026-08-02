@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.8.4 - 2026-08-02
+
+The launcher sits at a comfortable size again, and every app on your PC is
+reachable without it changing shape.
+
+2026.8.3 pinned the window to its content, which left the host card nearly
+touching the frame. There is proper breathing room around it again, and the
+window is still a fixed size - nothing in the launcher grows, so being able to
+drag it larger only ever added empty space.
+
+If your PC has more than five apps, the extra ones now live in a dropdown at the
+end of the row instead of being reachable only through the Stream button's
+context menu. The menu opens over the window, so reaching a sixth app no longer
+resizes anything. App tiles also respond across their whole area now, rather
+than only where the icon sits.
+
 ## 2026.8.3 - 2026-08-02
 
 Streaming over a VPN is far more reliable, a weak link no longer freezes the
