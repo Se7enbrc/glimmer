@@ -212,6 +212,15 @@ private struct ConnectSurface: View {
         // leftover height to absorb and nothing to pin against.
         .padding(.horizontal, 32)
         .padding(.vertical, 20)
+        // TAKE THE IDEAL HEIGHT, NOT THE OFFERED ONE. Removing the Spacer was
+        // not enough on its own: StreamButton's label carries
+        // `.frame(maxWidth: .infinity, minHeight: 46)`, and a minHeight is a
+        // FLOOR - the button will accept any height it is offered, which made
+        // this column vertically flexible and gave the window something to grow
+        // into. That is why 2026.8.2 still resized vertically. `fixedSize`
+        // proposes nil height to the column, so every such floor resolves to its
+        // own ideal instead of springboarding off the window.
+        .fixedSize(horizontal: false, vertical: true)
         // Hand off to the stream window: dim Glimmer's content so the
         // fullscreen surface visibly takes over and reverses on disconnect.
         .opacity(isHandedOff ? 0.4 : 1.0)
