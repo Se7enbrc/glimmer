@@ -653,9 +653,10 @@ struct EmptyPairingState: View {
     @State private var showPair = false
 
     var body: some View {
+        // No leading/trailing Spacers: they centred this state inside a window
+        // taller than itself, and the window now sizes to its content, so there
+        // is no extra height to centre within - only height they would invent.
         VStack(spacing: 26) {
-            Spacer()
-
             ZStack {
                 // Floating glass medallion behind the hero symbol -
                 // accent-tinted so it picks up the system tint.
@@ -704,10 +705,9 @@ struct EmptyPairingState: View {
             }
             .buttonStyle(StreamButtonStyle())
             .controlSize(.large)
-
-            Spacer()
         }
         .padding(40)
+        .fixedSize(horizontal: false, vertical: true)
         .sheet(isPresented: $showPair) {
             PairSheet().environment(model)
         }
