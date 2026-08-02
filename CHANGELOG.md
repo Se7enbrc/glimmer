@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.8.1 - 2026-08-02
+
+Fixes the launcher window, which 2026.8.0 left mostly empty.
+
+The host card was changed to grow when its app list expands, but that also let
+it grow when nothing needed the room - so the window opened with a large blank
+area under the Stream button, and dragging it taller stretched the card into an
+empty slab. The launcher is back to the layout it had in 2026.7.7.
+
+The expandable app grid that came with it is gone for now, so a PC with more
+than four apps reaches the rest through the Stream button's context menu again,
+as before. It will return once the card can grow for the right reason and stop
+growing for the wrong one.
+
 ## 2026.8.0 - 2026-08-02
 
 Streaming over a VPN is far more reliable, a weak link no longer freezes the
