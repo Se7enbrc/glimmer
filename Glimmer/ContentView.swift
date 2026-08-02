@@ -394,6 +394,12 @@ var accentSurfaceGradient: LinearGradient {
 }
 
 private struct HostHero: View {
+    /// Ceiling on the hero's width. Above the window's 860pt ideal so a
+    /// comfortably-sized window still grows the card, and below the point where
+    /// a centered 34pt host name starts reading as a banner rather than a card.
+    /// Tune this one value to change how much resizing buys.
+    static let heroMaxWidth: CGFloat = 820
+
     let host: Host?
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -479,7 +485,14 @@ private struct HostHero: View {
         // The compact presentation retains its 248pt footprint; an expanded
         // app grid grows naturally so every host app remains reachable.
         .frame(minHeight: 248)
-        .frame(maxWidth: 520)
+        // WIDTH: the hero tracks the window instead of parking at a fixed 520.
+        // The old cap dated to the first commit, when the hero held only an icon
+        // and a name and had nothing to do with extra width. The expandable app
+        // grid changed that - it has real content to flow - so a wider window now
+        // buys more apps per row rather than more empty card. The ceiling keeps a
+        // maximised window from stretching the card into a banner; it is the one
+        // number to turn if this wants to be tighter or looser.
+        .frame(maxWidth: Self.heroMaxWidth)
         // Expanding resizes the whole hero, which is exactly the kind of motion
         // Reduce Motion asks us to drop - match the connecting scaleEffect above,
         // which is already gated the same way. The layout still changes; only the

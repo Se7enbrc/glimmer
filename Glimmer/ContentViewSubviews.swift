@@ -313,10 +313,12 @@ struct AppIconsRow: View {
     @Binding var isExpanded: Bool
     @Environment(AppModel.self) private var model
 
-    private let columns = Array(
-        repeating: GridItem(.fixed(70), spacing: 10),
-        count: 4
-    )
+    /// Flow as many 70pt tiles per row as the hero's current width allows,
+    /// rather than pinning four. Fixed-4 wasted the room the hero already had
+    /// (four tiles span 310pt inside a 472pt content box) and made widening the
+    /// window buy nothing at all. `.adaptive` with min == max keeps every tile
+    /// exactly 70pt - the columns change, the tiles never stretch.
+    private let columns = [GridItem(.adaptive(minimum: 70, maximum: 70), spacing: 10)]
 
     var body: some View {
         VStack(spacing: 8) {
