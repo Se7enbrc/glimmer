@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.8.2 - 2026-08-02
+## 2026.8.3 - 2026-08-02
 
 Streaming over a VPN is far more reliable, a weak link no longer freezes the
 picture indefinitely, and the launcher window no longer opens mostly empty.
@@ -30,8 +30,8 @@ picture returns. It steps down at most twice, never on a local network, and
 never raises the quality back on its own.
 
 The launcher window is now exactly as big as what's in it, and no longer
-resizable. Nothing in it grows - one host card, a row of chips, a button - so
-dragging it larger only ever added empty space.
+resizable in either direction. Nothing in it grows - one host card, a row of
+chips, a button - so dragging it larger only ever added empty space.
 
 ## 2026.7.7 - 2026-07-22
 
