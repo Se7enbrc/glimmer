@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.8.5 - 2026-08-02
+
+You can browse your PC's apps while a stream is running again.
+
+If a PC has more than five apps, the extras live in a dropdown at the end of the
+row. That dropdown was being switched off along with the app tiles whenever a
+session was live - which is right for the tiles, since tapping one would start a
+second stream, but it also meant you couldn't so much as look at the list
+mid-session. The dropdown now opens; only the launching is held back. Screen
+readers also get a proper description of what it does.
+
 ## 2026.8.4 - 2026-08-02
 
 The launcher sits at a comfortable size again, and every app on your PC is
