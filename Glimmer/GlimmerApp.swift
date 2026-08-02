@@ -47,20 +47,32 @@ struct GlimmerApp: App {
         Window("Glimmer", id: "main") {
             MainWindow()
                 .environment(model)
-                // Honest minimums: the hero caps at 520pt + 64pt surface
-                // padding (~584), and the empty state's copy wraps at 440 -
-                // 720×500 keeps every layout intact with no truncation.
-                .frame(minWidth: 720, idealWidth: 860, minHeight: 500, idealHeight: 540)
+                // WIDTH FLOOR ONLY. The hero is 520pt + 64pt surface padding =
+                // 584, which is also clear of the empty state's copy (wraps at
+                // 440). No height constraint and no ideal size: the window is
+                // sized from the content below, so anything stated here would
+                // just be a second opinion for it to argue with.
+                .frame(minWidth: 584)
                 // Liquid Glass: on macOS 26 `.regularMaterial` resolves to
                 // the system material; future SDKs may expose a dedicated
                 // `.glassBackground` shape style for window containers.
                 .containerBackground(.regularMaterial, for: .window)
         }
         .windowStyle(.hiddenTitleBar)
-        // Tighter default than the old 920×580 - the launcher is one hero
-        // card + a button, not a document; the hero geometry trim (248pt
-        // card) keeps the composition centred at this size.
-        .defaultSize(width: 780, height: 540)
+        // The window is exactly its content and cannot be dragged bigger. The
+        // launcher is one fixed-height hero card, a chip row, a button and a
+        // footer - nothing in it grows, so a resize could only ever add empty
+        // space, which is precisely what it was doing.
+        //
+        // This works only because every element below now states a definite
+        // size: the card is a fixed 248x520, the column no longer ends in a
+        // Spacer, and MainWindow no longer forces itself to .infinity. An
+        // earlier attempt set this while the content was still flexible - the
+        // window stayed resizable and the card stretched to fill it.
+        //
+        // No .defaultSize: it would be a second opinion about a size the content
+        // already knows.
+        .windowResizability(.contentSize)
         // Opt OUT of window state restoration so a previously-X-closed
         // launcher always re-spawns fresh next launch (the bug that made
         // first Dock click do nothing pre-restoration-fix).

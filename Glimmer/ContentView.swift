@@ -50,7 +50,9 @@ struct MainWindow: View {
                   AWDLHelperManager.shared.shouldPromptToEnable else { return }
             showAWDLPrompt = true
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // No .frame: forcing either axis to .infinity gives the window an
+        // unbounded box to fill, and the only thing available to fill it with is
+        // nothing. The content states its own size; the window follows it.
         .overlay(alignment: .top) {
             // Disconnect-beat toast - a brief, calm acknowledgement after a
             // stream ends instead of the launcher just snapping back.
@@ -202,9 +204,12 @@ private struct ConnectSurface: View {
             }
 
             ContextFooter()
-
-            Spacer(minLength: 0)
         }
+        // No trailing Spacer. It existed to pin the column to the top of a
+        // window that could be taller than its content - and the space it pushed
+        // down into was the empty area under the footer. The window now sizes to
+        // this column (see .windowResizability in GlimmerApp), so there is no
+        // leftover height to absorb and nothing to pin against.
         .padding(.horizontal, 32)
         .padding(.vertical, 20)
         // Hand off to the stream window: dim Glimmer's content so the
@@ -476,7 +481,11 @@ private struct HostHero: View {
         // 248pt (was 270): content measures ~218pt, so this trims the hero's
         // dead air ("a bit too much") while keeping honest breathing room.
         .frame(height: 248)
-        .frame(maxWidth: 520)
+        // `width`, not `maxWidth`: the window is sized from this column, and a
+        // maxWidth has no size of its own to measure - which is why an earlier
+        // attempt at a content-sized window stayed resizable anyway. 520 is the
+        // width the card already had in every window wide enough to show it.
+        .frame(width: 520)
         // Right-click the hero to rename / set codec / unpair the current PC.
         .modifier(OptionalHostContextMenu(host: host))
     }
