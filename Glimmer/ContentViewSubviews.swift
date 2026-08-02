@@ -349,11 +349,18 @@ struct AppIconsRow: View {
                 }
             }
         }
-        // Tiles park while a session exists (connecting, live, backgrounded):
-        // a click would spawn a SECOND concurrent session - stream()'s
-        // re-entrancy guard is the wall, this is the honest affordance. Dim
-        // as the visual cue (.plain buttons don't restyle on disable).
-        .disabled(model.isStreaming)
+        // Dim the whole row while a session exists (connecting, live,
+        // backgrounded) as the visual "parked" cue - .plain buttons don't
+        // restyle on disable, so the opacity IS the affordance.
+        //
+        // The DISABLE, though, is scoped to the launch affordances themselves
+        // (each tile, and each item inside the overflow menu) rather than
+        // blanket-applied here. A click on one would spawn a SECOND concurrent
+        // session - stream()'s re-entrancy guard is the wall, this is the honest
+        // signal. But OPENING the menu launches nothing, and disabling the whole
+        // row took that with it: mid-session you could not even look at which
+        // apps the PC has. Same distinction this file's review of #49 drew for
+        // the old expand/collapse controls; it was lost in the revert.
         .opacity(model.isStreaming ? 0.45 : 1.0)
         .animation(.snappy(duration: 0.3), value: model.isStreaming)
     }
@@ -391,6 +398,7 @@ struct AppIconsRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(model.isStreaming)
         .help(model.isStreaming
             ? "Finish the current stream first" : "Stream \(app.name)")
     }
@@ -406,6 +414,9 @@ struct AppIconsRow: View {
                 } label: {
                     Label(app.name, systemImage: app.systemImage)
                 }
+                // Each ITEM is a launch, so each item parks - the menu itself
+                // stays openable so the list is still readable mid-session.
+                .disabled(model.isStreaming)
             }
         } label: {
             VStack(spacing: 4) {
@@ -429,6 +440,7 @@ struct AppIconsRow: View {
             ? "Finish the current stream first"
             : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
         .accessibilityLabel("\(overflowApps.count) more apps")
+        .accessibilityHint("Shows the rest of this PC's apps")
     }
 }
 
