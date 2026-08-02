@@ -345,16 +345,29 @@ struct AppIconsRow: View {
                 collapseButton
             }
         }
-        // Tiles park while a session exists (connecting, live, backgrounded):
-        // a click would spawn a SECOND concurrent session - stream()'s
-        // re-entrancy guard is the wall, this is the honest affordance. Dim
-        // as the visual cue (.plain buttons don't restyle on disable).
-        .disabled(model.isStreaming)
-        .opacity(model.isStreaming ? 0.45 : 1.0)
         .animation(.snappy(duration: 0.3), value: model.isStreaming)
     }
 
+    /// Park a LAUNCH affordance while a session exists (connecting, live,
+    /// backgrounded): a click would spawn a SECOND concurrent session -
+    /// stream()'s re-entrancy guard is the wall, this is the honest affordance.
+    /// Dim as the visual cue (.plain buttons don't restyle on disable).
+    ///
+    /// Scoped to the TILES on purpose. Expand/collapse only change what this
+    /// view shows - they can't start anything - so parking them too would strand
+    /// an already-expanded list open for the whole session and stop the user
+    /// browsing their apps while streaming, for no safety benefit.
+    private func parkedWhileStreaming(_ view: some View) -> some View {
+        view
+            .disabled(model.isStreaming)
+            .opacity(model.isStreaming ? 0.45 : 1.0)
+    }
+
     private func appTile(_ app: LibraryApp) -> some View {
+        parkedWhileStreaming(rawAppTile(app))
+    }
+
+    private func rawAppTile(_ app: LibraryApp) -> some View {
         Button {
             model.requestStream(app: app, on: host)
         } label: {
@@ -408,7 +421,7 @@ struct AppIconsRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-            .frame(width: 70, height: 70)
+        .frame(width: 70, height: 70)
         .help("Show all \(apps.count) apps")
         .accessibilityLabel("Show all \(apps.count) apps")
         .accessibilityValue("Collapsed")
@@ -428,7 +441,7 @@ struct AppIconsRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-            .frame(width: 44, height: 44)
+        .frame(width: 44, height: 44)
         .help("Show fewer apps")
         .accessibilityLabel("Show fewer apps")
         .accessibilityValue("Expanded")
