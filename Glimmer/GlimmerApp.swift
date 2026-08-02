@@ -47,12 +47,14 @@ struct GlimmerApp: App {
         Window("Glimmer", id: "main") {
             MainWindow()
                 .environment(model)
-                // WIDTH FLOOR ONLY. The hero is 520pt + 64pt surface padding =
-                // 584, which is also clear of the empty state's copy (wraps at
-                // 440). No height constraint and no ideal size: the window is
-                // sized from the content below, so anything stated here would
-                // just be a second opinion for it to argue with.
-                .frame(minWidth: 584)
+                // 520pt card + 80pt margins per side = 680. This MUST equal the
+                // connect surface's real width (ConnectSurface's .horizontal
+                // padding): a floor BELOW it leaves the window that much range
+                // to be dragged through, and it opens at the bottom of the range
+                // with the margins squeezed flat - which is exactly what a stale
+                // 584 here did. A floor equal to the content leaves nothing to
+                // drag.
+                .frame(minWidth: 680)
                 // Liquid Glass: on macOS 26 `.regularMaterial` resolves to
                 // the system material; future SDKs may expose a dedicated
                 // `.glassBackground` shape style for window containers.
