@@ -1,23 +1,9 @@
 # Changelog
 
-## 2026.8.1 - 2026-08-02
-
-Fixes the launcher window, which 2026.8.0 left mostly empty.
-
-The host card was changed to grow when its app list expands, but that also let
-it grow when nothing needed the room - so the window opened with a large blank
-area under the Stream button, and dragging it taller stretched the card into an
-empty slab. The launcher is back to the layout it had in 2026.7.7.
-
-The expandable app grid that came with it is gone for now, so a PC with more
-than four apps reaches the rest through the Stream button's context menu again,
-as before. It will return once the card can grow for the right reason and stop
-growing for the wrong one.
-
-## 2026.8.0 - 2026-08-02
+## 2026.8.2 - 2026-08-02
 
 Streaming over a VPN is far more reliable, a weak link no longer freezes the
-picture indefinitely, and every app on your PC is reachable from the host card.
+picture indefinitely, and the launcher window no longer opens mostly empty.
 
 If you stream to your PC over a tunnel - Tailscale, WireGuard, or similar -
 Glimmer was sizing every video packet for a local network. Those packets are too
@@ -43,11 +29,9 @@ you'll see a brief pause and a note that quality is being reduced, then the
 picture returns. It steps down at most twice, never on a local network, and
 never raises the quality back on its own.
 
-Every app on your PC is now reachable from the host card. It used to show the
-first four and hide the rest behind the Stream button's context menu; a "+N"
-control now expands the full list into a grid, and collapses back. App tiles
-respond across their whole area rather than only where the icon sits, and a long
-list scrolls instead of pushing the Stream button off-screen.
+The launcher window is now exactly as big as what's in it, and no longer
+resizable. Nothing in it grows - one host card, a row of chips, a button - so
+dragging it larger only ever added empty space.
 
 ## 2026.7.7 - 2026-07-22
 
