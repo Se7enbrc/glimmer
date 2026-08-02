@@ -203,7 +203,6 @@ private struct ConnectSurface: View {
                 }
 
                 ContextFooter()
-
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 32)
@@ -397,6 +396,7 @@ var accentSurfaceGradient: LinearGradient {
 private struct HostHero: View {
     let host: Host?
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appsExpanded = false
 
     var body: some View {
@@ -480,7 +480,13 @@ private struct HostHero: View {
         // app grid grows naturally so every host app remains reachable.
         .frame(minHeight: 248)
         .frame(maxWidth: 520)
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: appsExpanded)
+        // Expanding resizes the whole hero, which is exactly the kind of motion
+        // Reduce Motion asks us to drop - match the connecting scaleEffect above,
+        // which is already gated the same way. The layout still changes; only the
+        // animation between the two states is suppressed.
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
+            value: appsExpanded)
         // App-list expansion is scoped to the host currently on screen. A
         // host switch always starts in the compact four-app presentation.
         .onChange(of: host?.id) { _, _ in appsExpanded = false }
