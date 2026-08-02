@@ -1,9 +1,9 @@
 # Changelog
 
-## 2026.7.8 - 2026-07-30
+## 2026.8.0 - 2026-08-02
 
-Streaming over a VPN is far more reliable, and a weak link no longer freezes the
-picture indefinitely.
+Streaming over a VPN is far more reliable, a weak link no longer freezes the
+picture indefinitely, and every app on your PC is reachable from the host card.
 
 If you stream to your PC over a tunnel - Tailscale, WireGuard, or similar -
 Glimmer was sizing every video packet for a local network. Those packets are too
@@ -23,14 +23,17 @@ resolution would want on a local network. Streaming on a local network is
 unaffected, and if the measurement doesn't succeed for any reason, nothing is
 capped.
 
-Two related fixes for weak connections. Glimmer was telling your PC it could
-never encode below about half the requested bitrate - which, on a link that
-couldn't carry even that, left your PC no setting that would work. It can now
-drop as low as the connection genuinely needs. And if a remote connection still
-can't carry the stream, Glimmer lowers the quality and reconnects in place
-rather than holding a frozen frame forever: you'll see a brief pause and a note
-that quality is being reduced, then the picture returns. It steps down at most
-twice, never on a local network, and never raises the quality back on its own.
+And if a remote connection still can't carry the stream, Glimmer lowers the
+quality and reconnects in place rather than holding a frozen frame forever:
+you'll see a brief pause and a note that quality is being reduced, then the
+picture returns. It steps down at most twice, never on a local network, and
+never raises the quality back on its own.
+
+Every app on your PC is now reachable from the host card. It used to show the
+first four and hide the rest behind the Stream button's context menu; a "+N"
+control now expands the full list into a grid, and collapses back. App tiles
+respond across their whole area rather than only where the icon sits, and a long
+list scrolls instead of pushing the Stream button off-screen.
 
 ## 2026.7.7 - 2026-07-22
 
