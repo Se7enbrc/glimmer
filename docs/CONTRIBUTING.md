@@ -341,6 +341,35 @@ Body wrapped at ~72 columns when one's needed.
 `no_coauthor_trailer` swiftlint rule on source files and by repo policy on
 commits. Same for any "Generated with Claude" attribution.
 
+## The bar
+
+**"It builds clean" is table stakes, not evidence.** Neither is "the tests
+pass". Both are necessary; neither says anything about whether the thing is any
+good.
+
+The bar for anything a user can see or feel is: **would someone with taste,
+looking at this for two seconds, be appalled?** If you would not put it in a
+demo, it is not done - however green the checks are.
+
+This is not hypothetical. Glimmer 2026.8.0 shipped a launcher whose host card
+floated in ~420pt of empty window. It compiled without a warning, 210 tests
+passed, SwiftLint was clean, and it was obviously wrong to anyone who opened it.
+It took five further releases to walk back, because each attempt was validated
+by reading the diff instead of looking at the app.
+
+Practically, before you call something done:
+
+- **Run it.** Not the test suite - the app, the way a user meets it.
+- **Look at it**, in the states a user will hit: empty, one host, many apps,
+  mid-stream, disconnected, the smallest and largest window you allow.
+- **Prove the claim you are making.** If the claim is "no longer resizable",
+  drive the window and read the size back (see [UI changes](#ui-changes)). If it
+  is "reconnects cleanly", pull the cable. A claim you have not exercised is a
+  guess with a commit message.
+- **Say what you did NOT verify.** An honest "the dropdown has never rendered
+  with more than two apps" is worth more than silence, and it is what lets the
+  next person aim their attention.
+
 ## Pull requests
 
 - `main` is the active development branch; releases are tags on it.
