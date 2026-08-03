@@ -114,6 +114,61 @@ sudo tccutil reset All io.ugfugl.Glimmer
 service name `tccutil` accepts. `All` is the working form, and it also clears
 Input Monitoring (the DualSense raw-HID grant), so expect to re-approve that.
 
+## UI changes
+
+The launcher window is **sized to its content and not resizable**
+(`.windowResizability(.contentSize)` in `GlimmerApp`). That only holds while
+every view in the column states a _definite_ size, which makes ordinary SwiftUI
+idioms load-bearing in a way that is easy to miss:
+
+- `minHeight:` / `minWidth:` are **floors, not sizes**. A view with a floor
+  accepts any larger size it is offered, so one of them anywhere in the column
+  hands the window something to grow into - the window becomes resizable again
+  and the offending view stretches to fill whatever the user drags out.
+- `.frame(maxWidth: .infinity)` has no size of its own to measure.
+- A trailing `Spacer()` exists to push content against a container taller than
+  itself. In a content-sized window there is no such space, so it can only
+  invent some.
+- `ConnectSurface` and `EmptyPairingState` therefore end in
+  `.fixedSize(horizontal: false, vertical: true)` - they take their ideal height
+  rather than the offered one. Keep it that way.
+
+The window's `minWidth` in `GlimmerApp` must equal the connect surface's real
+width (card width + 2x its horizontal padding). A floor _below_ the true content
+width leaves the window that much range to be dragged through, and it opens at
+the bottom of that range with the margins squeezed flat.
+
+**Verify geometry against the running app, not the source.** Every one of the
+above was shipped at least once on a source reading that looked right. Build,
+install, launch, then ask the window what it actually did:
+
+```bash
+osascript <<'EOS'
+tell application "System Events"
+  tell process "Glimmer"
+    set w to first window
+    set s0 to size of w
+    set out to "opens at " & ((item 1 of s0) as integer) & "x" & ((item 2 of s0) as integer)
+    try
+      set size of w to {1200, 900}
+    end try
+    delay 0.7
+    set s1 to size of w
+    return out & "  after_grow=" & ((item 1 of s1) as integer) & "x" & ((item 2 of s1) as integer)
+  end tell
+end tell
+EOS
+```
+
+If `after_grow` differs from the opening size, something in the column is still
+flexible. This takes about a minute and is not optional for a geometry change -
+a resize regression once survived two releases because it was only ever read,
+never run.
+
+A UI pull request should say which of these it touches, and include a
+before/after screenshot at the smallest and largest window the change allows.
+"Builds clean" is not evidence about layout.
+
 ## Lint
 
 `swiftlint` runs as a pre-commit hook. The baseline is intentionally non-strict:
