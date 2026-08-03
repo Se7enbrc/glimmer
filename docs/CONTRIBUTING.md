@@ -52,9 +52,9 @@ xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
     -derivedDataPath ./build -destination 'platform=macOS' build
 ```
 
-For an inner-loop edit cycle, either use `make dev` (Release build with a stable
-self-signed dev signature so TCC grants survive rebuilds - see the Makefile
-comments), or work in Xcode against `Glimmer.xcodeproj`:
+For an inner-loop edit cycle, either use `make dev` (unit tests, then the
+notarized Release build, installed and relaunched - same signing path as
+`make install`), or work in Xcode against `Glimmer.xcodeproj`:
 
 1. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
    Scheme → Run → Info). It supplies the OpenSSL/Opus search paths and the
@@ -68,6 +68,51 @@ log stream --predicate 'subsystem == "io.ugfugl.Glimmer"' --level info
 ```
 
 See [PROFILING.md](PROFILING.md) for per-category predicates.
+
+### Build hygiene - don't mint app copies
+
+**Build once per thing you actually want to look at.** Not once per edit.
+
+macOS gives every distinct copy of the bundle its own privacy identity. Anything
+that registers a `Glimmer.app` with LaunchServices - and `make app` re-registers
+its Debug bundle on _every_ run - earns a separate row under **System Settings →
+Privacy & Security → Local Network**. Those rows are TCC records: they survive
+deleting the app, and they survive a reboot.
+
+One session of rebuild-on-every-edit produced **nine** registered copies (two
+checkouts' `build/`, two DerivedData trees, `/Applications`, Trash, Downloads)
+and eight Local Network entries. The app then could not reach a host on the LAN,
+and the failure surfaced as `Couldn't reach <ip>` - which reads as a network
+problem and is not one.
+
+Keep the inner loop cheap and batch the install:
+
+```bash
+make app     # compile-only check - fast, no install
+make test    # unit tests
+make dev     # ONLY when you want to actually use the build
+```
+
+Clean up copies you created:
+
+```bash
+LSREG=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/\
+LaunchServices.framework/Versions/A/Support/lsregister
+"$LSREG" -dump | grep -oE '/[^ ]*Glimmer\.app' | sort -u   # what macOS knows about
+"$LSREG" -u /path/to/stale/Glimmer.app                      # unregister one
+rm -rf build ~/Library/Developer/Xcode/DerivedData/Glimmer-*
+```
+
+Unregistering does **not** retract the privacy grants. Only this does, and only
+the user can run it:
+
+```bash
+sudo tccutil reset All io.ugfugl.Glimmer
+```
+
+`tccutil reset LocalNetwork <bundle-id>` is rejected - `LocalNetwork` is not a
+service name `tccutil` accepts. `All` is the working form, and it also clears
+Input Monitoring (the DualSense raw-HID grant), so expect to re-approve that.
 
 ## Lint
 
