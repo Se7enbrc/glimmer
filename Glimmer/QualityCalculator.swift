@@ -94,6 +94,19 @@ extension AppModel {
 
     /// Port of Moonlight's StreamingPreferences::getDefaultBitrate.
     /// Resolution table × frame-rate factor (sub-linear above 60 fps).
+    /// Exponent on the frame-rate curve past 60 fps. See `bitrateKbps` for why
+    /// 0.5 (plain sqrt) starves high-refresh panels; 0.75 is the one number to
+    /// turn if high-fps modes want more or less headroom.
+    static let frameRateExponent = 0.75
+
+    /// Ceiling on the computed dial. This is a WIRE budget that is discounted
+    /// twice downstream - once for codec efficiency (`codecBudgetMultiplier`,
+    /// 0.80 on AV1/HEVC) and once for FEC (`SdpBuilder`, another 0.80) - so the
+    /// encoder receives ~64% of it. 200_000 clipped 4K240 (which now computes
+    /// 226) back to a starved budget; 300_000 leaves the largest panels bounded
+    /// without clipping the modes this curve exists to serve.
+    static let maxBitrateKbps = 300_000
+
     func bitrateKbps(width: Int, height: Int, fps: Int, preset: QualityPreset) -> Int {
         let pixels = width * height
 
@@ -139,9 +152,29 @@ extension AppModel {
             }
         }
 
-        // Frame-rate factor: sub-linear past 60 fps (sqrt scaling).
+        // Frame-rate factor: sub-linear past 60 fps. Higher frame rates make
+        // consecutive frames MORE similar, so P-frames genuinely need fewer bits
+        // each - the curve should be sub-linear. But `sqrt` (exponent 0.5) is far
+        // too steep once the multiple gets large, because bits-per-FRAME falls as
+        // 2^(e-1) per doubling: at 0.5 a 240Hz panel receives 0.708x the
+        // per-frame budget of a 120Hz one, which is visible blocking on exactly
+        // the high-refresh displays users buy for smoothness.
+        //
+        // Measured, 4K AV1 10-bit HDR on an RTX 5080 (NVENC CBR, P2, two-pass):
+        // at 240fps the encoder produced 47,320 bytes/frame against a 53,333
+        // budget - 89%, i.e. tracking its target, NOT quality-satisfied. It
+        // spends whatever it is given, so the budget IS the quality dial here.
+        // (Confirmed separately that Sunshine's nvenc_vbv_increase moved nothing:
+        // the per-frame VBV ceiling was never the constraint, the average
+        // bitrate target was.)
+        //
+        // 0.75 keeps the curve sub-linear - 240fps still gets 0.84x the
+        // per-frame bits of 120fps, crediting the extra temporal redundancy -
+        // while restoring 4K240 to the per-frame budget 4K120 receives today.
         let fpsValue = Double(fps)
-        let frameRateFactor = (fpsValue <= 60 ? fpsValue : (sqrt(fpsValue / 60.0) * 60.0)) / 30.0
+        let frameRateFactor = (fpsValue <= 60
+            ? fpsValue
+            : (pow(fpsValue / 60.0, Self.frameRateExponent) * 60.0)) / 30.0
 
         // Preset multiplier: the surviving presets all stream at the formula's
         // reference bits-per-pixel and differ by RESOLUTION instead (HiDPI sends
@@ -153,7 +186,7 @@ extension AppModel {
         }
 
         let kbps = Int((resolutionFactor * frameRateFactor * presetMultiplier).rounded() * 1000)
-        return min(max(kbps, 5_000), 200_000)
+        return min(max(kbps, 5_000), Self.maxBitrateKbps)
     }
 
     /// Public surface for the UI: what bitrate would the Moonlight formula
