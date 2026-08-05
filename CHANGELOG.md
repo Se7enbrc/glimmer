@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.8.6 - 2026-08-04
+
+Sharper picture on high-refresh displays.
+
+Glimmer worked out its quality budget in a way that quietly penalised fast
+monitors: every time the frame rate doubled, each individual frame got about 30%
+fewer bits to work with. A 240Hz display therefore looked blockier than a 120Hz
+one at the same resolution - the opposite of what you buy a fast panel for.
+Streaming at 4K240 now gives each frame the same budget 4K120 gets, and 120Hz
+modes gain a little too. Anything at 60Hz or below is unchanged.
+
+Measured on a 4K240 HDR stream: each frame went from about 46 KB to 72 KB, with
+no added latency and no dropped packets.
+
+Because of this, high-refresh streams now ask your PC for more bandwidth than
+before. On a local network that costs nothing; over a VPN or the internet
+Glimmer still measures the connection first and asks for what it can carry.
+
 ## 2026.8.5 - 2026-08-02
 
 You can browse your PC's apps while a stream is running again.
