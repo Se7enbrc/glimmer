@@ -70,6 +70,15 @@ public protocol NativeAudioSink: AnyObject, Sendable {
     func decodeAndPlayPLC()
     /// Tear down the decoder + engine.
     func cleanup()
+    /// Packet flow RESUMED after a multi-second arrival gap (host-idle silence,
+    /// nap). Hygiene hook - the sink may re-arm its playout state so stale
+    /// segment anchors don't survive the gap; the default does nothing. Called
+    /// on the receive thread, so implementations must make NO AV calls.
+    func notePacketFlowResumed(afterGapMs: Double)
+}
+
+public extension NativeAudioSink {
+    func notePacketFlowResumed(afterGapMs: Double) {}
 }
 
 final class RtpAudioReceiver: @unchecked Sendable {
@@ -177,6 +186,11 @@ final class RtpAudioReceiver: @unchecked Sendable {
     // keeps this file under the SwiftLint length limit, like the video split). ---
     var audioMetricsWindowStartNanos: UInt64 = 0
     static let audioMetricsWindowNanos: UInt64 = 1_000_000_000  // 1s
+    /// Arrival gap (ns) past which the next datagram is a FLOW-RESUME edge
+    /// (host-idle silence ended) rather than link jitter - matches the skew
+    /// store's 2s pair-anchor freshness horizon, the sibling that already
+    /// treats a ≥2s-dark stream as a segment boundary.
+    static let flowResumeGapNanos: UInt64 = 2_000_000_000
     /// Last-flushed cumulative RtpAudioQueue stats, so each window publishes the
     /// delta into the monotonic TelemetryCounters audio totals.
     var lastFlushedAudioPackets: UInt32 = 0
@@ -586,6 +600,16 @@ final class RtpAudioReceiver: @unchecked Sendable {
                 counters.audioGapOver20msTotal.increment()
                 if gap > 50_000_000 { counters.audioGapOver50msTotal.increment() }
                 if gap > 100_000_000 { counters.audioGapOver100msTotal.increment() }
+            }
+            // FLOW-RESUME edge: past the pair-anchor freshness horizon (2s -
+            // AudioVideoSkewStore.freshnessNanos' rationale) the silence was a
+            // host-idle stretch, not jitter; this first datagram back is a
+            // segment boundary. Tell the sink so stale playout anchors don't
+            // span it (drift re-anchor + cushion rebuild; no-op when the drain
+            // edge already latched). Same recvQueue, one virtual call, only on
+            // a ≥2s-idle edge.
+            if gap >= Self.flowResumeGapNanos {
+                sink?.notePacketFlowResumed(afterGapMs: Double(gap) / 1_000_000)
             }
         }
         lastDatagramArrivalNanos = now

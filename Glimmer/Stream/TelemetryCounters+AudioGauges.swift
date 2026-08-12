@@ -367,6 +367,19 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     func noteAudioScheduled(rtp: UInt32) {
         let now = DispatchTime.now().uptimeNanoseconds
         os_unfair_lock_lock(lock)
+        // RATE-ANCHOR FRESHNESS (stale-anchor audit, 2026-08-12): a pre-resolve
+        // audio stall spanning the calibration window inflates elapsed-ms while
+        // the RTP stands still, depressing the measured rate toward 0 - and the
+        // two-window hold then AGREES with itself (both windows see the same
+        // depressed rate), latching the wrong family. The 2s freshness horizon
+        // that already governs the pair anchor restarts the calibration window
+        // instead; harmless post-resolve (the family is latched for the session).
+        if !audioRateResolved, audioNoteNanos != 0,
+           now &- audioNoteNanos > Self.freshnessNanos {
+            audioRateAnchorRtp = rtp
+            audioRateAnchorNanos = now
+            audioRatePendingFamily = nil
+        }
         audioLastRtp = rtp
         audioNoteNanos = now
         if audioRateAnchorNanos == 0 {

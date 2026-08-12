@@ -319,6 +319,31 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `audioMeterLock`.
     var quietSinceNanos: UInt64 = 0
 
+    // MARK: - P1 AUDIO playout-stall watchdog (the 2026-08-12 overnight wedge)
+    //
+    // Design narrative + detection/recovery: AudioDecoder+Meter.swift
+    // (`noteDropForStallWatchdogLocked` / `recoverIfPlayoutStalled`). Only the
+    // stored words live here; ALL guarded by `audioMeterLock`.
+    /// `DispatchTime` ns of the last observed playout PROGRESS: stamped on every
+    /// buffer completion and on each (re)arm edge - so a legitimately paused
+    /// cold pre-roll (armed = freshly stamped) can never read as a stall.
+    var lastPlayoutProgressNanos: UInt64 = 0
+    /// Latch set by the meter's DROP branches when scheduled audio has consumed
+    /// zero frames past the stall threshold while packets keep arriving: the
+    /// node stopped pulling (output device slept/vanished), the backlog pinned
+    /// above the gates, and every packet then drops forever - received,
+    /// decoded, discarded, silent until reconnect. Cleared on the decode path.
+    var playoutStallPending = false
+    /// `DispatchTime` ns of the last stall-recovery attempt - bounds the
+    /// rebuild cadence so a truly dead output device retries, not thrashes.
+    var stallRecoveryLastAttemptNanos: UInt64 = 0
+    /// True from the recovery's `playerNode.stop()` until the next (re)arm
+    /// edge: the completion handler's EVIDENCE gate treats it like
+    /// `meterShutdown`, so the stop()-fired completion burst can't mint a
+    /// synthetic under-run (ratchet + persisted floor - the
+    /// disguised-permanent-pin class).
+    var meterRecovering = false
+
     // MARK: - P1 AUDIO cushion LOSS FLOOR + per-host memory (the limit-cycle fix)
     //
     // Design narrative + persistence/seeding: AudioDecoder+CushionMemory.swift.
@@ -482,6 +507,11 @@ public final class AudioDecoder: @unchecked Sendable {
         floorQuietSinceNanos = seedNowNanos
         rebuildIsReprime = false
         lastUnderrunNoticeNanos = 0; underrunNoticesSuppressed = 0
+        // Playout-stall watchdog state (fresh session = no progress history yet).
+        lastPlayoutProgressNanos = 0
+        playoutStallPending = false
+        stallRecoveryLastAttemptNanos = 0
+        meterRecovering = false
         audioMeterLock.unlock()
         announceCushionSeed(seed)
         // A/V-skew session edge: the skew store's pair-anchor + accumulator
@@ -683,6 +713,57 @@ public final class AudioDecoder: @unchecked Sendable {
         }
     }
 
+    /// PLAYOUT-STALL RECOVERY (the 2026-08-12 overnight wedge; detection in
+    /// AudioDecoder+Meter.swift). Rebuild the output path after the meter
+    /// latched a stall: scheduled audio consumed ZERO frames past the threshold
+    /// while every arrival dropped at the backlog gates. Caller holds
+    /// `stateLock` (the decode path - the one place AV calls are serialized
+    /// against `shutdown()`, the same discipline as
+    /// `handleEngineConfigurationChange`). stop() fires the queued buffers'
+    /// completions on the meter path (no AV calls there); `meterRecovering`
+    /// gates their under-run EVIDENCE, and the completions reconcile
+    /// `framesPlayed` so the next schedule takes the (re)arm edge - drift
+    /// re-anchor, gate grace, cushion rebuild - and `maybePrime`'s cold-start
+    /// pre-roll re-issues `play()`.
+    func recoverIfPlayoutStalled() {
+        let now = DispatchTime.now().uptimeNanoseconds
+        audioMeterLock.lock()
+        guard playoutStallPending else { audioMeterLock.unlock(); return }
+        playoutStallPending = false
+        stallRecoveryLastAttemptNanos = now
+        meterRecovering = true
+        audioMeterLock.unlock()
+        guard !isShutdown else { return }
+        TelemetryCounters.shared.audioStallRecoveryTotal.increment()
+        Diag.error("audio playout STALLED: scheduled audio unconsumed ≥3s with "
+            + "every arrival dropped at the backlog gates (output device "
+            + "slept/vanished?) - rebuilding: node stop → engine ensure-running "
+            + "→ re-prime; route \(audioRouteCache)", "Stream.Audio")
+        playerNode.stop()
+        if !engine.isRunning {
+            do {
+                try engine.start()
+                engineRestartRetries = 0
+            } catch {
+                Diag.error("audio engine restart in stall recovery FAILED: "
+                    + "\(error.localizedDescription)", "Stream.Audio")
+                scheduleEngineRestartRetry()
+            }
+        }
+        let nowRunning = engine.isRunning
+        audioMeterLock.lock()
+        engineRunning = nowRunning
+        // Re-arm the pre-roll state machine (the H3/H4 idiom). `playoutStarted =
+        // false` makes the next arm edge a COLD start - correct, the node was
+        // just stopped, so the paused pre-roll + `play()` at target is exactly
+        // the rebuild it needs.
+        primed = false
+        playoutStarted = false
+        playoutDrained = false
+        buffersSinceArm = 0
+        audioMeterLock.unlock()
+    }
+
     private func handleEngineConfigurationChange() {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -858,7 +939,13 @@ public final class AudioDecoder: @unchecked Sendable {
         // OVER-RUN ceiling backstop for genuinely bad links. Both keep latency bounded.
         let decodedFrames = UInt64(decoded)
         if meterRegisterScheduleOrOverrun(frames: decodedFrames) {
-            return false  // trimmed/over-run: do not schedule (keeps A/V latency bounded)
+            // Trimmed/over-run: do not schedule (keeps A/V latency bounded). If the
+            // meter latched a playout STALL under this drop (node consuming nothing
+            // while every arrival hits the backlog gates), rebuild the output path
+            // now - this is the stateLock-serialized decode path, the one place AV
+            // calls are safe against shutdown (`recoverIfPlayoutStalled`).
+            recoverIfPlayoutStalled()
+            return false
         }
         playerNode.scheduleBuffer(pcm, completionHandler: { [weak self] in
             self?.meterCompleteOnePlayout(frames: decodedFrames)

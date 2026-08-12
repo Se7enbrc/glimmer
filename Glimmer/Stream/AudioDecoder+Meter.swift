@@ -42,6 +42,17 @@ extension AudioDecoder {
     /// still a step short of target hands the measured deficit to the silence
     /// backfill (`backfillCushion`) - by then the clump had its full window.
     static let reprimeGraceNanos: UInt64 = 250_000_000
+    /// Playout-stall watchdog threshold (ns): wall time with ZERO completion
+    /// progress before a backlog-gate drop declares the node stalled. 3s is far
+    /// past any legitimate pause - the deepest cushion is 300ms of 5ms buffers,
+    /// so a consuming node completes every few ms; only a node that stopped
+    /// pulling (output device slept/vanished - the 2026-08-12 overnight wedge,
+    /// 9h silent with 200 pkt/s arriving) goes 3s dark while drops fire.
+    static let playoutStallThresholdNanos: UInt64 = 3_000_000_000
+    /// Minimum spacing (ns) between stall-recovery rebuilds: a truly dead
+    /// output device RETRIES on this cadence ("never a permanent give-up")
+    /// instead of thrashing the node/engine per dropped packet.
+    static let stallRecoveryRetryNanos: UInt64 = 5_000_000_000
     /// Safety fallback FLOOR: prime (start playback) after at most this many
     /// buffers regardless of the measured cushion, so a very low-bitrate /
     /// near-silent stream (where the depth never reaches the target before
@@ -116,6 +127,7 @@ extension AudioDecoder {
             let now = DispatchTime.now().uptimeNanoseconds
             if now >= gateGraceUntilNanos && now &- lastTrimNanos >= Self.playoutTrimMinIntervalNanos {
                 lastTrimNanos = now
+                noteDropForStallWatchdogLocked(now: now)
                 audioMeterLock.unlock()
                 TelemetryCounters.shared.audioTrimTotal.increment()
                 return true
@@ -133,6 +145,7 @@ extension AudioDecoder {
         if playoutStarted && aheadMs > effectiveOverrunCeilingMs {
             let now = DispatchTime.now().uptimeNanoseconds
             if now >= gateGraceUntilNanos {
+                noteDropForStallWatchdogLocked(now: now)
                 audioMeterLock.unlock()
                 TelemetryCounters.shared.audioOverrunTotal.increment()
                 return true
@@ -155,6 +168,11 @@ extension AudioDecoder {
             playoutStarted = true
             driftAnchorNanos = DispatchTime.now().uptimeNanoseconds
             driftAnchorFramesPlayed = framesPlayed
+            // Stall watchdog: the arm edge IS progress (a paused cold pre-roll or
+            // a post-recovery rebuild starts its 3s clock here, not at zero), and
+            // a recovery episode ends at the edge it exists to reach.
+            lastPlayoutProgressNanos = driftAnchorNanos
+            meterRecovering = false
             // COLD START: arm the floor-learning gate. Drains inside the host's
             // boot-ramp window (paced sub-realtime inflow) must not teach the
             // per-link floor - see cushionNoteUnderrunLocked.
@@ -354,6 +372,9 @@ extension AudioDecoder {
     func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false) {
         audioMeterLock.lock()
         framesPlayed &+= frames
+        // Stall-watchdog heartbeat: a completion IS consumption. One clock read
+        // per completion (~200Hz) - the same budget as the trough math below.
+        lastPlayoutProgressNanos = DispatchTime.now().uptimeNanoseconds
         // A corrector-inserted silence buffer finished: release its resident
         // contribution so the av_skew fill correction tracks only buffered silence.
         if isSilence {
@@ -386,7 +407,10 @@ extension AudioDecoder {
         // trough, drained latch - so mid-session logic is untouched; ONLY the
         // evidence edges (ratchet/floor/persist/counter/NOTICE, and the decay
         // clock below) are gated.
-        let stopping = meterShutdown
+        // `meterRecovering` rides the same gate: the stall recovery's stop() fires
+        // an identical completion burst, and un-gated it would mint the same
+        // synthetic under-run (ratchet + persisted floor) the shutdown gate blocks.
+        let stopping = meterShutdown || meterRecovering
         let drainedNow = framesPlayed >= framesScheduled
         let isUnderrunEdge = drainedNow && !playoutDrained && !stopping
         if drainedNow { playoutDrained = true }
@@ -680,6 +704,61 @@ extension AudioDecoder {
         case kAudioDeviceTransportTypeAggregate: return "aggregate"
         case kAudioDeviceTransportTypeVirtual: return "virtual"
         default: return String(format: "0x%08x", transport)
+        }
+    }
+
+    // MARK: - Playout-stall watchdog (detection + recovery)
+    //
+    // MEASURED FAULT (2026-08-12, a 9h18m host-idle overnight): when audio
+    // resumed, the player node consumed ZERO frames (drift math: ~5000ms wall −
+    // 0 media − 171ms fill = the 4829ms the gauge froze at) while 200 pkt/s
+    // decoded into the backlog gates - the scheduled-ahead backlog pinned above
+    // the over-run ceiling, EVERY packet dropped (190/s ceiling + 10/s
+    // rate-limited trims = the full packet rate), `publishAudioState` never ran
+    // again (it sits behind a successful schedule), and the session stayed
+    // silent until reconnect. The H3/H4 config-change hop never fired, so
+    // nothing noticed "scheduling continuously, consuming nothing." This
+    // watchdog closes that class terminally: the DROP branches (the wedge's own
+    // symptom) latch a stall verdict when consumption has been dark past the
+    // threshold, and the decode path rebuilds the output the way a reconnect
+    // proved effective - node stop, engine ensure-running, pre-roll re-arm.
+    // The rebuild itself (`recoverIfPlayoutStalled`) lives in AudioDecoder.swift
+    // with the H3/H4 recovery it mirrors (it needs the private engine members).
+
+    /// Latch the stall verdict from a DROP branch (meter lock held, clock
+    /// already read). Consumption dark past the threshold + retry spacing
+    /// respected ⇒ the next decode-path packet runs the rebuild. `playoutStarted`
+    /// plus the arm-edge progress stamp keep a paused cold pre-roll (completions
+    /// legitimately silent) from ever reading as a stall - and a pre-roll never
+    /// reaches a drop branch anyway (fill < target ≤ ceiling, trim gated on
+    /// `primed`).
+    private func noteDropForStallWatchdogLocked(now: UInt64) {
+        guard playoutStarted, lastPlayoutProgressNanos != 0,
+              now &- lastPlayoutProgressNanos >= Self.playoutStallThresholdNanos,
+              now &- stallRecoveryLastAttemptNanos >= Self.stallRecoveryRetryNanos
+        else { return }
+        playoutStallPending = true
+    }
+
+    /// Packet flow resumed after a multi-second arrival gap (host-idle silence -
+    /// the receiver's gap tracker calls this on the recvQueue, so NO AV calls).
+    /// Hygiene, not recovery: force the drained latch so the NEXT schedule takes
+    /// the (re)arm edge - drift segment re-anchored (a 9h idle otherwise reads
+    /// as multi-second "drift", railing the resampler-converged verdict and
+    /// pinning the cushion deep), gate grace armed so the catch-up clump isn't
+    /// chopped, cushion rebuilt. Almost always a no-op: a ≥2s gap has long
+    /// since drained the ≤300ms cushion and the completion path latched
+    /// `playoutDrained` itself - this catches the drain edge going MISSING
+    /// (frozen completions), the wedge's precursor.
+    public func notePacketFlowResumed(afterGapMs: Double) {
+        audioMeterLock.lock()
+        let acted = playoutStarted && !playoutDrained
+        if acted { playoutDrained = true }
+        audioMeterLock.unlock()
+        if acted {
+            Diag.notice("audio flow resumed after \(Int(afterGapMs.rounded()))ms gap "
+                + "with the drain edge missing - forcing the re-arm (drift "
+                + "re-anchor + cushion rebuild)", "Stream.Audio")
         }
     }
 }
