@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.8.7 - 2026-08-12
+
+Audio now survives being left alone.
+
+A stream left running while the PC sat idle overnight came back with working
+video and no sound - permanently, until you reconnected. During the long silence
+the audio player had stopped consuming, and once sound resumed every arriving
+packet was dropped at the buffer's own safety gates: received, decoded, and
+thrown away, with nothing in the pipeline noticing. A watchdog now catches
+"audio arriving, nothing playing" within a few seconds and rebuilds the output
+path in place - one brief blip instead of a silent session. Long idle stretches
+also no longer poison the audio clock's drift tracking when sound resumes, so
+the buffer settles back to its normal depth instead of pinning deep.
+
 ## 2026.8.6 - 2026-08-04
 
 Sharper picture on high-refresh displays.
