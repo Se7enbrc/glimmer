@@ -139,6 +139,7 @@ extension TelemetryRenderer {
         builder.addCount("audio_trim_total", extras.audioTrimTotal)
         builder.add("audio_trims_per_s", extras.audioTrimsPerSecond)
         builder.addCount("audio_reprime_total", audio.rePrimeTotal)
+        builder.addCount("audio_stall_recovery_total", snap.audioStallRecoveryTotal)
         builder.add("audio_underruns_per_s", audio.underrunsPerSecond)
         builder.add("audio_overruns_per_s", audio.overrunsPerSecond)
         builder.add("audio_clock_drift_ms", audio.audioClockDriftMs)

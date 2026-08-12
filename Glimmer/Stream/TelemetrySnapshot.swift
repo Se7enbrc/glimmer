@@ -86,6 +86,10 @@ struct TelemetrySnapshot: Sendable {
     /// Steady-state audio fill dips under ~15ms that did NOT fully drain -
     /// cushion margin erosion visible before it becomes an audible under-run.
     var audioNearMissTotal: UInt64 = 0
+    /// Playout-stall watchdog rebuilds: the node stopped consuming while
+    /// packets kept arriving (a session that would previously have stayed
+    /// silent until reconnect). Zero in healthy sessions.
+    var audioStallRecoveryTotal: UInt64 = 0
     /// REORDER-DISPLACEMENT invariant (measurement only): session-max lateness
     /// of reordered packets vs the live reorder hold, the violation counter,
     /// and the distributions. margin = holdMs − maxMs is derived at render.

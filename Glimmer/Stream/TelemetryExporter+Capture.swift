@@ -127,6 +127,7 @@ extension TelemetryExporter {
         snap.staleEmptyQueueTotal = counters.staleEmptyQueueTotal.value
         snap.presentGapDroughtTotal = counters.presentGapDroughtTotal.value
         snap.audioNearMissTotal = counters.audioNearMissTotal.value
+        snap.audioStallRecoveryTotal = counters.audioStallRecoveryTotal.value
         snap.tickMissDescheduledTotal = counters.tickMissDescheduledTotal.value
         snap.tickMissCoalescedTotal = counters.tickMissCoalescedTotal.value
         snap.tickMissPreemptedTotal = counters.tickMissPreemptedTotal.value

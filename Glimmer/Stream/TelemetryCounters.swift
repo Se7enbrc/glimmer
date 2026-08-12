@@ -276,6 +276,15 @@ final class TelemetryCounters: @unchecked Sendable {
     /// edge (skew, gap texture) and the resampler/ratchet are living close.
     let audioNearMissTotal = Counter()
 
+    /// AUDIO PLAYOUT-STALL RECOVERY (signal: AUDIO) - the watchdog rebuilt the
+    /// output path after scheduled audio sat unconsumed ≥3s with every arrival
+    /// dropped at the backlog gates: the node stopped pulling (output device
+    /// slept/vanished - the 2026-08-12 overnight wedge, 9h of packets received,
+    /// decoded, and discarded in silence). Zero in a healthy session; ANY
+    /// increment is a session that would previously have stayed silent until
+    /// reconnect.
+    let audioStallRecoveryTotal = Counter()
+
     /// OVER-TARGET force-release count (signal: PRESENT). Bumped on each pacer tick
     /// where the due gate would have latched not-due against a GENUINE drainable
     /// backlog (one frame above the adaptive jitter-buffer target that survived the
@@ -718,6 +727,7 @@ final class TelemetryCounters: @unchecked Sendable {
                         decoderRecreateTotal, decoderRecreateFirstTotal,
                         decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
                         staleFrameRepeatTotal, staleEmptyQueueTotal, audioNearMissTotal,
+                        audioStallRecoveryTotal,
                         presentGapDroughtTotal, reorderHoldExceededTotal,
                         pacerOverTargetReleaseTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
