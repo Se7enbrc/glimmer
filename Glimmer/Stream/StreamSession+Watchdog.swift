@@ -452,11 +452,12 @@ extension StreamSession {
             // frameWatchdogTimeout) stays error-level.
             self.log.notice(
                 // swiftlint:disable:next line_length
-                "Present-path stall detected - linkDead=\(trip.linkDead, privacy: .public) tickDeficit=\(trip.tickDeficit, privacy: .public) rendererRejecting=\(trip.rendererRejecting, privacy: .public) rejectStreak=\(live.presentRejectStreak, privacy: .public) sinceTick=\(live.secondsSinceLastTick * 1000, privacy: .public)ms sinceRelease=\(live.secondsSinceLastRelease * 1000, privacy: .public)ms ticks/s=\(live.recentTicksPerSecond, privacy: .public) releases/s=\(live.recentReleasesPerSecond, privacy: .public) depth=\(live.depth, privacy: .public) decodeIdle=\(decodeIdle * 1000, privacy: .public)ms clusterTrips=\(StreamSession.presentTripsInCluster, privacy: .public) - self-healing")
+                "Present-path stall detected - linkDead=\(trip.linkDead, privacy: .public) tickDeficit=\(trip.tickDeficit, privacy: .public) rendererRejecting=\(trip.rendererRejecting, privacy: .public) rendererStarved=\(trip.rendererStarved, privacy: .public) rejectStreak=\(live.presentRejectStreak, privacy: .public) sinceTick=\(live.secondsSinceLastTick * 1000, privacy: .public)ms sinceRelease=\(live.secondsSinceLastRelease * 1000, privacy: .public)ms ticks/s=\(live.recentTicksPerSecond, privacy: .public) releases/s=\(live.recentReleasesPerSecond, privacy: .public) depth=\(live.depth, privacy: .public) decodeIdle=\(decodeIdle * 1000, privacy: .public)ms clusterTrips=\(StreamSession.presentTripsInCluster, privacy: .public) - self-healing")
             Diag.info(
                 "Present-path stall detected (linkDead=\(trip.linkDead) "
                 + "tickDeficit=\(trip.tickDeficit) "
                 + "rendererRejecting=\(trip.rendererRejecting) "
+                + "rendererStarved=\(trip.rendererStarved) "
                 + "rejectStreak=\(live.presentRejectStreak) "
                 + "ticks/s=\(String(format: "%.1f", live.recentTicksPerSecond)) "
                 + "releases/s=\(String(format: "%.1f", live.recentReleasesPerSecond)) "

@@ -132,6 +132,12 @@ extension VideoDecoder {
         let isIDR: Bool
         let rtpTimestamp: UInt32
         let totalLength: Int32
+        /// Stall-escalation verdict (see `reserveDecodeSlot`): the wedged VT
+        /// session must be REPLACED with this IDR, bypassing the byte-equal
+        /// param-set shortcut - a recovery IDR carries the SAME SPS/PPS, so
+        /// without the force the "rebuild" would no-op straight back into the
+        /// hosed session. false on every normal frame.
+        var forceSessionRecreate: Bool = false
     }
 
     /// Shared decode core, reached by the Swift-native VideoSink path
@@ -234,9 +240,16 @@ extension VideoDecoder {
         // (VideoDepacketizer.c:513-532). We deliberately do NOT also call
         // `backend?.requestIdrFrame()` here, so an overflow requests exactly one
         // IDR.
-        switch reserveDecodeSlot() {
+        var forceSessionRecreate = false
+        switch reserveDecodeSlot(isIDR: isIDR) {
         case .reserved:
             break
+        case .reservedForStallRecreate:
+            // The wedged session's slots were abandoned; this IDR must REPLACE
+            // the session, bypassing the byte-equal param-set shortcut (a
+            // recovery IDR carries identical SPS/PPS, so an unforced rebuild
+            // would no-op straight back into the hosed session).
+            forceSessionRecreate = true
         case .dropAndFlush:
             TelemetryCounters.shared.backlogOverflowTotal.increment()
             // This assembled frame is dropped before VT ever sees it - credit a
@@ -268,11 +281,13 @@ extension VideoDecoder {
         let needsParamRebuild =
             (newSps != nil) || (newPps != nil) || (newVps != nil)
             || (decompressionSession == nil && isIDR)
+            || forceSessionRecreate
 
         let pending = PendingDecode(
             pictureData: pictureData, newSps: newSps, newPps: newPps, newVps: newVps,
             needsParamRebuild: needsParamRebuild, isIDR: isIDR,
-            rtpTimestamp: rtpTimestamp, totalLength: totalLength)
+            rtpTimestamp: rtpTimestamp, totalLength: totalLength,
+            forceSessionRecreate: forceSessionRecreate)
 
         decodeQueue.async { [self] in
             // Teardown gate: stop() may have flipped isStreaming off (and
@@ -306,7 +321,8 @@ extension VideoDecoder {
         if pending.needsParamRebuild,
            !rebuildParamSetsAndSession(
                 newSps: pending.newSps, newPps: pending.newPps, newVps: pending.newVps,
-                format: format, pictureData: pictureData) {
+                format: format, pictureData: pictureData,
+                forceRecreate: pending.forceSessionRecreate) {
             // Param-rebuild / session-create failed: this frame never reaches
             // VT, so release its in-flight slot, credit a decoder-side discard
             // (it never reaches recordDecodeComplete), and request an IDR.
@@ -367,7 +383,8 @@ extension VideoDecoder {
     /// decompression session for the negotiated codec. Runs on the decode queue.
     /// Returns true on success; false means the caller should request an IDR.
     private nonisolated func rebuildParamSetsAndSession(
-        newSps: Data?, newPps: Data?, newVps: Data?, format: Int32, pictureData: Data
+        newSps: Data?, newPps: Data?, newVps: Data?, format: Int32, pictureData: Data,
+        forceRecreate: Bool = false
     ) -> Bool {
         let strippedSps = newSps.map(stripStartCode)
         let strippedPps = newPps.map(stripStartCode)
@@ -376,7 +393,10 @@ extension VideoDecoder {
         // Turbulent HEVC re-sends identical SPS/PPS/VPS on every IDR; the rebuild
         // is a no-op but its teardown + renderer flush + pacer clearQueue cluster
         // into hitches, so skip on byte-equal sets. (Inert for AV1: config is OBU.)
-        if decompressionSession != nil, formatDescription != nil,
+        // `forceRecreate` (the stall escalation) bypasses the shortcut: replacing
+        // the hosed session IS the point, and its params are byte-identical.
+        if !forceRecreate,
+           decompressionSession != nil, formatDescription != nil,
            newSps == nil || strippedSps == spsData,
            newPps == nil || strippedPps == ppsData,
            newVps == nil || strippedVps == vpsData,
@@ -534,6 +554,18 @@ extension VideoDecoder {
         /// VT has produced no output for the stall window). Drop this frame and
         /// flush-to-IDR. No slot was reserved.
         case dropAndFlush
+        /// STALL ESCALATION (wedge audit 2026-08-17): an IDR arrived while the
+        /// stall has persisted past `decodeStallEscalateSeconds` - the wedged
+        /// session's in-flight slots were abandoned (counter reset to this
+        /// IDR's own slot, the `handleCleanup` discipline) and the caller must
+        /// FORCE a session recreate with this frame. Without this case the
+        /// gate starved its own cure: every `.dropAndFlush` requests an IDR,
+        /// and the gate then dropped that IDR too - the recovery whose param
+        /// rebuild is the only mechanism that can replace a hosed VT session -
+        /// in a closed loop, forever, while ENet keepalives kept the frame
+        /// watchdog's teardown on hold (received, assembled, dropped, for
+        /// hours: the video twin of the 2026-08-12 audio wedge).
+        case reservedForStallRecreate
     }
 
     /// Reserve one in-flight-decode slot for a frame about to be dispatched, or
@@ -562,7 +594,7 @@ extension VideoDecoder {
     /// the frame (output callback) or on any abandon path. Lock-guarded because
     /// the count is read/written from both the receive thread (reserve) and the
     /// decode queue / VT output-callback thread (release).
-    private nonisolated func reserveDecodeSlot() -> DecodeSlotDecision {
+    private nonisolated func reserveDecodeSlot(isIDR: Bool) -> DecodeSlotDecision {
         inFlightDecodeLock.lock()
         let backlog = inFlightDecodes
 
@@ -579,8 +611,8 @@ extension VideoDecoder {
         // advances on every VT output callback, so a small value means VT is
         // actively retiring frames (a transient burst it will drain), while a
         // value past the stall window means VT has genuinely stopped producing.
-        let vtDraining =
-            secondsSinceLastDecodedFrame() < VideoDecoder.decodeStallWindowSeconds
+        let vtDark = secondsSinceLastDecodedFrame()
+        let vtDraining = vtDark < VideoDecoder.decodeStallWindowSeconds
         let underCeiling = backlog < maxInFlightDecodeCeiling
         consecutiveBacklogOverflow += 1
 
@@ -592,6 +624,31 @@ extension VideoDecoder {
             OSSignposter.decode.emitEvent(
                 "BacklogBurstAbsorbed", "depth=\(depth, privacy: .public)")
             return .reserved
+        }
+
+        // STALL ESCALATION - see `DecodeSlotDecision.reservedForStallRecreate`.
+        // An IDR during a stall SUSTAINED past the escalation window is the
+        // cure, not another casualty: abandon the wedged session's slots (the
+        // `handleCleanup` reset discipline; `releaseInFlightDecode` floors at
+        // 0, so a late callback from the doomed session cannot underflow -
+        // worst case it eats this IDR's slot early, briefly loosening a
+        // protective bound) and reserve this frame to drive a FORCED session
+        // recreate. The window is well past `decodeStallWindowSeconds`, so a
+        // burst VT is merely slow to drain never triggers a recreate - only a
+        // VT that has produced nothing across many IDR round-trips.
+        if isIDR, vtDark >= VideoDecoder.decodeStallEscalateSeconds {
+            inFlightDecodes = 1
+            consecutiveBacklogOverflow = 0
+            inFlightDecodeLock.unlock()
+            log.error(
+                // swiftlint:disable:next line_length
+                "Decode stall ESCALATION (\(backlog) in flight, VT dark \(String(format: "%.1f", vtDark))s) - abandoning wedged session, forcing recreate with this IDR")
+            Diag.error("Video decode stalled \(String(format: "%.1f", vtDark))s with "
+                + "\(backlog) frames wedged in VT - rebuilding the decode session in "
+                + "place with the arriving IDR", "Stream")
+            OSSignposter.decode.emitEvent(
+                "DecodeStallRecreate", "backlog=\(backlog, privacy: .public)")
+            return .reservedForStallRecreate
         }
 
         // Genuine sustained stall (VT not draining, or hit the ceiling). Drop +
