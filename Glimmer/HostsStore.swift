@@ -369,9 +369,16 @@ extension AppModel {
                         }
                     }
                 }
+                // `mac` + `lunadevice` MUST be wiped with the slot (audit
+                // 2026-08-17): both are slot-indexed and read back by
+                // `loadHosts`, so leaving them meant a NEW host paired into a
+                // recycled slot inherited the OLD host's Wake-on-LAN target
+                // and luna power-control identity - wake/sleep/shutdown aimed
+                // at the wrong machine.
                 for key in ["hostname", "uuid", "name", "customname",
                             "localaddress", "manualaddress",
-                            "srvcert", "appversion", "gfeversion", "apps.size"] {
+                            "srvcert", "appversion", "gfeversion", "apps.size",
+                            "mac", "lunadevice"] {
                     defaults.removeObject(forKey: "\(prefix).\(key)")
                 }
                 // Leave the hole; `loadHosts` skips empty slots and other

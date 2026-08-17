@@ -374,6 +374,15 @@ public final class VideoDecoder {
     /// present-watchdog's 250ms stall trip, so the decode side resyncs before the
     /// present path notices.
     nonisolated static let decodeStallWindowSeconds = 0.150
+    /// Stall ESCALATION window (wedge audit 2026-08-17): an IDR arriving after
+    /// VT has produced NOTHING for this long forces a session recreate instead
+    /// of dying at the backlog gate - the gate's own flush-to-IDR requests the
+    /// recovery keyframe, and dropping that keyframe too closed the loop
+    /// forever (the video twin of the audio silence wedge). 2s = ~13x the
+    /// stall window and several 1Hz IDR round-trips, so a VT that is merely
+    /// slow to drain a burst never triggers a teardown; a VT that is genuinely
+    /// hosed recreates within ~2-3s instead of freezing until manual reconnect.
+    nonisolated static let decodeStallEscalateSeconds = 2.0
 
     // True when start() has been called but stop() hasn't. We refuse to
     // touch the decode/enqueue path outside that window.

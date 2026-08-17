@@ -197,6 +197,7 @@
 		D2B00006 /* AudioPlayoutStallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00005 /* AudioPlayoutStallTests.swift */; };
 		D2B00008 /* MouseAccelerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00007 /* MouseAccelerationTests.swift */; };
 		D2B0000A /* EnvKeepalivePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00009 /* EnvKeepalivePolicyTests.swift */; };
+		D2B0000C /* PresentTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000B /* PresentTripTests.swift */; };
 		D2000031 /* StreamCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000030 /* StreamCryptoTests.swift */; };
 		D2000033 /* PairingCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000032 /* PairingCryptoTests.swift */; };
 		D2000035 /* ParserHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000034 /* ParserHelperTests.swift */; };
@@ -438,6 +439,7 @@
 		D2B00005 /* AudioPlayoutStallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayoutStallTests.swift; sourceTree = "<group>"; };
 		D2B00007 /* MouseAccelerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseAccelerationTests.swift; sourceTree = "<group>"; };
 		D2B00009 /* EnvKeepalivePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvKeepalivePolicyTests.swift; sourceTree = "<group>"; };
+		D2B0000B /* PresentTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentTripTests.swift; sourceTree = "<group>"; };
 		D2000030 /* StreamCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamCryptoTests.swift; sourceTree = "<group>"; };
 		D2000032 /* PairingCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCryptoTests.swift; sourceTree = "<group>"; };
 		D2000034 /* ParserHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserHelperTests.swift; sourceTree = "<group>"; };
@@ -735,6 +737,7 @@
 				D2B00005 /* AudioPlayoutStallTests.swift */,
 				D2B00007 /* MouseAccelerationTests.swift */,
 				D2B00009 /* EnvKeepalivePolicyTests.swift */,
+				D2B0000B /* PresentTripTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
 				D2000032 /* PairingCryptoTests.swift */,
 				D2000034 /* ParserHelperTests.swift */,
@@ -1071,6 +1074,7 @@
 				D2B00006 /* AudioPlayoutStallTests.swift in Sources */,
 				D2B00008 /* MouseAccelerationTests.swift in Sources */,
 				D2B0000A /* EnvKeepalivePolicyTests.swift in Sources */,
+				D2B0000C /* PresentTripTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
 				D2000033 /* PairingCryptoTests.swift in Sources */,
 				D2000035 /* ParserHelperTests.swift in Sources */,
