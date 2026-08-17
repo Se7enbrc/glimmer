@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026.8.9 - 2026-08-17
+
+The rough first half-minute on Wi-Fi is gone.
+
+A Wi-Fi stream's opening 30 seconds used to stutter - dropped frames, brief
+picture freezes - and then settle down on its own. Captured in the numbers:
+thirty-six freezes of a tenth of a second or more in the first half minute, then
+none at all, on a strong 6GHz connection. The cause wasn't the network warming
+up; it was Glimmer relaxing its radio-keepalive too early, letting the Mac's
+Wi-Fi radio nap between packets while the access point was still settling its
+power-management posture with the new stream. Glimmer now holds the radio awake
+for the first 90 seconds of every Wi-Fi session unconditionally, and only then
+begins economizing. Wired connections are unaffected, and the cost on Wi-Fi is a
+trickle of tiny keepalive packets.
+
 ## 2026.8.8 - 2026-08-17
 
 Your desktop mouse can no longer lose its acceleration to a streaming session.
