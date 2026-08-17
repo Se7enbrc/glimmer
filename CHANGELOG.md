@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026.8.10 - 2026-08-17
+
+Two ways a stream could freeze until you reconnected are gone, and unpairing a
+PC no longer leaves its power controls aimed at the next one.
+
+An audit of the whole streaming engine found two dormant failure modes with the
+same shape as the audio bug fixed in 2026.8.7 - video kept arriving and decoding
+perfectly while every frame was silently thrown away, forever, with nothing
+noticing. One lived in the recovery path that re-enables smooth pacing after a
+rough patch: if the display's renderer got stuck at exactly that moment, no
+watchdog could see it. The other lived in the decoder's overload protection: if
+Apple's video decoder genuinely hung, the recovery keyframe it asked for was
+itself thrown away by the very gate that requested it, in a closed loop. Both
+now self-heal within a couple of seconds - the first through the existing
+recovery ladder, which can finally see this case; the second by rebuilding the
+decoder in place with the arriving keyframe.
+
+Also fixed: removing a paired PC left its Wake-on-LAN address behind, so a new
+PC paired afterwards could inherit the old one's wake/sleep/shutdown target -
+power buttons aimed at the wrong machine.
+
 ## 2026.8.9 - 2026-08-17
 
 The rough first half-minute on Wi-Fi is gone.
