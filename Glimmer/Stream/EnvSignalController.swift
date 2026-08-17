@@ -202,6 +202,20 @@ final class EnvSignalController: @unchecked Sendable {
     /// falls back to the validated fast dial - stale knowledge never relaxes
     /// the countermeasure.
     static let routeTrustHorizonNanos: UInt64 = 30_000_000_000
+    /// Wi-Fi keepalive WARM-UP window (ns), measured from the ping-loop
+    /// bring-up edge (stream start or silent reconnect). For its duration the
+    /// wifi branch pins the FAST cadence unconditionally - ignoring the
+    /// "active input holds the radio awake" relaxation - because in a stream's
+    /// opening stretch that assumption is measurably false: the AP-side
+    /// power-save / aggregation ramp gaps the DOWNLINK even with steady
+    /// uplink input traffic (2026-08-17, 6GHz at -43dBm: 36 gaps >100ms in
+    /// the first 30s while the cadence flapped fast↔relaxed, then ZERO for
+    /// the next 150s once fast pings pinned - the clear→gap→caution→fast→
+    /// clear→relaxed limit cycle). 90s matches the independently measured
+    /// ~80s wifi warm-up the audio floor-learning gate already covers
+    /// (AudioDecoder+Meter.startupFloorGateNanos, measured 2026-07-21).
+    /// Cost: ~13Hz of tiny UDP pings for 90s - negligible airtime.
+    static let wifiWarmupPingNanos: UInt64 = 90_000_000_000
     /// Send-due slop: the ping threads wake on the fast quantum and gate the
     /// send on elapsed-since-last-ping; without a few ms of slop a 74.9ms
     /// wake against a 75ms interval would skip to 150ms cadence.
@@ -223,6 +237,12 @@ final class EnvSignalController: @unchecked Sendable {
     /// Monotonic instant of the last exporter feed (0 = never) - the cadence
     /// only trusts the route within `routeTrustHorizonNanos` of this.
     private var lastFedNanos: UInt64 = 0
+    /// Monotonic instant of the most recent ping-loop bring-up edge (stream
+    /// start or silent reconnect; stamped in `expireRouteClaim`, the shared
+    /// bring-up path) - the wifi keepalive warm-up window measures from here.
+    /// A reconnect re-earns the warm-up deliberately: the radio renegotiates
+    /// its power-save posture on every fresh flow. 0 = no session yet.
+    private var pingLoopStartNanos: UInt64 = 0
 
     // MARK: - Published reconciler decision (lock-guarded)
     //
@@ -316,6 +336,7 @@ final class EnvSignalController: @unchecked Sendable {
         lock.lock()
         streamLinkValue = LinkClass.unknown.rawValue
         lastFedNanos = 0
+        pingLoopStartNanos = DispatchTime.now().uptimeNanoseconds
         lock.unlock()
     }
 
@@ -323,34 +344,54 @@ final class EnvSignalController: @unchecked Sendable {
 
     /// The steady keepalive interval the RTP ping loops should honor RIGHT
     /// NOW. Called from both dedicated ping threads each wake (~13Hz); cost is
-    /// two short lock reads. Decision table (the header carries the WHY):
-    ///   * wired (fresh)  → relaxed 500ms - a wired NIC doesn't doze, so the
-    ///     fast cadence would just spend packets for nothing.
-    ///   * wifi (fresh)   → fast 75ms when input-idle OR state ≥ CAUTION
-    ///     (doze window open / link already degraded); relaxed 500ms during
-    ///     active-input CLEAR play (input traffic holds the radio awake).
-    ///   * tunnel/unknown/stale → fast 75ms: route truth absent or possibly
-    ///     riding the radio - keep the validated countermeasure. Never a
-    ///     permanent give-up: the next exporter feed or route probe re-opens
-    ///     the relaxed path within a second.
+    /// two short lock reads. Gathers the live inputs and delegates the table
+    /// to `resolveSteadyPingInterval` (pure, unit-tested).
     func steadyPingInterval() -> TimeInterval {
         let nowNanos = DispatchTime.now().uptimeNanoseconds
         lock.lock()
         let link = streamLinkValue
         let current = stateValue
         let fed = lastFedNanos
+        let loopStart = pingLoopStartNanos
         lock.unlock()
         let routeFresh = fed != 0 && nowNanos &- fed <= Self.routeTrustHorizonNanos
-        guard routeFresh else { return Self.fastPingIntervalSeconds }
-        switch LinkClass(label: link) {
+        let inWarmup = loopStart != 0 && nowNanos &- loopStart < Self.wifiWarmupPingNanos
+        return Self.resolveSteadyPingInterval(
+            link: LinkClass(label: link), state: current, routeFresh: routeFresh,
+            inputIdle: isInputIdle(nowNanos: nowNanos), inWarmup: inWarmup)
+    }
+
+    /// The keepalive decision table, pure (the header carries the WHY):
+    ///   * stale route    → fast 75ms: route truth absent or possibly riding
+    ///     the radio - keep the validated countermeasure. Never a permanent
+    ///     give-up: the next exporter feed re-opens the relaxed path.
+    ///   * wired (fresh)  → relaxed 500ms - a wired NIC doesn't doze, so the
+    ///     fast cadence would just spend packets for nothing (warm-up
+    ///     included: there is no radio to hold awake).
+    ///   * wifi WARM-UP   → fast 75ms unconditionally for the first
+    ///     `wifiWarmupPingNanos` of a session/reconnect: the "input traffic
+    ///     holds the radio awake" relaxation below is measurably false while
+    ///     the AP's power-save/aggregation posture is still ramping - the
+    ///     gaps hit the DOWNLINK regardless of uplink input (36 gaps >100ms
+    ///     in a measured first-30s, zero once fast pings pinned).
+    ///   * wifi (fresh)   → fast 75ms when input-idle OR state ≥ CAUTION
+    ///     (doze window open / link already degraded); relaxed 500ms during
+    ///     active-input CLEAR play (input traffic holds the radio awake).
+    ///   * tunnel/unknown → fast 75ms.
+    static func resolveSteadyPingInterval(
+        link: LinkClass, state: EnvState, routeFresh: Bool,
+        inputIdle: Bool, inWarmup: Bool
+    ) -> TimeInterval {
+        guard routeFresh else { return fastPingIntervalSeconds }
+        switch link {
         case .wired:
-            return Self.relaxedPingIntervalSeconds
+            return relaxedPingIntervalSeconds
         case .wifi:
-            if current != .clear { return Self.fastPingIntervalSeconds }
-            return isInputIdle(nowNanos: nowNanos)
-                ? Self.fastPingIntervalSeconds : Self.relaxedPingIntervalSeconds
+            if inWarmup { return fastPingIntervalSeconds }
+            if state != .clear { return fastPingIntervalSeconds }
+            return inputIdle ? fastPingIntervalSeconds : relaxedPingIntervalSeconds
         case .tunnel, .unknown:
-            return Self.fastPingIntervalSeconds
+            return fastPingIntervalSeconds
         }
     }
 
