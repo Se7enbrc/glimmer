@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.8.8 - 2026-08-17
+
+Your desktop mouse can no longer lose its acceleration to a streaming session.
+
+While a stream is focused, Glimmer turns off the Mac's pointer-acceleration
+curve so in-game aim is raw 1:1, and puts your setting back the moment you tab
+away. A bookkeeping bug could get that restore wrong in unusual situations - two
+copies of Glimmer running at once, or a session that ended mid-crash - and your
+desktop pointer was then left with acceleration off entirely, surviving
+relaunches, until you fixed it by hand in System Settings. The saved value is
+now tracked in a way those situations can't corrupt: however a session ends, the
+desktop always comes back to the curve you actually had.
+
 ## 2026.8.7 - 2026-08-12
 
 Audio now survives being left alone.
