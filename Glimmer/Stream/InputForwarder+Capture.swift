@@ -484,7 +484,9 @@ enum MouseAccelerationControl {
     /// Engage linear mode. Returns the saved prior acceleration to hand back on
     /// disengage, or nil when there is nothing of ours to undo: the read failed,
     /// the user already runs linear (prior < 0), or the write was refused. Stamps
-    /// the crash-safety sentinel only when it actually overrides.
+    /// the crash-safety sentinel only when it actually overrides. When the
+    /// sentinel shows an engagement is ALREADY live, the prior comes from the
+    /// sentinel, never the read-back (see the live-override guard below).
     static func engageLinear() -> Double? {
         let prior = gl_get_mouse_acceleration()
         // < -1.5 = the (deprecated, private) IOKit acceleration API failed or is
@@ -499,15 +501,50 @@ enum MouseAccelerationControl {
             }
             return nil
         }
-        // prior in [-1, 0): the user already runs linear - nothing of ours to undo.
-        guard prior >= 0 else { return nil }
         let defaults = UserDefaults.standard
+        // LIVE-OVERRIDE GUARD (the read-back trap): with the override engaged the
+        // system reads the acceleration back as 0.0 - NOT the negative sentinel
+        // value we wrote - so the old `guard prior >= 0` "already linear" check
+        // could never fire, and a second engage while an override was live (a
+        // concurrent second copy, a raced restore, a crashed session's leftover)
+        // adopted OUR OWN override as "the user's prior". The eventual restore
+        // then stranded the desktop at 0.0 - acceleration off - persisted across
+        // launches by the sentinel. The sentinel IS the discriminator: stamped
+        // means an engagement is live and it holds the user's real curve. Adopt
+        // the resolved prior (self-healing - the restore chain still ends at the
+        // user's setting), re-assert linear, and restamp. The re-assert result is
+        // deliberately ignored: the desktop is ALREADY overridden, so this
+        // session's exit must restore the adopted prior regardless.
+        if defaults.object(forKey: pendingRestoreKey) != nil {
+            let adopted = resolvePrior(readBack: prior,
+                                       sentinel: defaults.double(forKey: pendingRestoreKey))
+            defaults.set(adopted, forKey: pendingRestoreKey)
+            _ = gl_set_mouse_acceleration(linear)
+            return adopted
+        }
+        // prior in [-1, 0): the user already runs linear - nothing of ours to
+        // undo. (Sentinel absent, so a read-back of exactly 0.0 is a GENUINE
+        // user setting - the slider's lowest stop - saved and restored like any
+        // other; only a negative read means the linear sentinel is user-set.)
+        guard prior >= 0 else { return nil }
         defaults.set(prior, forKey: pendingRestoreKey)
         guard gl_set_mouse_acceleration(linear) == 1 else {
             defaults.removeObject(forKey: pendingRestoreKey)
             return nil
         }
         return prior
+    }
+
+    /// The prior to hand the restore chain when an engagement is already LIVE
+    /// (sentinel stamped). Pure - unit-tested without touching IOKit.
+    /// - `readBack > 0`: a real curve is live after all (a stale sentinel from
+    ///   an interrupted restore) - the fresh read is the truth.
+    /// - `readBack <= 0`: the override is live and the read-back is our own
+    ///   linear (reads 0.0, never negative) - the sentinel holds the user's
+    ///   real curve. Clamped >= 0 so a corrupt sentinel can never make the
+    ///   restore chain write a negative (stuck-linear) value.
+    static func resolvePrior(readBack: Double, sentinel: Double) -> Double {
+        readBack > 0 ? readBack : max(sentinel, 0)
     }
 
     /// Restore a previously-saved acceleration value and clear the sentinel.
