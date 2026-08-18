@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.8.11 - 2026-08-18
+
+Glimmer no longer crashes when a stream wakes up from sleep.
+
+If the Mac slept mid-stream, the audio hardware went away underneath the running
+session - and about nine seconds after waking, Glimmer could crash outright
+while trying to restart sound, because the system audio framework reports that
+particular failure by throwing an error the app was structurally unable to
+catch. Restarting playback now goes through a guard that catches those errors at
+the boundary: if sound can't start yet, Glimmer simply stays quiet and retries
+with each arriving packet until the audio hardware is back - a moment of silence
+instead of a dead app. The same guard covers every other way the audio engine
+can refuse to start.
+
 ## 2026.8.10 - 2026-08-17
 
 Two ways a stream could freeze until you reconnected are gone, and unpairing a
