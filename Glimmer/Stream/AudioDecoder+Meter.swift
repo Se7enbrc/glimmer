@@ -256,11 +256,16 @@ extension AudioDecoder {
         let aheadFrames = framesScheduled &- framesPlayed
         let aheadMs = meterSampleRate > 0 ? Double(aheadFrames) / meterSampleRate * 1000.0 : 0
         if aheadMs >= playoutTargetMs {
-            primed = true
             audioMeterLock.unlock()
             // Cushion is built - begin (or, re-prime, continue) gapless playback;
             // the already-queued buffers drain ahead of the playhead as the cushion.
-            playerNode.play()
+            // `primed` latches ONLY on a successful start (see
+            // startPlayoutAtPrimeEdge - the post-wake stopped-engine crash):
+            // on failure the next packet re-enters this edge and retries.
+            guard startPlayoutAtPrimeEdge() else { return }
+            audioMeterLock.lock()
+            primed = true
+            audioMeterLock.unlock()
             return
         }
         if !rebuildIsReprime {
@@ -276,9 +281,11 @@ extension AudioDecoder {
                 audioMeterLock.unlock()
                 return
             }
+            audioMeterLock.unlock()
+            guard startPlayoutAtPrimeEdge() else { return }
+            audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
-            playerNode.play()
             return
         }
         // Mid-stream re-prime, fill short of target: give the catch-up clump its
@@ -317,10 +324,15 @@ extension AudioDecoder {
         // as-is rather than wedging the state machine un-primed.
         guard deficitMs >= Self.playoutCushionStepMs, frames > 0,
               let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else {
+            // Sub-step deficit / failed alloc: prime as-is - but only if
+            // playback actually starts; a play failure (post-wake stopped
+            // engine) leaves the machine un-primed and this cheap path
+            // retries per packet. Bounded: with fill ≈ target the deficit
+            // stays sub-step, so the retries never re-enter the backfill.
+            guard startPlayoutAtPrimeEdge() else { return }
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
-            playerNode.play()
             return
         }
         silence.frameLength = frames
@@ -344,7 +356,6 @@ extension AudioDecoder {
         // playing the anchor can sit ahead of `framesPlayed`; `publishAudioState`'s
         // guard reports drift as absent for that moment, then resumes clean.)
         driftAnchorFramesPlayed &+= silenceFrames
-        primed = true
         let targetMs = playoutTargetMs
         let route = audioRouteCache
         audioMeterLock.unlock()
@@ -354,7 +365,15 @@ extension AudioDecoder {
         playerNode.scheduleBuffer(silence) { [weak self] in
             self?.meterCompleteOnePlayout(frames: silenceFrames, isSilence: true)
         }
-        playerNode.play() // no-op mid-stream; keeps the prime edge uniform
+        // Uniform prime edge, made exception-safe: the silence stays scheduled
+        // either way (it plays when the engine returns); `primed` latches only
+        // on a successful start, and the sub-step guard above makes the
+        // per-packet retries cheap (fill ≈ target ⇒ no repeat backfill).
+        if startPlayoutAtPrimeEdge() {
+            audioMeterLock.lock()
+            primed = true
+            audioMeterLock.unlock()
+        }
         Diag.notice(
             "audio cushion backfill +\(Int(deficitMs.rounded()))ms silence → \(Int(targetMs))ms standing fill "
             + "- no catch-up clump within the re-prime grace (steady link); route \(route)",

@@ -725,6 +725,51 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `framesPlayed` so the next schedule takes the (re)arm edge - drift
     /// re-anchor, gate grace, cushion rebuild - and `maybePrime`'s cold-start
     /// pre-roll re-issues `play()`.
+    /// Start playback at a prime edge, SAFELY (the 2026-08-17 post-wake crash).
+    /// System sleep tears the audio hardware down mid-stream and stops the
+    /// engine; the resume edge's re-prime then called `playerNode.play()` 9s
+    /// after wake, which raises an NSException Swift cannot catch - process
+    /// dead on the audio receive thread. Two layers here: ensure the engine is
+    /// running first (post-wake it usually just needs a start(); failure arms
+    /// the existing bounded retry ladder), then run play() under the ObjC
+    /// exception shim so even an engine that LIES about isRunning (device
+    /// mid-transition) degrades to a false return instead of an abort.
+    /// Returns false when playback could not start - the caller must leave the
+    /// state machine UN-primed so the next packet retries the edge; packets
+    /// keep scheduling meanwhile, so recovery is one successful start away.
+    /// Caller is the decode path with `stateLock` held (AV calls serialized
+    /// against `shutdown()`), never inside `audioMeterLock`.
+    func startPlayoutAtPrimeEdge() -> Bool {
+        if !engine.isRunning {
+            // The start itself goes under the shim too: `engine.start()`
+            // reports missing-hardware failures as a thrown NSError, but some
+            // states (an incomplete graph, a device mid-teardown) RAISE an
+            // NSException instead - the test suite's empty-graph decoder
+            // proved that path aborts without the guard.
+            var startError: Error?
+            let noRaise = gl_objc_try {
+                do { try self.engine.start() } catch { startError = error }
+            }
+            guard noRaise, startError == nil, engine.isRunning else {
+                Diag.error("audio engine start at prime edge FAILED "
+                    + "(\(startError.map { $0.localizedDescription } ?? "NSException")) "
+                    + "- staying un-primed, retry armed", "Stream.Audio")
+                scheduleEngineRestartRetry()
+                return false
+            }
+            engineRestartRetries = 0
+            Diag.notice("audio engine restarted at the prime edge "
+                + "(stopped underneath us - system sleep?)", "Stream.Audio")
+        }
+        guard gl_objc_try({ self.playerNode.play() }) else {
+            Diag.error("audio playerNode.play() threw at the prime edge (device "
+                + "mid-transition?) - staying un-primed, will retry per packet",
+                "Stream.Audio")
+            return false
+        }
+        return true
+    }
+
     func recoverIfPlayoutStalled() {
         let now = DispatchTime.now().uptimeNanoseconds
         audioMeterLock.lock()
