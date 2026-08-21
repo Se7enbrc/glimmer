@@ -40,6 +40,28 @@ enum ControlTransport {
                     timeout: TimeInterval) async throws -> Response {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Response, Error>) in
             ioQueue.async {
+                // OPENSSL PER-THREAD STATE RELEASE (the 2026-08-21 crash).
+                // `ioQueue` is a concurrent dispatch queue, so this block runs on
+                // POOLED GCD worker threads that the system retires when idle.
+                // libcrypto plants thread-local state (ERR stacks, the 3.x
+                // "master key" sparse array) on whatever thread runs a TLS
+                // handshake, and reclaims it in a pthread TSD DESTRUCTOR at
+                // thread exit. A 3-day process accumulated that state across
+                // dozens of workers; when GCD retired one ~15min after a wake,
+                // the destructor walked a days-old sparse array and crashed on
+                // freed memory (sa_doall → ossl_sa_free → clean_master_key,
+                // SIGSEGV at a 0x8080... poison address). OPENSSL_thread_stop is
+                // the API the OpenSSL docs REQUIRE of threads the library didn't
+                // create: it releases the per-thread state deterministically,
+                // HERE, microseconds after it was planted and while it is
+                // certainly valid - so thread retirement finds nothing to
+                // reclaim. Cost: per-call state re-creation, trivial next to the
+                // TLS handshake this block just performed. (The RTP/control
+                // paths run on OWNED long-lived threads and the audio decrypt
+                // path is plaintext for our hosts, so this transport is the one
+                // pooled-thread OpenSSL user; the Swift-concurrency cooperative
+                // pool's threads persist for the process lifetime.)
+                defer { OPENSSL_thread_stop() }
                 do {
                     cont.resume(returning: try performBlocking(
                         host: host, port: port, target: target, userAgent: userAgent,
