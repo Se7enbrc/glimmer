@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.8.12 - 2026-08-21
+
+A rare crash in long-running sessions is gone.
+
+Glimmer could crash out of the blue after days of running - not while streaming,
+but quietly in the background, typically some minutes after the Mac woke from
+sleep. The cause sat in the bundled OpenSSL library: every secure check-in with
+your PC leaves a little bookkeeping on whichever system worker thread happened
+to run it, to be cleaned up when that thread is eventually discarded - sometimes
+days later, by which point the cleanup could trip over stale memory and take the
+app down. Glimmer now does that cleanup itself, immediately after each secure
+call, so there is never anything old lying around for the system to trip over.
+
 ## 2026.8.11 - 2026-08-18
 
 Glimmer no longer crashes when a stream wakes up from sleep.
