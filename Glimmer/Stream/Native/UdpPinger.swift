@@ -197,8 +197,68 @@ final class UdpPinger: @unchecked Sendable {
         }
     }
 
-    /// Build a sockaddr for host:port. Only IP literals are expected on the
-    /// native path (the address came straight from RTSP); hostnames return nil.
+    /// Resolve a host STRING to an IP-literal `NWEndpoint.Host`, ONCE, at
+    /// connection start (issue #70). An IPv4/IPv6 literal passes through with
+    /// no DNS at all; a hostname is resolved via getaddrinfo - the SAME
+    /// resolver (and system address ordering) the TCP/control paths in
+    /// CHelpers already use - so every channel of a session targets the same
+    /// address and family, and split-horizon DNS can never send video to a
+    /// different host than control. Returns nil when the name does not
+    /// resolve; the caller fails the connection with a resolution error
+    /// instead of the old late, misleading per-receiver socket failure.
+    ///
+    /// WHY resolve-once-here and not inside `makeSockaddr`: DNS belongs at
+    /// the connection edge, not on a path called during socket setup (the
+    /// WiFiTelemetry no-DNS discipline). Before this, `.name` hosts sailed
+    /// through RTSP and ENet control (getaddrinfo in CHelpers) and then died
+    /// at both RTP receivers - a 100%-reproducible "CONNECTED then instant
+    /// video failure" when a host was added by hostname/FQDN.
+    static func resolveHost(_ address: String) -> NWEndpoint.Host? {
+        // Literal fast path: NWEndpoint.Host's parser yields .ipv4/.ipv6 for
+        // literals, .name for everything else.
+        let parsed = NWEndpoint.Host(address)
+        switch parsed {
+        case .ipv4, .ipv6:
+            return parsed
+        default:
+            break
+        }
+        var hints = addrinfo()
+        hints.ai_flags = AI_ADDRCONFIG   // only families this machine can route
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_DGRAM
+        hints.ai_protocol = IPPROTO_UDP
+        var res: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(address, nil, &hints, &res) == 0, let first = res else {
+            return nil
+        }
+        defer { freeaddrinfo(first) }
+        // Walk in returned order (system policy - the choice gl_tcp_connect
+        // makes by taking the head) and adopt the first usable family.
+        var info: UnsafeMutablePointer<addrinfo>? = first
+        while let cur = info {
+            if cur.pointee.ai_family == AF_INET, let sa = cur.pointee.ai_addr,
+               Int(cur.pointee.ai_addrlen) >= MemoryLayout<sockaddr_in>.size {
+                var sin = sockaddr_in()
+                memcpy(&sin, sa, MemoryLayout<sockaddr_in>.size)
+                let bytes = withUnsafeBytes(of: sin.sin_addr) { Data($0) }
+                if let v4 = IPv4Address(bytes) { return .ipv4(v4) }
+            } else if cur.pointee.ai_family == AF_INET6, let sa = cur.pointee.ai_addr,
+                      Int(cur.pointee.ai_addrlen) >= MemoryLayout<sockaddr_in6>.size {
+                var sin6 = sockaddr_in6()
+                memcpy(&sin6, sa, MemoryLayout<sockaddr_in6>.size)
+                let bytes = withUnsafeBytes(of: sin6.sin6_addr) { Data($0) }
+                if let v6 = IPv6Address(bytes) { return .ipv6(v6) }
+            }
+            info = cur.pointee.ai_next
+        }
+        return nil
+    }
+
+    /// Build a sockaddr for host:port. Only IP literals reach the native path -
+    /// ENFORCED at the pipeline entry by `resolveHost` (issue #70), which
+    /// resolves any hostname before the receivers exist; the nil return for
+    /// `.name` is now a defensive backstop, not an expected path.
     /// Shared with VideoRtpReceiver.
     static func makeSockaddr(for host: NWEndpoint.Host,
                              port: UInt16) -> (sockaddr_storage, socklen_t, Int32)? {

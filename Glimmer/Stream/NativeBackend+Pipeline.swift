@@ -20,7 +20,24 @@ extension NativeBackend {
             Diag.info("native backend: encrypted RTSP (rtspenc://) - sealing messages", Self.logCategory)
         }
 
-        let host = NWEndpoint.Host(server.address)
+        // Resolve the host address ONCE, here, before any stage (issue #70).
+        // A hostname/FQDN used to ride through RTSP and ENet control (whose C
+        // connect paths run their own getaddrinfo) and then kill BOTH RTP
+        // receivers at makeSockaddr - "CONNECTED" followed by an instant,
+        // 100%-reproducible video failure whenever a host was added by name.
+        // Resolving at the pipeline edge gives every stage the same IP literal,
+        // keeps DNS off the socket-setup paths, and fails a bad name in one
+        // place with an error that says so.
+        guard let host = UdpPinger.resolveHost(server.address) else {
+            Diag.error("native backend: could not resolve host \"\(server.address)\" "
+                + "- check the name resolves (DNS/mDNS) from this Mac", Self.logCategory)
+            throw EnetError.socketFailure(
+                "could not resolve host \"\(server.address)\"")
+        }
+        if case .name = NWEndpoint.Host(server.address) {
+            Diag.notice("native backend: resolved \"\(server.address)\" → \(host) "
+                + "(one resolve for all channels)", Self.logCategory)
+        }
 
         // The audio ping can start MID-handshake (rtsp.onAudioPortNegotiated fires
         // at SETUP-audio time, before PLAY - moonlight's
