@@ -26,6 +26,21 @@ final class UpdaterController {
         // silent until the next one - exactly the desired behavior, for free.
         controller = SPUStandardUpdaterController(
             startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        // PRESCRIPTIVE nag policy (2026-08-26). Previously nothing set a check
+        // schedule: Sparkle's own opt-in prompt decided whether SCHEDULED
+        // checks ever ran, and the only forced check fired on a user-initiated
+        // OPEN - which a Glimmer that sits running for days never triggers, so
+        // multi-day sessions rode releases behind without a single nag (a
+        // 3-day 2026.8.11 process ran through the .12 release unprompted).
+        // Now: automatic checks ON, DAILY. Sparkle's standard driver shows the
+        // update alert whenever a scheduled or launch check finds one - that
+        // alert IS the nag, at startup (first scheduled check fires shortly
+        // after launch, and the on-open background check in GlimmerApp still
+        // forces one per open) and every 24h of uptime thereafter. Users who
+        // want quiet can still disable automatic checks in the update alert's
+        // own UI; the app just stops being silent BY DEFAULT.
+        controller.updater.automaticallyChecksForUpdates = true
+        controller.updater.updateCheckInterval = 86_400
     }
 
     var updater: SPUUpdater { controller.updater }

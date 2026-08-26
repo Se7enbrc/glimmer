@@ -465,11 +465,17 @@ public final class AudioDecoder: @unchecked Sendable {
                 + "from per-host memory - starts pre-converged", "Stream.Audio")
         }
         let seedNowNanos = DispatchTime.now().uptimeNanoseconds
+        // AV call BEFORE the meter lock (leaf-lock discipline, audit remainder
+        // 2026-08-26): varispeed.rate is an AVAudio node property - writing it
+        // under audioMeterLock inverted the documented ordering that keeps node
+        // calls out of the lock the completion handlers take. Init-time and
+        // stateLock-held, so the hazard was theoretical; the rule isn't.
+        varispeed.rate = 1.0
         audioMeterLock.lock()
         meterSampleRate = Double(sampleRate)
         framesScheduled = 0; framesPlayed = 0
         driftAnchorNanos = 0; driftAnchorFramesPlayed = 0
-        resamplerIntegralPpm = skewSeedPpm; resamplerEpsPpm = 0; varispeed.rate = 1.0
+        resamplerIntegralPpm = skewSeedPpm; resamplerEpsPpm = 0
         resamplerEverEngaged = false
         lastResamplerSkewSaveNanos = 0; lastSavedResamplerSkewPpm = .nan
         playoutStarted = false; playoutDrained = false; meterShutdown = false
@@ -823,6 +829,21 @@ public final class AudioDecoder: @unchecked Sendable {
             // graph at our (unchanged) decode format - the mixer/output handle SRC
             // to the new hardware rate. stop() here fires queued completions on the
             // meter path (no AV calls), and we hold stateLock so no decode races.
+            //
+            // EVIDENCE GATE (audit remainder, 2026-08-26): that completion burst
+            // is the SAME one shutdown() and the stall recovery fire - and
+            // un-gated, its last completion minted a SYNTHETIC under-run on
+            // every mid-stream output-device change (AirPods connect/disconnect,
+            // HDMI unplug, DAC removal): target ratcheted +10ms, floor
+            // EWMA-pulled, both PERSISTED per host - audio latency quietly
+            // crept across sessions for anyone who switches audio devices (the
+            // disguised-permanent-pin class, in the one stop() this file had
+            // left un-gated). Raise the same `meterRecovering` latch the stall
+            // recovery uses; the re-arm below forces the next schedule's arm
+            // edge, which clears it.
+            audioMeterLock.lock()
+            meterRecovering = true
+            audioMeterLock.unlock()
             playerNode.stop()
             engine.connect(varispeed, to: engine.mainMixerNode, format: fmt)
         }

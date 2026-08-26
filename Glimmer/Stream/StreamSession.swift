@@ -143,6 +143,14 @@ public actor StreamSession {
     /// timer is allocated and invalidated on the main thread only; the
     /// actor schedules those touches via `await MainActor.run { ... }`.
     nonisolated(unsafe) var frameWatchdogTimer: Timer?
+    /// Monotonic instant (`CACurrentMediaTime`) the frame watchdog armed - the
+    /// idle reference for the PRE-FIRST-FRAME envelope (audit 2026-08-17: idle
+    /// reads ∞ until the first decoded frame, so a bring-up that hung before
+    /// frame one was invisible to every trip - black screen until manual
+    /// cancel, despite the comment below saying the timeout was MEANT to be
+    /// moonlight's FIRST_FRAME_TIMEOUT). Written on the main thread in
+    /// startFrameWatchdog, read by the timer closure on the same thread.
+    nonisolated(unsafe) var frameWatchdogArmedAt: Double = 0
     /// Matches moonlight-common-c's `FIRST_FRAME_TIMEOUT_SEC` in
     /// VideoStream.c. We reuse the value mid-stream as well: if decode has
     /// been silent for this long, the host is presumed gone or the bit-

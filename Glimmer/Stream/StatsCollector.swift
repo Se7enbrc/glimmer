@@ -39,12 +39,17 @@
 //  simpler than juggling several `OSAtomic*` calls.
 
 import Foundation
+import QuartzCore
 import os
 final class StatsCollector: @unchecked Sendable {
 
     /// FIFO of `(timestamp, intervalState)` pairs for in-flight decode
-    /// submits. Timestamps come from `CFAbsoluteTimeGetCurrent()` - wall-
-    /// clock seconds, ms resolution. Bounded at 64 entries which is well
+    /// submits. Timestamps come from `CACurrentMediaTime()` - MONOTONIC
+    /// seconds (mach clock; audit 2026-08-17: these stamps feed the frame
+    /// watchdog, IDR recovery, downshift gate and teardown as now-minus-stamp
+    /// idle readings, and the previous wall clock let an NTP step or DST
+    /// change mid-session fake or mask a stall). Every consumer diffs
+    /// internally - nothing here is a wall timestamp. Bounded at 64 entries which is well
     /// over the deepest in-flight queue VT hands us at 4K/240 (typically
     /// 1-2, occasionally 4 during a P-frame burst); overflow drops the
     /// oldest, biasing the EMA slightly toward recent frames - acceptable
@@ -253,7 +258,7 @@ final class StatsCollector: @unchecked Sendable {
         lastReceivedFrameTime = 0
         lastDecodedFrameTime = 0
         lastPresentTime = 0
-        windowStart = CFAbsoluteTimeGetCurrent()
+        windowStart = CACurrentMediaTime()
         windowStartReceivedFrames = 0
         windowStartDecodedFrames = 0
         windowStartRenderedFrames = 0
@@ -304,7 +309,7 @@ final class StatsCollector: @unchecked Sendable {
     /// reset-on-every-read behaviour - the telemetry exporter calls it that way
     /// so its NDJSON keeps emitting fresh per-tick windows on its own cadence.
     func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = CACurrentMediaTime()
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
 

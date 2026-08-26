@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import QuartzCore
 import os
 
 extension StatsCollector {
@@ -21,7 +22,7 @@ extension StatsCollector {
         defer { os_unfair_lock_unlock(&lock) }
         receivedFrames &+= 1
         totalReceived &+= 1
-        lastReceivedFrameTime = CFAbsoluteTimeGetCurrent()
+        lastReceivedFrameTime = CACurrentMediaTime()
         if bytes > 0 {
             receivedBytes &+= UInt64(bytes)
             // Telemetry frame-size + type window accumulators - cheap integer adds
@@ -39,7 +40,7 @@ extension StatsCollector {
     func recordDecodedFrame() {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
-        lastDecodedFrameTime = CFAbsoluteTimeGetCurrent()
+        lastDecodedFrameTime = CACurrentMediaTime()
     }
 
     /// Seconds since the last frame was received from the network, or
@@ -48,7 +49,7 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         guard lastReceivedFrameTime > 0 else { return .infinity }
-        return CFAbsoluteTimeGetCurrent() - lastReceivedFrameTime
+        return CACurrentMediaTime() - lastReceivedFrameTime
     }
 
     /// Seconds since VT successfully decoded a frame, or `Double.infinity`
@@ -59,7 +60,7 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         guard lastDecodedFrameTime > 0 else { return .infinity }
-        return CFAbsoluteTimeGetCurrent() - lastDecodedFrameTime
+        return CACurrentMediaTime() - lastDecodedFrameTime
     }
 
     /// Seconds since a frame last reached the renderer (the present clock), or
@@ -71,7 +72,7 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         guard lastPresentTime > 0 else { return .infinity }
-        return CFAbsoluteTimeGetCurrent() - lastPresentTime
+        return CACurrentMediaTime() - lastPresentTime
     }
 
     /// Record the host-reported `frameHostProcessingLatency` value from one
@@ -102,7 +103,7 @@ extension StatsCollector {
     /// it for the caller to close the interval - possibly on a different
     /// thread (the VT output callback fires on VT's own queue).
     func recordDecodeSubmit(intervalState: OSSignpostIntervalState) {
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = CACurrentMediaTime()
         var evictedForLeakClose: OSSignpostIntervalState?
         os_unfair_lock_lock(&lock)
         submitFifo.append((timestamp: now, state: intervalState))
@@ -134,7 +135,7 @@ extension StatsCollector {
     /// is empty (stray output callback) - caller should skip the
     /// `endInterval` in that case.
     func recordDecodeComplete(dropped: Bool) -> OSSignpostIntervalState? {
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = CACurrentMediaTime()
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         var poppedState: OSSignpostIntervalState?
@@ -185,7 +186,7 @@ extension StatsCollector {
         // for BOTH paced and direct presents - so the present-path watchdog and
         // fps_rendered both source from the actual screen-update moment and
         // never gap on a pacer disable/re-enable transition.
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = CACurrentMediaTime()
         lastPresentTime = now
         // Perceived-gap judge: a drought since the last present with frames
         // still ARRIVING in between means the screen held while content flowed

@@ -202,6 +202,7 @@ extension StreamSession {
         let dec = videoDecoder
         await MainActor.run {
             self.frameWatchdogTimer?.invalidate()
+            self.frameWatchdogArmedAt = CACurrentMediaTime()
             let timer = Timer.scheduledTimer(
                 withTimeInterval: 1.0, repeats: true
             ) { [weak self, weak dec] _ in
@@ -231,12 +232,32 @@ extension StreamSession {
                 let decodeIdle = min(
                     dec.secondsSinceLastDecodedFrame(),
                     dec.secondsSinceDecodeGateLifted())
-                // .infinity means we've never decoded a frame - leave the
-                // initial RTSP/IDR window alone. Once decode starts flowing,
-                // decodeIdle is a small number; if it climbs past the
-                // threshold the host has gone silent or the bitstream is
-                // unrecoverable.
-                guard decodeIdle.isFinite else { return }
+                // .infinity means we've never decoded a frame. The bare
+                // `return` here used to make EVERY trip below structurally
+                // blind to a bring-up that hangs before frame one - black
+                // screen until manual cancel - even though frameWatchdogTimeout
+                // is documented as moonlight's FIRST_FRAME_TIMEOUT_SEC. Give
+                // the pre-first-frame window its own envelope from the arm
+                // instant (audit 2026-08-17): past the same timeout with
+                // nothing EVER decoded, run the hard trip. The ENet-alive hold
+                // deliberately does NOT apply to this case - a host that never
+                // delivered frame ONE on a healthy control link is a broken
+                // bring-up, not a paused sign-in desktop.
+                guard decodeIdle.isFinite else {
+                    guard let self else { return }
+                    let sinceArm = CACurrentMediaTime() - self.frameWatchdogArmedAt
+                    if self.frameWatchdogArmedAt > 0,
+                       sinceArm > StreamSession.frameWatchdogTimeout {
+                        let receiveIdle = dec.secondsSinceLastReceivedFrame()
+                        Task { [weak self] in
+                            await self?.handleWatchdogTimeout(
+                                decodeIdleSeconds: sinceArm,
+                                receiveIdleSeconds: receiveIdle,
+                                neverDecodedFirstFrame: true)
+                        }
+                    }
+                    return
+                }
                 let receiveIdle = dec.secondsSinceLastReceivedFrame()
 
                 // Soft trip: reception healthy but decode silent → log a
@@ -596,7 +617,8 @@ extension StreamSession {
     }
 
     private func handleWatchdogTimeout(
-        decodeIdleSeconds: Double, receiveIdleSeconds: Double
+        decodeIdleSeconds: Double, receiveIdleSeconds: Double,
+        neverDecodedFirstFrame: Bool = false
     ) async {
         // While a reconnect episode is running the connection is deliberately
         // down (we're rebuilding it under the frozen frame); the episode owns
@@ -617,7 +639,12 @@ extension StreamSession {
         // "host is gone" teardown is owned by ENet's own dead-peer detection
         // (EnetControlChannel+ControlLoop fires onTerminated(-1) once keepalives
         // stop being ACKed) - a connection-loss signal, not a video-stall one.
-        if let health = backend.enetHealth(),
+        // The pre-first-frame trip is EXEMPT from the hold: "sign-in desktop
+        // paused the encoder" presupposes video once flowed. A host that never
+        // delivered frame ONE on a healthy control link is a broken bring-up -
+        // holding it just pins the black screen the trip exists to end.
+        if !neverDecodedFirstFrame,
+           let health = backend.enetHealth(),
            health.sinceLastAckMs < StreamSession.enetAliveHoldThresholdMs {
             // Hold banner over the frozen frame: "Holding..." since the control
             // link is alive (only video paused) - "Reconnecting..." is reserved
