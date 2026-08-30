@@ -3,22 +3,18 @@
 Glimmer's Swift streaming transport was **ported from
 [moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)**,
 the core protocol library written by the
-[Moonlight Game Streaming](https://github.com/moonlight-stream) team. Their work
-is a genuinely impressive, hard-won implementation of the GameStream/Sunshine
-wire protocol, and Glimmer would not exist without it. Thank you.
+[Moonlight Game Streaming](https://github.com/moonlight-stream) team. Their
+implementation of the GameStream/Sunshine wire protocol is hard-won work, and
+Glimmer would not exist without it. Thank you.
 
-A few higher-level pieces - the pairing handshake, the nvhttp control client,
-and the frame pacer - were likewise ported from the same team's
+A few higher-level pieces, the pairing handshake, the nvhttp control client, and
+the frame pacer, were likewise ported from the same team's
 [moonlight-qt](https://github.com/moonlight-stream/moonlight-qt) (also GPLv3).
 
-Because these are faithful ports - derivative works - Glimmer is distributed
+These are faithful ports, so Glimmer is a derivative work and is distributed
 under the **GNU General Public License v3** (see [LICENSE](LICENSE)), the same
-license as the originals.
-
-A clean-room reimplementation, written from the published GameStream/Sunshine
-wire protocol rather than from moonlight-common-c's source, is planned. Once
-that lands, Glimmer will become independently licensed. Until then, the GPLv3
-notice on the ported files is accurate and intentional.
+license as the originals. The GPLv3 notice on the ported files is accurate and
+intentional.
 
 ## MIT-licensed upstreams ported via moonlight-common-c
 

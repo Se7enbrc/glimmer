@@ -107,18 +107,19 @@ keychain once builds became Developer ID signed, and stayed on files:
   `~/Library/Preferences`, no keychain at all. Glimmer's mode-0600 home files
   are already stricter: only the owning UID can read them, and 0600 beats 0644.
 
-The one residual exposure is a Full-Disk-Access same-UID process reading the key
-
-- a narrow OS-level threat, and one the reference implementation doesn't address
-  either.
+The one residual exposure is a Full-Disk-Access same-UID process reading the
+key. That is a narrow OS-level threat, and one the reference implementation
+doesn't address either.
 
 **One-shot moonlight-qt migration.** On first launch, Glimmer reads the
-`com.moonlight-stream.Moonlight` and `com.moonlight-stream.moonlight-qt`
-preference domains. If a moonlight-qt install left a client identity +
-paired-host list, we adopt it so the user doesn't have to re-pair. After
-successful migration the PEM material in the foreign plist is wiped (it sat in a
-world-readable plist before - moonlight-qt's storage is not 0600). Idempotent;
-dormant after the first run.
+`com.moonlight-stream.Moonlight` preference domain. If a moonlight-qt install
+left a client identity and a paired-host list there, we adopt both so the user
+doesn't have to re-pair. The copy is one-way and read-only: Glimmer never writes
+to the foreign plist, so moonlight-qt keeps its own identity and its own
+pairings. Moonlight's storage is not 0600 and Glimmer cannot change that on its
+behalf; what Glimmer controls is its own copy, which lands in the mode-0600 file
+store described above. Idempotent, version-gated, and dormant after the first
+run. See `Identity+Loading.swift` and `HostsStore.swift`.
 
 ## Pairing
 
@@ -137,10 +138,10 @@ get to pick the primitives. Five HTTP rounds plus a final HTTPS liveness check
   check and the PIN-correctness check.
 
 **PIN entropy.** 4 digits, generated client-side via
-`MoonlightManager.generatePairingPIN()` and shown to the user to type into the
-host. ~13 bits. Brute-force isn't a worry: the host controls the retry rate and
-a wrong PIN aborts the handshake mid-round (the host returns a hash that doesn't
-match the one our PIN would have produced - see step 4 in `runPairingFlow`).
+`AppModel.generatePairingPIN()` and shown to the user to type into the host. ~13
+bits. Brute-force isn't a worry: the host controls the retry rate and a wrong
+PIN aborts the handshake mid-round (the host returns a hash that doesn't match
+the one our PIN would have produced - see step 4 in `runPairingFlow`).
 
 **Pin commit timing.** The host cert is pinned AFTER:
 
@@ -167,13 +168,17 @@ retry.
 ## Pinning
 
 Host certs are pinned **after** successful pairing. The pin lives in a mode-0600
-file at `~/Library/Application Support/Glimmer/PinnedHosts/<hostUUID>.pem`
-(moved out of `UserDefaults` because `cfprefsd` is shared across same-UID
-processes - any other process running as the user could rewrite a pin through
-the preferences daemon). PEM, not raw `SecCertificate` - PEM survives keychain
-wipes, OS migrations, and Time Machine restores in a way the `SecCertificate`
-ref does not. The cert is public information; the threat addressed by mode-0600
-is _write_, not _read_.
+file at `~/Library/Application Support/Glimmer/PinnedHosts/<hostID>.pem`, where
+`hostID` is the host's UUID (or its hostname, when that is all we have) with
+anything outside `[A-Za-z0-9-_.]` replaced by `_`. `PinnedCertStore`
+(`Types+Cert.swift`) owns it, at parent-directory mode 0700.
+
+The pins moved out of `UserDefaults` because `cfprefsd` is shared across
+same-UID processes: any other process running as the user could rewrite a pin
+through the preferences daemon. They are stored as PEM rather than a raw
+`SecCertificate`, because PEM survives keychain wipes, OS migrations, and Time
+Machine restores in a way the `SecCertificate` ref does not. The cert is public
+information; the threat mode-0600 addresses is _write_, not _read_.
 
 **Once pinned, ANY mismatch fails the connection.** Enforcement lives in
 `ControlTransport.swift`: `performBlocking` runs a post-handshake exact-DER pin
@@ -182,37 +187,29 @@ if the leaf cert doesn't byte-equal the pinned PEM. We do NOT silently re-pin on
 TLS error. The previous auto-rebind-on-TLS-error path was the gap a same-LAN
 attacker rode to pin their own cert - closed.
 
-A real cert rotation (Sunshine reinstall, OS reset on the host) lands the user
-on a loud `hostUnreachable` error directing them to **Settings → PCs → Compare
-fingerprints...**. That action does **not** wipe the pin - it stages a
-comparison.
+**Rotation UX.** A real cert rotation (Sunshine reinstall, OS reset on the host)
+throws `StreamError.hostUnreachable("pinned host cert mismatch")` out of
+`ControlTransport`. `HostStatusPoller` turns that specific error into a
+`certMismatch` host state, and the launcher's readiness chip goes amber and
+reads **Trust needed** with the description "Host certificate changed, re-pair
+to trust it". Clicking the chip opens the pairing sheet, pre-filled with the
+host's address.
 
-**Fingerprint UX**. The `FingerprintCompareSheet` shows the OLD pinned cert's
-SHA-256 fingerprint and the NEW cert's fingerprint side-by-side. Both are
-formatted as lowercase hex with colon separators (`ab:cd:ef:...` - same shape as
-`ssh-keygen -E sha256 -lf`). Each fingerprint has a copy button. The body text
-explicitly directs the user to verify with the host owner via a secure channel
-(phone call, in person) before continuing - if the fingerprints don't match and
-the user can't reach the owner, the safe action is to cancel. The accept button
-uses SwiftUI's `.destructive` role to visually signal the irreversible nature of
-trusting a new key. While the new fingerprint is being fetched the row shows
-`Probing...`; if the host is unreachable it shows `<could not reach host>` -
-both states keep the accept button disabled so the user can't trust an empty
-fingerprint. Bound through `MoonlightManager.pendingFingerprintCheckHost` /
-`probedNewFingerprint`; staging/confirming/cancelling goes through
-`stage/confirm/cancelTrustNewCertAndRepair`. The friction is deliberate - the
-alternative is "the on-path attacker rotates the cert for them".
+There is no "accept the new certificate" button anywhere. Re-pairing is the only
+path, which means the user has to read a fresh PIN off the host's own UI to
+replace the pin. The friction is the point: an on-path attacker who can rotate
+the cert cannot also produce the PIN.
 
 ## Transport
 
 - **Pre-pairing:** plain HTTP on **47989** for `/serverinfo` and the five
   pairing rounds. There's no TLS to validate yet; the out-of-band PIN
   authenticates the cert we then pin.
-- **Post-pairing:** HTTPS on **47984** for `/serverinfo`, `/launch`, `/resume`,
-  `/cancel`, `/applist`, and the final pairing-flow `/pair?phrase=pairchallenge`
-  liveness check. Mutual TLS - our client identity authenticates us to the host,
-  the pinned host cert authenticates the host to us. The system trust store is
-  NOT consulted; the pinned PEM is the entire trust anchor.
+- **Post-pairing:** HTTPS on **47984** for `/serverinfo`, `/launch`, `/cancel`,
+  `/applist`, and the final pairing-flow `/pair?phrase=pairchallenge` liveness
+  check. Mutual TLS - our client identity authenticates us to the host, the
+  pinned host cert authenticates the host to us. The system trust store is NOT
+  consulted; the pinned PEM is the entire trust anchor.
 - **Stream:** the Swift-native engine's RTP video/audio + ENet-subset control
   channels (`Glimmer/Stream/Native/`). AES-128-GCM, key derived from the launch
   response's `rikey` (or `gcmkey` on Sunshine). `EncryptionPreference.all` is
@@ -244,13 +241,14 @@ up.
 - **Developer-ID signing + notarization + stapling.** Release builds are signed
   with the team Developer ID, notarized by Apple, and the ticket is stapled to
   the app and DMG.
-- **Minimal-attack-surface helper.** The root daemon exposes exactly one
-  operation over XPC: `setAWDLDown(true/false)`. It is not a
-  run-anything-as-root backdoor. It accepts a connection only from a caller
-  whose code signature satisfies
-  `identifier "io.ugfugl.Glimmer" and anchor apple generic and certificate leaf[subject.OU]="5T7M4RH3F8"`
-  - i.e. the genuinely-signed Glimmer app, not a process that merely claims the
-    bundle id.
+- **Minimal-attack-surface helper.** The root daemon's XPC protocol is four
+  methods (`helper/Protocol.swift`), and exactly one of them changes anything:
+  `setAWDLDown(_:reason:)`. The other three (`currentStatus`, `ping`,
+  `reSuppressCount`) are read-only. It is not a run-anything-as-root backdoor.
+  It accepts a connection only from a caller whose code signature satisfies the
+  designated requirement in `helper/HelperService.swift`:
+  `identifier "io.ugfugl.Glimmer" and anchor apple generic and certificate leaf[subject.OU] = "5T7M4RH3F8"`
+  - the signed Glimmer app, not a process that merely claims the bundle id.
 
 **The defense-in-depth the sandbox used to provide** was containment of a
 memory-safety exploit in the streaming-protocol parsers reachable from a
@@ -268,8 +266,8 @@ parsers directly instead:
   link the Homebrew dylibs as-is and keep it via `Glimmer-Debug.entitlements` -
   an adhoc binary has no team id for validation to match.
 
-Note this is a LAN client connecting to the **user's own host**, so that exploit
-path is low-likelihood to begin with.
+This is a LAN client connecting to the **user's own host**, so that exploit path
+is low-likelihood to begin with.
 
 **Entitlements** (`Glimmer/Glimmer.entitlements`, Release):
 
@@ -297,9 +295,12 @@ their session use the host PC's recording tools, not the Mac's.
   `.public`, leaked every keystroke (including passwords typed during a stream)
   into the unified log. We log `keyCode` (positional, non-PII) and the modifier
   mask only.
-- **URLs containing `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, host UUIDs.** The
-  redaction helper in `Network.swift` strips them before logging.
-- **Cert PEMs / fingerprints at `.public`.** The TLS delegate logs a
+- **URLs containing `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`,
+  `uniqueid`.** `NetworkClient.sensitiveQueryKeys` (`Network.swift`) is the key
+  set; the launch-URL redaction that consumes it lives in
+  `NetworkClient+Endpoints.swift`, and `dumpXMLRedacted` covers the response
+  bodies.
+- **Cert PEMs / fingerprints at `.public`.** `ControlTransport` logs a
   pin-mismatch event but not the fingerprints - a hostile log scraper could
   otherwise read the pinned cert via `log show`.
 - **PIN values, AES keys, signed pairing-secret bytes.**

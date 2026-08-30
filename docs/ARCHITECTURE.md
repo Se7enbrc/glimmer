@@ -1,12 +1,17 @@
 # Architecture
 
-Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine. One process.
-No helper daemon, no external player, no linked C streaming library - the
+Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
+process. No external player, no linked C streaming library - the
 GameStream/Sunshine transport is implemented in Swift under
 `Glimmer/Stream/Native/` (ported from `moonlight-common-c`, GPLv3; see
 [CREDITS.md](../CREDITS.md)). The only C that crosses the bridging header is
 Opus (audio decode) and OpenSSL (identity / pairing / network crypto), plus a
 few inline shims in `CHelpers.h`.
+
+There is one other process, and it is not in the stream path: an opt-in root
+LaunchDaemon under `helper/` that parks the AirDrop radio (`awdl0`) for the
+duration of a stream. It is loaded through `SMAppService.daemon` and talks XPC.
+See [SECURITY.md](SECURITY.md) for why it exists and what it is allowed to do.
 
 ## Overview
 
@@ -19,35 +24,33 @@ input is forwarded to the host through the `StreamingBackend` input methods
 user hits the quit hotkey, the backend is told to disconnect and the window
 comes down.
 
-There is no helper process and no XPC service. The engine runs in the same
-process as the launcher.
-
 ## Process model
 
-Single process, single in-flight stream. `StreamSession.start()` refuses to
-start a second session while one is running (`isStreaming` guard).
+Single process, single in-flight stream. `StreamSession.start()`
+(`StreamSession+Start.swift`) refuses to start a second session while one is
+running (`isStreaming` guard).
 
 Top-level pieces:
 
-| Layer                 | Type                                                       | Lives where                                                 |
-| --------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
-| SwiftUI views         | views + observable state                                   | `Glimmer/ContentView.swift`, `SettingsView.swift`           |
-| `MoonlightManager`    | `@MainActor` `@Observable`                                 | `Glimmer/MoonlightManager.swift`                            |
-| `StreamSession`       | `actor`                                                    | `Glimmer/Stream/StreamSession.swift` (+ extensions)         |
-| `StreamingBackend`    | protocol (the engine boundary)                             | `Glimmer/Stream/StreamingBackend.swift`                     |
-| `NativeBackend`       | `final class`, sole backend conformer                      | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/`     |
-| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StreamBridgeContext.swift`                  |
-| `NetworkClient`       | `actor` over `ControlTransport` (hand-rolled OpenSSL mTLS) | `Glimmer/Stream/Network.swift`                              |
-| `PairingClient`       | `actor`                                                    | `Glimmer/Stream/Pairing.swift`                              |
-| `IdentityManager`     | `actor` (singleton)                                        | `Glimmer/Stream/Identity.swift`                             |
-| `VideoDecoder`        | `@MainActor final class`                                   | `Glimmer/Stream/VideoDecoder.swift` (+`+HDR`, `+Bitstream`) |
-| `FramePacer`          | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/FramePacer.swift` (+ extensions)            |
-| `AudioDecoder`        | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/AudioDecoder.swift`                         |
-| `InputForwarder`      | `@MainActor final class`                                   | `Glimmer/Stream/InputForwarder.swift`                       |
-| `ControllerForwarder` | `@MainActor` extension on InputForwarder                   | `Glimmer/Stream/ControllerForwarder.swift`                  |
-| `StreamWindow`        | `@MainActor final class`                                   | `Glimmer/Stream/StreamWindow.swift`                         |
-| `StatsCollector`      | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StatsCollector.swift`                       |
-| Telemetry (opt-in)    | exporter + counters                                        | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions)     |
+| Layer                 | Type                                                       | Lives where                                             |
+| --------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| SwiftUI views         | views + observable state                                   | `Glimmer/ContentView.swift`, `SettingsView.swift`       |
+| `AppModel`            | `@MainActor` `@Observable`                                 | `Glimmer/AppModel.swift` (+ extensions)                 |
+| `StreamSession`       | `actor`                                                    | `Glimmer/Stream/StreamSession.swift` (+ extensions)     |
+| `StreamingBackend`    | protocol (the engine boundary)                             | `Glimmer/Stream/StreamingBackend.swift`                 |
+| `NativeBackend`       | `final class`, sole backend conformer                      | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/` |
+| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StreamBridgeContext.swift`              |
+| `NetworkClient`       | `actor` over `ControlTransport` (hand-rolled OpenSSL mTLS) | `Glimmer/Stream/Network.swift`                          |
+| `PairingClient`       | `actor`                                                    | `Glimmer/Stream/Pairing.swift`                          |
+| `IdentityManager`     | `actor` (singleton)                                        | `Glimmer/Stream/Identity.swift`                         |
+| `VideoDecoder`        | `@MainActor final class`                                   | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)      |
+| `FramePacer`          | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/FramePacer.swift` (+ extensions)        |
+| `AudioDecoder`        | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/AudioDecoder.swift`                     |
+| `InputForwarder`      | `@MainActor final class`                                   | `Glimmer/Stream/InputForwarder.swift`                   |
+| `ControllerForwarder` | `@MainActor` extension on InputForwarder                   | `Glimmer/Stream/ControllerForwarder.swift`              |
+| `StreamWindow`        | `@MainActor final class`                                   | `Glimmer/Stream/StreamWindow.swift`                     |
+| `StatsCollector`      | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StatsCollector.swift`                   |
+| Telemetry (opt-in)    | exporter + counters                                        | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
 
 > The control/HTTP path runs over `ControlTransport` (`ControlTransport.swift`):
 > a hand-rolled OpenSSL + POSIX-socket mutual-TLS client, deliberately **not**
@@ -57,10 +60,11 @@ Top-level pieces:
 
 `Glimmer/Stream/StreamingBackend.swift` is **the** streaming-engine abstraction:
 one protocol for lifecycle / telemetry / input uplink, plus sink protocols for
-the inbound direction (`VideoSink`, the audio sink, `ConnectionEvents`), plus
+the inbound direction (`VideoSink`, `AudioSink`, `ConnectionEvents`), plus
 Glimmer-owned value types (`BackendServerInfo`, `BackendStreamConfig`,
-`DecodeUnit`, `OpusConfig`, `HdrMetadata`) so nothing outside the engine sees
-wire-level types. `NativeBackend` is the sole conformer.
+`DecodeUnit`, `DecodeBuffer`, `OpusConfig`, `HdrMetadata`, `GamepadAnalog`) so
+nothing outside the engine sees wire-level types. `NativeBackend` is the sole
+conformer.
 
 The method set deliberately mirrors the GameStream protocol surface - the
 outbound input methods map 1:1 to the `LiSend*` family the protocol defines, and
@@ -94,15 +98,19 @@ Components:
 - **`StreamCrypto`** - control-V2 AES-GCM encryption for control messages and
   the media-stream decrypt paths.
 - **Video receive** - `VideoRtpReceiver` (socket + ping loop) → `RtpVideoQueue`
-  (+`+AddPacket`, `+Reconstruct`, `+ReceiveQuality`) which reorders,
-  FEC-recovers, and assembles packets → `VideoDepacketizer` which emits
-  `DecodeUnit`s to the `VideoSink` (the `VideoDecoder`). `ReedSolomon.swift` is
-  the GF(256) erasure decoder (ported from nanors, MIT, Joseph Calderon - see
-  CREDITS.md). `FecHeadroomController` adaptively deepens receive headroom under
-  sustained loss with a bounded, recovering control loop.
-- **Audio receive** - `RtpAudioReceiver` (+`+Socket`, `+Decrypt`, `+Fec`,
-  `+Ping`, `+StartupGate`) → `RtpAudioQueue` / `AudioFecDecoder` → Opus decode
-  in `AudioDecoder` (AVAudioEngine playout with an adaptive cushion).
+  (+`+AddPacket`, `+Reconstruct`, `+ReceiveQuality`, `+ReorderStats`) which
+  reorders, FEC-recovers, and assembles packets → `VideoDepacketizer` which
+  emits `DecodeUnit`s to the `VideoSink` (the `VideoDecoder`).
+  `ReedSolomon.swift` is the GF(256) erasure decoder (ported from nanors, MIT,
+  Joseph Calderon - see CREDITS.md). `FecHeadroomController` adaptively deepens
+  receive headroom under sustained loss with a bounded, recovering control loop.
+- **Audio receive** - `RtpAudioReceiver` (+`+Socket`, `+Decrypt`, `+Ping`,
+  `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`) /
+  `AudioFecDecoder` → Opus decode in `AudioDecoder` (AVAudioEngine playout with
+  an adaptive cushion).
+- **`StreamPathMTU`** - a connect-time egress path-MTU probe. It resolves
+  `StreamConfig.remoteness == .auto` from the real route, so the SDP packet-size
+  clamp (1392 down to 1024 on a tunnelled path) fires on the paths that need it.
 - **Input uplink** - `InputBatcher` + `InputEncoder`: queue + merge + ~1ms flush
   (the port of `inputSendThreadProc`), coalescing high-rate mouse / controller
   deltas so the reliable channel carries ~1 packet per change per tick instead
@@ -151,13 +159,14 @@ UI lights up live.
 7. **`backend.startConnection(server:config:)`** - blocks while the native
    engine runs the RTSP + control + media bring-up described above; throws on
    failure.
-8. **Install timers** - a stats-overlay refresh and a 1 Hz frame-arrival
-   watchdog on the main run loop, plus the present-path watchdog
-   (`StreamSession+Watchdog.swift`). The frame watchdog (`frameWatchdogTimeout`
-   = 10s, matching upstream moonlight's `FIRST_FRAME_TIMEOUT_SEC`) tears the
-   session down if decode stops - the protocol's own dead-peer detection can
-   take longer to declare a dead connection. The watchdogs are suppression- and
-   gating-aware (a hidden window legitimately stops presenting; see
+8. **Install timers** - four on the main run loop: the stats-overlay refresh,
+   the 1 Hz frame watchdog, the present-path watchdog, and the present-metric
+   sampler (`StreamSession+Watchdog.swift`, `+PresentMetric.swift`). The frame
+   watchdog (`frameWatchdogTimeout` = 10s, matching upstream moonlight's
+   `FIRST_FRAME_TIMEOUT_SEC`) tears the session down if decode stops, because
+   the protocol's own dead-peer detection can take longer to declare a dead
+   connection. The watchdogs are suppression- and gating-aware: a hidden window
+   legitimately stops presenting, so they read the decode gate too (see
    `VideoDecoder` decode gating).
 
 Teardown (`stop()`) is re-entrant by design - any two of {quit hotkey,
@@ -167,7 +176,8 @@ pair both have to flip before further callers fall through.
 
 Teardown order is load-bearing:
 
-1. Invalidate stats-overlay + watchdog timers, hide overlay.
+1. Invalidate the four main-run-loop timers (stats overlay, frame watchdog,
+   present watchdog, present metric) and hide the overlay.
 2. `backend.stopConnection()` - synchronous; drains the engine's receive /
    control threads. After this returns, no further backend callbacks can fire.
 3. `network.cancel()` - tell the host the session is over so its `currentgame`
@@ -175,8 +185,9 @@ Teardown order is load-bearing:
 4. MainActor teardowns: `input.detach()`, `videoDecoder.teardown()`,
    `window.close()`.
 5. `audioDecoder.shutdown()` (AVAudioEngine drain).
-6. Release the bridge's `Unmanaged.passRetained` +1, `finish()` the event
-   stream, clear `StreamBridgeContext.current`.
+6. Clear `StreamBridgeContext.current`, release the bridge's
+   `Unmanaged.passRetained` +1, then `finish()` the event stream.
+7. Release the `beginActivity` power assertion.
 
 The bridge holds weak refs to every subsystem, so a callback firing against a
 torn-down subsystem just no-ops - but "no UAF" isn't "well-behaved", and the
@@ -210,10 +221,9 @@ stream window's screen releases at most one due frame per vsync to
 the macOS 15+ replacement for the deprecated `enqueueSampleBuffer`). The release
 path runs on a dedicated serial queue, never the main actor. The pacer's queue
 depth is adaptive: it rests at 1 frame on a clean link and grows only under
-genuinely measured (RFC-3550) reorder jitter, decaying back when the link is
-clean - see the rationale comments in `FramePacer.swift` and
-`FramePacer+Constants.swift`. There is no Metal shader - the OS owns color/EDR
-handling end-to-end.
+measured (RFC-3550) reorder jitter, decaying back when the link is clean - see
+the rationale comments in `FramePacer.swift` and `FramePacer+Constants.swift`.
+There is no Metal shader - the OS owns color/EDR handling end-to-end.
 
 The Metal-shader rewrite this used to be is documented in the top-of-file
 comment in `VideoDecoder.swift`. Short version: with a custom MSL fragment
@@ -269,9 +279,12 @@ latency. A hidden/occluded stream window suppresses presentation and, after a
 sustained window, gates VideoToolbox decode entirely (the host cannot pause;
 audio/network/FEC keep running); resume reuses the wait-for-IDR recovery path.
 
-**Stream-format coverage.** H.264, HEVC (Main / Main10), AV1 (Main / Main10,
-plus 4:4:4 paths). Default codec set is
-`[av1, av1Main10, hevcMain10, hevc, h264]`. Codec negotiation goes through
+**Stream-format coverage.** H.264 (8-bit and 4:4:4), HEVC (Main / Main10 / RExt
+4:4:4), AV1 (Main / Main10 / High 4:4:4). The default set is not a hardcoded
+list: `VideoFormats.probedSupported` (`Types.swift`) asks
+`VTIsHardwareDecodeSupported` per codec at runtime, with an Apple-Silicon gate
+on the 4:4:4 profiles, and the per-host `HostCodecPreference` narrows it
+further. Codec negotiation then goes through
 `BackendStreamConfig.supportedVideoFormats` (our preferences) and
 `BackendServerInfo.serverCodecModeRaw` (raw `SCM_*` bitmask from `/serverinfo`,
 passed verbatim - see the landmine note in `StreamProtocolConstants.swift` for
@@ -433,10 +446,10 @@ bridge handles this:
   arriving back-to-back from a receive thread could surface in either order on
   the consumer side.
 
-**Swift 6 strict concurrency posture.** Strict concurrency mode is on . Where
-the alternative is "synthesize an actor hop the hot path can't afford," we use
-`nonisolated(unsafe)` with the invariant documented at the property and the
-synchronisation justified inline. Examples:
+**Swift 6 strict concurrency posture.** `SWIFT_STRICT_CONCURRENCY = complete` on
+every configuration. Where the alternative is "synthesize an actor hop the hot
+path can't afford," we use `nonisolated(unsafe)` with the invariant documented
+at the property and the synchronisation justified inline. Examples:
 
 - `StreamBridgeContext.session/videoDecoder/audioDecoder/inputForwarder` are
   weak refs; Swift's weak storage is atomic per spec, and the engine serialises
@@ -498,28 +511,39 @@ HEADER_SEARCH_PATHS  = $(inherited) $(GLIMMER_REPO_ROOT) \
                       $(OPENSSL_PREFIX)/include $(OPUS_PREFIX)/include
 LIBRARY_SEARCH_PATHS = $(inherited) $(OPENSSL_PREFIX)/lib $(OPUS_PREFIX)/lib
 OTHER_LDFLAGS        = $(inherited) -lssl -lcrypto -lz -lopus
+ARCHS                = arm64
 SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
 ```
 
 `OPENSSL_PREFIX` and `OPUS_PREFIX` are injected by the Makefile from
-`brew --prefix` so the pbxproj stays portable. `Glimmer/Version.xcconfig` is the
-single source of truth for `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` - the
-version is NOT set in `project.pbxproj`.
+`brew --prefix` so the pbxproj stays portable. `ARCHS = arm64` is pinned because
+Homebrew's `openssl@3` and `opus` are arm64-only, so a universal link fails on
+the x86_64 slice. `Glimmer/Version.xcconfig` is the single source of truth for
+`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` - the version is NOT set in
+`project.pbxproj`.
 
 ### `Makefile`
 
-| Target                   | What it does                                                             |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `make`                   | Build `Glimmer.app` (Debug) + sign (Dev ID if found, else adhoc)         |
-| `make release`           | Same with `CONFIG=Release`                                               |
-| `make install`           | Build + copy to `/Applications/Glimmer.app`                              |
-| `make dev`               | Fast inner loop: Release build, stable dev signature, install + relaunch |
-| `make profile`           | Launch under Instruments (Time Profiler)                                 |
-| `make profile-signposts` | Launch under Instruments (Logging template)                              |
-| `make dist`              | Clean Release → Developer ID sign → notarize → staple → DMG              |
-| `make uninstall`         | Remove `/Applications/Glimmer.app`                                       |
-| `make clean`             | `rm -rf build/`                                                          |
+Every build below Release-publish goes through the same pipeline the shipped
+build does, so there is no adhoc/Debug divergence in signing, notarization, or
+library validation to chase. Without a Developer ID cert on the machine the
+pipeline falls back to an adhoc Release build.
 
-Signing/notarization details (dedicated signing keychain, notary profile,
-1Password plumbing) are documented in the Makefile itself and in
+| Target                   | What it does                                                 |
+| ------------------------ | ------------------------------------------------------------ |
+| `make app`               | Compile-only check, no signing or notarization               |
+| `make test`              | Build + run the `GlimmerTests` bundle                        |
+| `make release`           | Notarized Release build, no install                          |
+| `make` / `make install`  | `release` + copy to `/Applications/Glimmer.app`              |
+| `make reinstall`         | `install` + quit and relaunch the running app                |
+| `make dev`               | Inner loop: `test`, then `reinstall`                         |
+| `make profile`           | Launch under Instruments (Time Profiler)                     |
+| `make profile-signposts` | Launch under Instruments (Logging template)                  |
+| `make dist`              | Clean Release → Developer ID sign → notarize → staple → DMG  |
+| `make release-publish`   | `dist` + EdDSA-signed ZIP → GitHub release + Sparkle appcast |
+| `make uninstall`         | Remove `/Applications/Glimmer.app`                           |
+| `make clean`             | `rm -rf build/`                                              |
+
+Signing and notarization details (the dedicated signing keychain, the notary
+profile, the credentials file) are documented in the Makefile itself and in
 [RELEASE.md](RELEASE.md).

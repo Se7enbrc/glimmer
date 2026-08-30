@@ -12,15 +12,15 @@ instrumentation already wired into the hot paths.
 ## TL;DR
 
 ```sh
-# Build a representative binary (Debug skews everything):
-make release && make install
-
-# CPU hotspots only:
+# CPU hotspots only (installs a notarized Release build first):
 make profile
 
 # Per-frame signpost timeline - this is the one you usually want:
 make profile-signposts
 ```
+
+Both targets depend on `install`, and `install` builds Release, so what you
+profile is what ships. Never profile a `make app` Debug binary.
 
 Both targets drop a `.trace` into `~/Library/Developer/Xcode/Instruments/`.
 Double-click to open in Instruments.
@@ -30,35 +30,48 @@ After opening, drag the **os_signpost** track into view and filter by subsystem
 
 ## Unified log
 
-All Glimmer code logs under one subsystem: **`io.ugfugl.Glimmer`**. Per-file
-categories partition the output. The full list (grep `Logger(subsystem:` to
-verify):
+The app logs under one subsystem: **`io.ugfugl.Glimmer`**. Per-file categories
+partition the output. The full list (grep `Logger(subsystem:` to verify):
 
-| Category              | File                                                           |
-| --------------------- | -------------------------------------------------------------- |
-| `MoonlightManager`    | `Glimmer/MoonlightManager.swift`                               |
-| `HostsStore`          | `Glimmer/HostsStore.swift`                                     |
-| `Stream.Audio`        | `Glimmer/Stream/AudioDecoder.swift`                            |
-| `Stream.Discovery`    | `Glimmer/Stream/Discovery.swift`                               |
-| `Stream.Identity`     | `Glimmer/Stream/Identity.swift`                                |
-| `Stream.Input`        | `Glimmer/Stream/InputForwarder.swift`, `StreamInputView.swift` |
-| `Stream.Network`      | `Glimmer/Stream/Network.swift`                                 |
-| `Stream.Network.TLS`  | `Glimmer/Stream/Network.swift` (TLSDelegate)                   |
-| `Stream.Pairing`      | `Glimmer/Stream/Pairing.swift`                                 |
-| `Stream.Session`      | `Glimmer/Stream/StreamSession.swift`                           |
-| `Stream.VideoDecoder` | `Glimmer/Stream/VideoDecoder.swift` (+`+HDR`, `+Bitstream`)    |
-| `Stream.Window`       | `Glimmer/Stream/StreamWindow.swift`                            |
+| Category               | File                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `AppModel`             | `Glimmer/AppModel.swift`                                                          |
+| `AWDLHelper`           | `Glimmer/AWDLHelperManager.swift`                                                 |
+| `ContainerMigration`   | `Glimmer/ContainerMigration.swift`                                                |
+| `Diag.FileSink`        | `Glimmer/LogStore.swift`                                                          |
+| `DualSenseHID`         | `Glimmer/Stream/DualSenseHID.swift`                                               |
+| `HostsStore`           | `Glimmer/HostsStore.swift`                                                        |
+| `LunaPower`            | `Glimmer/LunaPower.swift`                                                         |
+| `MacSystemStats`       | `Glimmer/MacSystemStats.swift`                                                    |
+| `Stream.Audio`         | `Glimmer/Stream/AudioDecoder.swift`                                               |
+| `Stream.Capabilities`  | `Glimmer/Stream/Types.swift` (the VT codec probe)                                 |
+| `Stream.Discovery`     | `Glimmer/Stream/Discovery.swift`                                                  |
+| `Stream.Identity`      | `Glimmer/Stream/Identity.swift`                                                   |
+| `Stream.Input`         | `Glimmer/Stream/InputForwarder.swift`, `StreamInputView.swift`                    |
+| `Stream.NativeBackend` | `Glimmer/Stream/NativeBackend.swift`                                              |
+| `Stream.Network`       | `Glimmer/Stream/Network.swift`                                                    |
+| `Stream.Network.TLS`   | `Glimmer/Stream/ControlTransport.swift`                                           |
+| `Stream.Pacer`         | `Glimmer/Stream/FramePacer.swift`                                                 |
+| `Stream.Pairing`       | `Glimmer/Stream/Pairing.swift`                                                    |
+| `Stream.Session`       | `Glimmer/Stream/StreamSession.swift`                                              |
+| `Stream.Telemetry`     | `TelemetryExporter`, `TelemetryFrameTrace`, `IOReportSampler`, `DisplayTelemetry` |
+| `Stream.VideoDecoder`  | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)                                |
+| `Stream.Window`        | `Glimmer/Stream/StreamWindow.swift`                                               |
+
+The privileged AWDL helper is a separate process and logs under its own
+subsystem, `io.ugfugl.glimmer.helper` (lowercase `g`), with categories `main`,
+`AWDL`, and `XPC`.
 
 OSSignpost categories are different (they live on the same subsystem but a
 separate axis - see `Glimmer/Stream/Signposts.swift`):
 
-| Signpost category | Path                                                   |
-| ----------------- | ------------------------------------------------------ |
-| `Stream.Decode`   | VT decode submit → output                              |
-| `Stream.Render`   | VT output → `AVSampleBufferDisplayLayer` enqueue       |
-| `Stream.Network`  | connection bring-up (`startConnection`) + stage events |
-| `Stream.Pairing`  | five-round PIN handshake                               |
-| `Stream.Audio`    | opus decode + `AVAudioPlayerNode` schedule             |
+| Signpost category | Path                                             |
+| ----------------- | ------------------------------------------------ |
+| `Stream.Decode`   | VT decode submit → output                        |
+| `Stream.Render`   | VT output → `AVSampleBufferDisplayLayer` enqueue |
+| `Stream.Network`  | connection bring-up (`startConnection`)          |
+| `Stream.Pairing`  | five-round PIN handshake                         |
+| `Stream.Audio`    | opus decode + `AVAudioPlayerNode` schedule       |
 
 ### Stream-session lifecycle
 
@@ -118,21 +131,25 @@ log show --predicate 'subsystem == "io.ugfugl.Glimmer" \
 Hot paths have OSSignpost intervals + events. Subsystem is `io.ugfugl.Glimmer`;
 categories partition by area.
 
-| Category         | Interval                   | Events                                                                                               | Wired in                                     |
-| ---------------- | -------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `Stream.Decode`  | `DecodeFrame` (per frame)  | `FrameDropped`, `IDRRequested`, `StatsSnapshot`                                                      | `VideoDecoder.swift`, `StatsCollector.swift` |
-| `Stream.Render`  | `EnqueueFrame` (per frame) | `RendererFailed`                                                                                     | `VideoDecoder.swift`                         |
-| `Stream.Network` | `ConnectFlow` (per stream) | `StageStarting/Complete/Failed`, `ConnectionEstablished`, `ConnectionTerminated`, `ConnectionStatus` | `StreamSession.swift`                        |
-| `Stream.Pairing` | `PairingFlow` (per pair)   | `PairingStep` (one per handshake round)                                                              | `Pairing.swift`                              |
-| `Stream.Audio`   | `AudioFrame` (per packet)  | -                                                                                                    | `AudioDecoder.swift`                         |
+| Category         | Intervals                        | Events                                                                               | Wired in                                      |
+| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `Stream.Decode`  | `DecodeFrame`, `VTSessionCreate` | `FrameDropped`, `IDRRequested`, `StatsSnapshot`, `DecodeGate`, `DecodeStallRecreate` | `VideoDecoder*.swift`, `StatsCollector.swift` |
+| `Stream.Render`  | `EnqueueFrame` (per frame)       | `RendererFailed`, plus the `Pacer*` / `Present*` family                              | `VideoDecoder+Session.swift`, `FramePacer*`   |
+| `Stream.Network` | `ConnectFlow` (per stream)       | -                                                                                    | `StreamSession+Start.swift`                   |
+| `Stream.Pairing` | `PairingFlow` (per pair)         | `PairingStep` (one per handshake round)                                              | `Pairing.swift`                               |
+| `Stream.Audio`   | `AudioFrame` (per packet)        | -                                                                                    | `AudioDecoder.swift`                          |
 
 The interval state for `DecodeFrame` threads through `StatsCollector` so submit
 (on the engine's receive thread) and complete (on the VT output callback's
-thread) pair up cleanly. The `ConnectFlow` interval stays open across the
-C-callback boundary and is closed by `deliver(.connectionEstablished)` on
-success or by `stop()` on failure (with `outcome=aborted` so the Instruments
-timeline never shows a runaway-open interval). FIFO eviction inside
-`StatsCollector` closes any orphan interval.
+thread) pair up cleanly. FIFO eviction inside `StatsCollector` closes any orphan
+interval with `outcome=evicted_from_fifo`. The `ConnectFlow` interval stays open
+across the callback boundary and closes with `outcome=established`, `aborted`,
+or `reconnect`, so the Instruments timeline never shows a runaway-open interval.
+
+Connection stages, `connectionEstablished`, `connectionTerminated`, and
+`connectionStatus` are `StreamEvent`s on the session's `AsyncStream`, not
+signposts. Read them from the unified log under `Stream.Session`, or from the
+telemetry NDJSON when telemetry is on.
 
 ## Scenarios - which tool, what to look at
 
@@ -159,8 +176,8 @@ at the format-description rebuild path in `enqueueDecodedFrame`.
 ### "CPU spinning / fans ramping during a stream"
 
 `make profile`. Time Profiler shows wall-clock CPU. Look for any frame on the
-call tree under `Glimmer/Stream/*` that isn't VT, opus, or the Foundation
-networking stack - those are the expected heavyweights. Targets:
+call tree under `Glimmer/Stream/*` that isn't VideoToolbox, opus, or the socket
+receive loops. Those three are the expected heavyweights. Targets:
 
 | Metric                           | Target                      |
 | -------------------------------- | --------------------------- |
@@ -196,19 +213,20 @@ is producing pathological bitstreams.
 
 ### "Connection takes forever to establish"
 
-`make profile-signposts`. Filter category **Stream.Network**. The `ConnectFlow`
-interval covers the entire `startConnection` → first `connectionStarted` window.
-Inside it:
+The `ConnectFlow` interval (category **Stream.Network**) gives you the total:
+`startConnection` through to the established or aborted close. It carries no
+per-stage events, so for the breakdown read the log instead:
 
-- `StageStarting` / `StageComplete` for each connection stage
-  (`name resolution`, `RTSP handshake`, `control stream initialization`,
-  `video stream initialization`, ... - see `StreamStageNames.table` in
-  `StreamProtocolConstants.swift`).
-- `StageFailed` if any stage hard-fails.
+```sh
+log show --predicate 'subsystem == "io.ugfugl.Glimmer" \
+    AND category == "Stream.Session"' --last 5m
+```
 
-Look for unusually wide gaps between consecutive `StageStarting` and
-`StageComplete` events. Most common slow stage is the RTSP handshake on hosts
-with slow audio-device enumeration.
+The stage names are in `StreamStageNames.table`
+(`StreamProtocolConstants.swift`): name resolution, RTSP handshake, control
+stream initialization, video stream initialization, and so on. Look for an
+unusually wide gap between consecutive stage lines. The most common slow stage
+is the RTSP handshake on hosts with slow audio-device enumeration.
 
 ### "Pairing hangs"
 
@@ -224,29 +242,38 @@ never fired is where the host hung.
 interval is one opus packet (typically 5 ms of audio at 200 Hz). If the interval
 duration is consistently >5 ms the opus decoder is the bottleneck (very unusual
 on Apple Silicon). If the intervals are sparse (visible gaps) the audio receive
-thread is starving - switch to the **Stream.Network** category and check for
-`ConnectionStatus` events showing poor RTT.
+thread is starving; check the `Stream.Session` log for `connectionStatus` going
+poor, and the `Stream.Audio` log for underrun and cushion lines.
 
-## Opt-in telemetry + the local dashboard rig
+## Opt-in telemetry
 
-Beyond Instruments, Glimmer has an opt-in telemetry exporter (Settings → About →
-option-click the version line to reveal the Diagnostics pane). When enabled, a
-stream writes to `~/Library/Logs/Glimmer/`:
+Beyond Instruments, Glimmer has an opt-in telemetry exporter. It lives in
+**Settings → Diagnostics**, in a Telemetry section that is hidden until you
+option-click the version line in **Settings → About**. The pane's always-visible
+half (a live controller input test and the in-app log viewer) needs no gesture.
+Turning the toggle on applies to the next stream, not the running one.
+
+When enabled, a stream writes to `~/Library/Logs/Glimmer/`:
 
 - `telemetry-<timestamp>.ndjson` - per-second stream metrics;
 - `telemetry-session-<timestamp>.json` - a one-shot session scorecard;
+- `telemetry-frames-<timestamp>.ndjson` - the per-frame trace, segmented;
 - `glimmer-<timestamp>.log` - a richer per-session diagnostic log.
 
-Press **⌃B** during a stream to drop a timestamped "that felt bad" bookmark into
-the telemetry. All of it is local-only and carries performance numbers, never
-secrets - these are the artifacts the bug-report template asks for.
+The exporter also serves the per-second metrics on a local Prometheus endpoint,
+which is what a maintainer-local dashboard rig would scrape. No such rig is in
+this repository and nothing in the app depends on one; the NDJSON and the
+scorecard are the portable, self-contained way to analyze a session. Old files
+are swept against a byte budget, so the directory does not grow without bound.
 
-The Diagnostics pane also surfaces a Grafana port-forward command. That points
-at an **optional, maintainer-local dashboard rig** (Prometheus + Grafana + Loki
-on a local k8s cluster, living in a gitignored `debug-env/` directory) - it is
-deliberately **not part of this repository** and nothing in the app depends on
-it. The NDJSON + scorecard files above are the portable, self-contained way to
-analyze a session.
+Press **⌃B** during a stream to drop a timestamped "that felt bad" bookmark into
+the telemetry. The chord is intercepted only while telemetry is on; otherwise
+the keystroke passes through to the host. All of it is local-only and carries
+performance numbers, never secrets. These are the artifacts the bug-report
+template asks for.
+
+`make enable-telem` / `make disable-telem` flip the same preference from the
+command line.
 
 ## Other Instruments templates worth knowing
 
@@ -278,10 +305,11 @@ suspect TCP retransmissions or socket-buffer starvation.
 - **No temporal processing.** No B-frames in the GameStream / Sunshine output,
   so VT's temporal-processing path is irrelevant - frames decode in arrival
   order.
-- **Decode failures.** `DecodeFrame` interval close payload includes outcome
-  (`ok` / `dropped` / `abandoned`). A submitDecodeUnit that returns
-  `DR_NEED_IDR` triggers `LiRequestIdrFrame()` and shows as an `IDRRequested`
-  event with `trigger=...` (`bitstream_failed`, `renderer_failed`, etc.).
+- **Decode failures.** The `DecodeFrame` interval closes with an `outcome=`
+  payload. Anything that needs a fresh keyframe calls
+  `backend.requestIdrFrame()` and emits an `IDRRequested` event carrying a
+  `trigger=`: `param_rebuild_failed`, `no_session`, `sample_build_failed`,
+  `vt_decode_rejected`, `decode_backlog_stall`, or `present_stall`.
 
 ## Network diagnostics - packet loss vs decode failure
 
@@ -293,25 +321,33 @@ them" matters for triage:
   without a fresh IDR; AV1 sequence header malformed), or the FEC layer
   recovered the bytes but their content is bad. Surfaces as `FrameDropped` with
   `reason=vt_status_error`.
-- **Bytes not received** - network issue. Surfaces as `ConnectionStatus` events
-  with `status != 0` (the engine's poor-connection signal - typically high RTT +
-  packet loss).
+- **Bytes not received** - network issue. Surfaces as a
+  `connectionStatus(.poor)` stream event in the `Stream.Session` log (the
+  engine's poor-connection signal, typically high RTT plus packet loss).
 - **Renderer rejection mid-stream** - the layer's
   `AVSampleBufferVideoRenderer.status` latched `.failed`. Surfaces as a
-  `RendererFailed` signpost event + log line at `.warning`, and is recovered by
-  a flush + `LiRequestIdrFrame()`.
+  `RendererFailed` signpost event plus a log line at `.warning`, and is
+  recovered by a flush plus `backend.requestIdrFrame()`.
 
 ## Frame watchdog
 
-`StreamSession.frameWatchdogTimer` polls `VideoDecoder.secondsSinceLastFrame()`
-on the main run loop at 1 Hz. If more than `frameWatchdogTimeout` (10s, matching
-upstream moonlight's `FIRST_FRAME_TIMEOUT_SEC`) passes between frames AND we've
-previously received at least one frame, the session tears down with
+`StreamSession.frameWatchdogTimer` runs on the main run loop at 1 Hz
+(`StreamSession+Watchdog.swift`). It gates on
+`min(secondsSinceLastDecodedFrame(), secondsSinceDecodeGateLifted())`, so a
+window that legitimately stopped presenting does not trip it. Past
+`frameWatchdogTimeout` (10s, matching upstream moonlight's
+`FIRST_FRAME_TIMEOUT_SEC`) the session tears down with
 `StreamEvent.connectionTerminated(errorCode: -1)`. The log line reads:
 
 ```
-Frame watchdog tripped - no frame in <N>s; tearing down
+Frame watchdog tripped - no decoded frame in <N>s (last byte reception <M>s|never); tearing down
 ```
+
+A connection that never produced a first frame trips too, timed from
+`frameWatchdogArmedAt`; the black-screen-until-you-cancel case is the one that
+path fixes. A still-live control link holds instead of tearing down. Before the
+hard trip there is a 3s soft trip (`decodeOnlyStallThreshold`) that nudges an
+IDR first.
 
 This fast-paths the common "host crashed / network dropped / Sunshine restarted"
 case. The protocol's own dead-peer detection can take longer to declare a dead
@@ -325,20 +361,18 @@ connection.
 - `DEBUG_INFORMATION_FORMAT = dwarf-with-dsym` is set on Release so Time
   Profiler symbolicates without manual dSYM linking.
 
-Always profile with:
+`make profile` and `make profile-signposts` both depend on `install`, which
+builds Release and copies the freshly-signed bundle to
+`/Applications/Glimmer.app`
 
-```sh
-make release && make install && make profile-signposts
-```
-
-The `install` step copies the freshly-signed bundle to
-`/Applications/Glimmer.app`, which is the path `xctrace --launch` points at.
+- the path `xctrace --launch` points at. So `make profile-signposts` on its own
+  is the whole command.
 
 ## Common pitfalls
 
 - **Don't trust Debug-build numbers.** The single most common source of "wait
-  why is decode so slow" surprises. Always `make release` before any timing
-  measurement.
+  why is decode so slow" surprises. `make app` produces a Debug binary; never
+  time one.
 - **Don't profile on battery.** macOS throttles ARM cores on battery, and at
   4K60 that shows up as `DecodeFrame` p99 spikes that vanish when plugged in.
 - **Use Network Link Conditioner to test the network-jitter path.** System

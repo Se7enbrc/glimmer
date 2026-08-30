@@ -1,9 +1,16 @@
 # `generate-icons.swift` - design notes
 
-Generates the Glimmer app icon set in Apple's macOS 26 "Liquid Glass" style.
-This is the long-form rationale that used to live in the script header; the
-script keeps only concise pointers so it stays under the SwiftLint file-length
-guardrail. Behavior is unchanged - this is documentation only.
+**What actually ships is not this.** The app icon is `Glimmer/AppIcon.icon`, a
+hand-authored Icon Composer bundle: one `eclipse-mark.png` layer over a
+violet-to-black vertical gradient declared in `icon.json`, with a slightly
+brighter dark specialization. There is no `AppIcon.appiconset` in
+`Assets.xcassets` any more. `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` plus
+`CFBundleIconName` in `Info.plist` is what resolves it.
+
+`generate-icons.swift` is the generator for the previous moon-and-sparkles
+design. It still runs, and the rationale below is worth keeping because the
+constraints it solved (the small-size collapse, the `.icon` bundle's placement)
+apply to any replacement. Treat it as reference, not as the build step.
 
 ## Composition (back-to-front)
 
@@ -24,12 +31,11 @@ Run via `swift scripts/generate-icons.swift [flag]`:
 | `--dark`    | Dark variant - brighter palette so the icon pops on a dark Dock                                                                                                                                                           |
 | `--layered` | The layered 1024px PNGs into `AppIcon.icon/Assets` (`Background-Light.png` + `Background-Dark.png` + `Foreground.png`) consumed by macOS 26's Icon Composer bundle for light/dark/tinted/clear theme-snapping in the Dock |
 
-In legacy mode the dark variant emits filenames with a `-dark` suffix; the
-AppIcon `Contents.json` carries both sets, with
-`appearances: [{luminosity: dark}]` entries pointing at the dark files. The
-legacy `.appiconset` is kept so this script can still regenerate it, but on
-macOS 26 the Tahoe `.icon` bundle is what the Dock reads (`CFBundleIconName`
-resolves the `.icon`-derived asset first).
+In legacy mode the dark variant emits filenames with a `-dark` suffix, and the
+`.appiconset`'s `Contents.json` carries both sets with
+`appearances: [{luminosity: dark}]` entries pointing at the dark files. That
+output directory no longer exists in the tree; on macOS 26 the Tahoe `.icon`
+bundle is what the Dock reads.
 
 ## `.icon` bundle layout (`--layered`)
 
@@ -50,8 +56,11 @@ watchOS, none on clear):
 
 The `.icon` bundle lives next to `Assets.xcassets`, NOT inside it - Xcode 26
 requires the Icon Composer bundle to be a top-level resource in the target so it
-produces appearance-themed AppIcon entries in `Assets.car`. (When placed inside
-`.xcassets` the bundle is silently ignored.)
+produces appearance-themed AppIcon entries in `Assets.car`. Placed inside
+`.xcassets` the bundle is silently ignored. `generate-icons.swift --layered`
+writes to the correct `Glimmer/AppIcon.icon/Assets`; the older
+`generate-icon-layers.swift` still targets the inside-`.xcassets` path and is
+superseded.
 
 ## Palette
 

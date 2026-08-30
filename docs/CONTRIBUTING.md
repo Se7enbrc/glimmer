@@ -12,13 +12,13 @@ Required:
 Brew prerequisites:
 
 ```bash
-brew install openssl@3 opus swiftlint
+brew install openssl@3 opus swiftlint trufflehog
 ```
 
-(`swiftlint` is required for the pre-commit hook; `openssl@3` and `opus` are the
-Swift streaming engine's two link-time dependencies - OpenSSL for identity /
-pairing / network crypto, Opus for audio decode. There are no submodules and no
-vendored C library.)
+`openssl@3` and `opus` are the Swift streaming engine's two link-time
+dependencies: OpenSSL for identity / pairing / network crypto, Opus for audio
+decode. There are no submodules and no vendored C library. `swiftlint` and
+`trufflehog` back pre-commit hooks and the commit fails without them.
 
 Clone:
 
@@ -30,17 +30,25 @@ cd glimmer
 Install pre-commit hooks:
 
 ```bash
-pre-commit install
+pre-commit install                      # lint + secret scan, per commit
+pre-commit install --hook-type pre-push # `make test`, per push
 ```
 
 ## Build
 
 ```bash
-make            # Debug build
-make release    # Release build
-make install    # copy to /Applications/Glimmer.app, adhoc re-sign
-make open       # install + open
+make app        # compile-only check (Debug), no signing
+make test       # unit tests
+make            # notarized Release build, installed to /Applications
+make open       # same, then open it
 ```
+
+`make` and `make open` run the full shipping pipeline: Developer ID signing,
+notarization, strict library validation. That is deliberate. There is no
+adhoc/Debug divergence in daemon registration, TCC, or library validation to
+chase, because you are always running what ships. Without a Developer ID cert on
+the machine it falls back to an adhoc Release build (un-notarized, and TCC
+re-prompts).
 
 The canonical xcodebuild invocation (what `make app` runs) is:
 
@@ -171,26 +179,26 @@ before/after screenshot at the smallest and largest window the change allows.
 
 ## Lint
 
-`swiftlint` runs as a pre-commit hook. The baseline is intentionally non-strict:
-warnings are surfaced for review but only errors block the commit. Custom rules
-in `.swiftlint.yml`:
+`swiftlint` runs as a pre-commit hook over `Glimmer/` only; `scripts/` is
+build-time tooling and is not held to the product lint bar. The baseline is
+intentionally non-strict: warnings are surfaced for review but only errors block
+the commit. Thresholds worth knowing from `.swiftlint.yml`:
 
-- `no_coauthor_trailer` - bans `Co-Authored-By:` (error).
-- `no_claude_attribution` - bans `Generated with .*Claude` (error).
 - `force_unwrapping`, `force_cast`, `force_try` - warning only.
-- File / type body / function body lengths warn at ~600 / 600 / 80, error well
-  above the current largest case.
+- File length and type body warn at 600, function body at 80. The errors sit at
+  1500 / 1500 / 250, well above the current largest case.
+- `line_length` warns at 140, errors at 280, ignoring URLs and comments.
 
 The pre-commit wrapper runs `swiftlint --fix` first; if it modifies any staged
-file, the commit is **refused** and the user is told to re-stage the diff.
-Auto-staging by the hook is explicitly avoided so the user sees what changed.
+file, the commit is **refused** and you are told to re-stage the diff.
+Auto-staging by the hook is avoided so you see what changed.
 
 `swift-format` is intentionally NOT enforced - Apple's formatter reflows the
 codebase's trailing-aligned function arguments into a noisier style.
 
-A `trufflehog` secret-scan also runs per commit via pre-commit (install it with
-`brew install trufflehog` if the hook complains) - credentials never belong in
-the tree; see [SECURITY.md](SECURITY.md).
+A `trufflehog` secret scan runs per commit against verified detectors, and
+`prettier`, `markdownlint`, and `yamllint` cover the non-Swift files.
+Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 
 ## Style
 
@@ -199,8 +207,9 @@ the tree; see [SECURITY.md](SECURITY.md).
 - File / type names match the load-bearing type they contain
   (`VideoDecoder.swift` → `class VideoDecoder`). Extensions split out by feature
   (`VideoDecoder+HDR.swift`, `VideoDecoder+Bitstream.swift`).
-- C-FFI callbacks are named `c_<callbackName>` (e.g. `c_submit`,
-  `c_decodeAndPlaySample`). Allowed by `identifier_name.allowed_symbols`.
+- Protocol constants mirror their upstream C names verbatim
+  (`COLORSPACE_REC_2020`, `DR_NEED_IDR`) so a reader can grep the spec.
+  `identifier_name.allowed_symbols: ["_"]` exists for exactly that.
 - Comments earn their keep: short for obvious code, expansive when documenting a
   non-obvious decision. The HDR pipeline comments in `VideoDecoder.swift` and
   the bridge-lifetime comment in `StreamSession.swift` are the bar - if a future
@@ -216,24 +225,25 @@ code and `actor`-heavy in the streaming engine.
 Rules:
 
 - **`@MainActor`** for anything that touches `NSWindow`, `NSEvent`,
-  `CAMetalLayer`, `AVSampleBufferDisplayLayer` configuration, `@Published`, or
-  SwiftUI bindings. `VideoDecoder`, `InputForwarder`, `StreamWindow`,
-  `MoonlightManager` are all `@MainActor`-isolated at the class level.
+  `AVSampleBufferDisplayLayer` configuration, or SwiftUI bindings.
+  `VideoDecoder`, `InputForwarder`, `StreamWindow`, and `AppModel` are all
+  `@MainActor`-isolated at the class level.
 - **`actor`** for engine subsystems with non-trivial cross-thread state:
   `StreamSession`, `NetworkClient`, `PairingClient`, `IdentityManager`.
 - **`@unchecked Sendable` with a documented lock** when a system framework
   forces callbacks onto its own threads:
   - `AudioDecoder` (AVAudioEngine callbacks on Core Audio threads, internal
     state lock-guarded).
-  - `StatsCollector` (touched from the moonlight receive thread, the VT
+  - `StatsCollector` (touched from the engine's receive thread, the VT
     decode-queue, AND the main actor; guarded by an internal `os_unfair_lock`).
-  - `StreamBridgeContext` (C-thread callback target).
+  - `StreamBridgeContext` (the receive-thread callback target).
 
 ### `nonisolated(unsafe)`
 
-`nonisolated(unsafe)` IS acceptable in this codebase. It's used ~30 times. Every
-use must document the invariant in a comment on the property - what the
-synchronisation discipline is and why a regular actor / lock isn't viable.
+`nonisolated(unsafe)` IS acceptable in this codebase, and there are currently 74
+of them. Every use must document the invariant in a comment on the property:
+what the synchronisation discipline is, and why a regular actor or lock isn't
+viable.
 
 Acceptable patterns:
 
@@ -263,8 +273,8 @@ NOT acceptable:
 - "It compiled" without an invariant comment.
 - Multi-writer races. If two threads can write the same slot,
   `nonisolated(unsafe)` is wrong - use a lock or hop to an actor.
-- Anything with a Sendable-incomplete type behind it (CALayer, CAMetalLayer,
-  AVSampleBufferDisplayLayer). Wrap with an `NSLock` around the load/store
+- Anything with a Sendable-incomplete type behind it (`CALayer`,
+  `AVSampleBufferDisplayLayer`). Wrap with an `NSLock` around the load/store
   (`VideoDecoder._displayLayer` is the reference pattern).
 
 ### Event-yield discipline
@@ -282,23 +292,15 @@ the comment at `StreamBridgeContext.eventContinuation` (in
 
 `Logger` from `os`, never `print`, never `os_log`.
 
-- Subsystem: **`io.ugfugl.Glimmer`** (capital G). Per-file `Logger` instances
-  all use this string; no `.Stream` suffix on the subsystem.
+- Subsystem: **`io.ugfugl.Glimmer`** (capital G). Every `Logger` in the app uses
+  this string; no `.Stream` suffix on the subsystem. The privileged AWDL helper
+  is a separate process and uses `io.ugfugl.glimmer.helper`.
 - Category: per-file, dotted form `Stream.<Area>` for streaming-engine files.
-  Current categories:
-  - `MoonlightManager`
-  - `HostsStore`
-  - `Stream.Audio`
-  - `Stream.Discovery`
-  - `Stream.Identity`
-  - `Stream.Input`
-  - `Stream.Network`, `Stream.Network.TLS`
-  - `Stream.Pairing`
-  - `Stream.Session`
-  - `Stream.VideoDecoder`
-  - `Stream.Window`
-  - Signposts: `Stream.Decode`, `Stream.Render`, `Stream.Network`,
-    `Stream.Pairing`, `Stream.Audio` (see `Glimmer/Stream/Signposts.swift`).
+  The current list is in [PROFILING.md](PROFILING.md#unified-log); add to it
+  when you add a file, don't reuse a neighbour's category. Signposts sit on the
+  same subsystem with their own categories (`Stream.Decode`, `Stream.Render`,
+  `Stream.Network`, `Stream.Pairing`, `Stream.Audio`) in
+  `Glimmer/Stream/Signposts.swift`.
 - Privacy:
   - `privacy: .public` for non-sensitive diagnostic data (stage names, decode
     timings, codec format ints, error codes).
@@ -307,10 +309,11 @@ the comment at `StreamBridgeContext.eventContinuation` (in
   - Never log:
     - Key characters from `keyDown` events (a later change fixed the regression
       where chars=... leaked at `.public`).
-    - URLs containing `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, host UUIDs (the
-      redaction helper in `Network.swift` strips them).
-    - Cert PEMs or fingerprints at `.public` (see the TLS-delegate comment about
-      hostile log-scraping).
+    - URLs carrying `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`, or
+      `uniqueid`. `NetworkClient.sensitiveQueryKeys` is the set; the redaction
+      that consumes it lives in `NetworkClient+Endpoints.swift`.
+    - Cert PEMs or fingerprints at `.public` (see the hostile-log-scraping
+      comment in `ControlTransport.swift`).
     - PIN values, AES keys, signed pairing-secret bytes.
 
 The current Swift 6 strict-concurrency posture means
@@ -337,9 +340,8 @@ there. Common prefixes:
 Subject line: imperative mood, lowercase after the prefix, no trailing period.
 Body wrapped at ~72 columns when one's needed.
 
-**No `Co-Authored-By` trailer.** Hard rule, enforced by the
-`no_coauthor_trailer` swiftlint rule on source files and by repo policy on
-commits. Same for any "Generated with Claude" attribution.
+**No `Co-Authored-By` trailer.** Hard rule of repo policy, and the same goes for
+any "Generated with Claude" attribution. No emoji in commit messages either.
 
 ## The bar
 
@@ -351,11 +353,13 @@ The bar for anything a user can see or feel is: **would someone with taste,
 looking at this for two seconds, be appalled?** If you would not put it in a
 demo, it is not done - however green the checks are.
 
-This is not hypothetical. Glimmer 2026.8.0 shipped a launcher whose host card
-floated in ~420pt of empty window. It compiled without a warning, 210 tests
+This is not hypothetical. Glimmer shipped a launcher whose host card floated in
+several hundred points of empty window. It compiled without a warning, the tests
 passed, SwiftLint was clean, and it was obviously wrong to anyone who opened it.
-It took five further releases to walk back, because each attempt was validated
-by reading the diff instead of looking at the app.
+Walking it back took the rest of a release train: 2026.8.3 pinned the window to
+its content and left the card nearly touching the frame, and 2026.8.4 put the
+margins back. Each attempt had been validated by reading the diff instead of
+looking at the app.
 
 Practically, before you call something done:
 
@@ -373,8 +377,9 @@ Practically, before you call something done:
 ## Pull requests
 
 - `main` is the active development branch; releases are tags on it.
-- PR against `main`.
-- Smoke-test checklist before tagging is in
-  [RELEASE.md](RELEASE.md#3-pre-tag-smoke-test-checklist).
-- All four parallel-developable areas (codec, concurrency, security, hygiene)
-  have landed independently - keep PRs scoped so they can do the same.
+- PR against `main`. Keep them scoped to one area, so they can land
+  independently.
+- Bump `Glimmer/Version.xcconfig` and add a CHANGELOG entry in the same PR. See
+  [RELEASE.md](RELEASE.md).
+- Before you ask for a merge, run the thing and look at it. [The bar](#the-bar)
+  is the checklist.

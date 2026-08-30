@@ -18,7 +18,7 @@ body:
       description:
         Menu bar → About, or `defaults read
         /Applications/Glimmer.app/Contents/Info CFBundleShortVersionString`
-      placeholder: "2026.6.1 (20260605)"
+      placeholder: "2026.8.15 (20260830)"
     validations:
       required: true
   - type: input
@@ -32,7 +32,7 @@ body:
     id: host
     attributes:
       label: Host (Sunshine/GFE version + OS + GPU)
-      placeholder: "Sunshine 7.1.431, Windows 11, RTX 4080"
+      placeholder: "Sunshine 2026.8.26, Windows 11, RTX 4080"
     validations:
       required: true
   - type: dropdown
@@ -64,9 +64,10 @@ body:
         For streaming-quality issues (stutter, freezes, audio dropouts, input
         lag) please attach the session artifacts:
 
-        1. Enable telemetry: Settings → About → **option-click the version
-           line** to reveal the Diagnostics pane → turn on **Performance
-           telemetry** (applies on the next stream).
+        1. Enable telemetry: in Settings → About, **option-click the version
+           line** to reveal the Telemetry section inside Settings →
+           Diagnostics, then turn on **Performance telemetry**. It applies on
+           the next stream, not the running one.
         2. Reproduce the problem in a stream. When it "feels bad", press
            **⌃B** to drop a timestamped bookmark into the telemetry.
         3. End the stream, then attach from `~/Library/Logs/Glimmer/`:

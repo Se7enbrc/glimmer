@@ -1,121 +1,124 @@
 # Glimmer
 
-Mac-native game-streaming client. Speaks the GameStream/Sunshine protocol
-end-to-end in a from-scratch native Swift engine - no `moonlight-common-c`
-runtime, no external player. (The transport was ported from
-`moonlight-common-c`; see [CREDITS.md](CREDITS.md).)
+A Mac-native client for [Sunshine](https://github.com/LizardByte/Sunshine). Pure
+Swift, Apple Silicon only, built so a gaming PC in the other room feels like it
+is plugged into your Mac.
 
-## What it does
+Glimmer speaks the Moonlight protocol end to end in-process. There is no
+external player, no helper daemon, and no C runtime under the hood: the network
+socket, the decoder, the display, the audio engine, and the controllers are all
+wired together in one Swift process.
 
-- Pure native engine. No external player, no shelling out to other apps.
-- Decodes H.264, HEVC, HEVC Main10, AV1, and AV1 Main10 through VideoToolbox
-  into an `AVSampleBufferDisplayLayer`.
-- 10-bit HDR pipeline: BT.2020 NCL YUV→RGB, ITU-R BT.2100 PQ/HLG color space,
-  EDR metadata from the host's HDR-mode control message.
-- PIN pairing, mDNS discovery (`_nvstream._tcp`, `_nvstream-tcp._tcp`),
-  self-signed client identity stored as mode-0600 files under
-  `~/Library/Application Support/Glimmer/` (see
-  [docs/SECURITY.md](docs/SECURITY.md) for why not the keychain).
-- Configurable in-stream quit hotkey, quality presets (Smooth / Match my display
-  / Maximum / Custom), menu-bar item.
+## What you get
 
-## Wi-Fi stutter helper
+- **Video.** H.264, HEVC, and AV1, 8-bit and 10-bit, decoded in hardware through
+  VideoToolbox. HDR streams get a real PQ/HLG pipeline with EDR metadata rather
+  than a tone-mapped approximation. Up to 4K at 240 Hz when the host can encode
+  it.
+- **Pacing.** A frame pacer that locks the display to the stream's cadence,
+  passes frames straight through on a clean link, and buffers only for jitter it
+  has actually measured. It was tuned against per-frame telemetry, not by feel,
+  and it recovers on its own when the network gets ugly.
+- **Audio.** Opus through AVAudioEngine with a small adaptive cushion, so
+  swapping to AirPods mid-session or a rough patch of Wi-Fi does not turn into
+  crackle.
+- **Controllers.** Xbox, DualSense, and MFi pads with rumble. On a DualSense you
+  also get adaptive triggers, the light bar, gyro and accelerometer, the
+  touchpad, and battery reporting. A hold-to-quit chord gets you back to the Mac
+  without a keyboard.
+- **Keyboard and mouse.** Raw mouse input with the Mac's pointer acceleration
+  taken out, so aim is 1:1, plus a velocity-gated boost on fast flicks that
+  scales with the stream resolution, so a 4K desktop still crosses in one swipe.
+  Optional forwarding of ⌘ shortcuts to the host.
+- **Wi-Fi.** AirDrop and Continuity share the Mac's radio (AWDL) and will grab
+  the channel out from under a stream. An optional helper parks AWDL while you
+  play and hands it back when you stop.
+- **Hosts.** mDNS discovery, PIN pairing, hosts by IP or hostname (Tailscale
+  MagicDNS names work), and a one-time import of your paired hosts from
+  moonlight-qt so nothing needs re-pairing.
+- **Mac things.** Menu bar item, quality presets that match your display, a
+  stats overlay, configurable hotkeys, notarized, and self-updating.
 
-AirDrop and Continuity share the Mac's Wi-Fi radio (AWDL). During a stream they
-can grab the channel out from under you and cause multi-second freezes. Glimmer
-ships an optional helper that parks `awdl0` for the life of a stream and
-restores it the moment you stop.
+Nothing leaves your Mac. Diagnostics are off by default; when you turn them on
+they write files under `~/Library/Logs/Glimmer` for you to read or attach to an
+issue.
 
-Enable it in **Settings > General > Network** ("Smooth out Wi-Fi stutter while
-streaming"). Because the helper runs as a privileged background service, macOS
-requires a one-time approval in **System Settings > General > Login Items &
-Extensions** the first time you turn it on.
+## Install
 
-**Troubleshooting.** If it ever reports `operation not permitted` or
-`rejected by BTM` (can happen after many reinstalls), reset the Background Task
-Management database once and re-enable:
+Requires macOS 26 or newer on Apple Silicon.
+
+```bash
+brew tap se7enbrc/glimmer
+brew trust --tap se7enbrc/glimmer   # Homebrew asks this of every third-party tap
+brew install --cask glimmer
+```
+
+Or grab the notarized `.dmg` from
+[Releases](https://github.com/Se7enbrc/glimmer/releases) and drag Glimmer to
+Applications. Either way it updates itself from then on.
+
+Glimmer is Developer-ID signed and notarized but not sandboxed and not on the
+App Store; the Wi-Fi helper needs that freedom. See
+[docs/SECURITY.md](docs/SECURITY.md) for what that means in practice.
+
+### Your host
+
+The gaming PC needs Sunshine and a display that can present the exact resolution
+and refresh rate you ask for. On Windows that is a virtual display driver; on
+Linux a current Sunshine resizes the session itself.
+[docs/HOST_SETUP.md](docs/HOST_SETUP.md) walks through it.
+
+### Wi-Fi helper
+
+Turn it on in **Settings > Quality > Wi-Fi**. It runs as a privileged background
+service, so macOS asks for a one-time approval under **System Settings >
+General > Login Items & Extensions**. If it ever reports
+`operation not permitted` or `rejected by BTM` after a lot of reinstalls, reset
+the Background Task Management database once and re-enable:
 
 ```bash
 sudo sfltool resetbtm
 ```
 
-## Requirements
+## Build from source
 
-To run: macOS 26 or newer on Apple Silicon. The notarized download is
-self-contained - it bundles OpenSSL, Opus, and Sparkle, so there is nothing else
-to install.
-
-Your **host** (the gaming PC) needs Sunshine plus a display that can present the
-exact resolution/refresh you stream at - on Windows a Virtual Display Driver, on
-Linux a current Sunshine that resizes the session. See
-[docs/HOST_SETUP.md](docs/HOST_SETUP.md).
-
-To build from source: the Xcode 26 toolchain (Swift 6, strict concurrency) and
-Homebrew with `openssl@3` and `opus`.
-
-## Install
-
-### Download
-
-Grab the latest notarized `.dmg` from the
-[Releases](https://github.com/Se7enbrc/glimmer/releases) page and drag Glimmer
-to Applications. From then on it updates itself (Sparkle).
-
-Glimmer is a Developer-ID-signed, notarized, **unsandboxed** app - it is not on
-the Mac App Store. (The unsandboxed posture is what lets it run the Wi-Fi
-stutter helper; see [docs/SECURITY.md](docs/SECURITY.md).)
-
-### Homebrew
-
-A Homebrew cask (`brew install --cask glimmer`) is planned - not yet available.
-
-### From source
+Xcode 26 (Swift 6, strict concurrency) and Homebrew.
 
 ```bash
 git clone https://github.com/Se7enbrc/glimmer.git
 cd glimmer
 brew install openssl@3 opus
-make release && make install
-open /Applications/Glimmer.app
+make
 ```
 
-## Build
+`make` builds the Release app the same way a shipped one is built (signed and
+notarized when a Developer ID is available, ad hoc otherwise) and installs it to
+`/Applications`. `make app` is a quick compile-only check, `make test` runs the
+unit tests, `make uninstall` removes the app. The streaming engine lives under
+`Glimmer/Stream/` and is built by the app target directly, no submodules.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the map,
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) the rules.
 
-```bash
-make            # Debug build of Glimmer.app
-make release    # Release configuration
-make install    # copy to /Applications, adhoc re-sign
-make clean      # wipe build/
-make uninstall  # remove Glimmer.app
-```
+## Why not just use Moonlight
 
-The streaming engine is pure Swift under `Glimmer/Stream/`, built directly by
-the app target - there is no separate native library or submodule. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layout.
+Moonlight is excellent and Glimmer would not exist without it. On the Mac,
+though, moonlight-qt is a Qt port of a cross-platform C++ app, and it lives one
+layer away from the hardware. Glimmer talks to VideoToolbox, AVAudioEngine, and
+GameController directly, which is where the pacing, HDR, and controller work
+above comes from, and it looks and behaves like a Mac app because it is one.
 
-## Why this exists
+## Support
 
-[Moonlight](https://github.com/moonlight-stream/moonlight-qt) on macOS is a Qt6
-port of a multi-platform C++ codebase. It works, but it lives downstream of
-every Qt quirk and presents a UI that doesn't match the rest of the OS. Glimmer
-is a from-scratch native Swift client - its streaming transport was ported from
-`moonlight-common-c` (GPLv3; see [CREDITS.md](CREDITS.md)) and it owns its own
-video / audio / input pipeline through VideoToolbox + AVAudioEngine, running
-entirely in-process - no helper daemon and no external player. (OpenSSL and Opus
-are linked for crypto and audio decode, and bundled inside the app.)
-
-On first launch Glimmer migrates paired hosts and the RSA client identity from a
-prior moonlight-qt install (if one exists) so the user keeps their hosts without
-re-pairing.
+Glimmer is free software written in spare time. If it makes your setup better,
+[buying a coffee](https://ko-fi.com/ugfuglio) helps keep the hardware current.
 
 ## License
 
 GPLv3. Copyright © 2026 ugfugl.io. See [LICENSE](LICENSE).
 
-Glimmer's Swift streaming transport is **ported from
-[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c)**
-(GPLv3). Because that port is a derivative work, Glimmer is distributed under
-the GNU General Public License v3. A clean-room reimplementation from the
-published GameStream/Sunshine wire protocol is planned, after which Glimmer will
-become independently licensed. See [CREDITS.md](CREDITS.md) for the full
-acknowledgment.
+The streaming transport is a port of
+[moonlight-common-c](https://github.com/moonlight-stream/moonlight-common-c),
+with the pairing handshake, HTTP control client, and frame pacer ported from
+[moonlight-qt](https://github.com/moonlight-stream/moonlight-qt). Both are
+GPLv3, so Glimmer is too. [CREDITS.md](CREDITS.md) has the full acknowledgment,
+including the MIT-licensed enet and nanors code that came along with the port.
