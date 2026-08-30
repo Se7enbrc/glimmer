@@ -84,6 +84,11 @@ BUILD_NUMBER    := $(shell sed -n 's/^CURRENT_PROJECT_VERSION = \(.*\)/\1/p' Gli
 # Repo that hosts the Sparkle appcast (GitHub Pages) + release assets - the
 # public source repo itself.
 RELEASES_REPO   ?= Se7enbrc/glimmer
+# Homebrew tap that carries the cask (`brew install --cask se7enbrc/glimmer/glimmer`).
+TAP_REPO        ?= Se7enbrc/homebrew-glimmer
+export RELEASES_REPO TAP_REPO
+# Which release `make brew-bump` points the cask at - the one being built by default.
+VERSION         ?= $(MARKETING_VERSION)
 SPARKLE_VERSION ?= 2.9.3
 export SPARKLE_VERSION
 
@@ -104,10 +109,10 @@ HELPER_TARGET := arm64-apple-macos26.0
 
 .PHONY: all release install reinstall uninstall clean app sign embed open \
         helper-build embed-helper \
-        profile profile-signposts setup-notary notarize dmg dist preflight \
+        profile profile-signposts setup-notary notarize dmg dmg-background dist preflight \
         codesign-setup codesign-teardown ensure-signing dev test \
         creds-init enable-telem disable-telem release-publish sparkle-keys \
-        guard-clean-tree
+        guard-clean-tree brew-bump
 
 # TIER 1 - "everything but publish": the full release pipeline at Release
 # (xcodebuild -> inside-out sign -> embed + re-sign dylibs -> notarize -> staple),
@@ -411,17 +416,24 @@ notarize: embed
 	@spctl --assess --type execute --verbose=2 "$(GLIMMER_APP_SRC)" || true
 
 # Build a distributable DMG from the signed (and ideally notarized) bundle.
+# scripts/make-dmg.sh does the hdiutil + Finder-AppleScript dance (background
+# art, window bounds, icon positions, baked .DS_Store) with no Homebrew
+# dependency; it degrades to a plain-but-installable DMG if Finder scripting is
+# unavailable, so a release never fails over cosmetics. Same output path/name as
+# before, so `dist`, `release-publish`, and the Homebrew bump are unaffected.
 dmg:
 	@test -d "$(GLIMMER_APP_SRC)" || { echo "ERR: build first (make release embed)" >&2; exit 1; }
 	@echo "▶ Building $(DMG_NAME)..."
-	@rm -rf "$(DIST_DIR)" && mkdir -p "$(DIST_DIR)/stage"
-	cp -R "$(GLIMMER_APP_SRC)" "$(DIST_DIR)/stage/"
-	ln -s /Applications "$(DIST_DIR)/stage/Applications"
-	hdiutil create -volname "Glimmer $(MARKETING_VERSION)" \
-		-srcfolder "$(DIST_DIR)/stage" -ov -format UDZO "$(DIST_DIR)/$(DMG_NAME)"
-	@rm -rf "$(DIST_DIR)/stage"
+	@rm -rf "$(DIST_DIR)" && mkdir -p "$(DIST_DIR)"
+	@scripts/make-dmg.sh "$(GLIMMER_APP_SRC)" "$(DIST_DIR)/$(DMG_NAME)" "Glimmer $(MARKETING_VERSION)"
 	@echo "  ✓ $(DIST_DIR)/$(DMG_NAME)"
 	@shasum -a 256 "$(DIST_DIR)/$(DMG_NAME)"
+
+# Regenerate the DMG window background art (scripts/dmg/*.png). Committed, so
+# this only needs re-running when the layout or palette changes - keep it in
+# step with the geometry in scripts/make-dmg.sh.
+dmg-background:
+	@scripts/generate-dmg-background.swift
 
 # Fail-fast gate for `make dist`: verify every non-interactive ingredient
 # BEFORE the long Release build, so a missing cert/creds/profile surfaces in
@@ -526,6 +538,20 @@ release-publish: dist
 		"$(MARKETING_VERSION)" "$(BUILD_NUMBER)" \
 		"$(DERIVED)/Build/Products/Release/Glimmer.app" \
 		"$(DIST_DIR)" "$(RELEASES_REPO)"
+	@scripts/homebrew-bump.sh "$(MARKETING_VERSION)" || { \
+		echo "" >&2; \
+		echo "WARNING: Glimmer $(MARKETING_VERSION) IS published (release + appcast) -" >&2; \
+		echo "  only the Homebrew cask bump failed. Recover with: make brew-bump" >&2; \
+		exit 1; \
+	}
+
+# Point the Homebrew cask at the published release: download the DMG, checksum
+# it, and push version + sha256 to the tap ($(TAP_REPO)). `release-publish` runs
+# this last; run it by hand to recover from a failed bump, or to re-point the
+# cask at an older tag with `make brew-bump VERSION=2026.8.13`.
+# Idempotent - a cask already matching the published DMG makes no commit.
+brew-bump:
+	@scripts/homebrew-bump.sh "$(VERSION)"
 
 # Profile under Instruments → Time Profiler. CPU hotspots only - for the
 # OSSignpost-driven per-frame timeline, use `make profile-signposts`. Both

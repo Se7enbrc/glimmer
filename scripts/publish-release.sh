@@ -70,6 +70,21 @@ LENGTH="$(printf '%s' "$SIG_LINE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
 [ -n "$ED_SIG" ] && [ -n "$LENGTH" ] || { echo "ERR: sign_update produced no signature" >&2; exit 1; }
 echo "  ✓ signed ($LENGTH bytes)"
 
+# Release notes: this version's CHANGELOG.md section verbatim, which is also
+# what the appcast <description> carries - one source of truth, so the GitHub
+# release and Sparkle's "what's new" can never disagree. A version with no
+# section falls back to the old one-line boilerplate rather than shipping empty.
+NOTES="$(mktemp -t glimmer-notes)"
+trap 'rm -f "$NOTES"' EXIT
+if "$HERE/scripts/changelog.py" --version "$SHORT" --changelog "$HERE/CHANGELOG.md" >"$NOTES" 2>/dev/null \
+	&& [ -s "$NOTES" ]; then
+	echo "  ✓ release notes from CHANGELOG.md ($(wc -l <"$NOTES" | tr -d ' ') lines)"
+else
+	echo "  ! no '## $SHORT' section in CHANGELOG.md - using boilerplate release notes" >&2
+	printf 'Glimmer %s. Auto-updates via Sparkle; the notarized DMG is attached.\n' "$SHORT" >"$NOTES"
+fi
+printf '\nSource: this repo at tag %s (GPLv3).\n' "$TAG" >>"$NOTES"
+
 echo "Publishing GitHub release ${TAG} to ${REPO}"
 ASSETS=("$ZIP")
 [ -f "$DMG" ] && ASSETS+=("$DMG")
@@ -77,7 +92,7 @@ if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
 	gh release upload "$TAG" "${ASSETS[@]}" -R "$REPO" --clobber
 else
 	gh release create "$TAG" "${ASSETS[@]}" -R "$REPO" --target "$HEAD_SHA" --title "Glimmer $SHORT" \
-		--notes "Glimmer $SHORT. Auto-updates via Sparkle; the notarized DMG is attached. Source: this repo at tag $TAG (GPLv3)."
+		--notes-file "$NOTES"
 fi
 echo "  ✓ release published"
 
@@ -87,7 +102,8 @@ echo "  ✓ release published"
 echo "▶ Updating the committed appcast (main:/$APPCAST is what Pages serves)..."
 "$HERE/scripts/update-appcast.py" "$HERE/$APPCAST" \
 	--short-version "$SHORT" --version "$BUILD" \
-	--url "$ASSET_URL" --ed-signature "$ED_SIG" --length "$LENGTH" --min-system 26.0
+	--url "$ASSET_URL" --ed-signature "$ED_SIG" --length "$LENGTH" --min-system 26.0 \
+	--changelog "$HERE/CHANGELOG.md"
 if git -C "$HERE" diff --quiet -- "$APPCAST"; then
 	echo "  ✓ appcast already current (no change to publish)"
 else

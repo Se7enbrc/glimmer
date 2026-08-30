@@ -7,6 +7,13 @@
     <language>en</language>
     <item>
       <title>2026.8.14</title>
+      <description><![CDATA[
+<p>Switching audio devices no longer teaches the stream bad habits, a connection that never shows a picture fixes itself, and Glimmer finally tells you about updates.</p>
+<p>Popping AirPods in or out mid-stream (or unplugging HDMI audio) used to be silently counted as evidence of a bad connection: each switch nudged the audio buffer a step deeper, and the app remembered that per PC - so audio delay crept up across sessions for anyone who changes audio devices. Device switches are now recognized for what they are and teach nothing.</p>
+<p>A stream that connected but never showed a first frame used to sit on a black screen until you cancelled it - the ten-second recovery everyone else gets simply didn't apply before the first picture. It does now.</p>
+<p>Internal health checks also now run on a clock that can't be moved by network time syncs or daylight-saving changes, so a clock adjustment mid-stream can no longer masquerade as (or hide) a real stall.</p>
+<p>And updates: Glimmer used to only look for a new version when you opened the app - which, if you leave it running for days, meant never. It now checks at startup and once a day while running, and tells you when a release is waiting. You can turn the automatic check off in the update window if you prefer quiet.</p>
+]]></description>
       <pubDate>Wed, 26 Aug 2026 13:15:50 GMT</pubDate>
       <sparkle:version>20260823</sparkle:version>
       <sparkle:shortVersionString>2026.8.14</sparkle:shortVersionString>
@@ -15,6 +22,11 @@
     </item>
     <item>
       <title>2026.8.13</title>
+      <description><![CDATA[
+<p>Hosts added by hostname stream now.</p>
+<p>Adding a PC by hostname or fully-qualified domain name - a Tailscale MagicDNS name, a local DNS record, anything that resolves - used to fail in the most confusing way possible: pairing worked, the connection reported as established, and then the stream died instantly, every time. Only the video and audio channels ever saw the raw hostname; everything before them resolved it on their own. Glimmer now resolves the name once, up front, and hands the same resolved address to every part of the session - so names work everywhere an IP does, and a name that doesn't resolve fails immediately with an error that says exactly that.</p>
+<p>Thanks to the excellent diagnosis in issue #70, which identified the root cause down to the line.</p>
+]]></description>
       <pubDate>Wed, 26 Aug 2026 12:35:29 GMT</pubDate>
       <sparkle:version>20260822</sparkle:version>
       <sparkle:shortVersionString>2026.8.13</sparkle:shortVersionString>
@@ -23,6 +35,10 @@
     </item>
     <item>
       <title>2026.8.12</title>
+      <description><![CDATA[
+<p>A rare crash in long-running sessions is gone.</p>
+<p>Glimmer could crash out of the blue after days of running - not while streaming, but quietly in the background, typically some minutes after the Mac woke from sleep. The cause sat in the bundled OpenSSL library: every secure check-in with your PC leaves a little bookkeeping on whichever system worker thread happened to run it, to be cleaned up when that thread is eventually discarded - sometimes days later, by which point the cleanup could trip over stale memory and take the app down. Glimmer now does that cleanup itself, immediately after each secure call, so there is never anything old lying around for the system to trip over.</p>
+]]></description>
       <pubDate>Fri, 21 Aug 2026 20:19:43 GMT</pubDate>
       <sparkle:version>20260821</sparkle:version>
       <sparkle:shortVersionString>2026.8.12</sparkle:shortVersionString>
@@ -31,6 +47,10 @@
     </item>
     <item>
       <title>2026.8.11</title>
+      <description><![CDATA[
+<p>Glimmer no longer crashes when a stream wakes up from sleep.</p>
+<p>If the Mac slept mid-stream, the audio hardware went away underneath the running session - and about nine seconds after waking, Glimmer could crash outright while trying to restart sound, because the system audio framework reports that particular failure by throwing an error the app was structurally unable to catch. Restarting playback now goes through a guard that catches those errors at the boundary: if sound can't start yet, Glimmer simply stays quiet and retries with each arriving packet until the audio hardware is back - a moment of silence instead of a dead app. The same guard covers every other way the audio engine can refuse to start.</p>
+]]></description>
       <pubDate>Tue, 18 Aug 2026 12:29:21 GMT</pubDate>
       <sparkle:version>20260820</sparkle:version>
       <sparkle:shortVersionString>2026.8.11</sparkle:shortVersionString>
@@ -39,6 +59,11 @@
     </item>
     <item>
       <title>2026.8.10</title>
+      <description><![CDATA[
+<p>Two ways a stream could freeze until you reconnected are gone, and unpairing a PC no longer leaves its power controls aimed at the next one.</p>
+<p>An audit of the whole streaming engine found two dormant failure modes with the same shape as the audio bug fixed in 2026.8.7 - video kept arriving and decoding perfectly while every frame was silently thrown away, forever, with nothing noticing. One lived in the recovery path that re-enables smooth pacing after a rough patch: if the display's renderer got stuck at exactly that moment, no watchdog could see it. The other lived in the decoder's overload protection: if Apple's video decoder genuinely hung, the recovery keyframe it asked for was itself thrown away by the very gate that requested it, in a closed loop. Both now self-heal within a couple of seconds - the first through the existing recovery ladder, which can finally see this case; the second by rebuilding the decoder in place with the arriving keyframe.</p>
+<p>Also fixed: removing a paired PC left its Wake-on-LAN address behind, so a new PC paired afterwards could inherit the old one's wake/sleep/shutdown target - power buttons aimed at the wrong machine.</p>
+]]></description>
       <pubDate>Mon, 17 Aug 2026 15:10:53 GMT</pubDate>
       <sparkle:version>20260819</sparkle:version>
       <sparkle:shortVersionString>2026.8.10</sparkle:shortVersionString>
@@ -47,6 +72,10 @@
     </item>
     <item>
       <title>2026.8.9</title>
+      <description><![CDATA[
+<p>The rough first half-minute on Wi-Fi is gone.</p>
+<p>A Wi-Fi stream's opening 30 seconds used to stutter - dropped frames, brief picture freezes - and then settle down on its own. Captured in the numbers: thirty-six freezes of a tenth of a second or more in the first half minute, then none at all, on a strong 6GHz connection. The cause wasn't the network warming up; it was Glimmer relaxing its radio-keepalive too early, letting the Mac's Wi-Fi radio nap between packets while the access point was still settling its power-management posture with the new stream. Glimmer now holds the radio awake for the first 90 seconds of every Wi-Fi session unconditionally, and only then begins economizing. Wired connections are unaffected, and the cost on Wi-Fi is a trickle of tiny keepalive packets.</p>
+]]></description>
       <pubDate>Mon, 17 Aug 2026 13:43:55 GMT</pubDate>
       <sparkle:version>20260818</sparkle:version>
       <sparkle:shortVersionString>2026.8.9</sparkle:shortVersionString>
@@ -55,6 +84,10 @@
     </item>
     <item>
       <title>2026.8.8</title>
+      <description><![CDATA[
+<p>Your desktop mouse can no longer lose its acceleration to a streaming session.</p>
+<p>While a stream is focused, Glimmer turns off the Mac's pointer-acceleration curve so in-game aim is raw 1:1, and puts your setting back the moment you tab away. A bookkeeping bug could get that restore wrong in unusual situations - two copies of Glimmer running at once, or a session that ended mid-crash - and your desktop pointer was then left with acceleration off entirely, surviving relaunches, until you fixed it by hand in System Settings. The saved value is now tracked in a way those situations can't corrupt: however a session ends, the desktop always comes back to the curve you actually had.</p>
+]]></description>
       <pubDate>Mon, 17 Aug 2026 13:35:25 GMT</pubDate>
       <sparkle:version>20260817</sparkle:version>
       <sparkle:shortVersionString>2026.8.8</sparkle:shortVersionString>
@@ -63,6 +96,10 @@
     </item>
     <item>
       <title>2026.8.7</title>
+      <description><![CDATA[
+<p>Audio now survives being left alone.</p>
+<p>A stream left running while the PC sat idle overnight came back with working video and no sound - permanently, until you reconnected. During the long silence the audio player had stopped consuming, and once sound resumed every arriving packet was dropped at the buffer's own safety gates: received, decoded, and thrown away, with nothing in the pipeline noticing. A watchdog now catches "audio arriving, nothing playing" within a few seconds and rebuilds the output path in place - one brief blip instead of a silent session. Long idle stretches also no longer poison the audio clock's drift tracking when sound resumes, so the buffer settles back to its normal depth instead of pinning deep.</p>
+]]></description>
       <pubDate>Wed, 12 Aug 2026 13:38:35 GMT</pubDate>
       <sparkle:version>20260812</sparkle:version>
       <sparkle:shortVersionString>2026.8.7</sparkle:shortVersionString>
@@ -71,6 +108,12 @@
     </item>
     <item>
       <title>2026.8.6</title>
+      <description><![CDATA[
+<p>Sharper picture on high-refresh displays.</p>
+<p>Glimmer worked out its quality budget in a way that quietly penalised fast monitors: every time the frame rate doubled, each individual frame got about 30% fewer bits to work with. A 240Hz display therefore looked blockier than a 120Hz one at the same resolution - the opposite of what you buy a fast panel for. Streaming at 4K240 now gives each frame the same budget 4K120 gets, and 120Hz modes gain a little too. Anything at 60Hz or below is unchanged.</p>
+<p>Measured on a 4K240 HDR stream: each frame went from about 46 KB to 72 KB, with no added latency and no dropped packets.</p>
+<p>Because of this, high-refresh streams now ask your PC for more bandwidth than before. On a local network that costs nothing; over a VPN or the internet Glimmer still measures the connection first and asks for what it can carry.</p>
+]]></description>
       <pubDate>Wed, 05 Aug 2026 01:51:59 GMT</pubDate>
       <sparkle:version>20260808</sparkle:version>
       <sparkle:shortVersionString>2026.8.6</sparkle:shortVersionString>
@@ -79,6 +122,10 @@
     </item>
     <item>
       <title>2026.8.5</title>
+      <description><![CDATA[
+<p>You can browse your PC's apps while a stream is running again.</p>
+<p>If a PC has more than five apps, the extras live in a dropdown at the end of the row. That dropdown was being switched off along with the app tiles whenever a session was live - which is right for the tiles, since tapping one would start a second stream, but it also meant you couldn't so much as look at the list mid-session. The dropdown now opens; only the launching is held back. Screen readers also get a proper description of what it does.</p>
+]]></description>
       <pubDate>Sun, 02 Aug 2026 13:16:33 GMT</pubDate>
       <sparkle:version>20260807</sparkle:version>
       <sparkle:shortVersionString>2026.8.5</sparkle:shortVersionString>
@@ -87,6 +134,11 @@
     </item>
     <item>
       <title>2026.8.4</title>
+      <description><![CDATA[
+<p>The launcher sits at a comfortable size again, and every app on your PC is reachable without it changing shape.</p>
+<p>2026.8.3 pinned the window to its content, which left the host card nearly touching the frame. There is proper breathing room around it again, and the window is still a fixed size - nothing in the launcher grows, so being able to drag it larger only ever added empty space.</p>
+<p>If your PC has more than five apps, the extra ones now live in a dropdown at the end of the row instead of being reachable only through the Stream button's context menu. The menu opens over the window, so reaching a sixth app no longer resizes anything. App tiles also respond across their whole area now, rather than only where the icon sits.</p>
+]]></description>
       <pubDate>Sun, 02 Aug 2026 13:07:45 GMT</pubDate>
       <sparkle:version>20260806</sparkle:version>
       <sparkle:shortVersionString>2026.8.4</sparkle:shortVersionString>
@@ -95,6 +147,13 @@
     </item>
     <item>
       <title>2026.8.3</title>
+      <description><![CDATA[
+<p>Streaming over a VPN is far more reliable, a weak link no longer freezes the picture indefinitely, and the launcher window no longer opens mostly empty.</p>
+<p>If you stream to your PC over a tunnel - Tailscale, WireGuard, or similar - Glimmer was sizing every video packet for a local network. Those packets are too big for a tunnel, so each one had to be split in two on the way to you, and losing either half lost the whole packet. On an already-marginal connection that multiplied the damage: in one captured session the picture stopped entirely for fifteen minutes while video kept arriving, because none of it could be reassembled. Glimmer now measures the actual route to your PC when a stream starts and sizes packets to fit it. Streaming on a local network is unchanged.</p>
+<p>Glimmer now also checks the connection quality before a stream starts. During the moment it already spends contacting your PC, it measures how long round-trips are taking - not the best case, but the slow tail, which is what actually causes stutter - and if your PC is far away or the path is congested, it asks for a bitrate that path can realistically carry instead of the one your resolution would want on a local network. Streaming on a local network is unaffected, and if the measurement doesn't succeed for any reason, nothing is capped.</p>
+<p>And if a remote connection still can't carry the stream, Glimmer lowers the quality and reconnects in place rather than holding a frozen frame forever: you'll see a brief pause and a note that quality is being reduced, then the picture returns. It steps down at most twice, never on a local network, and never raises the quality back on its own.</p>
+<p>The launcher window is now exactly as big as what's in it, and no longer resizable in either direction. Nothing in it grows - one host card, a row of chips, a button - so dragging it larger only ever added empty space.</p>
+]]></description>
       <pubDate>Sun, 02 Aug 2026 12:53:41 GMT</pubDate>
       <sparkle:version>20260805</sparkle:version>
       <sparkle:shortVersionString>2026.8.3</sparkle:shortVersionString>
@@ -103,6 +162,11 @@
     </item>
     <item>
       <title>2026.7.7</title>
+      <description><![CDATA[
+<p>Wake your PC from the couch - power controls appear when your setup supports them, and a sleeping PC is recognized in seconds.</p>
+<p>If your gaming PC is managed by UpSnap and the <code>luna</code> command-line tool is set up on your Mac, Glimmer's host card now grows power controls: with the PC asleep, the big stream button becomes <strong>Wake &amp; Connect</strong> - one tap wakes the machine (confirmed, not fire-and-forget), waits for Sunshine to answer, and starts your stream; a quiet power menu in the corner offers plain Wake, and - while the PC is online - Sleep, Restart, and Shut Down behind confirmations. No luna, or a PC that UpSnap hasn't granted you? Nothing appears at all - no buttons, no settings, zero clutter. Glimmer never touches your UpSnap credentials; the identity check is the host's hardware address, learned automatically while the PC is online.</p>
+<p>Recognizing a sleeping PC is also much faster: opening the app used to sit on "Checking…" for half a minute before admitting the host was asleep. A cold start now reads Asleep after a single missed probe (about two seconds), while a briefly-hiccuping online host keeps the old benefit of the doubt.</p>
+]]></description>
       <pubDate>Wed, 22 Jul 2026 18:11:28 GMT</pubDate>
       <sparkle:version>20260708</sparkle:version>
       <sparkle:shortVersionString>2026.7.7</sparkle:shortVersionString>
@@ -111,6 +175,11 @@
     </item>
     <item>
       <title>2026.7.6</title>
+      <description><![CDATA[
+<p>Streams open quiet, and packet reorders become a checked guarantee.</p>
+<p>The audio cushion now remembers what it learned for days instead of hours. Its per-connection memory used to fade out in about six hours, so any stream after a day away re-learned its buffer depth the audible way - several small sound blips across the first minute. The memory now holds for days, starts no shallower than what the live connection indicates, and the opening minute no longer teaches the buffer bad long-term habits.</p>
+<p>Wi-Fi packet reordering is now tracked as a guarantee instead of a statistic. On any shared airwave a small number of packets arrive slightly out of order - that's radio physics, not a fault - and what matters is only that each one arrives inside the window the stream already holds open for it. Glimmer now measures exactly how late every reordered packet is, proves it landed inside the window, and counts the only thing worth alarming on: one that didn't.</p>
+]]></description>
       <pubDate>Wed, 22 Jul 2026 04:21:44 GMT</pubDate>
       <sparkle:version>20260707</sparkle:version>
       <sparkle:shortVersionString>2026.7.6</sparkle:shortVersionString>
@@ -119,6 +188,13 @@
     </item>
     <item>
       <title>2026.7.5</title>
+      <description><![CDATA[
+<p>Mouse feel settles on honest and raw, drags match free aim again, and battery streams stop chugging.</p>
+<p>Click-and-drag aim now travels the same as free aim. The macOS 27 beta delivers held-button mouse motion smaller than free motion for the same physical movement - precision aim while holding a button felt heavy and under-traveled. Glimmer now measures for this and scales drag motion back to parity.</p>
+<p>The "magic" fast-flick traversal boost is now off by default. Field data settled an honest question: at 4K, a quick combat aim-flick and a cross-screen traversal flick are the same speed and size to any detector, so any automatic boost eventually boosts your aim - felt twice as sudden sensitivity jumps. Raw, predictable 1:1 aim everywhere wins. (The machinery remains for the adventurous via hidden settings.)</p>
+<p>Streams on battery stop chugging. When macOS throttles the display clock below the stream's frame rate (common on battery, sometimes even plugged in), ~13 frames a second had nowhere to land and playback ran rough. The pacer now detects content outrunning the display clock and fills the missing beats from its own timer, holding steady until the display genuinely recovers.</p>
+<p>Under the hood: a much deeper self-diagnosis toolkit - frame-delivery cadence histograms at three pipeline stages, stutter and gap counters that name their cause, audio-margin tracking that sees trouble before it is audible, mouse-motion distributions, and battery/low-power state - so the next "something feels off" gets answered from data in minutes.</p>
+]]></description>
       <pubDate>Sun, 19 Jul 2026 19:16:49 GMT</pubDate>
       <sparkle:version>20260706</sparkle:version>
       <sparkle:shortVersionString>2026.7.5</sparkle:shortVersionString>
@@ -127,6 +203,10 @@
     </item>
     <item>
       <title>2026.7.4</title>
+      <description><![CDATA[
+<p>No more stuck keys when something steals focus mid-game.</p>
+<p>If another app grabbed the foreground while you were holding a key - say W, walking forward - the key's release went to that app instead of the stream, so the game kept the key pressed indefinitely: you walked on until you clicked back in and pressed it again. The stream now releases every held key and mouse button the moment its window loses focus, so a focus steal stops your character instead of committing it to a wall. A key you're still holding when you click back in picks up again on the next press.</p>
+]]></description>
       <pubDate>Sun, 05 Jul 2026 14:55:09 GMT</pubDate>
       <sparkle:version>20260705</sparkle:version>
       <sparkle:shortVersionString>2026.7.4</sparkle:shortVersionString>
@@ -135,6 +215,11 @@
     </item>
     <item>
       <title>2026.7.3</title>
+      <description><![CDATA[
+<p>A much smoother first half-minute, and audio that stops hoarding latency.</p>
+<p>Streams used to open with a rough patch: the audio cushion started shallower than the connection had already learned it needed, and the host feeds audio slower than real time for its first seconds - so the opening of a session could blip audibly several times over ~15 seconds while the buffer taught itself back up. The cushion now starts at the link's real learned depth and tops itself up the moment the connection type is confirmed, so a session opens with at most one brief quiet moment instead of a cascade.</p>
+<p>That same opening cascade also had a lasting cost: it taught the player a falsely deep "floor," which quietly held audio a fifth of a second behind for the rest of the session and carried over to the next one. Startup no longer teaches the floor, and a floor that got stuck that way is now repaired on read, so audio latency settles back down during quiet play the way it was always meant to.</p>
+]]></description>
       <pubDate>Sun, 05 Jul 2026 14:36:46 GMT</pubDate>
       <sparkle:version>20260704</sparkle:version>
       <sparkle:shortVersionString>2026.7.3</sparkle:shortVersionString>
@@ -143,6 +228,12 @@
     </item>
     <item>
       <title>2026.7.2</title>
+      <description><![CDATA[
+<p>Smoother streams when macOS throttles the display clock, honest stutter accounting, and audio that starts in sync.</p>
+<p>macOS sometimes throttles the display callback below the rate the stream asked for (commonly on battery); frames then slip a beat every few seconds - a subtle, persistent judder. The pacer now notices the throttle within a second and fills the missed beats from its own timer until the display clock recovers, so the stream stays smooth through it.</p>
+<p>The "felt stutter" telemetry signal now counts what you actually see: a screen that visibly held while frames were still arriving (a bad network moment, a decode stall). It previously required a rare double-fault and had never fired in practice; the stutter badge's thresholds are unchanged.</p>
+<p>Audio now remembers each PC's clock offset. Every computer's clock runs a hair fast or slow, and the player learns the difference to keep audio buffered tightly - but that learning restarted from zero every session, leaving the first minutes prone to audio blips while it re-converged. The learned offset is now saved per PC and applied from the first second of the next stream.</p>
+]]></description>
       <pubDate>Thu, 02 Jul 2026 22:03:45 GMT</pubDate>
       <sparkle:version>20260703</sparkle:version>
       <sparkle:shortVersionString>2026.7.2</sparkle:shortVersionString>
@@ -151,6 +242,10 @@
     </item>
     <item>
       <title>2026.7.1</title>
+      <description><![CDATA[
+<p>Internal naming cleanup - nothing you can see changes.</p>
+<p>Glimmer's streaming engine has been first-party Swift for a while now, so the app's core types no longer carry the "Moonlight" name they were first sketched under. This release renames them to plainer, protocol-neutral names. Your paired PCs, quality settings, and pairing all carry over untouched - there is nothing to redo. Moonlight is still credited in About; the transport is ported from its open-source code.</p>
+]]></description>
       <pubDate>Thu, 02 Jul 2026 14:54:13 GMT</pubDate>
       <sparkle:version>20260702</sparkle:version>
       <sparkle:shortVersionString>2026.7.1</sparkle:shortVersionString>
@@ -159,6 +254,11 @@
     </item>
     <item>
       <title>2026.7.0</title>
+      <description><![CDATA[
+<p>Smoothness reads honest at the desktop, and clearer pairing errors.</p>
+<p>When no game is running, the desktop often sits at a low, sparse frame rate - nothing is wrong, there just aren't many frames to pace. The stats overlay's smoothness reading used to plummet in that state (as low as single digits) even though the picture was perfectly steady, because it scored the long idle gaps between frames as if the player had paced them late. It now recognizes a content gap - no frame was waiting to be shown - as distinct from a genuine pacing miss, so an idle or low-frame-rate desktop reads healthy while a running game that actually drops its cadence still shows it. The "Stream stuttering" badge is unchanged.</p>
+<p>Pairing also tells you more when it can't connect: if the host is offline, at the wrong address, or not on your network, the error now names the host and says to check it's on and reachable - distinct from an actual pairing or PIN failure, which stays a deliberately vague "try again."</p>
+]]></description>
       <pubDate>Wed, 01 Jul 2026 13:45:51 GMT</pubDate>
       <sparkle:version>20260701</sparkle:version>
       <sparkle:shortVersionString>2026.7.0</sparkle:shortVersionString>
@@ -167,6 +267,11 @@
     </item>
     <item>
       <title>2026.6.54</title>
+      <description><![CDATA[
+<p>Reliability + smoothness pass from a deep code review.</p>
+<p>The adaptive jitter buffer is working again on the default install. It steers the playout buffer deeper on a jittery link to absorb hitches, but it had quietly gone dormant unless diagnostics were enabled - so a normal install sat at the shallowest depth and never adapted. It now tracks live network jitter directly, so a wifi or congested link gets the deeper buffer it needs.</p>
+<p>Plus a batch of edge-case fixes: quitting mid-stream no longer leaves the Mac's pointer acceleration overridden; audio recovers if the output device isn't ready the instant you switch it; a connection that fails right as the stream window opens can't steal focus or hide the cursor; waking on a high-latency link reconnects faster; the pairing success screen's buttons are clickable again; a stale error no longer names the wrong host after switching machines; and the reconnect banner is announced to VoiceOver.</p>
+]]></description>
       <pubDate>Tue, 30 Jun 2026 20:59:11 GMT</pubDate>
       <sparkle:version>20260665</sparkle:version>
       <sparkle:shortVersionString>2026.6.54</sparkle:shortVersionString>
@@ -175,6 +280,9 @@
     </item>
     <item>
       <title>2026.6.53</title>
+      <description><![CDATA[
+<p>The "Stream stuttering" badge is now much harder to fool. On a healthy Wi-Fi link with normal jitter, the player drops a stale frame and immediately shows the freshest one - a catch-up you never see, not a stutter - yet the badge used to count those and light up anyway. It now lights only when the screen actually held on a frame (a real hitch), so a smooth-but-jittery stream stops getting flagged. Genuine stutters - sustained dropped or held frames - still trip it.</p>
+]]></description>
       <pubDate>Mon, 29 Jun 2026 21:07:53 GMT</pubDate>
       <sparkle:version>20260664</sparkle:version>
       <sparkle:shortVersionString>2026.6.53</sparkle:shortVersionString>
@@ -183,6 +291,10 @@
     </item>
     <item>
       <title>2026.6.52</title>
+      <description><![CDATA[
+<p>Reliability pass from a full concurrency audit - a class of rare races that could surface as a crash on disconnect, audio drift, held input after a reconnect, or a stream coming up muted.</p>
+<p>Closed a recurring pattern where a per-session object (the diagnostics log sink, frame-timing tracker, telemetry event sink, decoder backend handle) could be torn down on one thread while another was still reading it - the kind of use-after-free that only bites under an unlucky disconnect. The audio drift-corrector's internal state is now properly synchronized, the frame pacer's real-time thread can no longer be orphaned if a stream stops the instant it starts, input no longer stays stuck disabled after a silent reconnect, and starting a new stream right after the last one can't leave it muted.</p>
+]]></description>
       <pubDate>Mon, 29 Jun 2026 20:09:09 GMT</pubDate>
       <sparkle:version>20260663</sparkle:version>
       <sparkle:shortVersionString>2026.6.52</sparkle:shortVersionString>
@@ -191,6 +303,9 @@
     </item>
     <item>
       <title>2026.6.51</title>
+      <description><![CDATA[
+<p>Magic resolution-aware mouse traversal - fast flicks cover the screen consistently at any stream resolution while aim sensitivity stays exactly raw. Automatic, no settings.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 22:00:44 GMT</pubDate>
       <sparkle:version>20260662</sparkle:version>
       <sparkle:shortVersionString>2026.6.51</sparkle:shortVersionString>
@@ -199,6 +314,13 @@
     </item>
     <item>
       <title>2026.6.50</title>
+      <description><![CDATA[
+<p>Robustness pass from a wide audit - several real "works until it doesn't" gaps.</p>
+<p>Audio now recovers mid-stream. Switching output device while streaming (AirPods, a USB DAC, unplugging HDMI, an OS sample-rate change) used to stop the audio engine for good - sound gone until you reconnected. It now detects the change and restarts the engine in place, and a stream that comes up with audio genuinely failing now says so instead of going silently video-only.</p>
+<p>Held controller inputs survive a reconnect. After a silent reconnect or a wake-from-sleep, a held trigger/stick/button used to read as released on the host until you moved it (ADS dropped, your character stopped, a charge cancelled). The real held state is now re-sent on reconnect.</p>
+<p>A host that crashes or drops now shows a distinct "ended unexpectedly" message with Retry, instead of the same calm toast as a clean quit. A wedged launch now gives up after ~22s (was ~55-65s) and Cancel bounces back immediately.</p>
+<p>Under the hood: quitting mid-reconnect no longer leaks a background connection; the per-session diagnostics trace is now size-capped and old logs are swept (it could grow unbounded); release builds refuse to build from an uncommitted tree; plus telemetry-accuracy fixes. No change to streaming/latency behavior.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 20:16:54 GMT</pubDate>
       <sparkle:version>20260661</sparkle:version>
       <sparkle:shortVersionString>2026.6.50</sparkle:shortVersionString>
@@ -207,6 +329,9 @@
     </item>
     <item>
       <title>2026.6.49</title>
+      <description><![CDATA[
+<p>Release-integrity gate: release builds are now refused from a dirty worktree, and publishing asserts the committed version at the tag matches the built bundle - so the GPLv3 source at a tag always reproduces the binary (closing the 2026.6.48 dirty-build gap). Adds a per-session diagnostic for why the 2026.6.47 real-time present scheduling never engages in the field, plus telemetry-accuracy fixes: per-second metrics no longer emit a giant spike across a reconnect, the real-time gauge no longer lies on reconnect, and the present on-time/late counts are now honest per-window gauges instead of non-monotonic counters. No behavior change.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 19:56:14 GMT</pubDate>
       <sparkle:version>20260660</sparkle:version>
       <sparkle:shortVersionString>2026.6.49</sparkle:shortVersionString>
@@ -215,6 +340,9 @@
     </item>
     <item>
       <title>2026.6.48</title>
+      <description><![CDATA[
+<p>Under the hood: confirms the 2026.6.47 real-time scheduling actually took (a queryable flag) and splits any residual present-timing miss into "the timing thread was starved" vs "the display didn't hand us a frame in time" - so the rare remaining hitch has a precise, named cause instead of a guess. No behavior change.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 17:44:35 GMT</pubDate>
       <sparkle:version>20260659</sparkle:version>
       <sparkle:shortVersionString>2026.6.48</sparkle:shortVersionString>
@@ -223,6 +351,9 @@
     </item>
     <item>
       <title>2026.6.47</title>
+      <description><![CDATA[
+<p>Kills the residual intermittent stutter on high-refresh displays. The present-timing thread (added in 2026.6.32) could still be preempted by the system under load, firing its display callback a couple of frames late - a brief judder that read as dropped frames even though the connection and decode were perfect (diagnosed precisely: the thread was being descheduled, not the panel changing refresh). It now runs with real-time scheduling - the same class CoreAudio's audio thread uses - so it gets a guaranteed slice every frame and can't be shoved off the CPU. No added latency, negligible CPU cost.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 17:23:22 GMT</pubDate>
       <sparkle:version>20260658</sparkle:version>
       <sparkle:shortVersionString>2026.6.47</sparkle:shortVersionString>
@@ -231,6 +362,9 @@
     </item>
     <item>
       <title>2026.6.46</title>
+      <description><![CDATA[
+<p>Under the hood: a diagnostic that pinpoints why the present-timing tick occasionally fires late on a high-refresh display - distinguishing the timing thread being preempted from the OS coalescing the callback. No behavior change; it tells the next release which fix is the right one.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 16:32:18 GMT</pubDate>
       <sparkle:version>20260657</sparkle:version>
       <sparkle:shortVersionString>2026.6.46</sparkle:shortVersionString>
@@ -239,6 +373,9 @@
     </item>
     <item>
       <title>2026.6.45</title>
+      <description><![CDATA[
+<p>Under the hood: new diagnostics, no change to behavior. Breaks stream-launch time into its sub-steps (so a slow start is attributable to the right leg), counts network-route changes (e.g. waking on a new Wi-Fi network) and input-path backpressure, and adds a controller-delivery latency measure - making the next wake/launch hiccup a one-query diagnosis.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 13:58:29 GMT</pubDate>
       <sparkle:version>20260656</sparkle:version>
       <sparkle:shortVersionString>2026.6.45</sparkle:shortVersionString>
@@ -247,6 +384,9 @@
     </item>
     <item>
       <title>2026.6.44</title>
+      <description><![CDATA[
+<p>Recovers fast when you wake the Mac mid-stream. Before, waking on a different Wi-Fi network left the stream's connection stale with no wake handling at all - and because the dead-connection timer pauses during sleep, recovery didn't even start for ~10 seconds (the black-screen hang). Now, on wake, the app immediately re-checks the link and - if the connection has gone silent - reconnects in place within about two seconds instead of waiting it out. A healthy wake on the same network is untouched.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 13:38:15 GMT</pubDate>
       <sparkle:version>20260655</sparkle:version>
       <sparkle:shortVersionString>2026.6.44</sparkle:shortVersionString>
@@ -255,6 +395,9 @@
     </item>
     <item>
       <title>2026.6.43</title>
+      <description><![CDATA[
+<p>Lowers standing audio latency on a clean wired link. Audio kept roughly 150ms more buffer than a good wired connection needs - around a quarter-second of avoidable lip-sync lag - because the buffer seeded deep whenever the network came up "unknown" (e.g. right after waking on a new network) and never converged back down. On a clean wired link whose clock is well-behaved, the buffer now walks down to a tight, low-latency depth; a link that's actually struggling (real underruns or large clock skew) keeps its deeper buffer untouched.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 13:19:19 GMT</pubDate>
       <sparkle:version>20260654</sparkle:version>
       <sparkle:shortVersionString>2026.6.43</sparkle:shortVersionString>
@@ -263,6 +406,9 @@
     </item>
     <item>
       <title>2026.6.42</title>
+      <description><![CDATA[
+<p>Fixes audio dying after a mid-stream reconnect. When the stream silently reconnected (a network blip - e.g. waking on a different Wi-Fi network - drops and re-establishes the connection underneath you), the audio decoder's shutdown flag was set during teardown and never cleared on the rebuild, so audio came back muted: the picture resumed but sound didn't, with packets arriving and nowhere to play. The flag is now reset on every rebuild, the audio graph re-initializes cleanly, and a new diagnostic surfaces a silent-audio state at a glance.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 13:06:42 GMT</pubDate>
       <sparkle:version>20260653</sparkle:version>
       <sparkle:shortVersionString>2026.6.42</sparkle:shortVersionString>
@@ -271,6 +417,11 @@
     </item>
     <item>
       <title>2026.6.41</title>
+      <description><![CDATA[
+<p>Two controller/overlay fixes.</p>
+<p>The controller exit chord no longer pops the host's on-screen keyboard. The old default (L1+R1+L2+R2) leaks the partial combo to the host as you press into it, and Steam Big Picture reads that as its show-keyboard shortcut. The default is now L3 + R3 (click both sticks) - native on every controller, and its partials collide with nothing. (The old chord is still selectable in Settings.)</p>
+<p>The "Stream stuttering" pill is now conservative: it lights only on real dropped or late frames, not on the normal frame-repeats a high-refresh display does when the host sends fewer fps than the panel refreshes - which was lighting it constantly at 4K 240 where the picture was actually smooth.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 04:46:22 GMT</pubDate>
       <sparkle:version>20260652</sparkle:version>
       <sparkle:shortVersionString>2026.6.41</sparkle:shortVersionString>
@@ -279,6 +430,9 @@
     </item>
     <item>
       <title>2026.6.40</title>
+      <description><![CDATA[
+<p>Under the hood, no change to streaming behavior: added diagnostics for the hardware decoder's session-create time and the cause of any mid-stream decoder rebuilds, plus a debug-build safety check on the present-timing thread's shutdown.</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 00:42:11 GMT</pubDate>
       <sparkle:version>20260651</sparkle:version>
       <sparkle:shortVersionString>2026.6.40</sparkle:shortVersionString>
@@ -287,6 +441,9 @@
     </item>
     <item>
       <title>2026.6.39</title>
+      <description><![CDATA[
+<p>Fixes the "Stream stuttering" badge firing constantly at high refresh. When the display refreshes faster than the host can send frames - e.g. a 240Hz panel with a host that can only encode ~130fps at 4K - the panel re-shows each frame to fill the idle refreshes. That's normal and looks smooth, but the badge counted those structural repeats as stutter and lit nonstop. It now judges smoothness by how EVENLY frames actually reach the screen (present cadence), so it stays dark on an even stream at any frame-rate-to-refresh ratio, and still catches real judder and dropped frames. (If your stream looks soft at 4K 240, the host likely can't encode it - try 4K 120 or a lower resolution; the picture is genuinely smooth at the rate it's delivering.)</p>
+]]></description>
       <pubDate>Fri, 26 Jun 2026 00:19:48 GMT</pubDate>
       <sparkle:version>20260650</sparkle:version>
       <sparkle:shortVersionString>2026.6.39</sparkle:shortVersionString>
@@ -295,6 +452,11 @@
     </item>
     <item>
       <title>2026.6.38</title>
+      <description><![CDATA[
+<p>Launcher polish, and the Wi-Fi helper now stays out of the way on Ethernet.</p>
+<p>On a confirmed-wired connection the network helper no longer prompts you to enable it AND no longer parks the AirDrop/Continuity radio during a stream - which did nothing for a wired session but disabled AirDrop system-wide. Wi-Fi sessions are unchanged (that's where it helps).</p>
+<p>The bitrate chip and the codec checkmark now update immediately when you change a host's codec (they could lag the actual setting). A configured launch app that isn't on the selected host is labelled "(not on &lt;host&gt;)". Plus a telemetry cardinality cleanup for per-thread CPU.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 23:59:13 GMT</pubDate>
       <sparkle:version>20260649</sparkle:version>
       <sparkle:shortVersionString>2026.6.38</sparkle:shortVersionString>
@@ -303,6 +465,9 @@
     </item>
     <item>
       <title>2026.6.37</title>
+      <description><![CDATA[
+<p>Under the hood: a batch of telemetry-accuracy fixes, no change to streaming behavior. The in-app latency and A/V-sync figures now reflect reality - the "input latency" estimate was measuring time-to-next-frame rather than felt latency (reading several times too low), and the "A/V skew" number was dominated by audio-buffer depth instead of true sync. Adds an honest click-to-first-frame measure (the old timer started after the launch handshake) and a few new diagnostic counters.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 23:48:55 GMT</pubDate>
       <sparkle:version>20260648</sparkle:version>
       <sparkle:shortVersionString>2026.6.37</sparkle:shortVersionString>
@@ -311,6 +476,9 @@
     </item>
     <item>
       <title>2026.6.36</title>
+      <description><![CDATA[
+<p>Cuts standing audio latency on a wired link. The audio buffer was holding roughly 150ms more cushion than a clean wired connection needs - about a quarter-second of avoidable A/V lag - because its learned safety floor had been trained up to its ceiling by clock-skew corrections (not real audio loss) and then couldn't ease back down. On a quiet, healthy wired link the floor now walks back down so the buffer drains to a tight, low-latency depth; a link that's actually struggling keeps its cushion, and Wi-Fi is unchanged (it needs the deeper buffer).</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 23:32:11 GMT</pubDate>
       <sparkle:version>20260647</sparkle:version>
       <sparkle:shortVersionString>2026.6.36</sparkle:shortVersionString>
@@ -319,6 +487,13 @@
     </item>
     <item>
       <title>2026.6.35</title>
+      <description><![CDATA[
+<p>Six fixes from a deep audit.</p>
+<p>The controller exit chord now works on every gamepad. The default leave-stream chord required a button (the DualSense Create button) that macOS doesn't expose, so on a DualSense it silently never fired. It's now a four-shoulder/trigger hold that's native to every controller, and the in-stream leave hint shows it.</p>
+<p>Three correctness fixes: the stream's network/RTT telemetry no longer goes blank after a silent reconnect; a rare main-thread stall when the present-timing thread is slow to start is closed; and an A/V-skew metric that could disagree between its two outputs is now computed once.</p>
+<p>Lower input latency - the controller-to-host send no longer lets macOS defer each flush by up to a full millisecond.</p>
+<p>The in-stream degradation pill is much harder to flicker: it shows only on sustained hitching and drains out cleanly.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 23:18:09 GMT</pubDate>
       <sparkle:version>20260646</sparkle:version>
       <sparkle:shortVersionString>2026.6.35</sparkle:shortVersionString>
@@ -327,6 +502,9 @@
     </item>
     <item>
       <title>2026.6.34</title>
+      <description><![CDATA[
+<p>Fixes the bitrate shown under the hero. The spec chip displayed the nominal H.264 quality figure, but on AV1/HEVC the stream actually sends ~20% fewer bits (the codec-aware budget from 2026.6.22) - so it read e.g. 84 Mbps while the wire carried 67. The chip and the spec summary now show the real codec-aware bitrate the engine sends.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 21:49:48 GMT</pubDate>
       <sparkle:version>20260645</sparkle:version>
       <sparkle:shortVersionString>2026.6.34</sparkle:shortVersionString>
@@ -335,6 +513,9 @@
     </item>
     <item>
       <title>2026.6.33</title>
+      <description><![CDATA[
+<p>Stops the in-stream "Stream stuttering" pill from crying wolf. It had no startup grace, so a game's brief launch stutter (loading + display-mode negotiation) flashed it immediately, and its thresholds sat close enough to the normal high-refresh floor that an occasional dip could trip it. It now waits out the launch transient and only shows for hitching clearly above that floor - so it stays dark on a healthy session and means something when it appears.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 21:41:35 GMT</pubDate>
       <sparkle:version>20260644</sparkle:version>
       <sparkle:shortVersionString>2026.6.33</sparkle:shortVersionString>
@@ -343,6 +524,9 @@
     </item>
     <item>
       <title>2026.6.32</title>
+      <description><![CDATA[
+<p>Drops fewer frames on high-refresh displays. The present-timing tick ran on the main thread, where the macOS frame-rate governor could starve it whenever the thread was busy - the display link missed callbacks, frames piled up, and the pacer trimmed them. On a clean link that was the biggest source of micro-stutter (~73% of the dropped frames). The tick now runs on its own high-priority thread so it fires on time, at no added latency.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 21:20:46 GMT</pubDate>
       <sparkle:version>20260643</sparkle:version>
       <sparkle:shortVersionString>2026.6.32</sparkle:shortVersionString>
@@ -351,6 +535,9 @@
     </item>
     <item>
       <title>2026.6.31</title>
+      <description><![CDATA[
+<p>Makes the in-stream degradation badge honest. It was driven by a link-contention signal (Wi-Fi AWDL co-gaps) that the error-correction quietly absorbs - so it lit when nothing was wrong and missed the actual picture stutter. It now fires on perceived present-side hitching (dropped, late, or repeated frames), so it lights when the picture actually stutters and stays dark when the link blips harmlessly. Relabeled "Stream stuttering". The link-health signal it used to read is still recorded in telemetry.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 20:11:02 GMT</pubDate>
       <sparkle:version>20260642</sparkle:version>
       <sparkle:shortVersionString>2026.6.31</sparkle:shortVersionString>
@@ -359,6 +546,9 @@
     </item>
     <item>
       <title>2026.6.30</title>
+      <description><![CDATA[
+<p>Fixes the in-stream "Network degraded" pill. A brief Wi-Fi co-gap blip could flash it, and once shown it could stay stuck on even after the link recovered. It now appears only for SUSTAINED degradation - a momentary blip is ignored - and reliably fades back out when the link clears.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 19:20:02 GMT</pubDate>
       <sparkle:version>20260641</sparkle:version>
       <sparkle:shortVersionString>2026.6.30</sparkle:shortVersionString>
@@ -367,6 +557,9 @@
     </item>
     <item>
       <title>2026.6.29</title>
+      <description><![CDATA[
+<p>Fixes the choppiness in 2026.6.28. One of that release's frame-pacing changes misread the present pacer's normal steady-state release as a defect and suppressed it, and over-tightened the due-gate timing - so frames missed their display tick, the present hold tripled, and the picture repeated and dropped frames on a clean link. That behavior change is reverted; the new pacing telemetry it added (which is how the regression was caught in a single session) is kept.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 18:25:11 GMT</pubDate>
       <sparkle:version>20260640</sparkle:version>
       <sparkle:shortVersionString>2026.6.29</sparkle:shortVersionString>
@@ -375,6 +568,15 @@
     </item>
     <item>
       <title>2026.6.28</title>
+      <description><![CDATA[
+<p>A broad polish release - 39 fixes across the engine, the interface, and the instrumentation.</p>
+<p>Lower audio latency and tighter lip-sync. The drift resampler now keeps its clock-offset estimate across buffer drains and corrects skew several times faster, and the playout cushion no longer ratchets to a deep buffer on a clean link - together cutting a large chunk of standing audio delay on a good connection.</p>
+<p>Smoother frames. At fps == display refresh the pacer no longer trims a few frames a second it shouldn't, so rendered frame rate matches decoded on a clean link.</p>
+<p>Sturdier connection. A control-channel read could hang indefinitely if the host went silent mid-reply - it now fails fast and recovers; the handshake has an overall timeout, more disconnect causes are treated as recoverable, and connecting no longer blocks the session.</p>
+<p>Keeps your setup across this update. The earlier move to an unsandboxed app left existing installs unable to see their paired PCs - this release migrates them forward so pairings and trust carry over.</p>
+<p>Clearer in-stream feedback. A banner shows over the frozen frame while reconnecting or holding; a host with a changed certificate is flagged with a real re-pair action instead of a false "Ready"; taking over a PC that's already streaming asks first; a first-stream hint shows how to leave fullscreen; and a "Network unstable" pill appears on a degrading link.</p>
+<p>Under the hood: honest decode-latency telemetry (the old p95/max were estimates), a durable disconnect-reason counter, Wi-Fi AWDL suppression that engages on the first stream after you enable it, GPU power folded into the power metric, and a batch of smaller correctness and observability fixes.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 17:52:31 GMT</pubDate>
       <sparkle:version>20260639</sparkle:version>
       <sparkle:shortVersionString>2026.6.28</sparkle:shortVersionString>
@@ -383,6 +585,9 @@
     </item>
     <item>
       <title>2026.6.27</title>
+      <description><![CDATA[
+<p>Tightens the Wi-Fi network helper so it holds awdl0 down harder during a stream. macOS re-raises the AirDrop/Continuity radio on its own schedule; the helper now catches that the instant it happens (a kernel routing socket rather than a slower poll), strips the interface's IPv6 address, and verifies it actually went down - so the radio gets far less chance to hop off your stream's channel and stutter it. It also now records how often macOS fought the radio back up (visible in telemetry) and logs clearly whether it engaged for each stream.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 13:37:31 GMT</pubDate>
       <sparkle:version>20260638</sparkle:version>
       <sparkle:shortVersionString>2026.6.27</sparkle:shortVersionString>
@@ -391,6 +596,9 @@
     </item>
     <item>
       <title>2026.6.26</title>
+      <description><![CDATA[
+<p>Holds audio together on hosts whose clock drifts hard. The drift resampler's correction ceiling was set for a near-perfect clock and could be hit by a host whose audio clock runs off by a few hundred parts-per-million - once pinned, it could no longer keep the buffer full and the audio would crackle. The ceiling is now high enough to absorb the skews real hosts actually show, with margin to spare; the rate change stays inaudible.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 02:16:30 GMT</pubDate>
       <sparkle:version>20260637</sparkle:version>
       <sparkle:shortVersionString>2026.6.26</sparkle:shortVersionString>
@@ -399,6 +607,9 @@
     </item>
     <item>
       <title>2026.6.25</title>
+      <description><![CDATA[
+<p>Smoother audio when the host and Mac clocks drift apart. The drift-tracking resampler now catches a clock-skew onset about twice as fast, so the audio cushion no longer briefly drains during the catch-up - which is what produced the occasional crackle on longer sessions. Pitch movement stays inaudible.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 01:20:55 GMT</pubDate>
       <sparkle:version>20260636</sparkle:version>
       <sparkle:shortVersionString>2026.6.25</sparkle:shortVersionString>
@@ -407,6 +618,9 @@
     </item>
     <item>
       <title>2026.6.24</title>
+      <description><![CDATA[
+<p>Fixes a rare freeze when a stream drops. If the host cut the connection at just the wrong instant - mid audio-playout - the app's audio teardown could deadlock against the audio engine, hanging Glimmer so it couldn't reconnect until it was force-quit and relaunched. The drift resampler now applies its rate change off the audio completion handler, removing the lock-order inversion that caused it.</p>
+]]></description>
       <pubDate>Thu, 25 Jun 2026 00:57:02 GMT</pubDate>
       <sparkle:version>20260635</sparkle:version>
       <sparkle:shortVersionString>2026.6.24</sparkle:shortVersionString>
@@ -415,6 +629,9 @@
     </item>
     <item>
       <title>2026.6.23</title>
+      <description><![CDATA[
+<p>Restores headroom on AV1 streams. 2026.6.22's codec-aware budget trimmed AV1 sessions a bit aggressively (a third off the H.264 figure); this softens that to match HEVC (~20% off), so busy, high-motion scenes keep more room before the encoder feels it - while still using less bandwidth than H.264 at the same quality.</p>
+]]></description>
       <pubDate>Wed, 24 Jun 2026 14:03:54 GMT</pubDate>
       <sparkle:version>20260634</sparkle:version>
       <sparkle:shortVersionString>2026.6.23</sparkle:shortVersionString>
@@ -423,6 +640,10 @@
     </item>
     <item>
       <title>2026.6.22</title>
+      <description><![CDATA[
+<p>Uses less bandwidth on modern codecs at the same picture quality. The bitrate budget is now codec-aware: AV1 and HEVC sessions need fewer bits than H.264 for the same result, so Glimmer no longer spends the H.264-sized budget on them (roughly 20-33% fewer bytes against a capable host, with no visible change). An explicit Custom bitrate is always sent as-is.</p>
+<p>Under the hood: the audio and video FEC decoders now share one Reed-Solomon solver (and a copy-on-write allocation was removed from the loss-recovery hot path), the frame pacer's state was regrouped into cohesive structs behind the same single lock, and the release tooling now pins the source tag to the exact built commit and stamps the appcast in UTC. A link-state FEC arming-bias experiment is present but off by default.</p>
+]]></description>
       <pubDate>Wed, 24 Jun 2026 13:20:43 GMT</pubDate>
       <sparkle:version>20260633</sparkle:version>
       <sparkle:shortVersionString>2026.6.22</sparkle:shortVersionString>
@@ -431,6 +652,9 @@
     </item>
     <item>
       <title>2026.6.21</title>
+      <description><![CDATA[
+<p>Clearer recovery when the Wi-Fi helper won't install. macOS occasionally keeps a stuck background-item record after an app update and refuses to register the helper - the app used to report this as "helper not found in the app bundle," which was both false and a dead end. It now explains what actually happened and links straight to Apple's own Login Items &amp; Extensions guide for managing it.</p>
+]]></description>
       <pubDate>Mon, 22 Jun 2026 14:44:25 -0400</pubDate>
       <sparkle:version>20260632</sparkle:version>
       <sparkle:shortVersionString>2026.6.21</sparkle:shortVersionString>
@@ -439,6 +663,10 @@
     </item>
     <item>
       <title>2026.6.20</title>
+      <description><![CDATA[
+<p>A maintenance pass. Fixes a couple of stale in-app pointers left by the Troubleshooting/Diagnostics merge - the DualSense chord tip and the quit-chord hint now send you to Settings &gt; Input, where those controls actually live. The mute-while-streaming toggle reads outcome-first with a clearer footnote, the Custom resolution helper is now a "Use native resolution" button, and the empty-state copy settles on a single "Pair a PC."</p>
+<p>Everything else is under-the-hood housekeeping: stale comments and docs brought back in line with the code - notably the security notes, which now describe the current OpenSSL certificate-pinning path - and internal planning shorthand scrubbed out of the source.</p>
+]]></description>
       <pubDate>Mon, 22 Jun 2026 11:45:11 -0400</pubDate>
       <sparkle:version>20260631</sparkle:version>
       <sparkle:shortVersionString>2026.6.20</sparkle:shortVersionString>
@@ -447,6 +675,13 @@
     </item>
     <item>
       <title>2026.6.19</title>
+      <description><![CDATA[
+<p>A polish pass across Settings, the controller, and stream robustness.</p>
+<p>The Quality presets are simpler and truer to these displays: "Match my display" is now "Native Retina" (every pixel of the Mac's panel), the rarely-right Smooth and Maximum presets are gone, and a new HiDPI preset streams at the Mac's default Retina scale - a crisp picture at roughly a quarter of the bandwidth. Notch coverage is now a single-line toggle right under the resolution picker, and the in-stream stats overlay can sit top-center (clear of the camera notch) or bottom-center.</p>
+<p>Settings are also reorganized: the raw-mouse aim toggle moved to Input, Wi-Fi stutter-smoothing moved to Quality, and the Troubleshooting and Diagnostics panes merged into one - the controller test and logs stay in plain sight, while the telemetry wires reveal with the usual option-click on the version line.</p>
+<p>On the controller, the DualSense player-number LEDs now light to match its slot, and the unreliable Home / Guide quit chord - macOS reserves that button - was removed (the Options + Create + L1 + R1 chord remains).</p>
+<p>Under the hood: a SwiftUI layout-engine crash is hardened by making the display-change recompute idempotent; the video receive path falls back gracefully if a future macOS ever drops its private batched-receive syscall; and a handful of defensive guards round it out.</p>
+]]></description>
       <pubDate>Sun, 21 Jun 2026 09:20:17 -0400</pubDate>
       <sparkle:version>20260630</sparkle:version>
       <sparkle:shortVersionString>2026.6.19</sparkle:shortVersionString>
@@ -455,6 +690,10 @@
     </item>
     <item>
       <title>2026.6.18</title>
+      <description><![CDATA[
+<p>Fixes controller input dying after you record a custom quit chord. Recording a chord temporarily borrows the gamepad's input handlers, and dismissing the recorder left them detached - so controller input stayed dead until the stream was restarted. Input now re-attaches automatically whenever the stream window regains focus, so it recovers on its own.</p>
+<p>Also in this release: the Mac's own mouse acceleration is now turned off while a stream is focused, so only the game's sensitivity shapes your aim instead of the Mac's pointer curve stacking on top of it - on by default, with a toggle in Settings &gt; General &gt; Mouse (mice only; the trackpad is untouched). Audio on a fresh, jittery, or remote connection starts at a smarter playout cushion instead of walking up to it through a few audible blips. And the telemetry now surfaces the FEC loss-recovery headroom - including how close each frame came to unrecoverable - for better visibility into marginal links.</p>
+]]></description>
       <pubDate>Sat, 20 Jun 2026 15:15:40 -0400</pubDate>
       <sparkle:version>20260629</sparkle:version>
       <sparkle:shortVersionString>2026.6.18</sparkle:shortVersionString>
@@ -463,6 +702,10 @@
     </item>
     <item>
       <title>2026.6.17</title>
+      <description><![CDATA[
+<p>Fixes visible frame-skipping on high-refresh displays. The present-pacing floor was re-pinning the display's refresh rate every couple of seconds to chase content cadence, and each renegotiation dropped a frame (reproducible on testufo.com/frameskipping). The floor now holds the requested refresh steady - skipping gone, and the top end is preserved (the panel max is still honored).</p>
+<p>Also in this release: audio drift is now corrected by a continuous resampler instead of the old silence-insertion stretch, so playback stays smoother under host/Mac clock skew; the launcher's primary button reads "Stream &lt;app&gt;" instead of the misleading "Resume &lt;app&gt;"; and the control channel is floored at TLS 1.2.</p>
+]]></description>
       <pubDate>Thu, 18 Jun 2026 20:12:42 -0400</pubDate>
       <sparkle:version>20260628</sparkle:version>
       <sparkle:shortVersionString>2026.6.17</sparkle:shortVersionString>
@@ -471,6 +714,9 @@
     </item>
     <item>
       <title>2026.6.16</title>
+      <description><![CDATA[
+<p>Root-fixes the "host suddenly stops trusting this Mac after sleep" problem. The control channel (pairing, launch, resume) now runs on Glimmer's own OpenSSL mutual-TLS client instead of URLSession - which had forced the client identity through the login keychain, the thing that locked on sleep and broke the connection. The cert + key now load straight from the on-disk PEM, with the host cert pinned exactly as before, so there's no keychain in the path to lapse on wake. (2026.6.15 was a stopgap that re-imported on demand; this removes the cause.)</p>
+]]></description>
       <pubDate>Thu, 18 Jun 2026 15:54:46 -0400</pubDate>
       <sparkle:version>20260627</sparkle:version>
       <sparkle:shortVersionString>2026.6.16</sparkle:shortVersionString>
@@ -479,6 +725,9 @@
     </item>
     <item>
       <title>2026.6.15</title>
+      <description><![CDATA[
+<p>Fixes streams suddenly failing with "host doesn't recognize this Mac" after the Mac sleeps. The client TLS identity is imported into the login keychain, which locks on sleep/idle; the long-running app kept using the now-unusable cached identity, so the next stream's mutual-TLS handshake couldn't sign - and that was misreported as a lost pairing. Glimmer now re-imports the identity on demand when its key can't sign, so it self-heals instead of needing a restart.</p>
+]]></description>
       <pubDate>Thu, 18 Jun 2026 14:22:39 -0400</pubDate>
       <sparkle:version>20260626</sparkle:version>
       <sparkle:shortVersionString>2026.6.15</sparkle:shortVersionString>
@@ -487,6 +736,9 @@
     </item>
     <item>
       <title>2026.6.14</title>
+      <description><![CDATA[
+<p>The AWDL helper now logs each time macOS re-raises <code>awdl0</code> mid-stream and it re-suppresses - recent macOS auto-enables <code>awdl0</code> for AirDrop/Continuity even while it's parked, and each re-enable is a brief contention window that can hitch the stream. Logged at a level that persists, so a hitch can be checked against it. Helper-only; no app changes.</p>
+]]></description>
       <pubDate>Wed, 17 Jun 2026 16:32:52 -0400</pubDate>
       <sparkle:version>20260625</sparkle:version>
       <sparkle:shortVersionString>2026.6.14</sparkle:shortVersionString>
@@ -495,6 +747,9 @@
     </item>
     <item>
       <title>2026.6.13</title>
+      <description><![CDATA[
+<p><code>make dev</code> now runs the test suite before building, and releases go through a PR. Dev-workflow only; no app changes.</p>
+]]></description>
       <pubDate>Wed, 17 Jun 2026 15:52:47 -0400</pubDate>
       <sparkle:version>20260624</sparkle:version>
       <sparkle:shortVersionString>2026.6.13</sparkle:shortVersionString>
@@ -503,6 +758,9 @@
     </item>
     <item>
       <title>2026.6.12</title>
+      <description><![CDATA[
+<p>Docs only - trimmed the release runbook. No app changes.</p>
+]]></description>
       <pubDate>Wed, 17 Jun 2026 15:40:44 -0400</pubDate>
       <sparkle:version>20260623</sparkle:version>
       <sparkle:shortVersionString>2026.6.12</sparkle:shortVersionString>
@@ -511,6 +769,15 @@
     </item>
     <item>
       <title>2026.6.11</title>
+      <description><![CDATA[
+<p>Smooths out Wi-Fi freezes during a stream, and moves Glimmer to an unsandboxed app to make that possible.</p>
+<h3>Streaming</h3>
+<ul><li><strong>Wi-Fi-stutter helper.</strong> AirDrop / Continuity share the Mac's Wi-Fi radio (AWDL) and can grab the channel mid-stream, causing multi-second freezes. Glimmer now suppresses <code>awdl0</code> for the life of a stream and restores it when you stop. Stream-scoped: it only parks the radio while you're actually streaming. The suppression runs through a privileged <code>SMAppService</code> daemon; enable it with a toggle in <strong>Settings &gt; General &gt; Network</strong>, and approve the one-time launch prompt macOS shows the first time.</li><li><strong>Host display setup.</strong> Glimmer requests your Mac's exact native resolution + refresh; <a href="https://github.com/Se7enbrc/glimmer/blob/main/docs/HOST_SETUP.md">docs/HOST_SETUP.md</a> and a sample <a href="https://github.com/Se7enbrc/glimmer/blob/main/docs/vddsettings.xml"><code>vddsettings.xml</code></a> document the Sunshine + Virtual-Display-Driver setup the host needs to present those modes.</li></ul>
+<h3>Security</h3>
+<ul><li><strong>Hardened Runtime library validation is back on</strong> for release builds. The embedded OpenSSL/Opus dylibs are re-signed under the team ID at build time, so the app no longer ships with library validation disabled - the compensating control now that there's no sandbox. See <a href="https://github.com/Se7enbrc/glimmer/blob/main/docs/SECURITY.md">docs/SECURITY.md</a>.</li><li><strong>Fuzzed the stream-transport parsers</strong> (Annex-B / RTP / FEC / RTSP / ENet / AES-GCM) - the bytes a host sends that the client has to parse. It surfaced and fixed an out-of-bounds read in the Reed-Solomon FEC decoders.</li></ul>
+<h3>Internal</h3>
+<ul><li><strong>Glimmer is now an unsandboxed app.</strong> Required to install and run the root AWDL helper (a sandboxed app cannot register a system daemon). Identity and pinned-cert files migrate from the old sandbox container to <code>~/Library/Application Support/Glimmer/</code> on first launch; no re-pairing. See <a href="https://github.com/Se7enbrc/glimmer/blob/main/docs/SECURITY.md">docs/SECURITY.md</a> for the full rationale and the compensating controls.</li><li><strong>The AWDL helper survives app updates.</strong> Its privileged registration now self-heals on launch, so an auto-update no longer leaves the Wi-Fi-stutter suppression silently disabled until you toggle it again.</li></ul>
+]]></description>
       <pubDate>Wed, 17 Jun 2026 15:26:20 -0400</pubDate>
       <sparkle:version>20260622</sparkle:version>
       <sparkle:shortVersionString>2026.6.11</sparkle:shortVersionString>
@@ -519,6 +786,9 @@
     </item>
     <item>
       <title>2026.6.10</title>
+      <description><![CDATA[
+<p>Hygiene. Adds an automated unit-test suite (120 tests across the wire codecs, Reed-Solomon / audio FEC, input encoders, RTSP/SDP, the AES-GCM stream crypto, and the pairing/identity crypto) plus a SwiftLint cleanup. No app-behavior changes.</p>
+]]></description>
       <pubDate>Tue, 16 Jun 2026 21:30:02 -0400</pubDate>
       <sparkle:version>20260621</sparkle:version>
       <sparkle:shortVersionString>2026.6.10</sparkle:shortVersionString>
@@ -527,6 +797,9 @@
     </item>
     <item>
       <title>2026.6.9</title>
+      <description><![CDATA[
+<p>Hygiene. The client identity stays in mode-0600 sandbox-container files - we evaluated the keychain and deliberately stayed on files (the data-protection keychain needs a provisioning profile a Developer-ID app can't ship, and the 0600 sandbox files already beat the reference client's plaintext plist). No user-visible change.</p>
+]]></description>
       <pubDate>Tue, 16 Jun 2026 19:46:51 -0400</pubDate>
       <sparkle:version>20260620</sparkle:version>
       <sparkle:shortVersionString>2026.6.9</sparkle:shortVersionString>
@@ -535,6 +808,10 @@
     </item>
     <item>
       <title>2026.6.8</title>
+      <description><![CDATA[
+<h3>Updates</h3>
+<ul><li><strong>Checks for updates on launch</strong>, in addition to the once-a-day background check.</li></ul>
+]]></description>
       <pubDate>Tue, 16 Jun 2026 19:06:03 -0400</pubDate>
       <sparkle:version>20260619</sparkle:version>
       <sparkle:shortVersionString>2026.6.8</sparkle:shortVersionString>
@@ -543,6 +820,9 @@
     </item>
     <item>
       <title>2026.6.7</title>
+      <description><![CDATA[
+<p>Auto-update test release - exercises the Sparkle in-place update from 2026.6.6. Source and docs cleanup only (punctuation normalized to ASCII; dependency docs corrected); no app-behavior changes. (Build stamp <code>20260618</code>.)</p>
+]]></description>
       <pubDate>Tue, 16 Jun 2026 15:05:04 -0400</pubDate>
       <sparkle:version>20260618</sparkle:version>
       <sparkle:shortVersionString>2026.6.7</sparkle:shortVersionString>
@@ -551,6 +831,9 @@
     </item>
     <item>
       <title>2026.6.6</title>
+      <description><![CDATA[
+<p>Auto-update validation release - no functional changes vs 2026.6.5; cut to exercise the Sparkle in-place update path. (Build stamp <code>20260617</code> so it sorts strictly after 2026.6.5's same-day <code>20260616</code>.)</p>
+]]></description>
       <pubDate>Tue, 16 Jun 2026 14:44:34 -0400</pubDate>
       <sparkle:version>20260617</sparkle:version>
       <sparkle:shortVersionString>2026.6.6</sparkle:shortVersionString>
