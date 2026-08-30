@@ -39,8 +39,8 @@ private final class SingleResume<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     init(_ cont: CheckedContinuation<T, Never>) { self.cont = cont }
     func resume(_ value: T) {
-        lock.lock(); let c = cont; cont = nil; lock.unlock()
-        c?.resume(returning: value)
+        lock.lock(); let pending = cont; cont = nil; lock.unlock()
+        pending?.resume(returning: value)
     }
 }
 
@@ -251,7 +251,10 @@ final class AWDLHelperManager: ObservableObject {
                 // refuse. Show users a plain message + Apple's Login Items guide; keep
                 // the reliable `sfltool resetbtm` fix in the log for support, not the UI.
                 if Self.isWedgedRegistration(ns) {
-                    log.error("AWDL helper register failed: \(detail, privacy: .public) - wedged Background Task Management record; reliable clear is 'sudo sfltool resetbtm' + restart")
+                    log.error("""
+                        AWDL helper register failed: \(detail, privacy: .public) - wedged Background Task \
+                        Management record; reliable clear is 'sudo sfltool resetbtm' + restart
+                        """)
                     state = .unavailable(Self.wedgedRegistrationMessage)
                 } else {
                     log.error("AWDL helper register failed: \(detail, privacy: .public)")
@@ -299,7 +302,10 @@ final class AWDLHelperManager: ObservableObject {
         case .requiresApproval:
             log.notice("AWDL daemon awaiting approval in System Settings ▸ Login Items")
         case .notRegistered, .unavailable:
-            log.notice("AWDL daemon registration drifted after an update (\(String(describing: self.state), privacy: .public)) - self-healing")
+            log.notice("""
+                AWDL daemon registration drifted after an update \
+                (\(String(describing: self.state), privacy: .public)) - self-healing
+                """)
             enable()
         }
     }

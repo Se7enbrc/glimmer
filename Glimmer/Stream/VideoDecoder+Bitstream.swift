@@ -242,7 +242,10 @@ extension VideoDecoder {
                 for nal in nals {
                     let lenBE = UInt32(nal.length).bigEndian
                     withUnsafeBytes(of: lenBE) { lenBytes in
-                        dstBase.advanced(by: offset).copyMemory(from: lenBytes.baseAddress!, byteCount: 4)
+                        // A 4-byte fixed-width value always has a base address;
+                        // the guard states that instead of trapping on it.
+                        guard let lenBase = lenBytes.baseAddress else { return }
+                        dstBase.advanced(by: offset).copyMemory(from: lenBase, byteCount: 4)
                     }
                     offset += 4
                     dstBase.advanced(by: offset)

@@ -11,9 +11,10 @@
 //
 //  Code map (this type is split across same-module extension files)
 //  ----------------------------------------------------------------
-//    * TelemetryCounters.swift             - the class decl, the Counter type,
-//                                            every stored counter + gauge field,
-//                                            init/deinit, and the session reset.
+//    * TelemetryCounters.swift             - the class decl + every stored
+//                                            counter / gauge field.
+//    * TelemetryCounters+Types.swift       - the nested value types + constants.
+//    * TelemetryCounters+Lifecycle.swift   - lock lifecycle + the session reset.
 //    * TelemetryCounters+Gauges.swift      - decode / packet-gap / jitter / RTT /
 //                                            present-suppression gauge accessors.
 //    * TelemetryCounters+AudioGauges.swift - audio playout gauges + cold-start.
@@ -42,23 +43,8 @@ import os
 final class TelemetryCounters: @unchecked Sendable {
     static let shared = TelemetryCounters()
 
-    /// One monotonic counter. os_unfair_lock-guarded UInt64 - matches the codebase's
-    /// existing AtomicCounter style; the few inc/read sites are not a tight inner
-    /// loop (per loss event / per frame, never per packet on the hot path).
-    final class Counter: @unchecked Sendable {
-        private let lock = os_unfair_lock_t.allocate(capacity: 1)
-        private var total: UInt64 = 0
-        init() { lock.initialize(to: os_unfair_lock_s()) }
-        deinit { lock.deallocate() }
-        func increment(by amount: UInt64 = 1) {
-            os_unfair_lock_lock(lock); total &+= amount; os_unfair_lock_unlock(lock)
-        }
-        var value: UInt64 {
-            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
-            return total
-        }
-        func reset() { os_unfair_lock_lock(lock); total = 0; os_unfair_lock_unlock(lock) }
-    }
+    // The `Counter` type - one os_unfair_lock-guarded monotonic UInt64, the
+    // building block of every total below - is in TelemetryCounters+Types.swift.
 
     // ---- Event counters (exposed as glimmer_*_total) ----
     let rfiTotal = Counter()
@@ -424,14 +410,10 @@ final class TelemetryCounters: @unchecked Sendable {
     /// `DispatchTime.now().uptimeNanoseconds` of the most recent input event, or
     /// 0 if none yet. Read by the exporter to compute time-since-last-input.
     var lastInputNanosValue: UInt64 = 0
-    /// Gap (seconds) of input silence after which the next event is an idle→active
-    /// edge. 2s comfortably exceeds normal inter-event spacing during active play
-    /// (sub-100ms) yet is short enough to catch a genuine "stepped away, came
-    /// back" resume - the exact motivating bug.
-    static let idleGapSeconds: Double = 2.0
+    // The idle-edge threshold (`idleGapSeconds`) is in TelemetryCounters+Types.swift.
 
-    // Module-internal (not private) so the gauge accessors in
-    // TelemetryCounters+Gauges.swift can reach these.
+    // Every gauge lock/value pair from here down is module-internal (not
+    // private) so the accessors in TelemetryCounters+Gauges.swift reach them.
     //
     /// Live smoothed recv-jitter gauge (ms), written by the RTP receive path.
     /// A plain Double behind an unfair lock - last-writer-wins is fine for a
@@ -439,9 +421,6 @@ final class TelemetryCounters: @unchecked Sendable {
     let jitterLock = os_unfair_lock_t.allocate(capacity: 1)
     var recvJitterMsValue: Double = 0
 
-    // Module-internal (not private) so the gauge accessors in
-    // TelemetryCounters+Gauges.swift can reach these.
-    //
     /// Live smoothed network RTT gauge (ms), refreshed once per ~1Hz telemetry
     /// tick by the exporter from the ENet ping estimate. Read on the present hot
     /// path by the per-frame glass-to-glass computation as `~RTT/2` for the
@@ -456,9 +435,6 @@ final class TelemetryCounters: @unchecked Sendable {
     let rttLock = os_unfair_lock_t.allocate(capacity: 1)
     var rttMsValue: Double = 0
 
-    // Module-internal (not private) so the gauge accessors in
-    // TelemetryCounters+Gauges.swift can reach these.
-    //
     /// LATEST VTDecompressionSessionCreate wall-clock cost (ms). HW decoder
     /// bring-up can't run until the first SPS/PPS, so it lands on the critical
     /// first-frame leg - this surfaces that one-shot startup cost. Stamped by the
@@ -477,9 +453,6 @@ final class TelemetryCounters: @unchecked Sendable {
     let cruiseMaxGainLock = os_unfair_lock_t.allocate(capacity: 1)
     var cruiseMaxGainValue: Double = 1.0
 
-    // Module-internal (not private) so the gauge accessors in
-    // TelemetryCounters+Gauges.swift can reach these.
-    //
     /// PRESENT-SUPPRESSION gauge (0/1): true while presentation is deliberately
     /// suppressed (window backgrounded/occluded → display link suspended). Set/
     /// cleared at the suppression EDGES by the present path - already-rare sites,
@@ -511,21 +484,8 @@ final class TelemetryCounters: @unchecked Sendable {
     var pacerTickRealtimeValue = false
 
     /// Live inter-packet-gap distribution (microseconds) for the microburst
-    /// detector. Written once per ~2s receive-metrics window by the RTP path
-    /// (computed there off the per-datagram arrival times it ALREADY reads for
-    /// jitter, so the hot path gains only a min/max/running-sum update - no clock
-    /// read, no alloc) and read at 1Hz by the exporter. A plain value struct behind
-    /// an unfair lock: last-writer-wins is fine for a gauge sampled at 1Hz against
-    /// the 2s window writer. p95 is an approximation (a 16-bucket log-spaced
-    /// histogram, see the writer) - exact enough to spot a microburst, far cheaper
-    /// than a per-packet reservoir on the receive path.
-    struct PacketGapSnapshot: Sendable {
-        var p50Us: Double
-        var p95Us: Double
-        var maxUs: Double
-    }
-    // Module-internal (not private) so the gauge accessors in
-    // TelemetryCounters+Gauges.swift can reach these.
+    /// detector, written once per ~2s receive-metrics window and read at 1Hz; the
+    /// `PacketGapSnapshot` type + rationale are in TelemetryCounters+Types.swift.
     let gapLock = os_unfair_lock_t.allocate(capacity: 1)
     var packetGapValue: PacketGapSnapshot?
 
@@ -556,68 +516,12 @@ final class TelemetryCounters: @unchecked Sendable {
     /// TelemetryCounters+InputActivity.swift next to its input-age sibling.
     let rumbleActivity = RumbleActivity()
 
-    /// Live AUDIO playout STATE (signal: AUDIO - the other stream). What the audio
-    /// output path is doing right now: how much decoded audio is scheduled ahead of
-    /// the playhead (the buffer level / fill), and the A/V SYNC DRIFT - how far the
-    /// audio presentation clock has slipped from the video present clock over time.
-    /// Published off the hot path (the audio decode path stamps it under the lock it
-    /// already holds, ~200Hz at 5ms packets) and read at 1Hz by the exporter. A
-    /// plain value struct behind an unfair lock: last-writer-wins is correct for a
-    /// 1Hz-sampled state gauge, and the lock keeps the multi-field read tear-free.
-    /// nil before the first decoded audio packet.
-    struct AudioState: Sendable {
-        /// Decoded audio buffered ahead of the playhead (ms): the scheduled-but-
-        /// not-yet-played backlog in the AVAudioPlayerNode. A healthy stream holds a
-        /// small steady cushion; a climb is latency creep, a fall toward 0 precedes
-        /// an under-run (the audio glitch).
-        var bufferFillMs: Double
-        /// ADAPTIVE PLAYOUT TARGET (ms): the cushion the playout path is
-        /// currently steering `bufferFillMs` toward. Fill vs target is the
-        /// cushion judge (base 30 / cap 150 / ceiling 190): a fill hugging a
-        /// flat ceiling is only legible against this - target re-pinned at the
-        /// cap through minutes of calm play = the decay is broken (the old
-        /// disguised-permanent-give-up failure mode), target ratcheting up
-        /// under gaps then decaying toward base = designed behavior. nil until
-        /// the playout path stamps it (AudioDecoder publishes alongside fill).
-        var playoutTargetMs: Double?
-        /// AUDIO CLOCK DRIFT (ms): the audio playout clock's slip vs WALL CLOCK,
-        /// signed and net of the steady buffer cushion. This is audio-clock-vs-
-        /// wall-clock drift - NOT a true cross-stream A/V delta (it never compares
-        /// against the video present clock). ~0 = the audio device clock is
-        /// tracking real time; POSITIVE = audio media has played BEHIND wall time
-        /// (the device clock is slow / it's draining late), NEGATIVE = ahead.
-        /// Computed as (wall-elapsed − media-played − buffer-cushion) since playout
-        /// start, so a steady cushion reads ~0 and only a genuine clock-domain
-        /// slip trends over time. nil until audio has begun playing.
-        var audioClockDriftMs: Double?
-        /// Windowed MINIMUM buffer fill (ms) since the exporter last read it - the
-        /// trough of the scheduled-ahead backlog. The 1Hz `bufferFillMs` gauge is
-        /// last-writer-wins and can miss the instantaneous low that precedes an
-        /// under-run; this min is the field that PROVES the buffer is (or is no
-        /// longer) draining toward 0. RESET-ON-READ by the exporter. nil when no
-        /// trough was sampled this window.
-        var bufferFillMinMs: Double?
-        /// RE-PRIME count this session (monotonic): pre-roll RE-ARM edges - the
-        /// state machine dropping back to un-primed after a full drain. NOT a
-        /// count of paused wall-time pre-rolls: the node keeps playing across a
-        /// re-arm and the cushion rebuilds via the post-gap catch-up clump (see
-        /// AudioDecoder). Directly countable alongside under-runs.
-        var rePrimeTotal: UInt64
-        /// RESAMPLER applied rate offset (ppm): the drift-tracking resampler's live
-        /// `varispeed.rate − 1` in parts-per-million. 0 when disengaged (pre-roll /
-        /// re-prime / drain); when converged it sits at the steady host↔Mac clock
-        /// offset (~tens of ppm) - the direct view of the resampler holding the fill
-        /// it's steering (vs the av_skew that bounces with video-side timing).
-        var resamplerPpm: Double = 0
-        /// AVAudioEngine running mirror (1 = up). Set under the audio meter lock at
-        /// engine start/stop, so a reconnect that re-inits the decoder but fails to
-        /// bring the engine back reads 0 here while packets still flow - the direct
-        /// "playout dead" signal. nil before the engine first starts.
-        var engineRunning: Bool?
-    }
-    // Module-internal (not private) so the audio accessors in
-    // TelemetryCounters+AudioGauges.swift can reach these (and the min-window
-    // field below).
+    /// Live AUDIO playout STATE storage (signal: AUDIO - the other stream): buffer
+    /// fill, playout target, clock drift, the windowed trough, re-prime count,
+    /// resampler ppm, engine-running. The `AudioState` type + rationale are in
+    /// TelemetryCounters+Types.swift. Module-internal (not private) so the audio
+    /// accessors in TelemetryCounters+AudioGauges.swift reach these (and the
+    /// min-window field below).
     let audioStateLock = os_unfair_lock_t.allocate(capacity: 1)
     var audioStateValue: AudioState?
     /// Windowed MINIMUM buffer fill (ms) accumulated by the audio playout path
@@ -672,118 +576,14 @@ final class TelemetryCounters: @unchecked Sendable {
     /// recv-thread boundary, so it lives here behind the measured value's lock.
     var audioStreamStartNanosValue: UInt64 = 0
 
-    init() {
-        jitterLock.initialize(to: os_unfair_lock_s())
-        inputLock.initialize(to: os_unfair_lock_s())
-        rttLock.initialize(to: os_unfair_lock_s())
-        vtSessionCreateLock.initialize(to: os_unfair_lock_s())
-        cruiseMaxGainLock.initialize(to: os_unfair_lock_s())
-        gapLock.initialize(to: os_unfair_lock_s())
-        decodeStateLock.initialize(to: os_unfair_lock_s())
-        fecHealthLock.initialize(to: os_unfair_lock_s())
-        audioStateLock.initialize(to: os_unfair_lock_s())
-        audioFirstPacketLock.initialize(to: os_unfair_lock_s())
-        presentSuppressedLock.initialize(to: os_unfair_lock_s())
-        decodeGatedLock.initialize(to: os_unfair_lock_s())
-        pacerTickRealtimeLock.initialize(to: os_unfair_lock_s())
-    }
-    deinit {
-        jitterLock.deallocate(); inputLock.deallocate()
-        rttLock.deallocate(); vtSessionCreateLock.deallocate()
-        cruiseMaxGainLock.deallocate()
-        gapLock.deallocate()
-        decodeStateLock.deallocate(); fecHealthLock.deallocate()
-        audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
-        presentSuppressedLock.deallocate(); decodeGatedLock.deallocate()
-        pacerTickRealtimeLock.deallocate()
-    }
+    init() { initializeGaugeLocks() }
+    deinit { deallocateGaugeLocks() }
 
-    // The gauge accessors live in same-module extension files (pure moves to
-    // keep this file under the length limit): the decode / packet-gap / jitter /
+    // The rest of this type lives in same-module extension files (pure moves, to
+    // keep this one under the length limit): the decode / packet-gap / jitter /
     // RTT / present-suppression reads + writes in TelemetryCounters+Gauges.swift,
     // the audio playout gauges + cold-start in TelemetryCounters+AudioGauges.swift,
-    // and the input stamp / idle-edge reads in
-    // TelemetryCounters+InputActivity.swift.
-
-    /// Reset everything. Called at the CONNECT-START edge
-    /// (`StreamSession.anchorTelemetryConnectStart`) - BEFORE the receivers spin
-    /// up, NOT at exporter start - so a warm host's mid-handshake one-shot
-    /// latches (audio TTF/first-packet) can never race the reset and serve a
-    /// prior session's values (the chimeric audio_ttf). (Prometheus counters are
-    /// nominally never reset, but a per-session diagnostic view wants per-session
-    /// totals - a scrape across a session boundary just sees a counter reset,
-    /// which Prometheus handles.)
-    func resetForNewSession() {
-        for counter in [rfiTotal, idrRequestedTotal, backlogOverflowTotal,
-                        presentStallTotal, frameLossTotal, unrecoverableFrameTotal,
-                        pacerDisabledTotal, videoPacketsTotal, videoFramesTotal,
-                        fecRecoveredFramesTotal, inputEventsTotal, inputBatchFlushTotal,
-                        inputFlushSendBackloggedSkipTotal, inputFlushReliableBackloggedSkipTotal,
-                        inputIdleToActiveTotal, bookmarkTotal,
-                        cruiseBoostedBatchesTotal, cruiseIdentityBatchesTotal,
-                        videoPacketsLostPreFecTotal, videoPacketsOutOfOrderTotal,
-                        videoPacketsDuplicateTotal, enetRetransmitTotal,
-                        ackSilenceNearMissTotal, ctrlIgnoredTotal,
-                        decoderRecreateTotal, decoderRecreateFirstTotal,
-                        decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
-                        staleFrameRepeatTotal, staleEmptyQueueTotal, audioNearMissTotal,
-                        audioStallRecoveryTotal,
-                        presentGapDroughtTotal, reorderHoldExceededTotal,
-                        pacerOverTargetReleaseTotal,
-                        tickMissDescheduledTotal, tickMissCoalescedTotal,
-                        tickMissPreemptedTotal, tickMissLinkskipTotal,
-                        suppressedDropTotal, decodeGatedDropTotal,
-                        discontinuityFlushTotal,
-                        audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
-                        audioFecMismatchTotal, audioUnderrunTotal, audioOverrunTotal,
-                        audioTrimTotal, audioReceiveFailedTotal,
-                        rumbleEventTotal, rumbleDroppedInvalidTotal,
-                        // Per-socket gap-event counters.
-                        videoGapOver20msTotal, videoGapOver50msTotal, videoGapOver100msTotal,
-                        audioGapOver20msTotal, audioGapOver50msTotal, audioGapOver100msTotal,
-                        enetGapOver20msTotal, enetGapOver50msTotal, enetGapOver100msTotal,
-                        // P2 session-lifecycle counters. reconnectTotal is excluded:
-                        // a silent reconnect re-runs this reset mid-run, which would
-                        // zero the very count it's about to make (run-global).
-                        idrRoundTripRequestTotal, idrRoundTripMatchedTotal,
-                        corruptionHeuristicTotal] {
-            counter.reset()
-        }
-        // NOTE: `p2` (the handshake timeline + disconnect reason + IDR round-trip
-        // state) is DELIBERATELY NOT reset here: `anchorTelemetryConnectStart`
-        // resets it itself, in the right order (reset → anchor), and keeping it
-        // out of this method preserves that single-owner discipline (this method
-        // and the p2 anchor are called back-to-back at the same connect edge).
-        setRecvJitterMs(0)
-        setRttMs(0)
-        setVtSessionCreateMs(0)
-        // Cruise max-gain resets to the unboosted floor (1.0), not 0.
-        os_unfair_lock_lock(cruiseMaxGainLock); cruiseMaxGainValue = 1.0; os_unfair_lock_unlock(cruiseMaxGainLock)
-        // Present-suppression + decode-gate gauges: a session starts with a
-        // visible stream view, and the present/decode paths re-stamp these at
-        // the next suppression/gate edge.
-        setPresentSuppressed(false)
-        setDecodeGated(false)
-        // RT gauge is NOT reset here: it's a THREAD-LIFETIME fact, set once when
-        // the tick thread starts. The thread is REUSED across reconnects (it never
-        // re-applies/re-stamps), so clearing it here would make the gauge lie
-        // inversely on every reconnect. Leave it at its thread-set value.
-        // Per-type ignored-control tallies are per-session like the aggregate
-        // total; the audio-TTF record resets but its last-stream-end stamp
-        // survives (it anchors THIS session's host_idle_s).
-        ctrlIgnoredPerType.reset()
-        audioTtf.resetForNewSession()
-        os_unfair_lock_lock(inputLock); lastInputNanosValue = 0; os_unfair_lock_unlock(inputLock)
-        rumbleActivity.reset()
-        os_unfair_lock_lock(gapLock); packetGapValue = nil; os_unfair_lock_unlock(gapLock)
-        os_unfair_lock_lock(decodeStateLock); decodeStateValue = nil; os_unfair_lock_unlock(decodeStateLock)
-        os_unfair_lock_lock(fecHealthLock); fecHealthValue = nil; os_unfair_lock_unlock(fecHealthLock)
-        awdlHelperState.withLock { $0 = nil }
-        os_unfair_lock_lock(audioStateLock)
-        audioStateValue = nil; audioBufferFillMinMsValue = .infinity
-        os_unfair_lock_unlock(audioStateLock)
-        os_unfair_lock_lock(audioFirstPacketLock)
-        audioFirstPacketMsValue = 0; audioStreamStartNanosValue = 0
-        os_unfair_lock_unlock(audioFirstPacketLock)
-    }
+    // the input stamp / idle-edge reads in TelemetryCounters+InputActivity.swift,
+    // and the gauge-lock lifecycle the init/deinit above call plus the
+    // per-session reset in TelemetryCounters+Lifecycle.swift.
 }

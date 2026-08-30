@@ -205,7 +205,10 @@ extension InputForwarder {
             savedMouseAcceleration = nil
             log.info("Mouse capture: pointer acceleration restored to \(prior)")
         }
-        log.info("Mouse capture: relative aim disengaged (associate-true; coalescing restored; cursor re-associated, visibility owned by StreamWindow)")
+        log.info("""
+            Mouse capture: relative aim disengaged (associate-true; coalescing restored; \
+            cursor re-associated, visibility owned by StreamWindow)
+            """)
     }
 
     func installGestureSuppressionMonitor() {

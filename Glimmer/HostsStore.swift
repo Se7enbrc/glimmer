@@ -251,23 +251,7 @@ extension AppModel {
                   serverCertPEM: String?, appVersion: String?, gfeVersion: String?,
                   apps: [PairedApp], macAddress: String? = nil) {
         let defaults = UserDefaults.standard
-        let count = defaults.integer(forKey: "hosts.size")
-
-        // Find an existing slot for this uuid; else the first empty slot; else append.
-        var slot = 0
-        var firstEmpty = 0
-        if count > 0 {
-            for i in 1...count {
-                let slotUUID = defaults.string(forKey: "hosts.\(i).uuid") ?? ""
-                let slotHostname = defaults.string(forKey: "hosts.\(i).hostname") ?? ""
-                if slotUUID == uuid { slot = i; break }
-                if firstEmpty == 0, slotUUID.isEmpty, slotHostname.isEmpty { firstEmpty = i }
-            }
-        }
-        if slot == 0 { slot = firstEmpty }
-        if slot == 0 { slot = count + 1; defaults.set(slot, forKey: "hosts.size") }
-
-        let prefix = "hosts.\(slot)"
+        let prefix = "hosts.\(saveSlot(for: uuid, defaults: defaults))"
         defaults.set(hostname, forKey: "\(prefix).hostname")
         defaults.set(uuid, forKey: "\(prefix).uuid")
         defaults.set(address, forKey: "\(prefix).localaddress")
@@ -285,7 +269,41 @@ extension AppModel {
             defaults.set(false, forKey: "\(prefix).customname")
         }
 
-        // Apps: write fresh, clearing any stale higher-index entries.
+        writeApps(apps, prefix: prefix, defaults: defaults)
+
+        // Pin the cert under the canonical uuid key too (belt-and-braces; the
+        // pairing flow already file-store-pins, but keep them in lockstep).
+        if let pem = serverCertPEM { try? PinnedCertStore.store(pem: pem, forHostID: uuid) }
+
+        loadHosts()
+    }
+
+    /// Resolve the `hosts.N` slot `saveHost` should write into: the slot that
+    /// already holds this uuid, else the first fully-empty slot left by an
+    /// unpair, else a freshly appended one (which grows `hosts.size` here, as
+    /// the inline version did). Split out of `saveHost` to keep that function
+    /// under the complexity limit; behaviour is unchanged.
+    private func saveSlot(for uuid: String, defaults: UserDefaults) -> Int {
+        let count = defaults.integer(forKey: "hosts.size")
+        var firstEmpty = 0
+        if count > 0 {
+            for i in 1...count {
+                let slotUUID = defaults.string(forKey: "hosts.\(i).uuid") ?? ""
+                let slotHostname = defaults.string(forKey: "hosts.\(i).hostname") ?? ""
+                if slotUUID == uuid { return i }
+                if firstEmpty == 0, slotUUID.isEmpty, slotHostname.isEmpty { firstEmpty = i }
+            }
+        }
+        if firstEmpty > 0 { return firstEmpty }
+        let appended = count + 1
+        defaults.set(appended, forKey: "hosts.size")
+        return appended
+    }
+
+    /// Rewrite one slot's `apps.N.*` block: clear the stale higher-index
+    /// entries a shorter applist would otherwise leave behind, then write the
+    /// fresh list. Split out of `saveHost` for the same reason as `saveSlot`.
+    private func writeApps(_ apps: [PairedApp], prefix: String, defaults: UserDefaults) {
         let oldApps = defaults.integer(forKey: "\(prefix).apps.size")
         if oldApps > apps.count {
             for j in (apps.count + 1)...oldApps {
@@ -302,12 +320,6 @@ extension AppModel {
             defaults.set(app.hdr, forKey: "\(prefix).apps.\(j).hdr")
             defaults.set(app.hidden, forKey: "\(prefix).apps.\(j).hidden")
         }
-
-        // Pin the cert under the canonical uuid key too (belt-and-braces; the
-        // pairing flow already file-store-pins, but keep them in lockstep).
-        if let pem = serverCertPEM { try? PinnedCertStore.store(pem: pem, forHostID: uuid) }
-
-        loadHosts()
     }
 
     func selectHost(_ host: Host) {

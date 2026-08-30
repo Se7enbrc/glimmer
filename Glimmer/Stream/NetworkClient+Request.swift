@@ -87,9 +87,10 @@ extension NetworkClient {
             host: server.address, port: port, target: target,
             userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
             tls: usePaired,
-            clientCertPEM: usePaired ? clientCertPEM : nil,
-            clientKeyPEM: usePaired ? clientKeyPEM : nil,
-            pinnedCertPEM: usePaired ? server.serverCertPEM : nil,
+            credential: ControlTransport.TLSCredential(
+                clientCertPEM: usePaired ? clientCertPEM : nil,
+                clientKeyPEM: usePaired ? clientKeyPEM : nil,
+                pinnedCertPEM: usePaired ? server.serverCertPEM : nil),
             timeout: timeout)
 
         // GameStream puts protocol errors in the body XML with HTTP 200, so a

@@ -19,6 +19,19 @@ extension EnetControlChannel {
         var lastHealthSnapshotMs: UInt32 = 0
     }
 
+    /// One tick's reliable-command health, read under a SINGLE stateLock
+    /// acquisition so every field describes the same instant (the dead-peer
+    /// cutoff, the backpressure gate, and the near-miss edge must all agree).
+    /// A named struct rather than a 5-tuple; the fields and their order are
+    /// exactly what the withState block used to return.
+    private struct AckHealth {
+        let sinceLastAck: UInt32
+        let unackedCount: Int
+        let oldestUnackedMs: UInt32
+        let rttMs: Double
+        let haveRtt: Bool
+    }
+
     /// Prime the keepalive clocks. Anchors the ACK-silence clock at loop start so a
     /// freshly-connected peer isn't immediately considered stale, and sends the
     /// first periodic ping immediately so the host keeps video flowing without
@@ -54,31 +67,32 @@ extension EnetControlChannel {
         // ackSilenceDeadMs (= ENet's peer timeout), the peer is genuinely gone.
         // A shorter window would kill a recoverable blip - moonlight rides those
         // out by retransmitting, never self-terminating early, and so do we.
-        let (sinceLastAck, unackedCount, oldestUnackedMs, rttMs, haveRtt) = withState {
-            () -> (UInt32, Int, UInt32, Double, Bool) in
+        let health = withState { () -> AckHealth in
             let sinceAck = now &- lastAckRecvMs
             let oldest = sentReliable.map { now &- $0.firstSentAtMs }.max() ?? 0
-            return (sinceAck, sentReliable.count, oldest, roundTripTime, hasRttSample)
+            return AckHealth(sinceLastAck: sinceAck, unackedCount: sentReliable.count,
+                             oldestUnackedMs: oldest, rttMs: roundTripTime,
+                             haveRtt: hasRttSample)
         }
         // RTT-relative input backpressure (do-no-harm on a stable link): mark the
         // host "behind" ONLY on sustained ACK silence relative to RTT, never on a
         // clean link where ACKs return within ~one RTT. Read lock-free by the 1ms
         // InputBatcher flush. floor when no RTT sample yet (handshake/early).
-        let bpThreshold = haveRtt
+        let bpThreshold = health.haveRtt
             ? max(Self.backpressureAckSilenceFloorMs,
-                  Self.backpressureRttMultiple * UInt32(min(rttMs, 1000)))
+                  Self.backpressureRttMultiple * UInt32(min(health.rttMs, 1000)))
             : Self.backpressureAckSilenceFloorMs
-        reliableBackloggedFlag = unackedCount > 0 && sinceLastAck > bpThreshold
+        reliableBackloggedFlag = health.unackedCount > 0 && health.sinceLastAck > bpThreshold
 
         // ACK-silence NEAR-MISS: count once per EDGE silence (reliables outstanding)
         // crosses a deep RTT multiple short of the dead-peer cutoff - the recovered
         // blip that cutoff never records. Edge-armed, so one near-miss = one count.
-        let nearMissThreshold = haveRtt
+        let nearMissThreshold = health.haveRtt
             ? min(Self.ackSilenceDeadMs - 1,
                   max(Self.ackSilenceNearMissFloorMs,
-                      Self.ackSilenceNearMissRttMultiple * UInt32(min(rttMs, 1000))))
+                      Self.ackSilenceNearMissRttMultiple * UInt32(min(health.rttMs, 1000))))
             : Self.ackSilenceNearMissFloorMs
-        if unackedCount > 0 && sinceLastAck >= nearMissThreshold {
+        if health.unackedCount > 0 && health.sinceLastAck >= nearMissThreshold {
             if !ackSilenceNearMissArmed {
                 ackSilenceNearMissArmed = true
                 TelemetryCounters.shared.ackSilenceNearMissTotal.increment()
@@ -87,10 +101,10 @@ extension EnetControlChannel {
             ackSilenceNearMissArmed = false
         }
 
-        if unackedCount > 0 && sinceLastAck >= Self.ackSilenceDeadMs {
-            Diag.error("ENet peer silent: no ACK in \(sinceLastAck)ms with "
-                + "\(unackedCount) reliable command(s) outstanding "
-                + "(oldest \(oldestUnackedMs)ms) - host silently reset peer; terminating",
+        if health.unackedCount > 0 && health.sinceLastAck >= Self.ackSilenceDeadMs {
+            Diag.error("ENet peer silent: no ACK in \(health.sinceLastAck)ms with "
+                + "\(health.unackedCount) reliable command(s) outstanding "
+                + "(oldest \(health.oldestUnackedMs)ms) - host silently reset peer; terminating",
                 Self.logCategory)
             withState { disconnected = true }
             onTerminated?(-1)
@@ -129,8 +143,8 @@ extension EnetControlChannel {
         // 9,614 copies in one 2.7h session file. The ring/os_log still carry
         // it live; the dead-peer/stall paths keep their own ERROR lines.
         if now &- state.lastHealthSnapshotMs >= Self.healthSnapshotIntervalMs {
-            Diag.debug("ENet health: sentReliable=\(unackedCount) "
-                + "oldestUnackedMs=\(oldestUnackedMs) sinceLastAckMs=\(sinceLastAck)",
+            Diag.debug("ENet health: sentReliable=\(health.unackedCount) "
+                + "oldestUnackedMs=\(health.oldestUnackedMs) sinceLastAckMs=\(health.sinceLastAck)",
                 Self.logCategory)
             state.lastHealthSnapshotMs = now
         }

@@ -23,6 +23,17 @@ extension TelemetryRenderer {
         _ builder: inout PromBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
     ) {
         guard let audio = snap.audio else { return }
+        promAudioReceive(&builder, audio, extras)
+        promAudioOutput(&builder, audio, extras)
+        promAudioSync(&builder, audio, extras)
+    }
+
+    /// Audio RECEIVE quality: the raw packet / loss / FEC totals (so Grafana
+    /// derives its own rates) plus the per-second rates this window.
+    private static func promAudioReceive(
+        _ builder: inout PromBuilder, _ audio: AudioSnapshot,
+        _ extras: TelemetrySnapshot.Extras
+    ) {
         builder.emitCounter("glimmer_audio_packets_total",
                             "Audio data packets accepted into the queue.", audio.packetsTotal)
         builder.emitCounter("glimmer_audio_packets_lost_total",
@@ -44,6 +55,16 @@ extension TelemetryRenderer {
         builder.emit("glimmer_audio_fec_recovery_rate",
                      "Audio FEC-recovery rate this window (recovered/(recovered+accepted)).",
                      audio.fecRecoveryRate)
+    }
+
+    /// Audio OUTPUT health: the engine-running mirror, the buffer fill and its
+    /// windowed trough against the adaptive playout target, the under-run /
+    /// over-run / trim / re-prime counters and their rates, and the
+    /// cushion-relative playout slip.
+    private static func promAudioOutput(
+        _ builder: inout PromBuilder, _ audio: AudioSnapshot,
+        _ extras: TelemetrySnapshot.Extras
+    ) {
         builder.emit("glimmer_audio_engine_running",
                      "AVAudioEngine running (1 = up). 0 with packets still flowing is the "
                      + "post-reconnect playout-dead signature (the isShutdown-latch fix).",
@@ -86,6 +107,16 @@ extension TelemetryRenderer {
                      + "playout slack over the current segment - not raw clock drift, not a "
                      + "cross-stream A/V delta.",
                      audio.audioClockDriftMs)
+    }
+
+    /// Cross-stream A/V alignment + the cushion memory: the pair-anchored skew,
+    /// its cushion-subtracted true clock skew and re-anchor count, the drift
+    /// resampler offset, the learned cushion floor / cold-start seed, and the
+    /// one-shot cold-start first-packet time.
+    private static func promAudioSync(
+        _ builder: inout PromBuilder, _ audio: AudioSnapshot,
+        _ extras: TelemetrySnapshot.Extras
+    ) {
         // The true cross-stream meter the drift line above disclaims: host-RTP
         // positions of last-presented video vs the audio playhead (schedule
         // head minus buffer fill), pair-anchored. Derived ONCE per tick in

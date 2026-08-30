@@ -2,7 +2,8 @@
 //  LunaPower.swift
 //
 //  Host power controls (wake/shutdown/sleep/reboot/status) via the `luna` CLI
-//  (whaleyshire upstream: dev/luna, backed by UpSnap). Spec: docs/LUNA_POWER.md.
+//  (whaleyshire upstream: dev/luna, backed by UpSnap). THIS HEADER IS THE SPEC -
+//  the standalone docs/LUNA_POWER.md is gone; every other file points here.
 //
 //  THE GATE (the whole product rule): power UI exists ONLY when (a) a usable
 //  luna binary >= 2026.7.1 is found AND (b) the host's stored MAC matches an
@@ -12,11 +13,25 @@
 //  zeroed/absent MACs (a Sunshine NIC quirk); no IP fallback, no manual
 //  binding in v1.
 //
+//  PROBE ORDER (first candidate that is executable AND prints a calver >=
+//  2026.7.1 from `luna version` wins): ~/.local/bin/luna, /opt/homebrew/bin/
+//  luna, /usr/local/bin/luna, then <dir>/luna for every entry of the inherited
+//  PATH, left to right. 2026.7.1 is the first release with `devices --json`,
+//  so anything older fails the gate outright. Re-probed at launch and on every
+//  app-foreground, so a luna installed or upgraded mid-session is picked up
+//  without a relaunch.
+//
 //  Luna owns the UpSnap endpoint + credentials (keychain item `upsnap-power`);
 //  Glimmer never reads, stores, or passes credentials - only sets
 //  UPSNAP_DEVICE=<matched id> per call. UpSnap's power routes are SYNCHRONOUS:
 //  luna exit 0 is a CONFIRMATION the device state actually flipped (~36s cold
 //  wake, ~9s off), so no client-side did-it-work polling is layered on top.
+//
+//  That synchronous contract is also why a wake can block for up to 200s, so
+//  `perform` is ABANDONABLE: `cancelAction(hostID:)` terminates the child luna
+//  process the wait is parked on. It abandons OUR wait only - the UpSnap call
+//  luna already made is server-side and keeps running, so the PC may still come
+//  up. A cancel is not a failure and records no `lastActionError`.
 //
 //  Zero-footprint acceptance: on a machine without luna, the only work ever
 //  done is a file-existence probe per candidate path at launch/foreground -
@@ -26,6 +41,46 @@
 import AppKit
 import Foundation
 import os.log
+
+/// Cancellable handle to one luna child process. Spawned on a background queue
+/// but terminated from the main actor, so both sides go through the lock.
+/// Adoption happens BEFORE `run()` and the spawn side re-checks afterwards, so
+/// a cancel landing on either side of the spawn still kills the child instead
+/// of orphaning it. File-scope (not nested in the `@MainActor` LunaPower) so it
+/// stays non-isolated - the spawn side touches it off the main actor.
+final class LunaRunHandle: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+
+    /// Register the not-yet-started child. Returns false when the cancel
+    /// already landed, meaning the caller must not start it at all.
+    fileprivate func adopt(_ process: Process) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !cancelled else { return false }
+        self.process = process
+        return true
+    }
+
+    fileprivate var isCancelled: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return cancelled
+    }
+
+    fileprivate func release() {
+        lock.lock(); process = nil; lock.unlock()
+    }
+
+    /// Terminate the child, or arm the pre-spawn refusal when it has not
+    /// started yet.
+    fileprivate func cancel() {
+        lock.lock()
+        cancelled = true
+        let running = process
+        lock.unlock()
+        if let running, running.isRunning { running.terminate() }
+    }
+}
 
 @MainActor
 @Observable
@@ -56,6 +111,15 @@ final class LunaPower {
     /// Last action error, keyed by host id (surfaced as tile subtext; cleared
     /// on the next action or gate re-evaluation).
     private(set) var lastActionError: [String: String] = [:]
+    /// Live child-process handle per in-flight action, so `cancelAction` can
+    /// terminate the wait `perform` is parked on. Torn down in `perform`'s
+    /// defer, so a cancelled action leaves nothing behind for the next one.
+    @ObservationIgnored private var runHandles: [String: LunaRunHandle] = [:]
+    /// Host ids whose in-flight action the user abandoned. `perform` reads this
+    /// to swallow the terminated child's non-zero exit - a deliberate cancel is
+    /// not a failure, so it must not paint the tile's error subtext. Cleared in
+    /// the same defer as `runHandles`.
+    @ObservationIgnored private var cancelledActions: Set<String> = []
 
     /// Devices-list TTL: refreshed lazily past this age, plus on any power-
     /// action failure and on host-store changes (spec: ~60s).
@@ -194,24 +258,53 @@ final class LunaPower {
     /// Run one power verb against a bound device. Blocks (off-main) until luna
     /// CONFIRMS the state flip - `on` measured ~36s cold (cap 200s), `off` ~9s.
     /// Throws with luna's one-line stderr reason on failure and forces a device
-    /// re-fetch so a revoked grant closes the gate promptly.
+    /// re-fetch so a revoked grant closes the gate promptly. Throws
+    /// `CancellationError` (and records NO error) when `cancelAction` abandoned
+    /// the wait.
     func perform(_ verb: String, deviceID: String, hostID: String) async throws {
         guard let binary = binaryURL else { throw LunaError.failed("luna not available") }
         actionInFlight[hostID] = verb
         lastActionError[hostID] = nil
-        defer { actionInFlight[hostID] = nil }
+        let handle = LunaRunHandle()
+        runHandles[hostID] = handle
+        // One teardown site for every exit path (success, failure, cancel), so
+        // a cancelled wake can never leave the tile latched or strand a stale
+        // handle in front of the next Wake.
+        defer {
+            actionInFlight[hostID] = nil
+            runHandles[hostID] = nil
+            cancelledActions.remove(hostID)
+        }
         do {
             let timeout: TimeInterval = verb == "on" ? 200 : 90
             let out = try await Self.run(
-                binary, args: [verb], env: ["UPSNAP_DEVICE": deviceID], timeout: timeout)
+                binary, args: [verb], env: ["UPSNAP_DEVICE": deviceID],
+                timeout: timeout, handle: handle)
+            // Checked BEFORE the exit status: a terminated child reports a
+            // non-zero status, and that is the cancel arriving, not a failure.
+            if cancelledActions.contains(hostID) { throw CancellationError() }
             guard out.status == 0 else {
                 throw LunaError.failed(out.stderr.isEmpty ? "\(verb) failed" : out.stderr)
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             lastActionError[hostID] = error.localizedDescription
             await refreshDevicesIfStale(force: true)
             throw error
         }
+    }
+
+    /// Abandon the in-flight action for a host: terminate the child luna
+    /// process `perform` is parked on so it returns promptly. The UpSnap call
+    /// luna already issued is server-side and unaffected - this gives the user
+    /// their UI back, it does not un-send the wake. No-op when nothing is in
+    /// flight for that host.
+    func cancelAction(hostID: String) {
+        guard let handle = runHandles[hostID] else { return }
+        cancelledActions.insert(hostID)
+        lastActionError[hostID] = nil
+        handle.cancel()
     }
 
     // MARK: - Helpers (pure; unit-tested)
@@ -243,7 +336,7 @@ final class LunaPower {
 
     /// Lexicographic component compare: version >= minimum.
     nonisolated static func calverAtLeast(_ version: [Int], _ minimum: [Int]) -> Bool {
-        for (v, m) in zip(version, minimum) where v != m { return v > m }
+        for (part, floor) in zip(version, minimum) where part != floor { return part > floor }
         return version.count >= minimum.count
     }
 
@@ -251,9 +344,11 @@ final class LunaPower {
 
     /// Run luna with a bounded timeout; never on the main thread. Environment
     /// is inherited plus overrides (UPSNAP_DEVICE) - luna resolves its own
-    /// credentials (keychain / UPSNAP_PASSWORD); Glimmer passes none.
+    /// credentials (keychain / UPSNAP_PASSWORD); Glimmer passes none. Pass a
+    /// `handle` for a wait the user is allowed to abandon (see `cancelAction`).
     nonisolated static func run(
-        _ url: URL, args: [String], env: [String: String] = [:], timeout: TimeInterval
+        _ url: URL, args: [String], env: [String: String] = [:], timeout: TimeInterval,
+        handle: LunaRunHandle? = nil
     ) async throws -> (status: Int32, stdout: String, stderr: String) {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
@@ -266,12 +361,21 @@ final class LunaPower {
                 let outPipe = Pipe(), errPipe = Pipe()
                 process.standardOutput = outPipe
                 process.standardError = errPipe
+                // Cancel that beat the spawn: never start the child at all.
+                guard handle?.adopt(process) ?? true else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                defer { handle?.release() }
                 do {
                     try process.run()
                 } catch {
                     continuation.resume(throwing: error)
                     return
                 }
+                // Cancel that landed between adopt and run saw a not-yet-running
+                // process, so its terminate() was a no-op - collect it here.
+                if handle?.isCancelled == true, process.isRunning { process.terminate() }
                 let killer = DispatchWorkItem { if process.isRunning { process.terminate() } }
                 DispatchQueue.global(qos: .utility)
                     .asyncAfter(deadline: .now() + timeout, execute: killer)

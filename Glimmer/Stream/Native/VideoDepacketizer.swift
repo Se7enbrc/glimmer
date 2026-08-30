@@ -54,7 +54,13 @@ protocol VideoDepacketizerDelegate: AnyObject {
 }
 
 final class VideoDepacketizer {
-    private static let cat = "NativeVideo"
+    // Access note: the members reached by the same-module split files
+    // (+FrameHeader / +AnnexB) are module-internal rather than private; every
+    // other member below stays private. The threading contract is unchanged -
+    // all of this state is owned by the single receive thread that drives
+    // `process(_:)`, exactly as before the split.
+
+    static let cat = "NativeVideo"
 
     // Flags (Video.h:21-23).
     private static let FLAG_CONTAINS_PIC_DATA: UInt8 = 0x1
@@ -64,11 +70,11 @@ final class VideoDepacketizer {
 
     // Frame types (matches StreamProtocol).
     private static let FRAME_TYPE_PFRAME: Int32 = 0
-    private static let FRAME_TYPE_IDR: Int32 = 1
+    static let FRAME_TYPE_IDR: Int32 = 1
 
     private weak var delegate: VideoDepacketizerDelegate?
     private let negotiatedVideoFormat: Int32
-    private let appVersionQuad: [Int32]
+    let appVersionQuad: [Int32]
     private let colorSpace: Int32
 
     // The 16-byte NV header is stripped by RtpVideoQueue before handing us the
@@ -85,7 +91,7 @@ final class VideoDepacketizer {
     private var startFrameNumber: UInt32 = 0
     private var lastPacketInStream: UInt32 = .max
     private var decodingFrame = false
-    private var waitingForIdrFrame = true
+    var waitingForIdrFrame = true
     // RFI recovery state (VideoDepacketizer.c file-scope statics). The client
     // RFI accept-path is always armed (strictIdrFrameWait=false): after the
     // first IDR is processed, a loss is recovered with a host post-invalidation
@@ -96,8 +102,8 @@ final class VideoDepacketizer {
     // .rfiCapabilities = HEVC|AV1; see SdpBuilder.referenceFrameInvalidationActive).
     // If the host ignores it and keeps sending IDRs, this state machine still
     // accepts them - RFI degrades gracefully to full-IDR recovery.
-    private var waitingForRefInvalFrame = false        // C:14
-    private var waitingForNextSuccessfulFrame = false  // C:12
+    var waitingForRefInvalFrame = false                // C:14
+    var waitingForNextSuccessfulFrame = false          // C:12
     private var idrFrameProcessed = false              // C:26
     private let strictIdrFrameWait = false             // C:80 (client RFI accept-path armed)
     private var consecutiveFrameDrops = 0              // C:31
@@ -105,14 +111,14 @@ final class VideoDepacketizer {
     private var syntheticPtsBaseUs: UInt64 = 0
 
     // Per-frame accumulation.
-    private var frameType: Int32 = VideoDepacketizer.FRAME_TYPE_PFRAME
+    var frameType: Int32 = VideoDepacketizer.FRAME_TYPE_PFRAME
     /// True iff THIS frame is a host post-invalidation RECOVERY frame (type 4/5)
     /// that cleared an outstanding RFI wait - the frame that resolves an RFI
     /// round-trip (signal: IDR-RTT). Set in parseFrameHeader, read + cleared in
     /// reassembleFrame. Telemetry-only; does not affect decode behavior.
-    private var frameIsRfiRecovery = false
-    private var frameHostProcessingLatency: UInt16 = 0
-    private var lastPacketPayloadLength: UInt16 = 0
+    var frameIsRfiRecovery = false
+    var frameHostProcessingLatency: UInt16 = 0
+    var lastPacketPayloadLength: UInt16 = 0
     private var firstPacketReceiveTimeUs: UInt64 = 0
     private var firstPacketPresentationTimeUs: UInt64 = 0
     private var firstPacketRtpTimestamp: UInt32 = 0
@@ -130,10 +136,10 @@ final class VideoDepacketizer {
         self.colorSpace = colorSpace
     }
 
-    private var isAV1: Bool {
+    var isAV1: Bool {
         (negotiatedVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0
     }
-    private var isHEVC: Bool {
+    var isHEVC: Bool {
         (negotiatedVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_H265) != 0
     }
 
@@ -329,83 +335,10 @@ final class VideoDepacketizer {
                         isLTR: (pkt.extraFlags & Self.EXTRA_FLAG_LTR) != 0)
     }
 
-    // MARK: - Frame header parse (c:851-972)
-
-    /// Returns the frame header size to skip, or -1 on parse failure.
-    private func parseFrameHeader(_ payload: inout [UInt8], frameIndex: UInt32) -> Int {
-        guard payload.count >= 4 else { return -1 }
-
-        // Frame type from data[offset+3] (offset==0 here) (c:857-887).
-        let typeByte = payload[3]
-        switch typeByte {
-        case 1:  // Normal P-frame
-            break
-        case 2:  // IDR
-            // For non-H.264/HEVC we trust the header byte (c:861-868).
-            if isAV1 {
-                waitingForIdrFrame = false
-                waitingForNextSuccessfulFrame = false   // c:866
-                frameType = Self.FRAME_TYPE_IDR
-            }
-            fallthrough                                 // c:869 - into 4/5
-        case 4, 5:  // intra-refresh / P-frame with RFI
-            // Host recovery frame after an RFI request: accept it by clearing
-            // the RFI wait so it falls through the lastPacket gate (c:872-878).
-            if waitingForRefInvalFrame {
-                Diag.notice("NativeVideo post-invalidation recovery frame \(frameIndex) "
-                    + "(\(typeByte == 5 ? "P" : "I")-frame)", Self.cat)
-                waitingForRefInvalFrame = false
-                waitingForNextSuccessfulFrame = false
-                // P2 IDR/RFI ROUND-TRIP: this recovery frame resolves an RFI
-                // request (the IDR path resolves in the receiver via unit.isIDR).
-                frameIsRfiRecovery = true
-            }
-        case 104:   // Sunshine hardcoded header
-            break
-        default:
-            Diag.warn("NativeVideo unrecognized frame type byte \(typeByte) frame \(frameIndex)", Self.cat)
-        }
-
-        // Sunshine host processing latency = u16 LE at offset+1 (c:899-903).
-        if payload.count >= 3 {
-            frameHostProcessingLatency = UInt16(payload[1]) | (UInt16(payload[2]) << 8)
-        }
-
-        // AV1 (non-H264/HEVC) lastPacketPayloadLength = u16 LE at offset+4
-        // (c:908-912).
-        if isAV1 && payload.count >= 6 {
-            lastPacketPayloadLength = UInt16(payload[4]) | (UInt16(payload[5]) << 8)
-        }
-
-        return frameHeaderSize(byte0: payload[0])
-    }
-
-    /// Version + byte0 dependent header length (c:914-965).
-    private func frameHeaderSize(byte0: UInt8) -> Int {
-        let quad = appVersionQuad
-        func atLeast(_ major: Int32, _ minor: Int32, _ patch: Int32) -> Bool {
-            if quad.count < 3 { return false }
-            if quad[0] != major { return quad[0] > major }
-            if quad[1] != minor { return quad[1] > minor }
-            return quad[2] >= patch
-        }
-
-        if atLeast(7, 1, 450) {
-            return byte0 == 0x01 ? 8 : 44
-        } else if atLeast(7, 1, 446) {
-            return byte0 == 0x01 ? 8 : 41
-        } else if atLeast(7, 1, 415) {
-            return byte0 == 0x01 ? 8 : 24
-        } else if atLeast(7, 1, 350) {
-            return 8
-        } else if atLeast(7, 1, 320) {
-            return 12
-        } else if atLeast(5, 0, 0) {
-            return 8
-        } else {
-            return 0
-        }
-    }
+    // The frame-header parse (c:851-972) - `parseFrameHeader` and the version +
+    // byte0 dependent `frameHeaderSize` - lives in
+    // VideoDepacketizer+FrameHeader.swift, split out to keep this file under the
+    // length limit.
 
     // MARK: - Reassemble (c:468-551)
 
@@ -581,90 +514,9 @@ final class VideoDepacketizer {
         }
     }
 
-    // MARK: - H.264/HEVC Annex-B helpers
-
-    /// isIdrFrameStart port: the frame's first payload must open with the
-    /// 4-byte start code (NV's frame-start marker; 3-byte means mid-frame)
-    /// followed by SPS (H.264, nal_unit_type 7) or VPS (HEVC, type 32) -
-    /// the host rides parameter sets on every IDR.
-    // internal for testability
-    static func isIdrFrameStart(_ payload: [UInt8], hevc: Bool) -> Bool {
-        guard payload.count >= 5,
-              payload[0] == 0, payload[1] == 0, payload[2] == 0, payload[3] == 1
-        else { return false }
-        if hevc {
-            return (payload[4] >> 1) & 0x3F == 32      // H265_NAL_TYPE_VPS
-        }
-        return payload[4] & 0x1F == 7                  // H264_NAL_TYPE_SPS
-    }
-
-    /// Split an Annex-B access unit into typed DecodeBuffers: VPS/SPS/PPS
-    /// NALs (H.264: 7/8; HEVC: 32/33/34) each become their own buffer -
-    /// start code kept; the decoder strips it - and every other NAL (SEI,
-    /// slices) stays in ONE picData buffer in arrival order. Runs only on
-    /// IDR frames, so the per-byte scan is off the steady-state path.
-    // internal for testability
-    func splitAnnexBParamSets(_ au: Data) -> [DecodeBuffer] {
-        let bytes = [UInt8](au)
-        var vps: Data?, sps: Data?, pps: Data?
-        var picData = Data()
-        picData.reserveCapacity(bytes.count)
-
-        // NAL boundaries: each starts at a 00 00 01 / 00 00 00 01 start code
-        // and runs to the next start code (or end of AU).
-        var starts: [Int] = []           // index OF the start code
-        var i = 0
-        while i + 2 < bytes.count {
-            if bytes[i] == 0 && bytes[i + 1] == 0 {
-                if bytes[i + 2] == 1 {
-                    starts.append(i); i += 3; continue
-                }
-                if i + 3 < bytes.count && bytes[i + 2] == 0 && bytes[i + 3] == 1 {
-                    starts.append(i); i += 4; continue
-                }
-            }
-            i += 1
-        }
-        guard !starts.isEmpty else {
-            return [DecodeBuffer(kind: .picData, data: au)]
-        }
-
-        for (idx, start) in starts.enumerated() {
-            let end = idx + 1 < starts.count ? starts[idx + 1] : bytes.count
-            let scLen = bytes[start + 2] == 1 ? 3 : 4
-            let headerIndex = start + scLen
-            guard headerIndex < end else { continue }
-            let nal = au.subdata(in: start..<end)
-            let kind: DecodeBuffer.Kind
-            if isHEVC {
-                switch (bytes[headerIndex] >> 1) & 0x3F {
-                case 32: kind = .vps
-                case 33: kind = .sps
-                case 34: kind = .pps
-                default: kind = .picData
-                }
-            } else {
-                switch bytes[headerIndex] & 0x1F {
-                case 7: kind = .sps
-                case 8: kind = .pps
-                default: kind = .picData
-                }
-            }
-            switch kind {
-            case .vps: vps = nal
-            case .sps: sps = nal
-            case .pps: pps = nal
-            case .picData: picData.append(nal)
-            }
-        }
-
-        var out: [DecodeBuffer] = []
-        if let vps { out.append(DecodeBuffer(kind: .vps, data: vps)) }
-        if let sps { out.append(DecodeBuffer(kind: .sps, data: sps)) }
-        if let pps { out.append(DecodeBuffer(kind: .pps, data: pps)) }
-        out.append(DecodeBuffer(kind: .picData, data: picData))
-        return out
-    }
+    // The H.264/HEVC Annex-B helpers (`isIdrFrameStart` and the IDR parameter-set
+    // split `splitAnnexBParamSets`) live in VideoDepacketizer+AnnexB.swift, split
+    // out to keep this file under the length limit.
 
     // MARK: - Helpers
 

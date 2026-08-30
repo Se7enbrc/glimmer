@@ -24,19 +24,30 @@ enum ControlTransport {
         let body: Data
     }
 
+    /// The PEM material one control call carries: the client credential we
+    /// present on the mutual-TLS handshake plus the host leaf we pin against.
+    /// Grouped into one value so the request entry points stay inside the
+    /// parameter-count bar; the fields keep their individual meanings verbatim.
+    /// All-nil is the plain-HTTP unpaired probe (no cert, no pin).
+    struct TLSCredential: Sendable {
+        let clientCertPEM: String?
+        let clientKeyPEM: String?
+        /// non-nil → the host leaf must match it byte-for-byte (DER) or the
+        /// handshake is refused (MITM gate). nil → first-contact pairing: any
+        /// cert is accepted and returned for the caller to pin after RSA verifies.
+        let pinnedCertPEM: String?
+    }
+
     private static let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Network.TLS")
     private static let ioQueue = DispatchQueue(label: "io.ugfugl.Glimmer.control", attributes: .concurrent)
 
     /// Perform one HTTP/1.1 GET. `tls == false` is plain HTTP (the unpaired probe
     /// path - no cert, no pin); `tls == true` presents the client cert and pins.
-    /// - pinnedCertPEM: non-nil → the host leaf must match it byte-for-byte (DER)
-    ///   or the handshake is refused (MITM gate). nil → first-contact pairing: any
-    ///   cert is accepted and returned for the caller to pin after RSA verifies.
+    /// - credential: the client cert/key + pinned host leaf (see `TLSCredential`).
     static func get(host: String, port: Int, target: String,
                     userAgent: String,
                     tls: Bool,
-                    clientCertPEM: String?, clientKeyPEM: String?,
-                    pinnedCertPEM: String?,
+                    credential: TLSCredential,
                     timeout: TimeInterval) async throws -> Response {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Response, Error>) in
             ioQueue.async {
@@ -65,8 +76,7 @@ enum ControlTransport {
                 do {
                     cont.resume(returning: try performBlocking(
                         host: host, port: port, target: target, userAgent: userAgent,
-                        tls: tls, clientCertPEM: clientCertPEM, clientKeyPEM: clientKeyPEM,
-                        pinnedCertPEM: pinnedCertPEM, timeout: timeout))
+                        tls: tls, credential: credential, timeout: timeout))
                 } catch {
                     cont.resume(throwing: error)
                 }
@@ -79,8 +89,7 @@ enum ControlTransport {
     private static func performBlocking(host: String, port: Int, target: String,
                                         userAgent: String,
                                         tls: Bool,
-                                        clientCertPEM: String?, clientKeyPEM: String?,
-                                        pinnedCertPEM: String?,
+                                        credential: TLSCredential,
                                         timeout: TimeInterval) throws -> Response {
         let timeoutMs = Int32(max(1, timeout) * 1000)
         let fd = gl_tcp_connect(host, String(port), timeoutMs)
@@ -117,7 +126,7 @@ enum ControlTransport {
         // from rejecting the self-signed leaf before we get to look at it.
         SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, nil)
 
-        if let certPEM = clientCertPEM, let keyPEM = clientKeyPEM {
+        if let certPEM = credential.clientCertPEM, let keyPEM = credential.clientKeyPEM {
             try loadClientCredential(ctx: ctx, certPEM: certPEM, keyPEM: keyPEM)
         }
 
@@ -133,7 +142,7 @@ enum ControlTransport {
             throw StreamError.hostUnreachable("host presented no certificate")
         }
         defer { X509_free(peer) }
-        if let pinPEM = pinnedCertPEM {
+        if let pinPEM = credential.pinnedCertPEM {
             guard let pinned = x509(fromPEM: pinPEM) else {
                 throw StreamError.crypto("could not parse pinned host cert")
             }
@@ -195,7 +204,10 @@ enum ControlTransport {
     private static func writeAll(fd: Int32, ssl: OpaquePointer?, _ bytes: [UInt8]) throws {
         var sent = 0
         try bytes.withUnsafeBytes { raw in
-            let base = raw.baseAddress!
+            // A nil base address means an EMPTY buffer, and the loop below would
+            // not run for one anyway (sent == bytes.count == 0) - so bailing out
+            // here is the same "nothing to write" outcome, without the trap.
+            guard let base = raw.baseAddress else { return }
             while sent < bytes.count {
                 let n: Int
                 if let ssl {
@@ -263,10 +275,7 @@ enum ControlTransport {
             // exactly at the body end instead of waiting on the close.
             if headerEnd == nil, let r = data.range(of: Data("\r\n\r\n".utf8)) {
                 headerEnd = r.upperBound
-                let head = String(decoding: data[data.startIndex..<r.lowerBound], as: UTF8.self)
-                for line in head.split(separator: "\r\n") where line.lowercased().hasPrefix("content-length:") {
-                    contentLength = Int(line.split(separator: ":")[1].trimmingCharacters(in: .whitespaces))
-                }
+                contentLength = try contentLengthHeader(in: data[data.startIndex..<r.lowerBound])
             }
             if let headerEnd, let contentLength, data.count - headerEnd >= contentLength { break }
         }
@@ -279,13 +288,40 @@ enum ControlTransport {
         return data
     }
 
+    /// Read `Content-Length` out of a completed header block (the bytes BEFORE
+    /// the blank-line terminator), so `readAll` can stop exactly at the body end
+    /// instead of waiting on the peer close. nil = no usable header. Split out of
+    /// `readAll` so the read loop stays inside the complexity bar; the last
+    /// matching header line wins, exactly as the inline loop did.
+    ///
+    /// FAIL CLOSED on non-UTF-8 header bytes. HTTP/1.1 headers are protocol text;
+    /// a lossy decode would silently substitute replacement characters and let us
+    /// keep reading a stream we cannot actually parse. This is host-supplied
+    /// input, so garbage in must surface as an error, not as a half-understood
+    /// header.
+    private static func contentLengthHeader(in headerBytes: Data) throws -> Int? {
+        guard let head = String(bytes: headerBytes, encoding: .utf8) else {
+            throw StreamError.hostUnreachable("malformed HTTP response (headers are not UTF-8)")
+        }
+        var length: Int?
+        for line in head.split(separator: "\r\n") where line.lowercased().hasPrefix("content-length:") {
+            length = Int(line.split(separator: ":")[1].trimmingCharacters(in: .whitespaces))
+        }
+        return length
+    }
+
     // MARK: - HTTP/1.1 response parse
 
     private static func parse(_ raw: Data) throws -> Response {
         guard let sep = raw.range(of: Data("\r\n\r\n".utf8)) else {
             throw StreamError.hostUnreachable("malformed HTTP response (no header terminator)")
         }
-        let head = String(decoding: raw[raw.startIndex..<sep.lowerBound], as: UTF8.self)
+        // Same fail-closed rule as `readAll`: header bytes that are not UTF-8 are
+        // malformed protocol text, handled by the malformed-response path rather
+        // than lossily decoded into a status line we only think we understood.
+        guard let head = String(bytes: raw[raw.startIndex..<sep.lowerBound], encoding: .utf8) else {
+            throw StreamError.hostUnreachable("malformed HTTP response (headers are not UTF-8)")
+        }
         guard let statusLine = head.split(separator: "\r\n").first else {
             throw StreamError.hostUnreachable("empty HTTP response")
         }

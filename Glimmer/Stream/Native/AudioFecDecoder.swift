@@ -26,11 +26,16 @@ struct AudioFecDecoder {
     private let rs: ReedSolomon
 
     init() {
-        // Force-unwrap is safe: geometry and matrix are compile-time constants
-        // (ds=4, ps=2, matrix.count == 8 == ps*ds), so this init never returns nil.
-        rs = ReedSolomon(matrix: Self.parity,
-                         dataShards: Self.dataShards,
-                         parityShards: Self.fecShards)!
+        // Geometry and matrix are compile-time constants (ds=4, ps=2,
+        // matrix.count == 8 == ps*ds), so this init never returns nil. The guard
+        // states that invariant explicitly instead of trapping through a `!`.
+        guard let rs = ReedSolomon(matrix: Self.parity,
+                                   dataShards: Self.dataShards,
+                                   parityShards: Self.fecShards) else {
+            preconditionFailure("audio RS(4,2) parity matrix is a compile-time constant "
+                + "(2x4, matching dataShards/fecShards) and must always construct")
+        }
+        self.rs = rs
     }
 
     /// Reconstruct erased data shards in place; see `ReedSolomon.decode`. `shards`:

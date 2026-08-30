@@ -55,8 +55,8 @@ enum CruiseTraversal {
     static let dragDeltaScaleDefaultsKey = "cruiseDragDeltaScale"
     static let defaultDragDeltaScale: Double = 1.35
     static var dragDeltaScale: Double {
-        let v = UserDefaults.standard.double(forKey: dragDeltaScaleDefaultsKey)
-        return v > 0 ? min(max(v, 0.5), 3.0) : defaultDragDeltaScale
+        let scale = UserDefaults.standard.double(forKey: dragDeltaScaleDefaultsKey)
+        return scale > 0 ? min(max(scale, 0.5), 3.0) : defaultDragDeltaScale
     }
 
     /// Whether the feature is on (default true).
@@ -66,12 +66,12 @@ enum CruiseTraversal {
     /// key is absent or non-positive. `vFull` is floored just above `vKnee` so the
     /// smoothstep denominator can never be zero/negative.
     static var vKnee: Double {
-        let v = UserDefaults.standard.double(forKey: vKneeDefaultsKey)
-        return v > 0 ? v : defaultVKnee
+        let knee = UserDefaults.standard.double(forKey: vKneeDefaultsKey)
+        return knee > 0 ? knee : defaultVKnee
     }
     static var vFull: Double {
-        let v = UserDefaults.standard.double(forKey: vFullDefaultsKey)
-        return v > vKnee ? v : max(defaultVFull, vKnee + 1)
+        let full = UserDefaults.standard.double(forKey: vFullDefaultsKey)
+        return full > vKnee ? full : max(defaultVFull, vKnee + 1)
     }
 
     /// Resolution-derived ceiling for the boost. Clamped to >=1.0 so <=1080p is
@@ -80,18 +80,19 @@ enum CruiseTraversal {
         max(1.0, Double(width) / referenceWidth)
     }
 
-    /// The pure gain. `v` is the batch speed (counts/sec); `dt` is the inter-batch
-    /// interval (NSEvent.timestamp deltas). Returns 1.0 on a stale/post-gap dt and
-    /// in the sacred low-speed aim band (EARLY RETURN, no float round-trip), gMax
-    /// at/above full speed, and a C1 smoothstep ramp between. With gMax==1.0 every
-    /// branch yields 1.0, so the whole feature is inert at <=referenceWidth.
-    static func gain(velocity v: Double, dt: Double, gMax: Double,
+    /// The pure gain. `velocity` is the batch speed (counts/sec); `dt` is the
+    /// inter-batch interval (NSEvent.timestamp deltas). Returns 1.0 on a
+    /// stale/post-gap dt and in the sacred low-speed aim band (EARLY RETURN, no
+    /// float round-trip), gMax at/above full speed, and a C1 smoothstep ramp
+    /// between. With gMax==1.0 every branch yields 1.0, so the whole feature is
+    /// inert at <=referenceWidth.
+    static func gain(velocity: Double, dt: Double, gMax: Double,
                      vKnee: Double, vFull: Double) -> Double {
         if dt <= 0 || dt > 0.1 { return 1.0 }   // stale/post-gap dt -> identity
-        if v <= vKnee { return 1.0 }             // sacred aim band, unscaled
-        if v >= vFull { return gMax }
-        let t = (v - vKnee) / (vFull - vKnee)
-        let s = t * t * (3 - 2 * t)              // smoothstep, C1 at both ends
+        if velocity <= vKnee { return 1.0 }      // sacred aim band, unscaled
+        if velocity >= vFull { return gMax }
+        let ramp = (velocity - vKnee) / (vFull - vKnee)
+        let s = ramp * ramp * (3 - 2 * ramp)     // smoothstep, C1 at both ends
         return 1.0 + (gMax - 1.0) * s
     }
 }

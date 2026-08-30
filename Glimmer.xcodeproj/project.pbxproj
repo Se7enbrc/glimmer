@@ -30,6 +30,12 @@
 		A100014A /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100014B /* LogViewerView.swift */; };
 		A100015A /* AppModel+Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100015B /* AppModel+Audio.swift */; };
 		A100016A /* ContentViewSubviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016B /* ContentViewSubviews.swift */; };
+		DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE01000000000000000B /* ContentView+Menus.swift */; };
+		DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */; };
+		DEC0DE03000000000000000A /* ContentView+PowerControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE03000000000000000B /* ContentView+PowerControls.swift */; };
+		DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE04000000000000000B /* ContentView+StreamButton.swift */; };
+		DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */; };
+		DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */; };
 		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
 		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
@@ -58,6 +64,14 @@
 		ABCD20260609000000000502 /* RtpAudioReceiver+Events.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */; };
 		ABCD20260609000000000602 /* RtpAudioQueue+Fec.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */; };
 		ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000701 /* AudioDecoder+Meter.swift */; };
+		AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000001 /* AudioDecoder+Engine.swift */; };
+		AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000003 /* AudioDecoder+Decode.swift */; };
+		AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000005 /* AudioDecoder+Prime.swift */; };
+		AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000007 /* AudioDecoder+Route.swift */; };
+		AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000009 /* AudioDecoder+Resampler.swift */; };
+		AC202608300000000000000C /* InputForwarder+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC202608300000000000000B /* InputForwarder+Lifecycle.swift */; };
+		AC202608300000000000000E /* ControllerForwarder+StatePush.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC202608300000000000000D /* ControllerForwarder+StatePush.swift */; };
+		AC2026083000000000000010 /* ControllerForwarder+Touchpad.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC202608300000000000000F /* ControllerForwarder+Touchpad.swift */; };
 		ABCD20260609000000000802 /* TelemetryCounters+Gauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */; };
 		ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */; };
 		ABCD20260609000000001002 /* TelemetryCounters+InputActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */; };
@@ -139,6 +153,12 @@
 		D1000076 /* VideoDecoder+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000075 /* VideoDecoder+Decode.swift */; };
 		D1000078 /* VideoDecoder+Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000077 /* VideoDecoder+Session.swift */; };
 		D100007A /* VideoDecoder+Sink.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000079 /* VideoDecoder+Sink.swift */; };
+		D6D80A7200000000000000A2 /* VideoDecoder+Pacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */; };
+		D6D80A7200000000000000B2 /* VideoDecoder+Backlog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */; };
+		D6D80A7200000000000000C2 /* VideoDepacketizer+FrameHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */; };
+		D6D80A7200000000000000D2 /* VideoDepacketizer+AnnexB.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */; };
+		D6D80A7200000000000000E2 /* RtpAudioReceiver+Receive.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */; };
+		D6D80A7200000000000000F2 /* EnetControlChannel+ControlMessages.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */; };
 		D100007C /* FramePacer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100007B /* FramePacer.swift */; };
 		D1000081 /* TelemetryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000080 /* TelemetryExporter.swift */; };
 		D1000083 /* TelemetryExporter+Render.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000082 /* TelemetryExporter+Render.swift */; };
@@ -175,6 +195,22 @@
 		D1000B71 /* StreamSession+Start.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B72 /* StreamSession+Start.swift */; };
 		D1000B73 /* StreamSession+StartSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B74 /* StreamSession+StartSetup.swift */; };
 		D1000BD1 /* FramePacer+TickDeficit.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BD2 /* FramePacer+TickDeficit.swift */; };
+		D6D80A720000000000000001 /* FramePacer+TickDeficitEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000002 /* FramePacer+TickDeficitEvents.swift */; };
+		D6D80A720000000000000003 /* FramePacer+DeficitTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000004 /* FramePacer+DeficitTimer.swift */; };
+		D6D80A720000000000000005 /* FramePacer+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000006 /* FramePacer+State.swift */; };
+		D6D80A720000000000000007 /* StreamSession+Connect.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000008 /* StreamSession+Connect.swift */; };
+		D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */; };
+		D6D80A720000000000000011 /* StreamSession+FrameWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */; };
+		D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000014 /* StreamWindow+Fade.swift */; };
+		D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */; };
+		D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */; };
+		D6D80A720000000000000019 /* EnvSignalController+Evidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */; };
+		D6D80A720000000000000021 /* TelemetryCounters+AudioSkew.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000022 /* TelemetryCounters+AudioSkew.swift */; };
+		D6D80A720000000000000023 /* TelemetryCounters+Types.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000024 /* TelemetryCounters+Types.swift */; };
+		D6D80A720000000000000025 /* TelemetryCounters+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000026 /* TelemetryCounters+Lifecycle.swift */; };
+		D6D80A720000000000000027 /* TelemetryExporter+Sinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000028 /* TelemetryExporter+Sinks.swift */; };
+		D6D80A720000000000000029 /* TelemetryLatencyHistograms.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000030 /* TelemetryLatencyHistograms.swift */; };
+		D6D80A720000000000000031 /* TelemetrySessionAggregate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000032 /* TelemetrySessionAggregate.swift */; };
 		D1000BE0 /* FramePacer+TickThread.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BE1 /* FramePacer+TickThread.swift */; };
 		D1000BD3 /* VideoDecoder+GovernorRepaint.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000BD4 /* VideoDecoder+GovernorRepaint.swift */; };
 		D1000C01 /* StreamWindow+Cursor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000C02 /* StreamWindow+Cursor.swift */; };
@@ -279,6 +315,12 @@
 		A100014B /* LogViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerView.swift; sourceTree = "<group>"; };
 		A100015B /* AppModel+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Audio.swift"; sourceTree = "<group>"; };
 		A100016B /* ContentViewSubviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewSubviews.swift; sourceTree = "<group>"; };
+		DEC0DE01000000000000000B /* ContentView+Menus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Menus.swift"; sourceTree = "<group>"; };
+		DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ReadinessChip.swift"; sourceTree = "<group>"; };
+		DEC0DE03000000000000000B /* ContentView+PowerControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+PowerControls.swift"; sourceTree = "<group>"; };
+		DEC0DE04000000000000000B /* ContentView+StreamButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+StreamButton.swift"; sourceTree = "<group>"; };
+		DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsGeneralStreamingPanes+LoginItem.swift"; sourceTree = "<group>"; };
+		DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming+Config.swift"; sourceTree = "<group>"; };
 		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
 		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
@@ -305,6 +347,14 @@
 		ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Events.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioQueue+Fec.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000701 /* AudioDecoder+Meter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Meter.swift"; sourceTree = "<group>"; };
+		AC2026083000000000000001 /* AudioDecoder+Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Engine.swift"; sourceTree = "<group>"; };
+		AC2026083000000000000003 /* AudioDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Decode.swift"; sourceTree = "<group>"; };
+		AC2026083000000000000005 /* AudioDecoder+Prime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Prime.swift"; sourceTree = "<group>"; };
+		AC2026083000000000000007 /* AudioDecoder+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Route.swift"; sourceTree = "<group>"; };
+		AC2026083000000000000009 /* AudioDecoder+Resampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Resampler.swift"; sourceTree = "<group>"; };
+		AC202608300000000000000B /* InputForwarder+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Lifecycle.swift"; sourceTree = "<group>"; };
+		AC202608300000000000000D /* ControllerForwarder+StatePush.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+StatePush.swift"; sourceTree = "<group>"; };
+		AC202608300000000000000F /* ControllerForwarder+Touchpad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+Touchpad.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+Gauges.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+AudioGauges.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+InputActivity.swift"; sourceTree = "<group>"; };
@@ -386,6 +436,12 @@
 		D1000075 /* VideoDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Decode.swift"; sourceTree = "<group>"; };
 		D1000077 /* VideoDecoder+Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Session.swift"; sourceTree = "<group>"; };
 		D1000079 /* VideoDecoder+Sink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Sink.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Pacing.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Backlog.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/VideoDepacketizer+FrameHeader.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/VideoDepacketizer+AnnexB.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Receive.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+ControlMessages.swift"; sourceTree = "<group>"; };
 		D100007B /* FramePacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/FramePacer.swift; sourceTree = "<group>"; };
 		D1000080 /* TelemetryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetryExporter.swift; sourceTree = "<group>"; };
 		D1000082 /* TelemetryExporter+Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+Render.swift"; sourceTree = "<group>"; };
@@ -422,6 +478,22 @@
 		D1000B72 /* StreamSession+Start.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Start.swift"; sourceTree = "<group>"; };
 		D1000B74 /* StreamSession+StartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StartSetup.swift"; sourceTree = "<group>"; };
 		D1000BD2 /* FramePacer+TickDeficit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickDeficit.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000002 /* FramePacer+TickDeficitEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickDeficitEvents.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000004 /* FramePacer+DeficitTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+DeficitTimer.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000006 /* FramePacer+State.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+State.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000008 /* StreamSession+Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Connect.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StatsOverlayTimer.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+FrameWatchdog.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000014 /* StreamWindow+Fade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Fade.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Rows.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController+Tunables.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController+Evidence.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000022 /* TelemetryCounters+AudioSkew.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+AudioSkew.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000024 /* TelemetryCounters+Types.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+Types.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000026 /* TelemetryCounters+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+Lifecycle.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000028 /* TelemetryExporter+Sinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+Sinks.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000030 /* TelemetryLatencyHistograms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryLatencyHistograms.swift"; sourceTree = "<group>"; };
+		D6D80A720000000000000032 /* TelemetrySessionAggregate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetrySessionAggregate.swift"; sourceTree = "<group>"; };
 		D1000BE1 /* FramePacer+TickThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickThread.swift"; sourceTree = "<group>"; };
 		D1000BD4 /* VideoDecoder+GovernorRepaint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+GovernorRepaint.swift"; sourceTree = "<group>"; };
 		D1000C02 /* StreamWindow+Cursor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Cursor.swift"; sourceTree = "<group>"; };
@@ -555,7 +627,13 @@
 				A100014B /* LogViewerView.swift */,
 				A100015B /* AppModel+Audio.swift */,
 				A100016B /* ContentViewSubviews.swift */,
+				DEC0DE01000000000000000B /* ContentView+Menus.swift */,
+				DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */,
+				DEC0DE03000000000000000B /* ContentView+PowerControls.swift */,
+				DEC0DE04000000000000000B /* ContentView+StreamButton.swift */,
+				DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */,
 				A100017B /* SettingsGeneralStreamingPanes.swift */,
+				DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */,
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
 				A100019B /* AboutPane.swift */,
 				A100011B /* DualSenseHID.swift */,
@@ -574,9 +652,27 @@
 				D1000B42 /* FramePacer+AdaptiveDepth.swift */,
 				D1000B52 /* FramePacer+Submit.swift */,
 				D1000BD2 /* FramePacer+TickDeficit.swift */,
+				D6D80A720000000000000002 /* FramePacer+TickDeficitEvents.swift */,
+				D6D80A720000000000000004 /* FramePacer+DeficitTimer.swift */,
+				D6D80A720000000000000006 /* FramePacer+State.swift */,
+				D6D80A720000000000000008 /* StreamSession+Connect.swift */,
+				D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */,
+				D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */,
+				D6D80A720000000000000014 /* StreamWindow+Fade.swift */,
+				D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */,
+				D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */,
+				D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */,
+				D6D80A720000000000000022 /* TelemetryCounters+AudioSkew.swift */,
+				D6D80A720000000000000024 /* TelemetryCounters+Types.swift */,
+				D6D80A720000000000000026 /* TelemetryCounters+Lifecycle.swift */,
+				D6D80A720000000000000028 /* TelemetryExporter+Sinks.swift */,
+				D6D80A720000000000000030 /* TelemetryLatencyHistograms.swift */,
+				D6D80A720000000000000032 /* TelemetrySessionAggregate.swift */,
 				D1000BE1 /* FramePacer+TickThread.swift */,
 				D1000B62 /* FramePacer+Constants.swift */,
 				D1000079 /* VideoDecoder+Sink.swift */,
+				D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */,
+				D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */,
 				D1000077 /* VideoDecoder+Session.swift */,
 				D10000B2 /* VideoDecoder+Suppression.swift */,
 				D1000075 /* VideoDecoder+Decode.swift */,
@@ -666,6 +762,10 @@
 				D1000017 /* EnetWire.swift */,
 				D100001F /* ReedSolomon.swift */,
 				D1000021 /* VideoDepacketizer.swift */,
+				D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */,
+				D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */,
+				D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */,
+				D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */,
 				D1000023 /* RtpVideoQueue.swift */,
 				D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */,
 				D10000E9 /* RtpVideoQueue+ReorderStats.swift */,
@@ -698,6 +798,14 @@
 				AB00000015 /* AudioDecoder.swift */,
 				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
 				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
+				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
+				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
+				AC2026083000000000000005 /* AudioDecoder+Prime.swift */,
+				AC2026083000000000000007 /* AudioDecoder+Route.swift */,
+				AC2026083000000000000009 /* AudioDecoder+Resampler.swift */,
+				AC202608300000000000000B /* InputForwarder+Lifecycle.swift */,
+				AC202608300000000000000D /* ControllerForwarder+StatePush.swift */,
+				AC202608300000000000000F /* ControllerForwarder+Touchpad.swift */,
 				AB00000017 /* InputForwarder.swift */,
 				AB00000019 /* StreamWindow.swift */,
 				AB00000021 /* Signposts.swift */,
@@ -911,7 +1019,13 @@
 				A100014A /* LogViewerView.swift in Sources */,
 				A100015A /* AppModel+Audio.swift in Sources */,
 				A100016A /* ContentViewSubviews.swift in Sources */,
+				DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */,
+				DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */,
+				DEC0DE03000000000000000A /* ContentView+PowerControls.swift in Sources */,
+				DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */,
+				DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */,
 				A100017A /* SettingsGeneralStreamingPanes.swift in Sources */,
+				DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */,
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
 				A100011A /* DualSenseHID.swift in Sources */,
@@ -927,9 +1041,31 @@
 				D1000B41 /* FramePacer+AdaptiveDepth.swift in Sources */,
 				D1000B51 /* FramePacer+Submit.swift in Sources */,
 				D1000BD1 /* FramePacer+TickDeficit.swift in Sources */,
+				D6D80A720000000000000001 /* FramePacer+TickDeficitEvents.swift in Sources */,
+				D6D80A720000000000000003 /* FramePacer+DeficitTimer.swift in Sources */,
+				D6D80A720000000000000005 /* FramePacer+State.swift in Sources */,
+				D6D80A720000000000000007 /* StreamSession+Connect.swift in Sources */,
+				D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */,
+				D6D80A720000000000000011 /* StreamSession+FrameWatchdog.swift in Sources */,
+				D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */,
+				D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */,
+				D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */,
+				D6D80A720000000000000019 /* EnvSignalController+Evidence.swift in Sources */,
+				D6D80A720000000000000021 /* TelemetryCounters+AudioSkew.swift in Sources */,
+				D6D80A720000000000000023 /* TelemetryCounters+Types.swift in Sources */,
+				D6D80A720000000000000025 /* TelemetryCounters+Lifecycle.swift in Sources */,
+				D6D80A720000000000000027 /* TelemetryExporter+Sinks.swift in Sources */,
+				D6D80A720000000000000029 /* TelemetryLatencyHistograms.swift in Sources */,
+				D6D80A720000000000000031 /* TelemetrySessionAggregate.swift in Sources */,
 				D1000BE0 /* FramePacer+TickThread.swift in Sources */,
 				D1000B61 /* FramePacer+Constants.swift in Sources */,
 				D100007A /* VideoDecoder+Sink.swift in Sources */,
+				D6D80A7200000000000000A2 /* VideoDecoder+Pacing.swift in Sources */,
+				D6D80A7200000000000000B2 /* VideoDecoder+Backlog.swift in Sources */,
+				D6D80A7200000000000000C2 /* VideoDepacketizer+FrameHeader.swift in Sources */,
+				D6D80A7200000000000000D2 /* VideoDepacketizer+AnnexB.swift in Sources */,
+				D6D80A7200000000000000E2 /* RtpAudioReceiver+Receive.swift in Sources */,
+				D6D80A7200000000000000F2 /* EnetControlChannel+ControlMessages.swift in Sources */,
 				D1000078 /* VideoDecoder+Session.swift in Sources */,
 				D10000B1 /* VideoDecoder+Suppression.swift in Sources */,
 				D1000076 /* VideoDecoder+Decode.swift in Sources */,
@@ -1051,6 +1187,14 @@
 				AB00000016 /* AudioDecoder.swift in Sources */,
 				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
 				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
+				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
+				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,
+				AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */,
+				AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */,
+				AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */,
+				AC202608300000000000000C /* InputForwarder+Lifecycle.swift in Sources */,
+				AC202608300000000000000E /* ControllerForwarder+StatePush.swift in Sources */,
+				AC2026083000000000000010 /* ControllerForwarder+Touchpad.swift in Sources */,
 				AB00000018 /* InputForwarder.swift in Sources */,
 				AB00000020 /* StreamWindow.swift in Sources */,
 				AB00000022 /* Signposts.swift in Sources */,

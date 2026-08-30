@@ -57,81 +57,16 @@ extension TelemetryExporter {
             Double(now.uptimeNanoseconds &- connectInstant.uptimeNanoseconds) / 1_000_000_000.0
         snap.wallClockISO8601 = isoFormatter.string(from: Date())
 
-        snap.receivedFps = stats.receivedFps
-        snap.decodedFps = stats.decodedFps
-        snap.renderedFps = stats.renderedFps
-
-        // StatsCollector tracks an EMA of decode wall-clock, not a per-frame
-        // histogram. Surface the raw EMA only - the true tail (p95/max) lives in
-        // the glimmer_decode_time_p_ms / _idr_ms histograms, not a multiple of it.
-        snap.decodeEmaMs = stats.avgDecodeTimeMs
-
-        snap.presentCadenceErrorMs = stats.avgPresentCadenceErrorMs
-        // on-time/late split: per-window frame counts derived from the on-time
-        // percent. Emitted as GAUGES (not counters - they're not monotonic).
-        if let onTimePct = stats.onTimePresentPercent, let rendered = stats.renderedFps {
-            snap.presentOnTimePercent = onTimePct
-            let approxPresents = max(rendered, 0)
-            snap.presentOnTimeCount = UInt64((approxPresents * onTimePct / 100.0).rounded())
-            snap.presentLateCount = UInt64((approxPresents * (100.0 - onTimePct) / 100.0).rounded())
-        }
+        fillCoreVideo(into: &snap, stats: stats)
 
         fillNetwork(into: &snap, stats: stats, rtt: rtt, health: health)
 
-        // Pacing depth/target track the LIVE pacer, never a stale collector
-        // sample: `StatsCollector.lastPacingDepth` keeps its last value after the
-        // pacer is disabled (written only on a tick), so reading it first reported
-        // a stale ~5 for the rest of a direct-enqueue session. When the pacer is
-        // gone (disabled → direct enqueue / passthrough) report 0 (not the stale
-        // value); while paced this tracks the live queue (now ~1). Target 0 too.
-        snap.pacingQueueDepth = pacing != nil ? pacing?.depth : 0
-        snap.pacingAdaptiveTargetDepth = pacing != nil ? pacing?.adaptiveTargetDepth : 0
-        snap.inFlightDecodeBacklog = source.inFlightDecodeBacklog()
-
-        snap.dropsDecoder = source.decoderDrops()
-        snap.dropsBackpressure = source.backpressureDrops()
-        snap.dropsPresentationLate = source.presentationLateDrops()
-        snap.presentationGaps = source.presentationGaps()
+        fillPacingAndDrops(into: &snap, pacing: pacing)
 
         fillRates(into: &snap, now: now)
         fillAuxiliarySignals(into: &snap, stats: stats)
 
-        let proc = ProcessMetrics.sample()
-        snap.processCpuPercent = proc.cpuPercent
-        snap.threadCount = proc.threadCount
-
-        // P1 RESOURCE (P-vs-E-core visibility): the per-thread CPU/QoS view +
-        // memory footprint + AC/battery (per-process), and the P-cluster vs
-        // E-cluster active residency (system, via IOReport). Both on this 1Hz
-        // queue - never a hot path. Includes the one-shot QoS audit (logged once).
-        fillResource(into: &snap)
-
-        snap.rfiTotal = counters.rfiTotal.value
-        snap.idrRequestedTotal = counters.idrRequestedTotal.value
-        snap.backlogOverflowTotal = counters.backlogOverflowTotal.value
-        snap.presentStallTotal = counters.presentStallTotal.value
-        snap.frameLossTotal = counters.frameLossTotal.value
-        snap.unrecoverableFrameTotal = counters.unrecoverableFrameTotal.value
-        snap.pacerDisabledTotal = counters.pacerDisabledTotal.value
-        snap.bookmarkTotal = counters.bookmarkTotal.value
-        snap.cruiseBoostedBatchesTotal = counters.cruiseBoostedBatchesTotal.value
-        snap.cruiseIdentityBatchesTotal = counters.cruiseIdentityBatchesTotal.value
-        snap.cruiseMaxGain = counters.cruiseMaxGain
-        snap.decoderRecreateTotal = counters.decoderRecreateTotal.value
-        snap.decoderRecreateFirstTotal = counters.decoderRecreateFirstTotal.value
-        snap.decoderRecreateResolutionTotal = counters.decoderRecreateResolutionTotal.value
-        snap.decoderRecreateColorspaceTotal = counters.decoderRecreateColorspaceTotal.value
-        snap.vtSessionCreateMs = counters.vtSessionCreateMs
-        snap.discontinuityFlushTotal = counters.discontinuityFlushTotal.value
-        snap.staleFrameRepeatTotal = counters.staleFrameRepeatTotal.value
-        snap.staleEmptyQueueTotal = counters.staleEmptyQueueTotal.value
-        snap.presentGapDroughtTotal = counters.presentGapDroughtTotal.value
-        snap.audioNearMissTotal = counters.audioNearMissTotal.value
-        snap.audioStallRecoveryTotal = counters.audioStallRecoveryTotal.value
-        snap.tickMissDescheduledTotal = counters.tickMissDescheduledTotal.value
-        snap.tickMissCoalescedTotal = counters.tickMissCoalescedTotal.value
-        snap.tickMissPreemptedTotal = counters.tickMissPreemptedTotal.value
-        snap.tickMissLinkskipTotal = counters.tickMissLinkskipTotal.value
+        fillProcessResourceAndCounters(into: &snap)
 
         // P1 DECODE state (HW-decode + pixel format + bit depth + colorspace) +
         // PRESENT/DISPLAY (EDR trend + HDR/screen/ProMotion). Both read off the
@@ -156,42 +91,11 @@ extension TelemetryExporter {
         // path. Also emits the one-shot handshake breakdown EVENT line.
         fillSessionLifecycle(into: &snap, now: now)
 
-        // Per-stage latency histograms: one cumulative snapshot per tick off the
-        // tracker's atomic buckets (no hot-path cost - the increments happen at
-        // present; this is just a read on the exporter queue). Carries the
-        // glass-to-glass + input-to-photon composite stages too.
-        snap.latencyHistograms = FrameTimingTracker.shared?.histograms.snapshot()
-        // Client-side input latency (queue→wire age) - a standalone input-family
-        // stage, read off the same tracker on this queue.
-        snap.inputLocalLatency = FrameTimingTracker.shared?.inputLocalLatency.snapshotValue()
-        snap.inputDeliverLatency = FrameTimingTracker.shared?.inputDeliverLatency.snapshotValue()
-        // Pipeline cadence (clump forensics) + cruise forensics - standalone
-        // stages on the same tracker, read on this queue.
-        snap.pipelineReceiveCadence = FrameTimingTracker.shared?.receiveCadence.snapshotValue()
-        snap.pipelineAssembleCadence = FrameTimingTracker.shared?.assembleCadence.snapshotValue()
-        snap.pipelineOutputCadence = FrameTimingTracker.shared?.outputCadence.snapshotValue()
-        snap.cruiseVelocityMove = FrameTimingTracker.shared?.cruiseVelocityMove.snapshotValue()
-        snap.cruiseVelocityDrag = FrameTimingTracker.shared?.cruiseVelocityDrag.snapshotValue()
-        snap.cruiseGainMove = FrameTimingTracker.shared?.cruiseGainMove.snapshotValue()
-        snap.cruiseGainDrag = FrameTimingTracker.shared?.cruiseGainDrag.snapshotValue()
+        // Per-stage latency histograms + the standalone input / pipeline-cadence /
+        // cruise stages, all read off the tracker on this queue.
+        fillTrackerStages(into: &snap)
 
-        // Wi-Fi radio (signal 3): one CoreWLAN read on this queue. Reads the
-        // current association only - never a scan - so it cannot disturb the link.
-        snap.wifi = wifi.sample()
-
-        // Power state: on-battery + Low Power Mode, 1Hz on this queue. The
-        // correlation labels for governor tick-throttle (the ~106-ticks-on-
-        // 120fps chug): if on_battery predicts it reliably, padding can be
-        // pre-armed at session start instead of waiting for the measured sag.
-        let powerSource = IOPSGetProvidingPowerSourceType(nil)?.takeRetainedValue() as String?
-        snap.onBattery = powerSource == kIOPMBatteryPowerKey
-        snap.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
-
-        // Build attribution (signal 5a): the compile-time git SHA + build date.
-        snap.buildCommit = BuildInfo.commit
-        snap.buildDate = BuildInfo.date
-        // The Sunshine server this session connects to (the `host` label).
-        snap.serverName = serverLabel
+        fillEnvironmentAndBuild(into: &snap)
 
         // Counters newer than the snapshot type (pacer over-target /
         // suppression+gate / control / audio-trim / rumble / per-socket gaps +
@@ -229,6 +133,156 @@ extension TelemetryExporter {
         EnvSignalController.shared.observeCaptureTick(route: extras.streamRoute, wifi: snap.wifi)
         fillEnvSignal(into: &extras, now: now)
 
+        foldSessionAggregate(snap: snap, extras: extras)
+
+        // Advance the shared tick baseline LAST: every per-second section above
+        // (video rates, audio rates, lifecycle, extras) derives its dt from the
+        // PREVIOUS tick's time, so advancing it mid-capture (inside one section)
+        // zeroes the dt every later section sees - exactly the bug that left the
+        // audio and corruption per-second rates permanently unemitted.
+        prevCaptureTime = now
+
+        latestPrometheus = TelemetryRenderer.prometheus(snap, extras: extras)
+        appendNDJSON(TelemetryRenderer.ndjson(snap, extras: extras))
+    }
+
+    /// Fill the core video block: the fps triple, the decode-time EMA (the raw
+    /// EMA only - the true tail lives in the histograms), the present cadence
+    /// error, and the on-time/late present split derived from the on-time
+    /// percent. On `workQueue`, off the same one `StatsCollector` read.
+    private func fillCoreVideo(into snap: inout TelemetrySnapshot, stats: StreamStatsSnapshot) {
+        snap.receivedFps = stats.receivedFps
+        snap.decodedFps = stats.decodedFps
+        snap.renderedFps = stats.renderedFps
+
+        // StatsCollector tracks an EMA of decode wall-clock, not a per-frame
+        // histogram. Surface the raw EMA only - the true tail (p95/max) lives in
+        // the glimmer_decode_time_p_ms / _idr_ms histograms, not a multiple of it.
+        snap.decodeEmaMs = stats.avgDecodeTimeMs
+
+        snap.presentCadenceErrorMs = stats.avgPresentCadenceErrorMs
+        // on-time/late split: per-window frame counts derived from the on-time
+        // percent. Emitted as GAUGES (not counters - they're not monotonic).
+        if let onTimePct = stats.onTimePresentPercent, let rendered = stats.renderedFps {
+            snap.presentOnTimePercent = onTimePct
+            let approxPresents = max(rendered, 0)
+            snap.presentOnTimeCount = UInt64((approxPresents * onTimePct / 100.0).rounded())
+            snap.presentLateCount = UInt64((approxPresents * (100.0 - onTimePct) / 100.0).rounded())
+        }
+    }
+
+    /// Fill the pacing depth/target, the in-flight decode backlog, and the
+    /// drops-by-cause block. On `workQueue`.
+    private func fillPacingAndDrops(
+        into snap: inout TelemetrySnapshot, pacing: FramePacer.LivenessSnapshot?
+    ) {
+        // Pacing depth/target track the LIVE pacer, never a stale collector
+        // sample: `StatsCollector.lastPacingDepth` keeps its last value after the
+        // pacer is disabled (written only on a tick), so reading it first reported
+        // a stale ~5 for the rest of a direct-enqueue session. When the pacer is
+        // gone (disabled → direct enqueue / passthrough) report 0 (not the stale
+        // value); while paced this tracks the live queue (now ~1). Target 0 too.
+        snap.pacingQueueDepth = pacing != nil ? pacing?.depth : 0
+        snap.pacingAdaptiveTargetDepth = pacing != nil ? pacing?.adaptiveTargetDepth : 0
+        snap.inFlightDecodeBacklog = source.inFlightDecodeBacklog()
+
+        snap.dropsDecoder = source.decoderDrops()
+        snap.dropsBackpressure = source.backpressureDrops()
+        snap.dropsPresentationLate = source.presentationLateDrops()
+        snap.presentationGaps = source.presentationGaps()
+    }
+
+    /// Fill the process-level sample (CPU / threads), the P1 RESOURCE view, and
+    /// every monotonic event-counter total. On `workQueue` - the counter reads
+    /// are one locked load each, never a hot path.
+    private func fillProcessResourceAndCounters(into snap: inout TelemetrySnapshot) {
+        let proc = ProcessMetrics.sample()
+        snap.processCpuPercent = proc.cpuPercent
+        snap.threadCount = proc.threadCount
+
+        // P1 RESOURCE (P-vs-E-core visibility): the per-thread CPU/QoS view +
+        // memory footprint + AC/battery (per-process), and the P-cluster vs
+        // E-cluster active residency (system, via IOReport). Both on this 1Hz
+        // queue - never a hot path. Includes the one-shot QoS audit (logged once).
+        fillResource(into: &snap)
+
+        snap.rfiTotal = counters.rfiTotal.value
+        snap.idrRequestedTotal = counters.idrRequestedTotal.value
+        snap.backlogOverflowTotal = counters.backlogOverflowTotal.value
+        snap.presentStallTotal = counters.presentStallTotal.value
+        snap.frameLossTotal = counters.frameLossTotal.value
+        snap.unrecoverableFrameTotal = counters.unrecoverableFrameTotal.value
+        snap.pacerDisabledTotal = counters.pacerDisabledTotal.value
+        snap.bookmarkTotal = counters.bookmarkTotal.value
+        snap.cruiseBoostedBatchesTotal = counters.cruiseBoostedBatchesTotal.value
+        snap.cruiseIdentityBatchesTotal = counters.cruiseIdentityBatchesTotal.value
+        snap.cruiseMaxGain = counters.cruiseMaxGain
+        snap.decoderRecreateTotal = counters.decoderRecreateTotal.value
+        snap.decoderRecreateFirstTotal = counters.decoderRecreateFirstTotal.value
+        snap.decoderRecreateResolutionTotal = counters.decoderRecreateResolutionTotal.value
+        snap.decoderRecreateColorspaceTotal = counters.decoderRecreateColorspaceTotal.value
+        snap.vtSessionCreateMs = counters.vtSessionCreateMs
+        snap.discontinuityFlushTotal = counters.discontinuityFlushTotal.value
+        snap.staleFrameRepeatTotal = counters.staleFrameRepeatTotal.value
+        snap.staleEmptyQueueTotal = counters.staleEmptyQueueTotal.value
+        snap.presentGapDroughtTotal = counters.presentGapDroughtTotal.value
+        snap.audioNearMissTotal = counters.audioNearMissTotal.value
+        snap.audioStallRecoveryTotal = counters.audioStallRecoveryTotal.value
+        snap.tickMissDescheduledTotal = counters.tickMissDescheduledTotal.value
+        snap.tickMissCoalescedTotal = counters.tickMissCoalescedTotal.value
+        snap.tickMissPreemptedTotal = counters.tickMissPreemptedTotal.value
+        snap.tickMissLinkskipTotal = counters.tickMissLinkskipTotal.value
+    }
+
+    /// Fill the per-stage latency histograms + the standalone input, pipeline-
+    /// cadence and cruise stages. One cumulative snapshot per tick off the
+    /// tracker's atomic buckets (no hot-path cost - the increments happen at
+    /// present; this is just a read on the exporter queue). Carries the
+    /// glass-to-glass + input-to-photon composite stages too.
+    private func fillTrackerStages(into snap: inout TelemetrySnapshot) {
+        snap.latencyHistograms = FrameTimingTracker.shared?.histograms.snapshot()
+        // Client-side input latency (queue→wire age) - a standalone input-family
+        // stage, read off the same tracker on this queue.
+        snap.inputLocalLatency = FrameTimingTracker.shared?.inputLocalLatency.snapshotValue()
+        snap.inputDeliverLatency = FrameTimingTracker.shared?.inputDeliverLatency.snapshotValue()
+        // Pipeline cadence (clump forensics) + cruise forensics - standalone
+        // stages on the same tracker, read on this queue.
+        snap.pipelineReceiveCadence = FrameTimingTracker.shared?.receiveCadence.snapshotValue()
+        snap.pipelineAssembleCadence = FrameTimingTracker.shared?.assembleCadence.snapshotValue()
+        snap.pipelineOutputCadence = FrameTimingTracker.shared?.outputCadence.snapshotValue()
+        snap.cruiseVelocityMove = FrameTimingTracker.shared?.cruiseVelocityMove.snapshotValue()
+        snap.cruiseVelocityDrag = FrameTimingTracker.shared?.cruiseVelocityDrag.snapshotValue()
+        snap.cruiseGainMove = FrameTimingTracker.shared?.cruiseGainMove.snapshotValue()
+        snap.cruiseGainDrag = FrameTimingTracker.shared?.cruiseGainDrag.snapshotValue()
+    }
+
+    /// Fill the environment block: the Wi-Fi association, the power state, the
+    /// build attribution, and the `host` label. All 1Hz reads on `workQueue`.
+    private func fillEnvironmentAndBuild(into snap: inout TelemetrySnapshot) {
+        // Wi-Fi radio (signal 3): one CoreWLAN read on this queue. Reads the
+        // current association only - never a scan - so it cannot disturb the link.
+        snap.wifi = wifi.sample()
+
+        // Power state: on-battery + Low Power Mode, 1Hz on this queue. The
+        // correlation labels for governor tick-throttle (the ~106-ticks-on-
+        // 120fps chug): if on_battery predicts it reliably, padding can be
+        // pre-armed at session start instead of waiting for the measured sag.
+        let powerSource = IOPSGetProvidingPowerSourceType(nil)?.takeRetainedValue() as String?
+        snap.onBattery = powerSource == kIOPMBatteryPowerKey
+        snap.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+        // Build attribution (signal 5a): the compile-time git SHA + build date.
+        snap.buildCommit = BuildInfo.commit
+        snap.buildDate = BuildInfo.date
+        // The Sunshine server this session connects to (the `host` label).
+        snap.serverName = serverLabel
+    }
+
+    /// Fold this tick into the running session aggregate (signal 5b). Takes the
+    /// snapshot by value - the aggregate only reads it. On `workQueue`.
+    private func foldSessionAggregate(
+        snap: TelemetrySnapshot, extras: TelemetrySnapshot.Extras
+    ) {
         // Fold this tick into the running session aggregate (signal 5b) - fps
         // min/avg/max, peak depth, worst windows. Done on `workQueue`, off any
         // hot path. GATE-AWARE: the tick is classified first (gated/
@@ -252,16 +306,6 @@ extension TelemetryExporter {
             sessionAggregate.noteEnvState(
                 ordinal: ordinal, changesTotal: extras.envStateChangesTotal ?? 0)
         }
-
-        // Advance the shared tick baseline LAST: every per-second section above
-        // (video rates, audio rates, lifecycle, extras) derives its dt from the
-        // PREVIOUS tick's time, so advancing it mid-capture (inside one section)
-        // zeroes the dt every later section sees - exactly the bug that left the
-        // audio and corruption per-second rates permanently unemitted.
-        prevCaptureTime = now
-
-        latestPrometheus = TelemetryRenderer.prometheus(snap, extras: extras)
-        appendNDJSON(TelemetryRenderer.ndjson(snap, extras: extras))
     }
 
     /// Fill the network block: jitter/RTT, the P1 receive-quality goodput + gap

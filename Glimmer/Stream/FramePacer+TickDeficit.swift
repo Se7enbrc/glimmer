@@ -43,6 +43,12 @@
 //  and the floor-violation breadcrumb (direct, postmortem-visible evidence of
 //  the governor overriding the pinned floor).
 //
+//  Two companions carry the rest of the mechanism, split off so each unit stays
+//  under the file-length budget: FramePacer+TickDeficitEvents.swift holds the
+//  `TickDeficitEvent` vocabulary the locked service pass below returns plus the
+//  OFF-LOCK breadcrumb logging, and FramePacer+DeficitTimer.swift the off-tick
+//  release timer (reconcile / synthetic-vsync beat / governor repaint).
+//
 
 import CoreMedia
 import QuartzCore
@@ -130,21 +136,11 @@ extension FramePacer {
     static let refinedCadenceStashMaxAgeSeconds = 30.0
     static let refinedCadenceStashMinSamples = 32
 
-    /// One state transition the locked service pass detected, surfaced so the
-    /// caller can log / reconcile the timer OFF the lock (LogStore takes its
-    /// own lock; DispatchSource ops allocate - neither belongs under the
-    /// pacer's hot os_unfair_lock).
-    enum TickDeficitEvent {
-        case deficitEngaged(ticksPerS: Double, expectedHz: Double, depth: Int)
-        case deficitDisengaged(
-            reason: String, durationSeconds: Double, releases: UInt64,
-            repaints: UInt64, ticksPerS: Double)
-        case floorViolation(ticksPerS: Double, floorHz: Double)
-        case floorRecovered(durationSeconds: Double, ticksPerS: Double)
-        case floorAssistEngaged(ticksPerS: Double, floorHz: Double, depth: Int)
-        case floorAssistDisengaged(reason: String, durationSeconds: Double, releases: UInt64, ticksPerS: Double)
-        case warmHandoverComplete(ticksPerS: Double)
-    }
+    // The `TickDeficitEvent` vocabulary this file's service pass returns - and
+    // the OFF-LOCK breadcrumb logging each case mints - live in
+    // FramePacer+TickDeficitEvents.swift, and the off-tick release timer the
+    // reconcile drives in FramePacer+DeficitTimer.swift, to keep THIS file
+    // under the length limit.
 
     // MARK: - The service pass (under `lock`)
 
@@ -495,184 +491,6 @@ extension FramePacer {
               CFAbsoluteTimeGetCurrent() - stashedAt
                 < FramePacer.refinedCadenceStashMaxAgeSeconds else { return }
         streamFrameIntervalSeconds = FramePacer.clampFrameInterval(stashed)
-    }
-
-    // MARK: - Event handling (OFF the lock)
-
-    /// Log the transitions and reconcile the off-tick timer. Callable from any
-    /// thread; Diag/LogStore lines land in the glimmer-*.log file sink so every
-    /// engage/disengage is postmortem-visible (the os_log-only breadcrumb class
-    /// this pass retires).
-    func handleTickDeficitEvents(_ events: [TickDeficitEvent]) {
-        guard !events.isEmpty else { return }
-        var reconcile = false
-        for event in events {
-            switch event {
-            case let .deficitEngaged(ticksPerS, expectedHz, depth):
-                reconcile = true
-                log.warning(
-                    // swiftlint:disable:next line_length
-                    "FramePacer tick-deficit degraded mode ENGAGED - measured ticks \(ticksPerS, privacy: .public)/s vs expected \(expectedHz, privacy: .public)Hz, depth=\(depth, privacy: .public); releasing off-tick at stream cadence")
-                Diag.notice(
-                    "FramePacer tick-deficit degraded mode ENGAGED - measured ticks "
-                    + "\(String(format: "%.1f", ticksPerS))/s vs expected "
-                    + "\(String(format: "%.1f", expectedHz))Hz, depth=\(depth); "
-                    + "releasing off-tick at stream cadence until ticks recover",
-                    "Stream.Pacer")
-                OSSignposter.render.emitEvent(
-                    "PacerTickDeficitEngaged",
-                    "ticksPerS=\(ticksPerS, privacy: .public) depth=\(depth, privacy: .public)")
-            case let .deficitDisengaged(reason, duration, releases, repaints, ticksPerS):
-                reconcile = true
-                log.notice(
-                    // swiftlint:disable:next line_length
-                    "FramePacer tick-deficit degraded mode DISENGAGED (\(reason, privacy: .public)) after \(duration * 1000, privacy: .public)ms - released \(releases, privacy: .public) frames off-tick, \(repaints, privacy: .public) governor repaints, ticks now \(ticksPerS, privacy: .public)/s")
-                Diag.info(
-                    "FramePacer tick-deficit degraded mode DISENGAGED (\(reason)) after "
-                    + "\(String(format: "%.0f", duration * 1000))ms - released \(releases) "
-                    + "frames off-tick, \(repaints) governor repaints",
-                    "Stream.Pacer")
-                OSSignposter.render.emitEvent(
-                    "PacerTickDeficitDisengaged",
-                    "durationMs=\(duration * 1000, privacy: .public) releases=\(releases, privacy: .public)")
-            case let .floorViolation(ticksPerS, floorHz):
-                log.notice(
-                    // swiftlint:disable:next line_length
-                    "FramePacer FLOOR VIOLATION - realized ticks \(ticksPerS, privacy: .public)/s below the pinned \(floorHz, privacy: .public)Hz preferredFrameRateRange floor for >1s (frame-rate governor overriding the advisory floor)")
-                Diag.notice(
-                    "FramePacer FLOOR VIOLATION - realized ticks "
-                    + "\(String(format: "%.1f", ticksPerS))/s below the pinned "
-                    + "\(String(format: "%.1f", floorHz))Hz floor for >1s "
-                    + "(frame-rate governor overriding the advisory floor)",
-                    "Stream.Pacer")
-                OSSignposter.render.emitEvent(
-                    "PacerFloorViolation",
-                    "ticksPerS=\(ticksPerS, privacy: .public) floorHz=\(floorHz, privacy: .public)")
-            case let .floorRecovered(duration, ticksPerS):
-                Diag.info(
-                    "FramePacer floor violation cleared after "
-                    + "\(String(format: "%.0f", duration * 1000))ms - ticks back at "
-                    + "\(String(format: "%.1f", ticksPerS))/s",
-                    "Stream.Pacer")
-            case let .floorAssistEngaged(ticksPerS, floorHz, depth):
-                reconcile = true
-                log.notice(
-                    // swiftlint:disable:next line_length
-                    "FramePacer floor-violation ASSIST engaged - ticks \(ticksPerS, privacy: .public)/s vs \(floorHz, privacy: .public)Hz floor, depth=\(depth, privacy: .public); off-tick timer filling missed beats")
-                Diag.notice(
-                    "FramePacer floor-violation ASSIST engaged - ticks "
-                    + "\(String(format: "%.1f", ticksPerS))/s vs "
-                    + "\(String(format: "%.1f", floorHz))Hz floor, depth=\(depth); "
-                    + "off-tick timer filling missed beats",
-                    "Stream.Pacer")
-                OSSignposter.render.emitEvent(
-                    "PacerFloorAssistEngaged",
-                    "ticksPerS=\(ticksPerS, privacy: .public) depth=\(depth, privacy: .public)")
-            case let .floorAssistDisengaged(reason, duration, releases, ticksPerS):
-                reconcile = true
-                Diag.info(
-                    "FramePacer floor-violation ASSIST disengaged (\(reason)) after "
-                    + "\(String(format: "%.0f", duration * 1000))ms - \(releases) releases "
-                    + "during assist, ticks \(String(format: "%.1f", ticksPerS))/s",
-                    "Stream.Pacer")
-                OSSignposter.render.emitEvent(
-                    "PacerFloorAssistDisengaged",
-                    "durationMs=\(duration * 1000, privacy: .public) releases=\(releases, privacy: .public)")
-            case let .warmHandoverComplete(ticksPerS):
-                log.notice(
-                    // swiftlint:disable:next line_length
-                    "FramePacer warm handover complete - rebuilt link healthy at \(ticksPerS, privacy: .public) ticks/s; paced release engaged")
-                Diag.info(
-                    "FramePacer warm handover complete - rebuilt link healthy at "
-                    + "\(String(format: "%.1f", ticksPerS)) ticks/s; paced release engaged",
-                    "Stream.Pacer")
-                OSSignposter.render.emitEvent(
-                    "PacerWarmHandoverComplete", "ticksPerS=\(ticksPerS, privacy: .public)")
-            }
-        }
-        if reconcile {
-            pacingQueue.async { [weak self] in self?.reconcileDeficitTimer() }
-        }
-    }
-
-    // MARK: - The off-tick release timer (pacingQueue-confined)
-
-    /// Create/cancel the off-tick timer to match the lock-guarded desired state.
-    /// Runs ONLY on `pacingQueue`, so `deficitTimer` itself needs no lock - the
-    /// idempotent reconcile shape means racing engage/disengage transitions
-    /// converge on the latest state instead of double-arming.
-    func reconcileDeficitTimer() {
-        os_unfair_lock_lock(&lock)
-        let want = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive) && running
-        let interval = streamFrameIntervalSeconds
-        os_unfair_lock_unlock(&lock)
-        if want, tickDeficit.deficitTimer == nil {
-            let timer = DispatchSource.makeTimerSource(queue: pacingQueue)
-            timer.schedule(
-                deadline: .now() + interval, repeating: interval,
-                leeway: .milliseconds(1))
-            timer.setEventHandler { [weak self] in self?.deficitTimerFired() }
-            tickDeficit.deficitTimer = timer
-            timer.resume()
-        } else if !want, let timer = tickDeficit.deficitTimer {
-            timer.cancel()
-            tickDeficit.deficitTimer = nil
-        }
-    }
-
-    /// One off-tick beat: run the NORMAL release pipeline (trim → backoff →
-    /// due-gate, every safeguard intact) against a synthetic vsync, then
-    /// repaint for the governor if nothing real flowed. `CACurrentMediaTime()`
-    /// shares CADisplayLink's timebase, so the cadence base stays on one clock
-    /// - when real ticks resume mid-deficit their targetTimestamps slot onto
-    /// the same grid and the due gate just keeps pacing (releases stay capped
-    /// at one per stream interval no matter how the two sources interleave).
-    func deficitTimerFired() {
-        os_unfair_lock_lock(&lock)
-        let active = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive)
-            && running && !presentSuppressed
-        let interval = streamFrameIntervalSeconds
-        os_unfair_lock_unlock(&lock)
-        guard active else { return }
-        releaseDueFrame(
-            targetTimestamp: CACurrentMediaTime(), vsyncInterval: interval)
-        maybeRepaintForGovernor(interval: interval)
-        // Keep the rate window rolling from here too: with ticks FULLY stopped
-        // and the watchdog mid-teardown there may be no other caller, and the
-        // disengage verdict must never depend on the thing that failed.
-        let now = CFAbsoluteTimeGetCurrent()
-        os_unfair_lock_lock(&lock)
-        let events = serviceTickDeficitLocked(now: now)
-        os_unfair_lock_unlock(&lock)
-        handleTickDeficitEvents(events)
-    }
-
-    /// Re-commit the most recently presented frame so the governor sees a live
-    /// layer even when the host also faded (the measured ordering evidence:
-    /// commits stopping is the suspected downclock trigger - one collapse
-    /// PRECEDED its host dip by ~1.5s). Only after ≥2 stream
-    /// intervals without a REAL release (a real release is itself a commit),
-    /// rate-limited to stream cadence, and never counted as a rendered frame -
-    /// the renders==received verification contract stays honest.
-    func maybeRepaintForGovernor(interval: Double) {
-        let now = CFAbsoluteTimeGetCurrent()
-        var repaint: CMSampleBuffer?
-        os_unfair_lock_lock(&lock)
-        let sinceRelease = liveness.lastReleaseHostTime.isFinite
-            ? now - liveness.lastReleaseHostTime : .infinity
-        let sinceRepaint = tickDeficit.lastRepaintHostTime.isFinite
-            ? now - tickDeficit.lastRepaintHostTime : .infinity
-        if tickDeficit.deficitModeActive || tickDeficit.floorAssistActive, !presentSuppressed,
-           sinceRelease > interval * FramePacer.repaintAfterIdleIntervals,
-           sinceRepaint >= interval,
-           let sampleBuffer = tickDeficit.lastPresentedSampleBuffer {
-            tickDeficit.lastRepaintHostTime = now
-            tickDeficit.deficitRepaints &+= 1
-            repaint = sampleBuffer
-        }
-        os_unfair_lock_unlock(&lock)
-        guard let repaint else { return }
-        onDeficitRepaint?(repaint)
     }
 
     // MARK: - Warm handover entry points

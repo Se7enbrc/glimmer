@@ -1,26 +1,30 @@
 //
 //  AudioDecoder+Meter.swift
 //
-//  The P1 AUDIO playout meter + cushion machinery: the schedule-side
-//  trim-toward-target / over-run gates and drift re-baseline, the pre-roll
-//  prime + re-prime silence backfill, the completion-side playhead +
-//  under-run edge (with its rate-limited route-carrying NOTICE) + adaptive
-//  cushion grow/decay, the published audio-state gauge, and the
-//  default-output-route sampler the breadcrumbs read. Split from
-//  AudioDecoder.swift - same idiom as the FramePacer split, to
+//  The P1 AUDIO playout meter + cushion machinery: the meter's tunables, the
+//  schedule-side trim-toward-target / over-run gates and drift re-baseline, the
+//  completion-side playhead + under-run edge (with its rate-limited
+//  route-carrying NOTICE) + adaptive cushion grow/decay, the published
+//  audio-state gauge, and the playout-stall watchdog's detection half. Split
+//  from AudioDecoder.swift - same idiom as the FramePacer split, to
 //  keep that file under the length limit. The stored meter state stays on
 //  the class (stored properties can't live in extensions); see the property
 //  docs there for the locking + design rationale.
 //
+//  Its two siblings, split off for the same length reason: the decode-path
+//  pre-roll arbiter + re-prime silence backfill in AudioDecoder+Prime.swift, and
+//  the default-output-route sampler the breadcrumbs read in
+//  AudioDecoder+Route.swift.
+//
 
-import AVFoundation
-import CoreAudio
 import Foundation
 
 extension AudioDecoder {
 
-    // MARK: - Tunables (the knobs of THIS file's machinery; the cushion ladder's
-    // base/step/cap and the over-run ceiling stay with the design narrative in
+    // MARK: - Tunables (the knobs of THIS file's machinery, plus the prime /
+    // re-prime pair AudioDecoder+Prime.swift reads - they interlock with the
+    // gates here, so they stay beside them; the cushion ladder's base/step/cap
+    // and the over-run ceiling stay with the design narrative in
     // AudioDecoder.swift, the decay clock with its arbitration in
     // AudioDecoder+CushionMemory.swift)
 
@@ -209,175 +213,6 @@ extension AudioDecoder {
         playoutDrained = false
         audioMeterLock.unlock()
         return false
-    }
-
-    /// PRE-ROLL / RE-PRIME arbiter, on the decode path after each schedule
-    /// (`stateLock` held by the caller, so the AV calls here are serialized
-    /// against `shutdown()`). No-op once primed - the steady-state cost is one
-    /// lock + a compare. Three un-primed paths:
-    ///   * TARGET REACHED (cold pre-roll filled, or a re-prime's catch-up clump
-    ///     stacked back up - the jittery-link rebuild): mark primed and `play()`.
-    ///     Only the COLD-START `play()` actually starts the node; on a re-prime it
-    ///     never paused (the completion path makes no AV calls), so `play()` is a
-    ///     harmless no-op marking the state-machine edge.
-    ///   * COLD-START FALLBACK: after `primeFallbackBufferCount` buffers, start
-    ///     anyway so a near-silent / very-low-bitrate stream can't wedge the
-    ///     session un-started.
-    ///   * RE-PRIME PAST THE GRACE with fill still a step short of target: the
-    ///     clump never formed (steady link - host pacing 1:1, or a playback-side
-    ///     drain), so waiting longer cannot add fill; hand the measured deficit to
-    ///     `backfillCushion`. The fallback deliberately does NOT apply here: it
-    ///     used to declare the rebuild done at ~15ms standing fill while the
-    ///     target ramped to 150ms - the under-run cascade.
-    /// Decides under the meter lock; AV calls happen OUTSIDE the lock
-    /// (AVAudioPlayerNode is thread-safe and we must not hold the meter lock
-    /// across an AV call).
-    func maybePrime(format: AVAudioFormat) {
-        audioMeterLock.lock()
-        if primed {
-            // RESOLVE TOP-UP (one-shot, armed by resolveCushionLink): the link
-            // resolve adopted a target deeper than the standing fill. Close the
-            // deficit NOW with the silence backfill - this is the decode path
-            // (stateLock held), the one place AV calls are serialized against
-            // shutdown - instead of letting the host's paced startup inflow
-            // drain-cascade the difference audibly.
-            guard pendingResolveTopUp else { audioMeterLock.unlock(); return }
-            pendingResolveTopUp = false
-            let aheadFrames = framesScheduled &- framesPlayed
-            let aheadMs = meterSampleRate > 0
-                ? Double(aheadFrames) / meterSampleRate * 1000.0 : 0
-            let deficitMs = playoutTargetMs - aheadMs
-            audioMeterLock.unlock()
-            if deficitMs >= Self.playoutCushionStepMs {
-                backfillCushion(deficitMs: deficitMs, format: format)
-            }
-            return
-        }
-        let aheadFrames = framesScheduled &- framesPlayed
-        let aheadMs = meterSampleRate > 0 ? Double(aheadFrames) / meterSampleRate * 1000.0 : 0
-        if aheadMs >= playoutTargetMs {
-            audioMeterLock.unlock()
-            // Cushion is built - begin (or, re-prime, continue) gapless playback;
-            // the already-queued buffers drain ahead of the playhead as the cushion.
-            // `primed` latches ONLY on a successful start (see
-            // startPlayoutAtPrimeEdge - the post-wake stopped-engine crash):
-            // on failure the next packet re-enters this edge and retries.
-            guard startPlayoutAtPrimeEdge() else { return }
-            audioMeterLock.lock()
-            primed = true
-            audioMeterLock.unlock()
-            return
-        }
-        if !rebuildIsReprime {
-            // The wedge-proof fallback SCALES with the (possibly seeded)
-            // target: the fixed 12 buffers covered the 30ms base, but a
-            // per-host seed of 80-150ms would otherwise always prime at the
-            // fallback's ~60ms and pay the seed's protection away on the
-            // first gap. Target/5ms-per-packet + 2 slack; a silent stream
-            // still un-wedges in ≤~160ms, far under the <1s cold-start budget.
-            let fallbackCount = max(Self.primeFallbackBufferCount,
-                                    UInt64(playoutTargetMs / 5.0) + 2)
-            guard buffersSinceArm >= fallbackCount else {
-                audioMeterLock.unlock()
-                return
-            }
-            audioMeterLock.unlock()
-            guard startPlayoutAtPrimeEdge() else { return }
-            audioMeterLock.lock()
-            primed = true
-            audioMeterLock.unlock()
-            return
-        }
-        // Mid-stream re-prime, fill short of target: give the catch-up clump its
-        // full grace window first (the clock read is transient - this branch lives
-        // at most one grace per drain, ~50 packets).
-        let now = DispatchTime.now().uptimeNanoseconds
-        guard now >= gateGraceUntilNanos else {
-            audioMeterLock.unlock()
-            return
-        }
-        let deficitMs = playoutTargetMs - aheadMs
-        audioMeterLock.unlock()
-        backfillCushion(deficitMs: deficitMs, format: format)
-    }
-
-    /// RE-PRIME silence backfill - the steady-link cushion rebuild. Schedules ONE
-    /// zeroed buffer of (target − fill) ms so the standing cushion reaches the
-    /// adaptive target immediately, then marks the re-prime complete. WHY silence:
-    /// after a drain the gap is already audible, and on a link delivering at
-    /// exactly real-time rate NOTHING else can add fill - the target ratchet was
-    /// pure cosmetics (fill pinned a couple steps above empty vs a much deeper
-    /// target through an under-run cascade). One deliberate, bounded (≤ cushion cap) quiet stretch right
-    /// behind the gap buys the headroom that ends the cascade - equivalent in gap
-    /// length to holding the node for the same span, without touching node state,
-    /// so the no-AV-calls-on-unserialized-paths discipline stands. JITTERY links
-    /// never reach here: their post-gap clump stacks fill to target inside the
-    /// grace and `maybePrime` exits on the target-reached path; a clump arriving
-    /// LATE (after a backfill) overshoots by at most its own size, which the
-    /// rate-limited trim - and, past 190ms, the ceiling backstop - walks back
-    /// down. Caller is the decode path with `stateLock` held (AV calls serialized
-    /// against `shutdown()`).
-    private func backfillCushion(deficitMs: Double, format: AVAudioFormat) {
-        let frames = AVAudioFrameCount((deficitMs / 1000.0) * format.sampleRate)
-        // Sub-step deficits aren't worth a splice - fill is already within one
-        // ratchet quantum of target. That case (and a failed allocation) primes
-        // as-is rather than wedging the state machine un-primed.
-        guard deficitMs >= Self.playoutCushionStepMs, frames > 0,
-              let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else {
-            // Sub-step deficit / failed alloc: prime as-is - but only if
-            // playback actually starts; a play failure (post-wake stopped
-            // engine) leaves the machine un-primed and this cheap path
-            // retries per packet. Bounded: with fill ≈ target the deficit
-            // stays sub-step, so the retries never re-enter the backfill.
-            guard startPlayoutAtPrimeEdge() else { return }
-            audioMeterLock.lock()
-            primed = true
-            audioMeterLock.unlock()
-            return
-        }
-        silence.frameLength = frames
-        // Zero explicitly - AVAudioPCMBuffer does not guarantee zeroed memory, and
-        // "silence" must never be heap garbage.
-        if let channels = silence.floatChannelData {
-            for channel in 0..<Int(format.channelCount) {
-                channels[channel].update(repeating: 0, count: Int(frames))
-            }
-        }
-        let silenceFrames = UInt64(frames)
-        audioMeterLock.lock()
-        framesScheduled &+= silenceFrames
-        // Resident silence for the av_skew correction (-= at completion): this
-        // silence inflates buffer fill without advancing the audio RTP position.
-        pendingSilenceFrames &+= silenceFrames
-        // Keep the drift gauge honest: the silence is media the wall-time stream
-        // never delivered, so advance the segment's media-played reference by the
-        // same amount - wall − media − fill stays an identity instead of stepping
-        // −deficit for the rest of the segment. (Until the silence finishes
-        // playing the anchor can sit ahead of `framesPlayed`; `publishAudioState`'s
-        // guard reports drift as absent for that moment, then resumes clean.)
-        driftAnchorFramesPlayed &+= silenceFrames
-        let targetMs = playoutTargetMs
-        let route = audioRouteCache
-        audioMeterLock.unlock()
-        // Accounted above, scheduled here (outside the meter lock, AV-call
-        // discipline): a completion in the sliver between sees fill briefly
-        // overstated - harmless, and it can't mistake the moment for a drain.
-        playerNode.scheduleBuffer(silence) { [weak self] in
-            self?.meterCompleteOnePlayout(frames: silenceFrames, isSilence: true)
-        }
-        // Uniform prime edge, made exception-safe: the silence stays scheduled
-        // either way (it plays when the engine returns); `primed` latches only
-        // on a successful start, and the sub-step guard above makes the
-        // per-packet retries cheap (fill ≈ target ⇒ no repeat backfill).
-        if startPlayoutAtPrimeEdge() {
-            audioMeterLock.lock()
-            primed = true
-            audioMeterLock.unlock()
-        }
-        Diag.notice(
-            "audio cushion backfill +\(Int(deficitMs.rounded()))ms silence → \(Int(targetMs))ms standing fill "
-            + "- no catch-up clump within the re-prime grace (steady link); route \(route)",
-            "Stream")
     }
 
     /// One scheduled buffer finished playing (the player's completion handler, on
@@ -604,128 +439,6 @@ extension AudioDecoder {
                 engineRunning: engineUp))
     }
 
-    // MARK: - Audio OUTPUT route (under-run attribution breadcrumbs)
-
-    /// Install the default-output-device listener + seed the route cache. Called
-    /// once from `initDecoderCore` with `stateLock` held (after the engine is up);
-    /// idempotent via the block handle. WHY a listener instead of sampling at the
-    /// under-run: route reads are blocking HAL IPC - putting one on the completion
-    /// thread (or the 200Hz decode path) would risk the very stalls the cushion
-    /// absorbs. The listener pays that cost on its own utility queue, only when
-    /// the device actually changes, and the hot paths read a cached String. The
-    /// route-CHANGE NOTICE it emits is itself the attribution breadcrumb the
-    /// under-run cascades were missing (a BT detach lands here seconds before the
-    /// drains it triggers).
-    func installAudioRouteListener() {
-        guard routeListenerBlock == nil else { return }
-        let route = Self.sampleAudioRoute()
-        audioMeterLock.lock()
-        audioRouteCache = route
-        audioMeterLock.unlock()
-        // First-sample NOTICE - a new sampler announces itself (success AND
-        // failure shape) rather than going silently dark.
-        Diag.notice("audio output route: \(route)", "Stream")
-        var addr = Self.defaultOutputDeviceAddress
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            guard let self else { return }
-            let fresh = Self.sampleAudioRoute()
-            self.audioMeterLock.lock()
-            let previous = self.audioRouteCache
-            self.audioRouteCache = fresh
-            self.audioMeterLock.unlock()
-            if fresh != previous {
-                Diag.notice("audio route changed: \(previous) → \(fresh)", "Stream")
-            }
-        }
-        let status = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block)
-        if status == noErr {
-            routeListenerBlock = block
-        } else {
-            Diag.notice(
-                "audio route listener install failed (OSStatus \(status)) - "
-                + "under-run route attribution will not track device switches",
-                "Stream")
-        }
-    }
-
-    /// Remove the route listener (the HAL requires the same address/queue/block
-    /// triple). Called from `shutdown()` with `stateLock` held; safe when the
-    /// install failed or never ran.
-    func removeAudioRouteListener() {
-        guard let block = routeListenerBlock else { return }
-        routeListenerBlock = nil
-        var addr = Self.defaultOutputDeviceAddress
-        AudioObjectRemovePropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block)
-    }
-
-    /// The HAL address of the system default OUTPUT device - AVAudioEngine's
-    /// outputNode tracks this device, so it IS the playback route.
-    private static var defaultOutputDeviceAddress: AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-    }
-
-    /// One blocking sample of the current default-output route, rendered as
-    /// "<device name> [<transport>]" (e.g. "MacBook Pro Speakers [builtin]").
-    /// Same probe idiom as `AudioConfig.currentDefaultOutputChannelCount`.
-    /// Returns "unknown" if the HAL won't answer - never throws. Call sites: init
-    /// + the listener's utility queue only, never a hot path.
-    private static func sampleAudioRoute() -> String {
-        var deviceID = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var addr = defaultOutputDeviceAddress
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID) == noErr,
-            deviceID != 0 else { return "unknown" }
-
-        var nameAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioObjectPropertyName,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        var nameRef: Unmanaged<CFString>?
-        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        let nameStatus = withUnsafeMutablePointer(to: &nameRef) {
-            AudioObjectGetPropertyData(deviceID, &nameAddr, 0, nil, &nameSize, $0)
-        }
-        var name = "unnamed"
-        if nameStatus == noErr, let cfName = nameRef?.takeRetainedValue() {
-            name = cfName as String
-        }
-
-        var transportAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyTransportType,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        var transport: UInt32 = 0
-        var transportSize = UInt32(MemoryLayout<UInt32>.size)
-        let transportStatus = AudioObjectGetPropertyData(
-            deviceID, &transportAddr, 0, nil, &transportSize, &transport)
-        let label = transportStatus == noErr ? Self.transportLabel(transport) : "?"
-        return "\(name) [\(label)]"
-    }
-
-    /// Short label for the HAL transport type - BT vs built-in vs USB is the
-    /// load-bearing distinction for drain attribution.
-    private static func transportLabel(_ transport: UInt32) -> String {
-        switch transport {
-        case kAudioDeviceTransportTypeBuiltIn: return "builtin"
-        case kAudioDeviceTransportTypeBluetooth,
-             kAudioDeviceTransportTypeBluetoothLE: return "bluetooth"
-        case kAudioDeviceTransportTypeUSB: return "usb"
-        case kAudioDeviceTransportTypeHDMI: return "hdmi"
-        case kAudioDeviceTransportTypeDisplayPort: return "displayport"
-        case kAudioDeviceTransportTypeThunderbolt: return "thunderbolt"
-        case kAudioDeviceTransportTypeAirPlay: return "airplay"
-        case kAudioDeviceTransportTypeAggregate: return "aggregate"
-        case kAudioDeviceTransportTypeVirtual: return "virtual"
-        default: return String(format: "0x%08x", transport)
-        }
-    }
-
     // MARK: - Playout-stall watchdog (detection + recovery)
     //
     // MEASURED FAULT (2026-08-12, a 9h18m host-idle overnight): when audio
@@ -741,8 +454,9 @@ extension AudioDecoder {
     // symptom) latch a stall verdict when consumption has been dark past the
     // threshold, and the decode path rebuilds the output the way a reconnect
     // proved effective - node stop, engine ensure-running, pre-roll re-arm.
-    // The rebuild itself (`recoverIfPlayoutStalled`) lives in AudioDecoder.swift
-    // with the H3/H4 recovery it mirrors (it needs the private engine members).
+    // The rebuild itself (`recoverIfPlayoutStalled`) lives in
+    // AudioDecoder+Engine.swift with the H3/H4 recovery it mirrors (it needs the
+    // engine members).
 
     /// Latch the stall verdict from a DROP branch (meter lock held, clock
     /// already read). Consumption dark past the threshold + retry spacing

@@ -4,14 +4,27 @@
 //  Opus → AVAudioEngine. Wraps an OpusMSDecoder and routes the decoded
 //  PCM into an AVAudioPlayerNode attached to AVAudioEngine.mainMixerNode.
 //  The Swift-native engine drives this through the `NativeAudioSink`
-//  conformance below.
+//  conformance (AudioDecoder+Decode.swift).
+//
+//  This file is the STORED STATE plus its design narrative - stored properties
+//  can't live in extensions, so every word the machinery keeps lives here while
+//  the machinery itself is split by topic across siblings: the opus/engine
+//  lifecycle + mid-stream recovery in AudioDecoder+Engine.swift, the per-packet
+//  decode + NativeAudioSink entry points in AudioDecoder+Decode.swift, the
+//  playout meter in AudioDecoder+Meter.swift, its pre-roll arbiter in
+//  AudioDecoder+Prime.swift, the output-route sampler in AudioDecoder+Route.swift,
+//  the cushion loss floor + per-host memory in AudioDecoder+CushionMemory.swift,
+//  and the drift-tracking resampler in AudioDecoder+Resampler.swift.
 
 import Foundation
 import AVFoundation
 import CoreAudio
 import os
 public final class AudioDecoder: @unchecked Sendable {
-    private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Audio")
+    // The opus + AVAudioEngine CORE state. Non-private (default internal): the
+    // lifecycle/recovery and decode extensions above own every path that touches
+    // it, and stored properties can't live in extensions.
+    let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Audio")
 
     /// Serializes the opus decoder + AVAudioEngine lifecycle against the
     /// per-sample decode path. `decodeAndPlay` runs on the native audio
@@ -21,11 +34,11 @@ public final class AudioDecoder: @unchecked Sendable {
     /// that `shutdown()` is concurrently destroying (use-after-free), and the
     /// AVAudioEngine could be reconfigured from two threads at once. The class
     /// is `@unchecked Sendable` on the strength of this lock.
-    private let stateLock = NSLock()
-    private var isShutdown = false
+    let stateLock = NSLock()
+    var isShutdown = false
 
-    private var decoder: OpaquePointer?            // OpusMSDecoder*
-    private let engine = AVAudioEngine()
+    var decoder: OpaquePointer?                    // OpusMSDecoder*
+    let engine = AVAudioEngine()
     let playerNode = AVAudioPlayerNode()
     /// Drift-tracking resampler, inserted between `playerNode` and the mixer. A
     /// slew-limited PI loop (`driveResampler`, driven ~1Hz from `publishAudioState`)
@@ -39,21 +52,21 @@ public final class AudioDecoder: @unchecked Sendable {
     /// lock and would deadlock against teardown's `playerNode.stop()`. Non-private:
     /// `applyVarispeedRate` (the resampler extension) writes through it.
     let varispeedRateQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.varispeed-rate")
-    private var inputFormat: AVAudioFormat?
+    var inputFormat: AVAudioFormat?
     /// Last-known engine OUTPUT (hardware) format, captured when the engine
     /// starts. The config-change handler (H3) compares against this to decide
     /// whether the output route's format actually moved (so it reconnects
     /// `varispeed -> mainMixer` only on a real change). Guarded by `stateLock`.
-    private var lastOutputFormat: AVAudioFormat?
-    private var channelCount: Int = 2
-    private var samplesPerFrame: Int = 240         // 5ms at 48kHz, common GFE/Sunshine config
-    private var streams: Int = 1
-    private var coupledStreams: Int = 1
-    private var mapping: [UInt8] = [0, 1]
+    var lastOutputFormat: AVAudioFormat?
+    var channelCount: Int = 2
+    var samplesPerFrame: Int = 240                 // 5ms at 48kHz, common GFE/Sunshine config
+    var streams: Int = 1
+    var coupledStreams: Int = 1
+    var mapping: [UInt8] = [0, 1]
 
     /// Index from Sunshine/GFE source channel order onto the AVAudioFormat
     /// channel order we picked. nil = identity. See `installChannelLayout`.
-    private var outputReorder: [Int]?
+    var outputReorder: [Int]?
 
     // MARK: - P1 AUDIO playout telemetry (opt-in; zero-overhead when off)
     //
@@ -103,7 +116,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// drain doesn't double-count media already played in an earlier segment.
     var driftAnchorFramesPlayed: UInt64 = 0
     /// Drift-resampler PI state (the loop lives in `driveResampler`,
-    /// AudioDecoder+CushionMemory.swift). `resamplerIntegralPpm` accumulates the
+    /// AudioDecoder+Resampler.swift). `resamplerIntegralPpm` accumulates the
     /// steady host↔Mac clock offset; the applied `resamplerEpsPpm` slews toward the
     /// PI target so the varispeed rate never steps audibly. Guarded by
     /// `audioMeterLock` (publishAudioState drives it from two threads); HELD
@@ -254,7 +267,8 @@ public final class AudioDecoder: @unchecked Sendable {
     static let playoutCushionMaxMs: Double = 150
     // (Remaining knobs live beside their machinery: the trim/grace/fallback/
     // NOTICE tunables in AudioDecoder+Meter.swift, the decay clock with its
-    // arbitration + the drift micro-stretch in AudioDecoder+CushionMemory.swift.)
+    // arbitration in AudioDecoder+CushionMemory.swift, the PI gains + skew
+    // memory in AudioDecoder+Resampler.swift.)
     /// Current adaptive cushion target (ms). Starts at the per-host SEEDED value
     /// (last session's learning; base when none) and grows by `playoutCushionStepMs`
     /// (capped at `effectiveCushionMaxMs`) on each under-run. Exported as the
@@ -404,8 +418,10 @@ public final class AudioDecoder: @unchecked Sendable {
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
     /// Bounded retry counter for an engine restart that threw because the new
     /// output device wasn't ready that instant (route handoff). stateLock-guarded.
-    private var engineRestartRetries = 0
-    private static let maxEngineRestartRetries = 5
+    /// Non-private with its ceiling: the retry ladder lives in
+    /// AudioDecoder+Engine.swift.
+    var engineRestartRetries = 0
+    static let maxEngineRestartRetries = 5
 
     /// `AVAudioEngineConfigurationChange` observer token (held so `shutdown()`
     /// can remove it). On a mid-stream output-device/format change AVAudioEngine
@@ -413,8 +429,9 @@ public final class AudioDecoder: @unchecked Sendable {
     /// the session. The handler re-resolves + reconnects + restarts the engine on
     /// the `stateLock`-serialized path. Fires on a NOTIFICATION (not a player-node
     /// completion handler), so a node-prop change there is safe - see `handle
-    /// EngineConfigurationChange`. Lifecycle-guarded by `stateLock`.
-    private var configChangeObserver: NSObjectProtocol?
+    /// EngineConfigurationChange`. Lifecycle-guarded by `stateLock`. Non-private:
+    /// the install/remove pair lives in AudioDecoder+Engine.swift.
+    var configChangeObserver: NSObjectProtocol?
 
     // MARK: - P1 AUDIO playout MIN-fill telemetry
     //
@@ -433,711 +450,15 @@ public final class AudioDecoder: @unchecked Sendable {
     /// directly countable alongside `audio_underrun_total`.
     var rePrimeCount: UInt64 = 0
 
-    public init() {}
-
-    // MARK: Lifecycle
-
-    /// Shared opus + AVAudioEngine setup, called by the Swift-native path (the
-    /// `NativeAudioSink` conformance). Takes plain values, no C types.
-    func initDecoderCore(channelCount chCount: Int, sampleRate: Int32,
-                         streams strms: Int32, coupledStreams coupled: Int32,
-                         samplesPerFrame spf: Int, mapping map: [UInt8]) -> Int32 {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        channelCount = chCount
-        samplesPerFrame = spf
-        streams = Int(strms)
-        coupledStreams = Int(coupled)
-        mapping = map
-
-        // P1 AUDIO meter: capture the output sample rate (frames↔ms conversion) and
-        // reset the playout accounting for this session. Under the small meter lock,
-        // never on the per-packet path. The seed loads BEFORE the lock (UserDefaults
-        // + route latch); seeding the target from per-host memory makes the cold
-        // pre-roll build last session's learned depth, not re-pay 5-8 startup blips.
-        let seed = Self.loadCushionSeed()
-        // Per-host skew seed: start the resampler's integral at the persisted
-        // converged clock offset so the session begins pre-corrected instead of
-        // re-drifting into the first minutes' underruns (the ratchet feed).
-        let skewSeedPpm = Self.loadResamplerSkewSeed(host: seed.host)
-        if skewSeedPpm != 0 {
-            Diag.notice("audio resampler skew seed: \(Int(skewSeedPpm.rounded()))ppm "
-                + "from per-host memory - starts pre-converged", "Stream.Audio")
-        }
-        let seedNowNanos = DispatchTime.now().uptimeNanoseconds
-        // AV call BEFORE the meter lock (leaf-lock discipline, audit remainder
-        // 2026-08-26): varispeed.rate is an AVAudio node property - writing it
-        // under audioMeterLock inverted the documented ordering that keeps node
-        // calls out of the lock the completion handlers take. Init-time and
-        // stateLock-held, so the hazard was theoretical; the rule isn't.
-        varispeed.rate = 1.0
-        audioMeterLock.lock()
-        meterSampleRate = Double(sampleRate)
-        framesScheduled = 0; framesPlayed = 0
-        driftAnchorNanos = 0; driftAnchorFramesPlayed = 0
-        resamplerIntegralPpm = skewSeedPpm; resamplerEpsPpm = 0
-        resamplerEverEngaged = false
-        lastResamplerSkewSaveNanos = 0; lastSavedResamplerSkewPpm = .nan
-        playoutStarted = false; playoutDrained = false; meterShutdown = false
-        // FIX: clear the teardown latch on RE-init. A reconnect's stopConnection →
-        // shutdown() set `isShutdown = true` and nothing reset it, so post-reconnect
-        // every decoded frame was dropped by the decode guards (packets flow, playout
-        // dead). Re-init under the lock is the honest "this decoder is live again" edge.
-        if isShutdown { Diag.info("audio decoder re-init - isShutdown reset (reconnect)", "Stream.Audio") }
-        isShutdown = false
-        engineRunning = false
-        // Cushion / pre-roll state for this session: start paused (no play() at
-        // engine start), at the SEEDED adaptive target, re-prime count reset. (The
-        // reset-on-read MIN-fill window lives in TelemetryCounters and is cleared by
-        // its own resetForNewSession.) The quiet anchors start NOW: a seeded
-        // (elevated) target must earn its first decay window.
-        primed = false
-        buffersSinceArm = 0
-        playoutTargetMs = seed.targetMs
-        learnedFloorMs = seed.floorMs
-        cushionSeedKey = seed.key
-        cushionHostLabel = seed.host
-        cushionHadUnderrun = false
-        cushionLinkResolved = seed.linkKnown
-        cushionLinkResolveDeadlineNanos = seedNowNanos &+ Self.cushionLinkResolveWindowNanos
-        // LINK-AWARE caps: seed from the resolved link; `resolveCushionLink`
-        // refreshes them if the route lands after bring-up.
-        effectiveCushionMaxMs = Self.cushionMaxMs(forLink: seed.link)
-        effectiveOverrunCeilingMs = effectiveCushionMaxMs + Self.bufferOverrunCeilingSlackMs
-        quietWindowMinFillMs = .infinity
-        rePrimeCount = 0
-        lastTrimNanos = 0; gateGraceUntilNanos = 0
-        pendingResolveTopUp = false; floorLearnGateUntilNanos = 0
-        nearMissLatched = false
-        quietSinceNanos = seedNowNanos
-        floorQuietSinceNanos = seedNowNanos
-        rebuildIsReprime = false
-        lastUnderrunNoticeNanos = 0; underrunNoticesSuppressed = 0
-        // Playout-stall watchdog state (fresh session = no progress history yet).
-        lastPlayoutProgressNanos = 0
-        playoutStallPending = false
-        stallRecoveryLastAttemptNanos = 0
-        meterRecovering = false
-        audioMeterLock.unlock()
-        announceCushionSeed(seed)
-        // A/V-skew session edge: the skew store's pair-anchor + accumulator
-        // reset here (one audio init per session IS the pair's session edge).
-        AudioVideoSkewStore.shared.resetForNewSession()
-
-        var err: Int32 = 0
-        decoder = opus_multistream_decoder_create(
-            sampleRate,
-            Int32(channelCount),
-            strms,
-            coupled,
-            mapping,
-            &err
-        )
-        guard err == OPUS_OK, decoder != nil else {
-            log.error("opus_multistream_decoder_create failed: \(err)")
-            return -1
-        }
-
-        // Sunshine/GFE deliver opus channels in moonlight-common-c's canonical
-        // order:  FL, FR, FC, LFE, BL, BR        (5.1)
-        //         FL, FR, FC, LFE, BL, BR, SL, SR (7.1)
-        // Apple's `kAudioChannelLayoutTag_AudioUnit_5_1` (= MPEG_5_1_A) is
-        // L,R,C,LFE,Ls,Rs - that matches the 5.1 order exactly, so no remap.
-        // Apple's `kAudioChannelLayoutTag_AudioUnit_7_1` (= MPEG_7_1_C) is
-        // L,R,C,LFE,Ls,Rs,Rls,Rrs - channels 4-7 are *paired-swapped*
-        // versus Sunshine. Build an explicit reorder table here; the alternative
-        // (rewriting `mapping` like moonlight-qt's SLAudio renderer does)
-        // bakes assumptions into the opus decoder we don't need.
-        outputReorder = nil
-        if channelCount == 8 {
-            // src index → dst index   (src is Sunshine's order)
-            //  0 FL  -> 0 L
-            //  1 FR  -> 1 R
-            //  2 FC  -> 2 C
-            //  3 LFE -> 3 LFE
-            //  4 BL  -> 6 Rls
-            //  5 BR  -> 7 Rrs
-            //  6 SL  -> 4 Ls
-            //  7 SR  -> 5 Rs
-            outputReorder = [0, 1, 2, 3, 6, 7, 4, 5]
-        }
-
-        guard let layout = AVAudioChannelLayout(layoutTag: layoutTag(forChannels: channelCount)) else {
-            log.error("AVAudioChannelLayout init failed")
-            return -1
-        }
-        let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                sampleRate: Double(sampleRate),
-                                interleaved: false,
-                                channelLayout: layout)
-        inputFormat = fmt
-
-        // Idempotent on a reconnect re-init: a node already on this engine must not
-        // be re-attached (AVAudio faults on a double-attach). `node.engine == nil`
-        // is the "not attached" test.
-        if playerNode.engine == nil { engine.attach(playerNode) }
-        if varispeed.engine == nil { engine.attach(varispeed) }
-        // playerNode → varispeed → mixer. The varispeed resamples the player's
-        // output by `rate=1+ε` (driveResampler), pulling the player's buffers at
-        // the consumption rate - so completion timing (framesPlayed) still tracks
-        // real consumption and the input-frame fill/cushion math reads true (the
-        // ε factor on the frames→ms convert is ppm-negligible).
-        engine.connect(playerNode, to: varispeed, format: fmt)
-        engine.connect(varispeed, to: engine.mainMixerNode, format: fmt)
-        do {
-            // Start the engine but DO NOT `play()` the player node yet. Playback is
-            // deferred until a `playoutTargetMs` cushion of decoded audio is queued
-            // (the pre-roll in `meterRegisterScheduleOrOverrun` / `maybePrime`),
-            // so the player starts with headroom instead of on the under-run floor.
-            // The node is scheduled-into while paused; `play()` then drains the
-            // already-queued cushion gapless.
-            // Only start when not already running (idempotent across a reconnect
-            // re-init that left the engine up).
-            if !engine.isRunning { try engine.start() }
-        } catch {
-            log.error("AVAudioEngine.start: \(error.localizedDescription)")
-            Diag.error("audio engine start FAILED: \(error.localizedDescription)", "Stream.Audio")
-            return -1
-        }
-        // Engine-running mirror for the telemetry gauge, set under the meter lock
-        // (read there by publishAudioState) - a plain Bool, no AVAudio call.
-        audioMeterLock.lock(); engineRunning = engine.isRunning; audioMeterLock.unlock()
-        // Baseline the output (hardware) format so the config-change handler can
-        // tell a real route-format move from a benign notification.
-        lastOutputFormat = engine.outputNode.outputFormat(forBus: 0)
-        // Seed + track the audio OUTPUT route for the under-run breadcrumbs.
-        // Installed only after the engine is up, so a failed init never leaves a
-        // listener behind; `shutdown()` removes it.
-        installAudioRouteListener()
-        // H3: recover playout across a mid-stream output-device/format change
-        // (BT/AirPods connect-disconnect, HDMI/DP unplug, USB-DAC removal, OS
-        // sample-rate change), which STOPS the engine's outputNode. Installed
-        // after the engine is up so a failed init never leaves an observer behind;
-        // `shutdown()` removes it.
-        installConfigChangeObserver()
-        return 0
-    }
-
-    public func shutdown() {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        guard !isShutdown else { return }
-        isShutdown = true
-        // Quiesce the meter's EVIDENCE machinery BEFORE stopping the node:
-        // stop() flushes a completion-handler burst for the standing cushion
-        // (6-30 buffers), and un-gated its last completion minted a synthetic
-        // under-run on EVERY session end - ratcheting the target +10ms, EWMA-
-        // pulling the learned floor, and PERSISTING both per-host, so sub-10-min
-        // sessions walked toward the 150ms cap across sessions (the disguised-
-        // permanent-pin class). Gate details: `meterCompleteOnePlayout`.
-        audioMeterLock.lock()
-        meterShutdown = true
-        engineRunning = false   // gauge mirror; a Bool, not an AVAudio call
-        audioMeterLock.unlock()
-        playerNode.stop()
-        engine.stop()
-        removeAudioRouteListener()
-        removeConfigChangeObserver()
-        if let decoderPtr = decoder {
-            opus_multistream_decoder_destroy(decoderPtr)
-            decoder = nil
-        }
-        // No global to clear here - the StreamBridgeContext holds a weak
-        // ref to us; when StreamSession drops its strong reference the bridge
-        // sees nil at the next callback (or the bridge itself is released
-        // first, which short-circuits earlier).
-    }
-
-    // MARK: - H3/H4 mid-stream audio-config recovery
-    //
-    // On a mid-stream output-device/format change (BT/AirPods connect-disconnect,
-    // HDMI/DP unplug, USB-DAC removal, OS sample-rate change) AVAudioEngine STOPS
-    // its outputNode and posts `AVAudioEngineConfigurationChange` - so without
-    // recovery audio goes silent for the rest of the session. The route listener
-    // only swaps a cached string; this is the actual recovery hop.
-    //
-    // DEADLOCK SAFETY: this fires on a NOTIFICATION, not a player-node completion
-    // handler, so re-arming node properties here is safe - the historical freeze
-    // came from touching AVAudio node props INSIDE a completion handler (which
-    // holds the messenger lock and deadlocked teardown's `playerNode.stop()`).
-    // We serialize on the SAME `stateLock` the decode + shutdown paths use, and
-    // make ZERO node-prop changes from any completion path. `playerNode.stop()`
-    // here flushes the queued buffers' completions, but those run
-    // `meterCompleteOnePlayout`, which makes no AV calls (only `audioMeterLock`).
-
-    /// Register the `AVAudioEngineConfigurationChange` observer. Called once from
-    /// `initDecoderCore` with `stateLock` held (after the engine is up);
-    /// idempotent via the token. The handler runs off a utility queue so the
-    /// notification thread never blocks on `stateLock`.
-    private func installConfigChangeObserver() {
-        guard configChangeObserver == nil else { return }
-        configChangeObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.routeListenerQueue.async { self.handleEngineConfigurationChange() }
-        }
-    }
-
-    /// Remove the config-change observer. Called from `shutdown()` with
-    /// `stateLock` held; safe when never installed.
-    private func removeConfigChangeObserver() {
-        if let observer = configChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            configChangeObserver = nil
-        }
-    }
-
-    /// Re-resolve the output format, reconnect `varispeed -> mainMixer` if it
-    /// moved, restart the engine if it stopped, and re-arm the pre-roll so the
-    /// cushion rebuilds. On the `stateLock`-serialized path (never a completion
-    /// handler). H4: re-samples `engine.isRunning` into the gauge mirror here too.
-    /// Schedule a bounded, backed-off retry of the engine restart on the route
-    /// queue. Called under stateLock from the config-change catch, so a transient
-    /// device-not-ready throw on an AirPods/HDMI/DAC handoff self-heals.
-    private func scheduleEngineRestartRetry() {
-        guard engineRestartRetries < Self.maxEngineRestartRetries else {
-            Diag.error("audio engine restart gave up after \(engineRestartRetries) retries", "Stream.Audio")
-            return
-        }
-        engineRestartRetries += 1
-        let attempt = engineRestartRetries
-        routeListenerQueue.asyncAfter(deadline: .now() + 0.3 * Double(attempt)) { [weak self] in
-            self?.retryEngineStart(attempt: attempt)
-        }
-    }
-
-    private func retryEngineStart(attempt: Int) {
-        stateLock.lock(); defer { stateLock.unlock() }
-        guard !isShutdown, !engine.isRunning, inputFormat != nil else { return }
-        do {
-            try engine.start()
-            engineRestartRetries = 0
-            Diag.notice("audio engine restart retry \(attempt) succeeded", "Stream.Audio")
-        } catch {
-            Diag.error("audio engine restart retry \(attempt) failed: \(error.localizedDescription)", "Stream.Audio")
-            scheduleEngineRestartRetry()
-        }
-    }
-
-    /// PLAYOUT-STALL RECOVERY (the 2026-08-12 overnight wedge; detection in
-    /// AudioDecoder+Meter.swift). Rebuild the output path after the meter
-    /// latched a stall: scheduled audio consumed ZERO frames past the threshold
-    /// while every arrival dropped at the backlog gates. Caller holds
-    /// `stateLock` (the decode path - the one place AV calls are serialized
-    /// against `shutdown()`, the same discipline as
-    /// `handleEngineConfigurationChange`). stop() fires the queued buffers'
-    /// completions on the meter path (no AV calls there); `meterRecovering`
-    /// gates their under-run EVIDENCE, and the completions reconcile
-    /// `framesPlayed` so the next schedule takes the (re)arm edge - drift
-    /// re-anchor, gate grace, cushion rebuild - and `maybePrime`'s cold-start
-    /// pre-roll re-issues `play()`.
-    /// Start playback at a prime edge, SAFELY (the 2026-08-17 post-wake crash).
-    /// System sleep tears the audio hardware down mid-stream and stops the
-    /// engine; the resume edge's re-prime then called `playerNode.play()` 9s
-    /// after wake, which raises an NSException Swift cannot catch - process
-    /// dead on the audio receive thread. Two layers here: ensure the engine is
-    /// running first (post-wake it usually just needs a start(); failure arms
-    /// the existing bounded retry ladder), then run play() under the ObjC
-    /// exception shim so even an engine that LIES about isRunning (device
-    /// mid-transition) degrades to a false return instead of an abort.
-    /// Returns false when playback could not start - the caller must leave the
-    /// state machine UN-primed so the next packet retries the edge; packets
-    /// keep scheduling meanwhile, so recovery is one successful start away.
-    /// Caller is the decode path with `stateLock` held (AV calls serialized
-    /// against `shutdown()`), never inside `audioMeterLock`.
-    func startPlayoutAtPrimeEdge() -> Bool {
-        if !engine.isRunning {
-            // The start itself goes under the shim too: `engine.start()`
-            // reports missing-hardware failures as a thrown NSError, but some
-            // states (an incomplete graph, a device mid-teardown) RAISE an
-            // NSException instead - the test suite's empty-graph decoder
-            // proved that path aborts without the guard.
-            var startError: Error?
-            let noRaise = gl_objc_try {
-                do { try self.engine.start() } catch { startError = error }
-            }
-            guard noRaise, startError == nil, engine.isRunning else {
-                Diag.error("audio engine start at prime edge FAILED "
-                    + "(\(startError.map { $0.localizedDescription } ?? "NSException")) "
-                    + "- staying un-primed, retry armed", "Stream.Audio")
-                scheduleEngineRestartRetry()
-                return false
-            }
-            engineRestartRetries = 0
-            Diag.notice("audio engine restarted at the prime edge "
-                + "(stopped underneath us - system sleep?)", "Stream.Audio")
-        }
-        guard gl_objc_try({ self.playerNode.play() }) else {
-            Diag.error("audio playerNode.play() threw at the prime edge (device "
-                + "mid-transition?) - staying un-primed, will retry per packet",
-                "Stream.Audio")
-            return false
-        }
-        return true
-    }
-
-    func recoverIfPlayoutStalled() {
-        let now = DispatchTime.now().uptimeNanoseconds
-        audioMeterLock.lock()
-        guard playoutStallPending else { audioMeterLock.unlock(); return }
-        playoutStallPending = false
-        stallRecoveryLastAttemptNanos = now
-        meterRecovering = true
-        audioMeterLock.unlock()
-        guard !isShutdown else { return }
-        TelemetryCounters.shared.audioStallRecoveryTotal.increment()
-        Diag.error("audio playout STALLED: scheduled audio unconsumed ≥3s with "
-            + "every arrival dropped at the backlog gates (output device "
-            + "slept/vanished?) - rebuilding: node stop → engine ensure-running "
-            + "→ re-prime; route \(audioRouteCache)", "Stream.Audio")
-        playerNode.stop()
-        if !engine.isRunning {
-            do {
-                try engine.start()
-                engineRestartRetries = 0
-            } catch {
-                Diag.error("audio engine restart in stall recovery FAILED: "
-                    + "\(error.localizedDescription)", "Stream.Audio")
-                scheduleEngineRestartRetry()
-            }
-        }
-        let nowRunning = engine.isRunning
-        audioMeterLock.lock()
-        engineRunning = nowRunning
-        // Re-arm the pre-roll state machine (the H3/H4 idiom). `playoutStarted =
-        // false` makes the next arm edge a COLD start - correct, the node was
-        // just stopped, so the paused pre-roll + `play()` at target is exactly
-        // the rebuild it needs.
-        primed = false
-        playoutStarted = false
-        playoutDrained = false
-        buffersSinceArm = 0
-        audioMeterLock.unlock()
-    }
-
-    private func handleEngineConfigurationChange() {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        guard !isShutdown, let fmt = inputFormat else { return }
-        let newOutputFormat = engine.outputNode.outputFormat(forBus: 0)
-        let formatMoved = lastOutputFormat.map { $0.sampleRate != newOutputFormat.sampleRate
-            || $0.channelCount != newOutputFormat.channelCount } ?? true
-        lastOutputFormat = newOutputFormat
-        let wasRunning = engine.isRunning
-        if formatMoved {
-            // The output route's format changed: stop the player + reconnect the
-            // graph at our (unchanged) decode format - the mixer/output handle SRC
-            // to the new hardware rate. stop() here fires queued completions on the
-            // meter path (no AV calls), and we hold stateLock so no decode races.
-            //
-            // EVIDENCE GATE (audit remainder, 2026-08-26): that completion burst
-            // is the SAME one shutdown() and the stall recovery fire - and
-            // un-gated, its last completion minted a SYNTHETIC under-run on
-            // every mid-stream output-device change (AirPods connect/disconnect,
-            // HDMI unplug, DAC removal): target ratcheted +10ms, floor
-            // EWMA-pulled, both PERSISTED per host - audio latency quietly
-            // crept across sessions for anyone who switches audio devices (the
-            // disguised-permanent-pin class, in the one stop() this file had
-            // left un-gated). Raise the same `meterRecovering` latch the stall
-            // recovery uses; the re-arm below forces the next schedule's arm
-            // edge, which clears it.
-            audioMeterLock.lock()
-            meterRecovering = true
-            audioMeterLock.unlock()
-            playerNode.stop()
-            engine.connect(varispeed, to: engine.mainMixerNode, format: fmt)
-        }
-        if !engine.isRunning {
-            do {
-                try engine.start()
-                engineRestartRetries = 0
-            } catch {
-                Diag.error("audio engine restart after config change FAILED: "
-                    + "\(error.localizedDescription)", "Stream.Audio")
-                scheduleEngineRestartRetry()
-            }
-        }
-        // H4: re-sample the engine-running gauge here (the same hop), and RE-ARM
-        // the pre-roll so the cushion rebuilds from the restart rather than the
-        // player resuming on the under-run floor. A plain Bool + state-machine
-        // resets under the meter lock - no AV call.
-        let nowRunning = engine.isRunning
-        audioMeterLock.lock()
-        engineRunning = nowRunning
-        if formatMoved || (!wasRunning && nowRunning) {
-            primed = false
-            playoutStarted = false
-            playoutDrained = false
-            buffersSinceArm = 0
-        }
-        audioMeterLock.unlock()
-        Diag.notice("audio engine config change handled "
-            + "(format \(formatMoved ? "moved" : "same"), running \(nowRunning))", "Stream.Audio")
-    }
-
-    // MARK: Per-sample decoding
-
     // MARK: - ★6 Opus in-band FEC on decode (lossy-link resilience)
     //
-    // Opus carries low-bitrate in-band FEC: a frame lost on the wire can be
-    // RECONSTRUCTED from the FEC payload the NEXT packet carries, which is
-    // higher fidelity than plain PLC (NULL-input concealment) for the same gap.
-    // The standard opus PLC-with-FEC pattern is: on a detected gap, when the
-    // next real packet arrives, decode it ONCE with `decode_fec=1` at the gap's
-    // frame size to recover the missing frame, schedule that, THEN decode the
-    // same packet normally with `decode_fec=0` for its own frame.
-    //
-    // Composition with the existing PLC path: the queue emits a `.lostPlaceholder`
-    // per missing data shard, which lands here as `decodeAndPlayPLC()`. Rather
-    // than immediately fabricate a NULL-input PLC frame, that call now ARMS a
-    // single pending-gap latch (`pendingFecGap`) and produces NO frame yet. The
-    // gap frame is then minted EXACTLY ONCE, by whichever resolves first:
-    //   • the next REAL packet (`decodeCore`) - FEC recovery (decode_fec=1); if
-    //     that packet happens to carry no FEC, opus still returns a concealed
-    //     frame for the gap, so we always get one frame, never zero; or
-    //   • a SECOND consecutive `decodeAndPlayPLC()` - we can't defer a gap past
-    //     one packet without adding latency, so the standing gap is flushed with
-    //     a NULL-input PLC frame and the new gap re-arms.
-    // Bounded to ONE recovered/concealed frame per gap (no double-count: the
-    // latch is cleared the instant the gap frame is scheduled). On a CLEAN link
-    // `pendingFecGap` is never armed, so this whole path is inert - `decodeCore`
-    // takes the plain `decode_fec=0` branch with zero added work or latency.
+    // Design narrative + the decode path itself: AudioDecoder+Decode.swift.
+    // Only the stored latch lives here (stored properties can't live in
+    // extensions).
     /// True while a wire gap is owed exactly one concealment frame, to be minted
     /// by the next real packet (via opus FEC) or the next PLC. Guarded by
     /// `stateLock` (only ever touched on the decode path, which holds it).
-    private var pendingFecGap = false
+    var pendingFecGap = false
 
-    /// The shared decode → schedule path for a REAL opus packet. If a wire gap is
-    /// pending (`pendingFecGap`), first mint the gap's concealment frame from
-    /// THIS packet's opus in-band FEC (`decode_fec=1`) before decoding the packet
-    /// itself (`decode_fec=0`) - the standard opus PLC-with-FEC pattern. Used by
-    /// the Swift-native `NativeAudioSink` path.
-    func decodeCore(input: UnsafePointer<UInt8>?, length: Int32) {
-        // Hold the state lock for the whole decode so `shutdown()` can't
-        // destroy the opus decoder mid-call. The work is microseconds at
-        // 200 Hz on a single audio thread, so the contention cost is nil.
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        guard !isShutdown, let decoder, let fmt = inputFormat else { return }
-
-        // `AudioFrame` interval - covers opus decode + scheduleBuffer. One
-        // per network-delivered opus packet, on whatever audio receive thread
-        // we're called on. Cheap enough at 200 Hz (5 ms packets) that we don't
-        // gate it.
-        let audioSignpostID = OSSignposter.audio.makeSignpostID()
-        let audioIntervalState = OSSignposter.audio.beginInterval(
-            "AudioFrame",
-            id: audioSignpostID,
-            "bytes=\(length, privacy: .public)")
-        defer {
-            OSSignposter.audio.endInterval("AudioFrame", audioIntervalState)
-        }
-
-        // ★6: a gap is owed a frame. Recover it from THIS packet's in-band FEC
-        // (decode_fec=1) BEFORE the packet's own frame, so the recovered frame
-        // keeps its place in the timeline. One frame per gap; latch cleared
-        // either way so it can't double-mint.
-        if pendingFecGap {
-            pendingFecGap = false
-            _ = decodeOneFrame(decoder: decoder, fmt: fmt,
-                               input: input, length: length, decodeFec: 1)
-        }
-
-        _ = decodeOneFrame(decoder: decoder, fmt: fmt,
-                           input: input, length: length, decodeFec: 0)
-    }
-
-    /// Decode exactly one opus frame (or conceal one) and, if it produced
-    /// samples, demux + meter + schedule it into the player. `decodeFec=1` with a
-    /// real `input` recovers the PREVIOUS (lost) frame from this packet's in-band
-    /// FEC; `decodeFec=0` decodes the packet's own frame; `input==nil` (length 0)
-    /// is NULL-input PLC. Returns true iff a frame was scheduled. Caller holds
-    /// `stateLock`.
-    @discardableResult
-    private func decodeOneFrame(decoder: OpaquePointer, fmt: AVAudioFormat,
-                                input: UnsafePointer<UInt8>?, length: Int32,
-                                decodeFec: Int32) -> Bool {
-        let frameCount = AVAudioFrameCount(samplesPerFrame)
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frameCount) else { return false }
-
-        // opus_multistream_decode_float writes interleaved float; we declared
-        // a non-interleaved format. Use a small interleaved scratch and then
-        // demux into channelData[i]. A NULL input + frameSize triggers PLC; a
-        // real input with decode_fec=1 reconstructs the prior lost frame.
-        var interleaved = [Float](repeating: 0, count: samplesPerFrame * channelCount)
-        let decoded = opus_multistream_decode_float(
-            decoder, input, length,
-            &interleaved, Int32(samplesPerFrame), decodeFec
-        )
-        guard decoded > 0 else {
-            // -1..-7 are recoverable; just drop the packet.
-            return false
-        }
-        pcm.frameLength = AVAudioFrameCount(decoded)
-
-        guard let channelData = pcm.floatChannelData else { return false }
-        if let reorder = outputReorder {
-            // 7.1 path - swap surround pairs into AVAudio's expected layout.
-            for srcChannel in 0..<channelCount {
-                let dstChannel = reorder[srcChannel]
-                let dst = channelData[dstChannel]
-                for i in 0..<Int(decoded) {
-                    dst[i] = interleaved[i * channelCount + srcChannel]
-                }
-            }
-        } else {
-            for channel in 0..<channelCount {
-                let dst = channelData[channel]
-                for i in 0..<Int(decoded) {
-                    dst[i] = interleaved[i * channelCount + channel]
-                }
-            }
-        }
-
-        // P1 AUDIO meter: account this buffer for the buffer-fill / under-run /
-        // over-run / A/V-drift signals. Two backlog guards run first, both dropping
-        // this freshly-decoded buffer (which is the NEWEST packet; since an
-        // AVAudioPlayerNode buffer can't be pulled once scheduled, declining to queue
-        // the incoming packet trims the scheduled-ahead backlog by exactly one 5ms
-        // packet - the same net effect as dropping the oldest, with no reschedule
-        // churn): (a) the steady-state TRIM-TOWARD-TARGET, which clips the backlog
-        // back to the adaptive cushion target so it can't pin high, and (b) the hard
-        // OVER-RUN ceiling backstop for genuinely bad links. Both keep latency bounded.
-        let decodedFrames = UInt64(decoded)
-        if meterRegisterScheduleOrOverrun(frames: decodedFrames) {
-            // Trimmed/over-run: do not schedule (keeps A/V latency bounded). If the
-            // meter latched a playout STALL under this drop (node consuming nothing
-            // while every arrival hits the backlog gates), rebuild the output path
-            // now - this is the stateLock-serialized decode path, the one place AV
-            // calls are safe against shutdown (`recoverIfPlayoutStalled`).
-            recoverIfPlayoutStalled()
-            return false
-        }
-        playerNode.scheduleBuffer(pcm, completionHandler: { [weak self] in
-            self?.meterCompleteOnePlayout(frames: decodedFrames)
-        })
-        // PRE-ROLL / RE-PRIME: now that this buffer is queued (into a paused node
-        // only before the cold-start prime), decide whether the cushion is deep
-        // enough to (re)declare playback primed - and, on a re-prime whose grace
-        // expired clumpless, schedule the silence backfill (which needs the node
-        // format, hence the parameter). No-op once primed, so this stays one lock
-        // + a compare on the steady-state path.
-        maybePrime(format: fmt)
-        // Drives the drift resampler's PI loop (self-rate-limited to ~4Hz) + the
-        // 1Hz audio-state gauge. The resampler replaced the decode-path micro-stretch.
-        publishAudioState()
-        return true
-    }
-
-    /// ★6: a wire gap occurred (the queue emitted a `.lostPlaceholder`). Arm the
-    /// pending-gap latch so the NEXT real packet recovers this frame via opus
-    /// in-band FEC. If a gap is ALREADY pending (a second consecutive loss), we
-    /// can't defer further without adding latency, so flush the standing gap with
-    /// a NULL-input PLC frame now and re-arm for this one. Caller is the
-    /// `NativeAudioSink` PLC entry point. Holds `stateLock` for the decoder.
-    func concealGap() {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        guard !isShutdown, let decoder, let fmt = inputFormat else { return }
-        if pendingFecGap {
-            // Two gaps in a row: the first can't wait for FEC any longer. Conceal
-            // it with NULL-input PLC, then this new gap takes the pending slot.
-            _ = decodeOneFrame(decoder: decoder, fmt: fmt,
-                               input: nil, length: 0, decodeFec: 0)
-        }
-        pendingFecGap = true
-    }
-
-    private func layoutTag(forChannels channels: Int) -> AudioChannelLayoutTag {
-        switch channels {
-        case 2: return kAudioChannelLayoutTag_Stereo
-        case 6: return kAudioChannelLayoutTag_AudioUnit_5_1
-        case 8: return kAudioChannelLayoutTag_AudioUnit_7_1
-        default: return kAudioChannelLayoutTag_Stereo
-        }
-    }
-}
-
-// MARK: - NativeAudioSink conformance (Swift-native engine)
-//
-// Lets RtpAudioReceiver feed the AudioDecoder. `initialize` reuses the shared
-// opus/engine setup; `decodeAndPlay([UInt8])` runs the shared decodeCore (with
-// opus in-band FEC recovery ahead of the packet when a gap is pending, ★6), and
-// `decodeAndPlayPLC()` arms the pending-gap latch (`concealGap`) so the gap's
-// concealment frame is minted by FEC or, failing that, by NULL-input PLC.
-extension AudioDecoder: NativeAudioSink {
-    public func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
-        let chCount = Int(gl_channel_count_from_audio_configuration(audioConfig))
-        // ★5 - NEGOTIATED multistream config. The passed `opus` carries the
-        // STEREO defaults (RtspHandshakeResult.defaultOpusConfig); the RTSP
-        // SETUP-audio response does NOT send an explicit per-channel opus
-        // stream layout. As in moonlight-common-c (AudioStream.c's
-        // `opusConfigArray`, indexed by the negotiated AudioConfiguration), the
-        // host encodes the opus multistream packets per the channel count it was
-        // asked for, and the client derives {streams, coupledStreams, mapping}
-        // from that same channel count. Feeding the hardcoded stereo
-        // {streams:1, coupled:1, mapping:[0,1]} into a 6/8-channel decoder
-        // produces inconsistent surround (the bug). Resolve the real config
-        // from `chCount` so a 5.1/7.1 stream decodes coherently; stereo is
-        // unchanged (config(forChannels:2) == the stereo default).
-        let cfg = Self.opusMultistreamConfig(forChannels: chCount, fallback: opus)
-        return initDecoderCore(
-            channelCount: chCount,
-            sampleRate: opus.sampleRate,
-            streams: cfg.streams,
-            coupledStreams: cfg.coupledStreams,
-            samplesPerFrame: Int(opus.samplesPerFrame),
-            mapping: cfg.mapping)
-    }
-
-    /// Canonical opus MULTISTREAM config (streams / coupledStreams / channel
-    /// mapping) for a channel count, mirroring moonlight-common-c's
-    /// `opusConfigArray` (AudioStream.c). The host builds its multistream
-    /// encoder from the SAME table keyed by the negotiated AudioConfiguration,
-    /// so these MUST match byte-for-byte or surround decodes to garbage:
-    ///   2ch stereo : streams 1, coupled 1, mapping [0,1]
-    ///   6ch  5.1   : streams 4, coupled 2, mapping [0,4,1,5,2,3]
-    ///   8ch  7.1   : streams 5, coupled 3, mapping [0,6,1,7,2,3,4,5]
-    /// The mapping is the opus surround mapping (which opus stream feeds which
-    /// output channel); the front L/R + back/side reorder onto Apple's layout
-    /// is a SEPARATE, later step (`outputReorder` in `initDecoderCore`). An
-    /// unrecognized channel count falls back to the passed config (the stereo
-    /// default), padded/trimmed to the channel count - the prior behavior.
-    static func opusMultistreamConfig(
-        forChannels channels: Int, fallback: OpusConfig
-    ) -> (streams: Int32, coupledStreams: Int32, mapping: [UInt8]) {
-        switch channels {
-        case 2: return (1, 1, [0, 1])
-        case 6: return (4, 2, [0, 4, 1, 5, 2, 3])
-        case 8: return (5, 3, [0, 6, 1, 7, 2, 3, 4, 5])
-        default:
-            // The opus mapping array carries `channels` valid entries; pad/trim
-            // the fallback so the core sees a consistent layout.
-            var map = fallback.mapping
-            if map.count < channels {
-                map += [UInt8](repeating: 0, count: channels - map.count)
-            }
-            return (fallback.streams, fallback.coupledStreams, Array(map.prefix(channels)))
-        }
-    }
-
-    public func decodeAndPlay(_ opus: [UInt8]) {
-        guard !opus.isEmpty else { decodeAndPlayPLC(); return }
-        opus.withUnsafeBufferPointer { buf in
-            decodeCore(input: buf.baseAddress, length: Int32(buf.count))
-        }
-    }
-
-    public func decodeAndPlayPLC() {
-        // ★6: arm the pending-gap latch so the next real packet recovers this
-        // frame via opus in-band FEC (decode_fec=1). The actual concealment
-        // frame is minted there, or by `concealGap` itself on a second
-        // consecutive loss (NULL-input PLC) - exactly one frame per gap.
-        concealGap()
-    }
-
-    public func cleanup() {
-        shutdown()
-    }
+    public init() {}
 }

@@ -54,6 +54,10 @@ nothing. Automatic checks are still on by default, but if you turn them off,
 they stay off. The update window also finally shows what changed: release notes
 ride along with each update instead of a blank panel.
 
+A PC that is taking too long to wake is no longer a dead end: the "Waking"
+button now offers Cancel (Esc works too), which gives you the launcher back at
+once. Your PC may still finish waking on its own.
+
 Smaller things: the certificate mismatch error now points at the amber "Trust
 needed" badge instead of a menu that does not exist, the menu bar no longer
 claims to be connected to a PC it is only pointing at, the DualSense buttons

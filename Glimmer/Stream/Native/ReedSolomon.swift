@@ -179,26 +179,27 @@ struct ReedSolomon {
 
     // MARK: - In-place shard mutation (copy-on-write avoidance)
 
-    // Mutate one shard WITHOUT per-op CoW: `var t = shards[i]` double-refs the buffer,
-    // so the next write copies the whole ~1.1KB shard on every axpy/scal during loss
-    // bursts. Assigning `shards[i] = []` first drops that ref so `t` owns it alone.
+    // Mutate one shard WITHOUT per-op CoW: `var target = shards[i]` double-refs the
+    // buffer, so the next write copies the whole ~1.1KB shard on every axpy/scal
+    // during loss bursts. Assigning `shards[i] = []` first drops that ref so
+    // `target` owns it alone. (`target` is rs.c's axpy/scal destination operand.)
 
     @inline(__always)
     private static func axpyShardInPlace(_ shards: inout [[UInt8]], _ tIdx: Int,
                                          _ src: [UInt8], _ coeff: UInt8, _ k: Int) {
-        var t = shards[tIdx]
+        var target = shards[tIdx]
         shards[tIdx] = []
-        axpyShard(&t, src, coeff, k)
-        shards[tIdx] = t
+        axpyShard(&target, src, coeff, k)
+        shards[tIdx] = target
     }
 
     @inline(__always)
     private static func scalShardInPlace(_ shards: inout [[UInt8]], _ tIdx: Int,
                                          _ coeff: UInt8, _ k: Int) {
-        var t = shards[tIdx]
+        var target = shards[tIdx]
         shards[tIdx] = []
-        scalShard(&t, coeff, k)
-        shards[tIdx] = t
+        scalShard(&target, coeff, k)
+        shards[tIdx] = target
     }
 
     // MARK: - Decode (rs.c reed_solomon_decode + invert_mat)
