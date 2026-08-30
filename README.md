@@ -4,6 +4,8 @@ A Mac-native client for [Sunshine](https://github.com/LizardByte/Sunshine). Pure
 Swift, Apple Silicon only, built so a gaming PC in the other room feels like it
 is plugged into your Mac.
 
+![The Glimmer launcher: a paired PC ready to stream at 120 Hz HDR](docs/assets/launcher.png)
+
 Glimmer speaks the Moonlight protocol end to end in-process. There is no
 external player, no helper daemon, and no C runtime under the hood: the network
 socket, the decoder, the display, the audio engine, and the controllers are all
