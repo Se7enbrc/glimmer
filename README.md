@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/icon-512.png" width="140" alt="Glimmer">
+</p>
+
 # Glimmer
 
 A Mac-native client for [Sunshine](https://github.com/LizardByte/Sunshine). Pure
@@ -6,32 +10,32 @@ is plugged into your Mac.
 
 ![The Glimmer launcher: a paired PC ready to stream at 120 Hz HDR](docs/assets/launcher.png)
 
-Glimmer speaks the Moonlight protocol end to end in-process. There is no
-external player, no helper daemon, and no C runtime under the hood: the network
-socket, the decoder, the display, the audio engine, and the controllers are all
-wired together in one Swift process.
+Glimmer speaks the Moonlight protocol end to end in-process: the network socket,
+the decoder, the display, the audio engine, and the controllers are wired
+together in one Swift process, with no external player and no C engine under the
+hood.
 
 ## What you get
 
-- **Video.** H.264, HEVC, and AV1, 8-bit and 10-bit, decoded in hardware through
-  VideoToolbox. HDR streams get a real PQ/HLG pipeline with EDR metadata rather
-  than a tone-mapped approximation. Up to 4K at 240 Hz when the host can encode
-  it.
+- **Video.** H.264, HEVC, and AV1, 8-bit and 10-bit, hardware decoded through
+  VideoToolbox, with a real PQ/HLG HDR pipeline and EDR metadata. Up to 4K at
+  240 Hz when the host can encode it.
 - **Pacing.** A frame pacer that locks the display to the stream's cadence,
   passes frames straight through on a clean link, and buffers only for jitter it
-  has actually measured. It was tuned against per-frame telemetry, not by feel,
-  and it recovers on its own when the network gets ugly.
-- **Audio.** Opus through AVAudioEngine with a small adaptive cushion, so
-  swapping to AirPods mid-session or a rough patch of Wi-Fi does not turn into
-  crackle.
-- **Controllers.** Xbox, DualSense, and MFi pads with rumble. On a DualSense you
-  also get adaptive triggers, the light bar, gyro and accelerometer, the
-  touchpad, and battery reporting. A hold-to-quit chord gets you back to the Mac
-  without a keyboard.
+  has measured. Tuned against per-frame telemetry; recovers on its own when the
+  network gets ugly.
+- **Audio.** Opus through AVAudioEngine with a small adaptive cushion, so device
+  switches and rough Wi-Fi do not turn into crackle.
+- **Controllers.** Xbox, DualSense, and MFi pads, with everything each pad can
+  do: rumble and trigger rumble, gyro and accelerometer, touchpad, battery
+  reporting, and the DualSense light bar. A hold-to-quit chord gets you back to
+  the Mac without a keyboard. An optional raw-input mode (off by default, needs
+  Input Monitoring) adds the DualSense buttons macOS hides - Options, Create,
+  Mute - and relays the host's adaptive-trigger effects to the pad.
 - **Keyboard and mouse.** Raw mouse input with the Mac's pointer acceleration
   taken out, so aim is 1:1, plus a velocity-gated boost on fast flicks that
-  scales with the stream resolution, so a 4K desktop still crosses in one swipe.
-  Optional forwarding of ⌘ shortcuts to the host.
+  scales with the stream resolution. Optional forwarding of ⌘ shortcuts to the
+  host.
 - **Wi-Fi.** AirDrop and Continuity share the Mac's radio (AWDL) and will grab
   the channel out from under a stream. An optional helper parks AWDL while you
   play and hands it back when you stop.
@@ -63,24 +67,14 @@ Glimmer is Developer-ID signed and notarized but not sandboxed and not on the
 App Store; the Wi-Fi helper needs that freedom. See
 [docs/SECURITY.md](docs/SECURITY.md) for what that means in practice.
 
-### Your host
+Your **host** needs Sunshine and a display that can present the exact resolution
+and refresh rate you ask for: a virtual display driver on Windows, a current
+Sunshine on Linux. [docs/HOST_SETUP.md](docs/HOST_SETUP.md) walks through it.
 
-The gaming PC needs Sunshine and a display that can present the exact resolution
-and refresh rate you ask for. On Windows that is a virtual display driver; on
-Linux a current Sunshine resizes the session itself.
-[docs/HOST_SETUP.md](docs/HOST_SETUP.md) walks through it.
-
-### Wi-Fi helper
-
-Turn it on in **Settings > Quality > Wi-Fi**. It runs as a privileged background
-service, so macOS asks for a one-time approval under **System Settings >
-General > Login Items & Extensions**. If it ever reports
-`operation not permitted` or `rejected by BTM` after a lot of reinstalls, reset
-the Background Task Management database once and re-enable:
-
-```bash
-sudo sfltool resetbtm
-```
+The Wi-Fi helper lives in **Settings > Quality > Wi-Fi**; macOS asks for a
+one-time approval under **System Settings > General > Login Items &
+Extensions**. If it ever reports `rejected by BTM` after many reinstalls, run
+`sudo sfltool resetbtm` once and re-enable it.
 
 ## Build from source
 
@@ -97,15 +91,15 @@ make
 notarized when a Developer ID is available, ad hoc otherwise) and installs it to
 `/Applications`. `make app` is a quick compile-only check, `make test` runs the
 unit tests, `make uninstall` removes the app. The streaming engine lives under
-`Glimmer/Stream/` and is built by the app target directly, no submodules.
+`Glimmer/Stream/`, built by the app target directly, no submodules.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the map,
 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) the rules.
 
 ## Why not just use Moonlight
 
 Moonlight is excellent and Glimmer would not exist without it. On the Mac,
-though, moonlight-qt is a Qt port of a cross-platform C++ app, and it lives one
-layer away from the hardware. Glimmer talks to VideoToolbox, AVAudioEngine, and
+though, moonlight-qt is a Qt port of a cross-platform C++ app, one layer away
+from the hardware. Glimmer talks to VideoToolbox, AVAudioEngine, and
 GameController directly, which is where the pacing, HDR, and controller work
 above comes from, and it looks and behaves like a Mac app because it is one.
 
