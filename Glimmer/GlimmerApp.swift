@@ -36,9 +36,67 @@ struct GlimmerApp: App {
         // MUST precede AppModel(): its init reads ~20 UserDefaults keys,
         // which the unsandbox-flip orphaned in the old container until this runs.
         ContainerMigration.runIfNeeded()
+        // Also MUST precede AppModel(), for the same reason: a registered
+        // default only answers reads that come AFTER the registration, and
+        // AppModel's init (and its property initializers) read these keys
+        // immediately. This block used to live in
+        // applicationWillFinishLaunching, which runs after this initializer -
+        // so every key AppModel reads was already past its chance to see a
+        // registered default.
+        Self.registerDefaults()
         let mgr = AppModel()
         _model = State(wrappedValue: mgr)
         AppDelegate.boundManager = mgr
+    }
+
+    /// Defaults for prefs whose readers use bare `UserDefaults.bool(forKey:)`.
+    /// REGISTERED, never written - a registration sits under the persistent
+    /// domain, so a user's own choice still wins and toggling back to the
+    /// default doesn't leave a stray key behind.
+    ///
+    /// Every value here must equal what the code effectively falls back to
+    /// today (`bool(forKey:)` on an absent key is false), so adding a key
+    /// changes nothing now. The point is that the default becomes a stated,
+    /// changeable fact in ONE place: flipping one of these to `true` later
+    /// reaches EXISTING users, where a hard-coded `false` fallback only ever
+    /// reached fresh installs.
+    @MainActor
+    private static func registerDefaults() {
+        UserDefaults.standard.register(defaults: [
+            // Default-ON prefs. disableMouseAccelWhileStreaming linearizes the
+            // system pointer acceleration while the stream window is focused so
+            // forwarded mouse deltas are raw 1:1; the non-UI gate reads it via
+            // UserDefaults.bool, which needs the registered default to read
+            // `true` before first toggle.
+            MouseAccelerationControl.enabledDefaultsKey: true,
+            // Cruise: resolution-aware fast-flick traversal boost. DEFAULT OFF
+            // as of 2026-07-19: at 4K, combat aim snaps and traversal flicks
+            // occupy the same velocity AND distance range (field histograms:
+            // aim snaps 1100-1800 counts/s, flicks p99 ~1770, distances
+            // overlap), so any velocity-gated boost eventually boosts aim -
+            // two "crazy sensitivity" incidents in one day. Raw everywhere
+            // wins until a discriminator that can't misfire exists. The
+            // machinery + hidden knobs stay for opt-in experimentation.
+            CruiseTraversal.enabledDefaultsKey: false,
+            // Fire the present tick on a private high-QoS run loop (not .main)
+            // so a busy main thread can't starve the CADisplayLink callback.
+            // Flip false for an instant fallback to the main-runloop tick.
+            FramePacer.tickOffMainDefaultsKey: true,
+            // Give that tick thread Mach time-constraint (real-time) scheduling
+            // so the CPU can't preempt it under load. Flip false to fall back to
+            // plain userInteractive (the pre-realtime behavior) without a rebuild.
+            PacerTickThread.realtimeDefaultsKey: true,
+            // AppModel's own bare-bool reads. All OFF today - the Mac keeps its
+            // volume during a stream, raw HID stays behind its explicit opt-in
+            // (it needs Input Monitoring), the auto-offer hasn't been answered,
+            // and the Diagnostics pane and its telemetry stay hidden until a
+            // power user reveals them from About.
+            "muteMacWhileStreaming": false,
+            "rawHIDControllerEnabled": false,
+            "rawHIDPromptAnswered": false,
+            "showDiagnostics": false,
+            "telemetryEnabled": false
+        ])
     }
 
     var body: some Scene {
@@ -151,31 +209,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Diag.notice("app launching - Glimmer \(version) (\(build)) commit \(BuildInfo.commit) "
             + "built \(BuildInfo.date) (launchedAtLogin=\(launchedAtLogin))", "Launch")
 
-        // Default-ON prefs (registered, not written - the user's explicit choice
-        // still overrides). disableMouseAccelWhileStreaming linearizes the system
-        // pointer acceleration while the stream window is focused so forwarded
-        // mouse deltas are raw 1:1; the non-UI gate reads it via UserDefaults.bool,
-        // which needs the registered default to read `true` before first toggle.
-        UserDefaults.standard.register(defaults: [
-            MouseAccelerationControl.enabledDefaultsKey: true,
-            // Cruise: resolution-aware fast-flick traversal boost. DEFAULT OFF
-            // as of 2026-07-19: at 4K, combat aim snaps and traversal flicks
-            // occupy the same velocity AND distance range (field histograms:
-            // aim snaps 1100-1800 counts/s, flicks p99 ~1770, distances
-            // overlap), so any velocity-gated boost eventually boosts aim -
-            // two "crazy sensitivity" incidents in one day. Raw everywhere
-            // wins until a discriminator that can't misfire exists. The
-            // machinery + hidden knobs stay for opt-in experimentation.
-            CruiseTraversal.enabledDefaultsKey: false,
-            // Fire the present tick on a private high-QoS run loop (not .main)
-            // so a busy main thread can't starve the CADisplayLink callback.
-            // Flip false for an instant fallback to the main-runloop tick.
-            FramePacer.tickOffMainDefaultsKey: true,
-            // Give that tick thread Mach time-constraint (real-time) scheduling
-            // so the CPU can't preempt it under load. Flip false to fall back to
-            // plain userInteractive (the pre-realtime behavior) without a rebuild.
-            PacerTickThread.realtimeDefaultsKey: true
-        ])
+        // Defaults registration deliberately does NOT happen here: it has to run
+        // before AppModel reads its keys, which is GlimmerApp.init() - one
+        // initializer earlier than this delegate callback. See
+        // `GlimmerApp.registerDefaults()`.
+        //
         // Crash recovery: if a prior session died mid-stream with the pointer
         // acceleration linearized, restore the user's saved value now (no-op in
         // the clean case). Runs before any window/stream can re-engage capture.

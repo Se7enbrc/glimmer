@@ -323,18 +323,32 @@ extension AppModel {
         if effectiveFPS != fps { effectiveFPS = fps; changed = true }
         if effectiveBitrateKbps != bitrate { effectiveBitrateKbps = bitrate; changed = true }
         if effectiveHDR != hdr { effectiveHDR = hdr; changed = true }
-        UserDefaults.standard.set(qualityPreset.rawValue, forKey: "qualityPreset")
+        // The preset itself is deliberately NOT written here. This function runs
+        // on paths with no user intent behind them (launch bootstrap, every
+        // display-parameter change), and writing the key from them re-stamped it
+        // with whatever the load had decoded - which destroyed an unrecognised
+        // legacy raw value before it could be migrated. `qualityPreset`'s own
+        // didSet persists it, and only a real change reaches that.
         return changed
     }
 
     /// Snap custom values to the display's native dimensions.
+    ///
+    /// Writes through the custom properties, so their didSets persist all four
+    /// keys - only ever call this behind an explicit user action (the Quality
+    /// pane's "Use native resolution") or when Custom is already the live
+    /// preset. The `max(5, ...)` floor matches the three sibling sites that
+    /// derive a Mbps figure (`qualityPreset`'s willSet prefill,
+    /// `autoUpdateCustomBitrate`, `recommendedBitrateMbps`) and the 5 Mbps floor
+    /// inside `bitrateKbps` itself; without it an integer divide of a
+    /// sub-5000 kbps budget could seed the slider below its own 5...200 range.
     func snapCustomToDisplay() {
         let defaults = smartDefaultsForCurrentDisplay()
         customWidth = defaults.width
         customHeight = defaults.height
         customFPS = defaults.fps
         let kbps = bitrateKbps(width: defaults.width, height: defaults.height, fps: defaults.fps, preset: .matchDisplay)
-        customBitrateMbps = kbps / 1000
+        customBitrateMbps = max(5, kbps / 1000)
     }
 
     /// What a preset would resolve to right now.

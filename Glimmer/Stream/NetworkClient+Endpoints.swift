@@ -82,7 +82,8 @@ extension NetworkClient {
                             )
                         }
                         throw StreamError.hostUnreachable(
-                            "Host cert mismatch - possible MITM. Settings → PCs → ... → Trust new cert and re-pair."
+                            "This PC's certificate changed. Click its amber \"Trust needed\" chip "
+                            + "in the main window to trust it and pair again."
                         )
                     }
                     throw StreamError.hostUnreachable(detail)

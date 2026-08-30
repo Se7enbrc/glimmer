@@ -50,7 +50,7 @@ struct RawHIDControl: View {
             .onAppear { working = currentlyWorking }
             .onReceive(poll) { _ in working = currentlyWorking }
         } else {
-            Button("Enable...") { showExplain = true }
+            Button("Enable…") { showExplain = true }
                 .alert("Enable enhanced DualSense buttons?", isPresented: $showExplain) {
                     Button("Enable") { enable() }
                     Button("Cancel", role: .cancel) {}

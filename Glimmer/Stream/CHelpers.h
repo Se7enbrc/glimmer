@@ -32,25 +32,28 @@
 // here. We use a gl_-prefixed struct name so a future SDK that exposes the real
 // `struct msghdr_x` can't collide; the kernel only cares about the byte layout,
 // which mirrors xnu's bsd/sys/socket.h exactly.
+// Nullability is spelled out on every pointer in this header: once one
+// declaration carries an annotation (gl_objc_try's block) clang audits the rest
+// and warns on each unannotated pointer, and the project builds warning-free.
 struct gl_msghdr_x {
-    void          *msg_name;        /* optional address */
-    socklen_t      msg_namelen;     /* size of address */
-    struct iovec  *msg_iov;         /* scatter/gather array */
-    int            msg_iovlen;      /* # elements in msg_iov */
-    void          *msg_control;     /* ancillary data */
-    socklen_t      msg_controllen;  /* ancillary data buffer len */
-    int            msg_flags;       /* flags on received message */
-    size_t         msg_datalen;     /* byte length of buffer in msg_iov */
+    void * _Nullable          msg_name;        /* optional address */
+    socklen_t                 msg_namelen;     /* size of address */
+    struct iovec * _Nonnull   msg_iov;         /* scatter/gather array */
+    int                       msg_iovlen;      /* # elements in msg_iov */
+    void * _Nullable          msg_control;     /* ancillary data */
+    socklen_t                 msg_controllen;  /* ancillary data buffer len */
+    int                       msg_flags;       /* flags on received message */
+    size_t                    msg_datalen;     /* byte length of buffer in msg_iov */
 };
-extern ssize_t recvmsg_x(int s, const struct gl_msghdr_x *msgp, unsigned int cnt, int flags);
+extern ssize_t recvmsg_x(int s, const struct gl_msghdr_x * _Nonnull msgp, unsigned int cnt, int flags);
 
 /// Read up to `count` (<=64) datagrams from `fd` in one `recvmsg_x` syscall into
 /// `storage` (count * stride bytes), writing each datagram's length into
 /// `lengths[i]`. Returns the number of datagrams received, or -1 with errno set
 /// (EAGAIN/EWOULDBLOCK on timeout, like recvfrom). All `msghdr_x` plumbing stays
 /// in C so the layout is correct by construction; Swift sees a flat API.
-static inline int gl_recvmsg_x_batch(int fd, uint8_t *storage, int stride,
-                                     int count, int *lengths) {
+static inline int gl_recvmsg_x_batch(int fd, uint8_t * _Nonnull storage, int stride,
+                                     int count, int * _Nonnull lengths) {
     if (count > 64) count = 64;
     struct gl_msghdr_x msgs[64];
     struct iovec iovs[64];
@@ -93,7 +96,7 @@ static inline int gl_surround_audio_info_from_audio_configuration(int x) {
 
 /// Returns the length of memory-buffered data in `bio` and writes the pointer
 /// into `*out_data`. Equivalent to the `BIO_get_mem_data` macro.
-static inline long gl_bio_get_mem_data(BIO *bio, char **out_data) {
+static inline long gl_bio_get_mem_data(BIO * _Nonnull bio, char * _Nullable * _Nonnull out_data) {
     return BIO_ctrl(bio, BIO_CTRL_INFO, 0, (char *)out_data);
 }
 
@@ -102,7 +105,7 @@ static inline long gl_bio_get_mem_data(BIO *bio, char **out_data) {
 // cert PINNING is the security guarantee (see ControlTransport); flooring at
 // TLS 1.2 just keeps the handshake off legacy protocol versions - cheap defense
 // in depth. Returns 1 on success.
-static inline int gl_ssl_ctx_set_min_tls12(SSL_CTX *ctx) {
+static inline int gl_ssl_ctx_set_min_tls12(SSL_CTX * _Nonnull ctx) {
     return SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
 }
 
@@ -112,7 +115,7 @@ static inline int gl_ssl_ctx_set_min_tls12(SSL_CTX *ctx) {
 
 #include <openssl/rsa.h>
 
-static inline EVP_PKEY *gl_rsa_keygen(int bits) {
+static inline EVP_PKEY * _Nullable gl_rsa_keygen(int bits) {
     EVP_PKEY *pkey = NULL;
     EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL);
     if (!ctx) return NULL;
@@ -131,7 +134,7 @@ cleanup:
 // SO_RCVTIMEO/SO_SNDTIMEO set to the same deadline, so the TLS handshake and HTTP
 // read/write that follow on this fd inherit the bound. Returns the fd, or -1.
 // `host` may be a hostname or a numeric IP; `port` is the decimal string.
-static inline int gl_tcp_connect(const char *host, const char *port, int timeout_ms) {
+static inline int gl_tcp_connect(const char * _Nonnull host, const char * _Nonnull port, int timeout_ms) {
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;

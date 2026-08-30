@@ -35,7 +35,7 @@ enum ChipPresentation: Equatable {
             return "Streaming \(Self.truncate(name, to: 14))"
         case .asleep: return "Asleep"
         case .certMismatch: return "Trust needed"
-        case .unknown: return "Checking..."
+        case .unknown: return "Checking…"
         }
     }
 
@@ -43,14 +43,14 @@ enum ChipPresentation: Equatable {
     var accessibility: String {
         switch self {
         case .noPC: return "No PC selected"
-        case .ready(nil): return "Host ready"
-        case .ready(let ms?): return "Host ready, round trip \(ms) milliseconds"
+        case .ready(nil): return "PC ready"
+        case .ready(let ms?): return "PC ready, round trip \(ms) milliseconds"
         case .streamingOurs: return "Streaming"
         case .connecting(let phase): return phase
-        case .streamingElsewhere(let name): return "Host is streaming \(name)"
-        case .asleep: return "Host is asleep or unreachable"
-        case .certMismatch: return "Host certificate changed, re-pair to trust it"
-        case .unknown: return "Checking host status"
+        case .streamingElsewhere(let name): return "PC is streaming \(name)"
+        case .asleep: return "PC is asleep or unreachable"
+        case .certMismatch: return "PC certificate changed, re-pair to trust it"
+        case .unknown: return "Checking PC status"
         }
     }
 
@@ -77,7 +77,7 @@ enum ChipPresentation: Equatable {
     private static func truncate(_ str: String, to max: Int) -> String {
         if str.count <= max { return str }
         let end = str.index(str.startIndex, offsetBy: max - 1)
-        return str[str.startIndex..<end] + "..."
+        return str[str.startIndex..<end] + "…"
     }
 }
 
@@ -283,7 +283,7 @@ struct HostPowerControls: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .glassEffect(.regular, in: .circle)
-                .accessibilityLabel("Host power menu")
+                .accessibilityLabel("PC power menu")
                 .confirmationDialog(
                     confirmPowerVerb == "off" ? "Shut down \(host.displayName)?"
                                               : "Restart \(host.displayName)?",
@@ -623,11 +623,14 @@ struct StreamButton: View {
                         Text("Wake & Connect")
                             .font(.system(size: 17, weight: .semibold))
                             .contentTransition(.opacity)
-                        // A failed wake surfaces luna's one-line reason here,
-                        // right under the retry affordance.
+                        // A failed wake surfaces one plain sentence here, right
+                        // under the retry affordance - luna's raw reason (subprocess
+                        // stderr, "on failed", "luna not available") stays in the
+                        // log (see AppModel+Power.swift's Diag.notice) and is never
+                        // shown to the user verbatim.
                         if let host = model.selectedHost,
-                           let reason = LunaPower.shared.lastActionError[host.id] {
-                            Text(reason)
+                           LunaPower.shared.lastActionError[host.id] != nil {
+                            Text("Couldn't wake this PC. Check that it's plugged in and Wake-on-LAN is enabled.")
                                 .font(.system(size: 11, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -636,7 +639,7 @@ struct StreamButton: View {
                 case .waking:
                     ProgressView()
                         .controlSize(.small)
-                    Text("Waking \(model.selectedHost?.displayName ?? "host")…")
+                    Text("Waking \(model.selectedHost?.displayName ?? "PC")…")
                         .font(.system(size: 16, weight: .semibold))
                         .lineLimit(1)
                         .contentTransition(.opacity)
@@ -701,28 +704,28 @@ struct StreamButton: View {
     }
 
     /// Steady primary line during connect. Prefers the SESSION's own friendly
-    /// stage ("Connecting to <host>..." / "Cancelling...", stamped with the host
+    /// stage ("Connecting to <host>..." / "Cancelling…", stamped with the host
     /// captured at stream() entry): ⌘1-⌘9 can re-point `selectedHost`
     /// mid-handshake, and the capsule must keep naming the PC it's dialling.
     private var connectingPrimary: String {
         if case .connecting(let stage) = model.streamPhase,
-           stage.hasPrefix("Connecting to ") || stage == "Cancelling..." {
+           stage.hasPrefix("Connecting to ") || stage == "Cancelling…" {
             return stage
         }
         if let name = model.selectedHost?.displayName {
-            return "Connecting to \(name)..."
+            return "Connecting to \(name)…"
         }
-        return "Connecting..."
+        return "Connecting…"
     }
 
     /// Optional engine-stage subtext below the primary line - surfaced only
     /// when the stage adds information beyond the primary ("RTSP handshake"),
     /// stripping whatever the primary already carries ("Connecting to X..."
-    /// duplicates, the "Cancelling..." repaint).
+    /// duplicates, the "Cancelling…" repaint).
     private var connectingSubtext: String? {
         guard case .connecting(let stage) = model.streamPhase, !stage.isEmpty else { return nil }
         if stage == connectingPrimary { return nil }
-        if stage.hasPrefix("Connecting to ") || stage == "Connecting..." { return nil }
+        if stage.hasPrefix("Connecting to ") || stage == "Connecting…" { return nil }
         return stage
     }
 }

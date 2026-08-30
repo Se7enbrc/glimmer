@@ -7,6 +7,8 @@
 //
 //    * Models/Host.swift      - Host, LibraryApp, QualityPreset,
 //                               HotkeyChord, HostLiveStatus
+//    * AppModel+Defaults.swift - the typed UserDefaults read helpers `init()`
+//                               loads settings through
 //    * HostsStore.swift       - UserDefaults read/write of the host list,
 //                               moonlight-qt migration, unpair/retrust
 //    * QualityCalculator.swift - bitrate/resolution/fps recommendation logic
@@ -50,8 +52,9 @@ final class AppModel {
     // Quality
     // Default `.matchDisplay` (panel-native resolution + refresh) - the option
     // shown at the top of the preset list. Users on constrained links can drop
-    // to Smooth; an explicit choice is persisted in init() and honored.
-    var qualityPreset: QualityPreset = .matchDisplay {
+    // to HiDPI; an explicit choice is persisted by the didSet below and read
+    // back (with the legacy-preset remap) in init().
+    var qualityPreset: QualityPreset = QualityPreset.defaultPreset {
         willSet {
             // When the user switches from a preset to Custom, prefill the custom
             // values with the preset's effective numbers so they're not surprised
@@ -64,7 +67,19 @@ final class AppModel {
                 customBitrateMbps = max(5, snapshot.bitrateKbps / 1000)
             }
         }
-        didSet { persistQualitySettings() }
+        didSet {
+            // The preset's OWN persistence lives here, not in
+            // persistQualitySettings(). That recompute runs on paths the user
+            // never touched - launch bootstrap, every display-parameter change -
+            // and its unconditional write re-stamped the key with whatever the
+            // load had decoded, so a raw value the decoder didn't recognise was
+            // overwritten before it could ever be migrated (see
+            // `QualityPreset.migrated(fromPersistedRawValue:)`). A didSet is
+            // suppressed during init(), so only a real change - which is only
+            // ever the Settings picker - reaches UserDefaults now.
+            UserDefaults.standard.set(qualityPreset.rawValue, forKey: "qualityPreset")
+            persistQualitySettings()
+        }
     }
 
     // Custom overrides (used only when qualityPreset == .custom)
@@ -511,7 +526,7 @@ final class AppModel {
         // stays under the complexity bar). The persisted-key set is unchanged.
         muteMacWhileStreaming = UserDefaults.standard.bool(forKey: "muteMacWhileStreaming")
         defaultLaunchApp = UserDefaults.standard.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
-        qualityPreset = Self.persistedRawValue("qualityPreset", QualityPreset.self) ?? qualityPreset
+        qualityPreset = Self.persistedQualityPreset() ?? qualityPreset
         // Width/height/fps are clamped on read: builds whose Quality pane
         // clamped on Return only could persist out-of-range values via a
         // focus-loss commit (0 self-heals via persistedPositiveInt; 1000 Hz
@@ -544,50 +559,6 @@ final class AppModel {
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self) ?? quitHotkey
         statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self) ?? statsHotkey
         controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self) ?? controllerQuitChord
-    }
-
-    // MARK: - Persisted-setting decode helpers
-    //
-    // Small typed wrappers around UserDefaults so `init()` reads as a flat list
-    // of assignments instead of a branch per key. Each returns nil when the key
-    // is absent / out of range / undecodable, so the caller keeps the property's
-    // declared default - identical to the prior inline `if let` / `if x > 0`.
-
-    /// A positive `Int`, or nil when the key is absent (`integer(forKey:)`
-    /// returns 0) or non-positive.
-    private static func persistedPositiveInt(_ key: String) -> Int? {
-        let value = UserDefaults.standard.integer(forKey: key)
-        return value > 0 ? value : nil
-    }
-
-    /// A `Bool`, or nil when the key was never written (so the default holds).
-    private static func persistedBool(_ key: String) -> Bool? {
-        guard UserDefaults.standard.object(forKey: key) != nil else { return nil }
-        return UserDefaults.standard.bool(forKey: key)
-    }
-
-    /// Decode a string-backed `RawRepresentable` from its persisted raw value.
-    private static func persistedRawValue<T: RawRepresentable>(
-        _ key: String, _ type: T.Type
-    ) -> T? where T.RawValue == String {
-        guard let raw = UserDefaults.standard.string(forKey: key) else { return nil }
-        return T(rawValue: raw)
-    }
-
-    /// JSON-decode a `Codable` from its persisted data blob.
-    private static func persistedDecoded<T: Decodable>(_ key: String, _ type: T.Type) -> T? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(type, from: data)
-    }
-
-    /// Decode the persisted stats-overlay custom-row set, or nil when the key is
-    /// absent or decodes to an empty set (so the default initial set holds).
-    private static func persistedCustomRows() -> Set<StatsRow.Kind>? {
-        guard let raw = UserDefaults.standard.array(forKey: "statsOverlayCustomRows") as? [String] else {
-            return nil
-        }
-        let decoded = raw.compactMap(StatsRow.Kind.init(rawValue:))
-        return decoded.isEmpty ? nil : Set(decoded)
     }
 
     // MARK: Mute/restore Mac audio

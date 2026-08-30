@@ -1,9 +1,11 @@
 //
 //  ContainerMigrationTests.swift
 //
-//  Covers ContainerMigration.copyTree (idempotent copy-not-move). The full
-//  runIfNeeded() touches the real home dir / CFPreferences, so the unit scope
-//  stays on the pure tree copy.
+//  Covers the copy-not-move migrations: ContainerMigration.copyTree, and the
+//  moonlight-qt identity import (which must leave the foreign plist intact so
+//  moonlight-qt keeps its own pairings). The full runIfNeeded() / load()
+//  paths touch the real home dir and real preference domains, so the unit
+//  scope stays on the pure tree copy and the pure suite read.
 //
 
 import Foundation
@@ -77,5 +79,60 @@ struct ContainerMigrationTests {
         #expect(first > 0)
         #expect(second == 0)   // everything already present → nothing new copied
         #expect(read(dst.appendingPathComponent("a/b.txt")) == "v")
+    }
+}
+
+/// The cross-app identity import out of moonlight-qt's UserDefaults suite.
+/// Runs against a throwaway preference domain, never the real
+/// `com.moonlight-stream.Moonlight` one.
+struct MoonlightQtIdentityImportTests {
+
+    /// Scratch domain names are fixed, not per-run UUIDs: CFPreferences leaves
+    /// the (now empty) plist behind after `removePersistentDomain`, so a fresh
+    /// name per run would litter ~/Library/Preferences a file at a time. One
+    /// stable name per test also keeps the two tests off each other's domain
+    /// when the suite runs in parallel.
+    private static let copyDomain = "io.ugfugl.Glimmer.tests.moonlightqt-copy"
+    private static let skipDomain = "io.ugfugl.Glimmer.tests.moonlightqt-skip"
+
+    @Test func importCopiesAndLeavesTheSourceSuiteUntouched() throws {
+        let domain = Self.copyDomain
+        let suite = try #require(UserDefaults(suiteName: domain))
+        suite.removePersistentDomain(forName: domain)   // no crumbs from a prior run
+        defer { suite.removePersistentDomain(forName: domain) }
+
+        // QSettings writes the cert as a String and the key as Data; mirror
+        // both shapes so the reader's Data → String path is exercised too.
+        let certPEM = "-----BEGIN CERTIFICATE-----\nqt-cert\n-----END CERTIFICATE-----\n"
+        let keyPEM  = "-----BEGIN PRIVATE KEY-----\nqt-key\n-----END PRIVATE KEY-----\n"
+        let keyData = Data(keyPEM.utf8)
+        suite.set(certPEM, forKey: "certificate")
+        suite.set(keyData, forKey: "key")
+        suite.set("qtuniqueid00", forKey: "uniqueid")
+
+        let adopted = try #require(
+            IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: "ours"))
+        #expect(adopted.certPEM == certPEM)
+        #expect(adopted.keyPEM == keyPEM)
+        #expect(adopted.uniqueID == "qtuniqueid00")
+
+        // The point of the test: copy only. moonlight-qt still holds its own
+        // identity, so it keeps every host it had paired with.
+        #expect(suite.string(forKey: "certificate") == certPEM)
+        #expect(suite.data(forKey: "key") == keyData)
+        #expect(suite.string(forKey: "uniqueid") == "qtuniqueid00")
+    }
+
+    @Test func aSuiteWithoutAKeyPairIsSkippedAndStillUntouched() throws {
+        let domain = Self.skipDomain
+        let suite = try #require(UserDefaults(suiteName: domain))
+        suite.removePersistentDomain(forName: domain)
+        defer { suite.removePersistentDomain(forName: domain) }
+
+        // Cert but no key - moonlight-qt installed, never paired.
+        suite.set("cert-only", forKey: "certificate")
+
+        #expect(IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: nil) == nil)
+        #expect(suite.string(forKey: "certificate") == "cert-only")
     }
 }

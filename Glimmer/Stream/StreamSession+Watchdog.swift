@@ -651,7 +651,7 @@ extension StreamSession {
             // for the real reconnect episode. Hidden by clearDecodeOnlyStallLatch.
             let winForHold = window
             await MainActor.run {
-                winForHold?.reconnectBanner.setText("Holding...")
+                winForHold?.reconnectBanner.setText("Holding…")
                 winForHold?.reconnectBanner.setVisible(true)
             }
             if !didLogWatchdogHold {

@@ -1,5 +1,67 @@
 # Changelog
 
+## 2026.8.15 - 2026-08-30
+
+The DualSense quit chord works, pairing a second PC works, Glimmer stops taking
+things away from Moonlight, and Homebrew can install it.
+
+The controller quit chord Start + Select + L1 + R1 never fired on a DualSense,
+even with Extra DualSense buttons on and Input Monitoring granted. macOS binds
+the DualSense's Create button to a system gesture (a long press starts a screen
+recording), so GameController withheld the press from Glimmer while the chord
+read Create from the raw report and L1/R1 from GameController, two views that
+disagreed for as long as the chord was held. Glimmer now turns that gesture off
+for the Create button when a pad attaches, reads every button of the chord from
+one coherent source with the raw report's shoulder bits filling in for
+GameController, ignores stray HID report IDs that could flip the decoded
+buttons, and writes a short breadcrumb to the session log whenever a chord arms,
+cancels, or only partially matches, so a chord that does not fire is diagnosable
+from the log. The Settings footnote also now says the default is L3 + R3 rather
+than off.
+
+Pairing a second PC works again. After one successful pairing, opening the Pair
+window again showed the "Paired" screen from last time, with a blank PC name and
+no way back to the list of PCs on your network, until you quit and reopened
+Glimmer. The result of a pairing is now tied to the pairing it came from, and
+the window starts fresh every time you open it. The window also explains itself
+before macOS does: choosing a PC starts a search of your local network, which
+makes macOS ask for permission, and a line at the top of the list now says what
+Glimmer is looking for and that the system will ask.
+
+Glimmer no longer takes anything away from Moonlight. On first launch Glimmer
+copies the client identity from an existing moonlight-qt install so you do not
+have to pair your PCs again, and until now it also erased that identity from
+Moonlight's own settings afterward. The intent was to avoid leaving a second
+copy of a private key in a file Moonlight stores unprotected, but the cost was
+that Moonlight quietly lost every host it had paired with the next time you
+opened it. Copying is all Glimmer does now. Moonlight's settings are read and
+never written, so both apps keep their identities and both stay paired.
+
+If you had chosen Smooth or Maximum before those presets were replaced, Glimmer
+no longer forgets which one. Those two settings were dropped in favour of Native
+Retina and HiDPI, and the old choice couldn't be read any more, so the app
+quietly fell back to Native Retina, the sharpest and most bandwidth-hungry
+option, and then overwrote your saved setting so there was nothing left to
+recover. Smooth now becomes HiDPI and Maximum becomes Native Retina, matching
+what each one was for, and your preset is only ever saved when you actually
+change it. In the same spirit, a first launch used to write a resolution,
+refresh rate and bitrate into the Custom preset even for people who never open
+it; Custom is now filled in when you actually switch to it.
+
+Turning off automatic update checks now sticks. Glimmer switched them back on
+every time it started, so the setting in the update window looked like it did
+nothing. Automatic checks are still on by default, but if you turn them off,
+they stay off. The update window also finally shows what changed: release notes
+ride along with each update instead of a blank panel.
+
+Smaller things: the certificate mismatch error now points at the amber "Trust
+needed" badge instead of a menu that does not exist, the menu bar no longer
+claims to be connected to a PC it is only pointing at, the DualSense buttons
+offer has a "Not Now" that means not now, the error banner can be dismissed, and
+Get Info on the app says GPL rather than "All rights reserved". Glimmer can now
+be installed with Homebrew (`brew install --cask se7enbrc/glimmer/glimmer`), and
+the download disk image looks like one.
+
 ## 2026.8.14 - 2026-08-26
 
 Switching audio devices no longer teaches the stream bad habits, a connection

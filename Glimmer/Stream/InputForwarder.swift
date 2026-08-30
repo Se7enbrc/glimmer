@@ -189,6 +189,11 @@ public final class InputForwarder {
     /// holding.
     var quitChordDwellSlot: UInt8?
 
+    /// Rate-limit state for the quit-chord Diag breadcrumbs (arm / cancel /
+    /// expiry / partial hold). Same stored-property-in-extension constraint as
+    /// the dwell fields above; the logic is in ControllerForwarder+QuitChord.
+    var quitChordCrumbs = QuitChordBreadcrumbState()
+
     /// Whether macOS-level "system" modifier combos that use the Cmd key
     /// should be forwarded to the host or left to macOS.
     ///

@@ -32,14 +32,22 @@ final class UpdaterController {
         // OPEN - which a Glimmer that sits running for days never triggers, so
         // multi-day sessions rode releases behind without a single nag (a
         // 3-day 2026.8.11 process ran through the .12 release unprompted).
-        // Now: automatic checks ON, DAILY. Sparkle's standard driver shows the
-        // update alert whenever a scheduled or launch check finds one - that
-        // alert IS the nag, at startup (first scheduled check fires shortly
-        // after launch, and the on-open background check in GlimmerApp still
-        // forces one per open) and every 24h of uptime thereafter. Users who
-        // want quiet can still disable automatic checks in the update alert's
-        // own UI; the app just stops being silent BY DEFAULT.
-        controller.updater.automaticallyChecksForUpdates = true
+        // Now: automatic checks ON BY DEFAULT, DAILY. Sparkle's standard driver
+        // shows the update alert whenever a scheduled or launch check finds one
+        // - that alert IS the nag, at startup (first scheduled check fires
+        // shortly after launch, and the on-open background check in GlimmerApp
+        // still forces one per open) and every 24h of uptime thereafter.
+        //
+        // DEFAULT, not policy: the write is gated on Sparkle's own persisted
+        // key being ABSENT. Setting it unconditionally re-enabled automatic
+        // checks on every launch, so a user who turned them off in the update
+        // alert's own UI had that choice reverted by the next start - the
+        // opt-out we promise was silently a no-op. Absent key = the user has
+        // never decided, so we decide for them (on); present = their answer,
+        // whichever way it goes, and we leave it alone.
+        if UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") == nil {
+            controller.updater.automaticallyChecksForUpdates = true
+        }
         controller.updater.updateCheckInterval = 86_400
     }
 
@@ -65,7 +73,7 @@ final class UpdateAvailability {
     }
 }
 
-/// The "Check for Updates..." menu command. Disables itself mid-check via the
+/// The "Check for Updates…" menu command. Disables itself mid-check via the
 /// observed `UpdateAvailability` (a plain Button can't reflect that state).
 struct CheckForUpdatesView: View {
     private let updater: SPUUpdater
@@ -77,7 +85,7 @@ struct CheckForUpdatesView: View {
     }
 
     var body: some View {
-        Button("Check for Updates...") { updater.checkForUpdates() }
+        Button("Check for Updates…") { updater.checkForUpdates() }
             .disabled(!availability.canCheckForUpdates)
     }
 }

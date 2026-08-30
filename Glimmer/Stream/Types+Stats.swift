@@ -100,7 +100,9 @@ public enum StatsOverlayPreset: String, CaseIterable, Codable, Sendable {
     public var displayName: String {
         switch self {
         case .minimal:  return "Minimal"
-        case .micro:    return "Micro"
+        // Display name only - "Micro" read backwards (7 rows vs Minimal's 3).
+        // rawValue stays "micro" so persisted choices don't reset.
+        case .micro:    return "Standard"
         case .extended: return "Extended"
         case .custom:   return "Custom"
         }

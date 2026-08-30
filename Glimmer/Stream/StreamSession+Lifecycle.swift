@@ -359,7 +359,7 @@ extension StreamSession {
             while Date() < end {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
-                if await self.isTearingDown {
+                if self.isTearingDown {
                     await box.offer(.failure(StreamError.launchFailed("Launch cancelled.")))
                     return
                 }

@@ -230,11 +230,11 @@ struct ShortcutsPane: View {
                              : ControllerButton.describe(model.customControllerChord))
                             .foregroundStyle(model.customControllerChord.isEmpty ? .secondary : .primary)
                         Spacer()
-                        Button("Record...") { showChordCapture = true }
+                        Button("Record…") { showChordCapture = true }
                     }
                 }
-                Text("Hold these buttons simultaneously on the gamepad to quit the stream. "
-                    + "Off by default - the keyboard chord stays available either way.")
+                Text("Hold these buttons together on the gamepad for a moment to quit the stream. "
+                    + "L3 + R3 by default; the keyboard shortcut above always works too.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -285,7 +285,8 @@ struct ShortcutsPane: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .help("Linearizes the system mouse acceleration (like `com.apple.mouse.scaling -1`) for the duration of each focused stream.")
+                .help("Linearizes the system mouse acceleration (like `com.apple.mouse.scaling -1`) "
+                    + "for the duration of each focused stream.")
             }
         }
         .formStyle(.grouped)
@@ -323,7 +324,7 @@ private struct ChordCaptureSheet: View {
                 Text("Hold all the buttons for your chord at once, then **release** to capture.")
                     .font(.callout).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Text(accumulated.isEmpty ? "Waiting for input..." : ControllerButton.describe(accumulated))
+                Text(accumulated.isEmpty ? "Waiting for input…" : ControllerButton.describe(accumulated))
                     .font(.title3.monospaced())
                     .foregroundStyle(accumulated.isEmpty ? Color.secondary : Color.accentColor)
                     .frame(minHeight: 28)
@@ -485,7 +486,7 @@ struct HotkeyBadge: View {
 
     private var displayText: String {
         if isCapturing {
-            return livePreview.isEmpty ? "Press keys..." : livePreview
+            return livePreview.isEmpty ? "Press keys…" : livePreview
         }
         return hotkey.displayString
     }
@@ -519,7 +520,7 @@ struct HotkeyBadge: View {
             if mods.contains(.option) { parts.append("⌥") }
             if mods.contains(.shift) { parts.append("⇧") }
             if mods.contains(.command) { parts.append("⌘") }
-            livePreview = parts.isEmpty ? "" : parts.joined() + "..."
+            livePreview = parts.isEmpty ? "" : parts.joined() + "…"
             return
         }
 

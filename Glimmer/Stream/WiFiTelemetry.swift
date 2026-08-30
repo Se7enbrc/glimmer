@@ -448,7 +448,7 @@ final class StreamRouteProbe: @unchecked Sendable {
     /// Everything else that routes (en*, bridge*) is wired.
     private static func classify(interfaceName: String?) -> String {
         guard let name = interfaceName else { return "unknown" }
-        if let wifiNames = CWWiFiClient.interfaceNames(), wifiNames.contains(name) { return "wifi" }
+        if let wifiNames = CWWiFiClient.shared().interfaceNames(), wifiNames.contains(name) { return "wifi" }
         if name.hasPrefix("awdl") || name.hasPrefix("llw") { return "wifi" }
         if name.hasPrefix("utun") || name.hasPrefix("ipsec") || name.hasPrefix("ppp") { return "tunnel" }
         return "wired"

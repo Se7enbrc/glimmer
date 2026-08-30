@@ -219,11 +219,9 @@ public actor IdentityManager {
         // builds imported into the login keychain - the control channel no longer
         // uses a SecIdentity, so nothing of ours should linger there.
         deleteLabelledIdentity()
-        // SECURITY: for users whose moonlight-qt migration already ran
-        // in an earlier build, the source plist still has the PEM material
-        // even though we've long since stopped reading from it. Do a
-        // version-gated best-effort wipe so those installs catch up.
-        sweepStaleMoonlightQtPEMs()
+        // Nothing here touches moonlight-qt: preflight only cleans up stores
+        // Glimmer itself wrote. The qt plist is a copy-from source, never a
+        // thing we edit - see the moonlight-qt section in Identity+Loading.
     }
 
     /// Versioned one-shot cleanup of legacy keychain state from earlier builds.

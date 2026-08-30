@@ -40,9 +40,18 @@ extension AppModel {
         await IdentityManager.shared.preflight()
         migrateFromMoonlightQtIfNeeded()
         loadHosts()
-        // First-launch: if the user has never set custom values, seed them
-        // with display native.
-        if UserDefaults.standard.object(forKey: "customWidth") == nil {
+        // Seed the Custom fields from the display when Custom is ALREADY the
+        // live preset and has no values on record (a preset restored from
+        // defaults, or a moonlight-qt migration).
+        //
+        // Deliberately not run for every first launch: snapCustomToDisplay()
+        // writes four UserDefaults keys through the property didSets, so the old
+        // unconditional call persisted resolution / refresh / bitrate settings
+        // for a user who had never opened the Custom pane - defaults that then
+        // outlive the display they were derived from. Users who pick Custom in
+        // Settings get the same seed for free from `qualityPreset`'s willSet,
+        // which prefills the fields from the preset they were leaving.
+        if qualityPreset == .custom, UserDefaults.standard.object(forKey: "customWidth") == nil {
             snapCustomToDisplay()
         }
         persistQualitySettings()

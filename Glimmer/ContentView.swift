@@ -23,7 +23,12 @@ struct MainWindow: View {
         // Monitoring prompt; declining never re-asks.
         .alert("Enable enhanced DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
             Button("Enable") { model.enableRawHIDFromPrompt() }
-            Button("Cancel", role: .cancel) { model.declineRawHIDPrompt() }
+            // "Not Now" just dismisses - no permanent flag - so a future
+            // DualSense connect offers again. Only "Don't Ask Again" answers
+            // for good (matches AWDLEnablePrompt's Not Now / Don't ask again
+            // split). declineRawHIDPrompt() already sets the permanent flag.
+            Button("Not Now", role: .cancel) { model.showRawHIDPrompt = false }
+            Button("Don't Ask Again") { model.declineRawHIDPrompt() }
         } message: {
             Text(AppModel.rawHIDExplanation)
         }
@@ -290,7 +295,7 @@ private struct ContextFooter: View {
                 // GfeVersion; the one discriminator - "MJOLNIR" in <state> -
                 // is stream-side and never persisted). "Sunshine <ver>"
                 // mislabeled every GFE host, so brand neither.
-                segments.append("host version \(short)")
+                segments.append("PC version \(short)")
             }
             return segments
         }()
@@ -337,6 +342,17 @@ private struct ConnectBanner: View {
                     .buttonStyle(.glass)
                     .controlSize(.small)
                     .disabled(model.selectedHost == nil || model.isStreaming)
+                    // Retry is disabled with no host selected or mid-stream, so
+                    // without this the banner could otherwise become permanent.
+                    Button {
+                        model.nativeStreamError = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Dismiss error")
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -382,7 +398,7 @@ private struct HostAndSettingsPill: View {
                 HStack(spacing: 6) {
                     Image(systemName: "display")
                         .symbolRenderingMode(.hierarchical)
-                    Text(model.selectedHost?.displayName ?? "Choose PC")
+                    Text(model.selectedHost?.displayName ?? "Choose a PC")
                         .lineLimit(1)
                 }
             }
@@ -551,7 +567,9 @@ struct MenuBarContent: View {
             }
 
             if let host = model.selectedHost {
-                Section("Connected to \(host.displayName)") {
+                // "Connected to" only when actually streaming this host - the
+                // selected host is not necessarily the connected one.
+                Section(model.isStreaming ? "Connected to \(host.displayName)" : host.displayName) {
                     Button {
                         model.streamDefaultApp()
                         activate()
@@ -601,7 +619,7 @@ struct MenuBarContent: View {
                 openSettings()
                 activate()
             } label: {
-                Label("Settings...", systemImage: "gearshape")
+                Label("Settings…", systemImage: "gearshape")
             }
             .keyboardShortcut(",")
 
@@ -613,7 +631,7 @@ struct MenuBarContent: View {
                 UpdaterController.shared.updater.checkForUpdates()
                 activate()
             } label: {
-                Label("Check for Updates...", systemImage: "arrow.triangle.2.circlepath")
+                Label("Check for Updates…", systemImage: "arrow.triangle.2.circlepath")
             }
             #endif
 
@@ -664,7 +682,7 @@ private struct HostContextMenu: ViewModifier {
                     draftName = host.customName ?? ""
                     showRename = true
                 } label: {
-                    Label("Rename...", systemImage: "pencil")
+                    Label("Rename…", systemImage: "pencil")
                 }
                 // Per-host codec cap. Automatic negotiates AV1 → HEVC → H.264
                 // against what this host's encoder supports, so the override
@@ -691,13 +709,15 @@ private struct HostContextMenu: ViewModifier {
                 Button(role: .destructive) {
                     showUnpairConfirm = true
                 } label: {
-                    Label("Unpair...", systemImage: "minus.circle")
+                    Label("Unpair…", systemImage: "minus.circle")
                 }
             }
-            .alert("Rename \(host.name)", isPresented: $showRename) {
+            .alert("Rename \(host.displayName)", isPresented: $showRename) {
                 TextField("Display name", text: $draftName)
                 Button("Save") { model.renameHost(host, to: draftName) }
-                Button("Use default name", role: .destructive) {
+                // Not destructive - it just clears the custom name back to the
+                // PC's own hostname, so no red styling.
+                Button("Use default name") {
                     model.renameHost(host, to: "")
                 }
                 Button("Cancel", role: .cancel) { }

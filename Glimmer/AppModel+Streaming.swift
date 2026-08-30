@@ -269,7 +269,7 @@ extension AppModel {
             return
         }
         Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
-        streamPhase = .connecting(stage: "Connecting to \(host.displayName)...")
+        streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
         nativeStreamError = nil
         nativeHDRActive = false
         // Re-arm the disconnect toast for back-to-back cycles: if the
@@ -396,7 +396,7 @@ extension AppModel {
             }
             // Single cleanup site: runs whether start() threw or the event
             // loop drained normally.
-            await self.cleanupAfterStream(host: host, caughtError: caughtError)
+            self.cleanupAfterStream(host: host, caughtError: caughtError)
         }
     }
 
@@ -573,11 +573,11 @@ extension AppModel {
         // Stage names are engineering jargon ("Starting RTSP handshake"). Keep
         // them in logs but show the user a friendly "Connecting to <host>..."
         // through the whole handshake.
-        let connecting = "Connecting to \(host.displayName)..."
+        let connecting = "Connecting to \(host.displayName)…"
         switch event {
         case .stageStarting:
-            // Don't let a late stage event repaint "Connecting..." over the
-            // "Cancelling..." the user's cancel click just earned.
+            // Don't let a late stage event repaint "Connecting…" over the
+            // "Cancelling…" the user's cancel click just earned.
             if !Self.connectCancelRequested { streamPhase = .connecting(stage: connecting) }
         case .stageComplete:              break
         case .stageFailed:
@@ -590,22 +590,7 @@ extension AppModel {
             // Latched once inside the store - repeat edges are no-ops.
             SessionReceiptStore.markSessionLive()
         case .firstFrame:
-            // Ground-truth liveness: a decoded/rendered frame proves the
-            // stream is up regardless of whether the one-shot
-            // .connectionEstablished edge was delivered. Promote ONLY out of a
-            // connecting phase - never override a teardown that has already
-            // moved us to .idle/.error (a late first-frame yield racing stop()
-            // must not resurrect the streaming phase). This is the
-            // belt-and-suspenders fix for "stuck on Connecting while video is
-            // actually flowing": if .connectionEstablished was lost, the first
-            // frame repairs the transition within ~one frame.
-            if case .connecting = streamPhase {
-                streamPhase = .streaming
-                logConnectHoldAdjudication()
-                // Same live-edge stamp as .connectionEstablished - whichever
-                // edge arrives first starts the receipt clock (store-latched).
-                SessionReceiptStore.markSessionLive()
-            }
+            promoteToStreamingOnFirstFrame()
         case .connectionTerminated(let code):
             streamPhase = .idle
             nativeHDRActive = false
@@ -619,7 +604,7 @@ extension AppModel {
             // which would tear the hero card back to the launcher; the stream
             // window stays up holding the frame. Resolves on .reconnected or, if
             // the engine gives up, a real .connectionTerminated.
-            streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)...")
+            streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)…")
         case .reconnected:
             // Resumed in place. (The fresh .connectionEstablished / .firstFrame
             // edges also promote the phase, so this is belt-and-braces.)
@@ -640,6 +625,23 @@ extension AppModel {
             break
         case .log: break
         }
+    }
+
+    /// Ground-truth liveness: a decoded/rendered frame proves the stream is up
+    /// regardless of whether the one-shot .connectionEstablished edge was
+    /// delivered. Promote ONLY out of a connecting phase - never override a
+    /// teardown that has already moved us to .idle/.error (a late first-frame
+    /// yield racing stop() must not resurrect the streaming phase). This is the
+    /// belt-and-suspenders fix for "stuck on Connecting while video is actually
+    /// flowing": if .connectionEstablished was lost, the first frame repairs the
+    /// transition within ~one frame.
+    private func promoteToStreamingOnFirstFrame() {
+        guard case .connecting = streamPhase else { return }
+        streamPhase = .streaming
+        logConnectHoldAdjudication()
+        // Same live-edge stamp as .connectionEstablished - whichever edge
+        // arrives first starts the receipt clock (store-latched).
+        SessionReceiptStore.markSessionLive()
     }
 
     // MARK: - Connect cancel + connect-hold adjudication
@@ -664,7 +666,7 @@ extension AppModel {
     /// True once the user cancelled the in-flight connect. Read by the
     /// teardown cleanup to suppress the failure banner (a deliberate cancel
     /// is not a failure) and by `.stageStarting` to keep a late stage event
-    /// from repainting over "Cancelling...". Reset at every stream() entry.
+    /// from repainting over "Cancelling…". Reset at every stream() entry.
     private static var connectCancelRequested = false
 
     /// ConnectSurface calls this when its 400 ms hold elapses and the
@@ -685,7 +687,7 @@ extension AppModel {
         guard !Self.connectCancelRequested else { return }  // one stop() is plenty (it's idempotent anyway)
         Self.connectCancelRequested = true
         Diag.notice("User cancelled connect - stopping the in-flight session", "Stream")
-        streamPhase = .connecting(stage: "Cancelling...")
+        streamPhase = .connecting(stage: "Cancelling…")
         Task { await session.stop() }
     }
 

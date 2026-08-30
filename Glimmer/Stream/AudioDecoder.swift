@@ -674,7 +674,8 @@ public final class AudioDecoder: @unchecked Sendable {
         configChangeObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
         ) { [weak self] _ in
-            self?.routeListenerQueue.async { self?.handleEngineConfigurationChange() }
+            guard let self else { return }
+            self.routeListenerQueue.async { self.handleEngineConfigurationChange() }
         }
     }
 
@@ -955,8 +956,8 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `stateLock`.
     @discardableResult
     private func decodeOneFrame(decoder: OpaquePointer, fmt: AVAudioFormat,
-                               input: UnsafePointer<UInt8>?, length: Int32,
-                               decodeFec: Int32) -> Bool {
+                                input: UnsafePointer<UInt8>?, length: Int32,
+                                decodeFec: Int32) -> Bool {
         let frameCount = AVAudioFrameCount(samplesPerFrame)
         guard let pcm = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frameCount) else { return false }
 

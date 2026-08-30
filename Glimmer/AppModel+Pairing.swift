@@ -99,6 +99,15 @@ extension AppModel {
         // against Sunshine's single-session pairing state. Race-free - this check and
         // the `pairingInFlight = true` below run synchronously on the main actor.
         guard !pairingInFlight else { return }
+        // Every attempt starts from a clean phase. `pairingPhase` is app-wide
+        // state that outlives the sheet that drove it, and nothing used to
+        // clear it: the previous attempt's .success / .failure stayed latched,
+        // so a new attempt against a different PC opened showing the OLD
+        // result - and a latched .success short-circuited the whole sheet to
+        // its "Paired" screen (with no host name to show) until the app was
+        // relaunched. The sheet also clears this on dismiss; both ends matter,
+        // because a validation failure below returns before any phase write.
+        pairingPhase = .idle
         let pattern = #"^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$"#
         guard hostnameOrIP.range(of: pattern, options: .regularExpression) != nil,
               hostnameOrIP.count <= 253,
@@ -112,7 +121,7 @@ extension AppModel {
         }
 
         pairingInFlight = true
-        pairingPhase = .awaitingPin("Pairing... enter \(pin) on \(hostnameOrIP).")
+        pairingPhase = .awaitingPin("Pairing… enter \(pin) on \(hostnameOrIP).")
 
         // Stop the background chip poller for the duration of pairing. It hits
         // the host's HTTPS :47984 every few seconds; Sunshine's pairing state
@@ -125,11 +134,7 @@ extension AppModel {
         hostStatusTask = nil
         defer { restartHostStatusPolling() }
 
-        var info = ServerInfo(
-            address: hostnameOrIP,
-            uniqueId: hostnameOrIP,
-            serverName: hostnameOrIP
-        )
+        var info = ServerInfo(address: hostnameOrIP, uniqueId: hostnameOrIP, serverName: hostnameOrIP)
         info.pairStatus = .unpaired
 
         // Reachability first, in its OWN catch: a connectivity failure (host offline /
@@ -140,7 +145,7 @@ extension AppModel {
         do {
             fetched = try await network.fetchServerInfo()
         } catch {
-            log.error("Pairing: couldn't reach host=\(hostnameOrIP, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .private)")
+            log.error("Pairing: unreachable \(hostnameOrIP, privacy: .private) - \(error.localizedDescription, privacy: .private)")
             pairingPhase = .failure("Couldn't reach \(hostnameOrIP). Make sure it's on and on this network.")
             Diag.error("Pairing: host unreachable", "Pairing")
             pairingInFlight = false
@@ -155,7 +160,7 @@ extension AppModel {
                 return
             }
             let client = PairingClient(network: network, server: fetched)
-            pairingPhase = .verifying("Pairing... enter \(pin) on \(hostnameOrIP).")
+            pairingPhase = .verifying("Pairing… enter \(pin) on \(hostnameOrIP).")
             let paired = try await client.pair(pin: pin)
             // Persist the host record so it survives loadHosts() - pairing only
             // pinned the cert; without this the freshly-paired PC didn't save.

@@ -10,7 +10,8 @@
 //  open - it never seizes the device, so GCController keeps everything it
 //  already provides: sticks, face, shoulders, triggers, touchpad, battery).
 //
-//  Surfaces only the three buttons GameController drops. Everything else stays
+//  Surfaces the centre buttons GameController drops (plus the two shoulder bits
+//  the quit-chord predicate reads from the same byte). Everything else stays
 //  on the GameController path.
 //
 //  REQUIRES the "Input Monitoring" privacy permission (TCC kTCCServiceListenEvent
@@ -26,13 +27,21 @@ import Foundation
 import IOKit.hid
 import os.log
 
-/// The three DualSense buttons GameController doesn't expose, mapped to the
-/// host's button semantics by `ControllerForwarder`.
+/// The DualSense buttons GameController doesn't expose, mapped to the host's
+/// button semantics by `ControllerForwarder`, plus the two shoulder bits from
+/// the same report byte. The shoulders are NOT forwarded from here (GameController
+/// stays the host's source for L1/R1); they exist so the quit-chord predicate
+/// can read every button of "Start + Select + L1 + R1" from ONE coherent report
+/// instead of splicing raw-HID centre bits onto GameController's view of the
+/// shoulders - the two sources disagree in time, and GameController withholds
+/// input around a bound system gesture (Create is bound on macOS 26).
 struct DualSenseExtraButtons: Equatable, Sendable {
     var options = false    // ≡  → Start  (PLAY_FLAG)
     var create = false     // Share/Create → Back/Select (BACK_FLAG)
     var ps = false         // PS → Guide  (SPECIAL_FLAG)
     var mute = false       // Mic mute → MISC_FLAG
+    var l1 = false         // chord-only; host L1 rides GameController
+    var r1 = false         // chord-only; host R1 rides GameController
 }
 
 /// Battery decoded straight from the DualSense report. We read this ourselves
@@ -321,54 +330,18 @@ final class DualSenseHID: @unchecked Sendable {
         me.decode(reportID: reportID, report: report, length: reportLength)
     }
 
+    /// Per-report entry from the IOKit callback: the pure decode lives in
+    /// DualSenseHID+Decode.swift; this half owns the lock, the change edge,
+    /// and the main-queue hop to `onChange`.
     private func decode(reportID: UInt32, report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
-        // Locate the button bytes robustly. Some IOKit stacks strip the report
-        // ID into `reportID` (so report[0] is the first payload byte); others
-        // leave it at report[0]. Detect by sniffing report[0] for a known
-        // DualSense report ID. Then:
-        //   USB (0x01): [ID?] LX LY RX RY ...   → LX at (idPresent ? 1 : 0)
-        //   BT  (0x31): [ID?] tag LX LY ...      → one extra tag byte before LX
-        // Button bytes sit a fixed distance after LX (identical masks USB/BT,
-        // per Linux hid-playstation / SDL ps5):
-        //   buttons[1] (Create 0x10 / Options 0x20) at LX+8
-        //   buttons[2] (PS 0x01 / Mute 0x04)         at LX+9
-        let idPresent = length > 0 && (report[0] == 0x01 || report[0] == 0x31)
-        let rid = idPresent ? UInt32(report[0]) : reportID
-        let lxIndex = (idPresent ? 1 : 0) + (rid == 0x31 ? 1 : 0)
-        let b1Index = lxIndex + 8
-        let b2Index = lxIndex + 9
-        guard length > b2Index else { return }
-
-        let b1 = report[b1Index]
-        let b2 = report[b2Index]
-        var next = DualSenseExtraButtons()
-        next.create = (b1 & 0x10) != 0
-        next.options = (b1 & 0x20) != 0
-        next.ps = (b2 & 0x01) != 0
-        next.mute = (b2 & 0x04) != 0
-
-        // Battery: the status byte sits 52 bytes past LX (SDL ps5 / Linux
-        // hid-playstation). Low nibble = level 0...10 (percent ≈ level*10+5),
-        // high nibble = charge state (1 = charging, 2 = full). The simple
-        // 10-byte BT report has no battery field, so guard on length and on
-        // the 0x0C "not reporting" sentinel.
-        var nextBattery: DualSenseBattery?
-        let statusIndex = lxIndex + 52
-        if length > statusIndex {
-            let status = report[statusIndex]
-            let level = status & 0x0F
-            if level != 0x0C {
-                let charge = (status >> 4) & 0x0F
-                let pct = (charge == 0x02) ? 100 : min(Int(level) * 10 + 5, 100)
-                nextBattery = DualSenseBattery(percent: pct, charging: charge == 0x01 || charge == 0x02)
-            }
-        }
+        guard let decoded = Self.decodeInputReport(
+            reportID: reportID, bytes: UnsafeBufferPointer(start: report, count: length)) else { return }
 
         lock.lock()
-        if let nextBattery { batteryLocked = nextBattery }
+        if let nextBattery = decoded.battery { batteryLocked = nextBattery }
         reportCountLocked += 1
-        let changed = next != buttonsLocked
-        buttonsLocked = next
+        let changed = decoded.buttons != buttonsLocked
+        buttonsLocked = decoded.buttons
         let notify = onChange
         lock.unlock()
 
@@ -525,8 +498,8 @@ final class DualSenseHID: @unchecked Sendable {
             data = payload
         }
         let rc = data.withUnsafeBufferPointer { buf -> IOReturn in
-            IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(reportID),
-                                 buf.baseAddress!, buf.count)
+            guard let base = buf.baseAddress else { return kIOReturnBadArgument }
+            return IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(reportID), base, buf.count)
         }
         if rc == kIOReturnSuccess {
             if !loggedWriteWasSuccessful() {
@@ -537,7 +510,8 @@ final class DualSenseHID: @unchecked Sendable {
             // exclusive grab by gamecontrollerd) degrades to "no adaptive
             // triggers". Everything else - the read path, buttons, battery - is
             // unaffected. Logged once so the verdict is in the log.
-            log.error("DualSense OUTPUT report write refused rc=0x\(String(UInt32(bitPattern: rc), radix: 16), privacy: .public) - adaptive triggers disabled (degraded no-op)")
+            let hex = String(UInt32(bitPattern: rc), radix: 16)
+            log.error("DualSense OUTPUT report write refused rc=0x\(hex, privacy: .public) - adaptive triggers disabled (degraded no-op)")
         }
     }
 

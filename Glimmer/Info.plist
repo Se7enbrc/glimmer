@@ -29,7 +29,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 ugfugl.io. All rights reserved.</string>
+	<string>Copyright © 2026 ugfugl.io. GNU GPL v3.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Glimmer</string>
 	<key>NSPrincipalClass</key>

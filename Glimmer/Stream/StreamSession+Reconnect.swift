@@ -87,14 +87,14 @@ extension StreamSession {
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
         await runReconnectEpisode(
             code: Self.deadPeerTerminationCode,
-            bannerText: "Connection is weak - lowering quality to \(toKbps / 1000) Mbps...")
+            bannerText: "Connection is weak - lowering quality to \(toKbps / 1000) Mbps…")
     }
 
     /// Drive a bounded reconnect episode: hold the frozen frame, retry the
     /// in-place rebuild with a short backoff until it succeeds or we exhaust the
     /// attempt/time budget, then resume (`.reconnected`) or give up (real
     /// teardown). MainActor work happens inside `reconnectInPlace`.
-    private func runReconnectEpisode(code: Int32, bannerText: String = "Reconnecting...") async {
+    private func runReconnectEpisode(code: Int32, bannerText: String = "Reconnecting…") async {
         isReconnecting = true
         reconnectAttempts = 0
         let deadline = Date().addingTimeInterval(Self.reconnectWindowSeconds)

@@ -2,9 +2,11 @@
 //  Identity+Loading.swift
 //
 //  Identity materialization + migration: load() (file store, with legacy
-//  keychain import) and the one-time cleanup of legacy keychain items,
-//  UserDefaults plaintext, and stale moonlight-qt artifacts. Split out of
-//  Identity.swift to keep each unit focused; see that file for the actor.
+//  keychain import) and the one-time cleanup of the stores Glimmer itself
+//  wrote in earlier builds - legacy keychain items and UserDefaults
+//  plaintext. moonlight-qt's plist is a read-only source: we copy out of
+//  it and never write to it. Split out of Identity.swift to keep each unit
+//  focused; see that file for the actor.
 //
 
 import Foundation
@@ -80,20 +82,15 @@ extension IdentityManager {
 
         // -----------------------------------------------------------------
         // Step 4 - moonlight-qt cross-app migration. QSettings stores PEMs
-        // as Data, not String, so we read both shapes. After a successful
-        // adoption the source plist's PEM material is wiped - see
-        // `wipeMoonlightQtIdentityPlist` below for the threat model.
+        // as Data, not String, so we read both shapes. Copy only - the
+        // source plist is never modified; see the note above
+        // `adoptMoonlightQtIdentity`.
         // -----------------------------------------------------------------
         let needsMigration = (storedCert?.isEmpty ?? true) || (storedKey?.isEmpty ?? true)
-        var adoptedMoonlightQt = false
-        if needsMigration {
-            let adopted = adoptMoonlightQtIdentity(currentID: storedID)
-            if let adopted {
-                storedCert = adopted.certPEM
-                storedKey  = adopted.keyPEM
-                storedID   = adopted.uniqueID
-                adoptedMoonlightQt = true
-            }
+        if needsMigration, let adopted = adoptMoonlightQtIdentity(currentID: storedID) {
+            storedCert = adopted.certPEM
+            storedKey  = adopted.keyPEM
+            storedID   = adopted.uniqueID
         }
 
         // -----------------------------------------------------------------
@@ -110,14 +107,6 @@ extension IdentityManager {
             let identity = Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
             try writeIdentityToFileStore(identity)
             wipeUserDefaultsPlaintext()
-            // SECURITY: once the file store has the canonical copy,
-            // remove the PEM material from moonlight-qt's plist so the
-            // long-lived private key isn't left readable at its world-
-            // accessible source path forever. Conditioned on having
-            // actually adopted from moonlight-qt this run.
-            if adoptedMoonlightQt {
-                wipeMoonlightQtIdentityPlist()
-            }
             defaults.set(Self.fileStorageVersion, forKey: Self.fileStorageFlag)
             cached = identity
             log.info("Migrated identity from UserDefaults plaintext to file store")
@@ -144,24 +133,57 @@ extension IdentityManager {
         return identity
     }
 
+    // MARK: moonlight-qt source (read-only)
+    //
+    // moonlight-qt keeps its client cert and RSA private key as plaintext
+    // PEM under the `certificate` / `key` fields of its own UserDefaults
+    // suite:
+    //   ~/Library/Preferences/com.moonlight-stream.Moonlight.plist
+    // at the default mode 0644 - readable by any process running as the
+    // same UID. That posture is moonlight-qt's, and it predates us; Glimmer
+    // neither created it nor can fix it on qt's behalf.
+    //
+    // What Glimmer controls is its own copy, and that lands in the mode-0600
+    // file store above. So we COPY and stop there: we never remove, rewrite,
+    // or otherwise touch a single field of the source plist. Deleting qt's
+    // PEMs would silently strip moonlight-qt of its identity and therefore
+    // of every host it had paired with - a real, immediate loss to the user
+    // in exchange for hardening a file we do not own. Both apps stay paired.
+
+    static let moonlightQtSuiteName = "com.moonlight-stream.Moonlight"
+
     /// Adopted PEM material from the moonlight-qt UserDefaults suite. The
     /// uniqueID carries forward the caller's existing ID when qt's own ID
     /// field is missing/empty, so adoption never clobbers a known ID with nil.
-    fileprivate struct AdoptedQtIdentity {
+    struct AdoptedQtIdentity {
         let certPEM: String
         let keyPEM: String
         let uniqueID: String?
     }
 
     /// Step 4 helper - read the cert/key (and optional uniqueID) PEMs out of
-    /// the moonlight-qt UserDefaults suite. QSettings persists PEMs as either
-    /// String or Data, so we read both shapes. Returns nil when the suite is
+    /// the moonlight-qt UserDefaults suite. Returns nil when the suite is
     /// unreadable or doesn't carry a usable cert+key pair.
     private func adoptMoonlightQtIdentity(currentID: String?) -> AdoptedQtIdentity? {
-        guard let moonlight = UserDefaults(suiteName: Self.moonlightQtSuiteName) else {
+        guard let moonlight = UserDefaults(suiteName: Self.moonlightQtSuiteName),
+              let adopted = Self.adoptedIdentity(fromMoonlightQt: moonlight,
+                                                 currentID: currentID) else {
             return nil
         }
+        log.info("""
+            Copying moonlight-qt client identity \
+            (\(adopted.certPEM.count) byte cert, \(adopted.keyPEM.count) byte key) \
+            → file store; source plist left untouched
+            """)
+        return adopted
+    }
 
+    /// The read itself, as a pure function of a suite, so a test can point it
+    /// at a scratch domain instead of the real moonlight-qt one. QSettings
+    /// persists PEMs as either String or Data, so we accept both shapes.
+    /// Reads only - nothing here writes back to `moonlight`.
+    static func adoptedIdentity(fromMoonlightQt moonlight: UserDefaults,
+                                currentID: String?) -> AdoptedQtIdentity? {
         func readPEM(_ key: String) -> String? {
             if let str = moonlight.string(forKey: key), !str.isEmpty { return str }
             if let data = moonlight.data(forKey: key),
@@ -177,7 +199,6 @@ extension IdentityManager {
         let mID = moonlight.string(forKey: "uniqueid")
                  ?? moonlight.data(forKey: "uniqueid").flatMap { String(data: $0, encoding: .utf8) }
 
-        log.info("Adopting moonlight-qt client identity (\(mCert.count) byte cert, \(mKey.count) byte key) → file store")
         // Preserve the caller's existing ID unless qt offers a non-empty one.
         let resolvedID = (mID?.isEmpty == false) ? mID : currentID
         return AdoptedQtIdentity(certPEM: mCert, keyPEM: mKey, uniqueID: resolvedID)
@@ -310,80 +331,6 @@ extension IdentityManager {
         // here and natural CFPreferences flush doesn't leave the plaintext
         // PEM on the platter.
         defaults.synchronize()
-    }
-
-    // MARK: moonlight-qt source plist hygiene
-    //
-    // moonlight-qt persists its client RSA private key in plaintext under
-    // the `key` field of its UserDefaults suite (QSettings writes it as
-    // Data, hex-decoded PEM). The plist lives at
-    //   ~/Library/Preferences/com.moonlight-stream.Moonlight.plist
-    // with default mode 0644 - readable by any process running as the
-    // same UID. That's a long-lived RSA-2048 private key sitting there
-    // forever even after Glimmer has migrated it into our mode-0600 file
-    // store.
-    //
-    // After a successful migration we wipe `certificate` and `key` from
-    // the source plist. We do NOT touch `uniqueid`, `hosts.*`, or any
-    // other moonlight-qt state - only the PEM material - so users who
-    // still use moonlight-qt alongside Glimmer keep their host list
-    // intact. (The next time they pair from moonlight-qt itself, qt will
-    // regenerate its own identity.)
-
-    fileprivate static let moonlightQtSuiteName = "com.moonlight-stream.Moonlight"
-
-    /// Version flag for the post-migration plist hygiene sweep. Bumped
-    /// when a new generation of qt-side PEM-bearing keys needs scrubbing.
-    private static let mqtPlistSweepKey     = "glimmer.moonlightQtPlistSweepVersion"
-    private static let mqtPlistSweepVersion = 1
-
-    /// Erase the cert/key PEM material from the moonlight-qt UserDefaults
-    /// suite. Called exactly once from the migration site (when we just
-    /// adopted them) and best-effort once from `preflight()` (when an
-    /// earlier-build migration completed before this code shipped).
-    /// Idempotent.
-    func wipeMoonlightQtIdentityPlist() {
-        guard let mq = UserDefaults(suiteName: Self.moonlightQtSuiteName) else {
-            // Suite unreadable (CFPreferences misconfig). Not an error per se -
-            // just nothing to wipe from our point of view.
-            log.info("moonlight-qt suite not readable; nothing to wipe")
-            return
-        }
-        // Only the PEM-bearing fields. Hosts list / customisations stay so
-        // a parallel moonlight-qt user isn't broken.
-        let pemKeys = ["certificate", "key"]
-        var wipedAny = false
-        for key in pemKeys {
-            let hadValue = mq.object(forKey: key) != nil
-            if hadValue {
-                mq.removeObject(forKey: key)
-                wipedAny = true
-            }
-        }
-        if wipedAny {
-            mq.synchronize()
-            log.info("Wiped moonlight-qt PEM material (certificate + key) from \(Self.moonlightQtSuiteName, privacy: .public).plist")
-        }
-        UserDefaults.standard.set(Self.mqtPlistSweepVersion,
-                                  forKey: Self.mqtPlistSweepKey)
-    }
-
-    /// Best-effort cleanup for users who migrated before the file store shipped: the
-    /// file store has the canonical PEMs and we've not touched the source
-    /// plist. Run on every preflight, gated by a UserDefaults version flag
-    /// so it's effectively one-shot.
-    func sweepStaleMoonlightQtPEMs() {
-        let defaults = UserDefaults.standard
-        guard defaults.integer(forKey: Self.mqtPlistSweepKey) < Self.mqtPlistSweepVersion else {
-            return
-        }
-        // Only wipe if the file store has the canonical identity already
-        // - never wipe a source we haven't superseded. The file-storage
-        // flag is the proof of that.
-        guard defaults.integer(forKey: Self.fileStorageFlag) >= Self.fileStorageVersion else {
-            return
-        }
-        wipeMoonlightQtIdentityPlist()
     }
 
     // MARK: Unique ID

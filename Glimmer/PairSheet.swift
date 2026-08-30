@@ -23,6 +23,19 @@ struct PairSheet: View {
     /// move to the PIN/handshake step.
     @State private var chosen: Bool
 
+    /// Latched when a handshake THIS sheet started reports success.
+    ///
+    /// Deliberately not read straight off `model.pairingPhase`: that phase is
+    /// app-wide state that outlives the sheet, and a body gated on it meant that
+    /// after one successful pairing every later open of the sheet short-
+    /// circuited to the "Paired" screen - with an empty host name, and no route
+    /// back to the chooser short of relaunching the app. A local latch starts
+    /// false on every presentation, so a stale phase can no longer speak for a
+    /// sheet that has paired nothing. It is only ever set with a non-empty host
+    /// name in hand, which is what keeps `successBody` from rendering "  is
+    /// ready to stream."
+    @State private var paired = false
+
     /// Optional pre-fill, used by the "re-pair" recovery path so the user
     /// doesn't retype the host's address - that path jumps straight to the PIN
     /// step. The normal "Pair a new PC" entry starts on the discovery chooser.
@@ -31,9 +44,10 @@ struct PairSheet: View {
         _chosen = State(initialValue: !initialAddress.isEmpty)
     }
 
-    private var isSuccess: Bool {
-        if case .success = model.pairingPhase { return true }
-        return false
+    /// The host we're pairing with, whitespace-trimmed. Empty means the user
+    /// hasn't picked or typed one yet.
+    private var trimmedHost: String {
+        hostnameOrIP.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
@@ -42,7 +56,7 @@ struct PairSheet: View {
                 .font(.title2.bold())
                 .contentTransition(.opacity)
 
-            if isSuccess {
+            if paired {
                 successBody
             } else if !chosen {
                 HostChooser(selected: { addr in
@@ -60,10 +74,25 @@ struct PairSheet: View {
         // Float above all other Glimmer windows so the PIN being read off isn't
         // hidden behind the launcher or Settings. Reverts on dismiss.
         .background(FloatingWindowLevel())
+        // Success is taken as a TRANSITION seen while this sheet is on screen
+        // and has a host in hand - never as a standing value, which is how a
+        // previous pairing's result used to leak into a fresh sheet.
+        .onChange(of: model.pairingPhase) { _, phase in
+            guard case .success = phase, chosen, !trimmedHost.isEmpty else { return }
+            paired = true
+        }
+        .onDisappear {
+            // The phase is per-attempt state. Leaving it latched at
+            // .success/.failure carried the last attempt's banner - and its
+            // success screen - into the next open of the sheet. `pair()` clears
+            // it at the start of an attempt too; this covers the dismissals
+            // where no new attempt ever follows.
+            model.pairingPhase = .idle
+        }
     }
 
     private var titleText: String {
-        if isSuccess { return "Paired" }
+        if paired { return "Paired" }
         return chosen ? "Pair a new PC" : "Choose a PC"
     }
 
@@ -72,19 +101,19 @@ struct PairSheet: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(.green)
-                .symbolEffect(.bounce, value: isSuccess)
-            Text("\(hostnameOrIP) is ready to stream.")
+                .symbolEffect(.bounce, value: paired)
+            Text("\(trimmedHost) is ready to stream.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .sensoryFeedback(.success, trigger: isSuccess)
+        .sensoryFeedback(.success, trigger: paired)
         // Auto-close after a brief beat so the check + haptic register; select
         // the freshly-paired host so the launcher lands on it.
-        .task(id: isSuccess) {
-            guard isSuccess else { return }
+        .task(id: paired) {
+            guard paired else { return }
             // No auto-dismiss: the success screen shows Done / "Stream now" buttons,
             // and a 900ms auto-close made them unclickable. The user dismisses it.
             selectPairedHost()
@@ -108,7 +137,7 @@ struct PairSheet: View {
                 .foregroundStyle(.secondary)
         }
 
-        if let msg = model.pairingMessage, !isSuccess {
+        if let msg = model.pairingMessage, !paired {
             HStack(spacing: 8) {
                 if model.pairingInFlight {
                     ProgressView().controlSize(.small)
@@ -129,7 +158,7 @@ struct PairSheet: View {
 
     @ViewBuilder private var footer: some View {
         HStack {
-            if isSuccess {
+            if paired {
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
@@ -159,15 +188,13 @@ struct PairSheet: View {
     }
 
     private func startPairing() {
-        guard !model.pairingInFlight, !isSuccess,
-              !hostnameOrIP.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return }
+        guard !model.pairingInFlight, !paired, !trimmedHost.isEmpty else { return }
         if pin.count != 4 { pin = model.generatePairingPIN() }
         Task { await model.pair(hostnameOrIP: hostnameOrIP, pin: pin) }
     }
 
     private func selectPairedHost() {
-        let typed = hostnameOrIP.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = trimmedHost
         if let host = model.hosts.first(where: {
             [$0.name, $0.displayName, $0.localAddress, $0.manualAddress]
                 .compactMap { $0 }
@@ -195,12 +222,24 @@ private struct HostChooser: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Up-front explanation for macOS's Local Network prompt, in the same
+            // spirit as the raw-HID one on the launcher: the `.task` below
+            // starts mDNS the moment this view renders, so the system dialog can
+            // land within a second of the sheet opening. Rendered FIRST, in the
+            // same body pass that arms discovery, so the reason is already on
+            // screen when the prompt arrives - not somewhere behind it.
+            Text("Glimmer looks for PCs running Sunshine on your local network; "
+                + "macOS will ask to allow that.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             // Spinner only while still actively looking. The stalled nudge is
             // hoisted out so it survives the auto-reveal of the manual field.
             if found.isEmpty && !showManual && !discoveryStalled {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text("Looking for PCs on your network...")
+                    Text("Looking for PCs on your network…")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

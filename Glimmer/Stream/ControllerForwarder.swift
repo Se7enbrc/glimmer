@@ -153,6 +153,23 @@ extension InputForwarder {
         // the host a hint about what kind of virtual controller to emulate.
         let buttons = supportedButtonMask(for: gamepad)
 
+        // Create/Share (`buttonOptions`) is bound to a macOS system gesture -
+        // measured on macOS 26 for the DualSense (isBoundToSystemGesture == true;
+        // the WWDC21 contract is double-press = screenshot, long-press = start or
+        // stop a ReplayKit recording). "Bound" means GameController runs the
+        // recognizer FIRST and withholds the press from the app, and the Moonlight
+        // quit chord is by definition a long-press of Create: the hold never
+        // reached us through GameController AND asked macOS to start a screen
+        // recording. A streaming client has exactly one consumer for that button,
+        // the host, so disable the gesture: the press is delivered immediately and
+        // macOS stays out of it. Home (PS) stays bound on purpose - the Game
+        // Overlay is a feature users expect from it and no chord depends on it.
+        if let create = gamepad.extendedGamepad?.buttonOptions, create.isBoundToSystemGesture {
+            create.preferredSystemGestureState = .disabled
+            Diag.info("controller \(slot): Create/Share was bound to a macOS system gesture - "
+                + "disabled so the press reaches the stream", "Controller")
+        }
+
         // DualSense + the user opted in: start the raw-HID side-channel so the
         // Options / Create / Mute buttons GameController hides become available
         // (see DualSenseHID). Gated on the opt-in so the Input Monitoring
@@ -243,7 +260,7 @@ extension InputForwarder {
         // If this pad armed the in-flight quit-chord dwell, the hold can no
         // longer complete - cancel rather than let the timer re-read a
         // disconnected profile.
-        if quitChordDwellSlot == state.slot { cancelQuitChordDwell() }
+        if quitChordDwellSlot == state.slot { cancelQuitChordDwell(reason: "arming pad detached") }
         log.info("Gamepad detached: slot=\(state.slot) remaining mask=0x\(String(self.gamepadMask, radix: 16), privacy: .public)")
         // DETACH-CONTEXT breadcrumb (NOTICE - a detach is rare and is exactly
         // the postmortem anchor the file sink must keep): last-input and
@@ -412,16 +429,30 @@ extension InputForwarder {
         forwardTouchpad(pad: pad, slot: slot)
     }
 
-    /// Raw-HID side-channel update: fired ONLY when a DualSense center-button bit
-    /// (Options/Create/PS/Mute) actually changed (DualSenseHID gates onChange on a
-    /// real bit change). GameController never delivers those buttons and does NOT
-    /// fire its valueChangedHandler for them, so this push is necessary to carry a
-    /// center-button edge to the host - but it does NOT re-forward the touchpad
-    /// (that stays on the GameController path) and the InputBatcher coalesces it
-    /// with the latest GC-sourced axes for the slot, so it is not a double-feed of
-    /// stick/axis state. This is the de-duplicated half of the old double-feed.
+    /// Raw-HID side-channel update: fired ONLY when a decoded DualSense bit
+    /// changed - a center button (Options/Create/PS/Mute) or, for the quit chord,
+    /// a shoulder (DualSenseHID gates onChange on a real bit change). GameController
+    /// never delivers the center buttons and does NOT fire its valueChangedHandler
+    /// for them, so this push is necessary to carry a center-button edge to the
+    /// host - but it does NOT re-forward the touchpad (that stays on the
+    /// GameController path) and the InputBatcher coalesces it with the latest
+    /// GC-sourced axes for the slot, so it is not a double-feed of stick/axis
+    /// state. A shoulder edge here re-pushes the same GC-sourced state (the host
+    /// L1/R1 still come from GameController); its purpose is to re-run the chord
+    /// check so a chord completed by a shoulder arms even if GameController's
+    /// frame for it is late or withheld.
     func sendCenterButtonUpdate(pad: GCExtendedGamepad, slot: UInt8) {
-        _ = pushControllerState(pad: pad, slot: slot)
+        let pushed = pushControllerState(pad: pad, slot: slot)
+        // Partial-hold breadcrumb: a centre button is down, the chord needs
+        // centre buttons, and the chord did NOT match on this edge (a match
+        // returns false from the push, having armed the dwell). This is the
+        // line that makes "I held all four and nothing happened" diagnosable:
+        // it names which of the four never registered. Edge-only + rate-limited.
+        guard pushed, quitChordUsesCentreButtons() else { return }
+        let hid = DualSenseHID.shared.buttons
+        if hid.options || hid.create {
+            quitChordBreadcrumb(.partial, "partial hold on slot \(slot)", pad: pad)
+        }
     }
 
     /// Build + push the current multiController state for `slot`. Returns false if
@@ -449,7 +480,9 @@ extension InputForwarder {
         // Released before the dwell elapsed (or never held): an in-game
         // button coincidence, not a quit. Only the arming pad's frames may
         // cancel - another pad's traffic says nothing about the holder.
-        if quitChordDwellSlot == slot { cancelQuitChordDwell() }
+        if quitChordDwellSlot == slot {
+            cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad)
+        }
 
         let buttons = pressedButtonFlags(pad: pad)
 

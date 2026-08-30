@@ -87,6 +87,41 @@ enum QualityPreset: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// What "no usable choice on record" resolves to: a fresh install, and any
+    /// persisted raw value we can't make sense of. One source of truth so the
+    /// `AppModel.qualityPreset` declared default and the legacy remap below
+    /// can't drift apart.
+    static let defaultPreset: QualityPreset = .matchDisplay
+
+    /// Resolve a persisted `qualityPreset` raw value to a live case, remapping
+    /// the two cases the preset rework deleted.
+    ///
+    /// The failure this closes: `QualityPreset(rawValue:)` answers nil for
+    /// "smooth" / "maximum", so the load fell through to the DEFAULT - Native
+    /// Retina, the panel-native, top-of-the-bitrate-curve preset - and the next
+    /// `persistQualitySettings()` rewrote the key, destroying the evidence. A
+    /// user who deliberately picked Smooth for a thin Wi-Fi link came back from
+    /// an update on the most demanding preset in the app with no way to tell
+    /// what had happened.
+    ///
+    /// The remap preserves each dropped case's INTENT rather than its numbers:
+    /// Smooth was "stay fluid, spend fewer bits", which is exactly what HiDPI is
+    /// now (a quarter of the pixels); Maximum was "sharpest picture, spend the
+    /// bandwidth", which is Native Retina. Anything else unrecognised (a
+    /// downgrade from a build carrying a preset this one has never heard of)
+    /// lands on the default rather than guessing.
+    ///
+    /// Idempotent by construction: every value this returns maps to itself on a
+    /// second pass, so re-running the migration is a no-op.
+    static func migrated(fromPersistedRawValue raw: String) -> QualityPreset {
+        if let known = QualityPreset(rawValue: raw) { return known }
+        switch raw {
+        case "smooth":  return .hidpi
+        case "maximum": return .matchDisplay
+        default:        return defaultPreset
+        }
+    }
+
     var displayName: String {
         switch self {
         case .matchDisplay: return "Native Retina"

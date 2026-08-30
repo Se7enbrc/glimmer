@@ -248,14 +248,16 @@ extension ControllerHaptics {
         let key = locality.rawValue
         let engineID = ObjectIdentifier(engine)
         engine.stoppedHandler = { [weak self] reason in
+            guard let self else { return }
             let why = "engine stopped (reason \(reason.rawValue))"
-            self?.queue.async {
-                self?.dropChannel(slot: slot, localityKey: key, engineID: engineID, why: why)
+            self.queue.async {
+                self.dropChannel(slot: slot, localityKey: key, engineID: engineID, why: why)
             }
         }
         engine.resetHandler = { [weak self] in
-            self?.queue.async {
-                self?.dropChannel(slot: slot, localityKey: key, engineID: engineID, why: "engine reset")
+            guard let self else { return }
+            self.queue.async {
+                self.dropChannel(slot: slot, localityKey: key, engineID: engineID, why: "engine reset")
             }
         }
         do {

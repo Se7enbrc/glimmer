@@ -404,7 +404,7 @@ struct QualityPane: View {
                 // Footnote tracks the actual configured chord so it stays
                 // accurate if the user rebinds the hotkey in Shortcuts.
                 Text("Ping, frame rate, decode time. Press \(model.statsHotkey.displayString) "
-                    + "(configurable in Shortcuts) while streaming to toggle the overlay.")
+                    + "(configurable in Input) while streaming to toggle the overlay.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 // Overlay position lives here (not a right-click menu - the
@@ -518,7 +518,7 @@ struct QualityPane: View {
             return "\(StatsOverlayDefaults.minimalRows.count) metrics - render FPS, latency, bitrate"
         case .micro:
             return "\(StatsOverlayDefaults.microRows.count) metrics - framerate, network, bitrate"
-        case .extended: return "All metrics except audio"
+        case .extended: return "All stream metrics (not audio or Mac vitals)"
         case .custom:   return "Pick rows individually below"
         }
     }
