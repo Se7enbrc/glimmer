@@ -118,12 +118,16 @@ final class TelemetryExporter: @unchecked Sendable {
     let display: DisplayTelemetry
 
     /// P1 RESOURCE: SoC P-cluster vs E-cluster active-residency sampler (IOReport).
-    /// Built ONLY on the gate-on path; nil if IOReport is unavailable on this OS
-    /// (then we simply omit the cluster-residency series). Sampled once per ~1Hz
-    /// capture tick on `workQueue` - never a hot path. The per-PROCESS per-thread
-    /// half of the RESOURCE signal is a stateless `ResourceTelemetry.sample()` read
-    /// (no stored sampler needed).
-    let ioReport = IOReportSampler()
+    /// The PROCESS-LIFETIME singleton, borrowed - never owned - because
+    /// releasing IOReport's objects crashed 2026.8.15's teardown (see the
+    /// PROCESS-LIFETIME note in IOReportSampler.swift). First gate-on access
+    /// builds it, so telemetry-off still allocates nothing; `start()` resets
+    /// its per-session baselines. nil if IOReport is unavailable on this OS
+    /// (then we simply omit the cluster-residency series). Sampled once per
+    /// ~1Hz capture tick on `workQueue` - never a hot path. The per-PROCESS
+    /// per-thread half of the RESOURCE signal is a stateless
+    /// `ResourceTelemetry.sample()` read (no stored sampler needed).
+    let ioReport = IOReportSampler.shared
 
     /// Set once the one-shot QoS audit has been logged (it runs on the first
     /// capture tick, when a per-thread sample exists). Confined to `workQueue`.
@@ -243,6 +247,11 @@ final class TelemetryExporter: @unchecked Sendable {
     func start() {
         workQueue.async { [weak self] in
             guard let self else { return }
+            // Reset the process-lifetime IOReport sampler's delta baselines for
+            // THIS session - it survives across sessions by design (teardown
+            // crash, see IOReportSampler.swift), so without this its first
+            // "delta" would span the gap since the previous session's last tick.
+            self.ioReport?.beginSession()
             // Per-frame latency tracker + its batched trace writer. Installs the
             // gate-checked `FrameTimingTracker.shared` the hot-path stage call
             // sites read; when the gate is off (default) nothing is installed and

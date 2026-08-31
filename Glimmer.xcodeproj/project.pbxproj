@@ -244,6 +244,7 @@
 		D2000081 /* AnnexBToAVCCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000080 /* AnnexBToAVCCTests.swift */; };
 		D2000091 /* ContainerMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000090 /* ContainerMigrationTests.swift */; };
 		D2000095 /* QualityPresetMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000094 /* QualityPresetMigrationTests.swift */; };
+		DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */; };
 		D2000037 /* KeyboardScanMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000036 /* KeyboardScanMapTests.swift */; };
 		D20000A1 /* ControllerQuitChordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000A0 /* ControllerQuitChordTests.swift */; };
 		D2000039 /* StreamProtocolConstantsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000038 /* StreamProtocolConstantsTests.swift */; };
@@ -528,6 +529,7 @@
 		D2000080 /* AnnexBToAVCCTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnexBToAVCCTests.swift; sourceTree = "<group>"; };
 		D2000090 /* ContainerMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerMigrationTests.swift; sourceTree = "<group>"; };
 		D2000094 /* QualityPresetMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityPresetMigrationTests.swift; sourceTree = "<group>"; };
+		DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOReportSamplerLifetimeTests.swift; sourceTree = "<group>"; };
 		D2000036 /* KeyboardScanMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardScanMapTests.swift; sourceTree = "<group>"; };
 		D20000A0 /* ControllerQuitChordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerQuitChordTests.swift; sourceTree = "<group>"; };
 		D2000038 /* StreamProtocolConstantsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamProtocolConstantsTests.swift; sourceTree = "<group>"; };
@@ -868,6 +870,7 @@
 				D2000080 /* AnnexBToAVCCTests.swift */,
 				D2000090 /* ContainerMigrationTests.swift */,
 				D2000094 /* QualityPresetMigrationTests.swift */,
+				DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */,
 				D2000036 /* KeyboardScanMapTests.swift */,
 				D20000A0 /* ControllerQuitChordTests.swift */,
 				D2000038 /* StreamProtocolConstantsTests.swift */,
@@ -1247,6 +1250,7 @@
 				D2000081 /* AnnexBToAVCCTests.swift in Sources */,
 				D2000091 /* ContainerMigrationTests.swift in Sources */,
 				D2000095 /* QualityPresetMigrationTests.swift in Sources */,
+				DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */,
 				D2000037 /* KeyboardScanMapTests.swift in Sources */,
 				D20000A1 /* ControllerQuitChordTests.swift in Sources */,
 				D2000039 /* StreamProtocolConstantsTests.swift in Sources */,

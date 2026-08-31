@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.8.16 - 2026-08-30
+
+Fixes a crash at the end of a stream when diagnostics are turned on.
+
+With the optional diagnostics enabled, ending a stream could take the whole app
+down. The system interface Glimmer reads processor and power statistics from
+does not tolerate having its objects cleaned up the way its naming suggests it
+should, and the cleanup at session end could land on memory that was no longer
+valid. Glimmer now keeps that reader alive for the life of the app, the way
+Apple's own power tools use the same interface, and simply resets its counters
+between sessions. Diagnostics stay off by default and this changes nothing else.
+
 ## 2026.8.15 - 2026-08-30
 
 The DualSense quit chord works, pairing a second PC works, Glimmer stops taking

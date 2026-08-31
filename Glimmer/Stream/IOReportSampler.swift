@@ -57,6 +57,22 @@
 //    * What is NOT acceptable is the prior state: fields documented as shipped
 //      yet absent from every row with no way to know why.
 //
+//  PROCESS-LIFETIME, NEVER DEALLOCATED (2026-08-30 crash fix): the sampler is
+//  a keep-alive singleton. Releasing what IOReport hands back is not
+//  survivable in practice: the shipped 2026.8.15 crashed in objc_release
+//  inside the compiler-generated IOReportSampler.deinit (a dict -> array ->
+//  dict dealloc chain over freed memory) when a telemetry session's teardown
+//  released the duplicated-channels dictionaries and final retained samples
+//  alongside the subscriptions. The API's real ownership does not follow the
+//  CF Create/Get rules its names suggest (the memory-discipline note below
+//  records an earlier over-release found the same way), and every long-lived
+//  IOReport consumer - powermetrics, asitop, macmon - holds its subscription
+//  for the life of the process and never frees anything. So: construct once
+//  on the first gate-on session via `shared`, reset the delta baselines per
+//  session (`beginSession()`), keep the dlopen handle + subscriptions until
+//  process exit. The cost of the keep-alive is a few KB of dormant CF state
+//  after the first opted-in session; the alternative was a teardown crash.
+//
 //  SECRET-FREE: residency fractions and package watts are pure SoC physics. No
 //  host identity, keys, pairing material, or secrets.
 //
@@ -101,14 +117,28 @@ struct ClusterResidencySnapshot: Sendable {
 }
 
 /// IOReport-backed SoC sampler (cluster residency + package power + GPU
-/// residency). Owned by the exporter, constructed only on the gate-on path.
-/// `sample()` is called once per ~1Hz tick on the exporter's serial queue (one
-/// caller, one thread).
+/// residency). A process-lifetime singleton (see PROCESS-LIFETIME above);
+/// each session's exporter borrows it via `shared` and calls `beginSession()`
+/// once, then `sample()` once per ~1Hz tick.
 ///
-/// `@unchecked Sendable`: the dlopen handle + IOReport subscriptions are touched
-/// ONLY from the exporter's single serial queue, so access is serialized by
-/// construction (same model as WiFiTelemetry's `CWWiFiClient`).
+/// `@unchecked Sendable`: every access to mutable state goes through
+/// `stateLock`. The old single-queue-confinement argument died with the
+/// singleton - each session's exporter has its OWN serial queue, so across a
+/// session boundary two different queues touch this object.
 final class IOReportSampler: @unchecked Sendable {
+
+    /// The one process-lifetime instance. Lazily built on first access, which
+    /// is the exporter's gate-on construction, so the dlopen + subscription
+    /// cost is still never paid when telemetry is off (the default). nil when
+    /// IOReport is unavailable; that verdict is final for the process (the
+    /// bring-up NOTICEs already named the failing stage once).
+    static let shared: IOReportSampler? = IOReportSampler()
+
+    /// Guards ALL mutable state below (previous samples, tick counter, log
+    /// latches). Taken for the whole of `sample()` and `beginSession()` -
+    /// ~1Hz, so contention is nil; correctness across session-queue changes
+    /// is the point.
+    private let stateLock = NSLock()
 
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
 
@@ -168,8 +198,8 @@ final class IOReportSampler: @unchecked Sendable {
 
     /// Previous raw samples, so each tick produces a DELTA over the window
     /// (residency and accumulated energy are meaningful only as deltas between
-    /// two instants). Confined to the exporter queue (the sole caller of
-    /// `sample()`). nil until the first sample of each group.
+    /// two instants). Guarded by `stateLock`; reset by `beginSession()`. nil
+    /// until the first sample of each group.
     private var previousCpuSample: CFDictionary?
     private var previousEnergySample: CFDictionary?
     private var previousGpuSample: CFDictionary?
@@ -180,8 +210,8 @@ final class IOReportSampler: @unchecked Sendable {
     /// First-sample outcome NOTICE state (the sensor-honesty contract: every
     /// sampler logs its first success OR failure once). Tick 1 is the designed
     /// delta baseline, so the verdict lands on tick 2; `lastClusterFailure`
-    /// names the stage the required CPU-cluster read died at. Confined to the
-    /// exporter queue like the sample state above.
+    /// names the stage the required CPU-cluster read died at. Guarded by
+    /// `stateLock` like the sample state above; reset per session.
     private var sampleTicks = 0
     private var firstSampleOutcomeLogged = false
     private var lastClusterFailure = "no sample attempted"
@@ -207,11 +237,11 @@ final class IOReportSampler: @unchecked Sendable {
     /// one-time Diag NOTICE naming the FAILING STAGE (dlopen / which dlsym /
     /// which subscription), so a packaged run names the failing stage from its
     /// session log instead of shipping silently-dark fields again.
-    /// Called ONLY on the gate-on path (the exporter constructs it in start(),
-    /// after the session log sink is up), so the dlopen + subscription cost is
-    /// paid only when telemetry is opt-in ON - and the NOTICEs are bounded to
-    /// one construction per session.
-    init?() {
+    /// Reached ONLY through `shared`'s first gate-on access (after the session
+    /// log sink is up), so the dlopen + subscription cost is paid only when
+    /// telemetry is opt-in ON - and the NOTICEs are bounded to one
+    /// construction per process.
+    private init?() {
         // Resolves from the dyld shared cache - no on-disk file, no link-time dep.
         guard let handle = dlopen("/usr/lib/libIOReport.dylib", RTLD_LAZY) else {
             Self.noteBringUpFailure("dlopen(/usr/lib/libIOReport.dylib) returned nil")
@@ -293,14 +323,33 @@ final class IOReportSampler: @unchecked Sendable {
 
     // MARK: - Sampling
 
+    /// Reset the delta baselines and the per-session one-shot log latches.
+    /// Called once per telemetry session (exporter construction), so a reused
+    /// sampler never deltas against the PREVIOUS session's final sample and
+    /// every session still gets its own LIVE/DARK verdict in the log.
+    func beginSession() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        previousCpuSample = nil
+        previousEnergySample = nil
+        previousGpuSample = nil
+        previousEnergyTickNs = nil
+        sampleTicks = 0
+        firstSampleOutcomeLogged = false
+        lastClusterFailure = "no sample attempted"
+        loggedUnknownEnergyUnit = false
+    }
+
     /// Capture one SoC sample (a delta over the window since the last call).
     /// Returns nil on the FIRST call (no previous samples to delta against) and
     /// when every group read hiccupped; otherwise whichever of the cluster /
-    /// power / GPU reads came through cleanly. On the exporter's serial queue -
+    /// power / GPU reads came through cleanly. ~1Hz from the exporter's queue -
     /// never the hot path. The first post-baseline outcome is logged ONCE
     /// (LIVE with the per-group inventory, or DARK naming the failing stage) so
     /// no session can ship these fields silently absent again.
     func sample() -> ClusterResidencySnapshot? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         sampleTicks += 1
         var snapshot = sampleClusters() ?? ClusterResidencySnapshot()
         snapshot.packagePowerW = samplePackagePower()
