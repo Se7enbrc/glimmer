@@ -91,8 +91,9 @@ because it is one.
 
 ## Support
 
-Free software, spare time. [Buy a coffee](https://ko-fi.com/ugfuglio) if it
-makes your setup better.
+Free software, spare time.
+[Sponsor it on GitHub](https://github.com/sponsors/Se7enbrc) if it makes your
+setup better.
 
 ## License
 

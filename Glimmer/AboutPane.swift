@@ -18,8 +18,8 @@ private enum AboutLink {
     static let sunshine = "https://github.com/LizardByte/Sunshine"
     static let moonlight = "https://github.com/moonlight-stream"
     /// The support link - the donate row reads this one constant and nothing
-    /// else. Mirrors the repo's FUNDING.yml (Ko-fi).
-    static let donate = "https://ko-fi.com/ugfuglio"
+    /// else. Mirrors the repo's FUNDING.yml (GitHub Sponsors).
+    static let donate = "https://github.com/sponsors/Se7enbrc"
 }
 
 struct AboutPane: View {
