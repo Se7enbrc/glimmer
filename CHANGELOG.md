@@ -13,12 +13,16 @@ encode time against the frame budget (for example "8.0 ms / 4.2"), turning
 warning at 80% of budget and critical over it, and ships in the Standard preset
 as well as Extended.
 
-When the PC is skipping captures under load, Glimmer now says so: the session
-log names the host as the cause with the measured evidence (the fraction of the
-requested rate actually delivered, how many frame gaps were whole skipped
-frames, and the longest gap), and the same three numbers ride every diagnostics
-row. Presentation itself is unchanged: Glimmer keeps showing every frame the
-moment it arrives, at the full rate you asked for.
+When a stream judders on a clean link, the session log now says which side is
+responsible. Glimmer reads the host's own frame timestamps against the rate you
+asked for and, only when Sunshine's per-frame encode time has also overrun the
+frame budget, reports that the PC is skipping captures, with the measured
+evidence: the share of the requested rate actually delivered, how many gaps were
+whole skipped frames, and the longest one. A game that is simply running slower
+than the requested rate is named as exactly that instead, because every frame it
+delivers is a real frame and that is smooth. The three numbers ride every
+diagnostics row either way. Presentation itself is unchanged: Glimmer keeps
+showing every frame the moment it arrives, at the full rate you asked for.
 
 ## 2026.8.18 - 2026-09-02
 

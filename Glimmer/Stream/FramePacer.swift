@@ -81,8 +81,8 @@
 //                                    synthetic-vsync beat, governor repaint).
 //    * FramePacer+SourceCadence.swift - source-cadence TELEMETRY: the feed into
 //                                    the pure SourceCadenceDetector and the
-//                                    gauge/notice publish that names a host
-//                                    skipping frames (no presentation effect).
+//                                    exporter-gauge publish (no presentation
+//                                    effect; the exporter classifies it).
 //
 //  Threading
 //  ---------
@@ -232,14 +232,14 @@ final class FramePacer: @unchecked Sendable {
 
     // MARK: - Source-cadence telemetry (guarded by `lock`)
 
-    /// Source-cadence telemetry state (guarded by `lock`): the pure detector
-    /// fed from the submit path that reports when the host is sustainedly
-    /// under-delivering in whole-frame steps (the loaded-GPU 4K240 skip
-    /// pattern transit jitter is blind to). Observability only - nothing on
-    /// the presentation path reads it. Seeded in `init` from the CONFIGURED
-    /// (requested) fps, its nominal unit, never the display rate. The
-    /// `SourceCadenceState` type lives in FramePacer+SourceCadence.swift.
-    var sourceCadence: SourceCadenceState
+    /// Source-cadence detector (guarded by `lock`): fed from the submit path,
+    /// it reports sustained under-delivery in whole-frame steps (the pattern
+    /// transit jitter is blind to) to the exporter gauge. Observability only -
+    /// nothing on the presentation path reads it, and the pacer never
+    /// classifies it (the host-encode discriminator lives in the exporter).
+    /// Seeded in `init` from the CONFIGURED (requested) fps, its nominal unit,
+    /// never the display rate. Feed + publish in FramePacer+SourceCadence.swift.
+    var sourceCadence: SourceCadenceDetector
 
     // MARK: - Collaborators
 
@@ -344,7 +344,7 @@ final class FramePacer: @unchecked Sendable {
         let interval = FramePacer.clampFrameInterval(1.0 / fps)
         self.streamFrameIntervalSeconds = interval
         self.configuredFrameIntervalSeconds = interval
-        self.sourceCadence = SourceCadenceState(nominalPeriodSeconds: interval)
+        self.sourceCadence = SourceCadenceDetector(nominalPeriodSeconds: interval)
     }
 
     /// Clamp a frame-interval estimate to a sane [1ms, 1s] range. A poisoned

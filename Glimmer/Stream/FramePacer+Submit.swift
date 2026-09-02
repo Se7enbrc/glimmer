@@ -36,7 +36,7 @@ extension FramePacer {
 
         var droppedStale: CMSampleBuffer?
         var suppressedDisplaced: CMSampleBuffer?
-        var sourceCadenceEvent: SourceCadenceEvent?
+        var sourceCadenceSample: SourceCadenceSample?
         os_unfair_lock_lock(&lock)
         guard running else {
             os_unfair_lock_unlock(&lock)
@@ -64,11 +64,11 @@ extension FramePacer {
             }
             // SOURCE-CADENCE TELEMETRY feed (FramePacer+SourceCadence.swift):
             // every delta, INCLUDING a >1s stall - the detector must SEE a
-            // stall so its window veto can refuse to read one as the host
-            // skipping frames - and a non-positive discontinuity, which resets
-            // the window. A few integer adds per frame; the 4x/s evaluation
+            // stall so its window veto can refuse to read one as under-
+            // delivery - and a non-positive discontinuity, which resets the
+            // window. A few integer adds per frame; the 4x/s evaluation
             // publishes OFF the lock below. Nothing here touches pacing.
-            sourceCadenceEvent = noteSourceTimestampDeltaLocked(delta)
+            sourceCadenceSample = noteSourceTimestampDeltaLocked(delta)
         }
         if ptsSeconds.isFinite {
             lastSubmittedPTSSeconds = ptsSeconds
@@ -94,7 +94,7 @@ extension FramePacer {
         // branch below keeps its single-newest-frame behavior.
         if tickDeficit.warmingUp && !presentSuppressed {
             os_unfair_lock_unlock(&lock)
-            handleSourceCadenceEvent(sourceCadenceEvent)
+            publishSourceCadence(sourceCadenceSample)
             presentWarmHandoverFrame(entry)
             return
         }
@@ -137,9 +137,9 @@ extension FramePacer {
         }
         os_unfair_lock_unlock(&lock)
 
-        // Source-cadence gauge publish (4x/s) + the rate-limited host-skipping
-        // notice, OFF the lock (the gauge and LogStore take their own).
-        handleSourceCadenceEvent(sourceCadenceEvent)
+        // Source-cadence gauge publish (4x/s), OFF the lock (the gauge takes
+        // its own). The exporter classifies it against host encode at 1Hz.
+        publishSourceCadence(sourceCadenceSample)
 
         if suppressedDisplaced != nil {
             // Suppressed-mode drops are quiet by design: the suppression EDGES

@@ -133,6 +133,12 @@ extension TelemetryExporter {
         EnvSignalController.shared.observeCaptureTick(route: extras.streamRoute, wifi: snap.wifi)
         fillEnvSignal(into: &extras, now: now)
 
+        // SOURCE-CADENCE classification: the pacer's under-delivery verdict
+        // meets host encode time against the frame budget here, the one place
+        // both inputs exist - a sustained claim lands in the session log once
+        // per episode (TelemetryExporter+SourceCadence.swift).
+        observeSourceCadence(snap: snap, now: now)
+
         foldSessionAggregate(snap: snap, extras: extras)
 
         // Advance the shared tick baseline LAST: every per-second section above

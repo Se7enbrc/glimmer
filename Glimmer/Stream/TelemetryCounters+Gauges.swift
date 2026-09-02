@@ -152,6 +152,14 @@ extension TelemetryCounters {
         var multiPeriodFraction: Double
         /// Largest source gap in the window, in requested periods.
         var maxGapPeriods: Int
+        /// The detector's SUSTAINED under-delivery verdict (hysteresis inside
+        /// SourceCadenceDetector). Not exported as a gauge: the exporter's 1Hz
+        /// classifier reads it alongside host encode time to decide whether it
+        /// is the host skipping captures or a game slower than the request.
+        var underDelivering: Bool
+        /// The requested period (ms) the window was measured in - the frame
+        /// budget the classifier compares host encode time against.
+        var requestedPeriodMs: Double
     }
 
     /// Publish the source-cadence gauge. Called 4x/s from the decode queue OFF

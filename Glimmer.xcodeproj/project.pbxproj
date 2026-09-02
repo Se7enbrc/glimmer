@@ -201,6 +201,7 @@
 		D6D80A7200000000000000E3 /* SourceCadenceDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000E4 /* SourceCadenceDetector.swift */; };
 		D6D80A7200000000000000E5 /* FramePacer+SourceCadence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000E6 /* FramePacer+SourceCadence.swift */; };
 		D6D80A7200000000000000E9 /* ProcessMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000EA /* ProcessMetrics.swift */; };
+		D6D80A7200000000000000EB /* TelemetryExporter+SourceCadence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000EC /* TelemetryExporter+SourceCadence.swift */; };
 		D6D80A720000000000000005 /* FramePacer+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000006 /* FramePacer+State.swift */; };
 		D6D80A720000000000000007 /* StreamSession+Connect.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000008 /* StreamSession+Connect.swift */; };
 		D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */; };
@@ -250,6 +251,7 @@
 		D2000091 /* ContainerMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000090 /* ContainerMigrationTests.swift */; };
 		D2000095 /* QualityPresetMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000094 /* QualityPresetMigrationTests.swift */; };
 		D6D80A7200000000000000E7 /* SourceCadenceDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000E8 /* SourceCadenceDetectorTests.swift */; };
+		D6D80A7200000000000000ED /* SourceCadenceClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A7200000000000000EE /* SourceCadenceClassifierTests.swift */; };
 		DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */; };
 		D2000037 /* KeyboardScanMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000036 /* KeyboardScanMapTests.swift */; };
 		D20000A1 /* ControllerQuitChordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000A0 /* ControllerQuitChordTests.swift */; };
@@ -491,6 +493,7 @@
 		D6D80A7200000000000000E4 /* SourceCadenceDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/SourceCadenceDetector.swift"; sourceTree = "<group>"; };
 		D6D80A7200000000000000E6 /* FramePacer+SourceCadence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+SourceCadence.swift"; sourceTree = "<group>"; };
 		D6D80A7200000000000000EA /* ProcessMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ProcessMetrics.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000EC /* TelemetryExporter+SourceCadence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+SourceCadence.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000006 /* FramePacer+State.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+State.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000008 /* StreamSession+Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Connect.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StatsOverlayTimer.swift"; sourceTree = "<group>"; };
@@ -541,6 +544,7 @@
 		D2000090 /* ContainerMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerMigrationTests.swift; sourceTree = "<group>"; };
 		D2000094 /* QualityPresetMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityPresetMigrationTests.swift; sourceTree = "<group>"; };
 		D6D80A7200000000000000E8 /* SourceCadenceDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceCadenceDetectorTests.swift; sourceTree = "<group>"; };
+		D6D80A7200000000000000EE /* SourceCadenceClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceCadenceClassifierTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOReportSamplerLifetimeTests.swift; sourceTree = "<group>"; };
 		D2000036 /* KeyboardScanMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardScanMapTests.swift; sourceTree = "<group>"; };
 		D20000A0 /* ControllerQuitChordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerQuitChordTests.swift; sourceTree = "<group>"; };
@@ -671,6 +675,7 @@
 				D6D80A7200000000000000E6 /* FramePacer+SourceCadence.swift */,
 				D6D80A7200000000000000E4 /* SourceCadenceDetector.swift */,
 				D6D80A7200000000000000EA /* ProcessMetrics.swift */,
+				D6D80A7200000000000000EC /* TelemetryExporter+SourceCadence.swift */,
 				D6D80A720000000000000006 /* FramePacer+State.swift */,
 				D6D80A720000000000000008 /* StreamSession+Connect.swift */,
 				D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */,
@@ -888,6 +893,7 @@
 				D2000090 /* ContainerMigrationTests.swift */,
 				D2000094 /* QualityPresetMigrationTests.swift */,
 				D6D80A7200000000000000E8 /* SourceCadenceDetectorTests.swift */,
+				D6D80A7200000000000000EE /* SourceCadenceClassifierTests.swift */,
 				DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */,
 				D2000036 /* KeyboardScanMapTests.swift */,
 				D20000A0 /* ControllerQuitChordTests.swift */,
@@ -1067,6 +1073,7 @@
 				D6D80A7200000000000000E5 /* FramePacer+SourceCadence.swift in Sources */,
 				D6D80A7200000000000000E3 /* SourceCadenceDetector.swift in Sources */,
 				D6D80A7200000000000000E9 /* ProcessMetrics.swift in Sources */,
+				D6D80A7200000000000000EB /* TelemetryExporter+SourceCadence.swift in Sources */,
 				D6D80A720000000000000005 /* FramePacer+State.swift in Sources */,
 				D6D80A720000000000000007 /* StreamSession+Connect.swift in Sources */,
 				D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */,
@@ -1274,6 +1281,7 @@
 				D2000091 /* ContainerMigrationTests.swift in Sources */,
 				D2000095 /* QualityPresetMigrationTests.swift in Sources */,
 				D6D80A7200000000000000E7 /* SourceCadenceDetectorTests.swift in Sources */,
+				D6D80A7200000000000000ED /* SourceCadenceClassifierTests.swift in Sources */,
 				DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */,
 				D2000037 /* KeyboardScanMapTests.swift in Sources */,
 				D20000A1 /* ControllerQuitChordTests.swift in Sources */,

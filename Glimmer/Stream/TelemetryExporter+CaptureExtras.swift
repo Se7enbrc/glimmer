@@ -275,6 +275,10 @@ extension TelemetryExporter {
     /// single-writer confinement discipline as the engine's other
     /// `nonisolated(unsafe)` slots.
     final class CaptureBaselines {
+        /// SOURCE-CADENCE classifier (host skipping vs game-limited), per
+        /// session like every baseline here; stepped once per capture tick
+        /// (TelemetryExporter+SourceCadence.swift). Exporter-queue-confined.
+        var sourceCadenceClassifier = SourceCadenceClassifier()
         var pacerOverTargetReleaseTotal: UInt64 = 0
         var audioTrimTotal: UInt64 = 0
         var rumbleEventTotal: UInt64 = 0
