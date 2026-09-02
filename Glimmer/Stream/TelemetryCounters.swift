@@ -285,16 +285,6 @@ final class TelemetryCounters: @unchecked Sendable {
     /// always-live (a sub-µs integer op, far below the per-vsync budget at 240Hz).
     let pacerOverTargetReleaseTotal = Counter()
 
-    /// SOURCE-CADENCE LOCK (signal: PRESENT; FramePacer+CadenceLock.swift):
-    /// engage/disengage transitions (seconds apart by construction - many in a
-    /// session is a source flapping across the engage band) and the frames the
-    /// trim dropped-to-newest WHILE locked - the DESIGNED k-grid decimation
-    /// (a 169fps source on a 120Hz grid sheds ~49/s), also counted inside the
-    /// collector's presentation-late drops so those can be read net of it.
-    let cadenceLockEngageTotal = Counter()
-    let cadenceLockDisengageTotal = Counter()
-    let cadenceLockDropTotal = Counter()
-
     /// Present-tick MISS split by ROOT CAUSE (signal: PRESENT, diagnostic). A
     /// stretched present tick (>1.5 vsyncs between successive CADisplayLink
     /// targetTimestamps - the residual ~3.8% present gap) is classified on the
@@ -492,6 +482,13 @@ final class TelemetryCounters: @unchecked Sendable {
     /// `tick_miss_*` split is read against. Last-writer-wins behind its own lock.
     let pacerTickRealtimeLock = os_unfair_lock_t.allocate(capacity: 1)
     var pacerTickRealtimeValue = false
+
+    /// SOURCE-CADENCE gauge storage (host delivery evidence from source
+    /// timestamps, published 4x/s by the pacer's submit path off its lock);
+    /// the `SourceCadenceSnapshot` type + accessors live in
+    /// TelemetryCounters+Gauges.swift. nil before the first judged window.
+    let sourceCadenceLock = os_unfair_lock_t.allocate(capacity: 1)
+    var sourceCadenceValue: SourceCadenceSnapshot?
 
     /// Live inter-packet-gap distribution (microseconds) for the microburst
     /// detector, written once per ~2s receive-metrics window and read at 1Hz; the

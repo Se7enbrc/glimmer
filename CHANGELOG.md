@@ -2,26 +2,23 @@
 
 ## 2026.9.0 - 2026-09-02
 
-Glimmer holds a steady rhythm when the PC cannot keep up, and the stats overlay
-shows why.
+The stats overlay shows when the PC, not the network, is the reason a stream
+judders, and the diagnostics say so in plain words.
 
-Under a heavy game at a 4K 240 request the host was skipping roughly every third
-capture, and Glimmer faithfully showed that as a restless mix of 4 ms and 8 ms
-steps, the least smooth pattern a display can show, while its jitter buffer saw
-nothing wrong because the host's timestamps stretched together with the
-arrivals. Glimmer now watches the source clock itself. When the PC has been
-under-delivering in whole-frame steps for a couple of seconds, it presents on a
-fixed divisor of the requested rate with a frame of reserve, so every refresh on
-that grid has a fresh picture. The session that produced this becomes a clean
-120 Hz metronome about four milliseconds behind where it was. A PC that keeps up
-is left exactly alone, the lock releases on its own a few seconds after the host
-recovers, and the same rule works at 60, 120, 144, 165 and 240.
-
-The overlay's Host encode row now shows the host's per-frame encode time against
-the frame budget (for example "8.0 ms / 4.2"), turning warning at 80% of budget
-and critical over it, so a game that pushes the host past a frame time reads as
-the cause instead of just a sagging framerate. It ships in the Standard preset
+Under a heavy game the host's capture and encode can take longer than one frame,
+and it starts skipping captures. The picture then arrives with a restless mix of
+whole-frame gaps while every network number looks clean, which used to make the
+cause hard to see. The overlay's Host encode row now shows the host's per-frame
+encode time against the frame budget (for example "8.0 ms / 4.2"), turning
+warning at 80% of budget and critical over it, and ships in the Standard preset
 as well as Extended.
+
+When the PC is skipping captures under load, Glimmer now says so: the session
+log names the host as the cause with the measured evidence (the fraction of the
+requested rate actually delivered, how many frame gaps were whole skipped
+frames, and the longest gap), and the same three numbers ride every diagnostics
+row. Presentation itself is unchanged: Glimmer keeps showing every frame the
+moment it arrives, at the full rate you asked for.
 
 ## 2026.8.18 - 2026-09-02
 

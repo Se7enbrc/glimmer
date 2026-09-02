@@ -138,6 +138,34 @@ extension TelemetryCounters {
     func setAWDLHelper(_ snapshot: AWDLHelperSnapshot) { awdlHelperState.withLock { $0 = snapshot } }
     var awdlHelper: AWDLHelperSnapshot? { awdlHelperState.withLock { $0 } }
 
+    /// SOURCE-CADENCE gauge: what the HOST is delivering, read off the source
+    /// timestamps over a trailing ~2s window in units of the REQUESTED period
+    /// (SourceCadenceDetector). The evidence that names the host when a stream
+    /// judders with transit jitter at ~0: a loaded host skipping captures
+    /// reads ~0.70 achieved / ~0.40 multi-period / max gap 2 on a 4K240
+    /// request. Published 4x/s by the pacer off its own lock, read at 1Hz by
+    /// the exporter. Last-writer-wins behind one lock, like `packetGap`.
+    struct SourceCadenceSnapshot: Sendable {
+        /// Achieved source rate as a fraction of the requested rate.
+        var achievedFraction: Double
+        /// Fraction of source gaps that are >= 2 requested periods.
+        var multiPeriodFraction: Double
+        /// Largest source gap in the window, in requested periods.
+        var maxGapPeriods: Int
+    }
+
+    /// Publish the source-cadence gauge. Called 4x/s from the decode queue OFF
+    /// the pacer lock - never per frame.
+    func setSourceCadence(_ snapshot: SourceCadenceSnapshot) {
+        os_unfair_lock_lock(sourceCadenceLock); sourceCadenceValue = snapshot; os_unfair_lock_unlock(sourceCadenceLock)
+    }
+    /// Latest source-cadence gauge, or nil before the first judged window. Read
+    /// by the exporter on its 1Hz queue (never the hot path).
+    var sourceCadence: SourceCadenceSnapshot? {
+        os_unfair_lock_lock(sourceCadenceLock); defer { os_unfair_lock_unlock(sourceCadenceLock) }
+        return sourceCadenceValue
+    }
+
     func setRecvJitterMs(_ ms: Double) {
         os_unfair_lock_lock(jitterLock); recvJitterMsValue = ms; os_unfair_lock_unlock(jitterLock)
     }

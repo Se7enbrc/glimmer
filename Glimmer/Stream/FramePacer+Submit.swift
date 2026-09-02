@@ -36,7 +36,7 @@ extension FramePacer {
 
         var droppedStale: CMSampleBuffer?
         var suppressedDisplaced: CMSampleBuffer?
-        var cadenceEvent: CadenceLockEvent?
+        var sourceCadenceEvent: SourceCadenceEvent?
         os_unfair_lock_lock(&lock)
         guard running else {
             os_unfair_lock_unlock(&lock)
@@ -62,12 +62,13 @@ extension FramePacer {
                         FramePacer.clampFrameInterval(skipRobustInterval(ptsDeltas))
                 }
             }
-            // SOURCE-CADENCE LOCK feed (FramePacer+CadenceLock.swift): every
-            // delta, INCLUDING a >1s stall - the detector must SEE a stall so
-            // its window veto can refuse to read one as a cadence - and a
-            // non-positive discontinuity, which resets the window. A few
-            // integer adds per frame; a transition logs OFF the lock below.
-            cadenceEvent = noteSourceTimestampDeltaLocked(delta)
+            // SOURCE-CADENCE TELEMETRY feed (FramePacer+SourceCadence.swift):
+            // every delta, INCLUDING a >1s stall - the detector must SEE a
+            // stall so its window veto can refuse to read one as the host
+            // skipping frames - and a non-positive discontinuity, which resets
+            // the window. A few integer adds per frame; the 4x/s evaluation
+            // publishes OFF the lock below. Nothing here touches pacing.
+            sourceCadenceEvent = noteSourceTimestampDeltaLocked(delta)
         }
         if ptsSeconds.isFinite {
             lastSubmittedPTSSeconds = ptsSeconds
@@ -93,7 +94,7 @@ extension FramePacer {
         // branch below keeps its single-newest-frame behavior.
         if tickDeficit.warmingUp && !presentSuppressed {
             os_unfair_lock_unlock(&lock)
-            handleCadenceLockEvent(cadenceEvent)
+            handleSourceCadenceEvent(sourceCadenceEvent)
             presentWarmHandoverFrame(entry)
             return
         }
@@ -136,9 +137,9 @@ extension FramePacer {
         }
         os_unfair_lock_unlock(&lock)
 
-        // Cadence-lock transition breadcrumb + counters, OFF the lock (LogStore
-        // takes its own). Rare by construction - seconds apart at the fastest.
-        handleCadenceLockEvent(cadenceEvent)
+        // Source-cadence gauge publish (4x/s) + the rate-limited host-skipping
+        // notice, OFF the lock (the gauge and LogStore take their own).
+        handleSourceCadenceEvent(sourceCadenceEvent)
 
         if suppressedDisplaced != nil {
             // Suppressed-mode drops are quiet by design: the suppression EDGES

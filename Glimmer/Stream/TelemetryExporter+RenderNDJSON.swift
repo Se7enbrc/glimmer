@@ -290,18 +290,12 @@ extension TelemetryRenderer {
     ) {
         builder.addInt("pacing_depth", snap.pacingQueueDepth)
         builder.addInt("pacing_target_depth", snap.pacingAdaptiveTargetDepth)
-        // Source-cadence lock (0 passthrough / k = every k-th refresh) + cushion
-        // + the detector evidence (achieved fraction of nominal, multi-period
-        // gap fraction, max gap in requested periods) + the transition and
-        // designed-decimation totals.
-        builder.addInt("cadence_lock", snap.cadenceLockDivisor)
-        builder.addInt("cadence_lock_cushion", snap.cadenceLockCushion)
+        // Source cadence (host delivery, from source timestamps over ~2s):
+        // achieved fraction of the requested rate, multi-period gap fraction,
+        // max gap in requested periods - the host-skipping-frames evidence.
         builder.add("source_achieved_frac", snap.sourceAchievedFraction)
         builder.add("source_multi_period_frac", snap.sourceMultiPeriodFraction)
         builder.addInt("source_max_gap_periods", snap.sourceMaxGapPeriods)
-        builder.addCount("cadence_lock_engage_total", snap.cadenceLockEngageTotal)
-        builder.addCount("cadence_lock_disengage_total", snap.cadenceLockDisengageTotal)
-        builder.addCount("cadence_lock_drop_total", snap.cadenceLockDropTotal)
         builder.addInt("decode_backlog", snap.inFlightDecodeBacklog)
         // Pacer tick/release rates - the direct display-link-callback-miss
         // measure (a ticks/s deficit below the refresh Hz is missed callbacks).

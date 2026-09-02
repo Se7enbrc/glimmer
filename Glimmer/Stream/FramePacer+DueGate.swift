@@ -30,15 +30,10 @@ extension FramePacer {
     /// drainable backlog above the adaptive target that the due gate would
     /// otherwise have latched not-due - the no-network present-stall fix). The
     /// last flag drives only observability; it never alters the present itself.
-    /// `heldForGrid` marks a tick where the head was deliberately held between
-    /// grid slots of an engaged cadence lock (FramePacer+CadenceLock.swift) -
-    /// like `heldForGrowth`, a designed wait the starvation failsafe must not
-    /// count as a latched gate.
     struct DueGateResult {
         let toPresent: Entry?
         let heldForGrowth: Bool
         let forcedOverTarget: Bool
-        var heldForGrid = false
     }
 
     /// Reset the pacing TIMEBASE under the lock. MUST be called on every link
@@ -64,15 +59,12 @@ extension FramePacer {
     /// behind makes `sinceLast ≈ streamFrameIntervalSeconds >= interval - slack`, so
     /// the next queued frame is DUE and STAYS due - flow resumes next vsync with no
     /// link rebuild or 5s pacer re-enable wait. Used by backoff reseed + failsafe.
-    /// "One interval" is the PACING interval - the locked grid while the cadence
-    /// lock is engaged - so the anchor lands on whichever grid the gate is
-    /// actually pacing.
     func anchorCadenceBaseOnGridLocked(targetTimestamp: CFTimeInterval) {
         guard targetTimestamp.isFinite else {
             resetCadenceBaseLocked()
             return
         }
-        lastPresentMediaTime = targetTimestamp - pacingIntervalLocked()
+        lastPresentMediaTime = targetTimestamp - streamFrameIntervalSeconds
         prevPresentMediaTimeForMetric = .nan
     }
 
@@ -89,10 +81,8 @@ extension FramePacer {
     func takeBackoffNewestLocked(targetTimestamp: CFTimeInterval) -> BackoffBeat? {
         guard queue.count > 1, lastPresentMediaTime.isFinite else { return nil }
         let sinceLast = targetTimestamp - lastPresentMediaTime
-        // Lateness is judged in PACING intervals: on a locked grid a normal
-        // k-tick wait is one interval, never "hopelessly late".
         let backoffThreshold =
-            pacingIntervalLocked() * FramePacer.presentBackoffLatenessIntervals
+            streamFrameIntervalSeconds * FramePacer.presentBackoffLatenessIntervals
         guard sinceLast.isFinite, sinceLast > 0, sinceLast > backoffThreshold else {
             return nil
         }
@@ -188,7 +178,6 @@ extension FramePacer {
         }
         var heldForGrowth = false
         var forcedOverTarget = false
-        var heldForGrid = false
         let due: Bool
         // GROW-WITHOUT-A-HITCH gate. When the adaptive target has risen above the
         // current depth (the link just got jittery, or we're filling the baseline
@@ -214,21 +203,6 @@ extension FramePacer {
             // self-corrects on the very NEXT tick instead of wedging.
             if !sinceLast.isFinite || sinceLast < 0 || sinceLast > 1.0 {
                 due = true
-            } else if cadenceLock.divisor > 1 {
-                // CADENCE LOCK engaged: release on every k-th refresh of the
-                // requested rate and hold the reserve between grid slots. A
-                // full reserve (`cushion + 1` queued) is the designed state,
-                // not an over-target backlog; only an over-CEILING backlog
-                // (gap-recovery catch-up) force-drains. The grow-hold below is
-                // moot here - arrivals outpace the grid by construction, so
-                // the reserve fills without holding anything late. See
-                // FramePacer+CadenceLock.swift.
-                let verdict = gridDueLocked(
-                    sinceLast: sinceLast, vsyncInterval: vsyncInterval,
-                    effectiveTarget: effectiveTarget)
-                due = verdict.due
-                heldForGrid = verdict.heldForGrid
-                forcedOverTarget = verdict.forcedOverTarget
             } else if !belowTarget {
                 // OVER-TARGET SHORT-CIRCUIT: a real backlog over target survived the
                 // trim - holding is always wrong, so force the head out NOW to drain.
@@ -258,8 +232,8 @@ extension FramePacer {
                 // startup chop) and trips the present-stall watchdog. Until cadence
                 // locks we use the normal slack-relaxed test, so the buffer primes
                 // from a clean link's natural slack WITHOUT ever holding a frame late.
-                let cadenceConverged = liveness.releaseCount > FramePacer.startupGrowHoldReleases
-                if cadenceConverged && belowTarget
+                let cadenceLocked = liveness.releaseCount > FramePacer.startupGrowHoldReleases
+                if cadenceLocked && belowTarget
                     && adaptiveDepth.adaptiveTargetDepth > FramePacer.targetDepth {
                     due = sinceLast >= interval
                     // If the head was barely-due (would have presented under the
@@ -279,8 +253,7 @@ extension FramePacer {
         }
         guard due else {
             return DueGateResult(
-                toPresent: nil, heldForGrowth: heldForGrowth, forcedOverTarget: false,
-                heldForGrid: heldForGrid)
+                toPresent: nil, heldForGrowth: heldForGrowth, forcedOverTarget: false)
         }
         let entry = queue.removeFirst()
         lastPresentMediaTime = targetTimestamp
@@ -341,13 +314,7 @@ extension FramePacer {
         // (wifi at target 5 ⇒ trim only above 6), so the trim NEVER drops below
         // the adaptive target: the wifi jitter buffer still fills and holds as
         // designed; only latency ABOVE the (correct, possibly grown) target sheds.
-        //
-        // CADENCE-LOCK CUSHION: while the source-cadence lock is engaged the
-        // target is `max(jitter depth, cushion)` - additive and explicit, so a
-        // wifi link that also skips keeps its measured jitter depth and a clean
-        // link holds exactly the reserve the source gaps need. Passthrough
-        // (divisor 1) returns the jitter depth untouched.
-        let effectiveTarget = effectiveTargetLocked(jitterTarget: decayTargetLocked())
+        let effectiveTarget = decayTargetLocked()
         // POST-GAP LENIENCY: in gap-recovery the trim ceiling rises to the cap so the
         // bunched catch-up plays THROUGH (drained 1/vsync) instead of trim-to-newest -
         // the discard that cost ~20% of frames on a gappy link; otherwise it stays at
@@ -357,7 +324,6 @@ extension FramePacer {
         let (gapTrimmed, inGapRecovery) = gapAwareTrimLocked(
             now: nowTime, effectiveTarget: effectiveTarget)
         trimmed = gapTrimmed
-        let trimmedUnderCadenceLock = cadenceLock.isEngaged
 
         // Snapshot the post-trim depth for the per-tick depth telemetry
         // (pacing_depth / pacing_depth_max) - the signal the diagnosis keys on to
@@ -422,9 +388,7 @@ extension FramePacer {
         // tick - breaking a latched-false `due` before the external watchdog fires.
         // A deliberate one-tick grow-hold is NOT a wedge - exclude it so the
         // failsafe only ever fires on a genuinely latched-false gate.
-        // A deliberate between-grid-slot hold of an engaged cadence lock is not
-        // a wedge either - the grid guarantees a release every k ticks.
-        let wedgedThisTick = !queue.isEmpty && toPresent == nil && !heldForGrowth && !gate.heldForGrid
+        let wedgedThisTick = !queue.isEmpty && toPresent == nil && !heldForGrowth
         var sinceLastForLog: CFTimeInterval = .nan
         var forcedSelfHeal = false
         if wedgedThisTick {
@@ -469,9 +433,15 @@ extension FramePacer {
 
         // Count each trimmed frame as a presentation-late drop (the renderer
         // owns sample lifetime; ARC frees the trimmed buffers when `trimmed`
-        // goes out of scope). The helper (FramePacer+AdaptiveDepth.swift, with
-        // the trim) also splits out the cadence lock's designed decimation.
-        recordTrimDrops(trimmed.count, depthAfter: sampledDepth, underCadenceLock: trimmedUnderCadenceLock)
+        // goes out of scope).
+        for _ in trimmed {
+            stats.recordPresentationLateDrop()
+        }
+        if !trimmed.isEmpty {
+            OSSignposter.render.emitEvent(
+                "PacerTrim",
+                "count=\(trimmed.count, privacy: .public) depthAfter=\(sampledDepth, privacy: .public)")
+        }
 
         // ---- Presentation-late trim is NOT an IDR trigger ----
         //

@@ -1,19 +1,19 @@
 //
 //  SourceCadenceDetectorTests.swift
 //
-//  The source-cadence lock's detector and its grid / cushion selection, which
-//  are pure by design so they can be driven with synthetic timestamp sequences
+//  The source-cadence detector - the pure telemetry signal that names a host
+//  sustainedly skipping frames - driven with synthetic timestamp sequences
 //  built from the measured histograms (388k frames of a Cyberpunk 4K240
 //  session: source gaps 1 period 59.9% / 2 periods 40.1%, ~169fps achieved;
 //  a light-load CachyOS control at 99.1% one-period; a Windows 120fps request
 //  whose game wandered 60-120) and with a real slice of the Cyberpunk trace's
 //  RTP deltas. The cases guard the contract in the file header of
-//  SourceCadenceDetector.swift: the 60/40 mix engages k=2 cushion 1 within a
-//  couple of seconds and covers every grid slot; a 99% one-period stream never
-//  engages; a game wandering 100-120 in a 120 request does not thrash; a source
-//  that returns to regular disengages with hysteresis; a stall is not a
-//  cadence; and the divisor staircase has no rate-specific constants (the same
-//  under-delivery picks the same k at 120, 144, 165 and 240 nominal).
+//  SourceCadenceDetector.swift: the 60/40 mix raises the signal within a
+//  couple of seconds with the right evidence; a 99% one-period stream never
+//  does; a game wandering 100-120 in a 120 request does not flap it; a source
+//  that returns to regular clears it with hysteresis; a stall is never
+//  reported as skipping; and the nominal unit is the requested rate, so the
+//  same under-delivery reads the same at 120, 144, 165 and 240.
 //
 
 import Foundation
@@ -54,7 +54,7 @@ struct SourceCadenceDetectorTests {
             let jitter = jitterPeriods > 0 ? (rng.next() * 2 - 1) * jitterPeriods : 0
             let delta = (Double(gap) + jitter) * period
             elapsed += delta
-            if let transition = detector.observe(deltaSeconds: delta) {
+            if let transition = detector.observe(deltaSeconds: delta)?.transition {
                 fired.append(Fired(seconds: elapsed, transition: transition))
             }
         }
@@ -98,118 +98,70 @@ struct SourceCadenceDetectorTests {
         return gaps
     }
 
-    static func engaged(_ fired: [Fired]) -> [Fired] {
-        fired.filter { if case .engaged = $0.transition { return true } else { return false } }
+    static func detected(_ fired: [Fired]) -> [Fired] {
+        fired.filter { if case .detected = $0.transition { return true } else { return false } }
     }
-    static func disengaged(_ fired: [Fired]) -> [Fired] {
-        fired.filter { if case .disengaged = $0.transition { return true } else { return false } }
+    static func cleared(_ fired: [Fired]) -> [Fired] {
+        fired.filter { if case .cleared = $0.transition { return true } else { return false } }
     }
-    static func lock(_ fired: Fired) -> SourceCadenceDetector.Lock? {
+    static func stats(_ fired: Fired) -> SourceCadenceDetector.Stats {
         switch fired.transition {
-        case let .engaged(lock, _): return lock
-        case let .retuned(_, lock, _): return lock
-        case .disengaged: return nil
+        case let .detected(stats), let .cleared(stats): return stats
         }
     }
 
-    /// Slot-coverage model of the pacer's depth semantics under a lock: ticks
-    /// at every nominal period (a panel at the requested rate), grid slots on
-    /// every `divisor`-th tick, arrivals jittered and phase-shifted against the
-    /// tick grid, the FIFO trimmed drop-to-newest to `cushion + 1` on every
-    /// tick, the head released on every grid tick. Returns the fraction of grid
-    /// slots that presented a fresh frame. `divisor == 1` with `cushion == 1`
-    /// is passthrough (the pre-lock rest state: target 1, ceiling 2).
-    static func slotCoverage(
-        gaps: [Int], divisor: Int, cushion: Int, jitterPeriods: Double, phase: Double, seed: UInt64
-    ) -> Double {
-        var rng = LCG(state: seed)
-        var arrivals: [Double] = []
-        var time = 0.0
-        for gap in gaps {
-            time += Double(gap)
-            arrivals.append(time + (rng.next() * 2 - 1) * jitterPeriods)
-        }
-        arrivals.sort()
-        let ceiling = cushion + 1
-        var queue: [Double] = []
-        var next = 0
-        var slots = 0
-        var covered = 0
-        var tick = 0
-        let lastTick = Int(time) - 2
-        // Skip the first few slots so the reserve can prime, as the pacer's
-        // does within a few grid ticks of engaging.
-        let warmupTicks = divisor * 4
-        while tick < lastTick {
-            let tickTime = Double(tick) + phase
-            while next < arrivals.count, arrivals[next] <= tickTime {
-                queue.append(arrivals[next])
-                next += 1
-            }
-            while queue.count > ceiling { queue.removeFirst() }
-            if tick % divisor == 0 {
-                if tick >= warmupTicks { slots += 1 }
-                if !queue.isEmpty {
-                    queue.removeFirst()
-                    if tick >= warmupTicks { covered += 1 }
-                }
-            }
-            tick += 1
-        }
-        return slots > 0 ? Double(covered) / Double(slots) : 0
-    }
+    // MARK: - (a) the measured 60/40 mix at 240 raises the signal
 
-    // MARK: - (a) the measured 60/40 mix at 240
-
-    @Test func cyberpunkMixEngagesK2Cushion1WithinTwoSeconds() {
+    @Test func cyberpunkMixIsDetectedWithinTwoSeconds() {
         for (label, gaps) in [
             ("pattern", Self.cyberpunkPattern(seconds: 20, nominalHz: 240)),
             ("random", Self.mix([(1, 0.6), (2, 0.4)], seconds: 20, nominalHz: 240, seed: 11))
         ] {
             let result = Self.run(nominalHz: 240, gaps: gaps, jitterPeriods: 0.15)
-            let engages = Self.engaged(result.fired)
-            #expect(engages.count == 1, "\(label): exactly one engage")
-            guard let first = engages.first else { continue }
-            #expect(first.seconds <= 3.0, "\(label): engaged at \(first.seconds)s")
-            #expect(Self.lock(first) == SourceCadenceDetector.Lock(divisor: 2, cushion: 1), "\(label)")
-            #expect(Self.disengaged(result.fired).isEmpty, "\(label): holds for the whole span")
-            #expect(result.detector.lock == SourceCadenceDetector.Lock(divisor: 2, cushion: 1), "\(label)")
-            if case let .engaged(_, stats) = first.transition {
-                #expect(abs(stats.achievedFraction - 0.705) < 0.05, "\(label): achieved \(stats.achievedFraction)")
-                #expect(abs(stats.multiPeriodFraction - 0.40) < 0.06, "\(label): multi \(stats.multiPeriodFraction)")
-                #expect(stats.maxGapPeriods == 2, "\(label)")
+            let detections = Self.detected(result.fired)
+            #expect(detections.count == 1, "\(label): exactly one detection")
+            guard let first = detections.first else { continue }
+            #expect(first.seconds <= 3.0, "\(label): detected at \(first.seconds)s")
+            #expect(Self.cleared(result.fired).isEmpty, "\(label): holds for the whole span")
+            #expect(result.detector.underDelivering, "\(label)")
+            let stats = Self.stats(first)
+            #expect(abs(stats.achievedFraction - 0.705) < 0.05, "\(label): achieved \(stats.achievedFraction)")
+            #expect(abs(stats.multiPeriodFraction - 0.40) < 0.06, "\(label): multi \(stats.multiPeriodFraction)")
+            #expect(stats.maxGapPeriods == 2, "\(label)")
+        }
+    }
+
+    /// Every evaluation (4x per second of source time) carries the live window
+    /// stats for the exporter gauge, whether or not the signal moved.
+    @Test func everyBucketBoundaryPublishesStats() {
+        var detector = SourceCadenceDetector(nominalPeriodSeconds: 1.0 / 240.0)
+        var evaluations = 0
+        for gap in Self.cyberpunkPattern(seconds: 4, nominalHz: 240) {
+            if let evaluation = detector.observe(deltaSeconds: Double(gap) / 240.0) {
+                evaluations += 1
+                #expect(evaluation.stats.frames > 0)
             }
         }
+        #expect(evaluations >= 14 && evaluations <= 16, "4s of source time = ~16 evaluations: \(evaluations)")
+        #expect(detector.lastStats != nil)
     }
 
-    @Test func cyberpunkMixK2Cushion1CoversEverySlot() {
-        let gaps = Self.mix([(1, 0.6), (2, 0.4)], seconds: 30, nominalHz: 240, seed: 5)
-        for phase in [0.0, 0.25, 0.5, 0.75] {
-            let locked = Self.slotCoverage(
-                gaps: gaps, divisor: 2, cushion: 1, jitterPeriods: 0.3, phase: phase, seed: 9)
-            #expect(locked == 1.0, "k=2 cushion 1 covers every 120Hz slot (phase \(phase)): \(locked)")
-            let passthrough = Self.slotCoverage(
-                gaps: gaps, divisor: 1, cushion: 1, jitterPeriods: 0.3, phase: phase, seed: 9)
-            #expect(passthrough < 0.8, "passthrough reproduces the 60/40 present pattern: \(passthrough)")
-        }
-    }
+    // MARK: - (b) the clean control never raises it
 
-    // MARK: - (b) the clean control never engages
-
-    @Test func cleanStreamNeverEngages() {
+    @Test func cleanStreamIsNeverDetected() {
         let gaps = Self.mix([(1, 0.991), (2, 0.009)], seconds: 60, nominalHz: 240, seed: 3)
         let result = Self.run(nominalHz: 240, gaps: gaps, jitterPeriods: 0.2)
         #expect(result.fired.isEmpty)
-        #expect(result.detector.lock == nil)
+        #expect(!result.detector.underDelivering)
         if let stats = result.detector.lastStats {
             #expect(stats.achievedFraction > 0.98)
             #expect(stats.multiPeriodFraction < 0.03)
         }
     }
 
-    // MARK: - (c) a 120 request with the game at 100-120 does not thrash
+    // MARK: - (c) a 120 request with the game at 100-120 does not flap it
 
-    @Test func wanderingGameAt120DoesNotThrash() {
+    @Test func wanderingGameAt120DoesNotFlap() {
         // The game's rate re-rolls every second, uniformly in 100...120 of a 120
         // request (gaps of 1 and 2 periods at 120: the Windows session's shape).
         var rng = LCG(state: 21)
@@ -220,47 +172,47 @@ struct SourceCadenceDetectorTests {
             gaps += Self.mix([(1, 1 - multi), (2, multi)], seconds: 1, nominalHz: 120, seed: rng.state)
         }
         let result = Self.run(nominalHz: 120, gaps: gaps, jitterPeriods: 0.1)
-        #expect(result.fired.count <= 2, "no thrash over 60s: \(result.fired.count) transitions")
+        #expect(result.fired.count <= 2, "no flapping over 60s: \(result.fired.count) transitions")
         for pair in zip(result.fired, result.fired.dropFirst()) {
             #expect(pair.1.seconds - pair.0.seconds >= 3.0, "transitions are seconds apart")
         }
-        // Steady 110 of 120 (91.7%, 9% multi-period) sits above the engage band
-        // even at the 2-sigma edge of a 2s window's sampling noise (a source
-        // hovering AT the 85% edge may legitimately cross it on one window and
-        // then holds, by design - that is one engage, not thrash).
+        // Steady 110 of 120 (91.7%, 9% multi-period) sits above the detect band
+        // even at the 2-sigma edge of a 2s window's sampling noise.
         let steady = Self.mix([(1, 0.91), (2, 0.09)], seconds: 30, nominalHz: 120, seed: 4)
         #expect(Self.run(nominalHz: 120, gaps: steady, jitterPeriods: 0.1).fired.isEmpty)
-        // A game LEGITIMATELY holding 60 in a 120 request (every gap 2 periods)
-        // locks to k=2 once and holds - that is the metronome, by design.
+        // A game holding 60 in a 120 request (every gap 2 periods) IS the host
+        // sampling at half rate: reported once and held, by design.
         let halved = [Int](repeating: 2, count: 60 * 60)
         let halvedResult = Self.run(nominalHz: 120, gaps: halved, jitterPeriods: 0.1)
-        #expect(Self.engaged(halvedResult.fired).count == 1)
-        #expect(halvedResult.detector.lock == SourceCadenceDetector.Lock(divisor: 2, cushion: 1))
+        #expect(Self.detected(halvedResult.fired).count == 1)
+        #expect(halvedResult.detector.underDelivering)
     }
 
-    // MARK: - (d) a source that returns to regular disengages with hysteresis
+    // MARK: - (d) a source that returns to regular clears with hysteresis
 
-    @Test func regularSourceDisengagesWithHysteresis() {
+    @Test func regularSourceClearsWithHysteresis() {
         let loaded = Self.mix([(1, 0.6), (2, 0.4)], seconds: 10, nominalHz: 240, seed: 8)
         let clean = [Int](repeating: 1, count: 240 * 20)
         let result = Self.run(nominalHz: 240, gaps: loaded + clean, jitterPeriods: 0.15)
-        let engages = Self.engaged(result.fired)
-        let disengages = Self.disengaged(result.fired)
-        #expect(engages.count == 1)
-        #expect(disengages.count == 1)
-        #expect(result.fired.count == 2, "no retunes on the way out: \(result.fired)")
-        guard let engage = engages.first, let disengage = disengages.first else { return }
-        #expect(engage.seconds <= 3.0)
+        let detections = Self.detected(result.fired)
+        let clears = Self.cleared(result.fired)
+        #expect(detections.count == 1)
+        #expect(clears.count == 1)
+        #expect(result.fired.count == 2, "\(result.fired)")
+        guard let detection = detections.first, let clear = clears.first else { return }
+        #expect(detection.seconds <= 3.0)
         // The window must first CLEAR (2s) and the verdict must then HOLD for
         // consecutive evaluations: never before ~12s, comfortably by 16s.
-        #expect(disengage.seconds > 12.0, "hysteresis: disengaged at \(disengage.seconds)s")
-        #expect(disengage.seconds < 16.0, "still prompt: disengaged at \(disengage.seconds)s")
-        #expect(result.detector.lock == nil)
+        #expect(clear.seconds > 12.0, "hysteresis: cleared at \(clear.seconds)s")
+        #expect(clear.seconds < 16.0, "still prompt: cleared at \(clear.seconds)s")
+        #expect(!result.detector.underDelivering)
+        let stats = Self.stats(clear)
+        #expect(stats.achievedFraction > 0.98 && stats.multiPeriodFraction < 0.03)
     }
 
-    // MARK: - (e) a stall is not a cadence lock
+    // MARK: - (e) a stall is not reported as skipping
 
-    @Test func stallIsNotTreatedAsCadenceLock() {
+    @Test func stallIsNotReportedAsSkipping() {
         // Regular frames with a 10-period stall every fourth frame: the rate
         // (31%) and multi-period fraction (25%) would both pass, the max-gap
         // bound must refuse it.
@@ -268,118 +220,52 @@ struct SourceCadenceDetectorTests {
         while gaps.count < 240 * 30 { gaps += [1, 1, 1, 10] }
         let result = Self.run(nominalHz: 240, gaps: gaps)
         #expect(result.fired.isEmpty)
-        #expect(result.detector.lock == nil)
+        #expect(!result.detector.underDelivering)
         // Whole-second stalls (a >1s gap the pacer's cadence estimator rejects
-        // outright) must also be seen by the detector as a veto, never a lock.
+        // outright) must also be seen by the detector as a veto, never a signal.
         var bursty: [Int] = []
         while bursty.count < 240 * 30 { bursty += [Int](repeating: 1, count: 120) + [300] }
         let burstyResult = Self.run(nominalHz: 240, gaps: bursty)
         #expect(burstyResult.fired.isEmpty)
-        // An ISOLATED stall inside an otherwise lockable source only delays the
-        // engage until the stall leaves the window; it does not forbid it.
+        // An ISOLATED stall inside an otherwise skipping source only delays the
+        // signal until the stall leaves the window; it does not forbid it.
         let mixed = Self.cyberpunkPattern(seconds: 1, nominalHz: 240) + [12]
             + Self.cyberpunkPattern(seconds: 10, nominalHz: 240)
         let mixedResult = Self.run(nominalHz: 240, gaps: mixed)
-        let engages = Self.engaged(mixedResult.fired)
-        #expect(engages.count == 1)
-        if let engage = engages.first {
-            #expect(engage.seconds > 3.0 && engage.seconds < 6.0, "delayed engage at \(engage.seconds)s")
-            #expect(Self.lock(engage) == SourceCadenceDetector.Lock(divisor: 2, cushion: 1))
+        let detections = Self.detected(mixedResult.fired)
+        #expect(detections.count == 1)
+        if let detection = detections.first {
+            #expect(detection.seconds > 3.0 && detection.seconds < 6.0, "delayed at \(detection.seconds)s")
         }
     }
 
-    @Test func timestampDiscontinuityDropsTheLock() {
+    @Test func timestampDiscontinuityResetsTheWindow() {
         let gaps = Self.cyberpunkPattern(seconds: 6, nominalHz: 240)
         var (detector, _) = Self.run(nominalHz: 240, gaps: gaps)
-        #expect(detector.lock != nil)
+        #expect(detector.underDelivering)
         #expect(detector.observe(deltaSeconds: -0.5) == nil)
-        #expect(detector.lock == nil)
+        #expect(!detector.underDelivering)
         #expect(detector.lastStats == nil)
     }
 
-    // MARK: - The divisor staircase (no rate-specific constants)
+    // MARK: - The nominal unit is the requested rate
 
-    /// Under-delivery at ~0.7x of nominal (a 1-or-2-period mix with ~43%
-    /// multi-period gaps) selects k=2 with one reserve frame at every common
-    /// requested rate.
+    /// The same 1-or-2-period skip mix (~43% multi-period, ~0.7x achieved)
+    /// reads the same at every common requested rate - the detector measures
+    /// in requested periods, never display refreshes.
     @Test(arguments: [120.0, 144.0, 165.0, 240.0])
-    func staircaseSelectsK2AtSeventyPercent(nominalHz: Double) {
+    func skipMixReadsTheSameAtEveryRequestedRate(nominalHz: Double) {
         let gaps = Self.mix([(1, 0.57), (2, 0.43)], seconds: 20, nominalHz: nominalHz, seed: 31)
         let result = Self.run(nominalHz: nominalHz, gaps: gaps, jitterPeriods: 0.15)
-        let engages = Self.engaged(result.fired)
-        #expect(engages.count == 1, "\(nominalHz): \(result.fired)")
-        #expect(engages.first.flatMap(Self.lock) == SourceCadenceDetector.Lock(divisor: 2, cushion: 1))
-        #expect(result.detector.lock == SourceCadenceDetector.Lock(divisor: 2, cushion: 1))
-        if case let .engaged(_, stats)? = engages.first?.transition {
+        let detections = Self.detected(result.fired)
+        #expect(detections.count == 1, "\(nominalHz): \(result.fired)")
+        #expect(result.detector.underDelivering)
+        if let detection = detections.first {
+            let stats = Self.stats(detection)
             #expect(abs(stats.achievedFraction - 0.70) < 0.05, "\(nominalHz): \(stats.achievedFraction)")
+            #expect(abs(stats.multiPeriodFraction - 0.43) < 0.06, "\(nominalHz): \(stats.multiPeriodFraction)")
+            #expect(stats.maxGapPeriods == 2)
         }
-    }
-
-    /// Under-delivery at ~0.45x of nominal (a 2-or-3-period mix, ~22% threes)
-    /// selects k=3; the 3-period gaps fit one k=3 slot, so one reserve frame
-    /// covers the boundary case and nothing more is bought.
-    @Test(arguments: [120.0, 144.0, 165.0, 240.0])
-    func staircaseSelectsK3AtFortyFivePercent(nominalHz: Double) {
-        let gaps = Self.mix([(2, 0.78), (3, 0.22)], seconds: 20, nominalHz: nominalHz, seed: 37)
-        let result = Self.run(nominalHz: nominalHz, gaps: gaps, jitterPeriods: 0.15)
-        let engages = Self.engaged(result.fired)
-        #expect(engages.count == 1, "\(nominalHz): \(result.fired)")
-        #expect(engages.first.flatMap(Self.lock) == SourceCadenceDetector.Lock(divisor: 3, cushion: 1))
-        #expect(result.detector.lock == SourceCadenceDetector.Lock(divisor: 3, cushion: 1))
-        if case let .engaged(_, stats)? = engages.first?.transition {
-            #expect(abs(stats.achievedFraction - 0.45) < 0.05, "\(nominalHz): \(stats.achievedFraction)")
-        }
-        // And the grid the pacer will present on, refresh-based (165/3 = 55,
-        // 144/3 = 48, 120/3 = 40, 240/3 = 80 - non-integer grids are fine).
-        let coverage = Self.slotCoverage(
-            gaps: gaps, divisor: 3, cushion: 1, jitterPeriods: 0.3, phase: 0.4, seed: 2)
-        #expect(coverage == 1.0, "\(nominalHz): k=3 cushion 1 covers every slot: \(coverage)")
-    }
-
-    @Test func gridDivisorStaircaseTable() {
-        typealias Detector = SourceCadenceDetector
-        // 240 -> 120 / 80 / 60 / 48, then nothing below the floor.
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 168) == 2)
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 108) == 3)
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 62) == 4)
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 50) == 5)
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 40) == nil)
-        // 144 -> 72 / 48 / 36.
-        #expect(Detector.gridDivisor(nominalHz: 144, achievedHz: 100.8) == 2)
-        #expect(Detector.gridDivisor(nominalHz: 144, achievedHz: 64.8) == 3)
-        #expect(Detector.gridDivisor(nominalHz: 144, achievedHz: 45) == 4)
-        #expect(Detector.gridDivisor(nominalHz: 144, achievedHz: 30) == nil)
-        // 165 -> 82.5 / 55 (non-integer grids are refresh-based, so fine).
-        #expect(Detector.gridDivisor(nominalHz: 165, achievedHz: 115.5) == 2)
-        #expect(Detector.gridDivisor(nominalHz: 165, achievedHz: 74.25) == 3)
-        // 120 -> 60 / 40 / 30.
-        #expect(Detector.gridDivisor(nominalHz: 120, achievedHz: 84) == 2)
-        #expect(Detector.gridDivisor(nominalHz: 120, achievedHz: 54) == 3)
-        #expect(Detector.gridDivisor(nominalHz: 120, achievedHz: 38) == 4)
-        #expect(Detector.gridDivisor(nominalHz: 120, achievedHz: 25) == nil)
-        // 60 -> 30, never lower.
-        #expect(Detector.gridDivisor(nominalHz: 60, achievedHz: 40) == 2)
-        #expect(Detector.gridDivisor(nominalHz: 60, achievedHz: 15) == nil)
-        // At or within tolerance of full rate: passthrough, never k=1.
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 235) == nil)
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 240) == nil)
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: 0) == nil)
-        #expect(Detector.gridDivisor(nominalHz: 240, achievedHz: .nan) == nil)
-    }
-
-    @Test func cushionRule() {
-        typealias Detector = SourceCadenceDetector
-        // ceil(g / k): (max gap - 1) at k=2 for the measured 2- and 3-period
-        // cases, one reserve frame for a gap that fits one slot, capped.
-        #expect(Detector.cushionFrames(maxGapPeriods: 2, divisor: 2) == 1)
-        #expect(Detector.cushionFrames(maxGapPeriods: 3, divisor: 2) == 2)
-        #expect(Detector.cushionFrames(maxGapPeriods: 3, divisor: 3) == 1)
-        #expect(Detector.cushionFrames(maxGapPeriods: 4, divisor: 2) == 2)
-        #expect(Detector.cushionFrames(maxGapPeriods: 4, divisor: 3) == 2)
-        #expect(Detector.cushionFrames(maxGapPeriods: 5, divisor: 2) == 3)
-        #expect(Detector.cushionFrames(maxGapPeriods: 1, divisor: 2) == 1)
-        #expect(Detector.cushionFrames(maxGapPeriods: 0, divisor: 2) == 1)
-        #expect(Detector.cushionFrames(maxGapPeriods: 15, divisor: 2) == Detector.maxCushionFrames)
     }
 
     // MARK: - Replay of the real Cyberpunk trace
@@ -494,7 +380,7 @@ struct SourceCadenceDetectorTests {
             .compactMap { Int($0) }
     }()
 
-    @Test func cyberpunkTraceReplayEngagesAndHolds() {
+    @Test func cyberpunkTraceReplayIsDetectedAndHolds() {
         let deltas = Self.cyberpunkRtpDeltas
         #expect(deltas.count == 2400)
         var detector = SourceCadenceDetector(nominalPeriodSeconds: 1.0 / 240.0)
@@ -503,30 +389,21 @@ struct SourceCadenceDetectorTests {
         for ticks in deltas {
             let delta = Double(ticks) / 90_000.0
             elapsed += delta
-            if let transition = detector.observe(deltaSeconds: delta) {
+            if let transition = detector.observe(deltaSeconds: delta)?.transition {
                 fired.append(Fired(seconds: elapsed, transition: transition))
             }
         }
         #expect(elapsed > 13.0 && elapsed < 16.0, "slice spans ~14s at ~169fps: \(elapsed)")
-        let engages = Self.engaged(fired)
-        #expect(engages.count == 1, "\(fired)")
-        #expect(fired.count == 1, "engages once and holds, no retune/disengage: \(fired)")
-        guard let engage = engages.first else { return }
-        #expect(engage.seconds <= 3.0, "engaged at \(engage.seconds)s")
-        #expect(Self.lock(engage) == SourceCadenceDetector.Lock(divisor: 2, cushion: 1))
-        #expect(detector.lock == SourceCadenceDetector.Lock(divisor: 2, cushion: 1))
+        let detections = Self.detected(fired)
+        #expect(detections.count == 1, "\(fired)")
+        #expect(fired.count == 1, "detected once and held, never cleared: \(fired)")
+        guard let detection = detections.first else { return }
+        #expect(detection.seconds <= 3.0, "detected at \(detection.seconds)s")
+        #expect(detector.underDelivering)
         if let stats = detector.lastStats {
             #expect(abs(stats.achievedFraction - 0.70) < 0.04, "achieved \(stats.achievedFraction)")
             #expect(abs(stats.multiPeriodFraction - 0.42) < 0.05, "multi \(stats.multiPeriodFraction)")
             #expect(stats.maxGapPeriods == 2)
-        }
-        // The lock's grid: k=2 cushion 1 covers every 120Hz slot of the real
-        // delivery pattern (jitter from the trace itself, plus phase sweeps).
-        let gaps = deltas.map { Int((Double($0) / 375.0).rounded()) }
-        for phase in [0.0, 0.5] {
-            let coverage = Self.slotCoverage(
-                gaps: gaps, divisor: 2, cushion: 1, jitterPeriods: 0.2, phase: phase, seed: 1)
-            #expect(coverage == 1.0, "real trace on k=2 cushion 1 (phase \(phase)): \(coverage)")
         }
     }
 }

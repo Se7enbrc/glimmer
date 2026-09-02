@@ -26,6 +26,7 @@ extension TelemetryCounters {
         vtSessionCreateLock.initialize(to: os_unfair_lock_s())
         cruiseMaxGainLock.initialize(to: os_unfair_lock_s())
         gapLock.initialize(to: os_unfair_lock_s())
+        sourceCadenceLock.initialize(to: os_unfair_lock_s())
         decodeStateLock.initialize(to: os_unfair_lock_s())
         fecHealthLock.initialize(to: os_unfair_lock_s())
         audioStateLock.initialize(to: os_unfair_lock_s())
@@ -42,6 +43,7 @@ extension TelemetryCounters {
         rttLock.deallocate(); vtSessionCreateLock.deallocate()
         cruiseMaxGainLock.deallocate()
         gapLock.deallocate()
+        sourceCadenceLock.deallocate()
         decodeStateLock.deallocate(); fecHealthLock.deallocate()
         audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
         presentSuppressedLock.deallocate(); decodeGatedLock.deallocate()
@@ -73,7 +75,6 @@ extension TelemetryCounters {
                         audioStallRecoveryTotal,
                         presentGapDroughtTotal, reorderHoldExceededTotal,
                         pacerOverTargetReleaseTotal,
-                        cadenceLockEngageTotal, cadenceLockDisengageTotal, cadenceLockDropTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
                         tickMissPreemptedTotal, tickMissLinkskipTotal,
                         suppressedDropTotal, decodeGatedDropTotal,
@@ -120,6 +121,7 @@ extension TelemetryCounters {
         os_unfair_lock_lock(inputLock); lastInputNanosValue = 0; os_unfair_lock_unlock(inputLock)
         rumbleActivity.reset()
         os_unfair_lock_lock(gapLock); packetGapValue = nil; os_unfair_lock_unlock(gapLock)
+        os_unfair_lock_lock(sourceCadenceLock); sourceCadenceValue = nil; os_unfair_lock_unlock(sourceCadenceLock)
         os_unfair_lock_lock(decodeStateLock); decodeStateValue = nil; os_unfair_lock_unlock(decodeStateLock)
         os_unfair_lock_lock(fecHealthLock); fecHealthValue = nil; os_unfair_lock_unlock(fecHealthLock)
         awdlHelperState.withLock { $0 = nil }
