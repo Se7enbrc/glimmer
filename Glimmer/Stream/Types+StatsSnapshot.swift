@@ -88,7 +88,11 @@ public struct StreamStatsSnapshot: Sendable {
     /// "Host processing latency min/max/average" row. All three values are
     /// nil until we've seen at least one frame with a non-zero latency in
     /// the current window (GFE never populates the field; Sunshine populates
-    /// it for most frames but emits zero for repeated frames).
+    /// it for most frames but emits zero for repeated frames). The overlay
+    /// row renders the average against the frame budget (see
+    /// Types+StatsSnapshotHostEncode.swift); min / max stay populated here
+    /// because the spread is what separates a steady encoder from a spiky
+    /// one when someone digs into a capture.
     public var minHostProcessingLatencyMs: Double?
     public var maxHostProcessingLatencyMs: Double?
     public var avgHostProcessingLatencyMs: Double?
@@ -217,7 +221,7 @@ public struct StreamStatsSnapshot: Sendable {
         let plan: [StatsRow.Kind] = [
             .hostFps, .networkFps, .decodeFps, .renderFps,
             .latency, .jitter, .networkDrops,
-            .decoderDrops, .smoothness, .decodeTime, .bitrate, .hostProcessing,
+            .decoderDrops, .smoothness, .decodeTime, .hostProcessing, .bitrate,
             .macCpu, .macRam, .macBattery, .controllerBattery,
             .audio
         ]
@@ -349,11 +353,17 @@ public struct StreamStatsSnapshot: Sendable {
             // be read as our client/pipeline latency (the separate "Latency"
             // row is RTT; our pipeline e2e is ~6ms). Labelling it "Host encode"
             // removes the misread that the engine regressed.
+            //
+            // Rendered against the frame budget because that comparison is the
+            // whole diagnosis: once the host spends longer than one frame time
+            // producing a frame it starts skipping frames, and every other row
+            // shows only the symptom (fps sagging) without naming the cause.
             return StatsRow(
                 kind: .hostProcessing, label: "Host encode",
-                value: formatHostProcessingLatency(),
+                value: formatHostEncode(targetFps: targetFps),
                 symbolName: "cpu.fill",
-                health: .neutral, section: .pipeline)
+                health: hostEncodeHealth(targetFps: targetFps),
+                section: .pipeline)
         case .smoothness:
             // Headline: present-cadence error + on-time fraction, with the
             // live pacing depth as a parenthetical and presentation-late
@@ -562,17 +572,6 @@ public struct StreamStatsSnapshot: Sendable {
             return pct
         }
         return pct + " \u{00B7} \(decoder)D/\(backpressure)B/\(late)L"
-    }
-    /// "2.0 / 8.0 / 5.0 ms" - min / max / avg host-side capture+encode
-    /// latency. The triple is from Sunshine's `frameHostProcessingLatency`
-    /// field and is window-relative (resets each snapshot).
-    private func formatHostProcessingLatency() -> String {
-        guard let lo = minHostProcessingLatencyMs,
-              let hi = maxHostProcessingLatencyMs,
-              let avg = avgHostProcessingLatencyMs else {
-            return "\u{2014}"
-        }
-        return String(format: "%.1f / %.1f / %.1f ms", lo, hi, avg)
     }
     /// "45.2 / 50.0 Mbps" - measured-over-negotiated. We render both as
     /// monospaced numerics with a slash so the user can see the

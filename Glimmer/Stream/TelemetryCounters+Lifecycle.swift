@@ -73,6 +73,7 @@ extension TelemetryCounters {
                         audioStallRecoveryTotal,
                         presentGapDroughtTotal, reorderHoldExceededTotal,
                         pacerOverTargetReleaseTotal,
+                        cadenceLockEngageTotal, cadenceLockDisengageTotal, cadenceLockDropTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
                         tickMissPreemptedTotal, tickMissLinkskipTotal,
                         suppressedDropTotal, decodeGatedDropTotal,

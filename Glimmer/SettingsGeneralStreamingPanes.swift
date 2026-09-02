@@ -442,7 +442,7 @@ struct QualityPane: View {
         case .minimal:
             return "\(StatsOverlayDefaults.minimalRows.count) metrics - render FPS, latency, bitrate"
         case .micro:
-            return "\(StatsOverlayDefaults.microRows.count) metrics - framerate, network, bitrate"
+            return "\(StatsOverlayDefaults.microRows.count) metrics - framerate, network, bitrate, host encode"
         case .extended: return "All stream metrics (not audio or Mac vitals)"
         case .custom:   return "Pick rows individually below"
         }
@@ -480,8 +480,8 @@ struct StatsCustomRowsPicker: View {
             (.decoderDrops, "Decoder drops"),
             (.smoothness, "Smoothness"),
             (.decodeTime, "Decode time"),
-            (.bitrate, "Bitrate"),
-            (.hostProcessing, "Host encode latency")
+            (.hostProcessing, "Host encode vs frame budget"),
+            (.bitrate, "Bitrate")
         ]),
         ("Mac", [
             (.macCpu, "Mac CPU"),

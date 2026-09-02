@@ -178,17 +178,21 @@ extension FramePacer {
 
     // MARK: - Helpers
 
-    /// The delta between the realized inter-present interval and the stream's
-    /// ideal frame interval, in seconds. Read under the lock right after a
+    /// The delta between the realized inter-present interval and the ideal
+    /// present interval, in seconds. Read under the lock right after a
     /// present updates `lastPresentMediaTime`. Positive = we presented late
-    /// vs the grid; near zero = on cadence.
+    /// vs the grid; near zero = on cadence. The ideal is the PACING interval:
+    /// the stream's frame interval in passthrough, the LOCKED grid (k x the
+    /// nominal period) while the cadence lock is engaged - so
+    /// present_cadence_error stays the verification metric for the lock (a
+    /// locked stream reads near zero, not a constant k-1 periods "late").
     func lastPresentInterPresentDelta() -> Double {
         os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
         let now = lastPresentMediaTime
         defer { prevPresentMediaTimeForMetric = now }
         guard prevPresentMediaTimeForMetric.isFinite, now.isFinite else { return 0 }
         let interPresent = now - prevPresentMediaTimeForMetric
-        return interPresent - streamFrameIntervalSeconds
+        return interPresent - pacingIntervalLocked()
     }
 
     /// SKIP-ROBUST frame-interval estimator: the lower-quartile (p25) of the PTS
@@ -236,6 +240,25 @@ extension FramePacer {
         var trimmed: [CMSampleBuffer] = []
         while queue.count > dropTarget { trimmed.append(queue.removeFirst().sampleBuffer) }
         return (trimmed, inGapRecovery)
+    }
+
+    /// Account the frames the per-tick trim dropped-to-newest: every one is a
+    /// presentation-late drop (load-bearing telemetry, unchanged), and while
+    /// the cadence lock is engaged ALSO a lock drop - the decimation a k-grid
+    /// applies to a source running faster than the grid is designed (a
+    /// 169fps source on a 120Hz grid sheds ~49/s), so the lock's own counter
+    /// lets `drops_presentation_late` be read net of it. Called OFF the lock.
+    func recordTrimDrops(_ count: Int, depthAfter: Int, underCadenceLock: Bool) {
+        guard count > 0 else { return }
+        for _ in 0..<count {
+            stats.recordPresentationLateDrop()
+        }
+        if underCadenceLock {
+            TelemetryCounters.shared.cadenceLockDropTotal.increment(by: UInt64(count))
+        }
+        OSSignposter.render.emitEvent(
+            "PacerTrim",
+            "count=\(count, privacy: .public) depthAfter=\(depthAfter, privacy: .public)")
     }
 
     /// Advance the empty-tick streak + arm the gap-recovery window: a frame

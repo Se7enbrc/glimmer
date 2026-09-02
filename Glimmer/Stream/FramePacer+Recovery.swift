@@ -74,6 +74,12 @@ extension FramePacer {
         /// renderer is the wedged organ (the renderer-refusal class) - the
         /// ladder reaches for the flush instead of cadence/link medicine.
         let presentRejectStreak: Int
+        /// Source-cadence lock gauge: divisor (0 passthrough / k engaged),
+        /// reserve cushion, and the detector's live window stats (achieved
+        /// fraction of nominal, multi-period gap fraction, max gap) - the
+        /// exporter's cadence_lock / source_* fields. See
+        /// FramePacer+CadenceLock.swift.
+        let cadenceLock: CadenceLockSnapshot
     }
 
     /// Per-second display-refresh telemetry: the realized vsync cadence over the
@@ -308,7 +314,8 @@ extension FramePacer {
             tickDeficitSeconds: tickDeficit.tickDeficitSince.isFinite ? now - tickDeficit.tickDeficitSince : 0,
             expectedTickHz: tickDeficit.lastExpectedTickHz,
             tickDeficitModeActive: tickDeficit.deficitModeActive,
-            presentRejectStreak: liveness.presentRejectStreak)
+            presentRejectStreak: liveness.presentRejectStreak,
+            cadenceLock: cadenceLockSnapshotLocked())
         os_unfair_lock_unlock(&lock)
         // Emit breadcrumbs / reconcile the off-tick timer OFF the lock (LogStore
         // takes its own lock; timer ops dispatch) - same discipline as handleTick.

@@ -55,6 +55,38 @@ extension TelemetryRenderer {
                      snap.pacingQueueDepth.map(Double.init))
         builder.emit("glimmer_pacing_target_depth", "Adaptive jitter-buffer target depth.",
                      snap.pacingAdaptiveTargetDepth.map(Double.init))
+        // SOURCE-CADENCE LOCK: 0 = passthrough, k = presenting on every k-th
+        // refresh of the requested rate because the host is sustainedly
+        // skipping frames; plus the detector evidence behind that verdict.
+        builder.emit("glimmer_pacer_cadence_lock",
+                     "Cadence lock: 0 = passthrough, k = presenting on every k-th refresh "
+                     + "of the requested rate (host sustainedly skipping frames).",
+                     snap.cadenceLockDivisor.map(Double.init))
+        builder.emit("glimmer_pacer_cadence_lock_cushion",
+                     "Reserve frames the cadence lock holds so a multi-period source gap "
+                     + "lands on the grid instead of repeating a frame.",
+                     snap.cadenceLockCushion.map(Double.init))
+        builder.emit("glimmer_source_achieved_fraction",
+                     "Source frame rate over the trailing ~2s as a fraction of the requested "
+                     + "rate (from source timestamps).",
+                     snap.sourceAchievedFraction)
+        builder.emit("glimmer_source_multi_period_fraction",
+                     "Fraction of source timestamp gaps >= 2 requested periods over the "
+                     + "trailing ~2s (the skipped-frame signal).",
+                     snap.sourceMultiPeriodFraction)
+        builder.emit("glimmer_source_max_gap_periods",
+                     "Largest source timestamp gap over the trailing ~2s, in requested periods.",
+                     snap.sourceMaxGapPeriods.map(Double.init))
+        builder.emitCounter("glimmer_pacer_cadence_lock_engage_total",
+                            "Cadence lock engagements (seconds apart by construction).",
+                            snap.cadenceLockEngageTotal)
+        builder.emitCounter("glimmer_pacer_cadence_lock_disengage_total",
+                            "Cadence lock disengagements (source back to >= 95% one-period gaps).",
+                            snap.cadenceLockDisengageTotal)
+        builder.emitCounter("glimmer_pacer_cadence_lock_drop_total",
+                            "Frames dropped-to-newest while a cadence lock was engaged (designed "
+                            + "k-grid decimation; also inside drops_presentation_late).",
+                            snap.cadenceLockDropTotal)
         builder.emit("glimmer_decode_backlog", "In-flight decode backlog (frames submitted, not yet output).",
                      snap.inFlightDecodeBacklog.map(Double.init))
         // Same Extras sample as the NDJSON pacer_ticks_per_s / pacer_releases_per_s

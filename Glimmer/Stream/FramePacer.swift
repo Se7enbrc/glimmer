@@ -79,6 +79,10 @@
 //                                    breadcrumb logging.
 //    * FramePacer+DeficitTimer.swift - the off-tick release timer (reconcile,
 //                                    synthetic-vsync beat, governor repaint).
+//    * FramePacer+CadenceLock.swift - the source-cadence lock: present on every
+//                                    k-th refresh of the requested rate while
+//                                    the host sustainedly skips frames (pure
+//                                    detector in SourceCadenceDetector.swift).
 //
 //  Threading
 //  ---------
@@ -226,6 +230,17 @@ final class FramePacer: @unchecked Sendable {
     /// lock-guarded state groups; the logic in FramePacer+TickDeficit.swift.
     var tickDeficit = TickDeficitState()
 
+    // MARK: - Source-cadence lock (guarded by `lock`)
+
+    /// Source-cadence lock state (guarded by `lock`): the pure detector fed
+    /// from the submit path plus the refresh divisor / reserve cushion the
+    /// present side honors while the host is sustainedly under-delivering in
+    /// period-multiple steps (the loaded-GPU 4K240 skip pattern transit jitter
+    /// is blind to). Seeded in `init` from the CONFIGURED (requested) fps -
+    /// the lock's nominal unit, never the display rate. The `CadenceLockState`
+    /// type and every rule live in FramePacer+CadenceLock.swift.
+    var cadenceLock: CadenceLockState
+
     // MARK: - Collaborators
 
     /// Stats sink - present cadence, late/on-time counts, depth samples, and
@@ -329,6 +344,7 @@ final class FramePacer: @unchecked Sendable {
         let interval = FramePacer.clampFrameInterval(1.0 / fps)
         self.streamFrameIntervalSeconds = interval
         self.configuredFrameIntervalSeconds = interval
+        self.cadenceLock = CadenceLockState(nominalPeriodSeconds: interval)
     }
 
     /// Clamp a frame-interval estimate to a sane [1ms, 1s] range. A poisoned
@@ -431,6 +447,10 @@ final class FramePacer: @unchecked Sendable {
         // field-by-field reset lives with the state machine it clears
         // (FramePacer+TickDeficit.swift).
         resetTickDeficitStateLocked()
+        // Back to passthrough with a fresh source-cadence window: a restart is
+        // a new source era, so an inherited lock (or half-filled window) must
+        // never pace the next link (FramePacer+CadenceLock.swift).
+        resetCadenceLockLocked()
         os_unfair_lock_unlock(&lock)
 
         // Cancel the off-tick release timer (if a deficit episode was live).

@@ -120,12 +120,15 @@ public enum StatsOverlayDefaults {
     public static let minimalRows: Set<StatsRow.Kind> = [
         .renderFps, .latency, .bitrate
     ]
-    /// Micro preset - framerate + network + bitrate, the "what matters
-    /// at a glance" diagnostic subset.
+    /// Micro preset - framerate + network + bitrate + host encode, the "what
+    /// matters at a glance" diagnostic subset. Host encode earns a slot here
+    /// even though it is a pipeline row: it is the one number that tells the
+    /// user a sagging framerate is the HOST running out of frame budget
+    /// rather than anything on this Mac or the link.
     public static let microRows: Set<StatsRow.Kind> = [
         .hostFps, .renderFps, .networkFps,
         .latency, .jitter, .networkDrops,
-        .bitrate
+        .bitrate, .hostProcessing
     ]
     /// Every stream-side row. Mac vitals and audio are NOT in Extended -
     /// they're host-Mac sidebar metrics rather than the game-streaming

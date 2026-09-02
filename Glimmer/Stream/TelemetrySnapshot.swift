@@ -44,6 +44,22 @@ struct TelemetrySnapshot: Sendable {
     /// content-fps vs refresh - the clean judder signal.
     var presentOnTimePercent: Double?
 
+    // SOURCE-CADENCE LOCK (FramePacer+CadenceLock.swift): the pacer presenting
+    // on every k-th refresh of the requested rate because the host is
+    // sustainedly skipping frames. All from the live pacer's liveness snapshot;
+    // 0 / nil while the pacer is disabled.
+    /// 0 = passthrough; k = presenting on every k-th refresh of the requested rate.
+    var cadenceLockDivisor: Int?
+    /// Reserve frames the lock holds so a multi-period source gap lands on the
+    /// grid instead of repeating a frame (0 in passthrough).
+    var cadenceLockCushion: Int?
+    /// Detector window (trailing ~2s of SOURCE timestamps, in units of the
+    /// requested period): achieved rate as a fraction of nominal, fraction of
+    /// gaps >= 2 periods, and the largest gap. nil until the window has judged.
+    var sourceAchievedFraction: Double?
+    var sourceMultiPeriodFraction: Double?
+    var sourceMaxGapPeriods: Int?
+
     // P1 DECODE/VT state + counters.
     /// VTDecompressionSession (re)creates this session (monotonic). The first
     /// create plus every mid-stream param-rebuild; a short-window `increase()`
@@ -287,6 +303,12 @@ struct TelemetrySnapshot: Sendable {
     var frameLossTotal: UInt64 = 0
     var unrecoverableFrameTotal: UInt64 = 0
     var pacerDisabledTotal: UInt64 = 0
+    /// Source-cadence lock engage / disengage transitions (monotonic) and the
+    /// frames the trim dropped-to-newest while a lock was engaged (the
+    /// designed k-grid decimation, also inside drops_presentation_late).
+    var cadenceLockEngageTotal: UInt64 = 0
+    var cadenceLockDisengageTotal: UInt64 = 0
+    var cadenceLockDropTotal: UInt64 = 0
     /// User "that felt bad" bookmark presses (signal 4). A short-window
     /// `increase()` marks the exact beat the user flagged jank.
     var bookmarkTotal: UInt64 = 0

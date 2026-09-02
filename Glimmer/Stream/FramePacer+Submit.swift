@@ -36,6 +36,7 @@ extension FramePacer {
 
         var droppedStale: CMSampleBuffer?
         var suppressedDisplaced: CMSampleBuffer?
+        var cadenceEvent: CadenceLockEvent?
         os_unfair_lock_lock(&lock)
         guard running else {
             os_unfair_lock_unlock(&lock)
@@ -61,6 +62,12 @@ extension FramePacer {
                         FramePacer.clampFrameInterval(skipRobustInterval(ptsDeltas))
                 }
             }
+            // SOURCE-CADENCE LOCK feed (FramePacer+CadenceLock.swift): every
+            // delta, INCLUDING a >1s stall - the detector must SEE a stall so
+            // its window veto can refuse to read one as a cadence - and a
+            // non-positive discontinuity, which resets the window. A few
+            // integer adds per frame; a transition logs OFF the lock below.
+            cadenceEvent = noteSourceTimestampDeltaLocked(delta)
         }
         if ptsSeconds.isFinite {
             lastSubmittedPTSSeconds = ptsSeconds
@@ -86,6 +93,7 @@ extension FramePacer {
         // branch below keeps its single-newest-frame behavior.
         if tickDeficit.warmingUp && !presentSuppressed {
             os_unfair_lock_unlock(&lock)
+            handleCadenceLockEvent(cadenceEvent)
             presentWarmHandoverFrame(entry)
             return
         }
@@ -127,6 +135,10 @@ extension FramePacer {
             droppedStale = queue.removeFirst().sampleBuffer
         }
         os_unfair_lock_unlock(&lock)
+
+        // Cadence-lock transition breadcrumb + counters, OFF the lock (LogStore
+        // takes its own). Rare by construction - seconds apart at the fastest.
+        handleCadenceLockEvent(cadenceEvent)
 
         if suppressedDisplaced != nil {
             // Suppressed-mode drops are quiet by design: the suppression EDGES

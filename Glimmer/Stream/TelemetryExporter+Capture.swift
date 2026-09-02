@@ -184,6 +184,15 @@ extension TelemetryExporter {
         // value); while paced this tracks the live queue (now ~1). Target 0 too.
         snap.pacingQueueDepth = pacing != nil ? pacing?.depth : 0
         snap.pacingAdaptiveTargetDepth = pacing != nil ? pacing?.adaptiveTargetDepth : 0
+        // Source-cadence lock gauge, same live-pacer discipline: 0 when the
+        // pacer is gone; the window fractions are absent (not 0) until the
+        // detector has judged a full window.
+        let cadence = pacing?.cadenceLock ?? .passthrough
+        snap.cadenceLockDivisor = cadence.divisor
+        snap.cadenceLockCushion = cadence.cushion
+        snap.sourceAchievedFraction = cadence.achievedFraction.isFinite ? cadence.achievedFraction : nil
+        snap.sourceMultiPeriodFraction = cadence.multiPeriodFraction.isFinite ? cadence.multiPeriodFraction : nil
+        snap.sourceMaxGapPeriods = cadence.achievedFraction.isFinite ? cadence.maxGapPeriods : nil
         snap.inFlightDecodeBacklog = source.inFlightDecodeBacklog()
 
         snap.dropsDecoder = source.decoderDrops()
@@ -213,6 +222,9 @@ extension TelemetryExporter {
         snap.frameLossTotal = counters.frameLossTotal.value
         snap.unrecoverableFrameTotal = counters.unrecoverableFrameTotal.value
         snap.pacerDisabledTotal = counters.pacerDisabledTotal.value
+        snap.cadenceLockEngageTotal = counters.cadenceLockEngageTotal.value
+        snap.cadenceLockDisengageTotal = counters.cadenceLockDisengageTotal.value
+        snap.cadenceLockDropTotal = counters.cadenceLockDropTotal.value
         snap.bookmarkTotal = counters.bookmarkTotal.value
         snap.cruiseBoostedBatchesTotal = counters.cruiseBoostedBatchesTotal.value
         snap.cruiseIdentityBatchesTotal = counters.cruiseIdentityBatchesTotal.value
