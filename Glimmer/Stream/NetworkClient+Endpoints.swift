@@ -60,31 +60,24 @@ extension NetworkClient {
                     log.error("HTTPS to pinned host failed (\(detail, privacy: .public)) - refusing HTTP fallback to preserve cert pin")
                     // Disambiguate before blaming the network: a READ-ONLY
                     // plain-HTTP probe (the pin is NEVER rebound from it -
-                    // the C2 contract above stands). Three outcomes:
-                    //   * host answers, PairStatus=0 → the host is up but
-                    //     doesn't know THIS client (typical after a migrated
-                    //     srvcert seeded the pin while pairing was never done
-                    //     by Glimmer, or a host-side re-install dropped us).
-                    //     Mutual TLS then fails in ~150ms and used to surface
-                    //     as "couldn't reach / is it awake" - dishonest.
-                    //   * host answers, PairStatus=1 → genuine cert weirdness;
-                    //     keep the loud mismatch message.
-                    //   * probe also fails → host genuinely unreachable.
+                    // the C2 contract above stands). It answers exactly one
+                    // question - "is the box up at all?" - and NOTHING about
+                    // pairing: Sunshine computes <PairStatus> only for HTTPS
+                    // requests and reports 0 on plain HTTP unconditionally, so
+                    // the earlier "probe says PairStatus=0, therefore unpaired"
+                    // read turned EVERY HTTPS hiccup into a false "pair again"
+                    // (2026-09-02: a wedged Sunshine HTTPS listener - 47984
+                    // refusing connections while 47989 answered - was reported
+                    // as "re-pair", when no client-side action could help).
+                    // The HTTPS failure itself carries the diagnosis, so
+                    // classify THAT once the probe proves the host is up.
                     if let probe = try? await rawRequest(path: "serverinfo",
                                                          query: [:],
                                                          extraQuery: nil,
                                                          usePaired: false,
                                                          timeout: 3),
                        (try? Self.verifyStatus(probe)) != nil {
-                        if (probe.int(forChild: "PairStatus") ?? 0) == 0 {
-                            throw StreamError.pairingFailed(
-                                "Host answered but doesn't recognize this Mac - pair (again) from Settings → PCs."
-                            )
-                        }
-                        throw StreamError.hostUnreachable(
-                            "This PC's certificate changed. Click its amber \"Trust needed\" chip "
-                            + "in the main window to trust it and pair again."
-                        )
+                        throw Self.classifyPairedPathFailure(detail, hostName: server.address)
                     }
                     throw StreamError.hostUnreachable(detail)
                 }
@@ -108,6 +101,46 @@ extension NetworkClient {
 
         hydrateServerInfo(from: xml, fetchedOverPaired: fetchedOverPaired)
         return server
+    }
+
+    /// Turn a paired-path (HTTPS) failure into the user-facing verdict, once
+    /// the plain-HTTP probe has proven the host is up. The `detail` strings
+    /// are ControlTransport's own (stable, ours), so matching on them is a
+    /// contract, not a heuristic:
+    ///   * "connect to ..." - TCP to 47984 refused or timed out while 47989
+    ///     answers: Sunshine's HTTPS listener is wedged (seen 2026-09-02 with
+    ///     zombie connections pinning its accept loop). Host-side; only a
+    ///     Sunshine restart clears it. NOT a pairing problem.
+    ///   * "Host requires pairing" - the host answered 401 over mutual TLS:
+    ///     it genuinely no longer knows this client.
+    ///   * "TLS handshake ..." - Sunshine rejects unknown client certs at the
+    ///     handshake, so this is the other face of "not paired".
+    ///   * "pinned host cert mismatch" / "host presented no certificate" -
+    ///     the HOST's cert changed: the trust chip, not the pair sheet.
+    ///   * anything else - honest generic: up on plain HTTP, broken on HTTPS.
+    static func classifyPairedPathFailure(_ detail: String, hostName: String) -> StreamError {
+        let name = hostName.isEmpty ? "The PC" : hostName
+        if detail.hasPrefix("connect to") {
+            return .hostUnreachable(
+                "\(name) is awake, but Sunshine's secure port (47984) is refusing connections - "
+                + "its HTTPS listener is stuck. Restart Sunshine on the PC; quitting Glimmer will not help."
+            )
+        }
+        if detail.contains("Host requires pairing") {
+            return .pairingFailed("\(name) no longer recognizes this Mac - pair it again from Settings → PCs.")
+        }
+        if detail.hasPrefix("TLS handshake") {
+            return .pairingFailed("\(name) rejected this Mac's certificate - pair it again from Settings → PCs.")
+        }
+        if detail.contains("cert mismatch") || detail.contains("no certificate") {
+            return .hostUnreachable(
+                "This PC's certificate changed. Click its amber \"Trust needed\" chip "
+                + "in the main window to trust it and pair again."
+            )
+        }
+        return .hostUnreachable(
+            "\(name) answers on its plain port but not its secure one (\(detail)). Restart Sunshine on the PC."
+        )
     }
 
     /// Populate `server` from the /serverinfo XML, split out of

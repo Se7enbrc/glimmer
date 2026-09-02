@@ -323,7 +323,10 @@ extension AppModel {
             // The network layer crafts user-facing guidance for the cases it
             // can prove (cert mismatch / not-paired disambiguation) - dropping
             // that for generic "is it awake" copy buries the real fix.
-            if detail.contains("cert") {
+            // "Restart Sunshine" marks the wedged-HTTPS-listener verdict
+            // (NetworkClient.classifyPairedPathFailure): the box is awake, so
+            // the "is it awake" copy would send the user to the wrong fix.
+            if detail.contains("cert") || detail.contains("Restart Sunshine") {
                 return detail
             }
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
@@ -332,10 +335,11 @@ extension AppModel {
             // establishment (a truncated control read = the host dropped mid-
             // response) → asleep guidance is honest.
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
-        case .pairingFailed(let detail) where detail.contains("recognize this Mac"):
-            // The not-paired disambiguation (NetworkClient.fetchServerInfo) -
-            // its message is already the actionable sentence.
-            return "\(hostName) answered but doesn't recognize this Mac. Pair (again) from Settings → PCs."
+        case .pairingFailed(let detail) where detail.contains("pair it again"):
+            // The paired-path classification (NetworkClient.
+            // classifyPairedPathFailure) - already the actionable, host-named
+            // sentence (401 or a TLS-level rejection of our client cert).
+            return detail
         case .pairingFailed, .pairingRejected:
             // The host answered but pairing failed - point the user at the
             // real fix, not at the power switch.

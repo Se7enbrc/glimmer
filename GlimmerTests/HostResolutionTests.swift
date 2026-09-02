@@ -15,6 +15,7 @@
 import Foundation
 import Network
 import Testing
+import XCTest
 @testable import Glimmer
 
 struct HostResolutionTests {
@@ -66,5 +67,57 @@ struct HostResolutionTests {
     /// RFC 6761 reserves .invalid: it never resolves, on or off the network.
     @Test func unresolvableNameReturnsNil() {
         #expect(UdpPinger.resolveHost("glimmer-nonexistent-host.invalid") == nil)
+    }
+}
+
+// MARK: - Paired-path failure classification (2026-09-02 false "re-pair")
+
+/// `classifyPairedPathFailure` is the one place a HTTPS failure on a pinned
+/// host becomes user-facing copy, and it used to say "pair again" for ANY
+/// failure because Sunshine reports PairStatus=0 on plain HTTP no matter
+/// what. These pin the contract per ControlTransport detail string.
+final class PairedPathFailureClassificationTests: XCTestCase {
+
+    private func classify(_ detail: String) -> StreamError {
+        NetworkClient.classifyPairedPathFailure(detail, hostName: "tower")
+    }
+
+    func testRefusedSecurePortIsNotAPairingProblem() {
+        guard case .hostUnreachable(let text) = classify("connect to tower:47984 failed or timed out") else {
+            return XCTFail("expected hostUnreachable")
+        }
+        XCTAssertTrue(text.contains("Restart Sunshine"))
+        XCTAssertTrue(text.contains("47984"))
+        XCTAssertFalse(text.lowercased().contains("pair it again"))
+    }
+
+    func test401IsUnpaired() {
+        guard case .pairingFailed(let text) = classify("Host requires pairing (401)") else {
+            return XCTFail("expected pairingFailed")
+        }
+        XCTAssertTrue(text.contains("pair it again"))
+        XCTAssertTrue(text.hasPrefix("tower"))
+    }
+
+    func testHandshakeRejectionIsUnpaired() {
+        guard case .pairingFailed(let text) = classify("TLS handshake to tower:47984 failed (SSL_connect)") else {
+            return XCTFail("expected pairingFailed")
+        }
+        XCTAssertTrue(text.contains("pair it again"))
+    }
+
+    func testHostCertChangePointsAtTrustChip() {
+        guard case .hostUnreachable(let text) = classify("pinned host cert mismatch") else {
+            return XCTFail("expected hostUnreachable")
+        }
+        XCTAssertTrue(text.contains("Trust needed"))
+    }
+
+    func testEmptyHostNameFallsBackToThePC() {
+        guard case .hostUnreachable(let text) = NetworkClient.classifyPairedPathFailure(
+            "connect to x:47984 failed or timed out", hostName: "") else {
+            return XCTFail("expected hostUnreachable")
+        }
+        XCTAssertTrue(text.hasPrefix("The PC"))
     }
 }

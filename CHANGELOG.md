@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.8.17 - 2026-09-02
+
+Glimmer stops telling you to re-pair when the real problem is on the PC.
+
+If Sunshine's secure port stopped accepting connections while its plain port
+still answered, Glimmer read the plain reply as "this PC does not know you" and
+asked you to pair again. That reading was never sound: Sunshine only reports
+pairing over the secure connection and always says "not paired" on the plain
+one. The failure itself is now what gets diagnosed. A refused secure port says
+so, names the fix (restart Sunshine on the PC) and notes that quitting Glimmer
+will not help; a 401 or a certificate rejection still means pair again; a
+changed host certificate still points at the amber Trust needed chip.
+
 ## 2026.8.16 - 2026-08-30
 
 Fixes a crash at the end of a stream when diagnostics are turned on.
