@@ -32,9 +32,10 @@ extension AppModel {
     /// cancelled the loop, then the last sample aged past `HostLiveStatus.stale`
     /// and the chip reverted). A TCP probe + one `/serverinfo` every 10s is
     /// negligible chatter - the cost the gate saved was never worth a chip that
-    /// lies whenever Glimmer isn't frontmost. We still pause for the two cases
-    /// that genuinely warrant it: an active stream (the engine owns RTT) and no
-    /// host selected.
+    /// lies whenever Glimmer isn't frontmost. We still pause for the cases that
+    /// genuinely warrant it: an active stream (the engine owns RTT), no host
+    /// selected, and system sleep (a poll caught mid-exchange by the nap wedges
+    /// Sunshine's HTTPS thread - see AppModel+Lifecycle).
     ///
     /// We deliberately don't fan out across multiple hosts - only the
     /// selected one is on screen. Background hosts get a stale chip; no
@@ -47,6 +48,10 @@ extension AppModel {
         // metric, and concurrent /serverinfo calls would tag along with the
         // pairing TLS session and confuse Sunshine's logs.
         guard !isStreaming else { return }
+        // Not across a nap either: the willSleep observer (AppModel+Lifecycle)
+        // set this so a poll can't be caught mid-exchange by the Mac going
+        // dark; didWake clears it and calls back here.
+        guard !hostPollingPausedForSleep else { return }
         guard let host = selectedHost else { return }
 
         // Fresh poll loop → fresh unreachable streak. A miss accrued against

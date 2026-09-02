@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.8.18 - 2026-09-02
+
+Glimmer no longer polls your PC while the Mac is going to sleep.
+
+The launcher checks the selected PC every ten seconds to keep the readiness chip
+honest. If the Mac fell asleep in the middle of one of those checks, the PC was
+left holding a half-finished secure connection, and Sunshine's secure listener
+would wait on it forever: every later connection was refused until Sunshine was
+restarted, and until 2026.8.17 Glimmer described that as a pairing problem. Any
+client can trigger that on Sunshine's side; Glimmer now simply stops being the
+one that does. The moment macOS announces sleep the poller stops, and it starts
+again on wake with a fresh check.
+
 ## 2026.8.17 - 2026-09-02
 
 Glimmer stops telling you to re-pair when the real problem is on the PC.

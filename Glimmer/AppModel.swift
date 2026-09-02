@@ -456,6 +456,19 @@ final class AppModel {
     /// HostStatusPoller.swift can drive it.
     @ObservationIgnored var hostStatusTask: Task<Void, Never>?
 
+    /// True between NSWorkspace's willSleep and didWake. The chip poller must
+    /// not run across a nap: a poll caught mid-exchange when the Mac goes dark
+    /// leaves a half-open TLS connection on the host, and Sunshine's single
+    /// HTTPS thread blocks on it forever (2026-09-02: 47984 refused for 14h
+    /// until a Sunshine restart). `restartHostStatusPolling` is a no-op while
+    /// this is set; didWake clears it and re-arms.
+    @ObservationIgnored var hostPollingPausedForSleep = false
+
+    /// Observer tokens registered on `NSWorkspace.shared.notificationCenter`
+    /// (sleep/wake live there, not on the default center), kept apart from
+    /// `notificationTokens` so each is removed from the center that owns it.
+    @ObservationIgnored var workspaceTokens: [NSObjectProtocol] = []
+
     /// Consecutive unreachable TCP probes for the currently-polled host. A
     /// SINGLE timed-out probe degrades the chip to `.unknown` ("Checking...")
     /// rather than asserting `.asleep`; only TWO misses in a row publish
@@ -501,6 +514,7 @@ final class AppModel {
     var displayInfoRevision: Int = 0
 
     isolated deinit {
+        for token in workspaceTokens { NSWorkspace.shared.notificationCenter.removeObserver(token) }
         // Drain NotificationCenter observer tokens we registered with the
         // closure form - without this they outlive the manager and keep the
         // closures (and any captured state) alive in NC's global table.

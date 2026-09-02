@@ -169,6 +169,36 @@ extension AppModel {
                 self?.controllerConnected = !GCController.controllers().isEmpty
             }
         })
+        // Sleep/wake: stop the chip poller BEFORE the Mac goes dark and re-arm
+        // it on wake. A /serverinfo poll caught mid-exchange by sleep leaves the
+        // host holding a half-open TLS connection, and Sunshine's HTTPS server
+        // (one asio thread for accept + handshake + handlers) blocks on it with
+        // no timeout - the 2026-09-02 "port 47984 refused until Sunshine
+        // restarts" wedge, which Glimmer used to misreport as "re-pair". Any
+        // client can trigger it; we simply stop being the client that does.
+        // NSWorkspace posts these on its OWN center (see StreamSession+Wake).
+        let wsnc = NSWorkspace.shared.notificationCenter
+        workspaceTokens.append(wsnc.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.hostPollingPausedForSleep = true
+                self.hostStatusTask?.cancel()
+                self.hostStatusTask = nil
+                Diag.info("system will sleep - host status polling paused", "Host")
+            }
+        })
+        workspaceTokens.append(wsnc.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.hostPollingPausedForSleep = false
+                Diag.info("system woke - host status polling resumed", "Host")
+                self.restartHostStatusPolling()
+            }
+        })
         // Catch a controller that was already connected at launch (covers both
         // the auto-offer and seeding `controllerConnected`).
         controllerConnected = !GCController.controllers().isEmpty
