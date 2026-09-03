@@ -213,8 +213,8 @@ Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 - Comments earn their keep: short for obvious code, expansive when documenting a
   non-obvious decision. The HDR pipeline comments in `VideoDecoder.swift` and
   the bridge-lifetime comment in `StreamSession.swift` are the bar - if a future
-  maintainer would have to dig through a `moonlight-qt` PR thread to understand
-  why a line exists, the comment goes in the source.
+  maintainer would have to dig through an upstream PR thread to understand why a
+  line exists, the comment goes in the source.
 - No emoji in source files.
 
 ## Concurrency

@@ -50,9 +50,7 @@ is sized to that.
   Reed-Solomon FEC reassembly, and AES-GCM decrypt all parse bytes that arrive
   over UDP/TCP from the network. Memory-safety bugs, parser confusion, and
   malformed-packet crashes in these parsers are **in scope and ours** - report
-  them here, not upstream. (Earlier revisions delegated this surface to a linked
-  `moonlight-common-c` C library; that library is gone - the parsing is
-  Glimmer's own code now, ported from it.)
+  them here, not upstream.
 
 **Out of scope:**
 
@@ -69,7 +67,7 @@ is sized to that.
 
 Per-machine RSA-2048 client identity, generated on first launch, 20-year
 self-signed cert with CN `NVIDIA GameStream Client` (the standard GameStream
-client identifier; moonlight-qt uses the same).
+client identifier).
 
 **Storage: mode-0600 files**, not the keychain. Three files:
 
@@ -224,10 +222,9 @@ the cert cannot also produce the PIN.
 
 **Why no sandbox.** The Wi-Fi-stutter helper registers a root LaunchDaemon via
 `SMAppService.daemon`, and a sandboxed app cannot install or run a system
-daemon - the helper needs root to run `ifconfig awdl0 down`. The reference
-client (**moonlight-qt**) is likewise unsandboxed. The Mac App Store path was
-already closed independently: the root `SMAppService` daemon cannot be shipped
-sandboxed at all, and a sandboxed build would also need
+daemon - the helper needs root to run `ifconfig awdl0 down`. The Mac App Store
+path was already closed independently: the root `SMAppService` daemon cannot be
+shipped sandboxed at all, and a sandboxed build would also need
 `com.apple.security.device.usb` (DualSense raw-HID adaptive triggers / haptics),
 a hard MAS reject. There was no sandboxed-and-shippable configuration to give
 up.

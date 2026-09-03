@@ -93,17 +93,16 @@ Components:
   - a focused, single-peer, client-only ENet subset over UDP: the CONNECT
     handshake, reliable sends with ACK tracking, and the inbound control
     dispatch (rumble, HDR mode, motion enable, lightbar, termination).
-    `EnetWire.swift` owns the byte layout. Ported from the enet protocol logic
-    vendored in moonlight-common-c (enet is MIT, Lee Salzman - see CREDITS.md).
+    `EnetWire.swift` owns the byte layout (enet wire format; see CREDITS.md).
 - **`StreamCrypto`** - control-V2 AES-GCM encryption for control messages and
   the media-stream decrypt paths.
 - **Video receive** - `VideoRtpReceiver` (socket + ping loop) → `RtpVideoQueue`
   (+`+AddPacket`, `+Reconstruct`, `+ReceiveQuality`, `+ReorderStats`) which
   reorders, FEC-recovers, and assembles packets → `VideoDepacketizer` which
   emits `DecodeUnit`s to the `VideoSink` (the `VideoDecoder`).
-  `ReedSolomon.swift` is the GF(256) erasure decoder (ported from nanors, MIT,
-  Joseph Calderon - see CREDITS.md). `FecHeadroomController` adaptively deepens
-  receive headroom under sustained loss with a bounded, recovering control loop.
+  `ReedSolomon.swift` is the GF(256) erasure decoder (see CREDITS.md).
+  `FecHeadroomController` adaptively deepens receive headroom under sustained
+  loss with a bounded, recovering control loop.
 - **Audio receive** - `RtpAudioReceiver` (+`+Socket`, `+Decrypt`, `+Ping`,
   `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`) /
   `AudioFecDecoder` → Opus decode in `AudioDecoder` (AVAudioEngine playout with
@@ -112,9 +111,8 @@ Components:
   `StreamConfig.remoteness == .auto` from the real route, so the SDP packet-size
   clamp (1392 down to 1024 on a tunnelled path) fires on the paths that need it.
 - **Input uplink** - `InputBatcher` + `InputEncoder`: queue + merge + ~1ms flush
-  (the port of `inputSendThreadProc`), coalescing high-rate mouse / controller
-  deltas so the reliable channel carries ~1 packet per change per tick instead
-  of 150-250/s.
+  coalescing high-rate mouse / controller deltas so the reliable channel carries
+  ~1 packet per change per tick instead of 150-250/s.
 - **`UdpPinger`** - stream-keepalive ping plumbing and the single steady-cadence
   dial both live receive loops ride.
 
@@ -213,26 +211,24 @@ quality. The output callback fires on our `decodeQueue` (a user-interactive
 
 **Pacing + enqueue.** The VT output callback wraps the pixel buffer + format
 description in a `CMSampleBuffer` and submits it to the `FramePacer` - a
-display-clock pacer (a port of moonlight-qt's `pacer.cpp` two-queue model,
-adapted to `AVSampleBufferDisplayLayer` + `CADisplayLink`). Frames land in a
-bounded, hostPTS-ordered jitter/reorder FIFO; a `CADisplayLink` bound to the
-stream window's screen releases at most one due frame per vsync to
-`displayLayer.sampleBufferRenderer.enqueue(_:)` (`AVSampleBufferVideoRenderer`,
-the macOS 15+ replacement for the deprecated `enqueueSampleBuffer`). The release
-path runs on a dedicated serial queue, never the main actor. The pacer's queue
-depth is adaptive: it rests at 1 frame on a clean link and grows only under
-measured (RFC-3550) reorder jitter, decaying back when the link is clean - see
-the rationale comments in `FramePacer.swift` and `FramePacer+Constants.swift`.
-There is no Metal shader - the OS owns color/EDR handling end-to-end.
+display-clock pacer (a two-queue model on `AVSampleBufferDisplayLayer` +
+`CADisplayLink`). Frames land in a bounded, hostPTS-ordered jitter/reorder FIFO;
+a `CADisplayLink` bound to the stream window's screen releases at most one due
+frame per vsync to `displayLayer.sampleBufferRenderer.enqueue(_:)`
+(`AVSampleBufferVideoRenderer`, the macOS 15+ replacement for the deprecated
+`enqueueSampleBuffer`). The release path runs on a dedicated serial queue, never
+the main actor. The pacer's queue depth is adaptive: it rests at 1 frame on a
+clean link and grows only under measured (RFC-3550) reorder jitter, decaying
+back when the link is clean - see the rationale comments in `FramePacer.swift`
+and `FramePacer+Constants.swift`. There is no Metal shader - the OS owns
+color/EDR handling end-to-end.
 
 The Metal-shader rewrite this used to be is documented in the top-of-file
 comment in `VideoDecoder.swift`. Short version: with a custom MSL fragment
 shader doing the YUV→RGB + PQ EOTF, HDR was visibly wrong (washed highlights,
-milky blacks) on real HDR displays. moonlight-qt's macOS path also uses
-`AVSampleBufferDisplayLayer`; Apple's Metal docs explicitly say "don't tone-map
-in your shader, the layer applies tone mapping based on the current EDR
-headroom." We do what moonlight-qt does, the OS owns the pipeline end-to-end,
-and HDR works.
+milky blacks) on real HDR displays. Apple's Metal docs explicitly say "don't
+tone-map in your shader, the layer applies tone mapping based on the current EDR
+headroom." The OS owns the pipeline end-to-end, and HDR works.
 
 **HDR pipeline.** Active when all three preconditions hold:
 
@@ -467,8 +463,8 @@ acceptable.
 
 `Identity.swift`: per-machine 32-hex `uniqueID`, an RSA-2048 keypair, and a
 20-year self-signed cert (CN `NVIDIA GameStream Client` - every GameStream
-client identifies as this string, including moonlight-qt). Three mode-0600 files
-under `~/Library/Application Support/Glimmer/Identity/`:
+client identifies as this string). Three mode-0600 files under
+`~/Library/Application Support/Glimmer/Identity/`:
 
 - `client-cert.pem`
 - `client-key.pem`
