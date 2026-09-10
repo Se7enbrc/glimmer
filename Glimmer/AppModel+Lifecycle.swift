@@ -253,12 +253,6 @@ extension AppModel {
         StreamDisplayMode.effective(chosen: streamDisplayMode, preset: qualityPreset)
     }
 
-    func autoUpdateCustomBitrate() {
-        guard customBitrateAuto else { return }
-        let kbps = bitrateKbps(width: customWidth, height: customHeight, fps: customFPS, preset: .matchDisplay)
-        customBitrateMbps = max(5, kbps / 1000)
-    }
-
     func shutdown() {
         // Native engine teardown is owned by StreamSession; bringing the app
         // down while a session is live triggers the session's cancellation

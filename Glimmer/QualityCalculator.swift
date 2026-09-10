@@ -311,7 +311,10 @@ extension AppModel {
             fps = streamDisplayMode == .window
                 ? StreamDisplayMode.windowedRefresh(customFPS: customFPS, displayMaxHz: display.fps)
                 : customFPS
-            bitrate = customBitrateMbps * 1000
+            // Derived, never asked: the measured-anchor recommendation for
+            // this mode. It reads `fps` (the capped value above), so a
+            // windowed 60 Hz stream does not carry a 120 Hz budget.
+            bitrate = recommendedBitrateMbps(width: width, height: height, fps: fps) * 1000
             hdr = customHDR
         }
         // Idempotent writes: assign each @Observable property only when it
@@ -339,21 +342,16 @@ extension AppModel {
 
     /// Snap custom values to the display's native dimensions.
     ///
-    /// Writes through the custom properties, so their didSets persist all four
-    /// keys - only ever call this behind an explicit user action (the Quality
-    /// pane's "Use native resolution") or when Custom is already the live
-    /// preset. The `max(5, ...)` floor matches the three sibling sites that
-    /// derive a Mbps figure (`qualityPreset`'s willSet prefill,
-    /// `autoUpdateCustomBitrate`, `recommendedBitrateMbps`) and the 5 Mbps floor
-    /// inside `bitrateKbps` itself; without it an integer divide of a
-    /// sub-5000 kbps budget could seed the slider below its own 5...200 range.
+    /// Writes through the custom properties, so their didSets persist all
+    /// three keys - only ever call this behind an explicit user action (the
+    /// Quality pane's "Use native resolution") or when Custom is already the
+    /// live preset. The bitrate needs no seeding: it is derived from the mode
+    /// every time the effective config is computed (`recommendedBitrateMbps`).
     func snapCustomToDisplay() {
         let defaults = smartDefaultsForCurrentDisplay()
         customWidth = defaults.width
         customHeight = defaults.height
         customFPS = defaults.fps
-        let kbps = bitrateKbps(width: defaults.width, height: defaults.height, fps: defaults.fps, preset: .matchDisplay)
-        customBitrateMbps = max(5, kbps / 1000)
     }
 
     /// What a preset would resolve to right now.
@@ -376,7 +374,8 @@ extension AppModel {
             let kbps = bitrateKbps(width: hd.width, height: hd.height, fps: hd.fps, preset: .hidpi)
             return PresetSnapshot(width: hd.width, height: hd.height, fps: hd.fps, bitrateKbps: kbps)
         case .custom:
-            return PresetSnapshot(width: customWidth, height: customHeight, fps: customFPS, bitrateKbps: customBitrateMbps * 1000)
+            let kbps = recommendedBitrateMbps(width: customWidth, height: customHeight, fps: customFPS) * 1000
+            return PresetSnapshot(width: customWidth, height: customHeight, fps: customFPS, bitrateKbps: kbps)
         }
     }
 

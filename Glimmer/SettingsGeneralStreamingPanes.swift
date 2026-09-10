@@ -311,24 +311,11 @@ struct QualityPane: View {
                             .onChange(of: model.customFPS) { _, _ in clampCustomFPS() }
                         Text("Hz").foregroundStyle(.secondary)
                     }
-                    Toggle("Keep bitrate matched automatically (follows resolution and refresh)",
-                           isOn: $model.customBitrateAuto)
-                        .help("Recomputes the bitrate whenever resolution or refresh changes. Turn off to set your own.")
-                    HStack {
-                        Text("Bitrate")
-                        Spacer()
-                        Slider(value: Binding(
-                            get: { Double(model.customBitrateMbps) },
-                            set: { model.customBitrateMbps = Int($0) }
-                        ), in: 5...200, step: 1)
-                        .frame(width: 200)
-                        .disabled(model.customBitrateAuto)
-                        Text("\(model.customBitrateMbps) Mbps")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(width: 80, alignment: .trailing)
-                    }
-                    bitrateGuidance
+                    // No bitrate row. Asking someone to pick a wire budget -
+                    // and then to decide whether we should pick it for them -
+                    // is two questions we can answer better ourselves from the
+                    // measured anchors (AppModel.measuredBitrateAnchors). The
+                    // resulting figure is in the next-stream summary below.
                     Toggle("Brighter highlights, deeper color (needs HDR on host and display)",
                            isOn: $model.customHDR)
                         .help("HDR - sends a 10-bit high-dynamic-range stream when the host and this display both support it.")
@@ -441,25 +428,6 @@ struct QualityPane: View {
         }
         .formStyle(.grouped)
         .onAppear { awdl.refresh() }
-    }
-
-    /// Bitrate guidance under the slider: the baked-in measured recommendation
-    /// (harness + 20% headroom - provenance on `AppModel.measuredBitrateAnchors`)
-    /// plus the wire-budget footnote. (Learned Tier-2 sentence retired - see QualityCalculator.)
-    private var bitrateGuidance: some View {
-        let width = model.customWidth
-        let height = model.customHeight
-        let fps = model.customFPS
-        let mode = "\(AppModel.resolutionLabel(width: width, height: height))·\(fps)"
-        let recommended = model.recommendedBitrateMbps(width: width, height: height, fps: fps)
-        return VStack(alignment: .leading, spacing: 4) {
-            Text("Recommended for \(mode): ~\(recommended) Mbps")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Text("The bitrate is a wire budget: the encoder gets 80%, forward-error-correction takes 20%.")
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
-        }
     }
 
     /// Per-preset hint string. Kept inline alongside the picker so the

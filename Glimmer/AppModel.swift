@@ -64,7 +64,6 @@ final class AppModel {
                 customWidth = snapshot.width
                 customHeight = snapshot.height
                 customFPS = snapshot.fps
-                customBitrateMbps = max(5, snapshot.bitrateKbps / 1000)
             }
         }
         didSet {
@@ -86,36 +85,27 @@ final class AppModel {
     var customWidth: Int = 1920 {
         didSet {
             UserDefaults.standard.set(customWidth, forKey: "customWidth")
-            autoUpdateCustomBitrate()
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
     var customHeight: Int = 1080 {
         didSet {
             UserDefaults.standard.set(customHeight, forKey: "customHeight")
-            autoUpdateCustomBitrate()
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
     var customFPS: Int = 60 {
         didSet {
             UserDefaults.standard.set(customFPS, forKey: "customFPS")
-            autoUpdateCustomBitrate()
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
-    var customBitrateAuto: Bool = true {
-        didSet {
-            UserDefaults.standard.set(customBitrateAuto, forKey: "customBitrateAuto")
-            if customBitrateAuto { autoUpdateCustomBitrate() }
-        }
-    }
-    var customBitrateMbps: Int = 50 {
-        didSet {
-            UserDefaults.standard.set(customBitrateMbps, forKey: "customBitrateMbps")
-            if qualityPreset == .custom { persistQualitySettings() }
-        }
-    }
+    // No bitrate knob, by design. A bitrate is a wire budget the app can
+    // derive better than a person can guess: `recommendedBitrateMbps` rescales
+    // the Moonlight formula onto anchors MEASURED on real hardware, so the
+    // number follows resolution and refresh (and, in a window, the capped
+    // refresh) on its own. Nothing to persist and nothing to ask - the result
+    // is visible in the next-stream summary. See QualityCalculator.
     var customHDR: Bool = true {
         didSet {
             UserDefaults.standard.set(customHDR, forKey: "customHDR")
@@ -527,9 +517,7 @@ final class AppModel {
         customWidth = min(max(Self.persistedPositiveInt("customWidth") ?? customWidth, 640), 7680)
         customHeight = min(max(Self.persistedPositiveInt("customHeight") ?? customHeight, 480), 4320)
         customFPS = min(max(Self.persistedPositiveInt("customFPS") ?? customFPS, 30), 240)
-        customBitrateMbps = Self.persistedPositiveInt("customBitrateMbps") ?? customBitrateMbps
         customHDR = Self.persistedBool("customHDR") ?? customHDR
-        customBitrateAuto = Self.persistedBool("customBitrateAuto") ?? customBitrateAuto
         captureSysKeys = Self.persistedBool("captureSysKeys") ?? captureSysKeys
         streamCoversNotch = Self.persistedBool("streamCoversNotch") ?? streamCoversNotch
         // Registered default (GlimmerApp) answers the absent-key case; an
