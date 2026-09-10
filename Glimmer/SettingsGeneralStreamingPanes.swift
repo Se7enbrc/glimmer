@@ -138,7 +138,7 @@ struct GeneralPane: View {
 /// the user can still type any value they like; this is just a
 /// no-typo shortcut for the 95% case (1080p / 1440p / 2160p).
 enum CommonResolution: CaseIterable {
-    case hd1080, qhd1440, uhd4K, hd720
+    case hd720, hd1080, qhd1440, uhd4K
 
     var width: Int {
         switch self {
@@ -282,11 +282,9 @@ struct QualityPane: View {
                                 }
                             }
                         } label: {
-                            Image(systemName: "rectangle.on.rectangle")
-                                .symbolRenderingMode(.hierarchical)
+                            Text("Presets")
                         }
-                        .menuStyle(.borderlessButton)
-                        .menuIndicator(.hidden)
+                        .menuStyle(.button)
                         .help("Common resolutions")
                         .fixedSize()
                         TextField("", value: $model.customWidth, format: .number)
