@@ -2,18 +2,17 @@
 
 ## 2026.9.0 - 2026-09-10
 
-Glimmer can stream in a window, and two full-screen dead ends are gone.
+You can now stream in a window, and two full-screen dead ends are gone.
 
-Settings, Quality, Show the stream: pick Window and the stream opens as a normal
-Mac window, pixel-mapped to the size you ask for, that you can drag, resize (the
-picture scales, it never letterboxes) and send full screen with the green
-button, with the menu bar and Dock left alone. A separate Window stream size
-picker chooses what your gaming PC renders, 720p through 4K or a custom size and
-refresh capped at your display's rate, without touching your full-screen
-settings; the bitrate follows automatically. Click the picture to grab the mouse
-and press Control-Option-R (configurable in Input) to let it go; closing the
-window ends the stream. Full screen stays the default and behaves exactly as
-before.
+Pick the Custom preset in Settings, Quality and turn on "Show the stream in a
+window". The stream opens as a normal Mac window at your Custom resolution,
+pixel-mapped on Retina panels, that you can drag, resize (the picture scales, it
+never letterboxes) and send full screen with the green button, with the menu bar
+and Dock left alone. Refresh is capped at what your display can actually show,
+and the window remembers where you left it. Click the picture to grab the mouse
+and press Control-Option-R, configurable in Input, to let it go; closing the
+window ends the stream. Native Retina and HiDPI are panel-native by definition,
+so they stay full screen and are untouched.
 
 Fill the notch now only appears on Macs that have a notch. Turning it off
 quietly switched full screen into a macOS full-screen space, and on a Mac mini

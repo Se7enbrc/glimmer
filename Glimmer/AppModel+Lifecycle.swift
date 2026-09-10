@@ -240,11 +240,17 @@ extension AppModel {
 
     /// The panel's CURRENT refresh (`NSScreen.maximumFramesPerSecond` reflects
     /// the System Settings choice, not the capability), 60 when it can't say.
-    /// The cap for every Window-mode refresh choice and the picker's label.
+    /// The cap a windowed stream's refresh takes, and the footnote's number.
     var currentDisplayMaxHz: Int {
         _ = displayInfoRevision
         let hz = NSScreen.main?.maximumFramesPerSecond ?? 0
-        return hz > 0 ? hz : WindowStreamSettings.fallbackDisplayMaxHz
+        return hz > 0 ? hz : StreamDisplayMode.fallbackDisplayMaxHz
+    }
+
+    /// The mode a session actually gets: the window choice under Custom, full
+    /// screen under the panel-native presets (StreamDisplayMode.effective).
+    var effectiveDisplayMode: StreamDisplayMode {
+        StreamDisplayMode.effective(chosen: streamDisplayMode, preset: qualityPreset)
     }
 
     func autoUpdateCustomBitrate() {

@@ -1,9 +1,10 @@
 //
 //  StreamWindow+Windowed.swift
 //
-//  Window mode: the stream as a real titled window (the "Show the stream:
-//  Window" setting), plus the mid-session conversion a Path-B Space exit
-//  performs to land here instead of leaving a vanished window (issue #84).
+//  Window mode: the stream as a real titled window (the Custom preset's "Show
+//  the stream in a window" toggle), plus the mid-session conversion a Path-B
+//  Space exit performs to land here instead of leaving a vanished window
+//  (issue #84).
 //
 //  What is deliberately NOT here: the presentation-options dance, the
 //  `mainMenuWindow + 1` level, the resign-key orderOut, the level re-raise on

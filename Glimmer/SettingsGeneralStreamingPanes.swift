@@ -227,41 +227,46 @@ struct QualityPane: View {
                 }
                 .pickerStyle(.inline)
                 .labelsHidden()
+                // Nothing else lives in this card: a switch or a picker under
+                // the radio rows read as extra preset rows (owner's screenshot).
+            }
 
-                // How the stream is shown. Full screen is the default; Window
-                // is a normal titled window with its own stream-size request
-                // (WindowStreamSizeControls). Snapshotted at session start.
-                Picker("Show the stream", selection: $model.streamDisplayMode) {
-                    ForEach(StreamDisplayMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                if model.streamDisplayMode == .fullScreen {
-                    // Notch coverage as a compact pill right under the mode
-                    // choice - it shapes the same picture. DEFAULT ON: full-panel
-                    // coverage is the product stance on notched MacBooks. Shown
-                    // ONLY on a notched panel: elsewhere the toggle used to
-                    // silently switch the fullscreen mechanism to a macOS Space
-                    // (issue #84), so notchless Macs now always take the cover
-                    // and never see the switch. Snapshotted at session start, so
-                    // the next-stream caveat lives in the description.
-                    if model.currentDisplayHasNotch {
-                        Toggle("Fill the notch", isOn: $model.streamCoversNotch)
-                            .toggleStyle(.switch)
-                            .help("Covers the whole panel; a sliver of the image hides behind the camera notch.")
-                        Text("Fills the whole panel - a thin strip of the picture hides behind the notch. "
-                            + "Off keeps the picture clear of it by using a macOS full-screen space instead. "
-                            + "Applies next stream.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    WindowStreamSizeControls()
+            // Notch coverage in its own compact card. DEFAULT ON: full-panel
+            // coverage is the product stance on notched MacBooks. Shown ONLY on
+            // a notched panel and only for a full-screen stream: elsewhere the
+            // toggle used to silently switch the fullscreen mechanism to a
+            // macOS Space (issue #84), so notchless Macs now always take the
+            // cover and never see the switch. Snapshotted at session start, so
+            // the next-stream caveat lives in the footer; the .help() carries
+            // the detail.
+            if model.currentDisplayHasNotch, model.effectiveDisplayMode == .fullScreen {
+                Section {
+                    Toggle("Fill the notch", isOn: $model.streamCoversNotch)
+                        .toggleStyle(.switch)
+                        .help("Covers the whole panel, camera notch included, so a panel-native stream renders 1:1. "
+                            + "Off keeps the picture below the notch by using a macOS full-screen space.")
+                } footer: {
+                    Text("A thin strip of the picture hides behind the notch. Off keeps it clear, "
+                        + "using a macOS full-screen space. Applies next stream.")
                 }
             }
 
             if model.qualityPreset == .custom {
-                Section("Custom overrides") {
+                // "Custom" alone: the section owns the window choice now, not
+                // just overrides of the preset numbers.
+                Section {
+                    // Window is a Custom thing - the panel-native presets are
+                    // full screen by definition - so the choice leads the
+                    // section, segmented (reads instantly; a two-value chevron
+                    // looked cheap next to the radio rows). Persisted as the
+                    // display mode; snapshotted at session start.
+                    Picker("Show the stream", selection: $model.streamDisplayMode) {
+                        ForEach(StreamDisplayMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .help("Window opens the stream as a normal window at the size below; drag it to any size.")
                     HStack {
                         Text("Resolution")
                         Spacer()
@@ -336,6 +341,16 @@ struct QualityPane: View {
                             model.snapCustomToDisplay()
                         }
                         .buttonStyle(.borderless)
+                    }
+                } header: {
+                    Text("Custom")
+                } footer: {
+                    // The one non-obvious thing about a window. The chord is
+                    // read live (same pattern as the stats-hotkey footnote
+                    // below) so it stays true after a rebind in Input.
+                    if model.streamDisplayMode == .window {
+                        Text("Click the picture to grab the mouse; \(model.releasePointerHotkey.displayString) "
+                            + "gives it back.")
                     }
                 }
             }

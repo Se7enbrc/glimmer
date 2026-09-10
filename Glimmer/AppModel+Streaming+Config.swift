@@ -51,10 +51,7 @@ extension AppModel {
     /// negotiated codec's efficiency. The spec UI and `nativeStreamConfig` both read
     /// this so the shown bitrate can't drift from what's sent. Custom is verbatim.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
-        // Under Window the Custom preset's slider is not in play (the bitrate is
-        // the formula's answer for the window request), so the codec discount
-        // applies there like any other computed budget.
-        if case .custom = qualityPreset, streamDisplayMode == .fullScreen { return effectiveBitrateKbps }
+        if case .custom = qualityPreset { return effectiveBitrateKbps }
         let mult = Self.codecBudgetMultiplier(for: formats)
         return max(5_000, Int((Double(effectiveBitrateKbps) * mult).rounded()))
     }
@@ -149,7 +146,7 @@ extension AppModel {
         // the session always takes the borderless cover (see
         // effectiveStreamCoversNotch for the issue this closes).
         cfg.coversNotch = effectiveStreamCoversNotch
-        cfg.displayMode = streamDisplayMode
+        cfg.displayMode = effectiveDisplayMode
         let codecPref = HostCodecPreference.load(for: host.id)
         cfg.videoFormats = codecPref.apply(to: .probedSupported)
         // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial

@@ -291,24 +291,16 @@ final class AppModel {
     var streamCoversNotch: Bool = true {
         didSet { UserDefaults.standard.set(streamCoversNotch, forKey: "streamCoversNotch") }
     }
-    /// "Show the stream": full screen (the default) or a normal titled window.
-    /// Snapshotted into the StreamConfig at session start, like `streamCoversNotch`.
-    /// Under Window the effective stream size comes from `windowStream`, so a
-    /// flip recomputes the "Your next stream" summary.
+    /// The Custom preset's "Show the stream in a window" choice: full screen
+    /// (the default) or a normal titled window at Custom's own resolution,
+    /// refresh, bitrate and HDR. Only in force under Custom (see
+    /// `effectiveDisplayMode`); snapshotted into the StreamConfig at session
+    /// start, like `streamCoversNotch`. A windowed stream caps the refresh at
+    /// the display, so a flip recomputes the "Your next stream" summary.
     var streamDisplayMode: StreamDisplayMode = StreamDisplayMode.defaultMode {
         didSet {
             UserDefaults.standard.set(streamDisplayMode.rawValue, forKey: StreamDisplayMode.defaultsKey)
-            persistQualitySettings()
-        }
-    }
-    /// What the host renders while the stream is shown in a window (the window
-    /// itself is whatever size the user drags it to). Persisted under its OWN
-    /// keys so it never clobbers the fullscreen Custom preset - see
-    /// WindowStreamSettings for the split and the clamping.
-    var windowStream = WindowStreamSettings() {
-        didSet {
-            windowStream.save(to: UserDefaults.standard)
-            if streamDisplayMode == .window { persistQualitySettings() }
+            if qualityPreset == .custom { persistQualitySettings() }
         }
     }
     /// Window-mode "Release the pointer" chord (default ⌃⌥R): frees the mouse
@@ -544,7 +536,6 @@ final class AppModel {
         // unrecognised raw value lands on the default rather than guessing.
         streamDisplayMode = StreamDisplayMode.persisted(
             rawValue: UserDefaults.standard.string(forKey: StreamDisplayMode.defaultsKey))
-        windowStream = WindowStreamSettings.load(from: UserDefaults.standard)
         releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self) ?? releasePointerHotkey
         showStreamStats = Self.persistedBool("showStreamStats") ?? showStreamStats
         streamStatsCorner = Self.persistedRawValue("streamStatsCorner", StatsOverlayCorner.self) ?? streamStatsCorner
