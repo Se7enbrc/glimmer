@@ -12,13 +12,13 @@ Dock left alone. Refresh is capped at what your display can actually show, and
 the window remembers where you left it. Native Retina and HiDPI are panel-native
 by definition, so they stay full screen and are untouched.
 
-Your mouse just works over that window: move it and the PC's pointer follows,
-click and the click lands where you clicked, move it away and you are using your
-Mac again. There is nothing to grab and nothing to escape. When a game needs
-mouselook, the button in the title bar hands the pointer to it, and holding Esc
-for a moment takes it back, while a tap of Esc still reaches the game's own
-menu. Control-Option-R toggles the same thing for anyone who prefers a key, and
-closing the window ends the stream.
+Moving the pointer onto the window hands your mouse to the game, cursor and all,
+the way it works in anything that plays. Holding Esc for a moment takes it back
+and the cursor reappears exactly where it left off, while a tap of Esc still
+reaches the game's own menu. Switching apps hands it back too, and moving onto
+the window again takes it, so there is nothing to click and nothing to remember.
+Control-Option-R does either without moving the mouse, and closing the window
+ends the stream.
 
 Fill the notch now only appears on Macs that have a notch. Turning it off
 quietly switched full screen into a macOS full-screen space, and on a Mac mini

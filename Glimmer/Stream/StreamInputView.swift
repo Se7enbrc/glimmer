@@ -24,6 +24,8 @@ protocol StreamInputViewDelegate: AnyObject {
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent)
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent)
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent)
+    func streamViewPointerDidEnter(_ view: StreamInputView)
+    func streamViewPointerDidExit(_ view: StreamInputView)
 }
 
 // MARK: - StreamInputView
@@ -87,6 +89,16 @@ final class StreamInputView: NSView {
         // backstop below was dead code (never invoked), so a system arrow could
         // paint over the stream whenever the OS re-showed the cursor behind the
         // CGDisplay hide latch (display/HDR/VRR reconfig, sleep-wake, HID attach).
+        //
+        // `.mouseEnteredAndExited` is what window mode's hover grab rides on,
+        // and `.inVisibleRect` is what keeps it honest across a live resize -
+        // AppKit re-derives the rect itself, so this method being called on
+        // every geometry change cannot leave a stale grab region behind.
+        // `.activeAlways` (rather than `.activeInKeyWindow`) is deliberate and
+        // unchanged: the fullscreen path needs mouseMoved and cursorUpdate
+        // regardless of key status. The "don't grab a background window's
+        // pointer" rule is enforced on the key-window bool in HoverCapture
+        // instead, where it is testable and cannot alter full screen.
         let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseMoved, .activeAlways, .inVisibleRect, .mouseEnteredAndExited, .cursorUpdate],
@@ -191,6 +203,13 @@ final class StreamInputView: NSView {
     override func otherMouseUp(with event: NSEvent) { delegate?.streamView(self, handleMouseUp: event) }
 
     override func scrollWheel(with event: NSEvent) { delegate?.streamView(self, handleScroll: event) }
+
+    // Window mode's grab edge. Nothing is decided here - the view reports the
+    // crossing and the forwarder's pure rule decides, so full screen (which
+    // ignores both) pays one delegate hop and nothing else. No event is
+    // consumed: AppKit does not route enter/exit anywhere else.
+    override func mouseEntered(with event: NSEvent) { delegate?.streamViewPointerDidEnter(self) }
+    override func mouseExited(with event: NSEvent) { delegate?.streamViewPointerDidExit(self) }
 
     // NOTE: warpCursorIfNearEdge was DELETED with the P0 mouse-snap fix. Under
     // the SDL associate-false model (InputForwarder.enterCapturedMode) the OS

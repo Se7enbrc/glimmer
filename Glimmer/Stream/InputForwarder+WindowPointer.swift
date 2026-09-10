@@ -1,12 +1,17 @@
 //
 //  InputForwarder+WindowPointer.swift
 //
-//  Window mode's pointer model. In a window the pointer is a NORMAL Mac
-//  pointer: visible, owned by the OS, and mirrored onto the host as ABSOLUTE
-//  positions so the two cursors sit on top of each other. Capture (relative
-//  aim, cursor hidden, associate-false) is the exception a mouselook game
-//  needs, entered deliberately from the titlebar button or the pointer chord
-//  and left again with a held Esc, the chord, or Cmd-Tab.
+//  Window mode's pointer model. Capture (relative aim, cursor hidden,
+//  associate-false) is grabbed by the pointer simply being OVER the picture,
+//  the way a VM window or a game does it, and left again with a held Esc, the
+//  pointer chord, or Cmd-Tab. The grab rule itself and its suppression latch
+//  are in InputForwarder+HoverCapture.swift.
+//
+//  Outside capture the pointer is a NORMAL Mac pointer: visible, owned by the
+//  OS, and mirrored onto the host as ABSOLUTE positions so the two cursors sit
+//  on top of each other. That state is transient now (the pointer is free only
+//  while it is off the picture, or the window is not key, or a release latch
+//  is holding the grab off) but it is the honest thing to send there.
 //
 //  Everything here is gated on `isWindowMode`, which only a window-mode
 //  session (or a Path-B Space exit landing in window mode) turns on. Full
@@ -53,15 +58,20 @@ extension InputForwarder {
         isWindowMode = enabled
         if enabled {
             exitCapturedMode()
-            log.info("Pointer policy: absolute in a window (capture on request)")
+            log.info("Pointer policy: relative capture while the pointer is over the window")
         } else {
+            // Leaving window mode retires the latch with the rule it belongs
+            // to: full screen never reads it, and a later return to a window
+            // must not inherit a stale "do not grab" from the last release.
+            isHoverCaptureSuppressed = false
             log.info("Pointer policy: always-on relative capture (full screen)")
         }
     }
 
-    /// The one entry point both visible affordances share - the titlebar
-    /// button and the pointer chord. A toggle, so neither is ever a dead key:
-    /// it grabs a free pointer and frees a grabbed one.
+    /// The pointer chord (⌃⌥R). A toggle, so the combo is never a dead key:
+    /// it grabs a free pointer and frees a grabbed one. It is the way to
+    /// re-grab without leaving and re-entering the window, and the way to
+    /// release without reaching for Esc.
     func togglePointerCapture(reason: String) {
         guard isWindowMode else { return }
         if isMouseCaptured {
@@ -73,23 +83,36 @@ extension InputForwarder {
 
     /// Enter relative capture. Only while the window is key - capturing while
     /// it is not would hide the cursor over a window that cannot receive
-    /// input, with no way to click the button that gives it back.
+    /// input, so a pointer sweeping over a background stream window on its way
+    /// somewhere else would vanish into a game the user is not looking at.
     func capturePointer(reason: String) {
         guard isWindowMode, !isMouseCaptured, let window, window.isKeyWindow else { return }
         log.info("Pointer capture requested (\(reason, privacy: .public))")
+        // Clear the latch as the grab lands: it exists to keep a release from
+        // being undone, and the pointer is captured again, so the question it
+        // answers is settled.
+        noteHoverCaptureEvent(.captureEngaged)
         enterCapturedMode()
     }
 
-    /// Leave relative capture (the titlebar button, the chord, a held Esc, or
-    /// resign-key). Releases the mouse buttons the host believes are held
-    /// FIRST - the physical up will land on whatever the freed pointer touches
-    /// next, so without this a button held through the release stays pressed
-    /// on the host - then disengages. Keys are deliberately NOT raised: the
-    /// keyboard keeps forwarding while the window is key, so a held W keeps
-    /// walking, as the user expects.
+    /// Leave relative capture on purpose (a held Esc or the chord). Releases
+    /// the mouse buttons the host believes are held FIRST - the physical up
+    /// will land on whatever the freed pointer touches next, so without this a
+    /// button held through the release stays pressed on the host - then
+    /// disengages. Keys are deliberately NOT raised: the keyboard keeps
+    /// forwarding while the window is key, so a held W keeps walking, as the
+    /// user expects.
+    ///
+    /// Arms the hover-grab latch, because this release happens with the
+    /// pointer still sitting on the picture: without it the very rule that
+    /// grabbed the pointer would take it straight back and Esc would do
+    /// nothing visible. Resign-key does NOT come through here - it releases via
+    /// `exitCapturedMode` and deliberately clears the latch instead, so a
+    /// Cmd-Tab back into the stream grabs again.
     func releasePointer(reason: String) {
         raiseHeldMouseButtons(reason: reason)
         cancelEscapeHold()
+        noteHoverCaptureEvent(.explicitRelease)
         exitCapturedMode()
     }
 

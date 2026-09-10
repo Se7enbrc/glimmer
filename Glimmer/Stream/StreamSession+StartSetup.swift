@@ -185,23 +185,20 @@ extension StreamSession {
         inp.captureSysKeys = config.captureSysKeys
         // Cruise ceiling is derived from the stream width (4K→2.0, 1080p→1.0 inert).
         inp.cruiseGMax = CruiseTraversal.gMax(forStreamWidth: config.width)
-        // Window mode: the pointer stays a normal Mac pointer mirrored onto
-        // the host as absolute positions, and relative capture is entered on
-        // request. The window hides + shows the cursor off the capture edges
-        // (visibility stays StreamWindow's; the forwarder only reports the
-        // edge). All four hooks are inert in full screen: the forwarder fires
-        // the edge callback only in window mode, the titlebar button exists
-        // only on a titled window, and the mode callback only runs when a
-        // Path-B Space exit lands the session in a window mid-stream
+        // Window mode: the pointer is grabbed into relative capture while it
+        // is over the window, and is a normal Mac pointer mirrored onto the
+        // host as absolute positions the rest of the time. The window hides +
+        // shows the cursor off the capture edges (visibility stays
+        // StreamWindow's; the forwarder only reports the edge). Every hook is
+        // inert in full screen: the forwarder fires the edge callback only in
+        // window mode, and the mode callback only runs when a Path-B Space
+        // exit lands the session in a window mid-stream
         // (StreamWindow+Windowed.swift).
         inp.isWindowMode = config.displayMode == .window
         // The reference frame absolute positions are measured against.
         inp.streamPixelSize = CGSize(width: config.width, height: config.height)
         inp.onPointerCaptureChanged = { [weak win] captured in
             win?.setPointerCaptured(captured)
-        }
-        win.onTogglePointerCapture = { [weak inp] in
-            inp?.togglePointerCapture(reason: "titlebar button")
         }
         win.onDisplayModeChanged = { [weak inp] mode in
             inp?.setWindowMode(mode == .window)

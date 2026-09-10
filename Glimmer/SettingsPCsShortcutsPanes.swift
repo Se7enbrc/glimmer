@@ -216,8 +216,9 @@ struct ShortcutsPane: View {
                 // Window mode only: in full screen the pointer is hidden for
                 // the whole session and there is nothing to toggle, so the
                 // chord reaches the host there like any other key.
-                Text("When the stream is shown in a window, hands the mouse to the game for mouselook, "
-                    + "and takes it back. Holding Esc also gives it back. In full screen this combo goes to the game.")
+                Text("When the stream is shown in a window the game takes your mouse while the pointer is "
+                    + "over it - hold Esc or switch apps to get it back, and this combo does either without "
+                    + "moving the mouse. In full screen this combo goes to the game.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

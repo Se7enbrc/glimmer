@@ -294,10 +294,11 @@ final class AppModel {
         }
     }
     /// Window-mode pointer chord (default ⌃⌥R): a TOGGLE - hands the mouse to
-    /// the game for mouselook, and takes it back. The titlebar button and a
-    /// held Esc do the same job without anything to remember; this stays for
-    /// users who prefer the keyboard. Read live via a provider, like the
-    /// quit/stats chords. The persisted key keeps its original name.
+    /// the game for mouselook, and takes it back. The pointer is normally
+    /// grabbed by being over the window and freed by a held Esc; this is how
+    /// you re-grab without moving the mouse off and back, and how you release
+    /// without reaching for Esc. Read live via a provider, like the quit/stats
+    /// chords. The persisted key keeps its original name.
     var releasePointerHotkey: HotkeyChord = .defaultReleasePointer {
         didSet {
             if let data = try? JSONEncoder().encode(releasePointerHotkey) {

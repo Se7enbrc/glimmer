@@ -104,8 +104,8 @@ extension StreamWindow {
     /// own the balanced show; this never fights them (it only ever hides).
     func reengageForeground() {
         guard !didClose else { return }
-        // Window mode: the cursor follows pointer capture (titlebar button /
-        // pointer chord), and the level and presentation options are AppKit's.
+        // Window mode: the cursor follows pointer capture (the pointer being
+        // over the window), and the level and presentation options are AppKit's.
         // Only the backgrounded signal applies - the "Back to stream" /
         // Dock-click return after a miniaturize lands here.
         if displayMode == .window {

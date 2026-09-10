@@ -86,8 +86,8 @@ extension InputForwarder {
     }
 
     /// Drop an in-flight dwell. Safe to call with none pending; called from
-    /// every release path so a hold that is overtaken by the chord, the
-    /// titlebar button, or teardown cannot fire against a freed pointer.
+    /// every release path so a hold that is overtaken by the chord, a
+    /// resign-key, or teardown cannot fire against a freed pointer.
     func cancelEscapeHold() {
         escapeHoldTask?.cancel()
         escapeHoldTask = nil

@@ -93,11 +93,15 @@ extension InputForwarder {
         // SDL_SetRelativeMouseMode(true) - see the file-top comment.
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
-        // Window mode opens with a free, absolute pointer; capture there is
-        // asked for (InputForwarder+WindowPointer).
         if window.isKeyWindow, !isWindowMode {
             enterCapturedMode()
         }
+        // Window mode grabs the pointer by hover, and the bring-up made the
+        // window key BEFORE the observers above existed - so the didBecomeKey
+        // that would have grabbed has already been and gone. A stream opened
+        // under a stationary pointer would otherwise stay ungrabbed until it
+        // moved. Inert in full screen and when the pointer is elsewhere.
+        captureIfPointerIsOverTheStreamView(reason: "stream window opened under the pointer")
     }
 
     public func detach() {
@@ -117,6 +121,10 @@ extension InputForwarder {
         // An Esc hold can be mid-dwell at teardown. No-op in full screen,
         // where nothing ever arms it.
         cancelEscapeHold()
+        // A forwarder outlives one session's window (the session re-attaches
+        // on a reconnect), so a latch armed by the last held Esc must not
+        // survive into the next stream and swallow its first hover grab.
+        isHoverCaptureSuppressed = false
         removeGestureSuppressionMonitor()
         removeDiagnosticMonitors()
         removeFocusObservers()

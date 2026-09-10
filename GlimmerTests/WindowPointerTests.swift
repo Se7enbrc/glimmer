@@ -2,9 +2,10 @@
 //  WindowPointerTests.swift
 //
 //  Covers the pure parts of Window mode's pointer model: the view-point →
-//  stream-pixel mapping (origin flip, aspect fit, clamping), the hold-Esc
-//  decision table, and the capture hint's show budget. All pure - no window,
-//  no view, no UserDefaults, no clock.
+//  stream-pixel mapping (origin flip, aspect fit, clamping), the hover-grab
+//  rule and its suppression latch, the hold-Esc decision table, and the
+//  capture hint's show budget. All pure - no window, no view, no UserDefaults,
+//  no clock.
 //
 
 import CoreGraphics
@@ -155,6 +156,129 @@ struct WindowPointerTests {
         #expect(PointerMapping.streamPoint(
             viewPoint: point, viewSize: CGSize(width: -960, height: 540),
             streamPixelSize: CGSize(width: 1920, height: 1080)) == nil)
+    }
+
+    // MARK: Hover grab - the capture decision
+
+    /// The plain case the owner asked for: the pointer arrives over the
+    /// picture of the focused stream window and the game takes it. No click,
+    /// no button, nothing pressed.
+    @Test func enteringAKeyWindowGrabsThePointer() {
+        #expect(HoverCapture.shouldCaptureOnEnter(
+            isKeyWindow: true, isSuppressed: false, isCaptured: false))
+    }
+
+    /// A pointer sweeping over an unfocused stream window on its way to
+    /// another app must not disappear into a game the user is not looking at.
+    @Test func aNonKeyWindowNeverStealsThePointer() {
+        #expect(!HoverCapture.shouldCaptureOnEnter(
+            isKeyWindow: false, isSuppressed: false, isCaptured: false))
+    }
+
+    /// The whole reason the latch exists: a held Esc frees the pointer with it
+    /// still sitting on the picture, so the grab rule must stay off until the
+    /// user has actually moved on. Without this, Esc would do nothing visible.
+    @Test func aSuppressedLatchBlocksTheRegrab() {
+        #expect(!HoverCapture.shouldCaptureOnEnter(
+            isKeyWindow: true, isSuppressed: true, isCaptured: false))
+    }
+
+    /// An enter arriving while the pointer is already grabbed says nothing -
+    /// under associate-false the cursor is frozen, so these are AppKit
+    /// bookkeeping (a re-created tracking area), not the user crossing in.
+    @Test func anEnterWhileCapturedIsANoOp() {
+        #expect(!HoverCapture.shouldCaptureOnEnter(
+            isKeyWindow: true, isSuppressed: false, isCaptured: true))
+    }
+
+    // MARK: Hover grab - becoming key
+
+    /// Cmd-Tab back with the mouse resting on the picture: no pointer moved,
+    /// so no enter event will ever arrive. Becoming key has to do the grab
+    /// itself or the stream sits focused and ungrabbed under the mouse.
+    @Test func becomingKeyUnderThePointerGrabs() {
+        #expect(HoverCapture.shouldCaptureOnKey(
+            pointerIsInside: true, isKeyWindow: true, isSuppressed: false, isCaptured: false))
+    }
+
+    /// Clicking the title bar to focus the window, or Cmd-Tabbing back with
+    /// the mouse parked somewhere else entirely, leaves the pointer alone.
+    @Test func becomingKeyWithThePointerElsewhereDoesNotGrab() {
+        #expect(!HoverCapture.shouldCaptureOnKey(
+            pointerIsInside: false, isKeyWindow: true, isSuppressed: false, isCaptured: false))
+    }
+
+    /// Becoming key obeys the same three gates as an enter - it is the same
+    /// rule with one extra question, not a second policy that could drift.
+    @Test func becomingKeyObeysTheSameGates() {
+        #expect(!HoverCapture.shouldCaptureOnKey(
+            pointerIsInside: true, isKeyWindow: false, isSuppressed: false, isCaptured: false))
+        #expect(!HoverCapture.shouldCaptureOnKey(
+            pointerIsInside: true, isKeyWindow: true, isSuppressed: true, isCaptured: false))
+        #expect(!HoverCapture.shouldCaptureOnKey(
+            pointerIsInside: true, isKeyWindow: true, isSuppressed: false, isCaptured: true))
+    }
+
+    // MARK: Hover grab - the suppression latch
+
+    /// The full lap the owner will walk: grab on enter, hold Esc to free
+    /// (latched, so it stays free), move off the window (latch clears), move
+    /// back on (grabs again).
+    @Test func theLatchWalksEnterReleaseExitReenter() {
+        var suppressed = false
+
+        // Pointer arrives: grabs, and the grab itself clears any latch.
+        #expect(HoverCapture.shouldCaptureOnEnter(
+            isKeyWindow: true, isSuppressed: suppressed, isCaptured: false))
+        suppressed = HoverCapture.suppression(suppressed, after: .captureEngaged)
+        #expect(!suppressed)
+
+        // Held Esc: freed on purpose, with the pointer still over the picture.
+        suppressed = HoverCapture.suppression(suppressed, after: .explicitRelease)
+        #expect(suppressed)
+        #expect(!HoverCapture.shouldCaptureOnEnter(
+            isKeyWindow: true, isSuppressed: suppressed, isCaptured: false))
+
+        // Off the window: the user has moved on.
+        suppressed = HoverCapture.suppression(suppressed, after: .pointerExited)
+        #expect(!suppressed)
+
+        // Back on: grabs again.
+        #expect(HoverCapture.shouldCaptureOnEnter(
+            isKeyWindow: true, isSuppressed: suppressed, isCaptured: false))
+    }
+
+    /// Cmd-Tab away after a held Esc, then Cmd-Tab back: resign clears the
+    /// latch, because leaving the window is not the user asking for the
+    /// pointer back - and coming back to a game means the game takes it again.
+    @Test func resigningKeyClearsTheLatch() {
+        var suppressed = HoverCapture.suppression(false, after: .explicitRelease)
+        #expect(suppressed)
+        suppressed = HoverCapture.suppression(suppressed, after: .windowResignedKey)
+        #expect(!suppressed)
+        #expect(HoverCapture.shouldCaptureOnKey(
+            pointerIsInside: true, isKeyWindow: true, isSuppressed: suppressed, isCaptured: false))
+    }
+
+    /// An enter must NOT clear a live latch. AppKit re-creates the tracking
+    /// area on every resize and synthesises an enter for a pointer already
+    /// inside it, so clearing here would mean nudging the window edge after a
+    /// held Esc silently took the pointer back.
+    @Test func anEnterDoesNotClearALiveLatch() {
+        #expect(HoverCapture.suppression(true, after: .pointerEntered))
+        #expect(!HoverCapture.suppression(false, after: .pointerEntered))
+    }
+
+    /// Every transition, stated once, so a future edit to the table has to
+    /// disagree with something explicit.
+    @Test func theLatchTransitionsAreExhaustive() {
+        for start in [false, true] {
+            #expect(HoverCapture.suppression(start, after: .explicitRelease))
+            #expect(!HoverCapture.suppression(start, after: .pointerExited))
+            #expect(!HoverCapture.suppression(start, after: .captureEngaged))
+            #expect(!HoverCapture.suppression(start, after: .windowResignedKey))
+            #expect(HoverCapture.suppression(start, after: .pointerEntered) == start)
+        }
     }
 
     // MARK: Hold Esc

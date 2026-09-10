@@ -170,12 +170,13 @@ public final class InputForwarder {
     /// on, where it TOGGLES capture.
     public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
-    /// Window mode: the pointer is a normal Mac pointer mirrored onto the host
-    /// as absolute positions, and relative capture is an exception entered
-    /// deliberately (titlebar button, pointer chord) and left with a held Esc.
-    /// Full screen keeps the always-on capture that follows key status. Set by
-    /// the session at attach; flipped live by a Space exit (`setWindowMode`).
-    /// Everything it gates is in InputForwarder+WindowPointer.swift.
+    /// Window mode: relative capture is grabbed by the pointer being over the
+    /// picture and left with a held Esc, the pointer chord, or switching apps.
+    /// Outside capture the pointer is a normal Mac pointer mirrored onto the
+    /// host as absolute positions. Full screen keeps the always-on capture
+    /// that follows key status. Set by the session at attach; flipped live by
+    /// a Space exit (`setWindowMode`). What it gates lives in
+    /// InputForwarder+WindowPointer.swift and +HoverCapture.swift.
     var isWindowMode: Bool = false
 
     /// The stream's pixel dimensions, the reference frame absolute pointer
@@ -189,6 +190,17 @@ public final class InputForwarder {
     /// only). Stored here because extensions can't add stored properties; the
     /// decision table and the timer live in InputForwarder+EscapeHold.swift.
     var escapeHoldTask: Task<Void, Never>?
+
+    /// Window mode: block the hover grab until the pointer LEAVES the stream
+    /// view or the window loses key status.
+    ///
+    /// Armed by every explicit release (a held Esc, the pointer chord), which
+    /// all happen with the pointer still physically over the picture - without
+    /// this the grab-on-hover rule would take the pointer straight back and
+    /// there would be no way out of capture at all. Stored here because
+    /// extensions can't add stored properties; the transitions are a pure
+    /// table in InputForwarder+HoverCapture.swift and this is its only writer.
+    var isHoverCaptureSuppressed = false
 
     /// Fired on every capture edge (true = engaged) while `isWindowMode` is
     /// on. StreamWindow hides and shows the cursor off it - visibility stays

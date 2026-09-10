@@ -434,6 +434,22 @@ extension InputForwarder: StreamInputViewDelegate {
         heldMouseButtons.remove(hostButton)
     }
 
+    /// Window mode's grab: the pointer crossing onto the picture takes it, no
+    /// click and nothing to press. Deliberately NOT gated on `isReady` - the
+    /// grab is about who owns the mouse, not about whether frames are flowing,
+    /// and a stream still handshaking must not hand the pointer to the Mac
+    /// mid-connect only to snatch it back. The rule itself (and its inertness
+    /// in full screen) lives in InputForwarder+HoverCapture.swift.
+    func streamViewPointerDidEnter(_ view: StreamInputView) {
+        notePointerEnteredStreamView()
+    }
+
+    /// The pointer left the picture. Only interesting as the thing that clears
+    /// a release latch, so a return can grab again.
+    func streamViewPointerDidExit(_ view: StreamInputView) {
+        notePointerExitedStreamView()
+    }
+
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent) {
         guard isReady, forwardsMouseEvents else { return }
         // DEADZONE REMOVED. This handler

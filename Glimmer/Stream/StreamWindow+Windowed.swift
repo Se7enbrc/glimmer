@@ -14,14 +14,15 @@
 //  miniaturize = backgrounded signal, and a cursor that follows pointer
 //  capture instead of key status.
 //
-//  The pointer in a window is a NORMAL Mac pointer: visible, and mirrored onto
-//  the host as absolute positions. Capture (hidden cursor, relative aim) is the
-//  exception a mouselook game needs, asked for with the titlebar button or the
-//  pointer chord and left with a held Esc. InputForwarder owns the engagement
-//  (as in full screen); it reports each edge through `setPointerCaptured(_:)`
-//  and this file keeps VISIBILITY in the single `setCursorHidden` owner - the
-//  one-owner rule the cursor latch depends on. The button and the hint live in
-//  StreamWindow+PointerAffordances.swift.
+//  The pointer in a window is GRABBED while it is over the picture - hidden
+//  cursor, relative aim - the way a VM window or a game behaves, and given
+//  back by a held Esc, the pointer chord, or switching apps. Off the picture
+//  it is a normal Mac pointer, mirrored onto the host as absolute positions.
+//  InputForwarder owns the engagement and the grab rule (as in full screen it
+//  owns capture); it reports each edge through `setPointerCaptured(_:)` and
+//  this file keeps VISIBILITY in the single `setCursorHidden` owner - the
+//  one-owner rule the cursor latch depends on. The hint that teaches the way
+//  out lives in StreamWindow+PointerAffordances.swift.
 //
 
 import AppKit
@@ -104,16 +105,14 @@ extension StreamWindow {
         let conformed = StreamWindowGeometry.conformed(restored, toAspect: aspect, within: available)
         if conformed != restored { window.setContentSize(conformed) }
         window.setFrame(window.constrainFrameRect(window.frame, to: screen), display: false)
-        // The visible way into capture. Installed with the rest of the chrome
-        // so both bring-ups (a fresh window, and a Path-B Space exit that
-        // converts one) get it; idempotent, so the second pass adds nothing.
-        installPointerCaptureAccessory()
         // Seed the FREE-pointer state. The per-view transparent-cursor
         // backstop defaults ON because full screen hides the cursor for the
         // whole session - but a window opens with the pointer the user's own,
         // and without this the arrow would be invisible over the picture from
-        // frame zero with no capture edge to switch it. No capture edge fires
-        // at bring-up, so this is the only thing that can seed it.
+        // frame zero. It runs before any capture edge can fire (the hover grab
+        // needs a first responder, installed a runloop turn later), so a
+        // bring-up that DOES land under the pointer still ends captured: this
+        // seeds free, the grab then flips it.
         (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(false)
     }
 
@@ -149,13 +148,13 @@ extension StreamWindow {
     /// InputForwarder's capture edge in window mode. Visibility stays with the
     /// single `setCursorHidden` owner; the per-view transparent cursor
     /// backstop is switched with it so a free pointer shows the arrow over the
-    /// picture and a captured one never can. The titlebar button reflects the
-    /// new state, and entering capture spends one of the hint's few shows.
+    /// picture and a captured one never can. Entering capture spends one of
+    /// the hint's few shows - the only teaching surface left now that the grab
+    /// is the pointer being over the window rather than a control to press.
     func setPointerCaptured(_ captured: Bool) {
         guard displayMode == .window, !didClose else { return }
         setCursorHidden(captured)
         (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(captured)
-        pointerCaptureAccessory?.setCaptured(captured)
         if captured {
             showCaptureHintIfBudgetAllows()
         } else {

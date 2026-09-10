@@ -1,16 +1,19 @@
 //
 //  StreamWindow+PointerAffordances.swift
 //
-//  The two things that make window-mode pointer capture discoverable: a
-//  titlebar button that takes the pointer, and a transient hint that says how
-//  to give it back. Both exist because the previous model - click to grab, a
-//  chord to release - required the user to have memorised something, and a
-//  window is a place where the pointer belongs to the Mac by default.
+//  The one thing that makes window-mode pointer capture teachable: a transient
+//  hint on the first few grabs saying how to give the pointer back.
 //
-//  Window mode only. A fullscreen cover is borderless (no title bar to hang an
-//  accessory on) and captures for the whole session (nothing to hint about),
-//  so every entry point here is gated on `displayMode == .window` and the
-//  fullscreen path never reaches them.
+//  It carries more weight than it used to. The pointer is now grabbed by being
+//  over the window - no button, no click - so there is no visible control left
+//  to explain the bargain, and this pill is the only place the user is ever
+//  told that a held Esc is the way out. Hence a budget of three shows rather
+//  than one: once is easy to miss when a game takes your attention the instant
+//  the cursor disappears.
+//
+//  Window mode only. A fullscreen cover captures for the whole session, so
+//  there is nothing to hint about; every entry point here is gated on
+//  `displayMode == .window` and the fullscreen path never reaches them.
 //
 
 import AppKit
@@ -39,92 +42,9 @@ enum CaptureHintPolicy {
     static func nextCount(after count: Int) -> Int { max(count, 0) + 1 }
 }
 
-// MARK: - Titlebar accessory
-
-/// The titlebar button that captures and releases the pointer, and the
-/// controller that hangs it off the window's title bar.
-///
-/// A view controller rather than a bare view because
-/// `NSTitlebarAccessoryViewController` is the only supported way to put a
-/// control in an AppKit title bar - and because it is an NSObject, so it can
-/// be the button's target without a separate shim.
-///
-/// Note the button is unclickable while the pointer is CAPTURED: capture hides
-/// the cursor and disassociates it, so there is nothing to click with. That is
-/// expected and by design - a held Esc and the pointer chord are the ways out,
-/// and the captured icon here is a status light rather than a control.
-final class PointerCaptureAccessory: NSTitlebarAccessoryViewController {
-
-    /// Fired when the button is clicked. The window owner routes it to the
-    /// input forwarder's capture toggle.
-    var onToggle: (@MainActor () -> Void)?
-
-    private let button = NSButton()
-
-    init(onToggle: (@MainActor () -> Void)?) {
-        self.onToggle = onToggle
-        super.init(nibName: nil, bundle: nil)
-        layoutAttribute = .right
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("PointerCaptureAccessory is created in code, never from a nib")
-    }
-
-    override func loadView() {
-        button.frame = NSRect(x: 6, y: 3, width: 28, height: 22)
-        button.isBordered = false
-        button.bezelStyle = .texturedRounded
-        button.imagePosition = .imageOnly
-        button.imageScaling = .scaleProportionallyDown
-        button.contentTintColor = .secondaryLabelColor
-        button.target = self
-        button.action = #selector(toggle(_:))
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 28))
-        container.addSubview(button)
-        view = container
-        setCaptured(false)
-    }
-
-    /// Reflect the live capture state in the icon, the tooltip, and the
-    /// accessibility label. Loading the view lazily is deliberate: AppKit only
-    /// builds it when the accessory is actually added to a window, and reading
-    /// `isViewLoaded` first keeps this callable before that happens.
-    func setCaptured(_ captured: Bool) {
-        guard isViewLoaded else { return }
-        // `cursorarrow.motionlines` is a pointer trailing movement - relative
-        // aim. `cursorarrow.slash` is a pointer that is not yours right now.
-        let symbol = captured ? "cursorarrow.slash" : "cursorarrow.motionlines"
-        let help = captured ? "Release pointer" : "Capture pointer for mouselook"
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: help)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .medium))
-        button.toolTip = help
-        button.setAccessibilityLabel(help)
-    }
-
-    @objc private func toggle(_ sender: NSButton) {
-        onToggle?()
-    }
-}
-
 // MARK: - StreamWindow
 
 extension StreamWindow {
-
-    /// Hang the capture button off the title bar. Idempotent - the windowed
-    /// chrome is configured both at show() and again when a Path-B Space exit
-    /// converts a fullscreen session into a window, and the second pass must
-    /// not stack a duplicate button.
-    func installPointerCaptureAccessory() {
-        guard displayMode == .window, pointerCaptureAccessory == nil else { return }
-        let accessory = PointerCaptureAccessory(onToggle: { [weak self] in
-            self?.onTogglePointerCapture?()
-        })
-        window.addTitlebarAccessoryViewController(accessory)
-        accessory.setCaptured(false)
-        pointerCaptureAccessory = accessory
-    }
 
     /// The first few captures explain the way out. Uses the same pill the
     /// one-time leave hint uses, so the two teaching toasts look like one

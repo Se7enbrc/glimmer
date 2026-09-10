@@ -197,15 +197,6 @@ public final class StreamWindow {
     /// session uses it to switch the InputForwarder to the window pointer model.
     public var onDisplayModeChanged: (@MainActor (StreamDisplayMode) -> Void)?
 
-    /// Window mode: the titlebar capture button was clicked. The session wires
-    /// this to the forwarder's capture toggle. Never fired in full screen (a
-    /// borderless cover has no title bar to hang the button on).
-    public var onTogglePointerCapture: (@MainActor () -> Void)?
-
-    /// The titlebar capture button's controller, held so the capture edge can
-    /// update its icon and tooltip. nil in full screen.
-    var pointerCaptureAccessory: PointerCaptureAccessory?
-
     /// Monotonic stamp for the capture hint's auto-hide, so a re-capture
     /// inside the hint's ~4s life can't be cut short by the previous show's
     /// timer. See StreamWindow+PointerAffordances.swift.

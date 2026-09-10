@@ -330,12 +330,12 @@ struct QualityPane: View {
                 } header: {
                     Text("Custom")
                 } footer: {
-                    // The one non-obvious thing about a window: the pointer
-                    // needs nothing learned, and the exception is a button you
-                    // can see rather than a combo you have to remember.
+                    // The one non-obvious thing about a window: the mouse
+                    // disappears into the game the moment it is over the
+                    // picture, so say up front how to get it back.
                     if model.streamDisplayMode == .window {
-                        Text("Your mouse works over the window as usual - "
-                            + "the button in the title bar hands it to the game for mouselook.")
+                        Text("The game takes your mouse while the pointer is over the window - "
+                            + "hold Esc or switch apps to get it back.")
                     }
                 }
             }

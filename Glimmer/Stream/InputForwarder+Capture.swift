@@ -83,12 +83,16 @@ extension InputForwarder {
             object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                // Window mode never captures on focus - a Cmd-Tab back must
-                // hand the user a normal pointer, not swallow it
-                // (InputForwarder+WindowPointer).
                 if self?.isWindowMode == false {
                     self?.enterCapturedMode()
                 }
+                // Window mode grabs on hover, and a Cmd-Tab back moves no
+                // pointer - so no enter event will ever arrive for a pointer
+                // already resting on the picture. Without this the stream
+                // would sit under the mouse, focused and ungrabbed, until the
+                // user jiggled it. Inert in full screen (the line above owns
+                // that path) and when the pointer is elsewhere on screen.
+                self?.captureIfPointerIsOverTheStreamView(reason: "window became key under the pointer")
                 // Snap all controller axes/buttons to live state on refocus -
                 // GCController's value-changed handler doesn't re-fire for an
                 // input held across the focus loss, so without this a stick
@@ -109,6 +113,11 @@ extension InputForwarder {
                 // until re-pressed - predictable, and what upstream clients do.
                 self?.raiseAllHeldInputs(reason: "focus loss")
                 self?.exitCapturedMode()
+                // Window mode: losing the window is not the user asking for
+                // the pointer back, it is them leaving. Clear the hover-grab
+                // latch so coming BACK to the stream grabs again - which is
+                // what returning to a game means. Inert in full screen.
+                self?.noteHoverCaptureEvent(.windowResignedKey)
             }
         }
     }
