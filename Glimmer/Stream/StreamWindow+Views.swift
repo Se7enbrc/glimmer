@@ -39,6 +39,26 @@ final class KeyableWindow: NSWindow {
 final class StreamWindowDelegate: NSObject, NSWindowDelegate {
     var coversNotch: Bool = true
 
+    /// Mirrors `StreamWindow.displayMode` so the close hook below only ever
+    /// acts for a real window (the borderless cover has no close button, so
+    /// `performClose:` never consults this in full screen anyway).
+    var displayMode: StreamDisplayMode = .fullScreen
+
+    /// Window mode: the user asked to close (red button / Cmd-W). The owner
+    /// routes it to the session's stop(); the window is NOT closed here.
+    var onCloseRequested: (() -> Void)?
+
+    /// Refuse the close and hand it to the session instead: letting AppKit
+    /// close the window would orderOut a still-live stream (headless session,
+    /// no /cancel - the same orphan issue #84 describes) and skip the fade-out
+    /// teardown `StreamWindow.close()` owns. Window mode only; a fullscreen
+    /// window never reaches here but stays refused for safety.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard displayMode == .window else { return false }
+        onCloseRequested?()
+        return false
+    }
+
     func window(_ window: NSWindow, willUseFullScreenContentSize proposedSize: NSSize) -> NSSize {
         guard coversNotch, let screen = window.screen ?? NSScreen.main else { return proposedSize }
         // `screen.safeAreaInsets.top` is the notch height in points on

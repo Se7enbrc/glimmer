@@ -165,6 +165,28 @@ public final class InputForwarder {
     /// a closure rather than a stored chord value.
     public var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
 
+    /// Provider for the Window-mode "Release the pointer" chord. Same
+    /// live-read closure shape as the quit/stats chords. Only consulted while
+    /// `pointerCaptureOnClick` is on.
+    public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
+
+    /// Window mode: relative aim engages on a CLICK in the stream view and
+    /// lets go on the release chord or resign-key, instead of the fullscreen
+    /// always-on capture that follows key status. While released, mouse
+    /// events stay on this Mac (nothing is forwarded), the keyboard still
+    /// reaches the host if the window is key - how a console emulator
+    /// behaves. Set by the session at attach; flipped live by a Space exit
+    /// (`setPointerCaptureOnClick`). Everything it gates is in
+    /// InputForwarder+PointerRelease.swift.
+    var pointerCaptureOnClick: Bool = false
+
+    /// Fired on every capture edge (true = engaged) while
+    /// `pointerCaptureOnClick` is on. StreamWindow hides and shows the cursor
+    /// off it - visibility stays the window's, this only reports the edge.
+    /// NEVER fired in full screen, where the window's own show / resign /
+    /// becomeKey path owns the cursor exactly as before.
+    var onPointerCaptureChanged: (@MainActor (Bool) -> Void)?
+
     /// Controller-side quit chord. The ControllerForwarder extension
     /// consults this on every gamepad update and fires `onQuitHotkey`
     /// when all chord buttons are held simultaneously. Closure so live

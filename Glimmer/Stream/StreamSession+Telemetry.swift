@@ -46,7 +46,10 @@ extension StreamSession {
             pacingLiveness: { [weak decoder] in decoder?.telemetryPacingLiveness() },
             inFlightDecodeBacklog: { [weak decoder] in decoder?.inFlightDecodeBacklog() ?? 0 },
             refreshWindow: { [weak decoder] in decoder?.telemetryRefreshWindow() },
-            displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() })
+            displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() },
+            // The mode the session STARTED in (a Path-B Space exit can land it
+            // in a window later; the per-second rows don't re-state it).
+            displayMode: (reconnectConfig?.displayMode ?? .defaultMode).rawValue)
 
         guard let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: serverName) else {
             // Gate off - the default. Nothing allocated, nothing started.

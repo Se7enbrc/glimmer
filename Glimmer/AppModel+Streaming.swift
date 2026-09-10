@@ -106,7 +106,12 @@ extension AppModel {
         // could otherwise land after this mute and un-mute the new stream.
         beforeStreamStart()
 
-        let cfg = nativeStreamConfig(for: host)
+        var cfg = nativeStreamConfig(for: host)
+        cfg.windowTitle = Self.streamWindowTitle(hostName: host.displayName, appName: app.name)
+        // One line naming how the stream will be shown and what was asked for,
+        // so a "why is it 1080p in a window" report answers itself from the log.
+        Diag.info("Show the stream: \(cfg.displayMode.displayName.lowercased()) - requesting "
+            + "\(cfg.width)x\(cfg.height) at \(cfg.fps) Hz", "Stream")
         let info = nativeServerInfo(for: host)
         // Hero-verb memory: stamp the app NAME at stream START (unlike the
         // lastConnected DATE above) so the next launcher visit names the app in
@@ -149,6 +154,9 @@ extension AppModel {
                     // forwarded to the host. (Made user-configurable later if
                     // desired, alongside quit/stats in Settings.)
                     bookmarkHotkeyProvider: { .defaultBookmark },
+                    releasePointerHotkeyProvider: { [weak self] in
+                        self?.releasePointerHotkey ?? .defaultReleasePointer
+                    },
                     initialStatsOverlay: initialStatsOverlay,
                     initialStatsCorner: streamStatsCorner,
                     // Provider closure so a Settings preset/checkbox

@@ -165,6 +165,38 @@ public final class StreamWindow {
     /// per-host preference.
     public var coversNotch: Bool = true
 
+    /// How the window presents. Fixed at construction (it picks the style
+    /// mask) from the session's snapshot of the user's "Show the stream"
+    /// choice; the ONE later flip is a user-driven exit from a Path-B Space,
+    /// which converts this same window to `.window` mid-session rather than
+    /// leaving it vanished (StreamWindow+Windowed.swift). Every fullscreen-only
+    /// behaviour - the cover, the presentation options, the resign-key
+    /// orderOut, the level re-raise - is gated on this being `.fullScreen`, so
+    /// the fullscreen path runs exactly as it always has.
+    public internal(set) var displayMode: StreamDisplayMode
+
+    /// Window-mode title ("Tower - Desktop"). Ignored by the borderless cover.
+    public var windowTitle: String = ""
+
+    /// The stream's requested pixel size. Window mode opens pixel-mapped to it
+    /// (points = pixels / backingScaleFactor, fit to the screen) and locks the
+    /// content aspect to it so a drag-resize scales the picture instead of
+    /// letterboxing.
+    public var streamPixelSize: CGSize = .zero
+
+    /// Window mode: the user closed the window (red button / Cmd-W). The
+    /// session wires this to the same stop() the quit hotkey runs.
+    public var onCloseRequested: (@MainActor () -> Void)?
+
+    /// Fired when `displayMode` flips mid-session (the Path-B Space exit). The
+    /// session uses it to switch the InputForwarder to click-to-capture.
+    public var onDisplayModeChanged: (@MainActor (StreamDisplayMode) -> Void)?
+
+    /// Path B's will/didExitFullScreen tokens, kept apart from `keyObservers`
+    /// because the exit conversion sweeps the fullscreen key observers while
+    /// these must keep firing until the exit completes. Swept by `close()`.
+    var spaceExitObservers: [NSObjectProtocol] = []
+
     /// Called whenever the window's "is it currently visible or sitting
     /// orderOut'd in the background?" state flips. The session owner wires
     /// this to AppModel so the launcher can show a "Back to stream"
@@ -226,7 +258,8 @@ public final class StreamWindow {
     /// we fire this synchronously once the window is up.)
     public var onDidBecomeReadyForInput: (@MainActor () -> Void)?
 
-    public init() {
+    public init(displayMode: StreamDisplayMode = .fullScreen) {
+        self.displayMode = displayMode
         // Pick the screen the user is *currently* on at construction time.
         // StreamSession constructs us right when the user clicks "Stream",
         // so NSScreen.main reflects the display the launcher window was on
@@ -242,7 +275,12 @@ public final class StreamWindow {
             // why rather than trapping with a bare `!`.
             preconditionFailure("StreamWindow.init: no attached display to host the stream window")
         }
-        let style: NSWindow.StyleMask = [.borderless]
+        // Window mode is a real titled window: closable (the red button ends
+        // the stream), miniaturizable, resizable (aspect-locked in show()).
+        // Full screen keeps the borderless cover exactly as before.
+        let style: NSWindow.StyleMask = displayMode == .window
+            ? [.titled, .closable, .miniaturizable, .resizable]
+            : [.borderless]
         // Borderless NSWindows return canBecomeKeyWindow = false by default,
         // which means makeKeyAndOrderFront silently fails to make us key and
         // the responder chain never delivers keyDown to our content view.
@@ -282,22 +320,24 @@ public final class StreamWindow {
         // Collection behavior:
         //   .fullScreenPrimary - declare we're a primary fullscreen window so
         //                        `toggleFullScreen:` puts us into a Space-
-        //                        based fullscreen. This is REQUIRED for
-        //                        macOS to engage display HDR mode on the
-        //                        connected panel: the OS only bumps
-        //                        NSScreen.maximumExtendedDynamicRangeColor-
-        //                        ComponentValue above 1.0 for windows that
-        //                        own a dedicated Space. A borderless cover
-        //                        at .normal level + .fullScreenAuxiliary
-        //                        gets treated as a regular window and the
-        //                        compositor tone-maps PQ → SDR (= dark,
-        //                        washed-out, no panel HDR engagement).
-        //                        moonlight-qt uses SDL_WINDOW_FULLSCREEN_-
-        //                        DESKTOP which on macOS is exactly this:
-        //                        toggleFullScreen + Space.
+        //                        based fullscreen (Path B in show(), and the
+        //                        green button in window mode). NOTE: this is
+        //                        NOT what engages display HDR. An earlier
+        //                        revision believed the OS only raised the
+        //                        screen's EDR headroom for windows owning a
+        //                        Space; that was wrong - the default
+        //                        borderless cover (Path A, no Space) engages
+        //                        HDR just fine, as does a plain window: EDR
+        //                        follows the layer's PQ content +
+        //                        wantsExtendedDynamicRangeContent, not the
+        //                        window's Space membership.
         //   .stationary        - don't get tossed into a different Space
-        //                        when Mission Control reflows windows.
-        window.collectionBehavior = [.fullScreenPrimary, .stationary]
+        //                        when Mission Control reflows windows. Full
+        //                        screen only: a real window should follow
+        //                        the user's own Space management.
+        window.collectionBehavior = displayMode == .window
+            ? [.fullScreenPrimary]
+            : [.fullScreenPrimary, .stationary]
         window.backgroundColor = .black
         window.acceptsMouseMovedEvents = true
         window.hidesOnDeactivate = false
@@ -374,6 +414,7 @@ public final class StreamWindow {
         // MacBooks. The delegate is created up-front so its `coversNotch`
         // flag stays in sync with `self.coversNotch` via show() time.
         let delegate = StreamWindowDelegate()
+        delegate.displayMode = displayMode
         window.delegate = delegate
 
         self.window = window
@@ -384,6 +425,10 @@ public final class StreamWindow {
         self.leaveHintBanner = leaveHint
         self.displayView = view
         self.streamDelegate = delegate
+        // Window mode: the red button / Cmd-W route through the delegate to
+        // the session's stop() (StreamWindow+Windowed.swift). Wired after
+        // full initialization because it captures self.
+        delegate.onCloseRequested = { [weak self] in self?.handleUserCloseRequest() }
     }
 
     /// Strong ref so the window delegate isn't deallocated mid-stream

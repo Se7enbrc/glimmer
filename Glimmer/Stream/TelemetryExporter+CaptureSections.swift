@@ -201,7 +201,11 @@ extension TelemetryExporter {
             "\"ts\":\"\(isoFormatter.string(from: Date()))\"",
             "\"session\":\"\(sessionId)\"",
             "\"event\":\"config\"",
-            "\"build_commit\":\"\(TelemetryRenderer.jsonStringEscape(BuildInfo.commit))\""
+            "\"build_commit\":\"\(TelemetryRenderer.jsonStringEscape(BuildInfo.commit))\"",
+            // fullScreen / window - a windowed session presents into a
+            // resizable layer, so its present-path numbers must not be judged
+            // against the fullscreen baseline without knowing.
+            "\"display_mode\":\"\(TelemetryRenderer.jsonStringEscape(source.displayMode))\""
         ] + linkGateFields + [
             // The keepalive is CONDITIONAL (EnvSignalController): both cadence
             // dials + the policy flag, so the session file self-describes the

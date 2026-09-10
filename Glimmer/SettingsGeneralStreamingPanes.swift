@@ -194,17 +194,17 @@ struct QualityPane: View {
     /// keystroke), so the clamp can't fight a transient mid-edit value.
     /// Bounds mirror the init()-time heal in AppModel.
     private func clampCustomResolution() {
-        if model.customWidth < 640 { model.customWidth = 640 }
-        if model.customWidth > 7680 { model.customWidth = 7680 }
-        if model.customHeight < 480 { model.customHeight = 480 }
-        if model.customHeight > 4320 { model.customHeight = 4320 }
+        let width = StreamSizeBounds.clampWidth(model.customWidth)
+        if width != model.customWidth { model.customWidth = width }
+        let height = StreamSizeBounds.clampHeight(model.customHeight)
+        if height != model.customHeight { model.customHeight = height }
     }
     /// FPS clamp: 30..240. Sunshine + GFE both refuse anything outside
     /// this band; clamping at the UI saves a confused stream-failure
     /// trip. Same every-commit .onChange wiring as the resolution clamp.
     private func clampCustomFPS() {
-        if model.customFPS < 30 { model.customFPS = 30 }
-        if model.customFPS > 240 { model.customFPS = 240 }
+        let fps = StreamSizeBounds.clampFPS(model.customFPS)
+        if fps != model.customFPS { model.customFPS = fps }
     }
 
     var body: some View {
@@ -228,19 +228,36 @@ struct QualityPane: View {
                 .pickerStyle(.inline)
                 .labelsHidden()
 
-                // Notch coverage as a compact pill right under the resolution
-                // choice - it shapes the same picture. DEFAULT ON: full-panel
-                // coverage is the product stance on notched MacBooks. Only
-                // meaningful on built-in notched panels; elsewhere the safe-area
-                // inset is zero and the toggle is a no-op. Snapshotted at session
-                // start, so the next-stream caveat lives in the description.
-                Toggle("Fill the notch", isOn: $model.streamCoversNotch)
-                    .toggleStyle(.switch)
-                    .help("Covers the whole panel on notched MacBooks; a sliver of the image hides behind the camera notch.")
-                Text("Fills the whole panel on notched MacBooks - a thin strip of the picture "
-                    + "hides behind the notch. Off keeps it clear. Applies next stream.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                // How the stream is shown. Full screen is the default; Window
+                // is a normal titled window with its own stream-size request
+                // (WindowStreamSizeControls). Snapshotted at session start.
+                Picker("Show the stream", selection: $model.streamDisplayMode) {
+                    ForEach(StreamDisplayMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                if model.streamDisplayMode == .fullScreen {
+                    // Notch coverage as a compact pill right under the mode
+                    // choice - it shapes the same picture. DEFAULT ON: full-panel
+                    // coverage is the product stance on notched MacBooks. Shown
+                    // ONLY on a notched panel: elsewhere the toggle used to
+                    // silently switch the fullscreen mechanism to a macOS Space
+                    // (issue #84), so notchless Macs now always take the cover
+                    // and never see the switch. Snapshotted at session start, so
+                    // the next-stream caveat lives in the description.
+                    if model.currentDisplayHasNotch {
+                        Toggle("Fill the notch", isOn: $model.streamCoversNotch)
+                            .toggleStyle(.switch)
+                            .help("Covers the whole panel; a sliver of the image hides behind the camera notch.")
+                        Text("Fills the whole panel - a thin strip of the picture hides behind the notch. "
+                            + "Off keeps the picture clear of it by using a macOS full-screen space instead. "
+                            + "Applies next stream.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    WindowStreamSizeControls()
+                }
             }
 
             if model.qualityPreset == .custom {

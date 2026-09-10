@@ -195,6 +195,14 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     ///     opt-in diagnostic session.
     public static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")
 
+    /// Default "Release the pointer" chord (Window mode): ⌃⌥R. Same ⌃⌥ family
+    /// as quit (Q) and stats (S) so the three read as one set, "R" for Release,
+    /// and no `.command` so it fires whether or not ⌘ shortcuts are forwarded.
+    /// Collides with none of the other defaults (⌃⌥Q, ⌃⌥S, ⌃B). Only
+    /// intercepted while the stream is in a window - in full screen the cursor
+    /// is hidden and there is nothing to release, so ⌃⌥R reaches the host.
+    public static let defaultReleasePointer = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "r")
+
     var displayString: String {
         var parts: [String] = []
         if ctrl { parts.append("⌃") }

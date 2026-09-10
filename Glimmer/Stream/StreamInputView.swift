@@ -53,6 +53,24 @@ final class StreamInputView: NSView {
         return NSCursor(image: image, hotSpot: .zero)
     }()
 
+    /// Whether the transparent-cursor backstop is in force. Always true in
+    /// full screen (the pointer is hidden for the whole session). Window mode
+    /// flips it with pointer capture: a released pointer must show the arrow
+    /// over the picture, so `cursorUpdate` hands AppKit the arrow instead.
+    private var transparentCursorEnabled = true
+
+    /// Window mode's capture edge. Applies the matching cursor immediately
+    /// rather than waiting for the next motion, so a chord release shows the
+    /// arrow at once and a grab click hides it at once.
+    func setTransparentCursorEnabled(_ enabled: Bool) {
+        transparentCursorEnabled = enabled
+        if enabled {
+            Self.transparentCursor.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
     override var acceptsFirstResponder: Bool { true }
     override var isOpaque: Bool { true }
     override func becomeFirstResponder() -> Bool { true }
@@ -89,6 +107,10 @@ final class StreamInputView: NSView {
     /// system cursor the moment the pointer leaves the view - so it can never
     /// leave the system cursor invisible.
     override func cursorUpdate(with event: NSEvent) {
+        guard transparentCursorEnabled else {
+            NSCursor.arrow.set()
+            return
+        }
         Self.transparentCursor.set()
     }
 
@@ -105,6 +127,7 @@ final class StreamInputView: NSView {
     /// system cursor the instant the pointer leaves the view, so it can never
     /// strand the cursor invisible.
     func refreshCursor() {
+        guard transparentCursorEnabled else { return }
         Self.transparentCursor.set()
     }
 

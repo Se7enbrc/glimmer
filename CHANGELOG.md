@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.9.0 - 2026-09-10
+
+Glimmer can stream in a window, and two full-screen dead ends are gone.
+
+Settings, Quality, Show the stream: pick Window and the stream opens as a normal
+Mac window, pixel-mapped to the size you ask for, that you can drag, resize (the
+picture scales, it never letterboxes) and send full screen with the green
+button, with the menu bar and Dock left alone. A separate Window stream size
+picker chooses what your gaming PC renders, 720p through 4K or a custom size and
+refresh capped at your display's rate, without touching your full-screen
+settings; the bitrate follows automatically. Click the picture to grab the mouse
+and press Control-Option-R (configurable in Input) to let it go; closing the
+window ends the stream. Full screen stays the default and behaves exactly as
+before.
+
+Fill the notch now only appears on Macs that have a notch. Turning it off
+quietly switched full screen into a macOS full-screen space, and on a Mac mini
+that meant leaving the space through Mission Control left the picture nowhere
+while the stream kept running. Leaving that space now lands you in a window
+instead.
+
+Quitting Glimmer mid-stream now waits, briefly, for the PC to be told the
+session is over, so Sunshine never keeps a phantom session that blocks your next
+launch.
+
 ## 2026.8.18 - 2026-09-02
 
 Glimmer no longer polls your PC while the Mac is going to sleep.

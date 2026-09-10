@@ -34,6 +34,7 @@ extension StreamSession {
         quitHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultQuit },
         statsHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultStats },
         bookmarkHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultBookmark },
+        releasePointerHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultReleasePointer },
         initialStatsOverlay: Bool = false,
         initialStatsCorner: StatsOverlayCorner = .topLeft,
         // Provider closure rather than a captured Set so toggling rows in
@@ -146,6 +147,7 @@ extension StreamSession {
             quitHotkeyProvider: quitHotkeyProvider,
             statsHotkeyProvider: statsHotkeyProvider,
             bookmarkHotkeyProvider: bookmarkHotkeyProvider,
+            releasePointerHotkeyProvider: releasePointerHotkeyProvider,
             controllerQuitChordProvider: controllerQuitChordProvider,
             customControllerChordProvider: customControllerChordProvider,
             onBackgroundedChanged: onBackgroundedChanged))

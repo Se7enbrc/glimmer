@@ -16,6 +16,11 @@ import os.log
 extension StreamWindow {
 
     public func show() {
+        // Window mode has its own bring-up (StreamWindow+Windowed.swift): a
+        // titled window, no presentation-options change, no cover, no cursor
+        // hide. Everything below is the fullscreen path, unchanged.
+        if displayMode == .window { showWindowed(); return }
+
         // 1. Save the host app's current presentation options so we can put
         //    them back verbatim on close(). Pulling this from NSApp at
         //    show() time (rather than caching a constant) means we cooperate
@@ -213,6 +218,11 @@ extension StreamWindow {
                     self.onDidBecomeReadyForInput?()
                 }
             }
+            // A user-driven exit from this Space (Mission Control, the Esc
+            // gesture) used to leave a vanished window over a still-running
+            // stream (issue #84). It now lands the session in a window - see
+            // StreamWindow+Windowed.swift for the conversion these drive.
+            installSpaceExitObservers()
             window.toggleFullScreen(nil)
         }
 
@@ -330,7 +340,10 @@ extension StreamWindow {
                     // background flips NSApp.isActive false and leaves the
                     // window non-key, so this only short-circuits the blip case.
                     guard !NSApp.isActive, !self.window.isKeyWindow else {
-                        self.log.info("Stream window still active/key after resign debounce - teardown cancelled (stream stays foregrounded)")
+                        self.log.info("""
+                            Stream window still active/key after resign debounce - teardown cancelled \
+                            (stream stays foregrounded)
+                            """)
                         return
                     }
                     // Confirmed genuine background (Cmd-Tab-away / app
@@ -340,6 +353,43 @@ extension StreamWindow {
             }
           }
         })
+        installDisplayObservers(nc: nc)
+        keyObservers.append(nc.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+          MainActor.assumeIsolated {
+            guard let self, !self.didClose else { return }
+            // Cancel any pending resign teardown: a becomeKey that lands
+            // inside the resign debounce window means the resign was a
+            // transient key blip (e.g. a DualSense connecting over Bluetooth
+            // mid-stream momentarily fluttered key away and back). Bumping the
+            // shared generation token makes the deferred resign handler bail,
+            // so the stream window is never ordered out and the launcher never
+            // flashes. reengageForeground() below is idempotent/latch-safe.
+            self.resignGeneration &+= 1
+            // Funnel through the SINGLE shared foreground re-engage so this
+            // Cmd-Tab/reactivation path is byte-for-byte identical to the
+            // menubar "Back to stream" path (`resumeWindow()` calls the same
+            // method). Re-hides the cursor (idempotent latch), restores the
+            // streaming level, re-applies the fullscreen presentation flags,
+            // and fires onBackgroundedChanged(false).
+            self.reengageForeground()
+            self.log.info(
+                "Stream window became key - re-engaged foreground (level \(streamingLevel.rawValue, privacy: .public))")
+          }
+        })
+        installAppReactivationObserver(nc: nc)
+    }
+
+    /// The display observers both presentation modes need: a screen change,
+    /// a same-screen mode/HDR/VRR reconfiguration, and a display wake all
+    /// rebind the FramePacer's CADisplayLink and re-assert the cursor hide.
+    /// Split out of `installLifecycleObservers()` (a pure move, registered at
+    /// the same point in the same order) so the windowed bring-up can install
+    /// exactly these without the fullscreen-only key/activation observers.
+    func installDisplayObservers(nc: NotificationCenter) {
         // Screen-change: the window was dragged to another display (or its
         // backing display's mode changed / woke from sleep). Notify the owner
         // so the FramePacer rebinds its CADisplayLink to the new screen's
@@ -409,33 +459,6 @@ extension StreamWindow {
                 self.reassertCursorHiddenIfNeeded()
             }
         })
-        keyObservers.append(nc.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] _ in
-          MainActor.assumeIsolated {
-            guard let self, !self.didClose else { return }
-            // Cancel any pending resign teardown: a becomeKey that lands
-            // inside the resign debounce window means the resign was a
-            // transient key blip (e.g. a DualSense connecting over Bluetooth
-            // mid-stream momentarily fluttered key away and back). Bumping the
-            // shared generation token makes the deferred resign handler bail,
-            // so the stream window is never ordered out and the launcher never
-            // flashes. reengageForeground() below is idempotent/latch-safe.
-            self.resignGeneration &+= 1
-            // Funnel through the SINGLE shared foreground re-engage so this
-            // Cmd-Tab/reactivation path is byte-for-byte identical to the
-            // menubar "Back to stream" path (`resumeWindow()` calls the same
-            // method). Re-hides the cursor (idempotent latch), restores the
-            // streaming level, re-applies the fullscreen presentation flags,
-            // and fires onBackgroundedChanged(false).
-            self.reengageForeground()
-            self.log.info(
-                "Stream window became key - re-engaged foreground (level \(streamingLevel.rawValue, privacy: .public))")
-          }
-        })
-        installAppReactivationObserver(nc: nc)
     }
 
     /// App reactivation. Cmd-Tab BACK fires the didBecomeKey observer above,

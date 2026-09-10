@@ -83,7 +83,11 @@ extension InputForwarder {
             object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.enterCapturedMode()
+                // Window mode recaptures on a click, not on focus - a Cmd-Tab
+                // back must not swallow the pointer (InputForwarder+PointerRelease).
+                if self?.pointerCaptureOnClick == false {
+                    self?.enterCapturedMode()
+                }
                 // Snap all controller axes/buttons to live state on refocus -
                 // GCController's value-changed handler doesn't re-fire for an
                 // input held across the focus loss, so without this a stick
@@ -173,7 +177,12 @@ extension InputForwarder {
             }
         }
         isMouseCaptured = true
-        log.info("Mouse capture: relative aim engaged (associate-false; coalescing off; cursor disassociated, visibility owned by StreamWindow)")
+        log.info("""
+            Mouse capture: relative aim engaged (associate-false; coalescing off; \
+            cursor disassociated, visibility owned by StreamWindow)
+            """)
+        // Window mode only: report the edge so the window hides the cursor.
+        if pointerCaptureOnClick { onPointerCaptureChanged?(true) }
     }
 
     /// Disengage relative-aim mode. RE-ASSOCIATES the cursor with the pointing
@@ -209,6 +218,8 @@ extension InputForwarder {
             Mouse capture: relative aim disengaged (associate-true; coalescing restored; \
             cursor re-associated, visibility owned by StreamWindow)
             """)
+        // Window mode only: report the edge so the window shows the cursor.
+        if pointerCaptureOnClick { onPointerCaptureChanged?(false) }
     }
 
     func installGestureSuppressionMonitor() {

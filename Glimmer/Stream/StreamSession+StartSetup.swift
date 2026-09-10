@@ -37,6 +37,7 @@ extension StreamSession {
         let quitHotkeyProvider: @MainActor () -> HotkeyChord
         let statsHotkeyProvider: @MainActor () -> HotkeyChord
         let bookmarkHotkeyProvider: @MainActor () -> HotkeyChord
+        let releasePointerHotkeyProvider: @MainActor () -> HotkeyChord
         let controllerQuitChordProvider: @MainActor () -> ControllerQuitChord
         let customControllerChordProvider: @MainActor () -> Set<ControllerButton>
         let onBackgroundedChanged: (@MainActor (Bool) -> Void)?
@@ -82,8 +83,12 @@ extension StreamSession {
         let initialStatsOverlay = options.initialStatsOverlay
         let initialStatsCorner = options.initialStatsCorner
         let onBackgroundedChanged = options.onBackgroundedChanged
-        let win = StreamWindow()
+        // The display mode is a construction-time choice (it picks the style
+        // mask); the notch flag, title, and stream size feed show().
+        let win = StreamWindow(displayMode: config.displayMode)
         win.coversNotch = config.coversNotch
+        win.windowTitle = config.windowTitle
+        win.streamPixelSize = CGSize(width: config.width, height: config.height)
         let dec = VideoDecoder()
         dec.attach(to: win.displayLayer)
         // Route the window's backgrounded/foregrounded signal to BOTH
@@ -106,6 +111,7 @@ extension StreamSession {
         inp.quitHotkeyProvider = options.quitHotkeyProvider
         inp.statsHotkeyProvider = options.statsHotkeyProvider
         inp.bookmarkHotkeyProvider = options.bookmarkHotkeyProvider
+        inp.releasePointerHotkeyProvider = options.releasePointerHotkeyProvider
         inp.controllerQuitChordProvider = options.controllerQuitChordProvider
         inp.customControllerChordProvider = options.customControllerChordProvider
         dec.statsOverlayEnabled = initialStatsOverlay
@@ -179,6 +185,20 @@ extension StreamSession {
         inp.captureSysKeys = config.captureSysKeys
         // Cruise ceiling is derived from the stream width (4K→2.0, 1080p→1.0 inert).
         inp.cruiseGMax = CruiseTraversal.gMax(forStreamWidth: config.width)
+        // Window mode: relative aim is click-to-grab / chord-to-release rather
+        // than always-on, and the window hides + shows the cursor off the
+        // capture edges (visibility stays StreamWindow's; the forwarder only
+        // reports the edge). Both hooks are inert in full screen: the forwarder
+        // fires the edge callback only in click-capture mode, and the mode
+        // callback only runs when a Path-B Space exit lands the session in a
+        // window mid-stream (StreamWindow+Windowed.swift).
+        inp.pointerCaptureOnClick = config.displayMode == .window
+        inp.onPointerCaptureChanged = { [weak win] captured in
+            win?.setPointerCaptured(captured)
+        }
+        win.onDisplayModeChanged = { [weak inp] mode in
+            inp?.setPointerCaptureOnClick(mode == .window)
+        }
         inp.attach(to: win.window)
         // The window installs first responder only after it has
         // become key AND finished its enter-fullscreen transition.
@@ -226,6 +246,12 @@ extension StreamSession {
         setup.2.setBackend(backendForInput)
         // Set the quit handler now that the session reference is stable.
         setup.1.onQuitHotkey = { [weak self] in
+            Task { await self?.stop() }
+        }
+        // Window mode: the red button / Cmd-W ends the stream exactly like the
+        // quit hotkey (same stop(), same /cancel). The delegate refuses the
+        // close itself so the session's own fade-out teardown owns the exit.
+        setup.0.onCloseRequested = { [weak self] in
             Task { await self?.stop() }
         }
         // Stats-overlay toggle. Flips a MainActor-isolated bool on the

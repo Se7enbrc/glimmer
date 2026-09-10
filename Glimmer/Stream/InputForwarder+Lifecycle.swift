@@ -93,7 +93,8 @@ extension InputForwarder {
         // SDL_SetRelativeMouseMode(true) - see the file-top comment.
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
-        if window.isKeyWindow {
+        // Window mode waits for the user's click (InputForwarder+PointerRelease).
+        if window.isKeyWindow, !pointerCaptureOnClick {
             enterCapturedMode()
         }
     }

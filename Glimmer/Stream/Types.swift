@@ -89,6 +89,15 @@ public struct StreamConfig: Sendable {
     /// at the safe-area boundary. Default true. See `StreamWindow.coversNotch`.
     public var coversNotch: Bool = true
 
+    /// How the stream window presents: the fullscreen cover (default) or a
+    /// normal titled window the user can drag and resize. Snapshotted at
+    /// session start like `coversNotch`; see `StreamDisplayMode`.
+    public var displayMode: StreamDisplayMode = .fullScreen
+
+    /// Title for the Window-mode window ("Tower - Desktop"). Unused in full
+    /// screen (a borderless cover has no title bar).
+    public var windowTitle: String = ""
+
     public init(width: Int, height: Int, fps: Int, bitrateKbps: Int) {
         self.width = width
         self.height = height

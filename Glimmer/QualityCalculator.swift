@@ -287,7 +287,8 @@ extension AppModel {
     func persistQualitySettings() -> Bool {
         let display = smartDefaultsForCurrentDisplay()
 
-        let width: Int, height: Int, fps: Int, bitrate: Int, hdr: Bool
+        var width: Int, height: Int, fps: Int, bitrate: Int
+        let hdr: Bool
         switch qualityPreset {
         case .matchDisplay:
             width = display.width
@@ -308,6 +309,17 @@ extension AppModel {
             fps = customFPS
             bitrate = customBitrateMbps * 1000
             hdr = customHDR
+        }
+        // Window mode: the stream size is the user's explicit window request,
+        // not the preset's - the preset still decides HDR. The bitrate is the
+        // formula's answer for that size (no separate dial in v1); the refresh
+        // is already capped at the panel's current maximum by the request.
+        if streamDisplayMode == .window {
+            let request = windowStream.request(displayMaxHz: display.fps)
+            width = request.width
+            height = request.height
+            fps = request.fps
+            bitrate = bitrateKbps(width: width, height: height, fps: fps, preset: qualityPreset)
         }
         // Idempotent writes: assign each @Observable property only when it
         // actually moves. A spurious didChangeScreenParameters notification (the

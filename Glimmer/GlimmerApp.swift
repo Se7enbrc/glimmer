@@ -95,7 +95,11 @@ struct GlimmerApp: App {
             "rawHIDControllerEnabled": false,
             "rawHIDPromptAnswered": false,
             "showDiagnostics": false,
-            "telemetryEnabled": false
+            "telemetryEnabled": false,
+            // "Show the stream": full screen unless the user picks Window. The
+            // registered value keeps the raw read and AppModel's declared
+            // default in agreement (see StreamDisplayMode.defaultMode).
+            StreamDisplayMode.defaultsKey: StreamDisplayMode.defaultMode.rawValue
         ])
     }
 
@@ -285,7 +289,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so the SYSTEM-WIDE pointer-acceleration override would survive process exit.
         // Restore it synchronously (idempotent; no-op when nothing is overridden).
         MouseAccelerationControl.restoreOrphanedOverride()
-        return .terminateNow
+        // A live (or connecting) session must reach the host's /cancel before
+        // the process exits. Returning .terminateNow after kicking off an async
+        // stop let the process die first and left Sunshine holding a phantom
+        // session that blocked the next /launch (issue #84). Defer the quit,
+        // run the stop bounded (a hung host can't pin Cmd-Q past the bound),
+        // then reply. No session object yet (the stream Task hasn't spun up)
+        // means nothing has been asked of the host - quit now.
+        guard let model, TerminationGate.reply(isStreaming: model.isStreaming) == .terminateLater,
+              let session = model.nativeSession else {
+            return .terminateNow
+        }
+        Task { @MainActor in
+            let bound = TerminationGate.stopBoundSeconds
+            let finished = await TerminationGate.runBounded(seconds: bound) { await session.stop() }
+            Diag.notice(finished
+                ? "Quit: stream stopped and the host session cancelled"
+                : "Quit: host didn't acknowledge /cancel within \(Int(bound))s - exiting anyway", "Stream")
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     /// Dock-click handler. Fires on Dock-icon click, `open -a Glimmer`, and

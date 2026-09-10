@@ -65,6 +65,19 @@ extension InputForwarder: StreamInputViewDelegate {
             return true
         }
 
+        // "Release the pointer" chord - WINDOW MODE ONLY, and only while the
+        // pointer is actually captured (a released pointer lets ⌃⌥R reach the
+        // host like any key). Same client-only intercept as quit/stats, and
+        // ordered BEFORE the sys-keys gate for the same reason. In full screen
+        // the cursor is hidden and there is nothing to release, so the chord is
+        // never intercepted there.
+        if !event.isARepeat, pointerCaptureOnClick, isMouseCaptured,
+           releasePointerHotkeyProvider().matches(event: event, modifiers: mods) {
+            log.info("Release-pointer hotkey detected - releasing the pointer")
+            releasePointer(reason: "release chord")
+            return true
+        }
+
         // macOS Accessibility Zoom keyboard shortcuts. These are pure OS
         // chords with no in-game meaning - if the user accidentally hits one
         // mid-fight (especially ⌥⌘8, which is right next to ⌥⌘9 and ⌥⌘0 that
@@ -218,7 +231,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
-        guard isReady else { return }
+        guard isReady, forwardsMouseEvents else { return }
 
         // Coalesce queued mouseMoved events the way moonlight-qt does it
         // (SDL_PeepEvents drains all pending SDL_MOUSEMOTION events and
@@ -366,6 +379,14 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
+        // Window mode: a click on a RELEASED stream view grabs the pointer and
+        // is consumed - the host never sees the grab click (a console-emulator
+        // convention). Checked before the ready gate so a click during the
+        // handshake still captures.
+        if pointerCaptureOnClick, !isMouseCaptured {
+            capturePointerFromClick()
+            return
+        }
         guard isReady else { return }
         let hostButton = button(for: event)
         let rc = backend?.sendMouseButton(
@@ -375,8 +396,11 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent) {
-        guard isReady else { return }
+        guard isReady, forwardsMouseEvents else { return }
         let hostButton = button(for: event)
+        // Window mode: the up of the grab click (its down was consumed above)
+        // must not reach the host as a release for a press it never saw.
+        if pointerCaptureOnClick, !heldMouseButtons.contains(hostButton) { return }
         let rc = backend?.sendMouseButton(
             action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: hostButton) ?? -2
         record("LiSendMouseButtonEvent(release)", rc)
@@ -384,7 +408,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent) {
-        guard isReady else { return }
+        guard isReady, forwardsMouseEvents else { return }
         // DEADZONE REMOVED. This handler
         // used to clamp each event's delta to ±1.0 line before the WHEEL_DELTA
         // scale - a per-event magnitude cap added

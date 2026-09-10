@@ -72,6 +72,10 @@ extension StreamWindow {
     /// captures no non-Sendable closure - the handler runs on the main run
     /// loop, so MainActor isolation is sound.
     private func applyPresentationOptions(coversNotch cover: Bool) {
+        // Window mode never touches the app's presentation options - the menu
+        // bar and Dock stay, that's the point of a window. (`show()` skipped
+        // saving them too, so close() has nothing to restore.)
+        guard displayMode == .fullScreen else { return }
         if cover {
             NSApp.presentationOptions = [.hideMenuBar, .hideDock]
         } else {
@@ -120,6 +124,18 @@ extension StreamWindow {
             NotificationCenter.default.removeObserver(token)
             enterFullScreenObserver = nil
         }
+        // Path B's Space-exit observers (StreamWindow+Windowed.swift) - the
+        // toggleFullScreen in step 4 below would otherwise fire them against
+        // a closing window. `didClose` already gates them; sweeping is the
+        // clean cut.
+        for token in spaceExitObservers {
+            NotificationCenter.default.removeObserver(token)
+        }
+        spaceExitObservers.removeAll()
+        // Window mode: persist the frame under its autosave name and release
+        // the name, so the next session's window can claim it (see
+        // StreamWindow+Windowed.swift).
+        if displayMode == .window { finishWindowedFrameAutosave() }
 
         // 3. Restore the app's presentation options BEFORE orderOut'ing the
         //    window. Order matters: if we orderOut first, the user briefly

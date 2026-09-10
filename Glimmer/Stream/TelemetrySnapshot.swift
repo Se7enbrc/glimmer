@@ -469,4 +469,9 @@ struct TelemetrySource: Sendable {
     /// it from a MAIN-queue 1Hz timer built only on the gate-on path (never a hot
     /// path). nil before the layer is bound to a screen.
     var displayProbe: @MainActor @Sendable () -> DisplayProbe?
+    /// How the stream was shown at session start (`StreamDisplayMode` raw
+    /// value) - written into the one-shot config event so a windowed capture
+    /// is never read as a fullscreen one. Defaulted so callers that predate
+    /// the mode keep compiling.
+    var displayMode: String = StreamDisplayMode.defaultMode.rawValue
 }

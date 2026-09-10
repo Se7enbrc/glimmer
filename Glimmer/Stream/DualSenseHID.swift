@@ -503,7 +503,7 @@ final class DualSenseHID: @unchecked Sendable {
         }
         if rc == kIOReturnSuccess {
             if !loggedWriteWasSuccessful() {
-                log.info("DualSense OUTPUT report write OK (transport=\(bluetooth ? "BT" : "USB", privacy: .public)) - adaptive triggers live")
+                log.info("DualSense OUTPUT report write OK over \(bluetooth ? "BT" : "USB", privacy: .public) - adaptive triggers live")
             }
         } else if !loggedWriteWasRefused() {
             // SAFETY no-op: a refused write (e.g. kIOReturnNotPermitted, or an

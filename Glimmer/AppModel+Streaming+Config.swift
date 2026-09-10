@@ -51,7 +51,10 @@ extension AppModel {
     /// negotiated codec's efficiency. The spec UI and `nativeStreamConfig` both read
     /// this so the shown bitrate can't drift from what's sent. Custom is verbatim.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
-        if case .custom = qualityPreset { return effectiveBitrateKbps }
+        // Under Window the Custom preset's slider is not in play (the bitrate is
+        // the formula's answer for the window request), so the codec discount
+        // applies there like any other computed budget.
+        if case .custom = qualityPreset, streamDisplayMode == .fullScreen { return effectiveBitrateKbps }
         let mult = Self.codecBudgetMultiplier(for: formats)
         return max(5_000, Int((Double(effectiveBitrateKbps) * mult).rounded()))
     }
@@ -142,7 +145,11 @@ extension AppModel {
                                fps: effectiveFPS, bitrateKbps: effectiveBitrateKbps)
         cfg.hdr = effectiveHDR
         cfg.captureSysKeys = captureSysKeys
-        cfg.coversNotch = streamCoversNotch
+        // The notch choice only means something on a notched panel; elsewhere
+        // the session always takes the borderless cover (see
+        // effectiveStreamCoversNotch for the issue this closes).
+        cfg.coversNotch = effectiveStreamCoversNotch
+        cfg.displayMode = streamDisplayMode
         let codecPref = HostCodecPreference.load(for: host.id)
         cfg.videoFormats = codecPref.apply(to: .probedSupported)
         // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
@@ -150,6 +157,14 @@ extension AppModel {
         // path so what's shown matches what's sent.
         cfg.bitrateKbps = wireBitrateKbps(forFormats: cfg.videoFormats)
         return cfg
+    }
+
+    /// Title for the Window-mode stream window: the PC's name, then the app
+    /// when one is known - "Tower - Desktop". Static and pure so the shape is
+    /// trivially checkable.
+    static func streamWindowTitle(hostName: String, appName: String) -> String {
+        let app = appName.trimmingCharacters(in: .whitespaces)
+        return app.isEmpty ? hostName : "\(hostName) - \(app)"
     }
 
     /// Convert a paired Host into the engine's ServerInfo. The
