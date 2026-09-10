@@ -92,6 +92,15 @@ extension InputForwarder {
         // being undone, and the pointer is captured again, so the question it
         // answers is settled.
         noteHoverCaptureEvent(.captureEngaged)
+        // Tell the host where the pointer IS before relative aim takes over.
+        // Deltas move the host's cursor from wherever it already sits, which
+        // after a spell in absolute mode - or after a game moved its own
+        // cursor while paused - is not where the user just pointed. The
+        // reported symptom was a pause menu whose cursor sat somewhere other
+        // than the pointer that grabbed it, so a click "over" a menu item
+        // landed elsewhere. One absolute position closes that gap; from the
+        // next event on it is deltas as before.
+        syncHostPointerToCurrentLocation()
         enterCapturedMode()
     }
 
@@ -138,6 +147,26 @@ extension InputForwarder {
     ///
     /// A no-op unless the pointer is free in a window, so every call site can
     /// invoke it unconditionally and full screen pays one bool for it.
+    /// One absolute position for the pointer's CURRENT location, read from the
+    /// window rather than an event so the two capture paths that have no event
+    /// to hand (a hover grab, a Cmd-Tab back onto a resting pointer) can both
+    /// use it. Deliberately NOT routed through `sendAbsolutePointer`: that one
+    /// is gated on the pointer being free, which is exactly the state this is
+    /// leaving. Window mode only, so full screen never emits an absolute event.
+    func syncHostPointerToCurrentLocation() {
+        guard isReady, isWindowMode, let window, let view = inputView else { return }
+        let viewPoint = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard view.bounds.contains(viewPoint) else { return }
+        guard let point = PointerMapping.streamPoint(
+            viewPoint: viewPoint,
+            viewSize: view.bounds.size,
+            streamPixelSize: streamPixelSize
+        ) else { return }
+        let rc = backend?.sendMousePosition(
+            x: point.x, y: point.y, refW: point.refW, refH: point.refH) ?? -2
+        record("LiSendMousePositionEvent(capture-sync)", rc)
+    }
+
     func sendAbsolutePointer(for event: NSEvent, in view: NSView) {
         guard isReady, sendsAbsolutePointer else { return }
         guard let point = PointerMapping.streamPoint(
