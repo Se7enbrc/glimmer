@@ -20,6 +20,15 @@ the window again takes it, so there is nothing to click and nothing to remember.
 Control-Option-R does either without moving the mouse, and closing the window
 ends the stream.
 
+Custom no longer asks you to set a bitrate. The toggle and the slider are gone,
+and the figure now comes from the same measured recommendation the pane used to
+print underneath them, following your resolution and refresh, and in a window
+the refresh your display can actually show. On a 14-inch MacBook Pro at 120 Hz
+that is about 85 Mbps where the old automatic setting asked for 100, so the
+honest number is also the smaller one. What it landed on is still there to read
+under Your next stream. The size shortcut beside the resolution fields is now a
+labelled Presets button rather than a bare glyph, and it runs 720p upward.
+
 Fill the notch now only appears on Macs that have a notch. Turning it off
 quietly switched full screen into a macOS full-screen space, and on a Mac mini
 that meant leaving the space through Mission Control left the picture nowhere
