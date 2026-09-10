@@ -65,18 +65,25 @@ extension InputForwarder: StreamInputViewDelegate {
             return true
         }
 
-        // "Release the pointer" chord - WINDOW MODE ONLY, and only while the
-        // pointer is actually captured (a released pointer lets ⌃⌥R reach the
-        // host like any key). Same client-only intercept as quit/stats, and
-        // ordered BEFORE the sys-keys gate for the same reason. In full screen
-        // the cursor is hidden and there is nothing to release, so the chord is
-        // never intercepted there.
-        if !event.isARepeat, pointerCaptureOnClick, isMouseCaptured,
+        // Pointer chord - WINDOW MODE ONLY, and a TOGGLE: it captures a free
+        // pointer and frees a captured one, so the combo is never a dead key
+        // and a user who learned it keeps it. Same client-only intercept as
+        // quit/stats, and ordered BEFORE the sys-keys gate for the same
+        // reason. In full screen capture follows key status and there is
+        // nothing to toggle, so the chord is never intercepted there and
+        // reaches the host like any key.
+        if !event.isARepeat, isWindowMode,
            releasePointerHotkeyProvider().matches(event: event, modifiers: mods) {
-            log.info("Release-pointer hotkey detected - releasing the pointer")
-            releasePointer(reason: "release chord")
+            log.info("Pointer hotkey detected - toggling capture")
+            togglePointerCapture(reason: "pointer chord")
             return true
         }
+
+        // Hold Esc to free the pointer (window mode, captured only). NOT
+        // consumed and never returns early: Esc is a game input, so the tap
+        // that opens a menu must forward on this very event with no added
+        // latency. Only a ~1s hold releases; see InputForwarder+EscapeHold.
+        noteEscapeKeyDown(event)
 
         // macOS Accessibility Zoom keyboard shortcuts. These are pure OS
         // chords with no in-game meaning - if the user accidentally hits one
@@ -139,6 +146,10 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {
+        // Cancel a pending Esc hold FIRST, ahead of every gate below: a tap
+        // must behave exactly as it did before the gesture existed, including
+        // while the stream is mid-handshake and forwarding nothing.
+        noteEscapeKeyUp(event)
         guard isReady else { return }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
@@ -232,6 +243,19 @@ extension InputForwarder: StreamInputViewDelegate {
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
         guard isReady, forwardsMouseEvents else { return }
+
+        // WINDOW MODE with the pointer free: the host cursor tracks this Mac's
+        // cursor 1:1, so send WHERE the pointer is rather than how far it
+        // moved. Everything below - the coalescing drain, the drag-delta
+        // compensation, Cruise, the sub-pixel residual - exists to make
+        // RELATIVE aim feel right and would actively break a 1:1 mapping, so
+        // the absolute path returns before any of it. Drags route through this
+        // handler too, so a held button tracks the same way. Constant `false`
+        // in full screen: nothing here changes for the fullscreen path.
+        if sendsAbsolutePointer {
+            sendAbsolutePointer(for: event, in: view)
+            return
+        }
 
         // Coalesce queued mouseMoved events the way moonlight-qt does it
         // (SDL_PeepEvents drains all pending SDL_MOUSEMOTION events and
@@ -379,15 +403,13 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
-        // Window mode: a click on a RELEASED stream view grabs the pointer and
-        // is consumed - the host never sees the grab click (a console-emulator
-        // convention). Checked before the ready gate so a click during the
-        // handshake still captures.
-        if pointerCaptureOnClick, !isMouseCaptured {
-            capturePointerFromClick()
-            return
-        }
-        guard isReady else { return }
+        guard isReady, forwardsMouseEvents else { return }
+        // A click in a window reaches the HOST - that is the whole point of
+        // absolute mode, and the reason click-to-capture is gone. Send the
+        // position first so the host's cursor is under the click before the
+        // button lands, even if the last motion event was coalesced away.
+        // No-op in full screen and while captured.
+        sendAbsolutePointer(for: event, in: view)
         let hostButton = button(for: event)
         let rc = backend?.sendMouseButton(
             action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: hostButton) ?? -2
@@ -398,9 +420,14 @@ extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent) {
         guard isReady, forwardsMouseEvents else { return }
         let hostButton = button(for: event)
-        // Window mode: the up of the grab click (its down was consumed above)
-        // must not reach the host as a release for a press it never saw.
-        if pointerCaptureOnClick, !heldMouseButtons.contains(hostButton) { return }
+        // Window mode: never send a release for a press the host has already
+        // been told about. `releasePointer` raises held buttons first, so a
+        // button held through a capture release would otherwise double-release
+        // when the physical up arrives.
+        if isWindowMode, !heldMouseButtons.contains(hostButton) { return }
+        // Land the release where the pointer actually ended up - a drag that
+        // moved between down and up must not release at the down position.
+        sendAbsolutePointer(for: event, in: view)
         let rc = backend?.sendMouseButton(
             action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: hostButton) ?? -2
         record("LiSendMouseButtonEvent(release)", rc)

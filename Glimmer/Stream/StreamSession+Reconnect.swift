@@ -198,6 +198,10 @@ extension StreamSession {
             // never re-runs StartSetup, so a mid-session resolution change would
             // otherwise keep a stale gMax.
             inp.cruiseGMax = CruiseTraversal.gMax(forStreamWidth: config.width)
+            // Same reasoning for the absolute pointer's reference frame: a
+            // reconnect at a new resolution would otherwise keep mapping
+            // window points onto the old stream's pixel grid.
+            inp.streamPixelSize = CGSize(width: config.width, height: config.height)
         }
 
         // 3. Fresh NetworkClient + full handshake against the restarted host.

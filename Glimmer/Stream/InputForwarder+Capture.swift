@@ -83,9 +83,10 @@ extension InputForwarder {
             object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                // Window mode recaptures on a click, not on focus - a Cmd-Tab
-                // back must not swallow the pointer (InputForwarder+PointerRelease).
-                if self?.pointerCaptureOnClick == false {
+                // Window mode never captures on focus - a Cmd-Tab back must
+                // hand the user a normal pointer, not swallow it
+                // (InputForwarder+WindowPointer).
+                if self?.isWindowMode == false {
                     self?.enterCapturedMode()
                 }
                 // Snap all controller axes/buttons to live state on refocus -
@@ -182,7 +183,7 @@ extension InputForwarder {
             cursor disassociated, visibility owned by StreamWindow)
             """)
         // Window mode only: report the edge so the window hides the cursor.
-        if pointerCaptureOnClick { onPointerCaptureChanged?(true) }
+        if isWindowMode { onPointerCaptureChanged?(true) }
     }
 
     /// Disengage relative-aim mode. RE-ASSOCIATES the cursor with the pointing
@@ -219,7 +220,7 @@ extension InputForwarder {
             cursor re-associated, visibility owned by StreamWindow)
             """)
         // Window mode only: report the edge so the window shows the cursor.
-        if pointerCaptureOnClick { onPointerCaptureChanged?(false) }
+        if isWindowMode { onPointerCaptureChanged?(false) }
     }
 
     func installGestureSuppressionMonitor() {

@@ -332,12 +332,12 @@ struct QualityPane: View {
                 } header: {
                     Text("Custom")
                 } footer: {
-                    // The one non-obvious thing about a window. The chord is
-                    // read live (same pattern as the stats-hotkey footnote
-                    // below) so it stays true after a rebind in Input.
+                    // The one non-obvious thing about a window: the pointer
+                    // needs nothing learned, and the exception is a button you
+                    // can see rather than a combo you have to remember.
                     if model.streamDisplayMode == .window {
-                        Text("Click the picture to grab the mouse; \(model.releasePointerHotkey.displayString) "
-                            + "gives it back.")
+                        Text("Your mouse works over the window as usual - "
+                            + "the button in the title bar hands it to the game for mouselook.")
                     }
                 }
             }

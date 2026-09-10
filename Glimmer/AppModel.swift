@@ -293,9 +293,11 @@ final class AppModel {
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
-    /// Window-mode "Release the pointer" chord (default ⌃⌥R): frees the mouse
-    /// so other apps can be used; a click on the stream grabs it again. Read
-    /// live via a provider, like the quit/stats chords.
+    /// Window-mode pointer chord (default ⌃⌥R): a TOGGLE - hands the mouse to
+    /// the game for mouselook, and takes it back. The titlebar button and a
+    /// held Esc do the same job without anything to remember; this stays for
+    /// users who prefer the keyboard. Read live via a provider, like the
+    /// quit/stats chords. The persisted key keeps its original name.
     var releasePointerHotkey: HotkeyChord = .defaultReleasePointer {
         didSet {
             if let data = try? JSONEncoder().encode(releasePointerHotkey) {

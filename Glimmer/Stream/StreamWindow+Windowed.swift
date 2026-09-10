@@ -14,12 +14,14 @@
 //  miniaturize = backgrounded signal, and a cursor that follows pointer
 //  capture instead of key status.
 //
-//  Pointer capture in a window is click-to-grab: the cursor is hidden and
-//  disassociated only after the user clicks the stream view, and comes back on
-//  the release chord or when the window resigns key. InputForwarder owns the
-//  engagement (as in full screen); it reports each edge through
-//  `setPointerCaptured(_:)` and this file keeps VISIBILITY in the single
-//  `setCursorHidden` owner - the one-owner rule the cursor latch depends on.
+//  The pointer in a window is a NORMAL Mac pointer: visible, and mirrored onto
+//  the host as absolute positions. Capture (hidden cursor, relative aim) is the
+//  exception a mouselook game needs, asked for with the titlebar button or the
+//  pointer chord and left with a held Esc. InputForwarder owns the engagement
+//  (as in full screen); it reports each edge through `setPointerCaptured(_:)`
+//  and this file keeps VISIBILITY in the single `setCursorHidden` owner - the
+//  one-owner rule the cursor latch depends on. The button and the hint live in
+//  StreamWindow+PointerAffordances.swift.
 //
 
 import AppKit
@@ -102,6 +104,17 @@ extension StreamWindow {
         let conformed = StreamWindowGeometry.conformed(restored, toAspect: aspect, within: available)
         if conformed != restored { window.setContentSize(conformed) }
         window.setFrame(window.constrainFrameRect(window.frame, to: screen), display: false)
+        // The visible way into capture. Installed with the rest of the chrome
+        // so both bring-ups (a fresh window, and a Path-B Space exit that
+        // converts one) get it; idempotent, so the second pass adds nothing.
+        installPointerCaptureAccessory()
+        // Seed the FREE-pointer state. The per-view transparent-cursor
+        // backstop defaults ON because full screen hides the cursor for the
+        // whole session - but a window opens with the pointer the user's own,
+        // and without this the arrow would be invisible over the picture from
+        // frame zero with no capture edge to switch it. No capture edge fires
+        // at bring-up, so this is the only thing that can seed it.
+        (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(false)
     }
 
     /// The visible screen area a window's CONTENT can occupy: the visible
@@ -133,14 +146,21 @@ extension StreamWindow {
         onCloseRequested?()
     }
 
-    /// InputForwarder's capture edge in click-capture mode. Visibility stays
-    /// with the single `setCursorHidden` owner; the per-view transparent
-    /// cursor backstop is switched with it so a released pointer shows the
-    /// arrow over the picture and a captured one never can.
+    /// InputForwarder's capture edge in window mode. Visibility stays with the
+    /// single `setCursorHidden` owner; the per-view transparent cursor
+    /// backstop is switched with it so a free pointer shows the arrow over the
+    /// picture and a captured one never can. The titlebar button reflects the
+    /// new state, and entering capture spends one of the hint's few shows.
     func setPointerCaptured(_ captured: Bool) {
         guard displayMode == .window, !didClose else { return }
         setCursorHidden(captured)
         (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(captured)
+        pointerCaptureAccessory?.setCaptured(captured)
+        if captured {
+            showCaptureHintIfBudgetAllows()
+        } else {
+            hideCaptureHint()
+        }
         log.info("Pointer \(captured ? "captured" : "released", privacy: .public) (window mode)")
     }
 
@@ -222,8 +242,8 @@ extension StreamWindow {
         displayMode = .window
         streamDelegate.displayMode = .window
         streamDelegate.coversNotch = false
-        // Cursor back first, then the forwarder switches to click-capture
-        // (which releases the association) - the same order a resign uses.
+        // Cursor back first, then the forwarder switches to the window pointer
+        // model (which releases the association) - the order a resign uses.
         setCursorHidden(false)
         onDisplayModeChanged?(.window)
     }
@@ -244,6 +264,6 @@ extension StreamWindow {
         spaceExitObservers.removeAll()
         onBackgroundedChanged?(false)
         onDidBecomeReadyForInput?()
-        Diag.notice("Left the full-screen Space - the stream continues in a window (click it to grab the pointer)", "Stream")
+        Diag.notice("Left the full-screen Space - the stream continues in a window (the pointer is yours again)", "Stream")
     }
 }

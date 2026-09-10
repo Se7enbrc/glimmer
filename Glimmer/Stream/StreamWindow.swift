@@ -103,6 +103,11 @@ public final class StreamWindow {
     /// Bottom-center one-time "press <chord> to leave" toast shown on the first
     /// stream so the quit chord is discoverable (Esc is a game input).
     public let leaveHintBanner: StreamBannerLayer
+    /// Bottom-center "Hold Esc to free the pointer" hint, shown over the
+    /// picture for the first few window-mode captures. Window mode only - the
+    /// sole caller is the capture edge in StreamWindow+Windowed.swift, which
+    /// full screen never reaches.
+    public let captureHintBanner: StreamBannerLayer
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen
@@ -189,8 +194,22 @@ public final class StreamWindow {
     public var onCloseRequested: (@MainActor () -> Void)?
 
     /// Fired when `displayMode` flips mid-session (the Path-B Space exit). The
-    /// session uses it to switch the InputForwarder to click-to-capture.
+    /// session uses it to switch the InputForwarder to the window pointer model.
     public var onDisplayModeChanged: (@MainActor (StreamDisplayMode) -> Void)?
+
+    /// Window mode: the titlebar capture button was clicked. The session wires
+    /// this to the forwarder's capture toggle. Never fired in full screen (a
+    /// borderless cover has no title bar to hang the button on).
+    public var onTogglePointerCapture: (@MainActor () -> Void)?
+
+    /// The titlebar capture button's controller, held so the capture edge can
+    /// update its icon and tooltip. nil in full screen.
+    var pointerCaptureAccessory: PointerCaptureAccessory?
+
+    /// Monotonic stamp for the capture hint's auto-hide, so a re-capture
+    /// inside the hint's ~4s life can't be cut short by the previous show's
+    /// timer. See StreamWindow+PointerAffordances.swift.
+    var captureHintGeneration: UInt64 = 0
 
     /// Path B's will/didExitFullScreen tokens, kept apart from `keyObservers`
     /// because the exit conversion sweeps the fullscreen key observers while
@@ -408,6 +427,11 @@ public final class StreamWindow {
         let leaveHint = StreamBannerLayer(
             anchor: .bottomCenter, accent: NSColor.white.cgColor, inset: 72)
         leaveHint.attach(to: layer)
+        // One rung higher again (72 + 34 + 10 = 116) so the pointer hint can
+        // share the corner with both of the pills below it.
+        let captureHint = StreamBannerLayer(
+            anchor: .bottomCenter, accent: NSColor.white.cgColor, inset: 116)
+        captureHint.attach(to: layer)
 
         // Install the delegate that overrides fullscreen content size so
         // the window covers the panel's notch reserve zone on notched
@@ -423,6 +447,7 @@ public final class StreamWindow {
         self.reconnectBanner = reconnect
         self.networkBanner = network
         self.leaveHintBanner = leaveHint
+        self.captureHintBanner = captureHint
         self.displayView = view
         self.streamDelegate = delegate
         // Window mode: the red button / Cmd-W route through the delegate to
@@ -472,6 +497,7 @@ public final class StreamWindow {
         reconnectBanner.attach(to: fresh)
         networkBanner.attach(to: fresh)
         leaveHintBanner.attach(to: fresh)
+        captureHintBanner.attach(to: fresh)
         // Swap as the view's root layer - same construction as init so the
         // EDR-direct path is preserved (root layer, not a sublayer of a backing
         // layer). wantsLayer stays true.

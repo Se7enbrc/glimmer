@@ -93,8 +93,9 @@ extension InputForwarder {
         // SDL_SetRelativeMouseMode(true) - see the file-top comment.
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
-        // Window mode waits for the user's click (InputForwarder+PointerRelease).
-        if window.isKeyWindow, !pointerCaptureOnClick {
+        // Window mode opens with a free, absolute pointer; capture there is
+        // asked for (InputForwarder+WindowPointer).
+        if window.isKeyWindow, !isWindowMode {
             enterCapturedMode()
         }
     }
@@ -113,6 +114,9 @@ extension InputForwarder {
         // via `setCursorHidden(false)`, so the user is never left with an
         // invisible cursor after teardown.
         exitCapturedMode()
+        // An Esc hold can be mid-dwell at teardown. No-op in full screen,
+        // where nothing ever arms it.
+        cancelEscapeHold()
         removeGestureSuppressionMonitor()
         removeDiagnosticMonitors()
         removeFocusObservers()

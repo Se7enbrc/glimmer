@@ -165,26 +165,36 @@ public final class InputForwarder {
     /// a closure rather than a stored chord value.
     public var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
 
-    /// Provider for the Window-mode "Release the pointer" chord. Same
-    /// live-read closure shape as the quit/stats chords. Only consulted while
-    /// `pointerCaptureOnClick` is on.
+    /// Provider for the Window-mode pointer chord. Same live-read closure
+    /// shape as the quit/stats chords. Only consulted while `isWindowMode` is
+    /// on, where it TOGGLES capture.
     public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
-    /// Window mode: relative aim engages on a CLICK in the stream view and
-    /// lets go on the release chord or resign-key, instead of the fullscreen
-    /// always-on capture that follows key status. While released, mouse
-    /// events stay on this Mac (nothing is forwarded), the keyboard still
-    /// reaches the host if the window is key - how a console emulator
-    /// behaves. Set by the session at attach; flipped live by a Space exit
-    /// (`setPointerCaptureOnClick`). Everything it gates is in
-    /// InputForwarder+PointerRelease.swift.
-    var pointerCaptureOnClick: Bool = false
+    /// Window mode: the pointer is a normal Mac pointer mirrored onto the host
+    /// as absolute positions, and relative capture is an exception entered
+    /// deliberately (titlebar button, pointer chord) and left with a held Esc.
+    /// Full screen keeps the always-on capture that follows key status. Set by
+    /// the session at attach; flipped live by a Space exit (`setWindowMode`).
+    /// Everything it gates is in InputForwarder+WindowPointer.swift.
+    var isWindowMode: Bool = false
 
-    /// Fired on every capture edge (true = engaged) while
-    /// `pointerCaptureOnClick` is on. StreamWindow hides and shows the cursor
-    /// off it - visibility stays the window's, this only reports the edge.
-    /// NEVER fired in full screen, where the window's own show / resign /
-    /// becomeKey path owns the cursor exactly as before.
+    /// The stream's pixel dimensions, the reference frame absolute pointer
+    /// positions are measured in. Set by the session at start and re-set on a
+    /// reconnect that changes resolution; `.zero` (full screen, or before the
+    /// session sets it) makes the absolute path a no-op rather than sending a
+    /// position against a frame that does not exist.
+    var streamPixelSize: CGSize = .zero
+
+    /// In-flight "hold Esc to free the pointer" dwell (window mode, captured
+    /// only). Stored here because extensions can't add stored properties; the
+    /// decision table and the timer live in InputForwarder+EscapeHold.swift.
+    var escapeHoldTask: Task<Void, Never>?
+
+    /// Fired on every capture edge (true = engaged) while `isWindowMode` is
+    /// on. StreamWindow hides and shows the cursor off it - visibility stays
+    /// the window's, this only reports the edge. NEVER fired in full screen,
+    /// where the window's own show / resign / becomeKey path owns the cursor
+    /// exactly as before.
     var onPointerCaptureChanged: (@MainActor (Bool) -> Void)?
 
     /// Controller-side quit chord. The ControllerForwarder extension
