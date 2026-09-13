@@ -251,17 +251,24 @@ struct StreamPathMTUTests {
         #expect(path.isRemotePath)
     }
 
-    /// The live case: ~50 ms tunnel → 0.50 → 84 becomes 42 Mbps. The host's
-    /// encoder was independently measured running 37-50 Mbps on this same path,
-    /// so the ceiling lands where reality already was.
+    /// The live case: a steady ~50 ms tunnel → 0.50 → 84 becomes 42 Mbps. The
+    /// host's encoder was measured delivering 37-50 Mbps on that path.
     @Test func fiftyMsTunnelHalvesTheAsk() {
-        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: RttStats(samples: [50]))
+        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true,
+                                   rtt: RttStats(samples: Array(repeating: 50, count: 6)))
         #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 42_000)
     }
 
+    /// One sample is an anecdote, not a level: too few samples cap nothing.
+    @Test func tooFewSamplesCapNothing() {
+        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true,
+                                   rtt: RttStats(samples: [50, 52, 55, 60]))
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 84_000)
+    }
+
     @Test func rttBandsAreMonotonicallyStricter() {
-        let bands: [(Double, Double)] = [(1, 1.00), (9.9, 1.00), (10, 0.75),
-                                         (29, 0.75), (30, 0.50), (59, 0.50),
+        let bands: [(Double, Double)] = [(1, 1.00), (9.9, 1.00), (19.9, 1.00),
+                                         (20, 0.75), (29, 0.75), (30, 0.50), (59, 0.50),
                                          (60, 0.35), (250, 0.35)]
         for (rtt, expected) in bands {
             #expect(StreamPathMTU.bitrateCeilingFraction(rttMs: rtt) == expected,
@@ -281,7 +288,8 @@ struct StreamPathMTUTests {
 
     /// However distant the host, never ask below the floor.
     @Test func capNeverGoesBelowTheFloor() {
-        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: RttStats(samples: [300]))
+        let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true,
+                                   rtt: RttStats(samples: Array(repeating: 300, count: 6)))
         let capped = StreamPathMTU.cappedBitrateKbps(configured: 20_000, path: path)
         #expect(capped == StreamPathMTU.minimumBitrateKbps)
     }
@@ -295,33 +303,58 @@ struct StreamPathMTUTests {
         }
     }
 
-    // MARK: - RTT distribution (p95 is what the gate bands on)
+    // MARK: - RTT distribution (the gate bands on the steady level, p25)
 
-    /// The gate must key on the TAIL. A link whose floor looks fine but whose
-    /// tail is 10x worse is bufferbloated and will stutter; banding on min would
-    /// hide exactly that, which is the whole reason p95 is the chosen statistic.
-    @Test func gateBandsOnTheTailNotTheFloor() throws {
-        // A realistically bloated link: the floor still looks like a LAN (8 ms)
-        // but a quarter of the samples are stuck behind a full queue. Note this
-        // needs a SUSTAINED tail, not one spike - a single outlier in 20 is
-        // exactly 5% and p95 correctly sits at the boundary rather than chasing
-        // it, which is the statistic behaving as intended.
+    /// A burst of bad samples (post-wake, a busy host, a Wi-Fi tail) is not a
+    /// level. A quarter of the samples stuck behind a queue caps nothing.
+    @Test func aMinorityOfBadSamplesCapsNothing() throws {
         let samples = Array(repeating: 8.0, count: 15) + Array(repeating: 120.0, count: 5)
         let stats = try #require(RttStats(samples: samples))
         #expect(stats.minMs == 8)
+        #expect(stats.steadyMs == 8)
         #expect(stats.p95Ms == 120)
         let path = StreamPathProbe(interfaceName: "en0", mtu: 1500, isTunnel: false, rtt: stats)
-        // Banding on min would call this local and cap nothing. On p95 it is
-        // correctly treated as a distant/congested path.
-        #expect(path.isRemotePath)
-        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) < 84_000)
+        #expect(!path.isRemotePath)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 84_000)
         #expect(stats.tailRatio == 15)
+    }
+
+    /// The owner's example: a LAN run, three 7-second stalls, one 16. No cap.
+    @Test func afewSevenSecondStallsDoNotSkewTheLevel() throws {
+        let stats = try #require(RttStats(samples: [1, 2, 3, 5, 7000, 7000, 7000, 16]))
+        #expect(stats.steadyMs <= 5)
+        let path = StreamPathProbe(interfaceName: "en0", mtu: 1500, isTunnel: false, rtt: stats)
+        #expect(!path.isRemotePath)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 84_000)
+    }
+
+    /// Consistently high does cap: three quarters of the samples at 45 ms.
+    @Test func aConsistentlyHighLevelCaps() throws {
+        let samples = Array(repeating: 8.0, count: 5) + Array(repeating: 45.0, count: 15)
+        let stats = try #require(RttStats(samples: samples))
+        #expect(stats.steadyMs == 45)
+        let path = StreamPathProbe(interfaceName: "en0", mtu: 1500, isTunnel: false, rtt: stats)
+        #expect(path.isRemotePath)
+        #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 42_000)
+    }
+
+    /// The friend's-house session: launch-window samples 24-76 ms on a path the
+    /// stream later measured at 10 ms. Pre-launch samples must win.
+    @Test func preLaunchSamplesOutrankLaunchWindowSamples() {
+        let pre = Array(repeating: 10.5, count: 12)
+        let launch = [24.5, 31.0, 55.4, 60.2, 76.2]
+        let chosen = RttSampler.gateSamples(pre + launch, preLaunchCount: pre.count)
+        #expect(chosen == pre)
+        // Too thin a pre-launch window falls back to everything.
+        #expect(RttSampler.gateSamples(pre + launch, preLaunchCount: 3) == pre + launch)
+        #expect(RttSampler.gateSamples(pre + launch, preLaunchCount: nil) == pre + launch)
     }
 
     @Test func percentilesAreOrdered() throws {
         let stats = try #require(RttStats(samples: [50, 10, 30, 20, 40]))
         #expect(stats.minMs == 10)
-        #expect(stats.minMs <= stats.p50Ms)
+        #expect(stats.minMs <= stats.steadyMs)
+        #expect(stats.steadyMs <= stats.p50Ms)
         #expect(stats.p50Ms <= stats.p95Ms)
         #expect(stats.count == 5)
     }

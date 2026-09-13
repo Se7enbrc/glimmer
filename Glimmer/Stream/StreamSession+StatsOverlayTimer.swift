@@ -54,9 +54,11 @@ extension StreamSession {
             // Per-second-rate baselines for the perceived-hitch pill, carried
             // across ticks. Reference type so the timer closure mutates one box.
             let hitchBox = PerceivedHitchBox()
+            let gateAudit = LinkGateAuditBox()
             let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
                 MainActor.assumeIsolated {
                     guard let dec, let win else { return }
+                    gateAudit.tick(streamRtt: dec.telemetryEstimatedRtt()?.rttMs)
                     // Cheap stats read FIRST (cached ~1s window) so the pill
                     // works with the HUD off - the expensive host/controller
                     // probes below stay gated on `statsOverlayEnabled`.
@@ -134,6 +136,28 @@ extension StreamSession {
             timer.tolerance = 0.03
             self.statsOverlayTimer = timer
         }
+    }
+}
+
+/// One-shot, ~10 s into the stream: grade the connect-time RTT prior against
+/// what the stream itself measures, so every session leaves a verdict in the log.
+@MainActor
+private final class LinkGateAuditBox {
+    private var done = false
+    private let firstTime = CACurrentMediaTime()
+    private let settleSeconds: CFTimeInterval = 10
+
+    func tick(streamRtt: Double?) {
+        guard !done, CACurrentMediaTime() - firstTime >= settleSeconds else { return }
+        guard let streamRtt, let gate = StreamPathMTU.currentGateDecision, let assumed = gate.rtt else { return }
+        done = true
+        let ratio = streamRtt > 0 ? assumed.steadyMs / streamRtt : 0
+        Diag.notice(
+            "Link gate audit: assumed steady \(String(format: "%.0f", assumed.steadyMs)) ms "
+            + "(\(assumed.count) samples\(gate.rttPreLaunch ? " before launch" : "")), "
+            + "stream measures \(String(format: "%.1f", streamRtt)) ms at 10 s "
+            + "(\(String(format: "%.1fx", ratio))) - asked \(gate.askedBitrateKbps / 1000) "
+            + "of \(gate.configuredBitrateKbps / 1000) Mbps.", "Stream")
     }
 }
 

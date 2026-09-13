@@ -91,15 +91,13 @@ extension StreamSession {
         // belt-and-braces overlap with stop() on the success / backend-failure
         // paths is harmless.
         defer { if !startHandedOff { shutdownOrphanedNetwork() } }
+        // Sample latency from the click, on a host that is still idle. The gate
+        // bands on the samples taken before /launch: once the game starts and
+        // the display switches, handshakes read 3-7x the path's true RTT.
+        let rttSampler = RttSampler(host: server.address, port: UInt16(server.httpsPort))
         let serverInfo = try await fetchAndVerifyServerInfo(network: network)
-
-        // Start sampling latency NOW, so the distribution accumulates across the
-        // /launch + RTSP wall-clock we are about to spend anyway (measured: 1383
-        // ms and ~960 ms respectively). Harvested in makeBackendConfig just
-        // before the SDP is built, which is the last moment the bitrate can be
-        // chosen - after ANNOUNCE it is fixed for the session. Costs no added
-        // connect latency; a LAN's samples simply never trip the gate.
-        let rttSampler = RttSampler(host: serverInfo.address, port: UInt16(serverInfo.httpsPort))
+        await rttSampler.awaitPreLaunchWindow()
+        rttSampler.markLaunch()
 
         // --- 2) Decide launch vs. resume vs. quit-then-launch -----------
         // GameStream hosts only run one session at a time. If a previous
@@ -123,7 +121,8 @@ extension StreamSession {
 
         // --- 3) Build the backend stream config -------------------------
         let backendConfig = makeBackendConfig(
-            config: config, launch: launch, server: serverInfo, rtt: rttSampler.harvest())
+            config: config, launch: launch, server: serverInfo,
+            rtt: rttSampler.harvest(), rttPreLaunch: rttSampler.usesPreLaunchWindow)
 
         // Diagnostic so "are we actually streaming at the right refresh rate"
         // is a one-line question. requestedFps is what we tell Sunshine;

@@ -24,7 +24,7 @@ extension StreamSession {
     /// launch handshake.
     func makeBackendConfig(
         config: StreamConfig, launch: LaunchResponse, server: ServerInfo,
-        rtt: RttStats? = nil
+        rtt: RttStats? = nil, rttPreLaunch: Bool = false
     ) -> BackendStreamConfig {
         // Resolve `.auto` from the route we will actually egress on. Without
         // this, `.auto` (STREAM_CFG_AUTO = 2) never equals STREAM_CFG_REMOTE and
@@ -57,19 +57,22 @@ extension StreamSession {
                 Path probe: if=\(path.interfaceName ?? "?", privacy: .public) \
                 mtu=\(path.mtu ?? -1, privacy: .public) \
                 tunnel=\(path.isTunnel, privacy: .public) \
-                rtt=p95 \(path.rtt.map { String(format: "%.0f", $0.p95Ms) } ?? "?", privacy: .public)ms \
+                rtt=steady \(path.rtt.map { String(format: "%.0f", $0.steadyMs) } ?? "?", privacy: .public)ms \
                 (min \(path.rtt.map { String(format: "%.0f", $0.minMs) } ?? "?", privacy: .public) \
                 p50 \(path.rtt.map { String(format: "%.0f", $0.p50Ms) } ?? "?", privacy: .public) \
-                n=\(path.rtt?.count ?? 0, privacy: .public)) \
+                p95 \(path.rtt.map { String(format: "%.0f", $0.p95Ms) } ?? "?", privacy: .public) \
+                n=\(path.rtt?.count ?? 0, privacy: .public) \
+                \(rttPreLaunch ? "pre-launch" : "all", privacy: .public)) \
                 → remoteness=\(resolvedRemoteness == .remote ? "remote" : "local", privacy: .public) \
                 bitrate=\(config.bitrateKbps, privacy: .public)→\(cappedBitrateKbps, privacy: .public)kbps
                 """)
         }
         if cappedBitrateKbps < config.bitrateKbps {
             Diag.notice(
-                "Link quality gate: p95 \(path.rttMs.map { String(format: "%.0f", $0) } ?? "?")ms RTT "
+                "Link quality gate: steady \(path.rttMs.map { String(format: "%.0f", $0) } ?? "?")ms RTT "
                 + "(min \(path.rtt.map { String(format: "%.0f", $0.minMs) } ?? "?")ms, "
-                + "\(path.rtt?.count ?? 0) samples) over "
+                + "p95 \(path.rtt.map { String(format: "%.0f", $0.p95Ms) } ?? "?")ms, "
+                + "\(path.rtt?.count ?? 0) samples\(rttPreLaunch ? " before launch" : "")) over "
                 + "\(path.isTunnel ? "a tunnel" : "this path") - asking for "
                 + "\(cappedBitrateKbps / 1000) Mbps instead of \(config.bitrateKbps / 1000) "
                 + "(a LAN-measured rate isn't a defensible ask at this distance).", "Stream")
@@ -96,7 +99,7 @@ extension StreamSession {
         // log doesn't capture anything emitted this early (see LinkGateDecision).
         StreamPathMTU.latchGateDecision(LinkGateDecision(
             interfaceName: path.interfaceName, mtu: path.mtu, isTunnel: path.isTunnel,
-            rtt: path.rtt, configuredBitrateKbps: config.bitrateKbps,
+            rtt: path.rtt, rttPreLaunch: rttPreLaunch, configuredBitrateKbps: config.bitrateKbps,
             askedBitrateKbps: cappedBitrateKbps, packetSize: resolvedPacketSize))
         return BackendStreamConfig(
             width: Int32(config.width),
