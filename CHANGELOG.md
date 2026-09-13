@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.9.2 - Unreleased
+## 2026.9.2 - 2026-09-13
 
 Remote streams are judged by the path, not by the moment you pressed Play.
 
