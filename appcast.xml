@@ -6,6 +6,20 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.9.1</title>
+      <description><![CDATA[
+<p>Three fixes reported by an early user, all small, all real.</p>
+<p>Command chords no longer leave a key held on the PC. macOS never tells an app when a letter comes up while Command is held, so Command-D (Win-D on the host) sent the press and never the release, and the PC kept typing d until the key was pressed again on its own. Glimmer now catches those releases itself. This only ever affected streams with "capture system keys" on.</p>
+<p>Typing a custom resolution works again. The fields checked their limits on every keystroke, so a height that began with 1 became 480 before you could finish, and the rest of what you typed landed on top of that. The limits now apply when you leave the field.</p>
+<p>Watch stream's health shows from the first frame. The overlay was being shown and hidden in the same instant at stream start and the hide won, so the stats only appeared after two presses of the hotkey.</p>
+]]></description>
+      <pubDate>Sun, 13 Sep 2026 17:25:36 GMT</pubDate>
+      <sparkle:version>20260913</sparkle:version>
+      <sparkle:shortVersionString>2026.9.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.9.1/Glimmer-2026.9.1.zip" type="application/octet-stream" sparkle:edSignature="6nWvW+yO6FyEVi2uSiaRRBGABnd7viCfpTzdVLXXx5uGzx7vF7FRe/P+FZuVx7nqvcMwXieHcCSiPM41Xzs5DA==" length="8307059" />
+    </item>
+    <item>
       <title>2026.9.0</title>
       <description><![CDATA[
 <p>You can now stream in a window, and two full-screen dead ends are gone.</p>
