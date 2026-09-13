@@ -93,6 +93,7 @@ extension InputForwarder {
         // SDL_SetRelativeMouseMode(true) - see the file-top comment.
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
+        installCommandKeyUpMonitor()
         if window.isKeyWindow, !isWindowMode {
             enterCapturedMode()
         }
@@ -126,6 +127,7 @@ extension InputForwarder {
         // survive into the next stream and swallow its first hover grab.
         isHoverCaptureSuppressed = false
         removeGestureSuppressionMonitor()
+        removeCommandKeyUpMonitor()
         removeDiagnosticMonitors()
         removeFocusObservers()
 

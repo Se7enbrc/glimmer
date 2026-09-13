@@ -146,6 +146,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {
+        guard !isDuplicateKeyUp(event) else { return }
         // Cancel a pending Esc hold FIRST, ahead of every gate below: a tap
         // must behave exactly as it did before the gesture existed, including
         // while the stream is mid-handshake and forwarding nothing.

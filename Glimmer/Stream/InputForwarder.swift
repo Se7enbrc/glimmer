@@ -402,6 +402,14 @@ public final class InputForwarder {
     /// InputForwarder+Capture.swift - not the old associate-false freeze.
     var gestureSuppressionMonitor: Any?
 
+    /// NSEvent local-monitor token for ⌘-held key-ups, which AppKit otherwise
+    /// never delivers to the first responder. See InputForwarder+CommandKeyUp.
+    var commandKeyUpMonitor: Any?
+
+    /// Last key-up seen, so a key-up delivered by both the responder chain and
+    /// the ⌘ monitor is forwarded once.
+    var lastKeyUpStamp: KeyUpStamp?
+
     /// NSEvent local-monitor token for the diagnostic event tap. While
     /// streaming (i.e. `isReady == true`) and the stream window is key, this
     /// monitor logs every event AppKit delivers to our process so we can

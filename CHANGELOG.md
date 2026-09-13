@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.9.1 - 2026-09-13
+
+Three fixes reported by an early user, all small, all real.
+
+Command chords no longer leave a key held on the PC. macOS never tells an app
+when a letter comes up while Command is held, so Command-D (Win-D on the host)
+sent the press and never the release, and the PC kept typing d until the key was
+pressed again on its own. Glimmer now catches those releases itself. This only
+ever affected streams with "capture system keys" on.
+
+Typing a custom resolution works again. The fields checked their limits on every
+keystroke, so a height that began with 1 became 480 before you could finish, and
+the rest of what you typed landed on top of that. The limits now apply when you
+leave the field.
+
+Watch stream's health shows from the first frame. The overlay was being shown
+and hidden in the same instant at stream start and the hide won, so the stats
+only appeared after two presses of the hotkey.
+
 ## 2026.9.0 - 2026-09-10
 
 You can now stream in a window, and two full-screen dead ends are gone.
