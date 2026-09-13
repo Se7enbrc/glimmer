@@ -397,13 +397,11 @@ public final class StreamWindow {
         // composites the overlay's sRGB text against the layer's HDR
         // contents correctly.
         //
-        // Created hidden - StreamSession's overlay timer toggles
-        // `isHidden` from `VideoDecoder.statsOverlayEnabled` and pushes
-        // text updates at 4 Hz (the FPS rows stay on a ~1s average; the
-        // latency rows refresh live each tick).
+        // Born hidden (its own init). StreamSession seeds visibility from the
+        // user's preference at stream start, the hotkey flips it, and the overlay
+        // timer pushes text at 4 Hz (FPS rows ~1s average, latency rows live).
         let overlay = StatsOverlayLayer()
         overlay.attach(to: layer)
-        overlay.setVisible(false)
 
         // Transient signal pills (sibling sublayers of the display layer, above
         // the stats panel). Created hidden; the session drives them on edges.

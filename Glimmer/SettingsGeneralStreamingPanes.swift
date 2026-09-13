@@ -184,27 +184,37 @@ struct QualityPane: View {
         }
     }
 
-    /// Width clamp: 640..7680 (480p min, 8K max). Matches Moonlight's
-    /// upstream bounds. Wired to .onChange so it runs on EVERY commit:
-    /// TextField(value:format:) writes the binding whenever editing ends -
-    /// focus loss included - and the old Return-only .onSubmit clamp let a
-    /// click-away commit feed raw values (0, 99999) straight into the
-    /// stream config, the bitrate guidance, and the session-receipt mode
-    /// keys. The binding still only commits on editing end (never per
-    /// keystroke), so the clamp can't fight a transient mid-edit value.
-    /// Bounds mirror the init()-time heal in AppModel.
-    private func clampCustomResolution() {
-        let width = StreamSizeBounds.clampWidth(model.customWidth)
-        if width != model.customWidth { model.customWidth = width }
-        let height = StreamSizeBounds.clampHeight(model.customHeight)
-        if height != model.customHeight { model.customHeight = height }
+    /// Which Custom field has keyboard focus. `TextField(value:format:)` writes
+    /// the binding per keystroke, so a clamp must wait for focus to leave (#87):
+    /// clamping "1" to 480 mid-edit turned a typed 1200 into 4320.
+    @FocusState private var focusedCustomField: CustomField?
+    private enum CustomField { case width, height, fps }
+
+    /// Width 640..7680, height 480..4320 (Moonlight's bounds; mirrors AppModel's
+    /// init-time heal). Runs on focus loss, Return, and on writes made while the
+    /// field is not being edited (Presets menu, "Use native resolution").
+    private func clampCustomResolution(force: Bool = false) {
+        if force || focusedCustomField != .width {
+            let width = StreamSizeBounds.clampWidth(model.customWidth)
+            if width != model.customWidth { model.customWidth = width }
+        }
+        if force || focusedCustomField != .height {
+            let height = StreamSizeBounds.clampHeight(model.customHeight)
+            if height != model.customHeight { model.customHeight = height }
+        }
     }
-    /// FPS clamp: 30..240. Sunshine + GFE both refuse anything outside
-    /// this band; clamping at the UI saves a confused stream-failure
-    /// trip. Same every-commit .onChange wiring as the resolution clamp.
-    private func clampCustomFPS() {
+    /// FPS 30..240: Sunshine and GFE refuse anything outside this band. Same
+    /// focus-aware wiring as the resolution clamp.
+    private func clampCustomFPS(force: Bool = false) {
+        guard force || focusedCustomField != .fps else { return }
         let fps = StreamSizeBounds.clampFPS(model.customFPS)
         if fps != model.customFPS { model.customFPS = fps }
+    }
+    /// Focus moved: clamp whatever was just edited. `force` is for the pane
+    /// going away mid-edit, when focus state can no longer be trusted.
+    private func clampCustomFields(force: Bool = false) {
+        clampCustomResolution(force: force)
+        clampCustomFPS(force: force)
     }
 
     var body: some View {
@@ -291,12 +301,16 @@ struct QualityPane: View {
                             .frame(width: 70)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
+                            .focused($focusedCustomField, equals: .width)
+                            .onSubmit { focusedCustomField = nil }
                             .onChange(of: model.customWidth) { _, _ in clampCustomResolution() }
                         Text("×").foregroundStyle(.secondary)
                         TextField("", value: $model.customHeight, format: .number)
                             .frame(width: 70)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
+                            .focused($focusedCustomField, equals: .height)
+                            .onSubmit { focusedCustomField = nil }
                             .onChange(of: model.customHeight) { _, _ in clampCustomResolution() }
                     }
                     HStack {
@@ -306,9 +320,13 @@ struct QualityPane: View {
                             .frame(width: 60)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
+                            .focused($focusedCustomField, equals: .fps)
+                            .onSubmit { focusedCustomField = nil }
                             .onChange(of: model.customFPS) { _, _ in clampCustomFPS() }
                         Text("Hz").foregroundStyle(.secondary)
                     }
+                    .onChange(of: focusedCustomField) { _, _ in clampCustomFields() }
+                    .onDisappear { clampCustomFields(force: true) }
                     // No bitrate row. Asking someone to pick a wire budget -
                     // and then to decide whether we should pick it for them -
                     // is two questions we can answer better ourselves from the

@@ -159,6 +159,10 @@ public final class StatsOverlayLayer {
         bg.zPosition = 1_000  // above any future sublayers of displayLayer.
         bg.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
         bg.actions = StatsOverlayLayer.disabledActions
+        // Born hidden so the layer agrees with `isVisible` (false) from the start;
+        // the owner seeds the real state through `setVisible(_:)`.
+        bg.isHidden = true
+        bg.opacity = 0.0
 
         self.layer = bg
     }
@@ -272,18 +276,31 @@ public final class StatsOverlayLayer {
         }
     }
 
+    /// What the owner last asked for. `setVisible` de-dups against this, never
+    /// `layer.isHidden`: a hide flips that from a deferred completion block, so a
+    /// show in the same turn used to see "not hidden" and return early (#88).
+    public private(set) var isVisible = false
+
+    /// Bumped per `setVisible` call so a hide's completion knows whether a show
+    /// overtook it mid-fade; a stale completion must not hide a re-shown panel.
+    private var visibilityGeneration = 0
+
     /// Show or hide the overlay. Uses a 120 ms crossfade so a hotkey-driven
     /// toggle feels snappy without being abrupt, matching the design spec.
     public func setVisible(_ visible: Bool) {
-        if visible == !layer.isHidden { return }
+        if visible == isVisible { return }
+        isVisible = visible
+        visibilityGeneration &+= 1
+        let generation = visibilityGeneration
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.12)
         if visible {
             layer.isHidden = false
             layer.opacity = 1.0
         } else {
-            CATransaction.setCompletionBlock { [weak layer] in
-                layer?.isHidden = true
+            CATransaction.setCompletionBlock { [weak self] in
+                guard let self, self.visibilityGeneration == generation else { return }
+                self.layer.isHidden = true
             }
             layer.opacity = 0.0
         }

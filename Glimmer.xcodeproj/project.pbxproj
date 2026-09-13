@@ -221,6 +221,7 @@
 		DEC0DE840000000000000015 /* PointerMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000016 /* PointerMapping.swift */; };
 		DEC0DE840000000000000017 /* InputForwarder+EscapeHold.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */; };
 		DEC0DE84000000000000001D /* InputForwarder+HoverCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001E /* InputForwarder+HoverCapture.swift */; };
+		DEC0DE2026091300000000B3 /* InputForwarder+CommandKeyUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */; };
 		DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */; };
 		DEC0DE840000000000000009 /* AppModel+RawHID.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000000A /* AppModel+RawHID.swift */; };
 		DEC0DE84000000000000000B /* TerminationGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000000C /* TerminationGate.swift */; };
@@ -257,6 +258,8 @@
 		DEC0DE840000000000000011 /* StreamDisplayModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000012 /* StreamDisplayModeTests.swift */; };
 		DEC0DE840000000000000013 /* TerminationGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000014 /* TerminationGateTests.swift */; };
 		DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001C /* WindowPointerTests.swift */; };
+		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
+		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */; };
 		D2000037 /* KeyboardScanMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000036 /* KeyboardScanMapTests.swift */; };
 		D20000A1 /* ControllerQuitChordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000A0 /* ControllerQuitChordTests.swift */; };
@@ -518,6 +521,7 @@
 		DEC0DE840000000000000016 /* PointerMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/PointerMapping.swift; sourceTree = "<group>"; };
 		DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+EscapeHold.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000001E /* InputForwarder+HoverCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+HoverCapture.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+CommandKeyUp.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+PointerAffordances.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000000A /* AppModel+RawHID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RawHID.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000000C /* TerminationGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminationGate.swift; sourceTree = "<group>"; };
@@ -555,6 +559,8 @@
 		DEC0DE840000000000000012 /* StreamDisplayModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayModeTests.swift; sourceTree = "<group>"; };
 		DEC0DE840000000000000014 /* TerminationGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminationGateTests.swift; sourceTree = "<group>"; };
 		DEC0DE84000000000000001C /* WindowPointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPointerTests.swift; sourceTree = "<group>"; };
+		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOReportSamplerLifetimeTests.swift; sourceTree = "<group>"; };
 		D2000036 /* KeyboardScanMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardScanMapTests.swift; sourceTree = "<group>"; };
 		D20000A0 /* ControllerQuitChordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerQuitChordTests.swift; sourceTree = "<group>"; };
@@ -718,6 +724,7 @@
 				DEC0DE840000000000000016 /* PointerMapping.swift */,
 				DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */,
 				DEC0DE84000000000000001E /* InputForwarder+HoverCapture.swift */,
+				DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */,
 				DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */,
 				DEC0DE84000000000000000A /* AppModel+RawHID.swift */,
 				DEC0DE84000000000000000C /* TerminationGate.swift */,
@@ -909,6 +916,8 @@
 				DEC0DE840000000000000012 /* StreamDisplayModeTests.swift */,
 				DEC0DE840000000000000014 /* TerminationGateTests.swift */,
 				DEC0DE84000000000000001C /* WindowPointerTests.swift */,
+				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
+				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */,
 				D2000036 /* KeyboardScanMapTests.swift */,
 				D20000A0 /* ControllerQuitChordTests.swift */,
@@ -1125,6 +1134,7 @@
 				DEC0DE840000000000000015 /* PointerMapping.swift in Sources */,
 				DEC0DE840000000000000017 /* InputForwarder+EscapeHold.swift in Sources */,
 				DEC0DE84000000000000001D /* InputForwarder+HoverCapture.swift in Sources */,
+				DEC0DE2026091300000000B3 /* InputForwarder+CommandKeyUp.swift in Sources */,
 				DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */,
 				DEC0DE840000000000000009 /* AppModel+RawHID.swift in Sources */,
 				DEC0DE84000000000000000B /* TerminationGate.swift in Sources */,
@@ -1302,6 +1312,8 @@
 				DEC0DE840000000000000011 /* StreamDisplayModeTests.swift in Sources */,
 				DEC0DE840000000000000013 /* TerminationGateTests.swift in Sources */,
 				DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */,
+				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
+				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */,
 				D2000037 /* KeyboardScanMapTests.swift in Sources */,
 				D20000A1 /* ControllerQuitChordTests.swift in Sources */,
