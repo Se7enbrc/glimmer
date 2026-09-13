@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.9.2 - Unreleased
+
+Remote streams are judged by the path, not by the moment you pressed Play.
+
+The connect-time latency check used to sample while the PC was busy launching
+your game, and it took the worst sample as the verdict. A 10 ms fiber hop read
+as 76 ms and got 28 Mbps instead of 80. It now samples before the launch, on an
+idle host, and bands on the steady level: three quarters of the samples have to
+agree before anything is trimmed, so a post-wake stall or a few Wi-Fi spikes
+cannot cap a session by themselves. Paths under 20 ms get the full rate. Ten
+seconds into every stream the log now grades that verdict against what the
+stream itself measures.
+
 ## 2026.9.1 - 2026-09-13
 
 Three fixes reported by an early user, all small, all real.

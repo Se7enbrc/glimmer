@@ -189,9 +189,11 @@ extension TelemetryExporter {
         if let mtu = gate.mtu { fields.append("\"gate_path_mtu\":\(mtu)") }
         if let rtt = gate.rtt {
             fields.append("\"gate_rtt_min_ms\":" + TelemetryRenderer.jsonNumber(rtt.minMs))
+            fields.append("\"gate_rtt_p25_ms\":" + TelemetryRenderer.jsonNumber(rtt.steadyMs))
             fields.append("\"gate_rtt_p50_ms\":" + TelemetryRenderer.jsonNumber(rtt.p50Ms))
             fields.append("\"gate_rtt_p95_ms\":" + TelemetryRenderer.jsonNumber(rtt.p95Ms))
             fields.append("\"gate_rtt_samples\":\(rtt.count)")
+            fields.append("\"gate_rtt_prelaunch\":\(gate.rttPreLaunch)")
         }
         return fields
     }

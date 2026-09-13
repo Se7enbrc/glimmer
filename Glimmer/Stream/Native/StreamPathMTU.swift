@@ -55,8 +55,8 @@ struct StreamPathProbe: Sendable {
     /// exactly one RTT). nil when unmeasured or unreachable.
     var rtt: RttStats?
 
-    /// The single number the gate bands on: the TAIL, not the floor. See RttStats.
-    var rttMs: Double? { rtt?.p95Ms }
+    /// The single number the gate bands on: the STEADY level (p25). See RttStats.
+    var rttMs: Double? { rtt?.steadyMs }
 
     /// True when this path should be treated as a remote/Internet session:
     /// a tunnel, a route whose MTU is below standard Ethernet, or an RTT no
@@ -70,15 +70,12 @@ struct StreamPathProbe: Sendable {
     }
 }
 
-/// A latency distribution measured before ANNOUNCE. `min` is the closest thing
-/// to the path's true propagation delay (a sample can only ever be inflated by
-/// queueing, never deflated below the wire time); `p95` is the TAIL, which is
-/// what actually hurts a stream - a link with min 20 ms and p95 200 ms is badly
-/// bufferbloated and will stutter, and judging it by `min` alone would hide
-/// that. The gate bands on p95 for exactly that reason; min and p50 are carried
-/// for diagnosis and to make bloat visible as the spread between them.
+/// A latency distribution measured before ANNOUNCE. The gate bands on `steadyMs`
+/// (p25): three quarters of the samples sit at or above it, so a burst of bad
+/// samples (post-wake, a busy host, Wi-Fi tail) cannot cap a path by itself.
 struct RttStats: Sendable, Equatable {
     var minMs: Double
+    var steadyMs: Double
     var p50Ms: Double
     var p95Ms: Double
     var count: Int
@@ -92,6 +89,7 @@ struct RttStats: Sendable, Equatable {
             return sorted[max(0, min(sorted.count - 1, idx))]
         }
         minMs = sorted[0]
+        steadyMs = percentile(0.25)
         p50Ms = percentile(0.50)
         p95Ms = percentile(0.95)
         count = sorted.count
@@ -102,28 +100,29 @@ struct RttStats: Sendable, Equatable {
     var tailRatio: Double { minMs > 0 ? p95Ms / minMs : 1 }
 }
 
-/// Samples RTT continuously on a background queue for the life of the
-/// pre-connect window, so the measurement rides wall-clock we are ALREADY
-/// spending (the /launch round trip alone measured 1383 ms, RTSP another ~960 ms)
-/// instead of adding any. Start it right after /serverinfo; harvest it just
-/// before the SDP is built.
+/// Samples RTT on a background queue from the Play click until the SDP is built.
+/// Samples taken before `/launch` are the ones that count: once the host starts
+/// the game and switches displays, handshakes read 3-7x the path's true RTT.
 ///
 /// THREADING: `start`/`harvest` are called from the session actor; the sampling
 /// loop owns its own queue and the sample array is lock-guarded.
 final class RttSampler: @unchecked Sendable {
     private let host: String
     private let port: UInt16
-    private let queue = DispatchQueue(label: "io.ugfugl.Glimmer.rttSampler", qos: .utility)
+    private let queue = DispatchQueue(label: "io.ugfugl.Glimmer.rttSampler", qos: .userInitiated)
     private let lock = NSLock()
     private var samples: [Double] = []
     private var stopped = false
+    /// Sample count when `markLaunch()` was called; nil until then.
+    private var preLaunchCount: Int?
 
-    /// Gap between handshakes. Loose enough that we are not hammering the host's
-    /// web port, tight enough to accumulate a usable distribution across a
-    /// ~1-2 s pre-connect window.
-    private static let intervalMs: UInt32 = 60
+    /// Gap between handshakes. Fast enough to fill the pre-launch window on a
+    /// quiet host without hammering its web port.
+    private static let intervalMs: UInt32 = 30
     /// Hard cap so a pathologically slow launch can't sample forever.
-    private static let maxSamples = 40
+    private static let maxSamples = 80
+    /// Pre-launch samples needed before the launch-window ones are ignored.
+    static let minPreLaunchSamples = 8
 
     /// Starts sampling immediately - there is no useful window between
     /// construction and the first sample, and the loop captures self WEAKLY, so
@@ -151,14 +150,53 @@ final class RttSampler: @unchecked Sendable {
         }
     }
 
-    /// Stop sampling and return the distribution gathered so far (nil if the
+    /// Wait until the pre-launch window holds `minSamples`, or `maxWaitMs` has
+    /// passed. Called on the connect path right before `/launch`.
+    func awaitPreLaunchWindow(minSamples: Int = RttSampler.minPreLaunchSamples,
+                              maxWaitMs: Int = 400) async {
+        let deadline = DispatchTime.now() + .milliseconds(maxWaitMs)
+        while DispatchTime.now() < deadline {
+            if windowIsReady(minSamples: minSamples) { return }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    private func windowIsReady(minSamples: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return samples.count >= minSamples || stopped
+    }
+
+    /// Freeze the pre-launch boundary: everything sampled after this rides the
+    /// host's game launch and is kept for diagnosis only.
+    func markLaunch() {
+        lock.lock(); preLaunchCount = samples.count; lock.unlock()
+    }
+
+    /// Stop sampling and return the distribution the gate should band on: the
+    /// pre-launch samples when there are enough, else everything (nil if the
     /// probe never succeeded - e.g. a host that refuses the port).
     func harvest() -> RttStats? {
         lock.lock()
         stopped = true
         let collected = samples
+        let boundary = preLaunchCount
         lock.unlock()
-        return RttStats(samples: collected)
+        return RttStats(samples: Self.gateSamples(collected, preLaunchCount: boundary))
+    }
+
+    /// The samples the gate bands on: the pre-launch prefix when it is big
+    /// enough to stand alone, else everything.
+    static func gateSamples(_ samples: [Double], preLaunchCount: Int?) -> [Double] {
+        if let preLaunchCount, preLaunchCount >= minPreLaunchSamples {
+            return Array(samples.prefix(preLaunchCount))
+        }
+        return samples
+    }
+
+    /// True when `harvest()` will band on pre-launch samples only.
+    var usesPreLaunchWindow: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return (preLaunchCount ?? 0) >= Self.minPreLaunchSamples
     }
 }
 
@@ -175,6 +213,8 @@ struct LinkGateDecision: Sendable {
     var mtu: Int?
     var isTunnel: Bool
     var rtt: RttStats?
+    /// Whether `rtt` is the pre-launch window (true) or every sample (false).
+    var rttPreLaunch: Bool = false
     var configuredBitrateKbps: Int
     var askedBitrateKbps: Int
     var packetSize: Int
@@ -225,46 +265,37 @@ enum StreamPathMTU {
     /// misconfigured one.
     static let minimumPacketSize = 512
 
-    /// Above this RTT we are not on a local network, whatever the interface
-    /// says. Wired LAN round-trips land at 0.5-2 ms and LAN wifi at 2-10 ms;
-    /// anything at or beyond 10 ms has left the building. Used both to classify
-    /// the path and as the first band of the bitrate ceiling below.
+    /// Above this steady RTT we are not on a local network, whatever the
+    /// interface says (wired 0.5-2 ms, LAN wifi 2-10 ms). Classifies the path for
+    /// packet size and downshift eligibility; the bitrate bands start at 20.
     static let localRttCeilingMs: Double = 10
 
-    /// RTT → fraction of the demand-based bitrate we are willing to ASK FOR.
-    ///
-    /// RTT is not a capacity measurement and this does not pretend to be one.
-    /// It is a RISK gate, and it is defensible on its own terms:
-    ///   * The demand-based anchors in QualityCalculator (84 Mbps at
-    ///     3024x1964@120) were measured on a LAN harness. Asking for a
-    ///     LAN-measured rate over a 50 ms path is not a considered choice, it is
-    ///     just the absence of one.
-    ///   * Higher RTT means more hops and a higher chance of a shared or
-    ///     congested segment - the paths that actually drop bursts.
-    ///   * Loss costs MORE at high RTT: an RFI/IDR recovery round trip scales
-    ///     with RTT, so at 50 ms a single reference break is ~100 ms of damaged
-    ///     output - 12 frames at 120fps. The same loss rate hurts proportionally
-    ///     more the further away the host is, so backing off the rate that
-    ///     PRODUCES the loss is the right direction.
-    ///
-    /// Sanity-checked against the field: on a ~50 ms tunnel this yields 0.50,
-    /// i.e. 84 -> 42 Mbps, and the host's encoder was independently measured
-    /// running at 37-50 Mbps on that same path. The ceiling lands where reality
-    /// already was, so it costs nothing that was actually being delivered.
+    /// Steady RTT → fraction of the demand-based bitrate we ASK for. A risk
+    /// prior, not a capacity measurement: loss costs more at distance (an IDR
+    /// round trip scales with RTT). Field anchor: a 35 ms tunnel → 0.50 → 42 Mbps.
     static func bitrateCeilingFraction(rttMs: Double?) -> Double {
         guard let rttMs else { return 1.0 }      // unmeasured: change nothing
         switch rttMs {
-        case ..<localRttCeilingMs: return 1.00   // LAN
-        case ..<30:                return 0.75   // same metro / good VPN
-        case ..<60:                return 0.50   // regional
-        default:                   return 0.35   // distant
+        case ..<fullRateRttCeilingMs: return 1.00  // LAN or metro fiber
+        case ..<30:                   return 0.75  // good VPN
+        case ..<60:                   return 0.50  // regional
+        default:                      return 0.35  // distant
         }
     }
+
+    /// Below this steady RTT the full demand-based ask stands. A 10-20 ms path is
+    /// remote for packet-size purposes (see `localRttCeilingMs`) but is metro
+    /// fiber, and distance alone is no reason to trim it.
+    static let fullRateRttCeilingMs: Double = 20
+
+    /// Fewer samples than this cannot cap: "consistently high" needs a sample.
+    static let minGateSamples = 5
 
     /// The bitrate to ASK FOR, given the configured (demand-based) value and the
     /// probed path. A local path returns `configured` untouched.
     static func cappedBitrateKbps(configured: Int, path: StreamPathProbe) -> Int {
         guard path.isRemotePath else { return configured }
+        guard (path.rtt?.count ?? 0) >= minGateSamples else { return configured }
         let fraction = bitrateCeilingFraction(rttMs: path.rttMs)
         guard fraction < 1.0 else { return configured }
         return max(minimumBitrateKbps, Int((Double(configured) * fraction).rounded()))
