@@ -6,6 +6,18 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.9.2</title>
+      <description><![CDATA[
+<p>Remote streams are judged by the path, not by the moment you pressed Play.</p>
+<p>The connect-time latency check used to sample while the PC was busy launching your game, and it took the worst sample as the verdict. A 10 ms fiber hop read as 76 ms and got 28 Mbps instead of 80. It now samples before the launch, on an idle host, and bands on the steady level: three quarters of the samples have to agree before anything is trimmed, so a post-wake stall or a few Wi-Fi spikes cannot cap a session by themselves. Paths under 20 ms get the full rate. Ten seconds into every stream the log now grades that verdict against what the stream itself measures.</p>
+]]></description>
+      <pubDate>Sun, 13 Sep 2026 19:23:51 GMT</pubDate>
+      <sparkle:version>20260914</sparkle:version>
+      <sparkle:shortVersionString>2026.9.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.9.2/Glimmer-2026.9.2.zip" type="application/octet-stream" sparkle:edSignature="+uGfY9jJa2O7Vz2Pt/OMlPyhSG5A9sFmovAIY5HK4F2IwM/m4P1vMN7aaiiUngEMyEmWOR/Bt3EcQkys8FEZCA==" length="8311849" />
+    </item>
+    <item>
       <title>2026.9.1</title>
       <description><![CDATA[
 <p>Three fixes reported by an early user, all small, all real.</p>
