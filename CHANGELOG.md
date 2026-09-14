@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.9.3 - 2026-09-14
+
+Fixes a crash after a stream ended, if you had visited the Custom resolution
+fields in Settings. The fix for typing into those fields in 2026.9.1 tracked
+keyboard focus, and macOS could later trip over that tracking while working out
+a tooltip. The fields now keep a value of their own and only hand the settings a
+number once it is complete and in range, which also means nothing ever rewrites
+what you are typing.
+
 ## 2026.9.2 - 2026-09-13
 
 Remote streams are judged by the path, not by the moment you pressed Play.

@@ -78,4 +78,11 @@ enum StreamSizeBounds {
     static func clampWidth(_ value: Int) -> Int { min(max(value, width.lowerBound), width.upperBound) }
     static func clampHeight(_ value: Int) -> Int { min(max(value, height.lowerBound), height.upperBound) }
     static func clampFPS(_ value: Int) -> Int { min(max(value, fps.lowerBound), fps.upperBound) }
+
+    /// What a Settings field may hand the model: the digits of `text` as a
+    /// number, only once they sit inside `range`. Nil for a half-typed value.
+    static func acceptedValue(from text: String, in range: ClosedRange<Int>) -> Int? {
+        guard let value = Int(text.filter(\.isNumber)), range.contains(value) else { return nil }
+        return value
+    }
 }

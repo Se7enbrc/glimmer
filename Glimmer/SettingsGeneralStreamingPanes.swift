@@ -184,37 +184,25 @@ struct QualityPane: View {
         }
     }
 
-    /// Which Custom field has keyboard focus. `TextField(value:format:)` writes
-    /// the binding per keystroke, so a clamp must wait for focus to leave (#87):
-    /// clamping "1" to 480 mid-edit turned a typed 1200 into 4320.
-    @FocusState private var focusedCustomField: CustomField?
-    private enum CustomField { case width, height, fps }
+    /// Text buffers for the Custom fields. The model only ever receives an
+    /// in-range value, so a half-typed "1" can't become 480 under the cursor
+    /// (#87). No @FocusState: one here dangled in SwiftUI's tooltip hit-test and crashed.
+    @State private var customWidthText = ""
+    @State private var customHeightText = ""
+    @State private var customFPSText = ""
 
-    /// Width 640..7680, height 480..4320 (Moonlight's bounds; mirrors AppModel's
-    /// init-time heal). Runs on focus loss, Return, and on writes made while the
-    /// field is not being edited (Presets menu, "Use native resolution").
-    private func clampCustomResolution(force: Bool = false) {
-        if force || focusedCustomField != .width {
-            let width = StreamSizeBounds.clampWidth(model.customWidth)
-            if width != model.customWidth { model.customWidth = width }
-        }
-        if force || focusedCustomField != .height {
-            let height = StreamSizeBounds.clampHeight(model.customHeight)
-            if height != model.customHeight { model.customHeight = height }
-        }
+    /// Commit `text` to the model when it parses and sits inside `range`.
+    private func commitCustomField(_ text: String, range: ClosedRange<Int>,
+                                   to write: (Int) -> Void) {
+        guard let value = StreamSizeBounds.acceptedValue(from: text, in: range) else { return }
+        write(value)
     }
-    /// FPS 30..240: Sunshine and GFE refuse anything outside this band. Same
-    /// focus-aware wiring as the resolution clamp.
-    private func clampCustomFPS(force: Bool = false) {
-        guard force || focusedCustomField != .fps else { return }
-        let fps = StreamSizeBounds.clampFPS(model.customFPS)
-        if fps != model.customFPS { model.customFPS = fps }
-    }
-    /// Focus moved: clamp whatever was just edited. `force` is for the pane
-    /// going away mid-edit, when focus state can no longer be trusted.
-    private func clampCustomFields(force: Bool = false) {
-        clampCustomResolution(force: force)
-        clampCustomFPS(force: force)
+
+    /// Show the model's values: on appear, and after Return settles a stray edit.
+    private func settleCustomFieldText() {
+        customWidthText = String(model.customWidth)
+        customHeightText = String(model.customHeight)
+        customFPSText = String(model.customFPS)
     }
 
     var body: some View {
@@ -297,36 +285,41 @@ struct QualityPane: View {
                         .menuStyle(.button)
                         .help("Common resolutions")
                         .fixedSize()
-                        TextField("", value: $model.customWidth, format: .number)
+                        TextField("", text: $customWidthText)
                             .frame(width: 70)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
-                            .focused($focusedCustomField, equals: .width)
-                            .onSubmit { focusedCustomField = nil }
-                            .onChange(of: model.customWidth) { _, _ in clampCustomResolution() }
+                            .onChange(of: customWidthText) { _, text in
+                                commitCustomField(text, range: StreamSizeBounds.width) { model.customWidth = $0 }
+                            }
+                            .onChange(of: model.customWidth) { _, value in customWidthText = String(value) }
+                            .onSubmit { settleCustomFieldText() }
                         Text("×").foregroundStyle(.secondary)
-                        TextField("", value: $model.customHeight, format: .number)
+                        TextField("", text: $customHeightText)
                             .frame(width: 70)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
-                            .focused($focusedCustomField, equals: .height)
-                            .onSubmit { focusedCustomField = nil }
-                            .onChange(of: model.customHeight) { _, _ in clampCustomResolution() }
+                            .onChange(of: customHeightText) { _, text in
+                                commitCustomField(text, range: StreamSizeBounds.height) { model.customHeight = $0 }
+                            }
+                            .onChange(of: model.customHeight) { _, value in customHeightText = String(value) }
+                            .onSubmit { settleCustomFieldText() }
                     }
                     HStack {
                         Text("Refresh rate")
                         Spacer()
-                        TextField("", value: $model.customFPS, format: .number)
+                        TextField("", text: $customFPSText)
                             .frame(width: 60)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
-                            .focused($focusedCustomField, equals: .fps)
-                            .onSubmit { focusedCustomField = nil }
-                            .onChange(of: model.customFPS) { _, _ in clampCustomFPS() }
+                            .onChange(of: customFPSText) { _, text in
+                                commitCustomField(text, range: StreamSizeBounds.fps) { model.customFPS = $0 }
+                            }
+                            .onChange(of: model.customFPS) { _, value in customFPSText = String(value) }
+                            .onSubmit { settleCustomFieldText() }
                         Text("Hz").foregroundStyle(.secondary)
                     }
-                    .onChange(of: focusedCustomField) { _, _ in clampCustomFields() }
-                    .onDisappear { clampCustomFields(force: true) }
+                    .onAppear { settleCustomFieldText() }
                     // No bitrate row. Asking someone to pick a wire budget -
                     // and then to decide whether we should pick it for them -
                     // is two questions we can answer better ourselves from the
