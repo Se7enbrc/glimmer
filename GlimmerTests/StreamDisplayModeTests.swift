@@ -121,4 +121,21 @@ struct StreamDisplayModeTests {
         // A degenerate aspect falls back to 16:9 rather than a zero height.
         #expect(StreamWindowGeometry.minimumContentSize(aspect: .zero) == CGSize(width: 640, height: 360))
     }
+
+    // MARK: - Custom field entry (#87 without focus tracking)
+
+    /// A half-typed value is never handed to the model; a complete one is.
+    @Test func customFieldAcceptsOnlyInRangeValues() {
+        let width = StreamSizeBounds.width
+        #expect(StreamSizeBounds.acceptedValue(from: "1", in: width) == nil)
+        #expect(StreamSizeBounds.acceptedValue(from: "19", in: width) == nil)
+        #expect(StreamSizeBounds.acceptedValue(from: "192", in: width) == nil)
+        #expect(StreamSizeBounds.acceptedValue(from: "1920", in: width) == 1920)
+        #expect(StreamSizeBounds.acceptedValue(from: "1,920", in: width) == 1920)
+        #expect(StreamSizeBounds.acceptedValue(from: "70000", in: width) == nil)
+        #expect(StreamSizeBounds.acceptedValue(from: "", in: width) == nil)
+        #expect(StreamSizeBounds.acceptedValue(from: "1200", in: StreamSizeBounds.height) == 1200)
+        #expect(StreamSizeBounds.acceptedValue(from: "12", in: StreamSizeBounds.fps) == nil)
+        #expect(StreamSizeBounds.acceptedValue(from: "120", in: StreamSizeBounds.fps) == 120)
+    }
 }
