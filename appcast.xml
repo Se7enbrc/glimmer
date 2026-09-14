@@ -6,6 +6,17 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.9.3</title>
+      <description><![CDATA[
+<p>Fixes a crash after a stream ended, if you had visited the Custom resolution fields in Settings. The fix for typing into those fields in 2026.9.1 tracked keyboard focus, and macOS could later trip over that tracking while working out a tooltip. The fields now keep a value of their own and only hand the settings a number once it is complete and in range, which also means nothing ever rewrites what you are typing.</p>
+]]></description>
+      <pubDate>Mon, 14 Sep 2026 13:08:50 GMT</pubDate>
+      <sparkle:version>20260915</sparkle:version>
+      <sparkle:shortVersionString>2026.9.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.9.3/Glimmer-2026.9.3.zip" type="application/octet-stream" sparkle:edSignature="SkSSij0B/1gQwsi2jyZY4F5/R/p+m3XL/UH3J/zd5E4Rxt/n1EXppBjpNgaqAPkPZx9eUGDGbfHD/btnrk3mAQ==" length="8309231" />
+    </item>
+    <item>
       <title>2026.9.2</title>
       <description><![CDATA[
 <p>Remote streams are judged by the path, not by the moment you pressed Play.</p>
