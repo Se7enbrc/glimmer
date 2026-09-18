@@ -271,6 +271,8 @@ extension EnetControlChannel {
             handleSetMotionEvent(payload)
         case CtrlV2.setAdaptiveTriggers:
             handleSetAdaptiveTriggers(payload)
+        case CtrlV2.setPlayerLeds:
+            handleSetPlayerLeds(payload)
         default:
             // ACKed + decrypted but not dispatched - truly-unknown types now
             // (rumble 0x010b, triggers 0x5500, and RGB LED 0x5502 each lived

@@ -62,6 +62,12 @@ enum Enet {
     /// its own per-pad channel, apart from the button/axis stream, so a
     /// retransmitted sensor sample can never stall a button edge.
     static let ctrlChannelSensorBase: UInt8 = 0x20
+
+    /// The channel a send may actually use: the requested one when the peer
+    /// granted it, else the generic channel (ControlStream.c sendMessageEnet).
+    static func effectiveChannel(_ requested: UInt8, negotiatedCount: UInt32) -> UInt8 {
+        UInt32(requested) < negotiatedCount ? requested : ctrlChannelGeneric
+    }
     /// MAX_GAMEPADS - Sunshine supports up to 16; controllerNumber %= this.
     static let maxGamepads: Int = 16
 
@@ -113,6 +119,9 @@ enum CtrlV2 {
     /// layout + the C-source citation live on handleSetAdaptiveTriggers
     /// (EnetControlChannel+Inbound.swift).
     static let setAdaptiveTriggers: UInt16 = 0x5503
+    /// Set player indicator LEDs - Sunshine 2026.906+ extension (IDX_SET_PLAYER_LEDS):
+    /// [u16 LE controllerNumber][u8 solid mask][u8 flashing mask], four bits each.
+    static let setPlayerLeds: UInt16 = 0x5504
     static let hdrInfo: UInt16 = 0x010e              // HDR mode
     /// Input data - packetTypesGen7Enc[IDX_INPUT_DATA] (ControlStream.c:209).
     /// Carries the NV_INPUT_HEADER+body that InputEncoder builds.

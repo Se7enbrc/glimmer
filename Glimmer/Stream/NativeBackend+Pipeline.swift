@@ -250,6 +250,9 @@ extension NativeBackend {
         enet.onSetRgbLed = { controllerNumber, red, green, blue in
             events.setControllerLED(controller: controllerNumber, r: red, g: green, b: blue)
         }
+        enet.onSetPlayerLeds = { controllerNumber, solid, flashing in
+            events.setPlayerLEDs(controller: controllerNumber, solid: solid, flashing: flashing)
+        }
         // Motion (0x5501) closes the loop the LI_CCAP_ACCEL/GYRO caps open:
         // the host asks for sensor reports at a rate, the sampler reads
         // GCMotion on main, and the samples ride the EXISTING input batcher
@@ -492,6 +495,11 @@ extension NativeConnectionEvents {
     func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8) {
         ControllerHaptics.shared.setLight(controllerNumber: controller,
                                           red: r, green: g, blue: b)
+    }
+
+    func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8) {
+        ControllerHaptics.shared.setPlayerLEDs(controllerNumber: controller,
+                                               solid: solid, flashing: flashing)
     }
 
     func setMotionEventState(controller: UInt16, motionType: UInt8, reportRateHz: UInt16) {

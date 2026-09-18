@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026.9.4 - Unreleased
+
+Catches up with what Sunshine changed over the summer, without changing anything
+for hosts that didn't.
+
+Your Mac now pairs under its own name. Sunshine's pairing page used to list
+Glimmer as "roth", a leftover from Moonlight's early days, and every Glimmer on
+your network identified itself with the same fixed id. Each install now sends
+its computer name and its own id to Sunshine. GFE hosts still get the shared id
+they depend on.
+
+Controller packets follow the host's channel grant. If a host opens fewer
+control channels than Glimmer asks for, controller and sensor traffic now falls
+back to the shared channel the way Moonlight does, instead of being sent into a
+channel that was never opened.
+
+Player indicator lights. Sunshine 2026.906 and later can tell the pad which
+player it is; Glimmer now sets the controller's player index from that.
+
+Holding both Shifts (or both Controls, or both Options) and letting go of one no
+longer leaves the other stuck on the host. Each side is tracked on its own, and
+a focus loss releases exactly the sides that were held.
+
 ## 2026.9.3 - 2026-09-14
 
 Fixes a crash after a stream ended, if you had visited the Custom resolution

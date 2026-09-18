@@ -146,6 +146,17 @@ extension ControllerHaptics {
         }
     }
 
+    /// Player LEDs (SET_PLAYER_LEDS) → GCController.playerIndex, which drives the
+    /// player indicators on pads that have them. Same queue as the light bar.
+    func applyPlayerLEDs(slot: UInt8, solidMask: UInt8) {
+        guard let pad = pads[slot], let controller = pad.controller else { return }
+        let index = PlayerLEDs.playerIndex(solidMask: solidMask)
+        guard controller.playerIndex != index else { return }
+        controller.playerIndex = index
+        Diag.info("player LEDs set: controller \(slot) mask=0x\(String(solidMask, radix: 16))",
+                  Self.logCategory)
+    }
+
     private func announceIfFirst(_ pad: PadHaptics, slot: UInt8) {
         guard !pad.announcedActive else { return }
         pad.announcedActive = true
@@ -412,6 +423,20 @@ extension ControllerHaptics {
 
         init(controller: GCController) {
             self.controller = controller
+        }
+    }
+}
+
+/// Pure mapping from Sunshine's four-bit player mask to a GameController player index.
+enum PlayerLEDs {
+    /// The lowest lit indicator names the player; an empty mask clears it.
+    static func playerIndex(solidMask: UInt8) -> GCControllerPlayerIndex {
+        switch solidMask & 0x0F {
+        case 0: return .indexUnset
+        case let mask where mask & 0x1 != 0: return .index1
+        case let mask where mask & 0x2 != 0: return .index2
+        case let mask where mask & 0x4 != 0: return .index3
+        default: return .index4
         }
     }
 }

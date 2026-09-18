@@ -366,10 +366,9 @@ extension Data {
 //    both accept either case in observed packet captures, but lowercase
 //    eliminates a latent divergence.
 //
-// 3. UNIQUEID / UUID - `NetworkClient.rawRequest` injects the well-known
-//    `uniqueid=0123456789ABCDEF` (matching moonlight-qt's hardcoded shared
-//    ID, see comment in nvhttp.cpp) and a fresh `uuid=` nonce per request.
-//    Pairing only passes its own keys.
+// 3. UNIQUEID / UUID - `NetworkClient.rawRequest` injects `uniqueid` (this
+//    install's id for Sunshine, moonlight-qt's shared constant for GFE) and a
+//    fresh `uuid=` nonce per request. Pairing only passes its own keys.
 //
 // 4. URL-ENCODING - URLComponents percent-encodes hex query values, which
 //    is harmless because hex chars are unreserved. Sunshine cert blobs

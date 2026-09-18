@@ -212,8 +212,9 @@ extension EnetControlChannel {
     /// SAME lock that orders the send (StreamCrypto's seq-uniqueness contract:
     /// reusing an enetSeq = GCM nonce reuse = catastrophic).
     @discardableResult
-    func sendEncryptedControl(type: UInt16, payload: [UInt8], channel: UInt8,
+    func sendEncryptedControl(type: UInt16, payload: [UInt8], channel requested: UInt8,
                               label: String) throws -> UInt16 {
+        let channel = withState { Enet.effectiveChannel(requested, negotiatedCount: negotiatedChannelCount) }
         let (seq, relSeq): (UInt32, UInt16) = withState {
             let currentSeq = enetSeq
             enetSeq += 1
@@ -288,7 +289,8 @@ extension EnetControlChannel {
     /// never tear (StreamCrypto's seq-uniqueness contract: a reused enetSeq = GCM
     /// nonce reuse = catastrophic).
     func sendEncryptedControlUnreliable(type: UInt16, payload: [UInt8],
-                                        channel: UInt8, label: String) throws {
+                                        channel requested: UInt8, label: String) throws {
+        let channel = withState { Enet.effectiveChannel(requested, negotiatedCount: negotiatedChannelCount) }
         let (seq, relSeq, unrelSeq): (UInt32, UInt16, UInt16) = withState {
             let currentSeq = enetSeq
             enetSeq += 1

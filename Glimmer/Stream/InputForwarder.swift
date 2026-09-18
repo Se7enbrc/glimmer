@@ -39,9 +39,9 @@
 //     up event for that key. `raiseAllHeldInputs()` (keys + buttons +
 //     modifiers) fires only on focus loss and `detach()` (stream teardown),
 //     so state never resets mid-game while the window stays key.
-//     `lastModFlags` is diffed against the new mask in `flagsChanged` so we
-//     only emit modifier transitions, not modifier state on every key. This
-//     matches moonlight-qt's `m_KeysDown` QSet semantics.
+//     `heldModifierVKs` (one entry per modifier SIDE) is diffed in
+//     `flagsChanged` so we only emit modifier transitions, and releasing one
+//     of two held Shifts releases exactly that one on the host.
 //
 //   * Mouse motion is *relative* via the SDL associate-false model
 //     (P0 mouse-snap fix). When relative aim is engaged we call
@@ -499,7 +499,9 @@ public final class InputForwarder {
 
     /// Last-seen modifier mask, so we can diff against the previous flagsChanged
     /// event and emit per-modifier down/up.
-    var lastModFlags: NSEvent.ModifierFlags = []
+    /// Win VK codes of the modifier sides the host currently believes are held.
+    var heldModifierVKs: Set<Int16> = []
+    var lastCapsLock = false
 
     /// Wire keycodes (0x8000|VK, exactly as sent) of non-modifier keys the host
     /// currently holds DOWN, and the mouse buttons it holds pressed. NKRO
@@ -565,22 +567,13 @@ public final class InputForwarder {
     /// fabricated event the host would react to.
     private func releaseStuckModifiers() {
         guard isReady else { return }
-        let flags = lastModFlags
-        var pairs: [(NSEvent.ModifierFlags, Int16)] = [
-            (.control, 0xA2), // VK_LCONTROL
-            (.shift, 0xA0), // VK_LSHIFT
-            (.option, 0xA4) // VK_LMENU (Alt)
-        ]
-        if captureSysKeys {
-            pairs.append((.command, 0x5B)) // VK_LWIN
-        }
-        for (flag, vk) in pairs where flags.contains(flag) {
+        for vk in heldModifierVKs.sorted() {
             let rc = backend?.sendKeyboard(
                 keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
                 action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
             record("LiSendKeyboardEvent2(modifier release)", rc)
         }
-        lastModFlags = []
+        heldModifierVKs = []
     }
 
     // Gamepad path (GameController framework integration, slot allocation,
