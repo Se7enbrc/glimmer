@@ -562,4 +562,7 @@ final class AppModel {
     /// the did-mute LATCH: the stream-end restore keys off THIS, never the live
     /// toggle - see AppModel+Audio.swift for the full contract.
     @ObservationIgnored var prePausedMacOutput: MutedOutput?
+
+    /// The launch the user last asked for, so Retry repeats exactly that.
+    @ObservationIgnored var lastLaunchAttempt: (app: LibraryApp, host: Host)?
 }

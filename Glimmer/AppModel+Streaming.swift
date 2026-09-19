@@ -48,6 +48,12 @@ extension AppModel {
         stream(app: pending.app, on: pending.host, takeoverAuthorized: true)
     }
 
+    /// Retry repeats the last requested launch, not the hero target.
+    func retryLastLaunch() {
+        guard let attempt = lastLaunchAttempt else { streamHeroApp(); return }
+        requestStream(app: attempt.app, on: attempt.host)
+    }
+
     func stream(app: LibraryApp, on host: Host, takeoverAuthorized: Bool = false) {
         // RE-ENTRANCY GUARD. The native backend runs ONE session at a time
         // (StreamBridgeContext.current is a single process-global slot), and
@@ -63,6 +69,7 @@ extension AppModel {
             return
         }
         Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
+        lastLaunchAttempt = (app, host)
         streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
         nativeStreamError = nil
         nativeHDRActive = false
@@ -119,10 +126,6 @@ extension AppModel {
         Diag.info("Show the stream: \(cfg.displayMode.displayName.lowercased()) - requesting "
             + "\(cfg.width)x\(cfg.height) at \(cfg.fps) Hz", "Stream")
         let info = nativeServerInfo(for: host)
-        // Hero-verb memory: stamp the app NAME at stream START (unlike the
-        // lastConnected DATE above) so the next launcher visit names the app in
-        // "Stream <app>" even if this session ends badly.
-        UserDefaults.standard.set(app.name, forKey: Self.lastPlayedAppKey(for: host.id))
         // Arm the session-receipt latch with this session's identity (host +
         // requested mode). The live edge stamps the wall clock; the teardown
         // hook in StreamSession.stop() adds the end-of-session numbers; the

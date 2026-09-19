@@ -341,11 +341,7 @@ private struct ConnectBanner: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Retry") {
                         model.nativeStreamError = nil
-                        // The hero verb's target, NOT streamDefaultApp(): the
-                        // failed launch stamped lastPlayedApp at start, so the
-                        // hero above still reads "Stream <app>" - a Retry that
-                        // launched the default app would contradict it.
-                        model.streamHeroApp()
+                        model.retryLastLaunch()
                     }
                     .buttonStyle(.glass)
                     .controlSize(.small)
