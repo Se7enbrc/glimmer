@@ -116,6 +116,7 @@ final class HIDGamepadManager {
 
     private func add(_ device: IOHIDDevice) {
         let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? 0
+        let product = (IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber)?.intValue ?? 0
         let name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String
         guard Self.claimAll || (![0x054C, 0x045E, 0x057E, 0x05AC].contains(vendor)
               && !GCController.controllers().contains(where: { name != nil && $0.vendorName == name })) else { return }
@@ -126,6 +127,14 @@ final class HIDGamepadManager {
         Diag.notice("Generic HID pad present; Input Monitoring access=\(access.rawValue) (0 granted, 1 denied, 2 unknown)",
                     "Controller")
         let pad = HIDGamepadDevice(device: device, id: id)
+        // A keyboard's analog side channel (Hall-effect boards expose one) looks
+        // like a pad, but its reports are keystrokes: without a known mapping the
+        // guess would drive a phantom Xbox pad on the host on every keypress.
+        if pad.mapping.isHeuristic, Self.presentsAsKeyboardOrMouse(vendor: vendor, product: product) {
+            Diag.notice("HID skipping \(pad.name) \(pad.hardwareID): a keyboard's gamepad interface with no known mapping",
+                        "Controller")
+            return
+        }
         guard pad.open() else { return }
         devices[id] = pad
         pad.onReport = { [weak self] pad in self?.onReport?(pad) }
@@ -134,6 +143,17 @@ final class HIDGamepadManager {
         onAttach?(pad)
         if access != kIOHIDAccessTypeGranted { onPermissionNeeded?(pad) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.recheckOwnership() }
+    }
+
+    /// Does the same VID:PID also enumerate as a keyboard or a mouse?
+    private static func presentsAsKeyboardOrMouse(vendor: Int, product: Int) -> Bool {
+        let probe = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        let matches = [kHIDUsage_GD_Keyboard, kHIDUsage_GD_Mouse].map {
+            [kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: $0,
+             kIOHIDVendorIDKey: vendor, kIOHIDProductIDKey: product]
+        }
+        IOHIDManagerSetDeviceMatchingMultiple(probe, matches as CFArray)
+        return ((IOHIDManagerCopyDevices(probe) as NSSet?)?.count ?? 0) > 0
     }
 
     /// After a grant: re-open every pad so reports flow without a relaunch.
