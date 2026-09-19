@@ -37,17 +37,14 @@ extension StreamSession {
     ///   from a genuine user quit in the scorecard fixes the prior single
     ///   default silently attributing a dropped consumer to the user.
     func stop(cause: DisconnectReason) async {
-        // Reentrancy guard. stop() can be triggered from multiple paths:
-        //   - the user's quit hotkey (InputForwarder.onQuitHotkey)
-        //   - the connectionTerminated callback after the backend stops
-        //   - the AsyncStream.onTermination handler when the consumer drops
-        //   - startConnection's error path in start()
-        // Any two of those can land back-to-back. We want exactly one
-        // teardown to run; subsequent callers should observe a no-op.
-        guard isStreaming, !stopInProgress else { return }
+        guard isStreaming || stopInProgress else { return }
         stopInProgress = true
         isStreaming = false
+        launchTask?.cancel()
+        await teardown.run { await self.performStop(cause: cause) }
+    }
 
+    private func performStop(cause: DisconnectReason) async {
         // Remove the sleep/wake observers + cancel any in-flight wake probe FIRST,
         // so a wake landing mid-teardown can't arm a probe against a dying session
         // (the probe also re-checks the lifecycle flags, but this is the clean cut).
@@ -146,11 +143,14 @@ extension StreamSession {
         //    blocked by an orphan session record. Best-effort; the host can
         //    be unreachable here if the network just dropped.
         if let net = network {
-            try? await net.cancel()
+            await net.setRequestDeadline(nil)
+            if ownsHostSession { try? await net.cancel() }
             // shutdown() is a no-op now (the control channel is per-request) -
             // kept for symmetry with the rest of the teardown.
             await net.shutdown()
         }
+        ownsHostSession = false
+        hostSessionClientID = nil
         network = nil
 
         // 3. MainActor-bound teardowns. Capture references first so we don't
@@ -212,190 +212,112 @@ extension StreamSession {
     }
 
     // MARK: - Launch with busy recovery
-    //
-    // Always renegotiate via `/cancel + /launch` on a user-initiated Stream
-    // click. Calling `/resume` on `currentgame == ourAppID` preserves the
-    // host-side STREAM_CONFIGURATION (resolution, FPS, HDR mode, codec
-    // set) - which breaks the multi-device flow: start a 4K@240 stream
-    // from the desktop, walk to the laptop, hit Stream → host /resumes
-    // 4K@240, ignoring the 1920x1200@120 the laptop requested.
-    //
-    // If the host was idle, `/cancel` is a no-op. If it had a stale
-    // session of ours, `/cancel` clears it. One-session-at-a-time is a
-    // host-side constraint. A future "Resume Game" affordance would need
-    // its own code path that explicitly calls /resume.
+
+    /// Idle host: /launch. Anything else: /cancel + /launch, so the host
+    /// renegotiates our config instead of /resume-ing a stale one.
     func launchWithBusyRecovery(
-        network: NetworkClient,
-        appID: Int,
-        config: StreamConfig,
-        hintCurrentGame: Int
+        network: NetworkClient, appID: Int, config: StreamConfig, info: ServerInfo, deadline: Date
     ) async throws -> LaunchResponse {
-
-        func tryLaunch() async throws -> LaunchResponse {
-            log.info("→ /launch (appID=\(appID))")
-            // Telemetry: stamp the /launch leg duration (launch sub-leg).
-            let t0 = Date().timeIntervalSinceReferenceDate
-            defer {
-                ConnectTimingTelemetry.shared.recordLaunchLeg(
-                    launchMs: (Date().timeIntervalSinceReferenceDate - t0) * 1000.0)
-            }
-            return try await network.launch(appID: appID, config: config)
-        }
-
-        // Wait for the host's `currentgame` to drop to 0, meaning Sunshine
-        // has actually torn down the session - INCLUDING running the app's
-        // Undo command (e.g. QRes.exe /X:3840 /Y:2160 /R:240 on Windows
-        // hosts that swap display resolution per stream). If we just /cancel
-        // and immediately /launch, the host can race Undo against Do: the
-        // Do command sets the requested resolution, then Undo finishes and
-        // resets to its default, last-writer-wins → user stuck at the host's
-        // default resolution. Polling /serverinfo until the Undo completes
-        // means the Do command from our subsequent /launch runs against a
-        // settled state and wins.
-        func waitForHostIdle(maxWait: TimeInterval) async {
-            // Telemetry: time the whole busy-poll + count its /serverinfo polls so
-            // the up-to-5s wait is attributable (launch_busy_wait_ms / _poll_count).
-            let waitStart = Date()
-            var polls = 0
-            let deadline = waitStart.addingTimeInterval(maxWait)
-            defer {
-                ConnectTimingTelemetry.shared.recordLaunchLeg(
-                    launchBusyWaitMs: Date().timeIntervalSince(waitStart) * 1000.0,
-                    busyPollCount: polls)
-            }
-            while Date() < deadline {
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                polls += 1
-                if let info = try? await network.fetchServerInfo(),
-                   info.currentGameID == 0 {
-                    log.info("Host idle - Undo command completed")
-                    return
-                }
-            }
-            log.info("Host idle wait timed out after \(maxWait)s; proceeding with /launch anyway")
-        }
-
-        func tryCancelThenLaunch() async throws -> LaunchResponse {
-            log.info("→ /cancel then /launch (forced renegotiation)")
-            // Telemetry: stamp the /cancel leg duration (launch sub-leg).
-            let cancelStart = Date()
-            try? await network.cancel()
-            ConnectTimingTelemetry.shared.recordLaunchLeg(
-                cancelMs: Date().timeIntervalSince(cancelStart) * 1000.0)
-            // Sunshine's Undo command on Windows hosts can take 1-3s
-            // (QRes.exe is synchronous; some user configs include a sleep
-            // for display-driver settle time). 5s ceiling is generous but
-            // bounded - we'd rather wait than land on the wrong resolution.
-            await waitForHostIdle(maxWait: 5)
-            return try await network.launch(appID: appID, config: config)
-        }
-
-        // Primary: idle host → /launch directly (no point cancelling nothing).
-        // Anything else → /cancel + /launch to force a fresh session config.
+        try checkAttempt(deadline: deadline)
+        try await authorizeOccupancy(info, network: network, deadline: deadline)
         do {
-            if hintCurrentGame == 0 {
-                return try await tryLaunch()
-            } else {
-                return try await tryCancelThenLaunch()
+            if info.currentGameID != 0 || info.isBusy {
+                return try await cancelThenLaunch(network: network, appID: appID, config: config, deadline: deadline)
             }
+            return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
         } catch let first as StreamError {
             log.error("primary launch path failed: \(String(describing: first), privacy: .public)")
-            // M6: a stop()/cancelConnect() can land during the primary leg or the
-            // host-idle poll. The actor sweeps it in at our awaits; re-check here
-            // so the recovery leg (another ~5s poll + 20s /launch) doesn't stack on
-            // a session the user already cancelled - rethrow the first error and
-            // let start()'s teardown win instead.
-            guard isStreaming, !stopInProgress else { throw first }
-            // Recovery: race between hint and actual host state. One more
-            // cancel + launch covers the "we thought idle but host had an
-            // orphan" and the "cancel raced" cases. We deliberately do NOT
-            // fall back to /resume here - that's the bug we're closing.
-            if let r = try? await tryCancelThenLaunch() { return r }
-            throw first
+            try checkAttempt(deadline: deadline)
+            let fresh = try await network.fetchServerInfo()
+            try checkAttempt(deadline: deadline)
+            try await authorizeOccupancy(fresh, network: network, deadline: deadline)
+            return try await cancelThenLaunch(network: network, appID: appID, config: config, deadline: deadline)
         }
     }
 
-    /// True once a teardown has begun - either `stop()` flipped the latch or the
-    /// session is no longer streaming. The launch-deadline watcher polls this so a
-    /// stop()/cancelConnect() landing mid-launch bounces back without waiting out
-    /// the non-cancellable HTTP leg. Actor-isolated so the read is race-free.
+    private func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
+        let client = await network.clientUniqueID
+        try checkAttempt(deadline: deadline)
+        let owner = isReconnecting && ownsHostSession && info.currentGameID == reconnectAppID
+            ? hostSessionClientID : nil
+        if StreamAttempt.requiresTakeover(
+            occupied: info.currentGameID != 0 || info.isBusy,
+            owner: owner, client: client, authorized: takeoverAuthorized) {
+            throw TakeoverRequired(appID: info.currentGameID)
+        }
+    }
+
+    private func launchHost(
+        network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date
+    ) async throws -> LaunchResponse {
+        try checkAttempt(deadline: deadline)
+        let start = Date()
+        defer { ConnectTimingTelemetry.shared.recordLaunchLeg(launchMs: Date().timeIntervalSince(start) * 1000) }
+        let response = try await network.launch(appID: appID, config: config)
+        try checkAttempt(deadline: deadline)
+        ownsHostSession = true
+        hostSessionClientID = await network.clientUniqueID
+        try checkAttempt(deadline: deadline)
+        return response
+    }
+
+    private func cancelThenLaunch(
+        network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date
+    ) async throws -> LaunchResponse {
+        try checkAttempt(deadline: deadline)
+        let start = Date()
+        try await network.cancel()
+        try checkAttempt(deadline: deadline)
+        ConnectTimingTelemetry.shared.recordLaunchLeg(cancelMs: Date().timeIntervalSince(start) * 1000)
+        try await waitForHostIdle(network: network, deadline: deadline)
+        try checkAttempt(deadline: deadline)
+        return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
+    }
+
+    private func waitForHostIdle(network: NetworkClient, deadline: Date) async throws {
+        let start = Date()
+        let idleDeadline = min(deadline, start.addingTimeInterval(5))
+        var polls = 0
+        defer {
+            ConnectTimingTelemetry.shared.recordLaunchLeg(
+                launchBusyWaitMs: Date().timeIntervalSince(start) * 1000, busyPollCount: polls)
+        }
+        while Date() < idleDeadline {
+            try checkAttempt(deadline: deadline)
+            try await Task.sleep(for: .milliseconds(250))
+            try checkAttempt(deadline: deadline)
+            polls += 1
+            let info = try await network.fetchServerInfo()
+            try checkAttempt(deadline: deadline)
+            if info.currentGameID == 0, !info.isBusy { return }
+            try await authorizeOccupancy(info, network: network, deadline: deadline)
+        }
+        try checkAttempt(deadline: deadline)
+    }
+
     var isTearingDown: Bool { !isStreaming || stopInProgress }
 
-    /// M6: run `launchWithBusyRecovery` under an overall wall-clock deadline.
-    ///
-    /// ControlTransport's HTTP leg is a blocking socket that isn't cancellation-
-    /// aware (it only unwinds on its own ~20s SO_RCVTIMEO), so we CANNOT rely on
-    /// structurally awaiting the launch - a task-group child or `Task.result`
-    /// await would pin us until that socket timed out, defeating the deadline.
-    /// Instead a first-writer-wins box collects whichever of {launch finished,
-    /// deadline/stop tripped} lands first; the read completes the instant either
-    /// writer fires, so on a timeout/cancel we return PROMPTLY and leave the
-    /// detached launch (now cancelled) to die on its own socket - rather than
-    /// stranding the user at "Connecting..." for ~55-65s. The timeout surfaces as
-    /// `.launchFailed` with honest copy.
+    /// The launch under one wall-clock deadline; a stop() mid-launch cancels it.
     func launchWithDeadline(
-        network: NetworkClient,
-        appID: Int,
-        config: StreamConfig,
-        hintCurrentGame: Int
+        network: NetworkClient, appID: Int, config: StreamConfig, info: ServerInfo, deadline: Date? = nil
     ) async throws -> LaunchResponse {
-        let deadline = Self.launchOverallDeadlineSeconds
-        let box = FirstResultBox<LaunchResponse>()
-        let launchTask = Task { [self] in
-            do {
-                let r = try await launchWithBusyRecovery(
-                    network: network, appID: appID, config: config,
-                    hintCurrentGame: hintCurrentGame)
-                await box.offer(.success(r))
-            } catch {
-                await box.offer(.failure(error))
+        let end = deadline ?? Date().addingTimeInterval(Self.launchOverallDeadlineSeconds)
+        await network.setRequestDeadline(end)
+        try checkAttempt(deadline: end)
+        let task = Task {
+            try await StreamAttempt.run(until: end) {
+                try await self.launchWithBusyRecovery(
+                    network: network, appID: appID, config: config, info: info, deadline: end)
             }
         }
-        // Watcher: trips on the wall-clock deadline OR a stop()/cancelConnect()
-        // landing mid-launch (the blocking HTTP leg can't be force-aborted, so
-        // without this the user would wait out the full deadline). Polls in 250ms.
-        let watcher = Task { [self] in
-            let end = Date().addingTimeInterval(deadline)
-            while Date() < end {
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                if Task.isCancelled { return }
-                if self.isTearingDown {
-                    await box.offer(.failure(StreamError.launchFailed("Launch cancelled.")))
-                    return
-                }
-            }
-            await box.offer(.failure(StreamError.launchFailed(
-                "Host didn't respond within \(Int(deadline))s - giving up.")))
-        }
-        // Completes as soon as EITHER writer offers; the loser's later offer is
-        // dropped by the box. Don't await the detached tasks structurally.
-        let outcome = await box.value
-        watcher.cancel()
-        // On loss (timeout/cancel won), cancel the launch - best-effort; it dies
-        // on its socket timeout and its late box.offer is a no-op.
-        if case .failure = outcome { launchTask.cancel() }
-        return try outcome.get()
-    }
-}
-
-/// First-writer-wins async box: the first `offer` latches the value and resumes
-/// the (single) pending `value` read; later offers are dropped. Used by M6 to
-/// race a non-cancellable launch against a deadline/stop watcher and return the
-/// instant either lands. Actor-isolated for race-free latching.
-private actor FirstResultBox<T: Sendable> {
-    private var result: Result<T, Error>?
-    private var waiter: CheckedContinuation<Result<T, Error>, Never>?
-
-    func offer(_ value: Result<T, Error>) {
-        guard result == nil else { return }
-        result = value
-        if let waiter { self.waiter = nil; waiter.resume(returning: value) }
-    }
-
-    var value: Result<T, Error> {
-        get async {
-            if let result { return result }
-            return await withCheckedContinuation { cont in waiter = cont }
+        launchTask = task
+        defer { launchTask = nil }
+        return try await withTaskCancellationHandler {
+            let result = try await task.value
+            try checkAttempt(deadline: end)
+            return result
+        } onCancel: {
+            task.cancel()
         }
     }
 }

@@ -269,8 +269,7 @@ extension VideoDecoder {
             self.ppsData = nil
             self.vpsData = nil
             // HDR caches: clear so the next session starts cold.
-            self.cachedMDCV = nil
-            self.cachedContentLightLevel = nil
+            self.hdrMetadataStore.publish(.empty)
             self.lastColorSpaceKey = nil
             self.lastColorSpace = nil
             self.hdrEnabled = false
@@ -297,7 +296,7 @@ extension VideoDecoder {
 
         // Drop the layer reference so a stray late-arriving frame can't
         // enqueue onto a layer the window has already torn down.
-        displayLayer = nil
+        setDisplayLayer(nil)
 
         // No bridging-pointer cleanup needed here - the backend callbacks
         // resolve us through StreamBridgeContext.current (weak). When this
@@ -322,18 +321,15 @@ extension VideoDecoder {
         // host display is hot-swapped). We honor the new metadata without
         // tearing down the layer; the next enqueued sample will pick it up
         // through the rebuilt format description.
-        let priorMDCV = cachedMDCV
-        let priorCLL = cachedContentLightLevel
+        let priorMetadata = hdrMetadataStore.snapshot
 
         if enabled {
             refreshHDRMetadataFromHost()
         } else {
-            cachedMDCV = nil
-            cachedContentLightLevel = nil
+            hdrMetadataStore.publish(.empty)
         }
 
-        let metadataChanged =
-            priorMDCV != cachedMDCV || priorCLL != cachedContentLightLevel
+        let metadataChanged = priorMetadata != hdrMetadataStore.snapshot
 
         // Invalidate the cached HDR format description so the next decoded
         // frame rebuilds it with current metadata (and toggles colorspace
@@ -365,7 +361,7 @@ extension VideoDecoder {
     /// when a hard-failed renderer is swapped for a fresh layer - so it
     /// re-installs the proactive layer observers onto the new layer.
     public func attach(to displayLayer: AVSampleBufferDisplayLayer) {
-        self.displayLayer = displayLayer
+        setDisplayLayer(displayLayer)
         // Install the proactive layer-stall observers (renderer requires-flush +
         // layer failed-to-decode) onto the new layer. Lives in
         // VideoDecoder+Suppression.swift alongside the present-suppression state.

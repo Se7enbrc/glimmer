@@ -77,13 +77,16 @@ final class ControllerMonitor {
 
     func stop() {
         HIDGamepadManager.shared.release()
-        for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
+        // A stream that started meanwhile owns these slots now; leave them to it.
+        if !isStreaming() {
+            for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
+            if hidRetained { DualSenseHID.shared.onChange = nil }
+        }
         engaged.removeAll()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
         GCController.stopWirelessControllerDiscovery()
         if hidRetained {
-            DualSenseHID.shared.onChange = nil
             DualSenseHID.shared.release()
             hidRetained = false
         }

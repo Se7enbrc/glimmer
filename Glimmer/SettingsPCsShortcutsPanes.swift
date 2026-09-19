@@ -10,6 +10,7 @@ import AppKit
 import GameController
 import os
 import ServiceManagement
+import Combine
 import SwiftUI
 
 // MARK: - PCs
@@ -318,9 +319,8 @@ private struct ChordCaptureSheet: View {
     @State private var accumulated: Set<ControllerButton> = []
     @State private var captured: Set<ControllerButton> = []
     @State private var recording = true
-    @State private var observers: [NSObjectProtocol] = []
     @State private var hidRetained = false
-    // Backstop the event-driven capture in case a release event is missed.
+    // Drives poll(): capture reads pad state, so a live stream keeps its handlers.
     private let tick = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -365,42 +365,22 @@ private struct ChordCaptureSheet: View {
         .onReceive(tick) { _ in poll() }
     }
 
-    /// Register input handlers directly (rather than via the input-test
-    /// ControllerMonitor) so capture works regardless of stream state, and so
-    /// every press/release drives `poll()` - not just the timer.
+    /// Poll-driven capture (the 30 Hz tick plus sticky accumulation), so the
+    /// sheet never takes the single-slot input handlers a live stream owns.
     private func engage() {
         HIDGamepadManager.shared.retain()
         GCController.shouldMonitorBackgroundEvents = true
         GCController.startWirelessControllerDiscovery {}
-        setGamepadHandlers()
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .GCControllerDidConnect, object: nil, queue: .main
-        ) { _ in MainActor.assumeIsolated { setGamepadHandlers() } })
         if DualSenseHID.isEnabled {
-            DualSenseHID.shared.onChange = { poll() }
             DualSenseHID.shared.retain()
             hidRetained = true
         }
     }
 
-    private func setGamepadHandlers() {
-        for controller in GCController.controllers() {
-            controller.extendedGamepad?.valueChangedHandler = { _, _ in
-                MainActor.assumeIsolated { poll() }
-            }
-        }
-    }
-
     private func disengage() {
         HIDGamepadManager.shared.release()
-        for controller in GCController.controllers() {
-            controller.extendedGamepad?.valueChangedHandler = nil
-        }
-        observers.forEach(NotificationCenter.default.removeObserver)
-        observers.removeAll()
         GCController.stopWirelessControllerDiscovery()
         if hidRetained {
-            DualSenseHID.shared.onChange = nil
             DualSenseHID.shared.release()
             hidRetained = false
         }

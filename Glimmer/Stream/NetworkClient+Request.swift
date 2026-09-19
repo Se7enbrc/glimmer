@@ -41,6 +41,7 @@ extension NetworkClient {
                     timeout: TimeInterval) async throws -> XMLNode {
 
         try await ensureIdentityLoaded()
+        try StreamAttempt.checkDeadline(requestDeadline)
 
         // GFE keys per-session state on `uniqueid`, so GFE gets moonlight-qt's
         // shared constant (any client can quit any session); Sunshine gets this
@@ -78,15 +79,21 @@ extension NetworkClient {
         // by DER; usePaired=false is the plain-HTTP unpaired probe. The UA matches
         // moonlight-qt so Sunshine's per-client feature gating (HDR etc.) doesn't
         // refuse us as an unknown client.
-        let resp = try await ControlTransport.get(
-            host: server.address, port: port, target: target,
-            userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
-            tls: usePaired,
-            credential: ControlTransport.TLSCredential(
-                clientCertPEM: usePaired ? clientCertPEM : nil,
-                clientKeyPEM: usePaired ? clientKeyPEM : nil,
-                pinnedCertPEM: usePaired ? server.serverCertPEM : nil),
-            timeout: timeout)
+        let deadline = requestDeadline ?? Date().addingTimeInterval(timeout)
+        let address = server.address
+        let credential = ControlTransport.TLSCredential(
+            clientCertPEM: usePaired ? clientCertPEM : nil,
+            clientKeyPEM: usePaired ? clientKeyPEM : nil,
+            pinnedCertPEM: usePaired ? server.serverCertPEM : nil)
+        let requestTarget = target
+        let resp = try await StreamAttempt.run(until: deadline) {
+            try await ControlTransport.get(
+                host: address, port: port, target: requestTarget,
+                userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
+                tls: usePaired, credential: credential,
+                timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+        }
+        try StreamAttempt.checkDeadline(requestDeadline)
 
         // GameStream puts protocol errors in the body XML with HTTP 200, so a
         // non-2xx is transport-level breakage (e.g. a 401 from a reverse proxy).

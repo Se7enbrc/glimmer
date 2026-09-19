@@ -23,18 +23,10 @@ struct PairSheet: View {
     /// move to the PIN/handshake step.
     @State private var chosen: Bool
 
-    /// Latched when a handshake THIS sheet started reports success.
-    ///
-    /// Deliberately not read straight off `model.pairingPhase`: that phase is
-    /// app-wide state that outlives the sheet, and a body gated on it meant that
-    /// after one successful pairing every later open of the sheet short-
-    /// circuited to the "Paired" screen - with an empty host name, and no route
-    /// back to the chooser short of relaunching the app. A local latch starts
-    /// false on every presentation, so a stale phase can no longer speak for a
-    /// sheet that has paired nothing. It is only ever set with a non-empty host
-    /// name in hand, which is what keeps `successBody` from rendering "  is
-    /// ready to stream."
-    @State private var paired = false
+    @State private var pairedHost: Host?
+    @State private var pairingAttempt: PairingAttempt?
+    @State private var pairingTask: Task<Void, Never>?
+    private var paired: Bool { pairedHost != nil }
 
     /// Optional pre-fill, used by the "re-pair" recovery path so the user
     /// doesn't retype the host's address - that path jumps straight to the PIN
@@ -74,21 +66,7 @@ struct PairSheet: View {
         // Float above all other Glimmer windows so the PIN being read off isn't
         // hidden behind the launcher or Settings. Reverts on dismiss.
         .background(FloatingWindowLevel())
-        // Success is taken as a TRANSITION seen while this sheet is on screen
-        // and has a host in hand - never as a standing value, which is how a
-        // previous pairing's result used to leak into a fresh sheet.
-        .onChange(of: model.pairingPhase) { _, phase in
-            guard case .success = phase, chosen, !trimmedHost.isEmpty else { return }
-            paired = true
-        }
-        .onDisappear {
-            // The phase is per-attempt state. Leaving it latched at
-            // .success/.failure carried the last attempt's banner - and its
-            // success screen - into the next open of the sheet. `pair()` clears
-            // it at the start of an attempt too; this covers the dismissals
-            // where no new attempt ever follows.
-            model.pairingPhase = .idle
-        }
+        .onDisappear { cancelPairing() }
     }
 
     private var titleText: String {
@@ -171,14 +149,15 @@ struct PairSheet: View {
                 .buttonStyle(StreamButtonStyle())
             } else if !chosen {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { cancelPairing(); dismiss() }
             } else {
                 Spacer()
                 Button("Back") {
+                    cancelPairing()
                     chosen = false
                     pin = ""
                 }
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { cancelPairing(); dismiss() }
                 // Manual retry - pairing normally auto-starts with the code.
                 Button("Retry") { startPairing() }
                     .buttonStyle(StreamButtonStyle())
@@ -188,20 +167,27 @@ struct PairSheet: View {
     }
 
     private func startPairing() {
-        guard !model.pairingInFlight, !paired, !trimmedHost.isEmpty else { return }
+        guard pairingTask == nil, !paired, !trimmedHost.isEmpty else { return }
         if pin.count != 4 { pin = model.generatePairingPIN() }
-        Task { await model.pair(hostnameOrIP: hostnameOrIP, pin: pin) }
+        let attempt = model.beginPairing(address: trimmedHost)
+        pairingAttempt = attempt
+        pairingTask = Task {
+            let host = await model.pair(attempt: attempt, pin: pin)
+            guard attempt.accepts(pairingAttempt, address: trimmedHost, cancelled: Task.isCancelled) else { return }
+            pairedHost = host
+            pairingTask = nil
+        }
+    }
+
+    private func cancelPairing() {
+        pairingTask?.cancel()
+        pairingTask = nil
+        if let pairingAttempt { model.cancelPairing(pairingAttempt) }
+        pairingAttempt = nil
     }
 
     private func selectPairedHost() {
-        let typed = trimmedHost
-        if let host = model.hosts.first(where: {
-            [$0.name, $0.displayName, $0.localAddress, $0.manualAddress]
-                .compactMap { $0 }
-                .contains { $0.caseInsensitiveCompare(typed) == .orderedSame }
-        }) {
-            model.selectHost(host)
-        }
+        if let pairedHost { model.selectHost(pairedHost) }
     }
 }
 

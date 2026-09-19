@@ -203,6 +203,10 @@ extension AppModel {
         // the auto-offer and seeding `controllerConnected`).
         controllerConnected = !GCController.controllers().isEmpty
         maybeOfferRawHID()
+        // Generic HID pads are discovered here, in the launcher, so their
+        // permission is explained before a stream and never during one.
+        HIDGamepadManager.shared.onPermissionNeeded = { [weak self] pad in self?.hidPadNeedsPermission(pad) }
+        HIDGamepadManager.shared.retain()
     }
 
     /// Human-readable description of the current primary display, for the UI.

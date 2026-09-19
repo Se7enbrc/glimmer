@@ -422,6 +422,7 @@ public struct ServerInfo: Sendable {
     /// code thinks in, while `serverCodecModeRaw` is what the backend
     /// needs on the wire.
     public var serverCodecModeRaw: Int = 0
+    public var isBusy = false
     public var currentGameID: Int = 0           // 0 = host is idle; otherwise the app ID that's streaming
     /// Host's primary-NIC MAC from /serverinfo's `<mac>` (stock Moonlight uses
     /// the same field for WoL). Only learnable while the host is ONLINE; some

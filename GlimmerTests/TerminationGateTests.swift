@@ -14,9 +14,9 @@ import Testing
 
 struct TerminationGateTests {
 
-    @Test func liveOrConnectingSessionDefersTheQuit() {
-        #expect(TerminationGate.reply(isStreaming: true) == .terminateLater)
-        #expect(TerminationGate.reply(isStreaming: false) == .terminateNow)
+    @Test func anySessionObjectDefersTheQuit() {
+        #expect(TerminationGate.reply(hasSession: true) == .terminateLater)
+        #expect(TerminationGate.reply(hasSession: false) == .terminateNow)
     }
 
     @Test func theBoundIsShortEnoughToFeelLikeQuit() {

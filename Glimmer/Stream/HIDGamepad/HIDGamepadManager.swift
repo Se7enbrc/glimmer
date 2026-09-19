@@ -12,6 +12,8 @@ final class HIDGamepadManager {
     var onAttach: ((HIDGamepadDevice) -> Void)?
     var onDetach: ((HIDGamepadDevice) -> Void)?
     var onReport: ((HIDGamepadDevice) -> Void)?
+    /// A pad attached without Input Monitoring; the launcher offers the prompt.
+    var onPermissionNeeded: ((HIDGamepadDevice) -> Void)?
     private(set) var slots: [UInt8: HIDGamepadDevice] = [:]
     private var slotAssignedAt: [UInt8: UInt64] = [:]
     private var pendingRumble: [UInt8: (low: UInt16, high: UInt16)] = [:]
@@ -121,7 +123,6 @@ final class HIDGamepadManager {
         guard IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(device), &id) == kIOReturnSuccess,
               devices[id] == nil else { return }
         let access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-        if access == kIOHIDAccessTypeUnknown { _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) }
         Diag.notice("Generic HID pad present; Input Monitoring access=\(access.rawValue) (0 granted, 1 denied, 2 unknown)",
                     "Controller")
         let pad = HIDGamepadDevice(device: device, id: id)
@@ -131,7 +132,15 @@ final class HIDGamepadManager {
         Diag.notice("HID attached: \(pad.name) \(pad.hardwareID) \(pad.transport) registry=\(id) "
             + "mapping=\(pad.mappingSource)", "Controller")
         onAttach?(pad)
+        if access != kIOHIDAccessTypeGranted { onPermissionNeeded?(pad) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.recheckOwnership() }
+    }
+
+    /// After a grant: re-open every pad so reports flow without a relaunch.
+    func reopenAll() {
+        for pad in devices.values where !pad.reopen() {
+            Diag.notice("HID reopen failed: \(pad.name) \(pad.hardwareID)", "Controller")
+        }
     }
 
     func recheckOwnership() {

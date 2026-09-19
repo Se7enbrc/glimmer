@@ -144,14 +144,15 @@ extension VideoDecoder {
         // the Limelight-free value type with the exact same fields/units.
         guard let hdr = backend?.hdrMetadata() else {
             log.info("hdrMetadata() returned nil; no HDR metadata to attach")
-            cachedMDCV = nil
-            cachedContentLightLevel = nil
+            hdrMetadataStore.publish(.empty)
             return
         }
 
         // Mastering display color volume - only meaningful if the host
         // populated primaries. Sunshine fills these from the OS-reported
         // monitor EDID; GFE may leave them zeroed.
+        var metadataMDCV: Data?
+        var contentLightLevel: Data?
         if hdr.displayPrimariesRX != 0 && hdr.maxDisplayLuminance != 0 {
             var mdcv = Data()
             mdcv.reserveCapacity(24)
@@ -170,9 +171,7 @@ extension VideoDecoder {
             // minDisplayLuminance is already in 1/10000-nit units per
             // Limelight.h, so no scaling needed.
             appendBE32(&mdcv, UInt32(hdr.minDisplayLuminance))
-            cachedMDCV = mdcv
-        } else {
-            cachedMDCV = nil
+            metadataMDCV = mdcv
         }
 
         // Content light level - host may omit these even when MDCV is present
@@ -183,13 +182,13 @@ extension VideoDecoder {
             cll.reserveCapacity(4)
             appendBE16(&cll, hdr.maxContentLightLevel)
             appendBE16(&cll, hdr.maxFrameAverageLightLevel)
-            cachedContentLightLevel = cll
-        } else {
-            cachedContentLightLevel = nil
+            contentLightLevel = cll
         }
 
-        let mdcvBytes = self.cachedMDCV?.count ?? 0
-        let cllBytes = self.cachedContentLightLevel?.count ?? 0
+        hdrMetadataStore.publish(HDRMetadata(
+            mdcv: metadataMDCV, contentLightLevel: contentLightLevel))
+        let mdcvBytes = metadataMDCV?.count ?? 0
+        let cllBytes = contentLightLevel?.count ?? 0
         log.info(
             """
             HDR metadata refreshed: mdcv=\(mdcvBytes)B cll=\(cllBytes)B \

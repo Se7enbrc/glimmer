@@ -451,7 +451,7 @@ extension VideoDecoder {
         // safe off the main thread, so calling it from the decode queue is fine.
         // Distinct from loss recovery: no IDR is requested here (the keyframe is
         // already in hand) and the depacketizer's reference state is untouched.
-        if let renderer = displayLayer?.sampleBufferRenderer {
+        if let renderer = sampleBufferRenderer {
             renderer.flush()
             OSSignposter.render.emitEvent("DiscontinuityFlush", "trigger=param_rebuild")
             TelemetryCounters.shared.discontinuityFlushTotal.increment()

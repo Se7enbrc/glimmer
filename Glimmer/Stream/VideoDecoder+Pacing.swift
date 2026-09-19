@@ -261,9 +261,9 @@ extension VideoDecoder {
     @discardableResult
     nonisolated func presentFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
         // Re-check the teardown gate: the pacer's serial queue can race a
-        // MainActor teardown that nil'd the layer. Snapshot the layer into a
-        // local so it can't be released mid-enqueue.
-        guard isStreaming, let layer = displayLayer else { return false }
+        // MainActor teardown that nil'd the layer. Snapshot the renderer into
+        // a local so it can't be released mid-enqueue.
+        guard isStreaming, let renderer = sampleBufferRenderer else { return false }
 
         // ---- Renderer via the macOS 15+ AVSampleBufferVideoRenderer path.
         //
@@ -280,7 +280,6 @@ extension VideoDecoder {
         // SDL_RENDER_DEVICE_RESET and recreating the decoder. We do it
         // cheaper: flush + request an IDR via the backend, and let VT pick
         // up where it left off.
-        let renderer = layer.sampleBufferRenderer
         if renderer.status == .failed {
             log.warning(
                 "AVSampleBufferDisplayLayer renderer FAILED; self-healing (error=\(String(describing: renderer.error)))")

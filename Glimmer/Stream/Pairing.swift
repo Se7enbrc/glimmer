@@ -242,6 +242,8 @@ public actor PairingClient {
             signpostID: pairingSignpostID
         )
 
+        try Task.checkCancellation()
+
         // Success - persist into the ServerInfo we hand back.
         server.serverCertPEM = serverCertPEM
         server.pairStatus = .paired

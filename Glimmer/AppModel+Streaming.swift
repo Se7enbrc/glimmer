@@ -21,28 +21,34 @@ import os.log
 
 extension AppModel {
 
-    /// UI entry point for a launch. If the host is already streaming an app
-    /// that ISN'T ours, arm `pendingTakeover` for a confirm before we /launch
-    /// over the live occupant; otherwise stream straight through.
+    /// Prompt at once when the launcher already knows the host is taken; the
+    /// launch flow re-checks fresh server-info and prompts if that disagrees.
     func requestStream(app: LibraryApp, on host: Host) {
-        if !isStreaming,
-           let live = hostLiveStatus, live.hostID == host.id,
+        if !isStreaming, let live = hostLiveStatus, live.hostID == host.id,
            Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
-           case .streamingApp(let occupant) = live.state {
+           let occupant = Self.occupant(of: live.state) {
             pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
             return
         }
         stream(app: app, on: host)
     }
 
+    static func occupant(of state: HostLiveStatus.State) -> String? {
+        switch state {
+        case .streamingApp(let name): name
+        case .streamingUnknownApp: "another app"
+        default: nil
+        }
+    }
+
     /// Confirm the armed takeover and launch over the host's current session.
     func confirmPendingTakeover() {
         guard let pending = pendingTakeover else { return }
         pendingTakeover = nil
-        stream(app: pending.app, on: pending.host)
+        stream(app: pending.app, on: pending.host, takeoverAuthorized: true)
     }
 
-    func stream(app: LibraryApp, on host: Host) {
+    func stream(app: LibraryApp, on host: Host, takeoverAuthorized: Bool = false) {
         // RE-ENTRANCY GUARD. The native backend runs ONE session at a time
         // (StreamBridgeContext.current is a single process-global slot), and
         // a second entry here would corrupt it wholesale: a second
@@ -138,7 +144,9 @@ extension AppModel {
             // The Swift-native engine is the only path.
             let session = StreamSession(backend: NativeBackend())
             await MainActor.run { self.nativeSession = session }
+            await session.authorizeTakeover(takeoverAuthorized)
             var caughtError: Error?
+            var takeover: TakeoverRequired?
             do {
                 // Provider closures (rather than captured values) so the user
                 // can edit either hotkey in Settings while a stream is live
@@ -187,12 +195,21 @@ extension AppModel {
                     // resolved at event time would then blame the wrong PC.
                     await MainActor.run { self.handleNativeEvent(event, host: host) }
                 }
+            } catch let required as TakeoverRequired {
+                takeover = required
             } catch {
                 caughtError = error
             }
             // Single cleanup site: runs whether start() threw or the event
             // loop drained normally.
+            await session.stop()
+            // A takeover prompt is not a stream that ended: no toast, no receipt.
+            if takeover != nil { self.isStreaming = false }
             self.cleanupAfterStream(host: host, caughtError: caughtError)
+            if let takeover {
+                let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name ?? "another app"
+                self.pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+            }
         }
     }
 

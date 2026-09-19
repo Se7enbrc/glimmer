@@ -130,7 +130,8 @@ extension StreamSession {
         backendConfig: BackendStreamConfig,
         setup: (StreamWindow, InputForwarder, VideoDecoder),
         network: NetworkClient,
-        duringReconnect: Bool = false
+        duringReconnect: Bool = false,
+        deadline: Date? = nil
     ) async throws {
         let backendServer = BackendServerInfo(
             address: serverInfo.address,
@@ -176,7 +177,16 @@ extension StreamSession {
             // Async connect: await the bridge rather than block this actor, so a
             // hanging host can't freeze stop/cancel/telemetry (bounded by the 30s
             // cap). Cancelling this task interrupts the in-flight connect.
-            try await backend.startConnectionAsync(server: backendServer, config: backendConfig)
+            try checkAttempt(deadline: deadline)
+            let connectingBackend = backend
+            if let deadline {
+                try await StreamAttempt.run(until: deadline) {
+                    try await connectingBackend.startConnectionAsync(server: backendServer, config: backendConfig)
+                }
+            } else {
+                try await connectingBackend.startConnectionAsync(server: backendServer, config: backendConfig)
+            }
+            try checkAttempt(deadline: deadline)
         } catch {
             // startConnection failed (RTSP handshake, control connect, etc., or
             // the native backend's LI_ERR_UNSUPPORTED stub). We've already told
@@ -197,14 +207,15 @@ extension StreamSession {
             // gives up to a real teardown after the cap). The initial-connect
             // path keeps its original behavior: latch connect-failed + stop().
             if duringReconnect {
+                try checkAttempt(deadline: deadline)
                 try? await network.cancel()
+                try checkAttempt(deadline: deadline)
                 throw StreamError.sessionFailed(code)
             }
             // P2 DISCONNECT REASON: the connection never reached established -
             // latch connect-failed before the teardown so the cause is attributed
             // to the handshake, not the host terminate that may follow.
             noteTelemetryDisconnect(.connectFailed)
-            try? await network.cancel()
             await stop()
             throw StreamError.sessionFailed(code)
         }

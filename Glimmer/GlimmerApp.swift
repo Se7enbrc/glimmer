@@ -222,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // acceleration linearized, restore the user's saved value now (no-op in
         // the clean case). Runs before any window/stream can re-engage capture.
         MouseAccelerationControl.restoreOrphanedOverride()
+        AppModel.restoreOrphanedMute()
 
         if let mgr = Self.boundManager {
             self.model = mgr
@@ -296,8 +297,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // run the stop bounded (a hung host can't pin Cmd-Q past the bound),
         // then reply. No session object yet (the stream Task hasn't spun up)
         // means nothing has been asked of the host - quit now.
-        guard let model, TerminationGate.reply(isStreaming: model.isStreaming) == .terminateLater,
-              let session = model.nativeSession else {
+        guard TerminationGate.reply(hasSession: model?.nativeSession != nil) == .terminateLater,
+              let session = model?.nativeSession else {
             return .terminateNow
         }
         Task { @MainActor in

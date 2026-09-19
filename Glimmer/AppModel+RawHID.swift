@@ -9,6 +9,7 @@
 
 import Foundation
 import GameController
+import IOKit.hid
 
 extension AppModel {
 
@@ -56,5 +57,43 @@ extension AppModel {
     func declineRawHIDPrompt() {
         rawHIDPromptAnswered = true
         showRawHIDPrompt = false
+    }
+
+    // MARK: Generic HID pads
+
+    static let hidPermissionExplanation =
+        "macOS doesn't recognise this controller on its own, so Glimmer reads it "
+        + "directly.\n\nmacOS will ask for \u{201C}Input Monitoring\u{201D} "
+        + "permission. Its dialog says \u{201C}keystrokes\u{201D} because that's "
+        + "the same system permission - but Glimmer only reads the controller, "
+        + "never your keyboard."
+
+    /// A generic pad attached without the permission. Offered from the launcher
+    /// only; a pad seen mid-stream is offered when the stream ends.
+    func hidPadNeedsPermission(_ pad: HIDGamepadDevice) {
+        hidPermissionPadName = pad.name
+        maybeOfferHIDPermission()
+    }
+
+    func maybeOfferHIDPermission() {
+        guard !isStreaming, hidPermissionPadName != nil, !HIDGamepadManager.accessGranted else { return }
+        showHIDPermissionPrompt = true
+    }
+
+    /// "Continue": the system prompt blocks its thread for a moment, so it
+    /// runs off main. A grant re-opens the pads; a refusal opens the pane.
+    func continueHIDPermission() {
+        dismissHIDPermission()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+            DispatchQueue.main.async {
+                if granted { HIDGamepadManager.shared.reopenAll() } else { RawHIDControl.openInputMonitoring() }
+            }
+        }
+    }
+
+    func dismissHIDPermission() {
+        showHIDPermissionPrompt = false
+        hidPermissionPadName = nil
     }
 }

@@ -201,6 +201,7 @@ extension NetworkClient {
         }
         // 0 = host idle, non-zero = app ID currently streaming. Drives the
         // launch-vs-resume decision in StreamSession.
+        server.isBusy = xml.string(forChild: "state")?.hasSuffix("_BUSY") == true
         if let active = xml.int(forChild: "currentgame") {
             server.currentGameID = active
         }

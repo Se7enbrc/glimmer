@@ -80,6 +80,16 @@ final class HIDGamepadDevice: Identifiable {
         return true
     }
 
+    /// Close and open again (after an Input Monitoring grant); keeps `onReport`.
+    func reopen() -> Bool {
+        if opened {
+            IOHIDDeviceRegisterInputValueCallback(device, nil, nil)
+            IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
+            opened = false
+        }
+        return open()
+    }
+
     func close() {
         guard opened else { return }
         opened = false

@@ -11,6 +11,7 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 // Module-internal (was private) so Settings → Input can host it alongside the

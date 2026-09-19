@@ -32,6 +32,7 @@ extension AppModel {
         // toggle (applyMutePreferenceMidStream) actually did, and is a no-op
         // when nothing was muted.
         restoreMac()
+        maybeOfferHIDPermission()
     }
 
     /// String-typed read shim for UI code that hasn't migrated to
@@ -83,131 +84,111 @@ extension AppModel {
     /// four is a footgun. If we ever validate 6-digit auto-submit
     /// behaviour on the current GFE + all Sunshine versions in the
     /// wild, this is the place to widen the range. The
-    /// pin.count == 4 guard in `pair(hostnameOrIP:pin:)` would also need
+    /// pin.count == 4 guard in `pair(attempt:pin:)` would also need
     /// to relax to >= 4.
     func generatePairingPIN() -> String {
         let pinValue = Int.random(in: 0...9999)
         return String(format: "%04d", pinValue)
     }
 
-    /// Pair with a host using Glimmer's native `PairingClient`. Walks the
-    /// full five-round-trip handshake against the host's HTTP/HTTPS port,
-    /// pins the resulting server cert, and persists the pairing so future
-    /// streams skip straight to /launch.
-    func pair(hostnameOrIP: String, pin: String) async {
-        // Re-entrancy guard: a double-tap must not launch two concurrent handshakes
-        // against Sunshine's single-session pairing state. Race-free - this check and
-        // the `pairingInFlight = true` below run synchronously on the main actor.
-        guard !pairingInFlight else { return }
-        // Every attempt starts from a clean phase. `pairingPhase` is app-wide
-        // state that outlives the sheet that drove it, and nothing used to
-        // clear it: the previous attempt's .success / .failure stayed latched,
-        // so a new attempt against a different PC opened showing the OLD
-        // result - and a latched .success short-circuited the whole sheet to
-        // its "Paired" screen (with no host name to show) until the app was
-        // relaunched. The sheet also clears this on dismiss; both ends matter,
-        // because a validation failure below returns before any phase write.
+    func beginPairing(address: String) -> PairingAttempt {
+        let attempt = PairingAttempt(address: address)
+        pairingAttempt = attempt
         pairingPhase = .idle
+        hostStatusTask?.cancel()
+        hostStatusTask = nil
+        return attempt
+    }
+
+    func cancelPairing(_ attempt: PairingAttempt) {
+        guard pairingAttempt == attempt else { return }
+        pairingAttempt = nil
+        pairingPhase = .idle
+        restartHostStatusPolling()
+    }
+
+    private func checkPairing(_ attempt: PairingAttempt) throws {
+        guard attempt.accepts(pairingAttempt, address: attempt.address, cancelled: Task.isCancelled) else {
+            throw CancellationError()
+        }
+    }
+
+    func pair(attempt: PairingAttempt, pin: String) async -> Host? {
+        guard (try? checkPairing(attempt)) != nil else { return nil }
+        defer {
+            if pairingAttempt == attempt {
+                pairingAttempt = nil
+                restartHostStatusPolling()
+            }
+        }
+        let address = attempt.address
         let pattern = #"^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$"#
-        guard hostnameOrIP.range(of: pattern, options: .regularExpression) != nil,
-              hostnameOrIP.count <= 253,
-              !hostnameOrIP.hasPrefix("-") else {
+        guard address.range(of: pattern, options: .regularExpression) != nil,
+              address.count <= 253, !address.hasPrefix("-") else {
             pairingPhase = .failure("Hostname looks invalid. Use a name like tower.local or an IP.")
-            return
+            return nil
         }
         guard pin.count == 4, pin.allSatisfy({ $0.isNumber }) else {
             pairingPhase = .failure("PIN must be 4 digits.")
-            return
+            return nil
         }
-
-        pairingInFlight = true
-        pairingPhase = .awaitingPin("Pairing… enter \(pin) on \(hostnameOrIP).")
-
-        // Stop the background chip poller for the duration of pairing. It hits
-        // the host's HTTPS :47984 every few seconds; Sunshine's pairing state
-        // machine is single-session, and those concurrent connections during
-        // the getservercert→PIN window can wedge it (the host stops responding
-        // to getservercert, and its log fills with "SSL Verification error ::
-        // self-signed certificate"). moonlight-qt pauses discovery/polling
-        // while pairing for the same reason. Restored in the defer below.
-        hostStatusTask?.cancel()
-        hostStatusTask = nil
-        defer { restartHostStatusPolling() }
-
-        var info = ServerInfo(address: hostnameOrIP, uniqueId: hostnameOrIP, serverName: hostnameOrIP)
-        info.pairStatus = .unpaired
-
-        // Reachability first, in its OWN catch: a connectivity failure (host offline /
-        // wrong address / DNS / TLS) gets a host-named message, distinct from a
-        // PIN/handshake failure - and fires BEFORE any PIN exchange, so no oracle leaks.
+        pairingPhase = .awaitingPin("Pairing… enter \(pin) on \(address).")
+        let info = ServerInfo(address: address, uniqueId: address, serverName: address)
         let network = NetworkClient(server: info)
         let fetched: ServerInfo
         do {
             fetched = try await network.fetchServerInfo()
+            try checkPairing(attempt)
         } catch {
-            log.error("Pairing: unreachable \(hostnameOrIP, privacy: .private) - \(error.localizedDescription, privacy: .private)")
-            pairingPhase = .failure("Couldn't reach \(hostnameOrIP). Make sure it's on and on this network.")
+            guard (try? checkPairing(attempt)) != nil else { return nil }
+            log.error("Pairing: unreachable \(address, privacy: .private) - \(error.localizedDescription, privacy: .private)")
             Diag.error("Pairing: host unreachable", "Pairing")
-            pairingInFlight = false
-            return
+            pairingPhase = .failure("Couldn't reach \(address). Make sure it's on and on this network.")
+            return nil
         }
-
         do {
+            pairingPhase = .verifying("Pairing… enter \(pin) on \(address).")
+            let paired: ServerInfo
             if fetched.pairStatus == .paired {
-                pairingPhase = .success("Already paired with \(hostnameOrIP). ✓")
-                pairingInFlight = false
-                loadHosts()
-                return
+                paired = fetched
+            } else {
+                paired = try await PairingClient(network: network, server: fetched).pair(pin: pin)
             }
-            let client = PairingClient(network: network, server: fetched)
-            pairingPhase = .verifying("Pairing… enter \(pin) on \(hostnameOrIP).")
-            let paired = try await client.pair(pin: pin)
-            // Persist the host record so it survives loadHosts() - pairing only
-            // pinned the cert; without this the freshly-paired PC didn't save.
-            // Fetch /applist (best-effort) so the host has its launchable apps;
-            // a "Desktop" fallback keeps it usable if the call fails.
-            var apps: [PairedApp] = []
-            do {
-                let pairedClient = NetworkClient(server: paired)
-                apps = try await pairedClient.appList()
-                    .map { PairedApp(id: $0.id, name: $0.name, hdr: $0.hdrCapable, hidden: $0.hidden) }
-            } catch {
-                log.error("post-pair /applist failed: \(error.localizedDescription, privacy: .public)")
-            }
-            if apps.isEmpty {
-                apps = [PairedApp(id: 881448767, name: "Desktop", hdr: false, hidden: false)]
-            }
+            try checkPairing(attempt)
+            guard paired.uniqueId == fetched.uniqueId else { throw CancellationError() }
+            let apps = await pairingApps(server: paired)
+            try checkPairing(attempt)
             saveHost(
                 uuid: paired.uniqueId,
-                hostname: paired.serverName.isEmpty ? hostnameOrIP : paired.serverName,
-                address: hostnameOrIP,
-                serverCertPEM: paired.serverCertPEM,
-                appVersion: paired.appVersion,
-                gfeVersion: paired.gfeVersion,
+                hostname: paired.serverName.isEmpty ? address : paired.serverName,
+                address: address, serverCertPEM: paired.serverCertPEM,
+                appVersion: paired.appVersion, gfeVersion: paired.gfeVersion,
                 apps: apps, macAddress: paired.macAddress)
-            pairingPhase = .success("Paired with \(hostnameOrIP) ✓")
+            pairingPhase = .success("Paired with \(address) ✓")
             Diag.notice("Pairing succeeded", "Pairing")
-        } catch let err as StreamError {
-            // SECURITY (#10): the externally-visible message is uniform -
-            // we don't tell the user (or an attacker watching over their
-            // shoulder) whether the failure was "wrong PIN" vs "host
-            // signature did not verify" vs "host returned status N".
-            // The detailed cause goes to the log at `.private` so a real
-            // bug report can still pull the cause via `log show`.
-            log.error("Pairing failed for host=\(hostnameOrIP, privacy: .private(mask: .hash)): \(err.description, privacy: .private)")
-            pairingPhase = .failure("Pairing failed - try again.")
-            Diag.error("Pairing failed", "Pairing")
+            return hosts.first { $0.id == paired.uniqueId }
         } catch {
+            guard (try? checkPairing(attempt)) != nil else { return nil }
+            // One uniform message: the cause (wrong PIN, signature, status)
+            // stays in the private log so nothing leaks over a shoulder (#10).
             log.error(
                 """
-                Pairing failed for host=\(hostnameOrIP, privacy: .private(mask: .hash)): \
+                Pairing failed for host=\(address, privacy: .private(mask: .hash)): \
                 \(error.localizedDescription, privacy: .private)
                 """
             )
-            pairingPhase = .failure("Pairing failed - try again.")
             Diag.error("Pairing failed", "Pairing")
+            pairingPhase = .failure("Pairing failed - try again.")
+            return nil
         }
-        pairingInFlight = false
+    }
+
+    private func pairingApps(server: ServerInfo) async -> [PairedApp] {
+        let client = NetworkClient(server: server)
+        if let apps = try? await client.appList(), !apps.isEmpty {
+            return apps.map { PairedApp(id: $0.id, name: $0.name, hdr: $0.hdrCapable, hidden: $0.hidden) }
+        }
+        return [PairedApp(id: 881448767, name: "Desktop", hdr: false, hidden: false)]
     }
 
     /// Future: currently uncalled. Safari's self-signed-cert dead-end
