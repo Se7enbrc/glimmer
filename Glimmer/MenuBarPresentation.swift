@@ -79,16 +79,24 @@ enum MenuBarPresentation {
         }
     }
 
-    static func statusLine(hostName: String, width: Int, height: Int, fps: Int) -> String {
-        let mode = height >= 2160 && width >= 3840 ? "4K" : "\(height)p"
-        return "Streaming to \(hostName) · \(mode) \(fps)"
+    /// The section header while streaming, in the launcher's own mode wording.
+    static func statusLine(hostName: String, width: Int, height: Int, fps: Int, hdr: Bool) -> String {
+        "Streaming to \(hostName) · \(width) × \(height) · \(fps) Hz" + (hdr ? " · HDR" : "")
+    }
+
+    /// The header for the selected PC when idle: its name, and its readiness when known.
+    static func hostHeader(name: String, readiness: String?) -> String {
+        readiness.map { "\(name) · \($0)" } ?? name
     }
 
     /// The Connection Details rows; each is "Label: value" with a plain unit.
+    /// Frames are what arrives, so a hidden window (nothing rendered) still reads true.
     static func detailLines(snapshot: StreamStatsSnapshot?, link: String?) -> [String] {
         guard let snapshot else { return ["Waiting for the first second of video"] }
         var lines: [String] = []
-        if let fps = snapshot.renderedFps { lines.append("Frames: \(Int(fps.rounded())) per second") }
+        if let fps = snapshot.receivedFps ?? snapshot.renderedFps {
+            lines.append("Frames: \(Int(fps.rounded())) per second")
+        }
         if let rtt = snapshot.rttMs { lines.append("Latency: \(Int(rtt.rounded())) ms") }
         if let mbps = snapshot.measuredBitrateMbps ?? snapshot.negotiatedBitrateMbps {
             lines.append("Bitrate: \(Int(mbps.rounded())) Mbps")

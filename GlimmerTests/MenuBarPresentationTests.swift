@@ -41,13 +41,18 @@ struct MenuBarPresentationTests {
         #expect(MenuBarPresentation.readiness(.streamingUnknownApp(id: 9), fresh: true) == "Busy")
         #expect(MenuBarPresentation.readiness(.unknown, fresh: true) == "Unavailable")
         #expect(MenuBarPresentation.readiness(.asleep, fresh: false) == nil)
-        #expect(MenuBarPresentation.statusLine(hostName: "Tower", width: 3840, height: 2160, fps: 120) == "Streaming to Tower · 4K 120")
-        #expect(MenuBarPresentation.statusLine(hostName: "Tower", width: 1920, height: 1080, fps: 60) == "Streaming to Tower · 1080p 60")
+        #expect(MenuBarPresentation.statusLine(hostName: "Tower", width: 3024, height: 1964, fps: 120, hdr: true)
+            == "Streaming to Tower · 3024 × 1964 · 120 Hz · HDR")
+        #expect(MenuBarPresentation.statusLine(hostName: "Tower", width: 1920, height: 1080, fps: 60, hdr: false)
+            == "Streaming to Tower · 1920 × 1080 · 60 Hz")
+        #expect(MenuBarPresentation.hostHeader(name: "Tower", readiness: "Ready") == "Tower · Ready")
+        #expect(MenuBarPresentation.hostHeader(name: "Tower", readiness: nil) == "Tower")
     }
 
     @Test func detailLinesUseWhatTheSnapshotHas() {
         var snap = StreamStatsSnapshot()
-        snap.renderedFps = 119.6
+        snap.receivedFps = 119.6
+        snap.renderedFps = 0
         snap.rttMs = 3.4
         snap.measuredBitrateMbps = 78.2
         let lines = MenuBarPresentation.detailLines(snapshot: snap, link: "Wi-Fi")

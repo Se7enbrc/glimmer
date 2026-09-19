@@ -56,7 +56,14 @@ extension AppModel {
     var menuBarStatusLine: String? {
         guard isStreaming, let host = selectedHost else { return nil }
         return MenuBarPresentation.statusLine(
-            hostName: host.displayName, width: effectiveWidth, height: effectiveHeight, fps: effectiveFPS)
+            hostName: host.displayName, width: effectiveWidth, height: effectiveHeight,
+            fps: effectiveFPS, hdr: nativeHDRActive)
+    }
+
+    /// The header while connecting: the phase's own stage copy.
+    var menuBarConnectingLine: String? {
+        if case .connecting(let stage) = streamPhase { return stage }
+        return nil
     }
 
     var menuBarDetailLines: [String] {

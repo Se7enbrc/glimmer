@@ -11,8 +11,8 @@ import SwiftUI
 
 // MARK: - Menu bar content
 
-/// The dropdown: the action you need now first, then what is going on, then
-/// the app. A standard menu (no popover): rows, checkmarks and submenus only.
+/// The dropdown: one section for the situation (streaming, connecting, or the
+/// selected PC), the status in its header, then the app. A standard menu.
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
@@ -21,9 +21,11 @@ struct MenuBarContent: View {
     var body: some View {
         Group {
             attentionRows
-            primaryRows
-            streamingRows
-            pcRows
+            switch model.menuBarPrimaryAction {
+            case .backToStream: streamingRows
+            case .cancelConnection: connectingRows
+            case .stream, .none: idleRows
+            }
             controllerRows
             Divider()
             Button {
@@ -67,78 +69,65 @@ struct MenuBarContent: View {
         }
     }
 
-    @ViewBuilder private var primaryRows: some View {
+    @ViewBuilder private var streamingRows: some View {
         Section {
-            switch model.menuBarPrimaryAction {
-            case .stream(let app):
-                Button {
-                    model.streamHeroApp()
-                    activate()
-                } label: {
-                    Label("Stream \(app)", systemImage: "play.fill")
-                }
-                if let host = model.selectedHost {
-                    let apps = host.apps.filter { !$0.hidden }
-                    if apps.count > 1 {
-                        Menu {
-                            ForEach(apps) { app in
-                                Button(app.name) { model.requestStream(app: app, on: host); activate() }
-                            }
-                        } label: {
-                            Label("Stream App", systemImage: "square.grid.2x2")
-                        }
+            Button {
+                model.resumeStreamWindow()
+                activate()
+            } label: {
+                Label("Back to Stream", systemImage: "play.rectangle")
+            }
+            Button {
+                model.stopStreamFromMenu()
+            } label: {
+                Label(model.menuStopInProgress ? "Stopping…" : "Stop Streaming", systemImage: "stop.fill")
+            }
+            .disabled(model.menuStopInProgress)
+        }
+        Section(model.menuBarStatusLine ?? "Streaming") {
+            Menu {
+                ForEach(model.menuBarDetailLines, id: \.self) { Text($0) }
+                Divider()
+                Toggle("Show Stream Statistics", isOn: Binding(
+                    get: { model.statsOverlayShown },
+                    set: { _ in model.toggleStatsOverlayFromMenu() }))
+            } label: {
+                Label("Connection Details", systemImage: "waveform.path.ecg")
+            }
+        }
+    }
+
+    @ViewBuilder private var connectingRows: some View {
+        Section(model.menuBarConnectingLine ?? "Connecting…") {
+            Button {
+                model.cancelConnect()
+            } label: {
+                Label("Cancel Connection", systemImage: "xmark.circle")
+            }
+        }
+    }
+
+    /// The selected PC with its readiness in the header, and what you can do with it.
+    @ViewBuilder private var idleRows: some View {
+        if let host = model.selectedHost {
+            Section(MenuBarPresentation.hostHeader(name: host.displayName, readiness: model.menuBarReadiness)) {
+                if case .stream(let app) = model.menuBarPrimaryAction {
+                    Button {
+                        model.streamHeroApp()
+                        activate()
+                    } label: {
+                        Label("Stream \(app)", systemImage: "play.fill")
                     }
                 }
-            case .cancelConnection:
-                Button {
-                    model.cancelConnect()
-                } label: {
-                    Label("Cancel Connection", systemImage: "xmark.circle")
-                }
-            case .backToStream:
-                Button {
-                    model.resumeStreamWindow()
-                    activate()
-                } label: {
-                    Label("Back to Stream", systemImage: "play.rectangle")
-                }
-                Button {
-                    model.stopStreamFromMenu()
-                } label: {
-                    Label(model.menuStopInProgress ? "Stopping…" : "Stop Streaming", systemImage: "stop.fill")
-                }
-                .disabled(model.menuStopInProgress)
-            case .none:
-                Label("No PC paired", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
-            }
-        }
-    }
-
-    /// The status line and Connection Details, only while streaming.
-    @ViewBuilder private var streamingRows: some View {
-        if let status = model.menuBarStatusLine {
-            Section {
-                Text(status)
-                Menu {
-                    ForEach(model.menuBarDetailLines, id: \.self) { Text($0) }
-                    Divider()
-                    Toggle("Show Stream Statistics", isOn: Binding(
-                        get: { model.statsOverlayShown },
-                        set: { _ in model.toggleStatsOverlayFromMenu() }))
-                } label: {
-                    Label("Connection Details", systemImage: "waveform.path.ecg")
-                }
-            }
-        }
-    }
-
-    /// The selected PC's readiness, Wake and Connect when it applies, and the
-    /// PCs submenu; while streaming, a pick here is the next connection.
-    @ViewBuilder private var pcRows: some View {
-        if let host = model.selectedHost {
-            Section(model.isStreaming ? "Next connection" : host.displayName) {
-                if let readiness = model.menuBarReadiness, !model.isStreaming {
-                    Text(readiness)
+                let apps = host.apps.filter { !$0.hidden }
+                if apps.count > 1 {
+                    Menu {
+                        ForEach(apps) { app in
+                            Button(app.name) { model.requestStream(app: app, on: host); activate() }
+                        }
+                    } label: {
+                        Label("Stream App", systemImage: "square.grid.2x2")
+                    }
                 }
                 wakeRows(host: host)
                 if model.hosts.count > 1 {
@@ -159,11 +148,15 @@ struct MenuBarContent: View {
                     }
                 }
             }
+        } else {
+            Section {
+                Label("No PC paired", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
+            }
         }
     }
 
     @ViewBuilder private func wakeRows(host: Host) -> some View {
-        if !model.isStreaming, let device = LunaPower.shared.gatedDevice(for: host) {
+        if let device = LunaPower.shared.gatedDevice(for: host) {
             if LunaPower.shared.actionInFlight[host.id] == "on" {
                 Text("Waking \(host.displayName)…")
                 Button("Stop Waiting") { model.cancelWake(host) }
