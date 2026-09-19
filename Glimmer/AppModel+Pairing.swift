@@ -20,6 +20,7 @@ extension AppModel {
 
     func beforeStreamStart() {
         if muteMacWhileStreaming { muteMac() }
+        WiFiRoamWatch.shared.start()
     }
 
     func afterStreamEnd() {
@@ -32,6 +33,7 @@ extension AppModel {
         // toggle (applyMutePreferenceMidStream) actually did, and is a no-op
         // when nothing was muted.
         restoreMac()
+        WiFiRoamWatch.shared.stop()
         maybeOfferHIDPermission()
     }
 
