@@ -11,4 +11,4 @@
 // version is NOT set in project.pbxproj - bump it HERE, build with `make`.
 
 MARKETING_VERSION = 2026.9.4
-CURRENT_PROJECT_VERSION = 20260918
+CURRENT_PROJECT_VERSION = 20260919
