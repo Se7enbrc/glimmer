@@ -151,8 +151,8 @@ struct GlimmerApp: App {
             // Standard macOS "Check for Updates..." under the app menu (after the
             // About item). Sparkle drives the rest: a check on every open
             // (applicationDidFinishLaunching) plus a daily background check and
-            // the update panels. Mirrored in the menu-bar dropdown for the
-            // accessory (no-window) case - see MenuBarContent.
+            // the update panels. Mirrored in the menu bar panel's overflow menu
+            // for the accessory (no-window) case - see MenuBarPanel.
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: UpdaterController.shared.updater)
             }
@@ -169,7 +169,7 @@ struct GlimmerApp: App {
         }
 
         MenuBarExtra {
-            MenuBarContent()
+            MenuBarPanel()
                 .environment(model)
                 .background(OpenWindowCapture())
         } label: {
@@ -182,7 +182,7 @@ struct GlimmerApp: App {
             }
             .accessibilityLabel(model.menuBarAccessibilityLabel)
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 }
 

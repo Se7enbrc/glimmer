@@ -53,22 +53,27 @@ extension AppModel {
         return live.state == .asleep
     }
 
-    var menuBarStatusLine: String? {
-        guard isStreaming, let host = selectedHost else { return nil }
-        return MenuBarPresentation.statusLine(
-            hostName: host.displayName, width: effectiveWidth, height: effectiveHeight,
-            fps: effectiveFPS, hdr: nativeHDRActive)
+    var menuBarModeLine: String {
+        MenuBarPresentation.modeLine(width: effectiveWidth, height: effectiveHeight, fps: effectiveFPS, hdr: nativeHDRActive)
+    }
+
+    var menuBarStateWord: String {
+        MenuBarPresentation.stateWord(menuBarIconState, readiness: menuBarReadiness)
+    }
+
+    var menuBarReadinessTone: MenuBarReadinessTone {
+        guard menuBarReadiness != nil, let live = hostLiveStatus else { return .off }
+        return MenuBarPresentation.readinessTone(live.state)
+    }
+
+    var menuBarMetrics: [MenuBarMetric] {
+        MenuBarPresentation.metrics(snapshot: menuDetails, link: MenuBarPresentation.linkLabel(hostRoute.routeClass))
     }
 
     /// The header while connecting: the phase's own stage copy.
     var menuBarConnectingLine: String? {
         if case .connecting(let stage) = streamPhase { return stage }
         return nil
-    }
-
-    var menuBarDetailLines: [String] {
-        MenuBarPresentation.detailLines(
-            snapshot: menuDetails, link: MenuBarPresentation.linkLabel(hostRoute.routeClass))
     }
 
     /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.

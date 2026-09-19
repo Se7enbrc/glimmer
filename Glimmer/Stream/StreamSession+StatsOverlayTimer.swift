@@ -55,6 +55,7 @@ extension StreamSession {
             // across ticks. Reference type so the timer closure mutates one box.
             let hitchBox = PerceivedHitchBox()
             let gateAudit = LinkGateAuditBox()
+            let history = StreamHistoryFeed()
             let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
                 MainActor.assumeIsolated {
                     guard let dec, let win else { return }
@@ -63,6 +64,7 @@ extension StreamSession {
                     // works with the HUD off - the expensive host/controller
                     // probes below stay gated on `statsOverlayEnabled`.
                     var snap = dec.statsSnapshot(minWindowSeconds: overlayFpsWindowSeconds)
+                    history.tick(fps: snap.receivedFps, rttMs: dec.telemetryEstimatedRtt()?.rttMs)
                     // Auto pill, independent of the stats-HUD toggle so a
                     // degrading PRESENT path reaches the user with the HUD off.
                     // Drives off PERCEIVED present-hitching (render-gap / stale

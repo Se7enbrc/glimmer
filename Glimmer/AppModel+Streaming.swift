@@ -54,6 +54,7 @@ extension AppModel {
         lastLaunchAttempt = (app, host)
         isReconnecting = false
         statsOverlayShown = showStreamStats
+        StreamHistory.shared.reset()
         streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
         nativeStreamError = nil
         nativeHDRActive = false

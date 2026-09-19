@@ -41,22 +41,37 @@ struct MenuBarPresentationTests {
         #expect(MenuBarPresentation.readiness(.streamingUnknownApp(id: 9), fresh: true) == "Busy")
         #expect(MenuBarPresentation.readiness(.unknown, fresh: true) == "Unavailable")
         #expect(MenuBarPresentation.readiness(.asleep, fresh: false) == nil)
-        #expect(MenuBarPresentation.statusLine(hostName: "Tower", width: 3024, height: 1964, fps: 120, hdr: true)
-            == "Streaming to Tower · 3024 × 1964 · 120 Hz · HDR")
-        #expect(MenuBarPresentation.statusLine(hostName: "Tower", width: 1920, height: 1080, fps: 60, hdr: false)
-            == "Streaming to Tower · 1920 × 1080 · 60 Hz")
-        #expect(MenuBarPresentation.hostHeader(name: "Tower", readiness: "Ready") == "Tower · Ready")
-        #expect(MenuBarPresentation.hostHeader(name: "Tower", readiness: nil) == "Tower")
+        #expect(MenuBarPresentation.modeLine(width: 3024, height: 1964, fps: 120, hdr: true) == "3024 × 1964 · 120 Hz · HDR")
+        #expect(MenuBarPresentation.modeLine(width: 1920, height: 1080, fps: 60, hdr: false) == "1920 × 1080 · 60 Hz")
+        #expect(MenuBarPresentation.stateWord(.idle, readiness: "Ready") == "Ready")
+        #expect(MenuBarPresentation.stateWord(.idle, readiness: nil) == "Idle")
+        #expect(MenuBarPresentation.stateWord(.reconnecting, readiness: "Ready") == "Reconnecting…")
+        #expect(MenuBarPresentation.readinessTone(.idle) == .ready)
+        #expect(MenuBarPresentation.readinessTone(.streamingApp(name: "x")) == .busy)
+        #expect(MenuBarPresentation.readinessTone(.certMismatch) == .trouble)
+        #expect(MenuBarPresentation.batterySymbol(percent: 25, charging: false) == "battery.25percent")
+        #expect(MenuBarPresentation.batterySymbol(percent: 5, charging: true) == "battery.100percent.bolt")
     }
 
-    @Test func detailLinesUseWhatTheSnapshotHas() {
+    @Test func metricsUseWhatArrivesAndDashTheRest() {
         var snap = StreamStatsSnapshot()
         snap.receivedFps = 119.6
         snap.renderedFps = 0
         snap.rttMs = 3.4
         snap.measuredBitrateMbps = 78.2
-        let lines = MenuBarPresentation.detailLines(snapshot: snap, link: "Wi-Fi")
-        #expect(lines == ["Frames: 120 per second", "Latency: 3 ms", "Bitrate: 78 Mbps", "Network: Wi-Fi"])
-        #expect(MenuBarPresentation.detailLines(snapshot: nil, link: nil) == ["Waiting for the first second of video"])
+        let metrics = MenuBarPresentation.metrics(snapshot: snap, link: "Wi-Fi")
+        #expect(metrics.map(\.value) == ["120", "3 ms", "78 Mbps", "Wi-Fi"])
+        #expect(metrics.map(\.label) == ["frames per second", "latency", "bitrate", "network"])
+        #expect(MenuBarPresentation.metrics(snapshot: nil, link: nil).map(\.value) == ["–", "–", "–", "–"])
+    }
+
+    @Test @MainActor func historyKeepsOneMinute() {
+        let history = StreamHistory()
+        for i in 0..<70 { history.append(fps: Double(i), rttMs: nil) }
+        #expect(history.fps.count == 60)
+        #expect(history.fps.first == 10)
+        #expect(history.rttMs.last == 0)
+        history.reset()
+        #expect(history.fps.isEmpty)
     }
 }

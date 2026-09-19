@@ -42,6 +42,7 @@
 		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
 		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
+		DEC0DE2026092000000000C7 /* MenuBarPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C8 /* MenuBarPanel.swift */; };
 		DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */; };
 		A100020A /* DiagnosticsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100020B /* DiagnosticsPane.swift */; };
 		A1009001 /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1009002 /* UpdaterController.swift */; };
@@ -175,6 +176,7 @@
 		D10000B1 /* VideoDecoder+Suppression.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000B2 /* VideoDecoder+Suppression.swift */; };
 		D10000C1 /* TelemetryCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C0 /* TelemetryCounters.swift */; };
 		D10000C3 /* WiFiTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C2 /* WiFiTelemetry.swift */; };
+		DEC0DE2026092000000000C9 /* StreamHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000CA /* StreamHistory.swift */; };
 		DEC0DE2026092000000000B1 /* WiFiRoamWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000B2 /* WiFiRoamWatch.swift */; };
 		D10000C5 /* BuildInfo.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C4 /* BuildInfo.generated.swift */; };
 		D10000C7 /* TelemetrySessionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C6 /* TelemetrySessionReport.swift */; };
@@ -370,6 +372,7 @@
 		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
 		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
+		DEC0DE2026092000000000C8 /* MenuBarPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPanel.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentation.swift"; sourceTree = "<group>"; };
 		A100020B /* DiagnosticsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsPane.swift; sourceTree = "<group>"; };
 		A1009002 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
@@ -501,6 +504,7 @@
 		D10000B2 /* VideoDecoder+Suppression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Suppression.swift"; sourceTree = "<group>"; };
 		D10000C0 /* TelemetryCounters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetryCounters.swift; sourceTree = "<group>"; };
 		D10000C2 /* WiFiTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/WiFiTelemetry.swift; sourceTree = "<group>"; };
+		DEC0DE2026092000000000CA /* StreamHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamHistory.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000B2 /* WiFiRoamWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/WiFiRoamWatch.swift"; sourceTree = "<group>"; };
 		D10000C4 /* BuildInfo.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.generated.swift; sourceTree = "<group>"; };
 		D10000C6 /* TelemetrySessionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetrySessionReport.swift; sourceTree = "<group>"; };
@@ -723,6 +727,7 @@
 				DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */,
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
 				A100019B /* AboutPane.swift */,
+				DEC0DE2026092000000000C8 /* MenuBarPanel.swift */,
 				DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */,
 				A100011B /* DualSenseHID.swift */,
 				DEC0DE2026091900000000F8 /* DualSenseDeviceState.swift */,
@@ -843,6 +848,7 @@
 				ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */,
 				ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */,
 				D10000C2 /* WiFiTelemetry.swift */,
+				DEC0DE2026092000000000CA /* StreamHistory.swift */,
 				DEC0DE2026092000000000B2 /* WiFiRoamWatch.swift */,
 				ABCD20260610000000005F01 /* EnvSignalController.swift */,
 				D10000E0 /* DisplayTelemetry.swift */,
@@ -1157,6 +1163,7 @@
 				DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */,
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
+				DEC0DE2026092000000000C7 /* MenuBarPanel.swift in Sources */,
 				DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */,
 				A100011A /* DualSenseHID.swift in Sources */,
 				DEC0DE2026091900000000F7 /* DualSenseDeviceState.swift in Sources */,
@@ -1279,6 +1286,7 @@
 				ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */,
 				ABCD20260609000000001002 /* TelemetryCounters+InputActivity.swift in Sources */,
 				D10000C3 /* WiFiTelemetry.swift in Sources */,
+				DEC0DE2026092000000000C9 /* StreamHistory.swift in Sources */,
 				DEC0DE2026092000000000B1 /* WiFiRoamWatch.swift in Sources */,
 				ABCD20260610000000005F02 /* EnvSignalController.swift in Sources */,
 				D10000E1 /* DisplayTelemetry.swift in Sources */,

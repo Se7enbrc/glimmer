@@ -12,6 +12,15 @@ enum MenuBarIconState: Equatable {
     case idle, connecting, reconnecting, streaming, attention
 }
 
+enum MenuBarReadinessTone: Equatable {
+    case ready, busy, off, trouble
+}
+
+struct MenuBarMetric: Equatable {
+    let value: String
+    let label: String
+}
+
 enum MenuBarPrimaryAction: Equatable {
     case stream(app: String)
     case cancelConnection
@@ -79,30 +88,53 @@ enum MenuBarPresentation {
         }
     }
 
-    /// The section header while streaming, in the launcher's own mode wording.
-    static func statusLine(hostName: String, width: Int, height: Int, fps: Int, hdr: Bool) -> String {
-        "Streaming to \(hostName) · \(width) × \(height) · \(fps) Hz" + (hdr ? " · HDR" : "")
+    /// The mode line under the stream card's header, in the launcher's wording.
+    static func modeLine(width: Int, height: Int, fps: Int, hdr: Bool) -> String {
+        "\(width) × \(height) · \(fps) Hz" + (hdr ? " · HDR" : "")
     }
 
-    /// The header for the selected PC when idle: its name, and its readiness when known.
-    static func hostHeader(name: String, readiness: String?) -> String {
-        readiness.map { "\(name) · \($0)" } ?? name
+    static func readinessTone(_ state: HostLiveStatus.State?) -> MenuBarReadinessTone {
+        switch state {
+        case .idle: .ready
+        case .streamingApp, .streamingUnknownApp: .busy
+        case .asleep, .unknown, nil: .off
+        case .certMismatch: .trouble
+        }
     }
 
-    /// The Connection Details rows; each is "Label: value" with a plain unit.
-    /// Frames are what arrives, so a hidden window (nothing rendered) still reads true.
-    static func detailLines(snapshot: StreamStatsSnapshot?, link: String?) -> [String] {
-        guard let snapshot else { return ["Waiting for the first second of video"] }
-        var lines: [String] = []
-        if let fps = snapshot.receivedFps ?? snapshot.renderedFps {
-            lines.append("Frames: \(Int(fps.rounded())) per second")
+    /// The right-hand word of the stream card's header.
+    static func stateWord(_ state: MenuBarIconState, readiness: String?) -> String {
+        switch state {
+        case .idle: readiness ?? "Idle"
+        case .connecting: "Connecting…"
+        case .reconnecting: "Reconnecting…"
+        case .streaming: "Streaming"
+        case .attention: "Needs attention"
         }
-        if let rtt = snapshot.rttMs { lines.append("Latency: \(Int(rtt.rounded())) ms") }
-        if let mbps = snapshot.measuredBitrateMbps ?? snapshot.negotiatedBitrateMbps {
-            lines.append("Bitrate: \(Int(mbps.rounded())) Mbps")
+    }
+
+    /// The big numbers: frames arriving (true even with the window hidden),
+    /// latency, bitrate and the network.
+    static func metrics(snapshot: StreamStatsSnapshot?, link: String?) -> [MenuBarMetric] {
+        var out: [MenuBarMetric] = []
+        let fps = snapshot?.receivedFps ?? snapshot?.renderedFps
+        out.append(MenuBarMetric(value: fps.map { "\(Int($0.rounded()))" } ?? "–", label: "frames per second"))
+        out.append(MenuBarMetric(value: snapshot?.rttMs.map { "\(Int($0.rounded())) ms" } ?? "–", label: "latency"))
+        let mbps = snapshot?.measuredBitrateMbps ?? snapshot?.negotiatedBitrateMbps
+        out.append(MenuBarMetric(value: mbps.map { "\(Int($0.rounded())) Mbps" } ?? "–", label: "bitrate"))
+        out.append(MenuBarMetric(value: link ?? "–", label: "network"))
+        return out
+    }
+
+    static func batterySymbol(percent: Int, charging: Bool) -> String {
+        if charging { return "battery.100percent.bolt" }
+        switch percent {
+        case ..<10: return "battery.0percent"
+        case ..<35: return "battery.25percent"
+        case ..<60: return "battery.50percent"
+        case ..<85: return "battery.75percent"
+        default: return "battery.100percent"
         }
-        if let link { lines.append("Network: \(link)") }
-        return lines
     }
 
     static func linkLabel(_ route: HostRouteMonitor.RouteClass) -> String? {
