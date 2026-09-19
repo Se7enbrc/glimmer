@@ -83,10 +83,8 @@ struct StreamButton: View {
         /// Host asleep + Luna power gate passed: the hero CTA becomes the one
         /// obvious action ("Wake & Connect") instead of a dead Stream button.
         case wake
-        /// luna's synchronous wake in flight (~36s cold, capped at 200s). Like
-        /// `.connecting` the capsule stays ENABLED and IS the cancel: a wait
-        /// that long with no way out is a dead end, and abandoning it costs
-        /// nothing (UpSnap already has the request - see AppModel.cancelWake).
+        /// A wake in flight (packets sent, waiting up to 90 s for Sunshine).
+        /// Like `.connecting` the capsule stays enabled and is the cancel.
         case waking
     }
     private var role: ButtonRole {
@@ -95,12 +93,8 @@ struct StreamButton: View {
             return .liveBackgrounded
         }
         guard let host = model.selectedHost else { return .noPC }
-        if LunaPower.shared.gatedDevice(for: host) != nil {
-            if LunaPower.shared.actionInFlight[host.id] == "on" { return .waking }
-            if hostIsAsleep(host), LunaPower.shared.actionInFlight[host.id] == nil {
-                return .wake
-            }
-        }
+        if model.isWaking(host) { return .waking }
+        if model.canWake(host), hostIsAsleep(host) { return .wake }
         return .connect
     }
 
@@ -130,10 +124,7 @@ struct StreamButton: View {
             case .connecting: model.cancelConnect()        // the working exit from a stuck connect
             case .liveBackgrounded: model.resumeStreamWindow()
             case .wake:
-                if let host = model.selectedHost,
-                   let device = LunaPower.shared.gatedDevice(for: host) {
-                    model.wakeHost(host, device: device, thenConnect: true)
-                }
+                if let host = model.selectedHost { model.wakeHost(host, thenConnect: true) }
             case .waking:
                 // The working exit from a wake that is taking too long. Drops
                 // our wait only; the tile falls back to offline + Wake and a
@@ -184,15 +175,10 @@ struct StreamButton: View {
                         Text("Wake & Connect")
                             .font(.system(size: 17, weight: .semibold))
                             .contentTransition(.opacity)
-                        // A failed wake surfaces one plain sentence here, right
-                        // under the retry affordance - luna's raw reason (subprocess
-                        // stderr, "on failed", "luna not available") stays in the
-                        // log (see AppModel+Power.swift's Diag.notice) and is never
-                        // shown to the user verbatim. A CANCELLED wake records no
-                        // error, so this line stays away after a cancel.
-                        if let host = model.selectedHost,
-                           LunaPower.shared.lastActionError[host.id] != nil {
-                            Text("Couldn't wake this PC. Check that it's plugged in and Wake-on-LAN is enabled.")
+                        // A wake that got no answer: one plain sentence with the
+                        // real limits. A cancelled wake shows nothing.
+                        if let host = model.selectedHost, model.wakeFailedHostID == host.id {
+                            Text("No answer. Wake on LAN works on your home network; over Tailscale it can't reach the PC.")
                                 .font(.system(size: 11, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)

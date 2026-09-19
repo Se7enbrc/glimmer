@@ -35,13 +35,13 @@
 		A100016A /* ContentViewSubviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100016B /* ContentViewSubviews.swift */; };
 		DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE01000000000000000B /* ContentView+Menus.swift */; };
 		DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */; };
-		DEC0DE03000000000000000A /* ContentView+PowerControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE03000000000000000B /* ContentView+PowerControls.swift */; };
 		DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE04000000000000000B /* ContentView+StreamButton.swift */; };
 		DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */; };
 		DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */; };
 		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
 		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
+		DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D2 /* WakeOnLAN.swift */; };
 		DEC0DE2026092000000000C7 /* MenuBarPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C8 /* MenuBarPanel.swift */; };
 		DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */; };
 		A100020A /* DiagnosticsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100020B /* DiagnosticsPane.swift */; };
@@ -146,7 +146,6 @@
 		D1000060 /* AppModel+Streaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005F /* AppModel+Streaming.swift */; };
 		D1000062 /* AppModel+Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000061 /* AppModel+Pairing.swift */; };
 		E20000A4 /* AppModel+Power.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000A3 /* AppModel+Power.swift */; };
-		E20000A2 /* LunaPower.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000A1 /* LunaPower.swift */; };
 		D1000064 /* NetworkClient+Endpoints.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000063 /* NetworkClient+Endpoints.swift */; };
 		D1000066 /* NetworkClient+Request.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000065 /* NetworkClient+Request.swift */; };
 		D1000068 /* Network+Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000067 /* Network+Support.swift */; };
@@ -259,7 +258,6 @@
 		D2000023 /* ReedSolomonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000022 /* ReedSolomonTests.swift */; };
 		D2000025 /* InputEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000024 /* InputEncoderTests.swift */; };
 		D2000CR2 /* CruiseTraversalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000CR1 /* CruiseTraversalTests.swift */; };
-		E20000A6 /* LunaGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000A5 /* LunaGateTests.swift */; };
 		D2000027 /* SdpCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000026 /* SdpCodecTests.swift */; };
 		D2B00004 /* BitrateDownshiftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00003 /* BitrateDownshiftTests.swift */; };
 		D2B00002 /* StreamPathMTUTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00001 /* StreamPathMTUTests.swift */; };
@@ -281,6 +279,7 @@
 		DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001C /* WindowPointerTests.swift */; };
 		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
+		DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */; };
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
 		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
@@ -365,13 +364,13 @@
 		A100016B /* ContentViewSubviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewSubviews.swift; sourceTree = "<group>"; };
 		DEC0DE01000000000000000B /* ContentView+Menus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Menus.swift"; sourceTree = "<group>"; };
 		DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ReadinessChip.swift"; sourceTree = "<group>"; };
-		DEC0DE03000000000000000B /* ContentView+PowerControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+PowerControls.swift"; sourceTree = "<group>"; };
 		DEC0DE04000000000000000B /* ContentView+StreamButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+StreamButton.swift"; sourceTree = "<group>"; };
 		DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsGeneralStreamingPanes+LoginItem.swift"; sourceTree = "<group>"; };
 		DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming+Config.swift"; sourceTree = "<group>"; };
 		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
 		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
+		DEC0DE2026092000000000D2 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLAN.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C8 /* MenuBarPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPanel.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentation.swift"; sourceTree = "<group>"; };
 		A100020B /* DiagnosticsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsPane.swift; sourceTree = "<group>"; };
@@ -474,7 +473,6 @@
 		D100005F /* AppModel+Streaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming.swift"; sourceTree = "<group>"; };
 		D1000061 /* AppModel+Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Pairing.swift"; sourceTree = "<group>"; };
 		E20000A3 /* AppModel+Power.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Power.swift"; sourceTree = "<group>"; };
-		E20000A1 /* LunaPower.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LunaPower.swift"; sourceTree = "<group>"; };
 		D1000063 /* NetworkClient+Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Endpoints.swift"; sourceTree = "<group>"; };
 		D1000065 /* NetworkClient+Request.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Request.swift"; sourceTree = "<group>"; };
 		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Network+Support.swift"; sourceTree = "<group>"; };
@@ -588,7 +586,6 @@
 		D2000022 /* ReedSolomonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReedSolomonTests.swift; sourceTree = "<group>"; };
 		D2000024 /* InputEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEncoderTests.swift; sourceTree = "<group>"; };
 		D2000CR1 /* CruiseTraversalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CruiseTraversalTests.swift; sourceTree = "<group>"; };
-		E20000A5 /* LunaGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LunaGateTests.swift"; sourceTree = "<group>"; };
 		D2000026 /* SdpCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdpCodecTests.swift; sourceTree = "<group>"; };
 		D2B00003 /* BitrateDownshiftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BitrateDownshiftTests.swift; sourceTree = "<group>"; };
 		D2B00001 /* StreamPathMTUTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamPathMTUTests.swift; sourceTree = "<group>"; };
@@ -610,6 +607,7 @@
 		DEC0DE84000000000000001C /* WindowPointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPointerTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLANTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
@@ -720,13 +718,13 @@
 				A100016B /* ContentViewSubviews.swift */,
 				DEC0DE01000000000000000B /* ContentView+Menus.swift */,
 				DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */,
-				DEC0DE03000000000000000B /* ContentView+PowerControls.swift */,
 				DEC0DE04000000000000000B /* ContentView+StreamButton.swift */,
 				DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */,
 				A100017B /* SettingsGeneralStreamingPanes.swift */,
 				DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */,
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
 				A100019B /* AboutPane.swift */,
+				DEC0DE2026092000000000D2 /* WakeOnLAN.swift */,
 				DEC0DE2026092000000000C8 /* MenuBarPanel.swift */,
 				DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */,
 				A100011B /* DualSenseHID.swift */,
@@ -808,7 +806,6 @@
 				D1000063 /* NetworkClient+Endpoints.swift */,
 				D1000061 /* AppModel+Pairing.swift */,
 				E20000A3 /* AppModel+Power.swift */,
-				E20000A1 /* LunaPower.swift */,
 				D100005F /* AppModel+Streaming.swift */,
 				D1A00001 /* AppModel+HostRoute.swift */,
 				D1A00003 /* AppModel+SessionReceipt.swift */,
@@ -973,7 +970,6 @@
 				D2000022 /* ReedSolomonTests.swift */,
 				D2000024 /* InputEncoderTests.swift */,
 				D2000CR1 /* CruiseTraversalTests.swift */,
-				E20000A5 /* LunaGateTests.swift */,
 				D2000026 /* SdpCodecTests.swift */,
 				D2B00003 /* BitrateDownshiftTests.swift */,
 				D2B00001 /* StreamPathMTUTests.swift */,
@@ -995,6 +991,7 @@
 				DEC0DE84000000000000001C /* WindowPointerTests.swift */,
 				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
+				DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
@@ -1156,13 +1153,13 @@
 				A100016A /* ContentViewSubviews.swift in Sources */,
 				DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */,
 				DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */,
-				DEC0DE03000000000000000A /* ContentView+PowerControls.swift in Sources */,
 				DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */,
 				DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */,
 				A100017A /* SettingsGeneralStreamingPanes.swift in Sources */,
 				DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */,
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
+				DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */,
 				DEC0DE2026092000000000C7 /* MenuBarPanel.swift in Sources */,
 				DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */,
 				A100011A /* DualSenseHID.swift in Sources */,
@@ -1246,7 +1243,6 @@
 				D1000064 /* NetworkClient+Endpoints.swift in Sources */,
 				D1000062 /* AppModel+Pairing.swift in Sources */,
 				E20000A4 /* AppModel+Power.swift in Sources */,
-				E20000A2 /* LunaPower.swift in Sources */,
 				D1000060 /* AppModel+Streaming.swift in Sources */,
 				D1A00002 /* AppModel+HostRoute.swift in Sources */,
 				D1A00004 /* AppModel+SessionReceipt.swift in Sources */,
@@ -1397,7 +1393,6 @@
 				D2000023 /* ReedSolomonTests.swift in Sources */,
 				D2000025 /* InputEncoderTests.swift in Sources */,
 				D2000CR2 /* CruiseTraversalTests.swift in Sources */,
-				E20000A6 /* LunaGateTests.swift in Sources */,
 				D2000027 /* SdpCodecTests.swift in Sources */,
 				D2B00004 /* BitrateDownshiftTests.swift in Sources */,
 				D2B00002 /* StreamPathMTUTests.swift in Sources */,
@@ -1419,6 +1414,7 @@
 				DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */,
 				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
+				DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,

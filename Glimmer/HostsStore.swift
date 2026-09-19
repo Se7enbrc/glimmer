@@ -146,7 +146,7 @@ extension AppModel {
                 // Backfilled from /serverinfo's `<mac>` on every successful
                 // poll/pair (only learnable while the host is online).
                 macAddress: defaults.string(forKey: "hosts.\(i).mac"),
-                lunaDeviceId: defaults.string(forKey: "hosts.\(i).lunadevice")
+                wakeOnLAN: defaults.object(forKey: "hosts.\(i).wol") as? Bool ?? true
             ))
         }
 
@@ -176,33 +176,23 @@ extension AppModel {
     }
 
     /// Backfill/refresh a host's MAC from a successful /serverinfo. Zeroed or
-    /// empty MACs are rejected (the Luna gate fails closed on them, and a
-    /// zeroed refresh must not clobber a previously-learned real MAC). Reloads
-    /// the in-memory list only when the stored value actually changed.
+    /// empty MACs are rejected so a bad refresh never clobbers a real one.
+    func setWakeOnLAN(_ host: Host, enabled: Bool) {
+        let defaults = UserDefaults.standard
+        let slot = hostSlot(for: host.id, defaults: defaults)
+        guard slot > 0 else { return }
+        defaults.set(enabled, forKey: "hosts.\(slot).wol")
+        loadHosts()
+    }
+
     func updateHostMac(hostID: String, mac: String?) {
-        guard let normalized = LunaPower.normalizeMac(mac) else { return }
+        guard let normalized = WakeOnLAN.normalizeMac(mac) else { return }
         let defaults = UserDefaults.standard
         let slot = hostSlot(for: hostID, defaults: defaults)
         guard slot > 0 else { return }
         let key = "hosts.\(slot).mac"
         guard defaults.string(forKey: key) != normalized else { return }
         defaults.set(normalized, forKey: key)
-        loadHosts()
-    }
-
-    /// Persist (or clear, with nil) the host → UpSnap device binding the Luna
-    /// gate resolved. Reloads only on change.
-    func bindLunaDevice(hostID: String, deviceID: String?) {
-        let defaults = UserDefaults.standard
-        let slot = hostSlot(for: hostID, defaults: defaults)
-        guard slot > 0 else { return }
-        let key = "hosts.\(slot).lunadevice"
-        guard defaults.string(forKey: key) != deviceID else { return }
-        if let deviceID {
-            defaults.set(deviceID, forKey: key)
-        } else {
-            defaults.removeObject(forKey: key)
-        }
         loadHosts()
     }
 
@@ -261,7 +251,7 @@ extension AppModel {
         if let gfeVersion { defaults.set(gfeVersion, forKey: "\(prefix).gfeversion") }
         // Pair-time MAC capture (the host is online right now - the only time
         // it's learnable). Zeroed/absent leaves any earlier value in place.
-        if let mac = LunaPower.normalizeMac(macAddress) {
+        if let mac = WakeOnLAN.normalizeMac(macAddress) {
             defaults.set(mac, forKey: "\(prefix).mac")
         }
         // Don't clobber a user's custom name on re-pair.
@@ -381,16 +371,12 @@ extension AppModel {
                         }
                     }
                 }
-                // `mac` + `lunadevice` MUST be wiped with the slot (audit
-                // 2026-08-17): both are slot-indexed and read back by
-                // `loadHosts`, so leaving them meant a NEW host paired into a
-                // recycled slot inherited the OLD host's Wake-on-LAN target
-                // and luna power-control identity - wake/sleep/shutdown aimed
-                // at the wrong machine.
+                // `mac` and `wol` are slot-indexed too: a new host paired
+                // into a recycled slot must not inherit the old wake target.
                 for key in ["hostname", "uuid", "name", "customname",
                             "localaddress", "manualaddress",
                             "srvcert", "appversion", "gfeversion", "apps.size",
-                            "mac", "lunadevice"] {
+                            "mac", "wol", "lunadevice"] {
                     defaults.removeObject(forKey: "\(prefix).\(key)")
                 }
                 // Leave the hole; `loadHosts` skips empty slots and other

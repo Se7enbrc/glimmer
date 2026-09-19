@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.9.5 - Unreleased
+
+Wake on LAN, built in. When a PC is asleep, the Stream button and the menu bar
+row become Wake and Connect: Glimmer sends the standard wake packets itself,
+using the network address Sunshine reported, waits for Sunshine to answer and
+connects. It is on for each PC by default and can be turned off in the PC's
+right-click menu. It works on your home network; over a VPN it depends on your
+router forwarding wake packets, and over Tailscale it cannot reach the PC. The
+old power controls that needed a separate tool are gone.
+
 ## 2026.9.4 - 2026-09-19
 
 Controllers macOS doesn't know about, a mouse that feels like your Mac, a menu

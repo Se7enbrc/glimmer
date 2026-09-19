@@ -243,20 +243,18 @@ struct MenuBarPanel: View {
                 }
             }
         }
-        if let device = LunaPower.shared.gatedDevice(for: host) {
-            if LunaPower.shared.actionInFlight[host.id] == "on" {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.mini).frame(width: 18)
-                    Text("Waking \(host.displayName)…")
-                    Spacer()
-                    Button("Stop Waiting") { model.cancelWake(host) }
-                        .buttonStyle(.glass)
-                        .controlSize(.small)
-                }
-            } else if model.menuBarHostAsleep {
-                actionRow("Wake and Connect", systemImage: "power") {
-                    model.wakeHost(host, device: device, thenConnect: true)
-                }
+        if model.isWaking(host) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.mini).frame(width: 18)
+                Text("Waking \(host.displayName)…")
+                Spacer()
+                Button("Stop Waiting") { model.cancelWake(host) }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+            }
+        } else if model.canWake(host), model.menuBarHostAsleep {
+            actionRow("Wake and Connect", systemImage: "power") {
+                model.wakeHost(host, thenConnect: true)
             }
         }
     }

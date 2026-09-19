@@ -33,10 +33,8 @@ struct Host: Identifiable, Hashable {
     // backend populates this.
     let macAddress: String?
 
-    /// UpSnap device id bound by the Luna power gate (persisted once the
-    /// host's MAC matches a device from `luna devices --json`). Invalidated
-    /// when a refreshed device list no longer contains it. nil = unbound.
-    var lunaDeviceId: String?
+    /// Per-PC "Wake on LAN": on by default; only matters when a MAC is known.
+    var wakeOnLAN: Bool = true
 
     var displayName: String { customName ?? name }
 
