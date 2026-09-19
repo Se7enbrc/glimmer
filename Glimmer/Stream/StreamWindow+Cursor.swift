@@ -26,21 +26,19 @@ extension StreamWindow {
     /// recipe SDL uses for relative mouse mode on macOS (CGDisplayHideCursor
     /// while the cursor stays associated).
     ///
-    /// Idempotent against `didHideCursor` (the single source of truth): hiding
-    /// while already hidden, or showing while already shown, is a no-op. That
-    /// guarantee caps the latch count at exactly 1, so the cursor can never be
-    /// stranded invisible system-wide regardless of how many times key status
-    /// flips. InputForwarder must never call this - visibility has exactly one
-    /// owner.
+    /// A hide always re-hides: macOS re-shows the pointer for menu bar and
+    /// menu tracking without telling us, and a same-app panel taking key never
+    /// runs the background path, so "already hidden" cannot be trusted. A show
+    /// undoes every outstanding hide, so nothing is ever stranded invisible.
     func setCursorHidden(_ hidden: Bool) {
         if hidden {
-            guard !didHideCursor else { return }
             CGDisplayHideCursor(CGMainDisplayID())
-            didHideCursor = true
+            cursorHideCount += 1
         } else {
-            guard didHideCursor else { return }
-            CGDisplayShowCursor(CGMainDisplayID())
-            didHideCursor = false
+            while cursorHideCount > 0 {
+                CGDisplayShowCursor(CGMainDisplayID())
+                cursorHideCount -= 1
+            }
         }
     }
 

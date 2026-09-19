@@ -115,14 +115,12 @@ public final class StreamWindow {
     /// driven off the display the stream window actually lives on, and the
     /// view tracks that display as the window moves between screens.
     public var streamContentView: NSView { displayView }
-    /// SINGLE SOURCE OF TRUTH for cursor visibility. The only authority on
-    /// whether Glimmer has hidden the system cursor. Every hide/show goes
-    /// through `setCursorHidden(_:)`, which drives `CGDisplayHideCursor` /
-    /// `CGDisplayShowCursor` idempotently off this flag so the (counted)
-    /// display-hide latch is never pushed above 1 and never left negative.
-    /// InputForwarder must NEVER touch cursor visibility - it only owns
-    /// relative-aim engagement (`isMouseCaptured`).
-    var didHideCursor = false
+    /// SINGLE SOURCE OF TRUTH for cursor visibility: how many CGDisplayHideCursor
+    /// calls are outstanding. Every hide/show goes through `setCursorHidden(_:)`;
+    /// a show undoes every hide, so the latch can never be left negative or
+    /// stranded. InputForwarder must NEVER touch cursor visibility.
+    var cursorHideCount = 0
+    var didHideCursor: Bool { cursorHideCount > 0 }
 
     /// Observers that track stream-window key status. We hide the cursor only
     /// while the stream window is key; on Cmd-Tab-away the window resigns key

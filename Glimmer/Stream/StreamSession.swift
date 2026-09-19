@@ -49,6 +49,13 @@ public actor StreamSession {
     /// launcher UI's "Back to stream" affordance when the user has
     /// Cmd-Tabbed away (which orderOut'd the window) and now wants to
     /// resume.
+    /// The menu bar panel shows the pointer while it is open over a stream;
+    /// the window's own re-key path hides it again.
+    public func setCursorHidden(_ hidden: Bool) async {
+        let win = self.window
+        await MainActor.run { win?.setCursorHidden(hidden) }
+    }
+
     public func resumeWindow() async {
         // Capture the StreamWindow reference on the actor first (it lives
         // here, isolated to us), then hop to the main actor to touch

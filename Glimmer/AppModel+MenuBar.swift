@@ -95,6 +95,7 @@ extension AppModel {
     func startMenuBarRefresh() {
         stopMenuBarRefresh()
         refreshMenuBarDetails()
+        if isStreaming, let session = nativeSession { Task { await session.setCursorHidden(false) } }
         menuRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshMenuBarDetails() }
         }

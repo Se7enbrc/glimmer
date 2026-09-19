@@ -115,11 +115,14 @@ struct MenuBarPanel: View {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 bigNumber(metrics[2], dot: .accentColor)
                 bigNumber(metrics[1], dot: .pink)
+                bigNumber(metrics[0], dot: .green)
             }
             StreamChart(mbps: StreamHistory.shared.mbps, latency: StreamHistory.shared.rttMs,
                         asked: Double(model.effectiveBitrateKbps) / 1000)
                 .frame(height: 56)
-            Text("\(metrics[0].value) frames/s · \(model.menuBarModeLine) · \(metrics[3].value)")
+            FramesChart(values: StreamHistory.shared.fps, target: Double(model.effectiveFPS))
+                .frame(height: 34)
+            Text("\(model.menuBarModeLine) · \(metrics[3].value)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -446,5 +449,70 @@ private struct StreamChart: View {
         let when = ago == 0 ? "now" : "\(ago) s ago"
         let ms = latency.indices.contains(index) ? Int(latency[index].rounded()) : 0
         return "\(Int(mbps[index].rounded())) Mbps · \(ms) ms · \(when)"
+    }
+}
+
+/// Sixty seconds of frames arriving against the requested rate, newest at
+/// the right; a second under 90 % of it is drawn orange. Hover reads it.
+private struct FramesChart: View {
+    let values: [Double]
+    let target: Double
+    @State private var hoverX: CGFloat?
+
+    var body: some View {
+        GeometryReader { geo in
+            let pitch = geo.size.width / CGFloat(StreamHistory.capacity)
+            let index = hoverX.flatMap { barIndex(atX: $0, pitch: pitch, width: geo.size.width) }
+            ZStack(alignment: .topLeading) {
+                Canvas { context, size in
+                    let width = max(pitch - 1.5, 1)
+                    let scale = max(target, values.max() ?? 0, 1)
+                    for (bar, value) in values.enumerated() {
+                        let x = size.width - CGFloat(values.count - bar) * pitch
+                        let height = max(size.height * CGFloat(min(value / scale, 1)), value > 0 ? 1.5 : 0)
+                        let rect = CGRect(x: x, y: size.height - height, width: width, height: height)
+                        let low = value < target * 0.9
+                        let color = (low ? Color.orange : Color.green).opacity(index == nil || index == bar ? 1 : 0.55)
+                        context.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(color))
+                    }
+                    if let index {
+                        let x = size.width - CGFloat(values.count - index) * pitch + width / 2
+                        var hair = Path()
+                        hair.move(to: CGPoint(x: x, y: 0))
+                        hair.addLine(to: CGPoint(x: x, y: size.height))
+                        context.stroke(hair, with: .color(.secondary.opacity(0.6)), lineWidth: 1)
+                    }
+                }
+                Text("Frames / s")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.green)
+                    .padding(4)
+                    .allowsHitTesting(false)
+                if let index, values.indices.contains(index) {
+                    let ago = values.count - 1 - index
+                    Text("\(Int(values[index].rounded())) fps · \(ago == 0 ? "now" : "\(ago) s ago")")
+                        .font(.caption2.monospacedDigit())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .position(x: min(max(hoverX ?? 0, 44), geo.size.width - 44), y: 9)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let point): hoverX = point.x
+                case .ended: hoverX = nil
+                }
+            }
+        }
+        .accessibilityLabel("Frames per second over the last minute")
+    }
+
+    private func barIndex(atX x: CGFloat, pitch: CGFloat, width: CGFloat) -> Int? {
+        guard pitch > 0, !values.isEmpty else { return nil }
+        let index = values.count - 1 - Int((width - x) / pitch)
+        return (0..<values.count).contains(index) ? index : nil
     }
 }
