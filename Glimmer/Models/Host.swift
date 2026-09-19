@@ -33,10 +33,8 @@ struct Host: Identifiable, Hashable {
     // backend populates this.
     let macAddress: String?
 
-    /// UpSnap device id bound by the Luna power gate (persisted once the
-    /// host's MAC matches a device from `luna devices --json`). Invalidated
-    /// when a refreshed device list no longer contains it. nil = unbound.
-    var lunaDeviceId: String?
+    /// Per-PC "Wake on LAN": on by default; only matters when a MAC is known.
+    var wakeOnLAN: Bool = true
 
     var displayName: String { customName ?? name }
 
@@ -203,6 +201,11 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     /// full screen capture follows key status and there is nothing to toggle,
     /// so ⌃⌥R reaches the host.
     public static let defaultReleasePointer = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "r")
+
+    /// Default mini player chord: ⌃M, a toggle between the mini player and
+    /// the full presentation. Two keys like ⌃B (it is pressed to step away,
+    /// not mid-fight), no ⌘, and it collides with none of the defaults.
+    public static let defaultMiniPlayer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "m")
 
     var displayString: String {
         var parts: [String] = []

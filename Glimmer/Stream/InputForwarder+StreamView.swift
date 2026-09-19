@@ -79,6 +79,14 @@ extension InputForwarder: StreamInputViewDelegate {
             return true
         }
 
+        // Mini player chord: the same client-only intercept as quit/stats,
+        // and the way back to the full presentation from inside the panel.
+        if !event.isARepeat, miniPlayerHotkeyProvider().matches(event: event, modifiers: mods) {
+            log.info("Mini player hotkey detected - toggling")
+            onMiniPlayerHotkey?()
+            return true
+        }
+
         // Hold Esc to free the pointer (window mode, captured only). NOT
         // consumed and never returns early: Esc is a game input, so the tap
         // that opens a menu must forward on this very event with no added
@@ -364,6 +372,9 @@ extension InputForwarder: StreamInputViewDelegate {
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
         guard isReady, forwardsMouseEvents else { return }
+        // Mini player: the click is the grab, and it still reaches the host
+        // so the button under the pointer is pressed, not just aimed at.
+        if isMiniPlayer, !isMouseCaptured { capturePointer(reason: "click on the mini player") }
         // A click in a window reaches the HOST - that is the whole point of
         // absolute mode, and the reason click-to-capture is gone. Send the
         // position first so the host's cursor is under the click before the

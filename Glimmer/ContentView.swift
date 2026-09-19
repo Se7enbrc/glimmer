@@ -471,27 +471,6 @@ private struct HostHero: View {
                 }
                 .shadow(color: .black.opacity(0.22), radius: 22, x: 0, y: 10)
 
-            // Top-left readiness chip
-            ReadinessChip()
-                .padding(14)
-                // Luna gate re-evaluation rides the always-present chip (the
-                // power cluster renders NOTHING un-gated, so it can't
-                // bootstrap itself). Keyed on the POLL TICK, not just the host
-                // id, so the gate self-heals every ~10s poll - the 60s device
-                // TTL bounds actual luna spawns to ~1/min; revocation vanishes
-                // the controls here or on app-foreground.
-                .task(id: "\(host?.id ?? "")|\(model.hostLiveStatus?.capturedAt.timeIntervalSinceReferenceDate ?? 0)") {
-                    guard let host else { return }
-                    await LunaPower.shared.reevaluate(for: host, model: model)
-                }
-
-            // Top-right Luna power cluster (renders nothing unless the hard
-            // gate passes - see HostPowerControls, and LunaPower.swift's file
-            // header for the gate rules themselves).
-            HostPowerControls()
-                .padding(14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-
             // Centered content
             VStack(spacing: 12) {
                 Image(systemName: "display")

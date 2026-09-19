@@ -132,8 +132,11 @@ struct MenuBarPanel: View {
                 .lineLimit(1)
             Divider()
             actionRow("Back to Stream", systemImage: "play.fill") {
-                model.resumeStreamWindow()
+                if model.isMiniPlayer { model.toggleMiniPlayer() } else { model.resumeStreamWindow() }
                 activate()
+            }
+            if !model.isMiniPlayer {
+                actionRow("Mini Player", systemImage: "pip.enter") { model.toggleMiniPlayer() }
             }
             actionRow(model.menuStopInProgress ? "Stopping…" : "Stop Streaming", systemImage: "stop.fill") {
                 model.stopStreamFromMenu()
@@ -243,20 +246,18 @@ struct MenuBarPanel: View {
                 }
             }
         }
-        if let device = LunaPower.shared.gatedDevice(for: host) {
-            if LunaPower.shared.actionInFlight[host.id] == "on" {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.mini).frame(width: 18)
-                    Text("Waking \(host.displayName)…")
-                    Spacer()
-                    Button("Stop Waiting") { model.cancelWake(host) }
-                        .buttonStyle(.glass)
-                        .controlSize(.small)
-                }
-            } else if model.menuBarHostAsleep {
-                actionRow("Wake and Connect", systemImage: "power") {
-                    model.wakeHost(host, device: device, thenConnect: true)
-                }
+        if model.isWaking(host) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.mini).frame(width: 18)
+                Text("Waking \(host.displayName)…")
+                Spacer()
+                Button("Stop Waiting") { model.cancelWake(host) }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+            }
+        } else if model.canWake(host), model.menuBarHostAsleep {
+            actionRow("Wake and Connect", systemImage: "power") {
+                model.wakeHost(host, thenConnect: true)
             }
         }
     }

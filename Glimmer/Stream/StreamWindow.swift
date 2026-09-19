@@ -181,6 +181,19 @@ public final class StreamWindow {
     /// Window-mode title ("Tower - Desktop"). Ignored by the borderless cover.
     public var windowTitle: String = ""
 
+    /// The window as a small floating panel (StreamWindow+MiniPlayer.swift).
+    /// A window-mode variant: `displayMode` reads `.window` while it is on.
+    public internal(set) var isMiniPlayer = false
+    /// The presentation to return to when the mini player is left.
+    var miniPlayerReturnMode: StreamDisplayMode = .fullScreen
+    /// Path B: the Space exit in flight was asked for by the mini player.
+    var miniPlayerPending = false
+    /// Pointer resting on the mini player; drives its hover-shown close button.
+    var miniPlayerHovering = false
+    /// Fired on every mini player edge (true = on). The session tells the
+    /// forwarder and the launcher.
+    public var onMiniPlayerChanged: (@MainActor (Bool) -> Void)?
+
     /// The stream's requested pixel size. Window mode opens pixel-mapped to it
     /// (points = pixels / backingScaleFactor, fit to the screen) and locks the
     /// content aspect to it so a drag-resize scales the picture instead of
@@ -441,6 +454,7 @@ public final class StreamWindow {
         // the session's stop() (StreamWindow+Windowed.swift). Wired after
         // full initialization because it captures self.
         delegate.onCloseRequested = { [weak self] in self?.handleUserCloseRequest() }
+        delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
     }
 
     /// Strong ref so the window delegate isn't deallocated mid-stream

@@ -56,6 +56,12 @@ public actor StreamSession {
         await MainActor.run { win?.setCursorHidden(hidden) }
     }
 
+    /// The menu bar row: into the mini player, or back out of it.
+    public func toggleMiniPlayer() async {
+        let win = self.window
+        await MainActor.run { win?.toggleMiniPlayer() }
+    }
+
     public func resumeWindow() async {
         // Capture the StreamWindow reference on the actor first (it lives
         // here, isolated to us), then hop to the main actor to touch

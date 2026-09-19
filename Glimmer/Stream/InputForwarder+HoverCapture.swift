@@ -100,6 +100,7 @@ extension InputForwarder {
     func notePointerEnteredStreamView() {
         guard isWindowMode else { return }
         noteHoverCaptureEvent(.pointerEntered)
+        if isMiniPlayer { onMiniPlayerHoverChanged?(true); return }
         guard HoverCapture.shouldCaptureOnEnter(
             isKeyWindow: window?.isKeyWindow ?? false,
             isSuppressed: isHoverCaptureSuppressed,
@@ -120,13 +121,14 @@ extension InputForwarder {
     func notePointerExitedStreamView() {
         guard isWindowMode, !isMouseCaptured else { return }
         noteHoverCaptureEvent(.pointerExited)
+        if isMiniPlayer { onMiniPlayerHoverChanged?(false) }
     }
 
     /// Grab now if the pointer is already resting on the picture. Called from
     /// the two moments where the window gains the input without the pointer
     /// moving: the windowed bring-up, and a Cmd-Tab back.
     func captureIfPointerIsOverTheStreamView(reason: String) {
-        guard isWindowMode, let window, let view = inputView else { return }
+        guard isWindowMode, !isMiniPlayer, let window, let view = inputView else { return }
         guard HoverCapture.shouldCaptureOnKey(
             pointerIsInside: Self.pointerIsInside(view, of: window),
             isKeyWindow: window.isKeyWindow,

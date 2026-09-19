@@ -49,9 +49,16 @@ extension AppModel {
         stream(app: pending.app, on: pending.host, takeoverAuthorized: true)
     }
 
-    /// The per-launch UI state, reset at every start.
+    /// The per-launch UI state, reset at every start. The click anchors live
+    /// here too: the engine's own clock starts after HTTPS + window build, so
+    /// only the click can answer "did the user wait > 400 ms".
     private func armLaunchState(app: LibraryApp, host: Host) {
         lastLaunchAttempt = (app, host)
+        Self.connectClickedAt = Date()
+        ConnectTimingTelemetry.shared.resetForNewSession()
+        ConnectTimingTelemetry.shared.anchorClick()
+        Self.connectCapsuleShown = false
+        Self.connectCancelRequested = false
         isReconnecting = false
         statsOverlayShown = showStreamStats
         StreamHistory.shared.reset()
@@ -88,20 +95,6 @@ extension AppModel {
         // stream end mounts a fresh toast with a full hold, instead of the
         // new toast inheriting the old one's residual timer.
         streamEndedToastVisible = false
-        // Connect-hold adjudication breadcrumb, half one: anchor the span at
-        // the CLICK (the engine's own clock starts after HTTPS + window
-        // build, so it can't answer "did the user wait >400 ms"). The live
-        // edge in handleNativeEvent logs the verdict.
-        Self.connectClickedAt = Date()
-        // True click-to-pixels anchor (telemetry): clear any prior session's
-        // latch, then anchor at this launch click - before the connect Task spins
-        // up - the leg handshake_total_ms (connect-start anchored) can't see.
-        // Resolved at the .firstFrame edge. Reset HERE (not in
-        // TelemetryCounters.resetForNewSession, which runs AFTER the click).
-        ConnectTimingTelemetry.shared.resetForNewSession()
-        ConnectTimingTelemetry.shared.anchorClick()
-        Self.connectCapsuleShown = false
-        Self.connectCancelRequested = false
         // NB: the "last played" timestamp is intentionally NOT written here.
         // It records when the stream ENDED, not when it started - writing it
         // on start made the launcher's "last played N ago" label tick from
@@ -177,6 +170,9 @@ extension AppModel {
                     releasePointerHotkeyProvider: { [weak self] in
                         self?.releasePointerHotkey ?? .defaultReleasePointer
                     },
+                    miniPlayerHotkeyProvider: { [weak self] in
+                        self?.miniPlayerHotkey ?? .defaultMiniPlayer
+                    },
                     initialStatsOverlay: initialStatsOverlay,
                     initialStatsCorner: streamStatsCorner,
                     // Provider closure so a Settings preset/checkbox
@@ -199,6 +195,9 @@ extension AppModel {
                     },
                     onBackgroundedChanged: { [weak self] backgrounded in
                         self?.nativeStreamBackgrounded = backgrounded
+                    },
+                    onMiniPlayerChanged: { [weak self] mini in
+                        self?.isMiniPlayer = mini
                     }
                 )
                 for await event in events {
@@ -282,6 +281,7 @@ extension AppModel {
         // teardown site. No-op if the helper was never engaged.
         AWDLHelperManager.shared.releaseForStream()
         self.nativeStreamBackgrounded = false
+        self.isMiniPlayer = false
         self.nativeSession = nil
         self.menuStopInProgress = false
         self.isReconnecting = false

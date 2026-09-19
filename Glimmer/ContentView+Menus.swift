@@ -62,6 +62,16 @@ private struct HostContextMenu: ViewModifier {
                     // the observable sentinel so SwiftUI recomputes the Mbps.
                     model.displayInfoRevision &+= 1
                 }
+                // Wake on LAN needs the MAC Sunshine reports; without one the
+                // switch is shown off and disabled so the reason is visible.
+                Toggle(isOn: Binding(
+                    get: { host.wakeOnLAN && WakeOnLAN.normalizeMac(host.macAddress) != nil },
+                    set: { model.setWakeOnLAN(host, enabled: $0) })) {
+                    Label("Wake on LAN", systemImage: "bolt.fill")
+                }
+                .disabled(WakeOnLAN.normalizeMac(host.macAddress) == nil)
+                .help("Wakes this PC before connecting when it is asleep. Works on your home network; "
+                    + "over a VPN it depends on your router, and over Tailscale it can't reach the PC.")
                 Divider()
                 Button(role: .destructive) {
                     showUnpairConfirm = true

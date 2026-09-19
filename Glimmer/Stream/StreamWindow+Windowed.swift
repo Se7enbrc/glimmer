@@ -77,7 +77,7 @@ extension StreamWindow {
     /// last position and size win. The restored size is then conformed to
     /// THIS stream's aspect (a saved 16:10 frame would letterbox a 16:9
     /// stream) and the whole frame constrained onto the screen.
-    private func configureWindowedChrome() {
+    func configureWindowedChrome() {
         window.title = windowTitle
         let aspect = streamPixelSize.width > 0 && streamPixelSize.height > 0
             ? streamPixelSize : CGSize(width: 16, height: 9)
@@ -132,7 +132,7 @@ extension StreamWindow {
     /// AppKit already saved the real one on the last move/resize.
     func finishWindowedFrameAutosave() {
         if !window.styleMask.contains(.fullScreen) {
-            window.saveFrame(usingName: Self.frameAutosaveName)
+            window.saveFrame(usingName: isMiniPlayer ? Self.miniPlayerFrameAutosaveName : Self.frameAutosaveName)
         }
         window.setFrameAutosaveName("")
     }
@@ -155,6 +155,7 @@ extension StreamWindow {
         guard displayMode == .window, !didClose else { return }
         setCursorHidden(captured)
         (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(captured)
+        updateMiniPlayerControls()
         if captured {
             showCaptureHintIfBudgetAllows()
         } else {
@@ -207,7 +208,7 @@ extension StreamWindow {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.didClose, self.displayMode == .fullScreen else { return }
-                self.beginSpaceExitConversion()
+                self.retireFullScreenCover()
             }
         })
         spaceExitObservers.append(nc.addObserver(
@@ -220,14 +221,15 @@ extension StreamWindow {
         })
     }
 
-    /// The transition is under way: make the fullscreen machinery inert
-    /// BEFORE anything can fire against it. Removing the key observers and
-    /// bumping the resign generation together guarantee that neither a fresh
-    /// resign nor one already sitting in its debounce can orderOut the window
-    /// - the vanish in #84. The menu bar and cursor come back now, the chrome
-    /// waits for didExit.
-    private func beginSpaceExitConversion() {
-        log.notice("Leaving the fullscreen Space (user-driven) - converting the stream window to window mode")
+    /// Full screen is ending (a Space exit under way, or the mini player
+    /// taking over the cover): make the fullscreen machinery inert BEFORE
+    /// anything can fire against it. Removing the key observers and bumping
+    /// the resign generation together guarantee that neither a fresh resign
+    /// nor one already sitting in its debounce can orderOut the window - the
+    /// vanish in #84. The menu bar and cursor come back now; the chrome is
+    /// the caller's.
+    func retireFullScreenCover() {
+        log.notice("Leaving full screen - converting the stream window to window mode")
         resignGeneration &+= 1
         for token in keyObservers { NotificationCenter.default.removeObserver(token) }
         keyObservers.removeAll()
@@ -252,17 +254,27 @@ extension StreamWindow {
     /// key, re-install the input path (the Space exit resets the responder
     /// chain, exactly as the enter did), and arm the windowed observers.
     private func finishSpaceExitConversion() {
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.collectionBehavior = [.fullScreenPrimary]
-        window.level = .normal
-        configureWindowedChrome()
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-        installWindowedLifecycleObservers()
         for token in spaceExitObservers { NotificationCenter.default.removeObserver(token) }
         spaceExitObservers.removeAll()
+        let toMiniPlayer = miniPlayerPending
+        miniPlayerPending = false
+        if toMiniPlayer {
+            applyMiniPlayerChrome()
+        } else {
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.collectionBehavior = [.fullScreenPrimary]
+            window.level = .normal
+            configureWindowedChrome()
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+        }
+        installWindowedLifecycleObservers()
         onBackgroundedChanged?(false)
         onDidBecomeReadyForInput?()
-        Diag.notice("Left the full-screen Space - the stream continues in a window (the pointer is yours again)", "Stream")
+        if toMiniPlayer {
+            onMiniPlayerChanged?(true)
+        } else {
+            Diag.notice("Left the full-screen Space - the stream continues in a window (the pointer is yours again)", "Stream")
+        }
     }
 }

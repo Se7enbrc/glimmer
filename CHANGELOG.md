@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.9.5 - Unreleased
+
+Wake on LAN, built in. When a PC is asleep, the Stream button and the menu bar
+row become Wake and Connect: Glimmer sends the standard wake packets itself,
+using the network address Sunshine reported, waits for Sunshine to answer and
+connects. It is on for each PC by default and can be turned off in the PC's
+right-click menu. It works on your home network; over a VPN it depends on your
+router forwarding wake packets, and over Tailscale it cannot reach the PC. The
+old power controls that needed a separate tool are gone.
+
+A mini player. Press ⌃M during a stream (or choose Mini Player in the menu bar)
+and the stream shrinks to a small window that floats over everything, including
+other apps' full-screen Spaces, so a queue, a loading screen or an idle game
+stays in view while you use the Mac. It opens a quarter of the screen wide in
+the bottom-right corner, remembers where you drag it, and keeps the picture's
+aspect as you resize it. Nothing about it takes your mouse until you click it: a
+click puts the pointer in the game, holding Esc gives it back, and the keyboard
+reaches the game while the mini player is the active window. Press ⌃M again,
+choose Back to Stream, or double-click its top edge to return to full screen or
+your window, whichever you had. The close button, shown when the pointer rests
+on it, ends the stream like the window's red button. The chord can be changed in
+Settings › Shortcuts.
+
+Raw-HID pads no longer claim a keyboard's gamepad interface. Hall-effect
+keyboards expose one for their analog mode; Glimmer was treating it as an
+unknown gamepad, which Sunshine emulates as an Xbox 360 controller, so every
+keypress drove a phantom pad and games flipped their button glyphs between Xbox
+and PlayStation.
+
 ## 2026.9.4 - 2026-09-19
 
 Controllers macOS doesn't know about, a mouse that feels like your Mac, a menu

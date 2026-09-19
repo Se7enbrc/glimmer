@@ -170,6 +170,17 @@ public final class InputForwarder {
     /// on, where it TOGGLES capture.
     public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
+    /// The mini player chord: a client-only toggle, never forwarded.
+    public var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
+    public var onMiniPlayerHotkey: (@MainActor () -> Void)?
+
+    /// Mini player: no hover grab, a click takes the pointer. Set live by
+    /// `setMiniPlayer` (InputForwarder+WindowPointer.swift).
+    var isMiniPlayer = false
+    /// The pointer entered or left the mini player; the window shows its
+    /// close button off this edge.
+    var onMiniPlayerHoverChanged: (@MainActor (Bool) -> Void)?
+
     /// Window mode: relative capture is grabbed by the pointer being over the
     /// picture and left with a held Esc, the pointer chord, or switching apps.
     /// Outside capture the pointer is a normal Mac pointer mirrored onto the

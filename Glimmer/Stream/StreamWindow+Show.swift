@@ -18,9 +18,15 @@ extension StreamWindow {
     public func show() {
         // Window mode has its own bring-up (StreamWindow+Windowed.swift): a
         // titled window, no presentation-options change, no cover, no cursor
-        // hide. Everything below is the fullscreen path, unchanged.
+        // hide. Everything else is the fullscreen path, unchanged.
         if displayMode == .window { showWindowed(); return }
+        presentFullScreen(firstShow: true)
+    }
 
+    /// The fullscreen bring-up. `firstShow` fades in on the first decoded
+    /// frame; the return from the mini player is already showing video, so
+    /// it stays opaque and takes the presentation options at once.
+    func presentFullScreen(firstShow: Bool) {
         // 1. Save the host app's current presentation options so we can put
         //    them back verbatim on close(). Pulling this from NSApp at
         //    show() time (rather than caching a constant) means we cooperate
@@ -156,8 +162,10 @@ extension StreamWindow {
         // (an empty AVSampleBufferDisplayLayer renders black and reads
         // as "macOS desktop with letterbox bars"). `fadeInOnFirstFrame()`
         // is called by the session when VT produces its first frame.
-        window.alphaValue = 0.0
-        awaitingFirstFrameFadeIn = true
+        if firstShow {
+            window.alphaValue = 0.0
+            awaitingFirstFrameFadeIn = true
+        }
 
         if coversNotch {
             // Borderless covering window above the menu bar level.
@@ -229,6 +237,7 @@ extension StreamWindow {
         setCursorHidden(true)
 
         installLifecycleObservers()
+        if !firstShow { applyPresentationOptions(coversNotch: coversNotch) }
 
         // NOTE: cursor ASSOCIATION (the SDL_SetRelativeMouseMode equivalent) is
         // owned by InputForwarder.enterCapturedMode()/exitCapturedMode(), which
@@ -241,13 +250,14 @@ extension StreamWindow {
         // pure - no warp, no edge, no reconciliation delta to leak). This is the
         // P0 mouse-snap fix; see InputForwarder+Capture for the contract.
 
-        // 6. Safety-net first-responder install. The didEnterFullScreen
-        //    observer above handles the happy path - it fires onDidBecome-
-        //    ReadyForInput after AppKit finishes the Space-creation
-        //    animation. But if that notification is dropped for any reason
-        //    (older macOS quirk, fullscreen transition fails), we'd be
-        //    left without an installed first responder and the user's
-        //    hotkeys never fire. A 1.5s backstop covers it.
+        installKeyBackstop()
+    }
+
+    /// Safety-net first-responder install. The didEnterFullScreen observer
+    /// handles the happy path; if that notification is dropped (older macOS
+    /// quirk, a failed transition) the hotkeys would never fire, so a 1.5 s
+    /// backstop re-activates and re-installs.
+    private func installKeyBackstop() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             // didClose guard: close() keeps the window alive ~250ms for the fade,
             // so a connect that failed at ~1-1.5s must not steal focus back here.

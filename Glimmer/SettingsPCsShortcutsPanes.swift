@@ -220,6 +220,11 @@ struct ShortcutsPane: View {
                     + "moving the mouse. In full screen this combo goes to the game.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                HotkeyRow(label: "Mini player", hotkey: $model.miniPlayerHotkey)
+                Text("Shrinks the stream to a small window that floats over your other apps, and brings it "
+                    + "back. Click the mini player to play; hold Esc to get the pointer back.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Controller quit") {
