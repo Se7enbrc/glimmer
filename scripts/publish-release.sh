@@ -89,7 +89,29 @@ echo "Publishing GitHub release ${TAG} to ${REPO}"
 ASSETS=("$ZIP")
 [ -f "$DMG" ] && ASSETS+=("$DMG")
 if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
-	gh release upload "$TAG" "${ASSETS[@]}" -R "$REPO" --clobber
+	# A published version is immutable: Sparkle signatures and the Homebrew
+	# cask checksum already point at these bytes. A retry may only add a
+	# missing asset or confirm an identical one; anything else is a new version.
+	TAG_SHA="$(gh api "repos/$REPO/commits/$TAG" --jq .sha 2>/dev/null || true)"
+	[ "$TAG_SHA" = "$HEAD_SHA" ] || {
+		echo "ERR: tag $TAG is at ${TAG_SHA:-unknown}, not HEAD ($HEAD_SHA). Published versions are immutable - bump the version." >&2
+		exit 1
+	}
+	for asset in "${ASSETS[@]}"; do
+		name="$(basename "$asset")"
+		remote="$(gh api "repos/$REPO/releases/tags/$TAG" \
+			--jq ".assets[] | select(.name==\"$name\") | .digest // \"unknown\"" 2>/dev/null || true)"
+		local_digest="sha256:$(shasum -a 256 "$asset" | cut -d' ' -f1)"
+		if [ -z "$remote" ]; then
+			gh release upload "$TAG" "$asset" -R "$REPO"
+			echo "  ✓ $name added to the existing release"
+		elif [ "$remote" = "$local_digest" ]; then
+			echo "  = $name already published with these bytes"
+		else
+			echo "ERR: $name is already published with different bytes ($remote). Published versions are immutable - bump the version." >&2
+			exit 1
+		fi
+	done
 else
 	gh release create "$TAG" "${ASSETS[@]}" -R "$REPO" --target "$HEAD_SHA" --title "Glimmer $SHORT" \
 		--notes-file "$NOTES"

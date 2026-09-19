@@ -86,21 +86,19 @@ repos:
       - id: swiftlint
         name: SwiftLint
         description: SwiftLint --fix then lint (errors only).
-        # If `swiftlint --fix` modifies any staged file we refuse the commit
-        # rather than silently `git add`-ing on the user's behalf. That way
-        # the user sees the autocorrected diff and re-stages it deliberately.
-        # Repo root is discovered via `git rev-parse --show-toplevel` so this
-        # config is portable (the previous version hard-coded an absolute
-        # path).
+        # If `swiftlint --fix` modifies any file we refuse the commit rather
+        # than silently `git add`-ing on the user's behalf: the working tree's
+        # Swift diff is hashed before and after, so a rewrite of an already-
+        # dirty file is caught too. Repo root comes from `git rev-parse`.
         entry:
           bash -c 'set -e; ROOT=$(git rev-parse --show-toplevel);
-          CFG="$ROOT/.swiftlint.yml"; BEFORE=$(git -C "$ROOT" diff --name-only
-          -- "*.swift" "*.swiftinterface" | sort -u); swiftlint --fix --quiet
-          --config "$CFG"; AFTER=$(git -C "$ROOT" diff --name-only -- "*.swift"
-          "*.swiftinterface" | sort -u); if [ "$BEFORE" != "$AFTER" ]; then echo
-          "swiftlint --fix rewrote files. Review the diff and re-add them:" >&2;
-          diff <(echo "$BEFORE") <(echo "$AFTER") >&2 || true; exit 1; fi;
-          swiftlint lint --quiet --config "$CFG"'
+          CFG="$ROOT/.swiftlint.yml"; BEFORE=$(git -C "$ROOT" diff -- "*.swift"
+          "*.swiftinterface" | shasum -a 256); swiftlint --fix --quiet --config
+          "$CFG"; AFTER=$(git -C "$ROOT" diff -- "*.swift" "*.swiftinterface" |
+          shasum -a 256); if [ "$BEFORE" != "$AFTER" ]; then echo "swiftlint
+          --fix rewrote files. Review the diff and re-add them:" >&2; git -C
+          "$ROOT" diff --stat -- "*.swift" >&2 || true; exit 1; fi; swiftlint
+          lint --quiet --config "$CFG"'
         language: system
         types: [swift]
         pass_filenames: false

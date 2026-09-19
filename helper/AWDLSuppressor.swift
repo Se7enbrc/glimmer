@@ -269,7 +269,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         ctx.info = unmanagedSelf
 
         let storeOpt = withUnsafeMutablePointer(to: &ctx) { ctxPtr -> SCDynamicStore? in
-            return SCDynamicStoreCreate(
+            SCDynamicStoreCreate(
                 nil,
                 "io.ugfugl.glimmer.helper" as CFString,
                 { _, changedKeys, info in
@@ -289,7 +289,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         let patterns = [
             "State:/Network/Interface/awdl0/Link" as CFString,
             "State:/Network/Interface/awdl0/IPv4" as CFString,
-            "State:/Network/Interface/awdl0/IPv6" as CFString,
+            "State:/Network/Interface/awdl0/IPv6" as CFString
         ]
         SCDynamicStoreSetNotificationKeys(store, nil, patterns as CFArray)
 

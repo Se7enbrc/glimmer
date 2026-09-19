@@ -522,8 +522,15 @@ guard-clean-tree:
 # DMG's app is stapled, so it passes Gatekeeper offline on any Mac.
 # Non-interactive from any session once the one-time setup is done (creds file +
 # codesign-setup + setup-notary - docs/RELEASE.md).
-dist: guard-clean-tree
+dist: guard-clean-tree verify
 	$(MAKE) CONFIG=Release preflight clean app notarize dmg
+
+# Release gate: lint clean (strict) and the unit suite green before anything
+# is packaged. `make dist` / `make release-publish` cannot skip it.
+verify:
+	@echo "▶ Verify (lint --strict + tests)..."
+	@swiftlint lint --strict --quiet
+	@$(MAKE) test
 
 # --- Auto-update publication (Sparkle) -------------------------------------
 

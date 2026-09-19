@@ -287,7 +287,7 @@ struct ParserHelperTests {
     @Test func padEmptyBufferBecomesAllZeros() {
         #expect(audioQueue().padShard([], to: 4) == [0, 0, 0, 0])
         // Pad-to-zero of an empty buffer stays empty.
-        #expect(audioQueue().padShard([], to: 0) == [])
+        #expect(audioQueue().padShard([], to: 0).isEmpty)
     }
 
     // MARK: - RtpAudioQueue.appendRtpHeader (12-byte big-endian RTP header)

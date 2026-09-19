@@ -12,11 +12,11 @@ if getuid() != 0 {
 let suppressor = AWDLSuppressor()
 suppressor.start()
 
-let listener = NSXPCListener(machServiceName: GlimmerHelperMachServiceName)
+let listener = NSXPCListener(machServiceName: glimmerHelperMachServiceName)
 let service = HelperService(suppressor: suppressor)
 listener.delegate = service
 listener.resume()
 
-os_log("Glimmer helper listening on %{public}@", log: log, type: .info, GlimmerHelperMachServiceName)
+os_log("Glimmer helper listening on %{public}@", log: log, type: .info, glimmerHelperMachServiceName)
 
 RunLoop.main.run()

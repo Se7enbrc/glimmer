@@ -172,9 +172,9 @@ struct FuzzTests {
             #expect(!b.isEmpty, "HEVC split produced no buffers at iteration \(i) for \(hex([UInt8](random)))")
         }
         for _ in 0..<kIterations {
-            let m = Data(rng.mutate([UInt8](validAU), maxAppend: 128))
-            _ = dpH264.splitAnnexBParamSets(m)
-            _ = dpHevc.splitAnnexBParamSets(m)
+            let mutated = Data(rng.mutate([UInt8](validAU), maxAppend: 128))
+            _ = dpH264.splitAnnexBParamSets(mutated)
+            _ = dpHevc.splitAnnexBParamSets(mutated)
         }
     }
 
@@ -196,8 +196,8 @@ struct FuzzTests {
             _ = RtspMessage.parseResponse(Data(random))
         }
         for _ in 0..<kIterations {
-            let m = rng.mutate(valid, maxAppend: 256)
-            let msg = RtspMessage.parseResponse(Data(m))
+            let mutated = rng.mutate(valid, maxAppend: 256)
+            let msg = RtspMessage.parseResponse(Data(mutated))
             // If it parsed, headerValue must not trap on any key.
             _ = msg?.headerValue("CSeq")
             _ = msg?.headerValue("Session")
@@ -215,7 +215,7 @@ struct FuzzTests {
             // Random bytes interpreted as a (possibly invalid) UTF-8 / Latin-1
             // string - the host's SDP can be arbitrary text.
             let randomBytes = rng.randomData(maxLen: 4096)
-            let s = String(decoding: randomBytes, as: UTF8.self)
+            let s = String(bytes: randomBytes, encoding: .utf8) ?? ""
             // Probe with both a present-ish and an absent attribute name, plus a
             // randomly-sliced needle, so the range arithmetic is hammered.
             _ = SdpScan.attributeUInt(s, attrName)
@@ -227,8 +227,8 @@ struct FuzzTests {
             _ = SdpScan.contains(s, needle)
         }
         for _ in 0..<kIterations {
-            let m = rng.mutate([UInt8](validSdp.utf8), maxAppend: 128)
-            let s = String(decoding: m, as: UTF8.self)
+            let mutated = rng.mutate([UInt8](validSdp.utf8), maxAppend: 128)
+            let s = String(bytes: mutated, encoding: .utf8) ?? ""
             _ = SdpScan.attributeUInt(s, attrName)
             _ = SdpScan.attributeUInt(s, "x-ss-general.featureFlags")
             _ = SdpScan.contains(s, "minimumBitrateKbps")
@@ -304,12 +304,12 @@ struct FuzzTests {
             _ = EnetControlChannel.reliableSeqIsNewer(a, than: b)
         }
         for _ in 0..<kIterations {
-            let m = rng.mutate(validHdr, maxAppend: 64)
+            let mutated = rng.mutate(validHdr, maxAppend: 64)
             // Only exercise the static parser at lengths its caller guarantees
             // (>=27); shorter mutations exercise the guard's contract via the
             // length check the caller embodies. We assert no trap at >=27.
-            if m.count >= 27 {
-                _ = EnetControlChannel.parseHdrMetadata(m)
+            if mutated.count >= 27 {
+                _ = EnetControlChannel.parseHdrMetadata(mutated)
             }
         }
     }
@@ -419,8 +419,8 @@ struct FuzzTests {
         }
         if !validEnvelope.isEmpty {
             for _ in 0..<kIterations {
-                let m = rng.mutate(validEnvelope, maxAppend: 128)
-                _ = try? crypto.open(m)
+                let mutated = rng.mutate(validEnvelope, maxAppend: 128)
+                _ = try? crypto.open(mutated)
             }
         }
     }
@@ -442,8 +442,8 @@ struct FuzzTests {
         plaintext.append(UInt8(plen & 0xFF)); plaintext.append(UInt8((plen >> 8) & 0xFF))
         plaintext.append(contentsOf: payload)
 
-        let nonce = try CryptoKitGCMNonce(iv)
-        let (ciphertext, tag) = try CryptoKitGCMSeal(plaintext, key: key, nonce: nonce)
+        let nonce = try cryptoKitGCMNonce(iv)
+        let (ciphertext, tag) = try cryptoKitGCMSeal(plaintext, key: key, nonce: nonce)
         let length = UInt16(4 + 16 + ciphertext.count)
         var out: [UInt8] = [0x01, 0x00]
         out.append(UInt8(length & 0xFF)); out.append(UInt8((length >> 8) & 0xFF))
@@ -457,11 +457,11 @@ struct FuzzTests {
 
 // MARK: - Tiny CryptoKit shims for the StreamCrypto seed (kept off the main type)
 
-private func CryptoKitGCMNonce(_ bytes: [UInt8]) throws -> AES.GCM.Nonce {
+private func cryptoKitGCMNonce(_ bytes: [UInt8]) throws -> AES.GCM.Nonce {
     try AES.GCM.Nonce(data: Data(bytes))
 }
 
-private func CryptoKitGCMSeal(_ plaintext: [UInt8], key: [UInt8],
+private func cryptoKitGCMSeal(_ plaintext: [UInt8], key: [UInt8],
                               nonce: AES.GCM.Nonce) throws -> (ciphertext: [UInt8], tag: [UInt8]) {
     let box = try AES.GCM.seal(Data(plaintext),
                                using: SymmetricKey(data: Data(key)), nonce: nonce)
