@@ -1,6 +1,9 @@
 # Changelog
 
-## 2026.9.5 - Unreleased
+## 2026.9.5 - 2026-09-19
+
+Wake the PC yourself, keep the game in view while you do something else, and a
+keyboard that stops passing for a gamepad.
 
 Wake on LAN, built in. When a PC is asleep, the Stream button and the menu bar
 row become Wake and Connect: Glimmer sends the standard wake packets itself,
