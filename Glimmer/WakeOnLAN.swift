@@ -68,7 +68,7 @@ enum WakeOnLAN {
             if getnameinfo(broadcast, socklen_t(broadcast.pointee.sa_len), &address, socklen_t(address.count),
                            nil, 0, NI_NUMERICHOST) == 0 {
                 let bytes = address.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
-                result.append(String(decoding: bytes, as: UTF8.self))
+                if let text = String(bytes: bytes, encoding: .utf8) { result.append(text) }
             }
         }
         return result

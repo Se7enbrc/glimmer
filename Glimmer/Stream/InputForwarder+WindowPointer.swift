@@ -68,6 +68,18 @@ extension InputForwarder {
         }
     }
 
+    /// The mini player never grabs on hover: a click takes the pointer and a
+    /// held Esc or the chord gives it back. Entering releases a held grab so
+    /// the user can go and do something else; the view accepts the activating
+    /// click so one click on an inactive panel lands in the game.
+    func setMiniPlayer(_ enabled: Bool) {
+        guard isMiniPlayer != enabled else { return }
+        isMiniPlayer = enabled
+        inputView?.acceptsActivatingClick = enabled
+        if enabled, isMouseCaptured { releasePointer(reason: "mini player") }
+        log.info("Pointer policy: \(enabled ? "click to capture (mini player)" : "capture while over the window", privacy: .public)")
+    }
+
     /// The pointer chord (⌃⌥R). A toggle, so the combo is never a dead key:
     /// it grabs a free pointer and frees a grabbed one. It is the way to
     /// re-grab without leaving and re-entering the window, and the way to

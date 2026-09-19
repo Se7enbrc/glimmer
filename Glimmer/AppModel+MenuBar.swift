@@ -77,6 +77,11 @@ extension AppModel {
     }
 
     /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.
+    /// The menu bar row and the chord land in the same place.
+    func toggleMiniPlayer() {
+        Task { [weak self] in await self?.nativeSession?.toggleMiniPlayer() }
+    }
+
     func stopStreamFromMenu() {
         guard let session = nativeSession, !menuStopInProgress else { return }
         menuStopInProgress = true

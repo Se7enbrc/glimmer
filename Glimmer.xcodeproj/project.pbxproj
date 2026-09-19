@@ -226,6 +226,7 @@
 		DEC0DE840000000000000001 /* StreamDisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000002 /* StreamDisplayMode.swift */; };
 		DEC0DE840000000000000003 /* StreamWindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000004 /* StreamWindowGeometry.swift */; };
 		DEC0DE840000000000000005 /* StreamWindow+Windowed.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000006 /* StreamWindow+Windowed.swift */; };
+		DEC0DE2026092000000000D5 /* StreamWindow+MiniPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D6 /* StreamWindow+MiniPlayer.swift */; };
 		DEC0DE840000000000000007 /* InputForwarder+WindowPointer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000008 /* InputForwarder+WindowPointer.swift */; };
 		DEC0DE840000000000000015 /* PointerMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000016 /* PointerMapping.swift */; };
 		DEC0DE840000000000000017 /* InputForwarder+EscapeHold.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */; };
@@ -280,6 +281,7 @@
 		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */; };
+		DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */; };
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
 		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
@@ -553,6 +555,7 @@
 		DEC0DE840000000000000002 /* StreamDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayMode.swift; sourceTree = "<group>"; };
 		DEC0DE840000000000000004 /* StreamWindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamWindowGeometry.swift; sourceTree = "<group>"; };
 		DEC0DE840000000000000006 /* StreamWindow+Windowed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Windowed.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000D6 /* StreamWindow+MiniPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+MiniPlayer.swift"; sourceTree = "<group>"; };
 		DEC0DE840000000000000008 /* InputForwarder+WindowPointer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+WindowPointer.swift"; sourceTree = "<group>"; };
 		DEC0DE840000000000000016 /* PointerMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/PointerMapping.swift; sourceTree = "<group>"; };
 		DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+EscapeHold.swift"; sourceTree = "<group>"; };
@@ -608,6 +611,7 @@
 		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLANTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MiniPlayerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
@@ -779,6 +783,7 @@
 				D1000C02 /* StreamWindow+Cursor.swift */,
 				DEC0DE840000000000000004 /* StreamWindowGeometry.swift */,
 				DEC0DE840000000000000006 /* StreamWindow+Windowed.swift */,
+				DEC0DE2026092000000000D6 /* StreamWindow+MiniPlayer.swift */,
 				DEC0DE840000000000000008 /* InputForwarder+WindowPointer.swift */,
 				DEC0DE840000000000000016 /* PointerMapping.swift */,
 				DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */,
@@ -992,6 +997,7 @@
 				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */,
+				DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
@@ -1216,6 +1222,7 @@
 				DEC0DE840000000000000001 /* StreamDisplayMode.swift in Sources */,
 				DEC0DE840000000000000003 /* StreamWindowGeometry.swift in Sources */,
 				DEC0DE840000000000000005 /* StreamWindow+Windowed.swift in Sources */,
+				DEC0DE2026092000000000D5 /* StreamWindow+MiniPlayer.swift in Sources */,
 				DEC0DE840000000000000007 /* InputForwarder+WindowPointer.swift in Sources */,
 				DEC0DE840000000000000015 /* PointerMapping.swift in Sources */,
 				DEC0DE840000000000000017 /* InputForwarder+EscapeHold.swift in Sources */,
@@ -1415,6 +1422,7 @@
 				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */,
+				DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,

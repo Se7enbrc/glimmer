@@ -202,6 +202,11 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     /// so ⌃⌥R reaches the host.
     public static let defaultReleasePointer = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "r")
 
+    /// Default mini player chord: ⌃M, a toggle between the mini player and
+    /// the full presentation. Two keys like ⌃B (it is pressed to step away,
+    /// not mid-fight), no ⌘, and it collides with none of the defaults.
+    public static let defaultMiniPlayer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "m")
+
     var displayString: String {
         var parts: [String] = []
         if ctrl { parts.append("⌃") }

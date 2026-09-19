@@ -35,6 +35,7 @@ extension StreamSession {
         statsHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultStats },
         bookmarkHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultBookmark },
         releasePointerHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultReleasePointer },
+        miniPlayerHotkeyProvider: @escaping @MainActor () -> HotkeyChord = { .defaultMiniPlayer },
         initialStatsOverlay: Bool = false,
         initialStatsCorner: StatsOverlayCorner = .topLeft,
         // Provider closure rather than a captured Set so toggling rows in
@@ -48,7 +49,8 @@ extension StreamSession {
         statsThresholdsProvider: @escaping @MainActor () -> StatsThresholds = { .default },
         controllerQuitChordProvider: @escaping @MainActor () -> ControllerQuitChord = { .none },
         customControllerChordProvider: @escaping @MainActor () -> Set<ControllerButton> = { [] },
-        onBackgroundedChanged: (@MainActor (Bool) -> Void)? = nil
+        onBackgroundedChanged: (@MainActor (Bool) -> Void)? = nil,
+        onMiniPlayerChanged: (@MainActor (Bool) -> Void)? = nil
     ) async throws -> AsyncStream<StreamEvent> {
         guard !isStreaming, !stopInProgress else {
             throw StreamError.sessionFailed(-1)
@@ -137,9 +139,11 @@ extension StreamSession {
             statsHotkeyProvider: statsHotkeyProvider,
             bookmarkHotkeyProvider: bookmarkHotkeyProvider,
             releasePointerHotkeyProvider: releasePointerHotkeyProvider,
+            miniPlayerHotkeyProvider: miniPlayerHotkeyProvider,
             controllerQuitChordProvider: controllerQuitChordProvider,
             customControllerChordProvider: customControllerChordProvider,
-            onBackgroundedChanged: onBackgroundedChanged))
+            onBackgroundedChanged: onBackgroundedChanged,
+            onMiniPlayerChanged: onMiniPlayerChanged))
 
         // --- 4a) Build + publish the session bridge (see publishBridge): weak
         // refs to every subsystem + self so a torn-down subsystem just makes its

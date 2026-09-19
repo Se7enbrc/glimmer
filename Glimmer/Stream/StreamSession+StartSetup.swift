@@ -38,9 +38,11 @@ extension StreamSession {
         let statsHotkeyProvider: @MainActor () -> HotkeyChord
         let bookmarkHotkeyProvider: @MainActor () -> HotkeyChord
         let releasePointerHotkeyProvider: @MainActor () -> HotkeyChord
+        let miniPlayerHotkeyProvider: @MainActor () -> HotkeyChord
         let controllerQuitChordProvider: @MainActor () -> ControllerQuitChord
         let customControllerChordProvider: @MainActor () -> Set<ControllerButton>
         let onBackgroundedChanged: (@MainActor (Bool) -> Void)?
+        let onMiniPlayerChanged: (@MainActor (Bool) -> Void)?
     }
 
     /// Build the one-time leave-hint string: the keyboard hotkey, plus the
@@ -83,6 +85,7 @@ extension StreamSession {
         let initialStatsOverlay = options.initialStatsOverlay
         let initialStatsCorner = options.initialStatsCorner
         let onBackgroundedChanged = options.onBackgroundedChanged
+        let onMiniPlayerChanged = options.onMiniPlayerChanged
         // The display mode is a construction-time choice (it picks the style
         // mask); the notch flag, title, and stream size feed show().
         let win = StreamWindow(displayMode: config.displayMode)
@@ -112,6 +115,7 @@ extension StreamSession {
         inp.statsHotkeyProvider = options.statsHotkeyProvider
         inp.bookmarkHotkeyProvider = options.bookmarkHotkeyProvider
         inp.releasePointerHotkeyProvider = options.releasePointerHotkeyProvider
+        inp.miniPlayerHotkeyProvider = options.miniPlayerHotkeyProvider
         inp.controllerQuitChordProvider = options.controllerQuitChordProvider
         inp.customControllerChordProvider = options.customControllerChordProvider
         dec.statsOverlayEnabled = initialStatsOverlay
@@ -197,12 +201,7 @@ extension StreamSession {
         inp.isWindowMode = config.displayMode == .window
         // The reference frame absolute positions are measured against.
         inp.streamPixelSize = CGSize(width: config.width, height: config.height)
-        inp.onPointerCaptureChanged = { [weak win] captured in
-            win?.setPointerCaptured(captured)
-        }
-        win.onDisplayModeChanged = { [weak inp] mode in
-            inp?.setWindowMode(mode == .window)
-        }
+        Self.wireWindowPointerModel(win: win, inp: inp, onMiniPlayerChanged: onMiniPlayerChanged)
         inp.attach(to: win.window)
         // The window installs first responder only after it has
         // become key AND finished its enter-fullscreen transition.
@@ -226,6 +225,29 @@ extension StreamSession {
             drivingView: win.streamContentView,
             configuredFps: Int32(config.fps))
         return (win, inp, dec)
+    }
+
+    /// The window ⇄ forwarder edges of the window pointer model: capture
+    /// edges drive the cursor, a mode flip switches the pointer policy, and
+    /// the mini player edge reaches the forwarder (click-to-capture) before
+    /// the launcher and menu bar hear about it.
+    @MainActor
+    private static func wireWindowPointerModel(
+        win: StreamWindow, inp: InputForwarder, onMiniPlayerChanged: (@MainActor (Bool) -> Void)?
+    ) {
+        inp.onPointerCaptureChanged = { [weak win] captured in
+            win?.setPointerCaptured(captured)
+        }
+        win.onDisplayModeChanged = { [weak inp] mode in
+            inp?.setWindowMode(mode == .window)
+        }
+        win.onMiniPlayerChanged = { [weak inp] mini in
+            inp?.setMiniPlayer(mini)
+            onMiniPlayerChanged?(mini)
+        }
+        inp.onMiniPlayerHoverChanged = { [weak win] hovering in
+            win?.setMiniPlayerHovering(hovering)
+        }
     }
 
     /// Inject the streaming engine into the input forwarder + decoder and wire
@@ -257,6 +279,10 @@ extension StreamSession {
         // close itself so the session's own fade-out teardown owns the exit.
         setup.0.onCloseRequested = { [weak self] in
             Task { await self?.stop() }
+        }
+        // The chord toggles the window directly; both live on the main actor.
+        setup.1.onMiniPlayerHotkey = { [weak win = setup.0] in
+            win?.toggleMiniPlayer()
         }
         // Stats-overlay toggle. Flips a MainActor-isolated bool on the
         // VideoDecoder (read by the render loop) but intentionally does

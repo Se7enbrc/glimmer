@@ -314,6 +314,17 @@ final class AppModel {
             }
         }
     }
+    /// Mini player chord (default ⌃M): the stream as a small floating panel
+    /// over other apps, and back. Read live via a provider like the others.
+    var miniPlayerHotkey: HotkeyChord = .defaultMiniPlayer {
+        didSet {
+            if let data = try? JSONEncoder().encode(miniPlayerHotkey) {
+                UserDefaults.standard.set(data, forKey: "miniPlayerHotkey")
+            }
+        }
+    }
+    /// The running stream is showing as the mini player.
+    var isMiniPlayer = false
     /// Controller-side quit chord - fires the same path as `quitHotkey`
     /// from the keyboard, but driven by a multi-button hold on the
     /// gamepad. Defaults to L3 + R3 (click both sticks): native on every pad (no
@@ -542,6 +553,7 @@ final class AppModel {
         streamDisplayMode = StreamDisplayMode.persisted(
             rawValue: UserDefaults.standard.string(forKey: StreamDisplayMode.defaultsKey))
         releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self) ?? releasePointerHotkey
+        miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self) ?? miniPlayerHotkey
         showStreamStats = Self.persistedBool("showStreamStats") ?? showStreamStats
         streamStatsCorner = Self.persistedRawValue("streamStatsCorner", StatsOverlayCorner.self) ?? streamStatsCorner
         // Stats overlay preset. Key-absence means the user never touched

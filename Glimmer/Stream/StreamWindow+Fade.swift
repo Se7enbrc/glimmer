@@ -71,7 +71,7 @@ extension StreamWindow {
     /// Extracted from `fadeInOnFirstFrame` so the fade completion handler
     /// captures no non-Sendable closure - the handler runs on the main run
     /// loop, so MainActor isolation is sound.
-    private func applyPresentationOptions(coversNotch cover: Bool) {
+    func applyPresentationOptions(coversNotch cover: Bool) {
         // Window mode never touches the app's presentation options - the menu
         // bar and Dock stay, that's the point of a window. (`show()` skipped
         // saving them too, so close() has nothing to restore.)

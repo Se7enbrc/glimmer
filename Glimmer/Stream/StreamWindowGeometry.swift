@@ -53,6 +53,30 @@ enum StreamWindowGeometry {
         return fitted(conformed, within: available)
     }
 
+    /// The narrowest the mini player may be dragged: a glanceable thumbnail.
+    static let miniPlayerMinimumContentWidth: CGFloat = 320
+
+    /// The mini player opens a quarter of the visible width wide, never
+    /// narrower than its minimum or wider than 640 pt, at the stream's aspect.
+    static func miniPlayerContentSize(aspect: CGSize, visible: CGSize) -> CGSize {
+        let width = min(max((visible.width / 4).rounded(), miniPlayerMinimumContentWidth), 640)
+        return CGSize(width: width, height: (width * heightRatio(aspect)).rounded())
+    }
+
+    static func miniPlayerMinimumContentSize(aspect: CGSize) -> CGSize {
+        CGSize(width: miniPlayerMinimumContentWidth, height: miniPlayerMinimumContentWidth * heightRatio(aspect))
+    }
+
+    /// The bottom-right corner of the visible area (above the Dock, clear of
+    /// the menu bar), `inset` points in from both edges.
+    static func miniPlayerOrigin(frame: CGSize, visible: CGRect, inset: CGFloat = 16) -> CGPoint {
+        CGPoint(x: visible.maxX - inset - frame.width, y: visible.minY + inset)
+    }
+
+    private static func heightRatio(_ aspect: CGSize) -> CGFloat {
+        aspect.width > 0 && aspect.height > 0 ? aspect.height / aspect.width : 9 / 16
+    }
+
     /// The minimum content size at this aspect: `minimumContentWidth` wide,
     /// the matching height, so the floor sits ON the aspect line and the
     /// resize constraint never fights the minimum.

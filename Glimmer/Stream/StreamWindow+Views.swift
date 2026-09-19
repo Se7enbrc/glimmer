@@ -48,6 +48,17 @@ final class StreamWindowDelegate: NSObject, NSWindowDelegate {
     /// routes it to the session's stop(); the window is NOT closed here.
     var onCloseRequested: (() -> Void)?
 
+    /// Mirrors `StreamWindow.isMiniPlayer`; a zoom (the title strip's
+    /// double-click) leaves the mini player instead of resizing it.
+    var isMiniPlayer = false
+    var onMiniPlayerExitRequested: (() -> Void)?
+
+    func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
+        guard isMiniPlayer else { return true }
+        onMiniPlayerExitRequested?()
+        return false
+    }
+
     /// Refuse the close and hand it to the session instead: letting AppKit
     /// close the window would orderOut a still-live stream (headless session,
     /// no /cancel - the same orphan issue #84 describes) and skip the fade-out

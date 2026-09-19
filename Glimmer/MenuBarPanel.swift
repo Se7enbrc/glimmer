@@ -132,8 +132,11 @@ struct MenuBarPanel: View {
                 .lineLimit(1)
             Divider()
             actionRow("Back to Stream", systemImage: "play.fill") {
-                model.resumeStreamWindow()
+                if model.isMiniPlayer { model.toggleMiniPlayer() } else { model.resumeStreamWindow() }
                 activate()
+            }
+            if !model.isMiniPlayer {
+                actionRow("Mini Player", systemImage: "pip.enter") { model.toggleMiniPlayer() }
             }
             actionRow(model.menuStopInProgress ? "Stopping…" : "Stop Streaming", systemImage: "stop.fill") {
                 model.stopStreamFromMenu()

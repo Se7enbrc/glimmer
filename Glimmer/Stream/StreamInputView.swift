@@ -73,6 +73,10 @@ final class StreamInputView: NSView {
         }
     }
 
+    /// Mini player: the click that activates the app also lands in the game.
+    var acceptsActivatingClick = false
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { acceptsActivatingClick }
+
     override var acceptsFirstResponder: Bool { true }
     override var isOpaque: Bool { true }
     override func becomeFirstResponder() -> Bool { true }
