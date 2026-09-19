@@ -118,11 +118,11 @@ enum MenuBarPresentation {
     static func metrics(snapshot: StreamStatsSnapshot?, link: String?) -> [MenuBarMetric] {
         var out: [MenuBarMetric] = []
         let fps = snapshot?.receivedFps ?? snapshot?.renderedFps
-        out.append(MenuBarMetric(value: fps.map { "\(Int($0.rounded()))" } ?? "–", label: "frames / s"))
-        out.append(MenuBarMetric(value: snapshot?.rttMs.map { "\(Int($0.rounded())) ms" } ?? "–", label: "latency"))
+        out.append(MenuBarMetric(value: fps.map { "\(Int($0.rounded()))" } ?? "–", label: "Frames/s"))
+        out.append(MenuBarMetric(value: snapshot?.rttMs.map { "\(Int($0.rounded())) ms" } ?? "–", label: "Latency"))
         let mbps = snapshot?.measuredBitrateMbps ?? snapshot?.negotiatedBitrateMbps
-        out.append(MenuBarMetric(value: mbps.map { "\(Int($0.rounded())) Mbps" } ?? "–", label: "bandwidth"))
-        out.append(MenuBarMetric(value: link ?? "–", label: "network"))
+        out.append(MenuBarMetric(value: mbps.map { "\(Int($0.rounded())) Mbps" } ?? "–", label: "Bandwidth"))
+        out.append(MenuBarMetric(value: link ?? "–", label: "Network"))
         return out
     }
 

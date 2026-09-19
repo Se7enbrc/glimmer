@@ -61,7 +61,7 @@ struct MenuBarPresentationTests {
         snap.measuredBitrateMbps = 78.2
         let metrics = MenuBarPresentation.metrics(snapshot: snap, link: "Wi-Fi")
         #expect(metrics.map(\.value) == ["120", "3 ms", "78 Mbps", "Wi-Fi"])
-        #expect(metrics.map(\.label) == ["frames / s", "latency", "bandwidth", "network"])
+        #expect(metrics.map(\.label) == ["Frames/s", "Latency", "Bandwidth", "Network"])
         #expect(MenuBarPresentation.metrics(snapshot: nil, link: nil).map(\.value) == ["–", "–", "–", "–"])
     }
 
