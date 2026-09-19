@@ -247,6 +247,7 @@ extension EnetControlChannel {
         outgoingPeerID = vcOutgoingPeerID
         incomingSessionID = vcIncomingSession
         outgoingSessionID = vcOutgoingSession
+        negotiatedChannelCount = channelCount
         // The CONNECT (channel 0xFF, seq 1) is now acknowledged implicitly.
         let beforeRemove = sentReliable.count
         sentReliable.removeAll { $0.channelID == 0xFF && $0.reliableSequenceNumber == 1 }

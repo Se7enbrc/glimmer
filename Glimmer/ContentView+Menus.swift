@@ -1,125 +1,13 @@
 //
 //  ContentView+Menus.swift
 //
-//  The launcher's two menu surfaces: the MenuBarExtra dropdown (open / stream /
-//  switch PC / controller charm / Settings / updates / quit) and the shared
-//  per-host right-click menu (Rename / Codec / Unpair) that both the hero card
-//  and Settings' PCTile mount via `.hostContextMenu(host)`. Split out of
-//  ContentView.swift to keep each file under the length limit; the window,
-//  connect surface, and hero live there.
+//  The shared per-host right-click menu (Rename / Codec / Unpair) that both the
+//  hero card and Settings' PCTile mount via `.hostContextMenu(host)`. The menu
+//  bar item's panel lives in MenuBarPanel.swift.
 //
 
 import AppKit
 import SwiftUI
-
-// MARK: - Menu bar content
-
-struct MenuBarContent: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Group {
-            // Icon-forward, sectioned layout within `.menu`-style MenuBarExtra
-            // constraints (system NSMenu: Labels show their SF Symbol,
-            // Sections render titled groups, custom materials are NOT
-            // honoured - lean on iconography + structure, not glass). Item
-            // order: navigational ("Open Glimmer") FIRST, then stream actions,
-            // then app-wide (Settings / Quit) - Apple's first-party agent
-            // pattern (Time Machine, Bluetooth).
-            Button {
-                openWindow(id: "main")
-                activate()
-            } label: {
-                Label("Open Glimmer", systemImage: "macwindow")
-            }
-
-            if let host = model.selectedHost {
-                // "Connected to" only when actually streaming this host - the
-                // selected host is not necessarily the connected one.
-                Section(model.isStreaming ? "Connected to \(host.displayName)" : host.displayName) {
-                    Button {
-                        model.streamDefaultApp()
-                        activate()
-                    } label: {
-                        Label("Stream \(model.defaultAppName)", systemImage: "play.fill")
-                    }
-                    .disabled(model.isStreaming)
-
-                    if model.hosts.count > 1 {
-                        Menu {
-                            ForEach(model.hosts) { host in
-                                Button {
-                                    model.selectHost(host)
-                                } label: {
-                                    if host.id == model.selectedHost?.id {
-                                        Label(host.displayName, systemImage: "checkmark")
-                                    } else {
-                                        Text(host.displayName)
-                                    }
-                                }
-                            }
-                        } label: {
-                            Label("Switch PC", systemImage: "desktopcomputer")
-                        }
-                    }
-                }
-            } else {
-                Section {
-                    Label("No PC paired", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
-                }
-            }
-
-            // Controller battery charm - shown whenever a pad reporting battery
-            // is connected to the Mac (sampled on menu open).
-            if let battery = model.menuBarControllerBattery {
-                Section("Controller") {
-                    Label(
-                        "\(battery.percent)% battery\(battery.charging ? " · charging" : "")",
-                        systemImage: battery.charging ? "battery.100.bolt" : "gamecontroller"
-                    )
-                }
-            }
-
-            Divider()
-
-            Button {
-                openSettings()
-                activate()
-            } label: {
-                Label("Settings…", systemImage: "gearshape")
-            }
-            .keyboardShortcut(",")
-
-            #if canImport(Sparkle)
-            // The menu-bar dropdown is the reliable surface for the accessory
-            // (no-window) case, where the app menu's "Check for Updates..." isn't
-            // visible. `activate()` brings Glimmer forward so Sparkle's panel shows.
-            Button {
-                UpdaterController.shared.updater.checkForUpdates()
-                activate()
-            } label: {
-                Label("Check for Updates…", systemImage: "arrow.triangle.2.circlepath")
-            }
-            #endif
-
-            Button {
-                NSApp.terminate(nil)
-            } label: {
-                Label("Quit Glimmer", systemImage: "power")
-            }
-            .keyboardShortcut("q")
-        }
-    }
-
-    private func activate() {
-        // NSApp.activate() is the macOS 14+ replacement for
-        // activate(ignoringOtherApps:) - the OS decides foreground policy
-        // system-side now, so the "ignoringOtherApps: true" knob is gone.
-        NSApp.activate()
-    }
-}
 
 // MARK: - Shared per-host right-click menu
 

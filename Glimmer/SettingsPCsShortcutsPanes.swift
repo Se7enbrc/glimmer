@@ -10,6 +10,7 @@ import AppKit
 import GameController
 import os
 import ServiceManagement
+import Combine
 import SwiftUI
 
 // MARK: - PCs
@@ -188,10 +189,8 @@ struct PCTile: View {
 struct ShortcutsPane: View {
     @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
-    // Default-ON: linearize the Mac's mouse acceleration while a stream is
-    // focused so only the game's own sensitivity shapes aim. Key mirrors
-    // MouseAccelerationControl.enabledDefaultsKey (registered true in GlimmerApp,
-    // which is what makes the non-UI UserDefaults.bool read default to on too).
+    // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
+    // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
     @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
     var body: some View {
@@ -284,18 +283,18 @@ struct ShortcutsPane: View {
             }
 
             Section("Mouse") {
-                Toggle(isOn: $rawMouseWhileStreaming) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Aim with raw mouse motion while streaming").fontWeight(.medium)
-                        Text("Only the game's own sensitivity shapes your aim - the Mac's pointer "
-                            + "acceleration stops stacking on top while the stream is focused, and is "
-                            + "restored the instant you leave. Mice only; the trackpad is untouched.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                Picker("Pointer while streaming", selection: $rawMouseWhileStreaming) {
+                    Text("Linear scaling").tag(true)
+                    Text("Mouse acceleration").tag(false)
                 }
-                .help("Linearizes the system mouse acceleration (like `com.apple.mouse.scaling -1`) "
-                    + "for the duration of each focused stream.")
+                .pickerStyle(.segmented)
+                .help("Linear scaling keeps your Tracking Speed and drops the acceleration curve while "
+                    + "the stream is focused; Mouse acceleration leaves the Mac's pointer untouched.")
+                Text("Linear scaling means only the game's own sensitivity shapes your aim, at the "
+                    + "speed you are used to. Your setting is restored the instant you leave the "
+                    + "stream. Mice only; the trackpad is untouched.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -320,9 +319,8 @@ private struct ChordCaptureSheet: View {
     @State private var accumulated: Set<ControllerButton> = []
     @State private var captured: Set<ControllerButton> = []
     @State private var recording = true
-    @State private var observers: [NSObjectProtocol] = []
     @State private var hidRetained = false
-    // Backstop the event-driven capture in case a release event is missed.
+    // Drives poll(): capture reads pad state, so a live stream keeps its handlers.
     private let tick = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -367,40 +365,22 @@ private struct ChordCaptureSheet: View {
         .onReceive(tick) { _ in poll() }
     }
 
-    /// Register input handlers directly (rather than via the input-test
-    /// ControllerMonitor) so capture works regardless of stream state, and so
-    /// every press/release drives `poll()` - not just the timer.
+    /// Poll-driven capture (the 30 Hz tick plus sticky accumulation), so the
+    /// sheet never takes the single-slot input handlers a live stream owns.
     private func engage() {
+        HIDGamepadManager.shared.retain()
         GCController.shouldMonitorBackgroundEvents = true
         GCController.startWirelessControllerDiscovery {}
-        setGamepadHandlers()
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .GCControllerDidConnect, object: nil, queue: .main
-        ) { _ in MainActor.assumeIsolated { setGamepadHandlers() } })
         if DualSenseHID.isEnabled {
-            DualSenseHID.shared.onChange = { poll() }
             DualSenseHID.shared.retain()
             hidRetained = true
         }
     }
 
-    private func setGamepadHandlers() {
-        for controller in GCController.controllers() {
-            controller.extendedGamepad?.valueChangedHandler = { _, _ in
-                MainActor.assumeIsolated { poll() }
-            }
-        }
-    }
-
     private func disengage() {
-        for controller in GCController.controllers() {
-            controller.extendedGamepad?.valueChangedHandler = nil
-        }
-        observers.forEach(NotificationCenter.default.removeObserver)
-        observers.removeAll()
+        HIDGamepadManager.shared.release()
         GCController.stopWirelessControllerDiscovery()
         if hidRetained {
-            DualSenseHID.shared.onChange = nil
             DualSenseHID.shared.release()
             hidRetained = false
         }
@@ -411,8 +391,16 @@ private struct ChordCaptureSheet: View {
     }
 
     private func poll() {
-        guard recording, let pad = GCController.controllers().first?.extendedGamepad else { return }
-        let held = heldControllerButtons(pad: pad)
+        guard recording else { return }
+        var held: Set<ControllerButton> = []
+        for pad in GCController.controllers().compactMap(\.extendedGamepad) {
+            held.formUnion(heldControllerButtons(pad: pad))
+        }
+        for pad in HIDGamepadManager.shared.devices.values {
+            let state = pad.state
+            held.formUnion(heldControllerButtons(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
+                                                 rightTrigger: state.analog.rightTrigger))
+        }
         current = held
         if !held.isEmpty {
             // Sticky: remember every button touched during the hold, so a

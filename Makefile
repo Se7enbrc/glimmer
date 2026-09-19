@@ -268,16 +268,38 @@ open: install
 # and starting a new stream reuses the same instance, so a dev can unknowingly
 # test stale code for an hour. Use this when iterating on a dev build. (Builds
 # FIRST via the `install` prereq, so a failed build never quits a good session.)
-reinstall: install
+reinstall: install quit-running
+	@echo "▶ Relaunching..."; open "$(GLIMMER_APP_DST)"
+	@COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
+	echo "  ✓ now running build $$COMMIT"
+
+# Quit any running instance so the bundle on disk is the one that loads next.
+quit-running:
 	@if pgrep -x Glimmer >/dev/null 2>&1; then \
 		echo "▶ Quitting the running Glimmer so the new build can load..."; \
 		osascript -e 'tell application "Glimmer" to quit' >/dev/null 2>&1 || true; \
 		for i in 1 2 3 4 5 6 7 8; do pgrep -x Glimmer >/dev/null 2>&1 || break; sleep 1; done; \
 		pkill -x Glimmer >/dev/null 2>&1 || true; \
 	fi
-	@echo "▶ Relaunching..."; open "$(GLIMMER_APP_DST)"
-	@COMMIT=$$(sed -nE 's/.*static let commit = "([^"]+)".*/\1/p' Glimmer/BuildInfo.generated.swift); \
-	echo "  ✓ now running build $$COMMIT"
+
+# Address-sanitized DEBUG build through the normal pipeline (helper, keychain
+# signing, dylibs), installed and relaunched like `reinstall`, never notarized.
+# ASan reports land in ~/Library/Logs/Glimmer/asan.log.<pid>; `make reinstall`
+# puts the normal build back.
+ASAN_XCCONFIG := $(DERIVED)/asan.xcconfig
+asan-reinstall:
+	@mkdir -p "$(DERIVED)"
+	@printf '#include "%s"\nENABLE_ADDRESS_SANITIZER = YES\nOTHER_SWIFT_FLAGS = $$(inherited) -sanitize=address\nOTHER_CFLAGS = $$(inherited) -fsanitize=address\nOTHER_LDFLAGS = $$(inherited) -fsanitize=address\n' "$(CURDIR)/$(STREAM_XCCONFIG)" > "$(ASAN_XCCONFIG)"
+	$(MAKE) CONFIG=Debug STREAM_XCCONFIG="$(ASAN_XCCONFIG)" app
+	@rm -rf "$(DERIVED)/Build/Products/Debug/Glimmer.app/Contents/PlugIns"/*.xctest
+	$(MAKE) CONFIG=Debug STREAM_XCCONFIG="$(ASAN_XCCONFIG)" embed
+	$(MAKE) quit-running
+	@echo "▶ Installing the ASan Debug build to $(GLIMMER_APP_DST)..."
+	@rm -rf "$(GLIMMER_APP_DST)"; cp -R "$(DERIVED)/Build/Products/Debug/Glimmer.app" "$(GLIMMER_APP_DST)"
+	@mkdir -p "$$HOME/Library/Logs/Glimmer"
+	@echo "▶ Relaunching with ASAN_OPTIONS..."; \
+	open --env "ASAN_OPTIONS=log_path=$$HOME/Library/Logs/Glimmer/asan.log:halt_on_error=0" "$(GLIMMER_APP_DST)"
+	@echo "  ✓ ASan build running (reports: ~/Library/Logs/Glimmer/asan.log.*)"
 
 # `make dev` is the inner loop: run the unit tests, THEN build + install +
 # relaunch the notarized Release build. Tests run first so a failure skips the
@@ -500,8 +522,15 @@ guard-clean-tree:
 # DMG's app is stapled, so it passes Gatekeeper offline on any Mac.
 # Non-interactive from any session once the one-time setup is done (creds file +
 # codesign-setup + setup-notary - docs/RELEASE.md).
-dist: guard-clean-tree
+dist: guard-clean-tree verify
 	$(MAKE) CONFIG=Release preflight clean app notarize dmg
+
+# Release gate: lint clean (strict) and the unit suite green before anything
+# is packaged. `make dist` / `make release-publish` cannot skip it.
+verify:
+	@echo "▶ Verify (lint --strict + tests)..."
+	@swiftlint lint --strict --quiet
+	@$(MAKE) test
 
 # --- Auto-update publication (Sparkle) -------------------------------------
 

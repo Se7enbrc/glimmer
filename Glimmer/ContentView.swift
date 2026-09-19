@@ -32,6 +32,14 @@ struct MainWindow: View {
         } message: {
             Text(AppModel.rawHIDExplanation)
         }
+        // Same explanation for a pad macOS doesn't recognise (generic HID).
+        .alert("Use \(model.hidPermissionPadName ?? "this controller") with Glimmer?",
+               isPresented: $model.showHIDPermissionPrompt) {
+            Button("Continue") { model.continueHIDPermission() }
+            Button("Not Now", role: .cancel) { model.dismissHIDPermission() }
+        } message: {
+            Text(AppModel.hidPermissionExplanation)
+        }
         // One-time launch nudge to enable Wi-Fi stutter protection. Only for
         // users who've paired a PC (skips first-run onboarding), never while the
         // rawHID prompt is up; "Don't ask again" inside silences it for good.
@@ -50,7 +58,7 @@ struct MainWindow: View {
             // a privileged-helper install for nothing. Suppress ONLY on .wired -
             // Wi-Fi / tunnel / still-resolving unknown still prompt.
             guard !model.hosts.isEmpty,
-                  !model.showRawHIDPrompt,
+                  !model.showRawHIDPrompt, !model.showHIDPermissionPrompt,
                   model.hostRoute.routeClass != .wired,
                   AWDLHelperManager.shared.shouldPromptToEnable else { return }
             showAWDLPrompt = true
@@ -333,11 +341,7 @@ private struct ConnectBanner: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Retry") {
                         model.nativeStreamError = nil
-                        // The hero verb's target, NOT streamDefaultApp(): the
-                        // failed launch stamped lastPlayedApp at start, so the
-                        // hero above still reads "Stream <app>" - a Retry that
-                        // launched the default app would contradict it.
-                        model.streamHeroApp()
+                        model.retryLastLaunch()
                     }
                     .buttonStyle(.glass)
                     .controlSize(.small)

@@ -151,8 +151,8 @@ struct GlimmerApp: App {
             // Standard macOS "Check for Updates..." under the app menu (after the
             // About item). Sparkle drives the rest: a check on every open
             // (applicationDidFinishLaunching) plus a daily background check and
-            // the update panels. Mirrored in the menu-bar dropdown for the
-            // accessory (no-window) case - see MenuBarContent.
+            // the update panels. Mirrored in the menu bar panel's overflow menu
+            // for the accessory (no-window) case - see MenuBarPanel.
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: UpdaterController.shared.updater)
             }
@@ -169,17 +169,20 @@ struct GlimmerApp: App {
         }
 
         MenuBarExtra {
-            MenuBarContent()
+            MenuBarPanel()
                 .environment(model)
                 .background(OpenWindowCapture())
         } label: {
-            if let symbol = model.menuBarSystemImageName {
-                Image(systemName: symbol)
-            } else {
-                Image("MenuBarIcon")
+            Group {
+                if let symbol = MenuBarPresentation.systemImage(for: model.menuBarIconState) {
+                    Image(systemName: symbol)
+                } else {
+                    Image("MenuBarIcon")
+                }
             }
+            .accessibilityLabel(model.menuBarAccessibilityLabel)
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 }
 
@@ -222,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // acceleration linearized, restore the user's saved value now (no-op in
         // the clean case). Runs before any window/stream can re-engage capture.
         MouseAccelerationControl.restoreOrphanedOverride()
+        AppModel.restoreOrphanedMute()
 
         if let mgr = Self.boundManager {
             self.model = mgr
@@ -296,8 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // run the stop bounded (a hung host can't pin Cmd-Q past the bound),
         // then reply. No session object yet (the stream Task hasn't spun up)
         // means nothing has been asked of the host - quit now.
-        guard let model, TerminationGate.reply(isStreaming: model.isStreaming) == .terminateLater,
-              let session = model.nativeSession else {
+        guard TerminationGate.reply(hasSession: model?.nativeSession != nil) == .terminateLater,
+              let session = model?.nativeSession else {
             return .terminateNow
         }
         Task { @MainActor in

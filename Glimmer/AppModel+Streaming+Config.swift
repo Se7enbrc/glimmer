@@ -76,39 +76,20 @@ extension AppModel {
 
     // MARK: - Hero verb (state-aware primary action)
 
-    /// UserDefaults key for the NAME of the last app launched on a host.
-    /// Distinct from `glimmer.lastConnected.<id>` (a DATE, stamped at stream
-    /// END): "what did I play here" is true from the moment a launch begins,
-    /// so the name stamps at START - see the write in `stream(app:on:)`.
-    static func lastPlayedAppKey(for hostId: String) -> String {
-        "glimmer.lastPlayedApp.\(hostId)"
-    }
-
-    /// The app the hero button can meaningfully resume on the selected host.
-    /// Host-reported truth wins: a fresh /serverinfo snapshot naming an
-    /// in-flight session (aged out on the same `HostLiveStatus.stale` horizon
-    /// the readiness chip uses; the host-id guard in `publishLiveStatus`
-    /// already scopes the snapshot to this host). Otherwise the name stamped
-    /// at the last stream start, as long as it's still in the applist. nil
-    /// when neither is known - the button falls back to "Connect".
+    /// The app the host is running right now, when a fresh /serverinfo
+    /// snapshot names one that is in the applist. Host truth is the one thing
+    /// allowed to override the Default action: the button then resumes it.
     var resumableAppName: String? {
-        guard let host = selectedHost else { return nil }
-        if let live = hostLiveStatus,
-           Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
-           case .streamingApp(let name) = live.state,
-           host.apps.contains(where: { $0.name == name }) {
-            return name
-        }
-        if let last = UserDefaults.standard.string(forKey: Self.lastPlayedAppKey(for: host.id)),
-           host.apps.contains(where: { $0.name == last }) {
-            return last
-        }
-        return nil
+        guard let host = selectedHost, let live = hostLiveStatus,
+              Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
+              case .streamingApp(let name) = live.state,
+              host.apps.contains(where: { $0.name == name }) else { return nil }
+        return name
     }
 
-    /// What the hero button actually launches - the resume target when known,
-    /// else the configured default app. The AppIconsRow accent ring follows
-    /// this so the ring can never disagree with the button's verb.
+    /// What the hero button launches: the host's running app if there is one,
+    /// else the Default action from Settings (the menu bar uses the same rule).
+    /// The AppIconsRow accent ring follows this so it never disagrees.
     var heroTargetAppName: String {
         resumableAppName ?? defaultAppName
     }

@@ -158,7 +158,7 @@ final class WiFiTelemetry: @unchecked Sendable {
     }
 
     /// Map CoreWLAN's `CWChannelBand` to a compact dashboard label.
-    private static func bandLabel(_ band: CWChannelBand) -> String? {
+    static func bandLabel(_ band: CWChannelBand) -> String? {
         switch band {
         case .band2GHz: return "2.4GHz"
         case .band5GHz: return "5GHz"

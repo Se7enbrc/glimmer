@@ -12,9 +12,23 @@
 //
 
 import Foundation
-import os.log
+import os
 
 enum ControlTransport {
+
+    final class RequestLifetime: Sendable {
+        let deadline: Date
+        private let cancelled = OSAllocatedUnfairLock(initialState: false)
+
+        init(timeout: TimeInterval) { deadline = Date().addingTimeInterval(timeout) }
+
+        func cancel() { cancelled.withLock { $0 = true } }
+
+        func check() throws {
+            if cancelled.withLock({ $0 }) { throw CancellationError() }
+            if Date() >= deadline { throw StreamError.hostUnreachable("Control request timed out.") }
+        }
+    }
 
     /// One control response. `peerCertPEM` is the host's leaf cert (PEM) seen on
     /// the TLS handshake - returned on every paired call so the caller can pin it
@@ -49,38 +63,26 @@ enum ControlTransport {
                     tls: Bool,
                     credential: TLSCredential,
                     timeout: TimeInterval) async throws -> Response {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Response, Error>) in
-            ioQueue.async {
-                // OPENSSL PER-THREAD STATE RELEASE (the 2026-08-21 crash).
-                // `ioQueue` is a concurrent dispatch queue, so this block runs on
-                // POOLED GCD worker threads that the system retires when idle.
-                // libcrypto plants thread-local state (ERR stacks, the 3.x
-                // "master key" sparse array) on whatever thread runs a TLS
-                // handshake, and reclaims it in a pthread TSD DESTRUCTOR at
-                // thread exit. A 3-day process accumulated that state across
-                // dozens of workers; when GCD retired one ~15min after a wake,
-                // the destructor walked a days-old sparse array and crashed on
-                // freed memory (sa_doall → ossl_sa_free → clean_master_key,
-                // SIGSEGV at a 0x8080... poison address). OPENSSL_thread_stop is
-                // the API the OpenSSL docs REQUIRE of threads the library didn't
-                // create: it releases the per-thread state deterministically,
-                // HERE, microseconds after it was planted and while it is
-                // certainly valid - so thread retirement finds nothing to
-                // reclaim. Cost: per-call state re-creation, trivial next to the
-                // TLS handshake this block just performed. (The RTP/control
-                // paths run on OWNED long-lived threads and the audio decrypt
-                // path is plaintext for our hosts, so this transport is the one
-                // pooled-thread OpenSSL user; the Swift-concurrency cooperative
-                // pool's threads persist for the process lifetime.)
-                defer { OPENSSL_thread_stop() }
-                do {
-                    cont.resume(returning: try performBlocking(
-                        host: host, port: port, target: target, userAgent: userAgent,
-                        tls: tls, credential: credential, timeout: timeout))
-                } catch {
-                    cont.resume(throwing: error)
+        let lifetime = RequestLifetime(timeout: timeout)
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Response, Error>) in
+                ioQueue.async {
+                    // libcrypto plants per-thread state on this pooled worker and
+                    // frees it in a TSD destructor when GCD retires the thread
+                    // (2026-08-21 SIGSEGV); release it here, deterministically.
+                    defer { OPENSSL_thread_stop() }
+                    do {
+                        cont.resume(returning: try performBlocking(
+                            host: host, port: port, target: target, userAgent: userAgent,
+                            tls: tls, credential: credential, lifetime: lifetime))
+                    } catch {
+                        cont.resume(throwing: error)
+                    }
                 }
             }
+        } onCancel: {
+            lifetime.cancel()
         }
     }
 
@@ -90,13 +92,15 @@ enum ControlTransport {
                                         userAgent: String,
                                         tls: Bool,
                                         credential: TLSCredential,
-                                        timeout: TimeInterval) throws -> Response {
-        let timeoutMs = Int32(max(1, timeout) * 1000)
+                                        lifetime: RequestLifetime) throws -> Response {
+        try lifetime.check()
+        let timeoutMs = Int32(max(0.001, lifetime.deadline.timeIntervalSinceNow) * 1000)
         let fd = gl_tcp_connect(host, String(port), timeoutMs)
         guard fd >= 0 else {
             throw StreamError.hostUnreachable("connect to \(host):\(port) failed or timed out")
         }
         defer { close(fd) }
+        try lifetime.check()
 
         // Build the request bytes once - same for the TLS and plaintext paths.
         var request = "GET \(target) HTTP/1.1\r\n"
@@ -107,6 +111,7 @@ enum ControlTransport {
         let requestBytes = Array(request.utf8)
 
         if !tls {
+            try lifetime.check()
             try writeAll(fd: fd, ssl: nil, requestBytes)
             let raw = try readAll(fd: fd, ssl: nil)
             return try parse(raw)
@@ -153,6 +158,7 @@ enum ControlTransport {
             }
         }
 
+        try lifetime.check()
         try writeAll(fd: fd, ssl: ssl, requestBytes)
         let raw = try readAll(fd: fd, ssl: ssl)
         SSL_shutdown(ssl)   // best-effort clean close; body is already read

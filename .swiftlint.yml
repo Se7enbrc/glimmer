@@ -4,6 +4,9 @@
 
 included:
   - Glimmer
+  - GlimmerTests
+  - helper
+  - LoginHelper
   # scripts/ is build-time tooling (icon generators, not product code) - not
   # subject to the product lint bar.
 

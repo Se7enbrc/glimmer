@@ -31,7 +31,16 @@ permission notices are preserved here, as the MIT license requires:
   `nanors/rs.c` plus the scalar GF(256) math from nanors' vendored
   `deps/obl/oblas_lite.c` (covered by the same nanors license).
 
-MIT permission notice (applies to both):
+## Controller mappings
+
+- **[SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB)** -
+  Copyright (C) 1997-2025 Sam Lantinga and contributors. zlib license. The "Mac
+  OS X" section is embedded as
+  `Glimmer/Stream/HIDGamepad/GameControllerDB+Data.swift` (regenerate with
+  `scripts/gen-gamecontrollerdb.py`) so pads that macOS's GameController
+  framework does not expose get the same button and axis layout Moonlight uses.
+
+MIT permission notice (applies to both MIT upstreams above):
 
 > Permission is hereby granted, free of charge, to any person obtaining a copy
 > of this software and associated documentation files (the "Software"), to deal

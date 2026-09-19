@@ -32,6 +32,7 @@ final class ControllerMonitor {
     init(isStreaming: @escaping () -> Bool) { self.isStreaming = isStreaming }
 
     func start() {
+        HIDGamepadManager.shared.retain()
         GCController.startWirelessControllerDiscovery {}
         // Receive controller input even though the Settings window - not a
         // game window - is key. Without this, GameController appears to deliver
@@ -51,7 +52,7 @@ final class ControllerMonitor {
         // stream's ControllerForwarder holds, so grabbing it here would drop the
         // stream's center-button uplink until a resync.
         if DualSenseHID.isEnabled, !isStreaming() {
-            DualSenseHID.shared.onChange = { [weak self] in self?.revision &+= 1 }
+            DualSenseHID.shared.onChange = { [weak self] _ in self?.revision &+= 1 }
             DualSenseHID.shared.retain()
             hidRetained = true
         }
@@ -60,11 +61,18 @@ final class ControllerMonitor {
 
     private func engage() {
         guard !isStreaming() else { revision &+= 1; return }
+        DualSenseRouting.shared.syncControllers()
+        let live = Set(GCController.controllers().map(ObjectIdentifier.init))
+        for id in engaged.keys where !live.contains(id) {
+            engaged[id]?.extendedGamepad?.valueChangedHandler = nil
+            engaged[id] = nil
+        }
         for controller in GCController.controllers() {
             let id = ObjectIdentifier(controller)
             guard engaged[id] == nil else { continue }
-            controller.extendedGamepad?.valueChangedHandler = { [weak self] _, _ in
+            controller.extendedGamepad?.valueChangedHandler = { [weak self] pad, _ in
                 MainActor.assumeIsolated {
+                    DualSenseRouting.shared.gc(pad: pad)
                     self?.gcEventCount &+= 1
                     self?.revision &+= 1
                 }
@@ -75,13 +83,17 @@ final class ControllerMonitor {
     }
 
     func stop() {
-        for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
+        HIDGamepadManager.shared.release()
+        // A stream that started meanwhile owns these slots now; leave them to it.
+        if !isStreaming() {
+            for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
+            if hidRetained { DualSenseHID.shared.onChange = nil }
+        }
         engaged.removeAll()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
         GCController.stopWirelessControllerDiscovery()
         if hidRetained {
-            DualSenseHID.shared.onChange = nil
             DualSenseHID.shared.release()
             hidRetained = false
         }
@@ -93,21 +105,28 @@ struct ControllerInputTest: View {
     @State private var monitor: ControllerMonitor?
 
     var body: some View {
-        // Reading monitor.revision establishes the @Observable dependency, so a
-        // value-changed handler firing re-renders this view (which then reads
-        // the now-live element values).
-        // Poll on a 30 Hz timeline so the chips reflect live element state.
-        // (Input IS arriving - the counters prove it - but a revision-based
-        // re-render wasn't repainting the chips; a timeline is reliable.)
-        TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
-            let pads = GCController.controllers()
-            VStack(alignment: .leading, spacing: 12) {
-                diagnosticLine
-                if pads.isEmpty {
+        // `monitor.revision` is the @Observable edge for connects; the 30 Hz
+        // timeline only runs while a pad is present (chips need live values).
+        let revision = monitor?.revision ?? 0
+        let pads = GCController.controllers()
+        let hidPads = HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }
+        Group {
+            if pads.isEmpty && hidPads.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    diagnosticLine
                     emptyState
-                } else {
-                    ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in
-                        ControllerCard(pad: pad, tick: context.date)
+                }
+                .id(revision)
+            } else {
+                TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(hidPads) { pad in
+                            HIDGamepadCard(pad: pad, tick: context.date)
+                        }
+                        diagnosticLine
+                        ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in
+                            ControllerCard(pad: pad, tick: context.date)
+                        }
                     }
                 }
             }
@@ -226,7 +245,9 @@ private struct ControllerCard: View {
     /// (DualSense: 0.95/.unknown) keeps its percentage with charging nil.
     /// The 30Hz repaint re-reads, so a reading that materialises appears.
     private var batteryReading: (percent: Int, charging: Bool?)? {
-        if let hid = DualSenseHID.shared.battery { return (hid.percent, hid.charging) }
+        if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(pad))?.battery {
+            return (hid.percent, hid.charging)
+        }
         if let b = pad.battery { return ControllerBattery.uiReading(b) }
         return nil
     }
@@ -248,7 +269,7 @@ private struct ControllerCard: View {
         // System row, wider + full labels. On a DualSense, Options/Create/PS/
         // Mute come from the raw-HID reader (GameController returns false for
         // them); on Xbox/MFi they come from GameController.
-        let hid = DualSenseHID.shared.buttons
+        let hid = dualSenseButtons(pad: gp)
         let tpClicked = touchpad(of: gp)?.button.isPressed ?? false
         let system: [(String, Bool)] = isPlayStation
             ? [("Options", hid.options), ("Create", hid.create),
@@ -257,6 +278,15 @@ private struct ControllerCard: View {
                ("View", gp.buttonOptions?.isPressed ?? false),
                ("Guide", gp.buttonHome?.isPressed ?? false)]
         return VStack(alignment: .leading, spacing: 6) {
+            if gp is GCDualSenseGamepad, DualSenseHID.shared.isActive {
+                if let state = DualSenseHID.shared.state(for: ObjectIdentifier(pad)) {
+                    Text("DualSense: \(state.transport), \(state.reportCount) reports")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("DualSense: not matched yet, press any face button")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             FlowChips(chips: standard)
             FlowChips(chips: system, minWidth: 72)
         }

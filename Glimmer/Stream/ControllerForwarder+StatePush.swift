@@ -50,7 +50,7 @@ extension InputForwarder {
         // line that makes "I held all four and nothing happened" diagnosable:
         // it names which of the four never registered. Edge-only + rate-limited.
         guard pushed, quitChordUsesCentreButtons() else { return }
-        let hid = DualSenseHID.shared.buttons
+        let hid = dualSenseButtons(pad: pad)
         if hid.options || hid.create {
             quitChordBreadcrumb(.partial, "partial hold on slot \(slot)", pad: pad)
         }
@@ -112,7 +112,7 @@ extension InputForwarder {
     /// trips). The DualSense/DualShock touchpad *click* rides here as
     /// TOUCHPAD_FLAG (Sunshine's touchpad button); the touchpad *surface* is
     /// forwarded separately as touch events.
-    private func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
+    func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
         let mapping: [(Bool, Int32)] = [
             (pad.buttonA.isPressed, StreamProtocol.A_FLAG),
             (pad.buttonB.isPressed, StreamProtocol.B_FLAG),
@@ -145,7 +145,7 @@ extension InputForwarder {
         // GameController). Mapped to the host's semantics: Options → Start,
         // Create/Share → Back, PS → Guide, Mute → misc.
         if pad is GCDualSenseGamepad {
-            let hid = DualSenseHID.shared.buttons
+            let hid = dualSenseButtons(pad: pad)
             if hid.options { buttons |= StreamProtocol.PLAY_FLAG }
             if hid.create { buttons |= StreamProtocol.BACK_FLAG }
             if hid.ps { buttons |= StreamProtocol.SPECIAL_FLAG }

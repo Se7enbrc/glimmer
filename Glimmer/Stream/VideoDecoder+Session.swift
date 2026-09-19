@@ -477,14 +477,15 @@ extension VideoDecoder {
         // / kCVImageBufferContentLightLevelInfoKey on each frame. The
         // attachments are the same GBR-ordered big-endian byte blobs we
         // build in refreshHDRMetadataFromHost.
-        if let mdcv = cachedMDCV {
+        let metadata = hdrMetadataStore.snapshot
+        if let mdcv = metadata.mdcv {
             CVBufferSetAttachment(
                 pixelBuffer,
                 kCVImageBufferMasteringDisplayColorVolumeKey,
                 mdcv as CFData,
                 .shouldPropagate)
         }
-        if let cll = cachedContentLightLevel {
+        if let cll = metadata.contentLightLevel {
             CVBufferSetAttachment(
                 pixelBuffer,
                 kCVImageBufferContentLightLevelInfoKey,

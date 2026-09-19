@@ -63,6 +63,11 @@ if [ -d "$HELPER" ]; then
 	fi
 fi
 
+# Loose dylibs in Frameworks (e.g. the Address Sanitizer runtime an ASan build
+# copies in) are nested code too and must carry our seal before the app does.
+for dylib in "$APP/Contents/Frameworks/"*.dylib; do
+	[ -f "$dylib" ] && sign_plain "$dylib"
+done
 DAEMON="$APP/Contents/MacOS/io.ugfugl.glimmer.helper"
 if [ -f "$DAEMON" ]; then
 	echo "Signing the AWDL network helper (root LaunchDaemon, hardened runtime, no entitlements)"

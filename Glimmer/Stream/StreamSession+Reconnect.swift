@@ -124,10 +124,15 @@ extension StreamSession {
             // the first resume snappy; launchWithBusyRecovery's own
             // waitForHostIdle poll absorbs the rest of the host's settle time.
             let delayMs = UInt64(min(reconnectAttempts, 3)) * 800
-            try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
-            if !isStreaming || stopInProgress { break }
+            do {
+                let delay = min(Double(delayMs) / 1000, max(0, deadline.timeIntervalSinceNow))
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                break
+            }
+            if Task.isCancelled || !isStreaming || stopInProgress || Date() >= deadline { break }
             Diag.notice("reconnect attempt \(reconnectAttempts)/\(Self.reconnectAttemptCap)...", "Stream")
-            if await reconnectInPlace() {
+            if await reconnectInPlace(deadline: deadline) {
                 isReconnecting = false
                 reconnectAttempts = 0
                 // Count the genuine reconnect HERE. The established-edge inference
@@ -167,8 +172,8 @@ extension StreamSession {
     /// /launch + startConnection against the (restarted) host - all while the
     /// window, decoder, frozen frame, bridge, and event stream stay alive.
     /// Returns true once the connection is back up.
-    private func reconnectInPlace() async -> Bool {
-        guard isStreaming, !stopInProgress else { return false }
+    private func reconnectInPlace(deadline: Date) async -> Bool {
+        guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline else { return false }
         guard let server = reconnectServer,
               let config = reconnectConfig,
               let appID = reconnectAppID,
@@ -183,7 +188,7 @@ extension StreamSession {
         // stopInProgress synchronously before its own first await, so a guard
         // evaluated ON the actor between awaits reliably observes a teardown that
         // slipped in. Bail BEFORE building a fresh backend - nothing to clean up.
-        guard isStreaming, !stopInProgress else { return false }
+        guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline else { return false }
 
         // 2. Swap in a fresh backend (NativeBackend is one-shot: its connection
         //    state can't be reused and interrupt() latches permanently). Re-point
@@ -207,11 +212,17 @@ extension StreamSession {
         // 3. Fresh NetworkClient + full handshake against the restarted host.
         let net = NetworkClient(server: server)
         self.network = net
+        await net.setRequestDeadline(deadline)
         do {
-            let serverInfo = try await net.fetchServerInfo()
-            let launch = try await launchWithBusyRecovery(
-                network: net, appID: appID, config: config,
-                hintCurrentGame: serverInfo.currentGameID)
+            try checkAttempt(deadline: deadline)
+            let serverInfo = try await StreamAttempt.run(until: deadline) {
+                try await net.fetchServerInfo()
+            }
+            try checkAttempt(deadline: deadline)
+            if serverInfo.currentGameID != appID { ownsHostSession = false }
+            let launch = try await launchWithDeadline(
+                network: net, appID: appID, config: config, info: serverInfo, deadline: deadline)
+            try checkAttempt(deadline: deadline)
             // Re-probe the path on reconnect: the route may have moved (the
             // tunnel-flap case this whole clamp exists for), so remoteness and
             // the advertised packet size are resolved fresh, never inherited.
@@ -222,11 +233,13 @@ extension StreamSession {
             // launcher) - it cancels the failed launch and throws so we retry.
             try await connectBackend(
                 serverInfo: serverInfo, launch: launch, backendConfig: backendConfig,
-                setup: (win, inp, dec), network: net, duringReconnect: true)
+                setup: (win, inp, dec), network: net, duringReconnect: true, deadline: deadline)
+            try checkAttempt(deadline: deadline)
         } catch {
             Diag.notice("reconnect attempt failed: \(error)", "Stream")
+            fresh.interruptConnection()
             await net.shutdown()
-            self.network = nil
+            if self.network === net { self.network = nil }
             return false
         }
 
@@ -246,6 +259,9 @@ extension StreamSession {
             return false
         }
 
+        await net.setRequestDeadline(nil)
+        guard isStreaming, !stopInProgress, !Task.isCancelled else { return false }
+
         // 4. Nudge a keyframe so the fresh VT session repaints over the frozen
         //    frame promptly (Sunshine sends one at start; cheap insurance).
         backend.requestIdrFrame()
@@ -260,7 +276,6 @@ extension StreamSession {
     /// concurrent stop() may have already nil'd it.
     private func tearDownSlippedInReconnect(fresh: NativeBackend, net: NetworkClient) async {
         fresh.interruptConnection()
-        try? await net.cancel()
         await net.shutdown()
         if self.network === net { self.network = nil }
     }

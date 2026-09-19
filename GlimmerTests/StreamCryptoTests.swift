@@ -218,15 +218,15 @@ struct StreamCryptoTests {
     // control path relies on is anchored to a known answer. 16-byte tag.
 
     @Test func aesGcm128KnownAnswerVector() throws {
-        let key = Data(hex: "feffe9928665731c6d6a8f9467308308")!
-        let iv = Data(hex: "cafebabefacedbaddecaf888")!
-        let plaintext = Data(hex:
+        let key = try #require(Data(hex: "feffe9928665731c6d6a8f9467308308"))
+        let iv = try #require(Data(hex: "cafebabefacedbaddecaf888"))
+        let plaintext = try #require(Data(hex:
             "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a72" +
-            "1c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255")!
-        let expectedCT = Data(hex:
+            "1c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255"))
+        let expectedCT = try #require(Data(hex:
             "42831ec2217774244b7221b784d0d49ce3aa212f2c02a4e035c17e2329aca12e" +
-            "21d514b25466931c7d8f6a5aac84aa051ba30b396a0aac973d58e091473f5985")!
-        let expectedTag = Data(hex: "4d5c2af327cd64a62cf35abd2ba6fab4")!
+            "21d514b25466931c7d8f6a5aac84aa051ba30b396a0aac973d58e091473f5985"))
+        let expectedTag = try #require(Data(hex: "4d5c2af327cd64a62cf35abd2ba6fab4"))
 
         let nonce = try AES.GCM.Nonce(data: iv)
         let box = try AES.GCM.seal(plaintext, using: SymmetricKey(data: key), nonce: nonce)

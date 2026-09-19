@@ -55,6 +55,7 @@ extension StreamSession {
             // across ticks. Reference type so the timer closure mutates one box.
             let hitchBox = PerceivedHitchBox()
             let gateAudit = LinkGateAuditBox()
+            let history = StreamHistoryFeed()
             let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
                 MainActor.assumeIsolated {
                     guard let dec, let win else { return }
@@ -63,6 +64,8 @@ extension StreamSession {
                     // works with the HUD off - the expensive host/controller
                     // probes below stay gated on `statsOverlayEnabled`.
                     var snap = dec.statsSnapshot(minWindowSeconds: overlayFpsWindowSeconds)
+                    history.tick(mbps: snap.measuredBitrateMbps, fps: snap.receivedFps,
+                                 rttMs: dec.telemetryEstimatedRtt()?.rttMs)
                     // Auto pill, independent of the stats-HUD toggle so a
                     // degrading PRESENT path reaches the user with the HUD off.
                     // Drives off PERCEIVED present-hitching (render-gap / stale
@@ -136,6 +139,22 @@ extension StreamSession {
             timer.tolerance = 0.03
             self.statsOverlayTimer = timer
         }
+    }
+
+    /// One snapshot for the menu bar's Connection Details, plus the overlay state.
+    func menuBarDetails() async -> (snapshot: StreamStatsSnapshot, overlayShown: Bool)? {
+        guard let dec = videoDecoder else { return nil }
+        return await MainActor.run {
+            var snap = dec.statsSnapshot(minWindowSeconds: 1.0)
+            if let rtt = dec.telemetryEstimatedRtt() { snap.rttMs = rtt.rttMs }
+            return (snap, dec.statsOverlayEnabled)
+        }
+    }
+
+    /// The current session's overlay, the same switch the keyboard toggle drives.
+    func setStatsOverlay(_ shown: Bool) async {
+        guard let dec = videoDecoder else { return }
+        await MainActor.run { dec.statsOverlayEnabled = shown }
     }
 }
 

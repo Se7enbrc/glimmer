@@ -50,9 +50,11 @@ extension StreamSession {
         customControllerChordProvider: @escaping @MainActor () -> Set<ControllerButton> = { [] },
         onBackgroundedChanged: (@MainActor (Bool) -> Void)? = nil
     ) async throws -> AsyncStream<StreamEvent> {
-        guard !isStreaming else {
+        guard !isStreaming, !stopInProgress else {
             throw StreamError.sessionFailed(-1)
         }
+        teardown = SharedTeardown()
+        ownsHostSession = false
         isStreaming = true
 
         // Capture the inputs a SILENT RECONNECT needs to rebuild the connection
@@ -96,28 +98,16 @@ extension StreamSession {
         // the display switches, handshakes read 3-7x the path's true RTT.
         let rttSampler = RttSampler(host: server.address, port: UInt16(server.httpsPort))
         let serverInfo = try await fetchAndVerifyServerInfo(network: network)
+        try checkAttempt()
         await rttSampler.awaitPreLaunchWindow()
+        try checkAttempt()
         rttSampler.markLaunch()
 
-        // --- 2) Decide launch vs. resume vs. quit-then-launch -----------
-        // GameStream hosts only run one session at a time. If a previous
-        // attempt left the host busy (orphan session) or someone else is
-        // streaming, /launch will fail. Route based on the host's currentgame:
-        //   0                  → free, /launch
-        //   == our appID       → still ours, /resume
-        //   != our appID       → someone else's session, /cancel + /launch
-        // Try the obvious path first (launch if idle, resume if our app is
-        // already going), then fall back through busy-recovery if the host
-        // disagrees. `<currentgame>` parsing is inconsistent across hosts so
-        // we treat it as a hint, not gospel.
-        // M6: bound the initial-connect launch with an overall deadline so the
-        // busy-recovery retries can't stack to ~55-65s of "Connecting...". The
-        // reconnect path keeps the un-deadlined call - its episode already bounds
-        // the total (attempt cap + window).
-        let launch: LaunchResponse = try await launchWithDeadline(
-            network: network, appID: appID, config: config,
-            hintCurrentGame: serverInfo.currentGameID
-        )
+        let launch = try await launchWithDeadline(network: network, appID: appID, config: config, info: serverInfo)
+        try checkAttempt()
+        takeoverAuthorized = false
+        await network.setRequestDeadline(nil)
+        try checkAttempt()
 
         // --- 3) Build the backend stream config -------------------------
         let backendConfig = makeBackendConfig(

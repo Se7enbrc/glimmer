@@ -33,8 +33,7 @@ extension VideoDecoder {
         // backpressured renderer drops the repaint silently (best-effort:
         // the off-tick release path is the load-bearing failsafe; this only
         // feeds the governor's activity heuristic).
-        guard isStreaming, let layer = displayLayer else { return }
-        let renderer = layer.sampleBufferRenderer
+        guard isStreaming, let renderer = sampleBufferRenderer else { return }
         guard renderer.status != .failed, renderer.isReadyForMoreMediaData else { return }
         // Copy the sample buffer (shares the pixel buffer - no pixel copy) so
         // the renderer gets a distinct enqueue object rather than the exact

@@ -34,3 +34,35 @@ struct CommandKeyUpTests {
         #expect(try forwarder.isDuplicateKeyUp(keyUp(keyCode: kVK_ANSI_A, at: 101)) == false)
     }
 }
+
+/// A key held from before ⌘ went down was forwarded, so its release must be
+/// forwarded too, even with sys-key capture off.
+@MainActor
+struct HeldKeyReleaseUnderCommandTests {
+
+    private func key(_ type: NSEvent.EventType, keyCode: Int, mods: NSEvent.ModifierFlags) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: type, location: .zero, modifierFlags: mods, timestamp: 1,
+            windowNumber: 0, context: nil, characters: "w", charactersIgnoringModifiers: "w",
+            isARepeat: false, keyCode: UInt16(keyCode)))
+    }
+
+    @Test func heldKeyIsReleasedUnderCommand() throws {
+        let forwarder = InputForwarder()
+        forwarder.isReady = true
+        let view = StreamInputView()
+        #expect(forwarder.streamView(view, handleKeyDown: try key(.keyDown, keyCode: kVK_ANSI_W, mods: [])))
+        #expect(forwarder.heldKeys.count == 1)
+        forwarder.streamView(view, handleKeyUp: try key(.keyUp, keyCode: kVK_ANSI_W, mods: [.command]))
+        #expect(forwarder.heldKeys.isEmpty)
+    }
+
+    @Test func unforwardedCommandKeyUpIsIgnored() throws {
+        let forwarder = InputForwarder()
+        forwarder.isReady = true
+        let view = StreamInputView()
+        #expect(forwarder.streamView(view, handleKeyDown: try key(.keyDown, keyCode: kVK_ANSI_W, mods: [.command])) == false)
+        forwarder.streamView(view, handleKeyUp: try key(.keyUp, keyCode: kVK_ANSI_W, mods: [.command]))
+        #expect(forwarder.heldKeys.isEmpty)
+    }
+}

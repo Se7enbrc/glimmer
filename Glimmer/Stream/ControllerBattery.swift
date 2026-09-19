@@ -115,6 +115,15 @@ final class ControllerBattery: @unchecked Sendable {
         }
     }
 
+    @MainActor
+    func register(slot: UInt8, hid: HIDGamepadDevice) -> UInt16 {
+        unregister(slot: slot)
+        guard hid.hasBattery else { return 0 }
+        pads[slot] = Pad(hid: hid)
+        startTimerIfNeeded()
+        return UInt16(StreamProtocol.LI_CCAP_BATTERY_STATE)
+    }
+
     // MARK: - Arrival baseline (ControllerForwarder.sendArrival, main thread)
 
     /// Arm the uplink and send `slot`'s baseline reading right behind its
@@ -168,7 +177,10 @@ final class ControllerBattery: @unchecked Sendable {
         // status byte itself, so route that to the host when available and fall
         // back to GCController.battery otherwise (Xbox, or DualSense without the
         // opt-in raw-HID feature on).
-        guard let reading = hidReading(for: pad) ?? pad.controller?.battery.map(Self.wireReading)
+        let genericReading = pad.hid?.batteryPercentage.map {
+            (state: UInt8(StreamProtocol.LI_BATTERY_STATE_DISCHARGING), percentage: $0)
+        }
+        guard let reading = genericReading ?? hidReading(for: pad) ?? pad.controller?.battery.map(Self.wireReading)
         else { return }
         if let last = pad.lastSent, last == reading { return }
         let rc = backend.sendControllerBattery(num: slot, state: reading.state,
@@ -205,18 +217,13 @@ final class ControllerBattery: @unchecked Sendable {
 
     // MARK: - Raw-HID (DualSense) battery → wire mapping
 
-    /// The wire reading from the raw-HID DualSense decode, or nil when this pad
-    /// is not a DualSense, the raw-HID reader is not live, or no battery report
-    /// has been decoded yet. Single-pad assumption matches DualSenseHID's: the
-    /// decoded battery belongs to the DualSense the user is holding. The HID
-    /// decode carries percent + charging directly, so map it straight onto the
-    /// FULL/CHARGING/DISCHARGING states the wire wants (no .unknown-with-level
-    /// corner - the raw status byte always gives a real percent when present).
+    /// Battery telemetry from this controller's bound HID device, when available.
     @MainActor
     private func hidReading(for pad: Pad) -> (state: UInt8, percentage: UInt8)? {
         guard pad.controller?.extendedGamepad is GCDualSenseGamepad,
               DualSenseHID.shared.isActive,
-              let hid = DualSenseHID.shared.battery else { return nil }
+              let controller = pad.controller,
+              let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery else { return nil }
         // `DualSenseBattery.charging` collapses the decode's "charging" (charge
         // nibble 0x01) and "full" (0x02) into one Bool, so a pad charging at
         // level 10 is indistinguishable from a full one. Report CHARGING for
@@ -334,10 +341,12 @@ final class ControllerBattery: @unchecked Sendable {
         /// Weak: GameController owns the pad's lifetime; a disconnect must
         /// deallocate it even if our unregister is still in flight.
         weak var controller: GCController?
+        weak var hid: HIDGamepadDevice?
         /// Last reading the host actually got, for send-on-change suppression.
         var lastSent: (state: UInt8, percentage: UInt8)?
 
         init(controller: GCController) { self.controller = controller }
+        init(hid: HIDGamepadDevice) { self.hid = hid }
     }
 }
 

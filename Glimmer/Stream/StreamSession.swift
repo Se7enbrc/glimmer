@@ -49,6 +49,13 @@ public actor StreamSession {
     /// launcher UI's "Back to stream" affordance when the user has
     /// Cmd-Tabbed away (which orderOut'd the window) and now wants to
     /// resume.
+    /// The menu bar panel shows the pointer while it is open over a stream;
+    /// the window's own re-key path hides it again.
+    public func setCursorHidden(_ hidden: Bool) async {
+        let win = self.window
+        await MainActor.run { win?.setCursorHidden(hidden) }
+    }
+
     public func resumeWindow() async {
         // Capture the StreamWindow reference on the actor first (it lives
         // here, isolated to us), then hop to the main actor to touch
@@ -395,14 +402,13 @@ public actor StreamSession {
     // StreamSession+Callbacks, so it is module-internal rather than private(set);
     // it stays actor-isolated, so external readers still can't race it.
     var isStreaming = false
-    // Set the moment stop() begins so re-entrant calls (e.g. quit hotkey +
-    // connectionTerminated firing back-to-back, or AsyncStream onTermination
-    // racing the explicit stop) early-out before re-entering teardown. The
-    // existing `isStreaming` guard is necessary but not sufficient - the
-    // first call flips it to false, but the entire teardown is async, so a
-    // second call can sneak past it while the backend stop / decoder
-    // teardown are still in flight.
+    // Set before teardown suspends; overlapping callers await the same work.
     var stopInProgress = false
+    var teardown = SharedTeardown()
+    var takeoverAuthorized = false
+    var ownsHostSession = false
+    var hostSessionClientID: String?
+    var launchTask: Task<LaunchResponse, Error>?
 
     /// - Parameter backend: the streaming engine. Defaults to the Swift-native
     ///   engine, the only implementation.

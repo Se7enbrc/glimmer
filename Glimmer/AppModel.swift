@@ -191,6 +191,14 @@ final class AppModel {
         let occupantApp: String
     }
 
+    // Menu bar: reconnect edge, the Stop row's latch, the overlay mirror and
+    // the Connection Details snapshot (see AppModel+MenuBar).
+    var isReconnecting = false
+    var menuStopInProgress = false
+    var statsOverlayShown = false
+    var menuDetails: StreamStatsSnapshot?
+    @ObservationIgnored var menuRefreshTimer: Timer?
+
     var showStreamStats: Bool = false {
         didSet { UserDefaults.standard.set(showStreamStats, forKey: "showStreamStats") }
     }
@@ -381,6 +389,11 @@ final class AppModel {
     /// is seen and the user hasn't decided yet. Transient.
     var showRawHIDPrompt = false
 
+    /// Name of a generic HID pad waiting for Input Monitoring, and the
+    /// launcher's offer for it. Transient (see AppModel+RawHID).
+    var hidPermissionPadName: String?
+    var showHIDPermissionPrompt = false
+
     /// Whether the user has answered the auto-offer (Enable or Cancel) - so we
     /// only proactively ask once. They can still flip the Settings toggle.
     var rawHIDPromptAnswered: Bool = UserDefaults.standard.bool(forKey: "rawHIDPromptAnswered") {
@@ -393,7 +406,8 @@ final class AppModel {
     // declineRawHIDPrompt) and its explanation copy live in AppModel+RawHID.swift.
 
     // Pairing
-    var pairingInFlight = false
+    var pairingAttempt: PairingAttempt?
+    var pairingInFlight: Bool { pairingAttempt != nil }
 
     /// Typed phase of the in-flight pairing handshake. Drives the PairSheet
     /// banner colour, spinner, and result text. `pairingMessage` is the
@@ -552,8 +566,11 @@ final class AppModel {
 
     // MARK: Mute/restore Mac audio
 
-    /// Pre-mute capture of the system output level. Non-nil doubles as the
-    /// did-mute LATCH: the stream-end restore keys off THIS, never the live
+    /// Pre-mute capture of the output device and its level. Non-nil doubles as
+    /// the did-mute LATCH: the stream-end restore keys off THIS, never the live
     /// toggle - see AppModel+Audio.swift for the full contract.
-    @ObservationIgnored var prePausedMacVolume: Float?
+    @ObservationIgnored var prePausedMacOutput: MutedOutput?
+
+    /// The launch the user last asked for, so Retry repeats exactly that.
+    @ObservationIgnored var lastLaunchAttempt: (app: LibraryApp, host: Host)?
 }

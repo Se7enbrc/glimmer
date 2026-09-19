@@ -139,7 +139,7 @@ struct EnetWireTests {
 
     @Test func takeZeroReturnsEmptyArray() {
         var r = ByteReader([0x01, 0x02])
-        #expect(r.take(0) == [])
+        #expect(r.take(0)?.isEmpty == true)
         #expect(r.remaining == 2)
     }
 
@@ -150,5 +150,24 @@ struct EnetWireTests {
         #expect(r.u16BE() == nil)
         #expect(r.u32BE() == nil)
         #expect(r.u32Raw() == nil)
+    }
+
+    // MARK: - Channel fallback (ControlStream.c sendMessageEnet parity)
+
+    /// With the full 48 channels granted every requested channel stands.
+    @Test func grantedChannelsAreUsedAsRequested() {
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelMouse, negotiatedCount: 48) == Enet.ctrlChannelMouse)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelGamepadBase + 3, negotiatedCount: 48) == Enet.ctrlChannelGamepadBase + 3)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelSensorBase + 15, negotiatedCount: 48) == Enet.ctrlChannelSensorBase + 15)
+    }
+
+    /// A peer that granted fewer channels gets those sends on the generic
+    /// channel instead of a channel it never opened.
+    @Test func channelsBeyondTheGrantFoldOntoGeneric() {
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelMouse, negotiatedCount: 4) == Enet.ctrlChannelMouse)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelGamepadBase, negotiatedCount: 4) == Enet.ctrlChannelGeneric)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelGamepadBase, negotiatedCount: 16) == Enet.ctrlChannelGeneric)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelGamepadBase, negotiatedCount: 17) == Enet.ctrlChannelGamepadBase)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelKeyboard, negotiatedCount: 1) == Enet.ctrlChannelGeneric)
     }
 }

@@ -20,11 +20,11 @@ struct InputEncoderTests {
     private func header(bodyLength: UInt32, magicLE: UInt32) -> [UInt8] {
         let sizeBE: [UInt8] = [
             UInt8((bodyLength >> 24) & 0xFF), UInt8((bodyLength >> 16) & 0xFF),
-            UInt8((bodyLength >> 8) & 0xFF), UInt8(bodyLength & 0xFF),
+            UInt8((bodyLength >> 8) & 0xFF), UInt8(bodyLength & 0xFF)
         ]
         let magicLEbytes: [UInt8] = [
             UInt8(magicLE & 0xFF), UInt8((magicLE >> 8) & 0xFF),
-            UInt8((magicLE >> 16) & 0xFF), UInt8((magicLE >> 24) & 0xFF),
+            UInt8((magicLE >> 16) & 0xFF), UInt8((magicLE >> 24) & 0xFF)
         ]
         return sizeBE + magicLEbytes
     }
@@ -209,7 +209,7 @@ struct InputEncoderTests {
             InputEncoder.mouseButton(action: 0x07, button: 1),
             InputEncoder.scroll(1),
             InputEncoder.hscroll(1),
-            InputEncoder.controllerBattery(num: 0, state: 0, percentage: 0),
+            InputEncoder.controllerBattery(num: 0, state: 0, percentage: 0)
         ]
         for pkt in packets {
             let sizeField = (UInt32(pkt[0]) << 24) | (UInt32(pkt[1]) << 16)

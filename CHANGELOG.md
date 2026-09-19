@@ -1,5 +1,89 @@
 # Changelog
 
+## 2026.9.4 - 2026-09-19
+
+Controllers macOS doesn't know about, a mouse that feels like your Mac, a menu
+bar item worth opening, and a catch-up with what Sunshine changed over the
+summer.
+
+Any HID gamepad now works. Glimmer used to see only the pads macOS itself
+recognises (Xbox, PlayStation, Switch and MFi). Pads that show up as plain
+DirectInput devices, like the 8BitDo Ultimate 2C over Bluetooth, were invisible.
+Glimmer now reads those directly, using the same community controller mappings
+Moonlight relies on, with rumble where the hardware offers force feedback,
+battery level where it is reported, the quit chord, and a live readout in
+Settings, Diagnostics. Pads macOS handles keep going through macOS. A pad that
+needs the Input Monitoring permission is explained in the launcher before macOS
+asks, never in the middle of a stream.
+
+Two DualSenses now keep their own buttons, battery readings, lights and trigger
+effects. A face-button press matches the pads up when needed; one pad still
+works straight away.
+
+The mouse keeps your speed. "Raw aim" used to switch the Mac's pointer to a mode
+that also threw away your Tracking Speed, so the stream ran at roughly a quarter
+of desktop sensitivity, and a crash could leave the desktop that way. It now
+uses macOS's own linear scaling: no acceleration curve in the game, your speed
+unchanged, restored the moment you leave. Settings, Input has a switch between
+Linear scaling and Mouse acceleration; linear is the default.
+
+The menu bar item is now a panel. While streaming it shows bandwidth, latency
+and frames per second as big numbers over a one-minute chart (hover it to read
+any second back), the mode you asked for, Back to Stream, Stop Streaming and a
+stats-overlay switch. Otherwise it shows the selected PC with its readiness, a
+Stream button, the PC's apps and PCs one level down, and Wake and Connect for an
+asleep PC where luna is set up. Controllers show their name and a battery bar.
+The mark itself reads idle, connecting, reconnecting, streaming or needs
+attention, and attention opens to the reason and a Try Again.
+
+The main Stream button now launches the Default action from Settings, the same
+as the menu bar; an app the PC is already running still wins, and Retry repeats
+the exact launch that failed.
+
+Your Mac now pairs under its own name. Sunshine's pairing page used to list
+Glimmer as "roth", a leftover from Moonlight's early days, and every Glimmer on
+your network identified itself with the same fixed id. Each install now sends
+its computer name and its own id to Sunshine. GFE hosts still get the shared id
+they depend on.
+
+Controller packets follow the host's channel grant. If a host opens fewer
+control channels than Glimmer asks for, controller and sensor traffic now falls
+back to the shared channel the way Moonlight does, instead of being sent into a
+channel that was never opened.
+
+Player indicator lights. Sunshine 2026.906 and later can tell the pad which
+player it is; Glimmer now sets the controller's player index from that.
+
+Holding both Shifts (or both Controls, or both Options) and letting go of one no
+longer leaves the other stuck on the host. Each side is tracked on its own, and
+a focus loss releases exactly the sides that were held. A key held from before
+you pressed ⌘ is released when you let go of it, too.
+
+Two crashes on the second stream of a run are gone. The DualSense reader freed a
+buffer macOS still writes controller reports into, which corrupted memory and
+took the app down later, and a telemetry lock was never initialised. Both were
+found under Address Sanitizer, which the build now supports directly.
+
+Clicking back into a stream no longer leaves the Mac's pointer drawn over the
+game. macOS shows the pointer again for menu bar and menu interactions without
+saying so, and the stream trusted its own record instead; it now hides it again
+on every return.
+
+Quieter, more careful edges from an end-to-end review: cancelling a connection
+can no longer launch the game afterwards; quitting during a stream's teardown
+waits for the same teardown instead of exiting past it; a reconnect keeps to its
+30 second window on every request; a host that is streaming anything, known app
+or not, asks before being taken over; pairing results can only land on the PC
+that started them; opening the chord recorder or Diagnostics no longer takes the
+controller away from a live stream; muting the Mac remembers which output it
+silenced and puts that one back (also after a crash); and a Wi-Fi helper race
+that could leave AirDrop's radio parked after a stream ended is closed. HDR
+metadata updates are now handed to the decoder as one atomic snapshot.
+
+When the Mac's Wi-Fi roams to another access point, or drops and comes back,
+during a stream, the session log now says so in plain words next to the video
+lines, so a hitch that lines up with it explains itself.
+
 ## 2026.9.3 - 2026-09-14
 
 Fixes a crash after a stream ended, if you had visited the Custom resolution

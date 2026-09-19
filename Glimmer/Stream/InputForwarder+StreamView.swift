@@ -153,18 +153,16 @@ extension InputForwarder: StreamInputViewDelegate {
         noteEscapeKeyUp(event)
         guard isReady else { return }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return }
+        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
 
-        // Mirror the sys-key gate from handleKeyDown: if Cmd is held and
-        // capture is off, the matching key-down was never forwarded, so
-        // sending the key-up alone would leave the host's keyboard state
-        // inconsistent (it would think the key was released without ever
-        // having been pressed).
-        if mods.contains(.command), !captureSysKeys {
+        // Mirror the key-down gate: under ⌘ with capture off the down was never
+        // forwarded, so no up either. A key held from before ⌘ went down was
+        // forwarded and must be released, or the host keeps it pressed.
+        if mods.contains(.command), !captureSysKeys, !heldKeys.contains(wireCode) {
             return
         }
 
-        guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return }
-        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
         let rc = backend?.sendKeyboard(
             keyCode: wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_UP),
@@ -177,69 +175,31 @@ extension InputForwarder: StreamInputViewDelegate {
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let changed = mods.symmetricDifference(lastModFlags)
-        lastModFlags = mods
+        // Each modifier SIDE is tracked on its own (device-dependent bits), so
+        // holding both Shifts and releasing one sends exactly that side's up.
+        // Cmd is macOS-owned: never forwarded unless sys-key capture is on.
+        let downNow = ModifierSides.held(in: event.modifierFlags, includeCommand: captureSysKeys)
+        let capsChanged = mods.contains(.capsLock) != lastCapsLock
+        lastCapsLock = mods.contains(.capsLock)
+        let pressed = downNow.subtracting(heldModifierVKs)
+        let released = heldModifierVKs.subtracting(downNow)
+        heldModifierVKs = downNow
         guard isReady else { return }
 
-        // Use the OS keyCode to figure out which side (L vs R) of the modifier
-        // changed - Win VK has separate codes for LSHIFT (0xA0) and RSHIFT
-        // (0xA1), and games sometimes care.
         let modByte = Int8(bitPattern: modifierByte(from: mods))
-        let isDown: (NSEvent.ModifierFlags) -> Bool = { mods.contains($0) }
-
-        // Translate the side-specific Carbon keyCode to its Win VK pair.
-        let kc = Int(event.keyCode)
-        let vkPairs: [(Int, NSEvent.ModifierFlags, Int16)] = [
-            (kVK_Control, .control, 0xA2),  // VK_LCONTROL
-            (kVK_RightControl, .control, 0xA3),  // VK_RCONTROL
-            (kVK_Shift, .shift, 0xA0),  // VK_LSHIFT
-            (kVK_RightShift, .shift, 0xA1),  // VK_RSHIFT
-            (kVK_Option, .option, 0xA4),  // VK_LMENU
-            (kVK_RightOption, .option, 0xA5),  // VK_RMENU
-            (kVK_Command, .command, 0x5B),  // VK_LWIN
-            (kVK_RightCommand, .command, 0x5C),  // VK_RWIN
-            (kVK_CapsLock, .capsLock, 0x14) // VK_CAPITAL
-        ]
-
-        // Cmd is a macOS-specific modifier. When sys-key capture is off, we
-        // don't want the host to ever see VK_LWIN / VK_RWIN - not even as a
-        // bare modifier press - because that would still pop the host's
-        // Start menu on key-up. Suppress both left and right Cmd here. Other
-        // modifiers (Ctrl → CTRL, Shift → SHIFT, Option → ALT) ARE forwarded
-        // because they're not macOS-owned in the same way: most apps treat
-        // ⌃/⌥/⇧ as game / app input modifiers, not as system shortcut keys.
-        let suppressCmd = !captureSysKeys
-
-        var forwarded = false
-        for (codeKC, flag, vk) in vkPairs where kc == codeKC && changed.contains(flag) {
-            if suppressCmd && flag == .command {
-                forwarded = true   // pretend we did, to skip the fallback loop
-                break
-            }
-            let action: Int8 = isDown(flag) ? Int8(StreamProtocol.KEY_ACTION_DOWN) : Int8(StreamProtocol.KEY_ACTION_UP)
-            let rc = backend?.sendKeyboard(
-                keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
-                action: action, modifiers: modByte, flags: 0) ?? -2
-            record("LiSendKeyboardEvent2(modifier)", rc)
-            forwarded = true
-            break
+        for vk in released.sorted() { sendModifier(vk, down: false, modByte: modByte) }
+        for vk in pressed.sorted() { sendModifier(vk, down: true, modByte: modByte) }
+        if capsChanged {
+            sendModifier(0x14, down: mods.contains(.capsLock), modByte: modByte) // VK_CAPITAL
         }
-        if !forwarded {
-            // Fallback when we can't identify the side from the keyCode (e.g.
-            // synthetic flagsChanged from sticky-keys). Send the left-side VK
-            // for each flag that flipped. Skip `.command` when capture is off.
-            let fallback: [(NSEvent.ModifierFlags, Int16)] = [
-                (.control, 0xA2), (.shift, 0xA0), (.option, 0xA4), (.command, 0x5B), (.capsLock, 0x14)
-            ]
-            for (flag, vk) in fallback where changed.contains(flag) {
-                if suppressCmd && flag == .command { continue }
-                let action: Int8 = isDown(flag) ? Int8(StreamProtocol.KEY_ACTION_DOWN) : Int8(StreamProtocol.KEY_ACTION_UP)
-                let rc = backend?.sendKeyboard(
-                    keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
-                    action: action, modifiers: modByte, flags: 0) ?? -2
-                record("LiSendKeyboardEvent2(modifier fallback)", rc)
-            }
-        }
+    }
+
+    private func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {
+        let action: Int8 = down ? Int8(StreamProtocol.KEY_ACTION_DOWN) : Int8(StreamProtocol.KEY_ACTION_UP)
+        let rc = backend?.sendKeyboard(
+            keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
+            action: action, modifiers: modByte, flags: 0) ?? -2
+        record("LiSendKeyboardEvent2(modifier)", rc)
     }
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
@@ -291,12 +251,11 @@ extension InputForwarder: StreamInputViewDelegate {
             batchTimestamp = queued.timestamp
         }
 
-        // DRAG-DELTA compensation (before Cruise, so the velocity gate sees the
-        // corrected motion): macOS damps dragged deltas vs free motion for the
-        // same hand speed (owner-verified matched-speed swipes, macOS 27 beta).
-        // Scale button-held batches back to parity; 1.0 disables.
+        // DRAG-DELTA compensation, only while raw aim has linearised the pointer:
+        // that mode damps dragged deltas vs free motion (owner-measured, macOS 27).
+        // With acceleration untouched, drags already match moves. 1.0 disables.
         let isDragBatch = event.type != .mouseMoved
-        if isDragBatch {
+        if isDragBatch && savedLinearScaling != nil {
             let scale = CruiseTraversal.dragDeltaScale
             if scale != 1.0 {
                 accumDx *= scale
@@ -366,13 +325,13 @@ extension InputForwarder: StreamInputViewDelegate {
         // slow trackpad motion under 1px/event isn't rounded away.
         mouseResidualX += accumDx
         mouseResidualY += accumDy  // macOS deltaY is down-positive - matches Windows VK input.
-        let dxInt = Int(mouseResidualX.rounded(.towardZero))
-        let dyInt = Int(mouseResidualY.rounded(.towardZero))
-        if dxInt != 0 || dyInt != 0 {
-            mouseResidualX -= Double(dxInt)
-            mouseResidualY -= Double(dyInt)
-            let outDx = Int16(clamping: dxInt)
-            let outDy = Int16(clamping: dyInt)
+        // Send only what fits the wire's Int16 and keep the rest in the residual,
+        // so an oversized batch never loses the overflow to the clamp.
+        let outDx = Int16(clamping: Int(mouseResidualX.rounded(.towardZero)))
+        let outDy = Int16(clamping: Int(mouseResidualY.rounded(.towardZero)))
+        if outDx != 0 || outDy != 0 {
+            mouseResidualX -= Double(outDx)
+            mouseResidualY -= Double(outDy)
             let rc = backend?.sendMouseMove(dx: outDx, dy: outDy) ?? -2
             record("LiSendMouseMoveEvent", rc)
         }

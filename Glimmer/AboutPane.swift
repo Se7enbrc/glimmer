@@ -53,12 +53,6 @@ struct AboutPane: View {
                         Text("Stream your gaming PC to this Mac.")
                             .font(.title3)
                             .foregroundStyle(.secondary)
-                        // The credo. One line, no elaboration - it is the
-                        // project's bar, not a slogan to be decorated.
-                        Text("Highest fidelity. Lowest resources. Rock stable.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .italic()
                         Text("Version \(versionString)")
                             .font(.footnote)
                             .foregroundStyle(.tertiary)

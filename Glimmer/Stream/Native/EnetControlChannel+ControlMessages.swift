@@ -136,6 +136,14 @@ extension EnetControlChannel {
         onSetRgbLed?(controllerNumber, payload[2], payload[3], payload[4])
     }
 
+    /// Parse SET_PLAYER_LEDS (0x5504): [u16 LE controllerNumber][u8 solid][u8 flashing].
+    /// Truncated → dropped; the host re-sends on the next change.
+    func handleSetPlayerLeds(_ payload: [UInt8]) {
+        guard payload.count >= 4 else { return }
+        let controllerNumber = UInt16(payload[0]) | (UInt16(payload[1]) << 8)
+        onSetPlayerLeds?(controllerNumber, payload[2], payload[3])
+    }
+
     /// Parse SET_MOTION_EVENT (0x5501) and hand the enable to onSetMotionEvent.
     ///
     /// Layout verified against BOTH ends of the wire: Sunshine's

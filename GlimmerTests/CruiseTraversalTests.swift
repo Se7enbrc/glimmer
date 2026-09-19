@@ -18,8 +18,8 @@ struct CruiseTraversalTests {
     let vFull = CruiseTraversal.defaultVFull   // 4500
     let dt = 0.008                              // ~120Hz batch interval (valid)
 
-    private func gain(_ v: Double, dt: Double? = nil, gMax: Double? = nil) -> Double {
-        CruiseTraversal.gain(velocity: v, dt: dt ?? self.dt, gMax: gMax ?? gMax4K,
+    private func gain(_ velocity: Double, dt: Double? = nil, gMax: Double? = nil) -> Double {
+        CruiseTraversal.gain(velocity: velocity, dt: dt ?? self.dt, gMax: gMax ?? gMax4K,
                              vKnee: vKnee, vFull: vFull)
     }
 
@@ -46,13 +46,13 @@ struct CruiseTraversalTests {
     @Test func rampIsMonotonicAndBoundedBetween() {
         // Strictly increasing from 1.0 toward gMax across the knee→full band.
         var prev = gain(vKnee)
-        var v = vKnee + 50
-        while v < vFull {
-            let g = gain(v)
+        var velocity = vKnee + 50
+        while velocity < vFull {
+            let g = gain(velocity)
             #expect(g > prev)                 // monotonic ramp
             #expect(g > 1.0 && g < gMax4K)    // bounded strictly inside
             prev = g
-            v += 50
+            velocity += 50
         }
     }
 
@@ -74,8 +74,8 @@ struct CruiseTraversalTests {
         // <=1080p (gMax clamps to 1.0) is provably inert at every velocity.
         let inert = CruiseTraversal.gMax(forStreamWidth: 1920)
         #expect(inert == 1.0)
-        for v in stride(from: 0.0, through: 20_000, by: 250) {
-            #expect(gain(v, gMax: inert) == 1.0)
+        for velocity in stride(from: 0.0, through: 20_000, by: 250) {
+            #expect(gain(velocity, gMax: inert) == 1.0)
         }
         // 1080p width derives the same inert ceiling.
         #expect(CruiseTraversal.gMax(forStreamWidth: 1080) == 1.0)

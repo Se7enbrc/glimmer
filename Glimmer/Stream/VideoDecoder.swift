@@ -237,31 +237,28 @@ public final class VideoDecoder {
 
     // Display layer. Set on the main actor before stream start, dropped on
     // teardown. The decode queue reads it from the VT output callback;
-    // AVSampleBufferDisplayLayer.enqueue is thread-safe per Apple's docs
-    // (the layer maintains its own internal sample queue and lock), but
-    // the *reference write* itself (set/clear of the optional) races against
-    // the decode-queue reader. Guard the pointer load/store with a plain
-    // NSLock so the MainActor nil-out at teardown can't interleave with a
-    // decode-queue snapshot. NSLock is used here instead of
-    // OSAllocatedUnfairLock<T> because the latter requires its stored state to
-    // be Sendable and AVSampleBufferDisplayLayer/CALayer is not - locking
-    // around a plain nonisolated(unsafe) slot keeps the same race-free
-    // semantics without forcing Sendable on a class we don't own.
-    //
-    // Read pattern at hot sites: snapshot once into a local, operate on the
-    // local; the local extends the layer's lifetime past any teardown that
-    // races. Writes only happen on MainActor (attach/teardown).
+    // The layer/renderer slot: enqueue is thread-safe, the reference write is
+    // not, so an NSLock (the layer is not Sendable) guards load/store. Hot
+    // sites snapshot into a local; writes happen on MainActor only.
     let displayLayerLock = NSLock()
     nonisolated(unsafe) var _displayLayer: AVSampleBufferDisplayLayer?
+    // The layer's renderer, captured with the layer: it is safe off-main, but
+    // the layer property that vends it is main-actor only.
+    nonisolated(unsafe) var _sampleBufferRenderer: AVSampleBufferVideoRenderer?
     nonisolated var displayLayer: AVSampleBufferDisplayLayer? {
-        get {
-            displayLayerLock.lock(); defer { displayLayerLock.unlock() }
-            return _displayLayer
-        }
-        set {
-            displayLayerLock.lock(); defer { displayLayerLock.unlock() }
-            _displayLayer = newValue
-        }
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        return _displayLayer
+    }
+    nonisolated var sampleBufferRenderer: AVSampleBufferVideoRenderer? {
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        return _sampleBufferRenderer
+    }
+    /// The one write site for the layer (attach / teardown), on the main actor.
+    func setDisplayLayer(_ layer: AVSampleBufferDisplayLayer?) {
+        let renderer = layer?.sampleBufferRenderer
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        _displayLayer = layer
+        _sampleBufferRenderer = renderer
     }
 
     // Decode session + format desc. Both live on the decode queue.
@@ -284,7 +281,7 @@ public final class VideoDecoder {
     // Cached because building it is non-trivial (CMFormatDescription is
     // immutable, so we have to copy the original's extensions dict and
     // re-create the description). Invalidated whenever formatDescription
-    // changes or cachedMDCV / cachedContentLightLevel changes.
+    // changes or the HDR metadata snapshot changes.
     nonisolated(unsafe) var cachedHDRFormatDescription: CMVideoFormatDescription?
 
     // Stream parameters from setup().
@@ -484,8 +481,7 @@ public final class VideoDecoder {
     // The Data blobs are in the exact GBR-order big-endian byte layout that
     // moonlight-qt's vt_base.mm builds for the HDR10 MDCV + CLL SEI
     // attachments - see `refreshHDRMetadataFromHost()` for the contract.
-    nonisolated(unsafe) var cachedMDCV: Data?
-    nonisolated(unsafe) var cachedContentLightLevel: Data?
+    nonisolated let hdrMetadataStore = HDRMetadataStore()
 
     /// "Presentation is intentionally suppressed" - true while the stream window
     /// is orderOut'd / occluded / minimized / nativeStreamBackgrounded, i.e. the

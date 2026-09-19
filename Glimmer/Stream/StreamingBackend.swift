@@ -303,6 +303,9 @@ public protocol ConnectionEvents: AnyObject, Sendable {
     /// trigger API, so unlike rumble/LED/motion the native conformer routes this
     /// to DualSenseHID's raw-HID write rather than the GC actuator.)
     func setAdaptiveTriggers(controller: UInt16, eventFlags: UInt8, typeLeft: UInt8, typeRight: UInt8, left: [UInt8], right: [UInt8])
+    /// Host player indicator LEDs (SET_PLAYER_LEDS 0x5504; Sunshine 2026.906+).
+    /// `solid`/`flashing` are four-bit player masks. Same witness-table reason as rumble.
+    func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8)
 }
 
 public extension ConnectionEvents {
@@ -313,6 +316,7 @@ public extension ConnectionEvents {
     func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8) {}
     func setMotionEventState(controller: UInt16, motionType: UInt8, reportRateHz: UInt16) {}
     func setAdaptiveTriggers(controller: UInt16, eventFlags: UInt8, typeLeft: UInt8, typeRight: UInt8, left: [UInt8], right: [UInt8]) {}
+    func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8) {}
     // Future controller-feedback slots; NULL today, no-op for parity.
     func logMessage(_ message: String) {}
 }

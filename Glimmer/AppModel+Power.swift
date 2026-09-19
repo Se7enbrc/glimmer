@@ -39,7 +39,7 @@ extension AppModel {
                 guard thenConnect, !Task.isCancelled else { return }
                 if await waitForSunshine(host: host, budgetSeconds: 90) {
                     guard selectedHost?.id == host.id, !isStreaming else { return }
-                    streamDefaultApp()
+                    streamHeroApp()
                 } else if !Task.isCancelled {
                     Diag.notice("luna: \(host.displayName) awake but Sunshine did not "
                         + "answer within 90s - not auto-connecting", "Power")

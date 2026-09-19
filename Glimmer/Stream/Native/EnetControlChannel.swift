@@ -181,6 +181,9 @@ final class EnetControlChannel: @unchecked Sendable {
     var sentReliable: [SentReliable] = []
     var connected = false
     var disconnected = false
+    /// Channels the peer granted in VERIFY_CONNECT; sends above it fold onto
+    /// the generic channel the way moonlight-common-c does. Guarded by stateLock.
+    var negotiatedChannelCount: UInt32 = Enet.ctrlChannelCount
 
     // MARK: - IDR / RFI request coalescing (ControlStream.c idrFrameRequiredEvent)
     //
@@ -408,6 +411,9 @@ final class EnetControlChannel: @unchecked Sendable {
     /// the light bar at frame rate, so the consumer coalesces latest-wins off
     /// this thread exactly like rumble.
     var onSetRgbLed: ((UInt16, UInt8, UInt8, UInt8) -> Void)?
+    /// Fired for every host SET_PLAYER_LEDS (0x5504): (controllerNumber, solid
+    /// mask, flashing mask). Same off-thread, latest-wins contract as the light bar.
+    var onSetPlayerLeds: ((UInt16, UInt8, UInt8) -> Void)?
     /// Fired for EVERY host SET_MOTION_EVENT (0x5501): (controllerNumber,
     /// motionType LI_MOTION_TYPE_*, reportRateHz - 0 means stop). Rare state
     /// changes (a per-sensor open/close when a game grabs the IMU), not a

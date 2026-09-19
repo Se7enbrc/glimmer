@@ -108,7 +108,9 @@ final class AWDLSuppressor: @unchecked Sendable {
     }
 
     private func downIfUp(fast: Bool = false) {
-        guard isInterfaceUp() else { return }
+        // Re-checked here on execQueue: a raise edge queued just before a
+        // release must not put awdl0 back down behind the release's "up".
+        guard suppressing, isInterfaceUp() else { return }
         let confirmed = forceDownAwdl(fast: fast)
         stateLock.lock()
         let initial = !_initialDownDone
@@ -203,7 +205,7 @@ final class AWDLSuppressor: @unchecked Sendable {
     /// Restore awdl0 to its normal (up) state once suppression ends - mirror of
     /// downIfUp. macOS resumes managing the interface from there.
     private func upIfDown() {
-        guard !isInterfaceUp() else { return }
+        guard !suppressing, !isInterfaceUp() else { return }
         guard executeIfconfig(args: [interfaceName, "up"]) else {
             os_log("Failed to bring %{public}@ up", log: log, type: .error, interfaceName)
             return
@@ -267,7 +269,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         ctx.info = unmanagedSelf
 
         let storeOpt = withUnsafeMutablePointer(to: &ctx) { ctxPtr -> SCDynamicStore? in
-            return SCDynamicStoreCreate(
+            SCDynamicStoreCreate(
                 nil,
                 "io.ugfugl.glimmer.helper" as CFString,
                 { _, changedKeys, info in
@@ -287,7 +289,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         let patterns = [
             "State:/Network/Interface/awdl0/Link" as CFString,
             "State:/Network/Interface/awdl0/IPv4" as CFString,
-            "State:/Network/Interface/awdl0/IPv6" as CFString,
+            "State:/Network/Interface/awdl0/IPv6" as CFString
         ]
         SCDynamicStoreSetNotificationKeys(store, nil, patterns as CFArray)
 

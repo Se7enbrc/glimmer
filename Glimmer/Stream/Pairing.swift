@@ -242,6 +242,8 @@ public actor PairingClient {
             signpostID: pairingSignpostID
         )
 
+        try Task.checkCancellation()
+
         // Success - persist into the ServerInfo we hand back.
         server.serverCertPEM = serverCertPEM
         server.pairStatus = .paired
@@ -363,7 +365,7 @@ public actor PairingClient {
             "PairingStep",
             id: signpostID,
             "step=\(stepLabel)")
-        var fullQuery = ["devicename": "roth", "updateState": "1"]
+        var fullQuery = ["devicename": NetworkClient.pairingDeviceName, "updateState": "1"]
         for (key, value) in query { fullQuery[key] = value }
         let response = try await network.request(
             path: "pair",

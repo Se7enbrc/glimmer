@@ -21,28 +21,52 @@ import os.log
 
 extension AppModel {
 
-    /// UI entry point for a launch. If the host is already streaming an app
-    /// that ISN'T ours, arm `pendingTakeover` for a confirm before we /launch
-    /// over the live occupant; otherwise stream straight through.
+    /// Prompt at once when the launcher already knows the host is taken; the
+    /// launch flow re-checks fresh server-info and prompts if that disagrees.
     func requestStream(app: LibraryApp, on host: Host) {
-        if !isStreaming,
-           let live = hostLiveStatus, live.hostID == host.id,
+        if !isStreaming, let live = hostLiveStatus, live.hostID == host.id,
            Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
-           case .streamingApp(let occupant) = live.state {
+           let occupant = Self.occupant(of: live.state) {
             pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+            presentTakeoverAlertIfNeeded()
             return
         }
         stream(app: app, on: host)
+    }
+
+    static func occupant(of state: HostLiveStatus.State) -> String? {
+        switch state {
+        case .streamingApp(let name): name
+        case .streamingUnknownApp: "another app"
+        default: nil
+        }
     }
 
     /// Confirm the armed takeover and launch over the host's current session.
     func confirmPendingTakeover() {
         guard let pending = pendingTakeover else { return }
         pendingTakeover = nil
-        stream(app: pending.app, on: pending.host)
+        stream(app: pending.app, on: pending.host, takeoverAuthorized: true)
     }
 
-    func stream(app: LibraryApp, on host: Host) {
+    /// The per-launch UI state, reset at every start.
+    private func armLaunchState(app: LibraryApp, host: Host) {
+        lastLaunchAttempt = (app, host)
+        isReconnecting = false
+        statsOverlayShown = showStreamStats
+        StreamHistory.shared.reset()
+        streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
+        nativeStreamError = nil
+        nativeHDRActive = false
+    }
+
+    /// Retry repeats the last requested launch, not the hero target.
+    func retryLastLaunch() {
+        guard let attempt = lastLaunchAttempt else { streamHeroApp(); return }
+        requestStream(app: attempt.app, on: attempt.host)
+    }
+
+    func stream(app: LibraryApp, on host: Host, takeoverAuthorized: Bool = false) {
         // RE-ENTRANCY GUARD. The native backend runs ONE session at a time
         // (StreamBridgeContext.current is a single process-global slot), and
         // a second entry here would corrupt it wholesale: a second
@@ -57,9 +81,7 @@ extension AppModel {
             return
         }
         Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
-        streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
-        nativeStreamError = nil
-        nativeHDRActive = false
+        armLaunchState(app: app, host: host)
         // Re-arm the disconnect toast for back-to-back cycles: if the
         // previous session's toast is still inside its 2-4 s hold, dropping
         // the flag here unmounts it (cancelling its hold task) so the NEXT
@@ -113,10 +135,6 @@ extension AppModel {
         Diag.info("Show the stream: \(cfg.displayMode.displayName.lowercased()) - requesting "
             + "\(cfg.width)x\(cfg.height) at \(cfg.fps) Hz", "Stream")
         let info = nativeServerInfo(for: host)
-        // Hero-verb memory: stamp the app NAME at stream START (unlike the
-        // lastConnected DATE above) so the next launcher visit names the app in
-        // "Stream <app>" even if this session ends badly.
-        UserDefaults.standard.set(app.name, forKey: Self.lastPlayedAppKey(for: host.id))
         // Arm the session-receipt latch with this session's identity (host +
         // requested mode). The live edge stamps the wall clock; the teardown
         // hook in StreamSession.stop() adds the end-of-session numbers; the
@@ -138,7 +156,9 @@ extension AppModel {
             // The Swift-native engine is the only path.
             let session = StreamSession(backend: NativeBackend())
             await MainActor.run { self.nativeSession = session }
+            await session.authorizeTakeover(takeoverAuthorized)
             var caughtError: Error?
+            var takeover: TakeoverRequired?
             do {
                 // Provider closures (rather than captured values) so the user
                 // can edit either hotkey in Settings while a stream is live
@@ -187,12 +207,22 @@ extension AppModel {
                     // resolved at event time would then blame the wrong PC.
                     await MainActor.run { self.handleNativeEvent(event, host: host) }
                 }
+            } catch let required as TakeoverRequired {
+                takeover = required
             } catch {
                 caughtError = error
             }
             // Single cleanup site: runs whether start() threw or the event
             // loop drained normally.
+            await session.stop()
+            // A takeover prompt is not a stream that ended: no toast, no receipt.
+            if takeover != nil { self.isStreaming = false }
             self.cleanupAfterStream(host: host, caughtError: caughtError)
+            if let takeover {
+                let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name ?? "another app"
+                self.pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+                self.presentTakeoverAlertIfNeeded()
+            }
         }
     }
 
@@ -253,6 +283,9 @@ extension AppModel {
         AWDLHelperManager.shared.releaseForStream()
         self.nativeStreamBackgrounded = false
         self.nativeSession = nil
+        self.menuStopInProgress = false
+        self.isReconnecting = false
+        self.menuDetails = nil
         // Disconnect beat (#3) - surface the "Stream ended" toast on
         // the launcher only when we actually had a live session.
         // Skipping the toast on the connection-failure path (where
@@ -384,6 +417,7 @@ extension AppModel {
             nativeStreamError = "Couldn't reach \(host.displayName)."
         case .connectionEstablished:
             streamPhase = .streaming
+            isReconnecting = false
             logConnectHoldAdjudication()
             // Receipt wall-clock starts at the LIVE edge (not the click) so
             // "2h 12m" measures time actually streaming, not handshake.
@@ -405,10 +439,12 @@ extension AppModel {
             // window stays up holding the frame. Resolves on .reconnected or, if
             // the engine gives up, a real .connectionTerminated.
             streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)…")
+            isReconnecting = true
         case .reconnected:
             // Resumed in place. (The fresh .connectionEstablished / .firstFrame
             // edges also promote the phase, so this is belt-and-braces.)
             streamPhase = .streaming
+            isReconnecting = false
         case .connectionStatus(let quality):
             // .good / .degraded both leave us in the streaming phase -
             // the stats overlay carries the real-time network signal,

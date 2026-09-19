@@ -1,40 +1,25 @@
 //
 //  DualSenseHID.swift
 //
-//  Raw-HID side-channel for the Sony DualSense, read over IOKit's
-//  IOHIDManager - exactly how moonlight-qt / SDL's HIDAPI driver does it.
-//  macOS's GameController framework does NOT deliver the DualSense's centre
-//  buttons (Options ≡, Create/Share, Mute) to apps, so a controller-only exit
-//  chord and full button parity are impossible through GCController alone.
-//  This reads the raw input report alongside GameController (non-exclusive
-//  open - it never seizes the device, so GCController keeps everything it
-//  already provides: sticks, face, shoulders, triggers, touchpad, battery).
+//  Raw-HID side channel for the DualSense over IOHIDManager (as moonlight-qt
+//  and SDL do). GameController never delivers the centre buttons (Options,
+//  Create, Mute), so they are read from the raw report alongside it.
 //
-//  Surfaces the centre buttons GameController drops (plus the two shoulder bits
-//  the quit-chord predicate reads from the same byte). Everything else stays
-//  on the GameController path.
+//  Non-exclusive open: gamecontrollerd keeps sticks, face, triggers, touchpad,
+//  rumble and light; this reads the report next to it and writes the OUTPUT
+//  report (adaptive triggers, plus lightbar and rumble re-emitted with them).
 //
-//  REQUIRES the "Input Monitoring" privacy permission (TCC kTCCServiceListenEvent
-//  - it covers game controllers, not just keyboards). Raw-HID open works under
-//  the unsandboxed Developer-ID build with no device.* entitlement. NOT
-//  Mac-App-Store-compatible (raw device HID is a hard App-Review reject).
-//  MAS-STRIP: a future Mac App Store target must remove this file and the call
-//  sites that reference DualSenseHID (ControllerForwarder / InputForwarder /
-//  TroubleshootingPane).
+//  Needs the Input Monitoring permission (TCC ListenEvent). Not App Store
+//  compatible: a Mac App Store target must drop this file and its call sites.
 //
 
 import Foundation
 import IOKit.hid
 import os.log
 
-/// The DualSense buttons GameController doesn't expose, mapped to the host's
-/// button semantics by `ControllerForwarder`, plus the two shoulder bits from
-/// the same report byte. The shoulders are NOT forwarded from here (GameController
-/// stays the host's source for L1/R1); they exist so the quit-chord predicate
-/// can read every button of "Start + Select + L1 + R1" from ONE coherent report
-/// instead of splicing raw-HID centre bits onto GameController's view of the
-/// shoulders - the two sources disagree in time, and GameController withholds
-/// input around a bound system gesture (Create is bound on macOS 26).
+/// The DualSense buttons GameController hides, plus L1/R1 from the same byte
+/// so the quit chord reads one coherent report (the host's L1/R1 still ride
+/// GameController; GameController withholds input around bound gestures).
 struct DualSenseExtraButtons: Equatable, Sendable {
     var options = false    // ≡  → Start  (PLAY_FLAG)
     var create = false     // Share/Create → Back/Select (BACK_FLAG)
@@ -44,43 +29,29 @@ struct DualSenseExtraButtons: Equatable, Sendable {
     var r1 = false         // chord-only; host R1 rides GameController
 }
 
-/// Battery decoded straight from the DualSense report. We read this ourselves
-/// because opening the pad over raw HID makes `gamecontrollerd` drop the
-/// enhanced-report battery field, so `GCController.battery` goes nil while the
-/// HID reader is live (confirmed via SDL/Linux hid-playstation). Callers prefer
-/// this whenever `DualSenseHID` is running.
+/// Battery from the raw report: opening the pad over HID makes gamecontrollerd
+/// drop the enhanced battery field, so `GCController.battery` reads nil while
+/// this reader is live and callers prefer this value.
 struct DualSenseBattery: Equatable, Sendable {
     var percent: Int       // 0...100
     var charging: Bool
 }
 
-/// The merged state we write into the DualSense OUTPUT report (0x02 USB / 0x31
-/// BT). All three families (rumble, lightbar, adaptive triggers) share one
-/// report, so we keep the latest of each and re-emit the whole thing on any
-/// update. Trigger blocks are the DualSense-native MODE byte + 10 param bytes
-/// (the Sunshine wire passes these through verbatim). Defaults are the neutral
-/// state: motors off, lightbar off, triggers off (mode 0x00 = no effect).
+/// One merged OUTPUT report (0x02 USB / 0x31 BT): rumble, lightbar and both
+/// trigger blocks travel together, so every write re-emits all of them.
+/// Defaults are neutral (motors off, bar off, trigger mode 0x00).
 struct DualSenseOutputState: Equatable, Sendable {
     var rumbleLeft: UInt8 = 0   // low-freq / heavy motor
     var rumbleRight: UInt8 = 0  // high-freq / light motor
     var lightR: UInt8 = 0
     var lightG: UInt8 = 0
     var lightB: UInt8 = 0
-    /// True once the host has sent a lightbar color this session. Until then we
-    /// must NOT assert LIGHTBAR_CONTROL_ENABLE in an output write - doing so
-    /// with the default (0,0,0) would blank a bar that gamecontrollerd/Sunshine
-    /// already lit (the pre-first-color window an adaptive-trigger write hits).
     var lightSet: Bool = false
     /// 11 bytes each: [mode][10 params]. 0x00 mode = trigger off (neutral).
     var leftTrigger: [UInt8] = [UInt8](repeating: 0, count: 11)
     var rightTrigger: [UInt8] = [UInt8](repeating: 0, count: 11)
 }
 
-/// Reference-counted singleton owning one IOHIDManager for the DualSense raw
-/// report. Both the live stream (InputForwarder) and the Troubleshooting input
-/// test `retain()` it; it opens on the first retain and closes on the last
-/// release. Single-pad assumption: the decoded button state applies to the
-/// DualSense the user is holding (a Moonlight client streams one pad).
 final class DualSenseHID: @unchecked Sendable {
     static let shared = DualSenseHID()
 
@@ -89,26 +60,22 @@ final class DualSenseHID: @unchecked Sendable {
     private let lock = NSLock()
 
     // All mutable state below is guarded by `lock`.
-    private var buttonsLocked = DualSenseExtraButtons()
+    private var deviceStates: [UnsafeMutableRawPointer: DualSenseDeviceState] = [:]
     private var retainCount = 0
     private var running = false
-    // Per-device input-report buffers, kept alive while a device-level report
-    // callback is registered. Keyed by the device's opaque pointer.
+    // Per-device input-report buffers, keyed by the device's opaque pointer. IOKit
+    // holds the pointer for the device object's lifetime (the manager keeps those
+    // across close/open), so a buffer is never freed, only reused on re-match.
     private var deviceBuffers: [UnsafeMutableRawPointer: UnsafeMutablePointer<UInt8>] = [:]
     private let bufLen = 128 // ≥ 78 (BT) / 64 (USB)
 
-    // Matched devices, kept so the OUTPUT-report write path (adaptive triggers)
-    // can address them. Retained (a +1 from IOHIDManager's matching set isn't
-    // guaranteed to outlive a callback), keyed by the same opaque pointer as
-    // `deviceBuffers`. Bluetooth devices need report ID 0x31 + a trailing CRC32;
-    // USB uses 0x02 with no CRC, so we cache each device's transport at match.
+    // Strong references keep devices alive while queued output writes finish.
+    // Bluetooth needs report 0x31 plus a CRC32; USB uses 0x02 without one, so
+    // each device's transport is cached at match time.
     private var writeDevices: [UnsafeMutableRawPointer: (device: IOHIDDevice, bluetooth: Bool)] = [:]
-    /// Merged DualSense OUTPUT state. The 0x02/0x31 report carries lightbar +
-    /// rumble + both trigger blocks together (all-or-nothing), so a trigger
-    /// write MUST re-send the current lightbar + rumble or it would clobber
-    /// them to zero. ControllerHaptics feeds lightbar/rumble here when raw-HID
-    /// is live; setAdaptiveTriggers feeds the trigger blocks. Lock-guarded.
-    private var outputState = DualSenseOutputState()
+    /// Per-device merged OUTPUT state; a trigger write re-sends that pad's
+    /// lightbar and rumble so they are never clobbered to zero.
+    private var outputStates: [UnsafeMutableRawPointer: DualSenseOutputState] = [:]
     /// Latch so the "SetReport refused" breadcrumb logs once, not per write
     /// (host re-arms triggers can arrive at frame rate).
     private var loggedWriteFailure = false
@@ -116,16 +83,12 @@ final class DualSenseHID: @unchecked Sendable {
     /// path reached the device).
     private var loggedWriteSuccess = false
 
-    /// Serial queue for the IOKit OUTPUT-report writes. The host feedback
-    /// callbacks fire on the enet receive thread; we hop here so a SetReport
-    /// (which can block briefly) never stalls the control channel's ACK path,
-    /// the same off-thread discipline ControllerHaptics uses for rumble.
     private let writeQueue = DispatchQueue(label: "io.ugfugl.Glimmer.dualsense-hid-write",
                                            qos: .userInitiated)
 
     /// Called on the main queue whenever the decoded buttons change - lets the
-    /// input-test UI refresh. Set by the consumer; cleared on the last release.
-    var onChange: (@MainActor () -> Void)?
+    /// input-test UI refresh. The forwarder routes it to the bound slot.
+    @MainActor var onChange: (@MainActor (DualSenseDeviceKey) -> Void)?
 
     /// Total raw input reports received since the manager opened - a live
     /// "is the device delivering anything?" signal for the input test. Zero
@@ -136,24 +99,13 @@ final class DualSenseHID: @unchecked Sendable {
         return reportCountLocked
     }
 
-    /// Battery decoded from the HID status byte; nil until a report with a
-    /// valid battery field arrives (the simple 10-byte BT report has none).
-    private var batteryLocked: DualSenseBattery?
-    var battery: DualSenseBattery? {
+    func state(for controllerID: ObjectIdentifier) -> DualSenseDeviceState? {
+        guard let device = DualSenseRouting.shared.device(for: controllerID),
+              let key = UnsafeMutableRawPointer(bitPattern: device) else { return nil }
         lock.lock(); defer { lock.unlock() }
-        return batteryLocked
+        return deviceStates[key]
     }
 
-    /// Latest decoded button state (thread-safe snapshot).
-    var buttons: DualSenseExtraButtons {
-        lock.lock(); defer { lock.unlock() }
-        return buttonsLocked
-    }
-
-    /// True while the IOHIDManager is open (someone holds a `retain()`). The
-    /// battery uplink reads this to decide whether to trust the raw-HID battery
-    /// decode (which only fills while the reader is live) over GCController's
-    /// (which goes .unknown for a DualSense in enhanced-report mode).
     var isActive: Bool {
         lock.lock(); defer { lock.unlock() }
         return running
@@ -169,10 +121,6 @@ final class DualSenseHID: @unchecked Sendable {
         IOHIDManagerSetDeviceMatchingMultiple(manager, matches as CFArray)
     }
 
-    /// Opt-in gate (mirrors AppModel.rawHIDControllerEnabled). Read
-    /// from non-UI code (ControllerForwarder) so the raw-HID reader - and its
-    /// Input Monitoring prompt - only ever engage when the user has turned the
-    /// feature on in Settings.
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "rawHIDControllerEnabled") }
 
     // MARK: Input Monitoring permission
@@ -213,33 +161,12 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     private func start() {
-        // NOTE: we deliberately do NOT call IOHIDRequestAccess() here - it
-        // BLOCKS the main thread while presenting the TCC prompt, which hung
-        // the Troubleshooting pane. Permission is requested explicitly from the
-        // enable flow / a "Grant" button instead. Opening without the grant
-        // succeeds but silently delivers no reports.
+        // Permission is requested by the opt-in UI; opening here never prompts.
         let ctx = Unmanaged.passUnretained(self).toOpaque()
-        // DEVICE-level input-report callbacks (registered per matched device in
-        // the DeviceMatching callback, each with its own buffer). The
-        // MANAGER-level report callback traps in IOKit because it has no
-        // per-device buffer to hand the device applier. Scheduled on the main
-        // run loop so the trivial report decode and the ControllerForwarder
-        // reads share one thread.
         IOHIDManagerRegisterDeviceMatchingCallback(manager, Self.deviceMatched, ctx)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, Self.deviceRemoved, ctx)
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        // NON-exclusive (kIOHIDOptionsTypeNone): we never seize the pad - the
-        // open is shared with gamecontrollerd so GCController keeps everything
-        // it already provides (sticks/face/triggers/touchpad/rumble/light), and
-        // we read the centre buttons + battery alongside it. A non-exclusive
-        // open still permits IOHIDDeviceSetReport(Output) - the adaptive-trigger
-        // write path below - for an already-matched device (degrades to a clean
-        // no-op if the write is refused; see writeOutputReport).
         let rc = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        // NOTICE (was INFO): the open-rc + Input-Monitoring state is the one fact
-        // that tells "are the DualSense centre buttons / battery actually
-        // readable" - and it being INFO-only made the broken-quit-chord regression
-        // un-diagnosable from shipped logs. Ship it.
         let monitoring = Self.accessGranted ? "granted"
             : (Self.accessDenied ? "DENIED" : "not-yet-determined")
         let usable = (rc == kIOReturnSuccess && Self.accessGranted)
@@ -250,26 +177,27 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     private func stop() {
-        // Best-effort: park the triggers (and re-emit current light/rumble) so
-        // a stream ending mid-effect doesn't strand a stiff trigger on the pad.
-        // MUST run BEFORE IOHIDManagerClose - the SetReport needs the manager
-        // (and the device's open) still live, and writeDevices still populated.
         resetTriggersBeforeClose()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, nil, nil)
+        // Closing the manager leaves the per-device report callbacks registered;
+        // drop them here. The buffers stay allocated (see `deviceBuffers`).
+        lock.lock()
+        let open = writeDevices.compactMap { key, entry in deviceBuffers[key].map { (entry.device, $0) } }
+        lock.unlock()
+        for (device, buf) in open {
+            IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
+        }
         IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        // Close unregistered the device callbacks; now free the buffers.
         lock.lock()
-        let bufs = deviceBuffers
-        deviceBuffers.removeAll()
         writeDevices.removeAll()
-        buttonsLocked = DualSenseExtraButtons()
-        batteryLocked = nil
+        let removed = deviceStates.keys.map { UInt(bitPattern: $0) }
+        deviceStates.removeAll()
         reportCountLocked = 0
-        outputState = DualSenseOutputState()
+        outputStates.removeAll()
         lock.unlock()
-        for (_, buf) in bufs { buf.deallocate() }
+        for device in removed { DualSenseRouting.shared.disconnectDevice(device) }
         log.info("DualSense HID closed")
     }
 
@@ -286,24 +214,29 @@ final class DualSenseHID: @unchecked Sendable {
 
     private func registerDevice(_ device: IOHIDDevice) {
         let key = Unmanaged.passUnretained(device).toOpaque()
-        // Transport classification for the OUTPUT report (USB 0x02 vs BT 0x31 +
-        // CRC). kIOHIDTransportKey is a string like "USB" / "Bluetooth"; treat
-        // anything that isn't plain USB as Bluetooth (covers "Bluetooth" and
-        // "Bluetooth Low Energy"), the conservative choice since BT needs the
-        // CRC the device would otherwise reject.
         let transport = (IOHIDDeviceGetProperty(device, kIOHIDTransportKey as CFString) as? String) ?? ""
         let isBluetooth = !transport.localizedCaseInsensitiveContains("usb")
+        let serial = IOHIDDeviceGetProperty(device, kIOHIDSerialNumberKey as CFString) as? String
+        var registryID: UInt64 = 0
+        IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(device), &registryID)
+        let identity = serial.flatMap { $0.isEmpty ? nil : $0 }.map(DualSenseDeviceState.Identity.serial)
+            ?? .registry(registryID)
         lock.lock()
-        guard deviceBuffers[key] == nil else { lock.unlock(); return }
-        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: bufLen)
-        buf.initialize(repeating: 0, count: bufLen)
+        guard writeDevices[key] == nil else { lock.unlock(); return }
+        // Same buffer as any earlier registration on this device, so IOKit's
+        // callback set sees one entry and its report pointer is always live.
+        let buf = deviceBuffers[key] ?? Self.makeReportBuffer(bufLen)
         deviceBuffers[key] = buf
-        // Stored as a strong Swift reference - ARC retains the bridged CF
-        // object for the lifetime of the map entry, so a SetReport can't race
-        // device deallocation. (The `key` opaque pointer is only an identity
-        // token, NOT the retain; do not switch this value to Unmanaged.)
         writeDevices[key] = (device: device, bluetooth: isBluetooth)
+        deviceStates[key] = DualSenseDeviceState(identity: identity, transport: transport)
+        outputStates[key] = DualSenseOutputState()
         lock.unlock()
+        // Seed the full matching set before the first callback can infer a single pair.
+        let devices = (IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice>) ?? [device]
+        let ids = Set(devices.map { UInt(bitPattern: Unmanaged.passUnretained($0).toOpaque()) })
+        MainActor.assumeIsolated { DualSenseRouting.shared.syncControllers() }
+        DualSenseRouting.shared.connectDevices(ids)
+        notifyChange(UInt(bitPattern: key))
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, Self.reportCallback, ctx)
         log.info("DualSense HID device matched (transport=\(transport, privacy: .public))")
@@ -312,91 +245,94 @@ final class DualSenseHID: @unchecked Sendable {
     private func unregisterDevice(_ device: IOHIDDevice) {
         let key = Unmanaged.passUnretained(device).toOpaque()
         lock.lock()
-        let buf = deviceBuffers.removeValue(forKey: key)
-        writeDevices.removeValue(forKey: key)
+        let wasOpen = writeDevices.removeValue(forKey: key) != nil
+        deviceStates[key] = nil
+        outputStates[key] = nil
+        let buf = deviceBuffers[key]
         lock.unlock()
-        if let buf {
-            IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
-            buf.deallocate()
-        }
+        let deviceID = UInt(bitPattern: key)
+        MainActor.assumeIsolated { onChange?(deviceID) }
+        DualSenseRouting.shared.disconnectDevice(deviceID)
+        guard wasOpen, let buf else { return }
+        IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
+    }
+
+    private static func makeReportBuffer(_ length: Int) -> UnsafeMutablePointer<UInt8> {
+        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: length)
+        buf.initialize(repeating: 0, count: length)
+        return buf
     }
 
     // MARK: Report decode
 
     // C-function-pointer-compatible (no captures). `report` is non-optional.
-    private static let reportCallback: IOHIDReportCallback = { context, result, _, _, reportID, report, reportLength in
-        guard result == kIOReturnSuccess, let context else { return }
+    private static let reportCallback: IOHIDReportCallback = { context, result, sender, _, reportID, report, length in
+        guard result == kIOReturnSuccess, let context, let sender else { return }
         let me = Unmanaged<DualSenseHID>.fromOpaque(context).takeUnretainedValue()
-        me.decode(reportID: reportID, report: report, length: reportLength)
+        me.decode(device: sender, reportID: reportID, report: report, length: length)
     }
 
     /// Per-report entry from the IOKit callback: the pure decode lives in
     /// DualSenseHID+Decode.swift; this half owns the lock, the change edge,
     /// and the main-queue hop to `onChange`.
-    private func decode(reportID: UInt32, report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
+    private func decode(device: UnsafeMutableRawPointer, reportID: UInt32,
+                        report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
         guard let decoded = Self.decodeInputReport(
             reportID: reportID, bytes: UnsafeBufferPointer(start: report, count: length)) else { return }
-
+        let time = ProcessInfo.processInfo.systemUptime
         lock.lock()
-        if let nextBattery = decoded.battery { batteryLocked = nextBattery }
+        guard var state = deviceStates[device] else { lock.unlock(); return }
+        let previous = state
+        let pressed = state.apply(decoded)
+        let changed = state.buttons != previous.buttons || state.battery != previous.battery
+        deviceStates[device] = state
         reportCountLocked += 1
-        let changed = decoded.buttons != buttonsLocked
-        buttonsLocked = decoded.buttons
-        let notify = onChange
         lock.unlock()
-
-        if changed, let notify {
-            DispatchQueue.main.async { MainActor.assumeIsolated { notify() } }
-        }
+        let key = UInt(bitPattern: device)
+        if !pressed.isEmpty { DualSenseRouting.shared.hid(device: key, pressed: pressed, at: time) }
+        if changed { notifyChange(key) }
     }
 
-    // MARK: OUTPUT report (adaptive triggers + lightbar/rumble merge)
-    //
-    // The DualSense OUTPUT report (0x02 over USB, 0x31 + CRC over Bluetooth) is
-    // all-or-nothing: rumble, lightbar, and BOTH adaptive-trigger blocks ride
-    // ONE report. So every write re-emits the full merged `outputState`. We own
-    // adaptive triggers exclusively (GameController has no API for them); we
-    // re-emit the host's last lightbar + rumble alongside so a trigger update
-    // doesn't zero them. (Wire facts: SDL SDL_hidapi_ps5.c DS5EffectsState_t,
-    // Sunshine adaptive-trigger pass-through, Linux hid-playstation.c CRC seed.)
+    private func notifyChange(_ device: DualSenseDeviceKey) {
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.onChange?(device) } }
+    }
 
-    /// Apply a host SET_ADAPTIVE_TRIGGERS (0x5503) to the open DualSense. Only
-    /// the trigger blocks whose `eventFlags` bit is set are updated (the other
-    /// is left at its current state); `typeLeft`/`typeRight` are the
-    /// DualSense-native mode bytes and `left`/`right` are the 10 param bytes -
-    /// passed straight through (moonlight-qt's shape). A no-op when no device is
-    /// open or the write is refused.
-    func setAdaptiveTriggers(eventFlags: UInt8, typeLeft: UInt8, typeRight: UInt8,
+    func setAdaptiveTriggers(device: DualSenseDeviceKey, eventFlags: UInt8, typeLeft: UInt8, typeRight: UInt8,
                              left: [UInt8], right: [UInt8]) {
         // DS_EFFECT_RIGHT_TRIGGER 0x04 / DS_EFFECT_LEFT_TRIGGER 0x08.
         let wantRight = (eventFlags & 0x04) != 0
         let wantLeft = (eventFlags & 0x08) != 0
         guard wantRight || wantLeft else { return }
         lock.lock()
+        guard let key = UnsafeMutableRawPointer(bitPattern: device),
+              var outputState = outputStates[key] else { lock.unlock(); return }
         if wantLeft { outputState.leftTrigger = Self.triggerBlock(mode: typeLeft, params: left) }
         if wantRight { outputState.rightTrigger = Self.triggerBlock(mode: typeRight, params: right) }
+        outputStates[key] = outputState
         lock.unlock()
-        scheduleWrite()
+        scheduleWrite(device: device)
     }
 
-    /// Feed the host's latest lightbar color into the merged output state
-    /// (called by ControllerHaptics when raw-HID is live). Does NOT itself
-    /// write - the lightbar still rides GameController's GCDeviceLight; this
-    /// only keeps our merge current so an adaptive-trigger write re-emits the
-    /// right color instead of blanking the bar.
-    func setLightbarState(red: UInt8, green: UInt8, blue: UInt8) {
+    /// Merge only: GameController still drives the light; trigger writes preserve its latest color.
+    func setLightbarState(device: DualSenseDeviceKey, red: UInt8, green: UInt8, blue: UInt8) {
         lock.lock()
+        guard let key = UnsafeMutableRawPointer(bitPattern: device),
+              var outputState = outputStates[key] else { lock.unlock(); return }
         outputState.lightR = red; outputState.lightG = green; outputState.lightB = blue
         outputState.lightSet = true
+        outputStates[key] = outputState
         lock.unlock()
     }
 
     /// Feed the host's latest rumble pair into the merged output state (8-bit,
     /// already down-scaled from the 16-bit wire by the caller). Merge-only, like
     /// setLightbarState - rumble itself still rides GameController haptics.
-    func setRumbleState(left: UInt8, right: UInt8) {
+    func setRumbleState(device: DualSenseDeviceKey, left: UInt8, right: UInt8) {
         lock.lock()
+        guard let key = UnsafeMutableRawPointer(bitPattern: device),
+              var outputState = outputStates[key] else { lock.unlock(); return }
         outputState.rumbleLeft = left; outputState.rumbleRight = right
+        outputStates[key] = outputState
         lock.unlock()
     }
 
@@ -405,14 +341,15 @@ final class DualSenseHID: @unchecked Sendable {
     /// loses power on disconnect anyway.
     private func resetTriggersBeforeClose() {
         lock.lock()
-        let hadDevice = !writeDevices.isEmpty
-        outputState.leftTrigger = [UInt8](repeating: 0, count: 11)
-        outputState.rightTrigger = [UInt8](repeating: 0, count: 11)
+        let devices = outputStates.keys.map { UInt(bitPattern: $0) }
+        for key in outputStates.keys {
+            outputStates[key]?.leftTrigger = [UInt8](repeating: 0, count: 11)
+            outputStates[key]?.rightTrigger = [UInt8](repeating: 0, count: 11)
+        }
         lock.unlock()
-        guard hadDevice else { return }
-        // Synchronous on the write queue so it completes before the manager
-        // closes underneath us (stop() clears writeDevices right after).
-        writeQueue.sync { self.writeCurrentOutput() }
+        writeQueue.sync {
+            for device in devices { self.writeCurrentOutput(device: device) }
+        }
     }
 
     /// One trigger block = [mode][10 params], clamped to 11 bytes. Rejects the
@@ -426,42 +363,25 @@ final class DualSenseHID: @unchecked Sendable {
         return block
     }
 
-    private func scheduleWrite() {
-        writeQueue.async { [weak self] in self?.writeCurrentOutput() }
+    private func scheduleWrite(device: DualSenseDeviceKey) {
+        writeQueue.async { [weak self] in self?.writeCurrentOutput(device: device) }
     }
 
-    /// Build the merged OUTPUT report from the current state and write it to
-    /// every open device. Runs on `writeQueue`.
-    private func writeCurrentOutput() {
+    private func writeCurrentOutput(device: DualSenseDeviceKey) {
+        guard let key = UnsafeMutableRawPointer(bitPattern: device) else { return }
         lock.lock()
-        let state = outputState
-        let devices = writeDevices
+        let state = outputStates[key]
+        let entry = writeDevices[key]
         lock.unlock()
-        guard !devices.isEmpty else { return }
-        for (_, entry) in devices {
-            writeOutputReport(to: entry.device, bluetooth: entry.bluetooth, state: state)
-        }
+        guard let state, let entry else { return }
+        writeOutputReport(to: entry.device, bluetooth: entry.bluetooth, state: state)
     }
 
-    /// The 47-byte DS5EffectsState payload (the report DATA after any report-ID
-    /// / BT magic byte). Offsets are SDL's DS5EffectsState_t. We set the
-    /// enable/valid flags for rumble + lightbar + the LED effect, and copy both
-    /// trigger blocks unconditionally (the device applies them when present -
-    /// there is no separate trigger valid-flag bit in SDL / mainline Linux).
     private static func effectsState(_ s: DualSenseOutputState) -> [UInt8] {
         var d = [UInt8](repeating: 0, count: 47)
-        // valid_flag0: COMPATIBLE_VIBRATION 0x01 | HAPTICS_SELECT 0x02 - enable
-        // the rumble motor bytes. (0,0) here is a harmless "motors off"; the
-        // DualSense's CHHaptics voice-coil path is separate, so we never fight
-        // the live rumble GameController drives.
         d[0] = 0x01 | 0x02
         d[2] = s.rumbleRight   // ucRumbleRight (high-freq)
         d[3] = s.rumbleLeft    // ucRumbleLeft  (low-freq)
-        // valid_flag1: LIGHTBAR_CONTROL_ENABLE 0x04 - ONLY when the host has set
-        // a color this session. Asserting it with the default (0,0,0) would
-        // blank a bar gamecontrollerd/Sunshine already lit before the first
-        // SET_RGB_LED (see DualSenseOutputState.lightSet). Until then we leave
-        // the LED bytes + flag at zero so the bar is left untouched.
         if s.lightSet {
             d[1] = 0x04
             d[44] = s.lightR; d[45] = s.lightG; d[46] = s.lightB
@@ -503,15 +423,12 @@ final class DualSenseHID: @unchecked Sendable {
         }
         if rc == kIOReturnSuccess {
             if !loggedWriteWasSuccessful() {
-                log.info("DualSense OUTPUT report write OK over \(bluetooth ? "BT" : "USB", privacy: .public) - adaptive triggers live")
+                let transport = bluetooth ? "BT" : "USB"
+                log.info("DualSense OUTPUT write OK over \(transport, privacy: .public) - adaptive triggers live")
             }
         } else if !loggedWriteWasRefused() {
-            // SAFETY no-op: a refused write (e.g. kIOReturnNotPermitted, or an
-            // exclusive grab by gamecontrollerd) degrades to "no adaptive
-            // triggers". Everything else - the read path, buttons, battery - is
-            // unaffected. Logged once so the verdict is in the log.
             let hex = String(UInt32(bitPattern: rc), radix: 16)
-            log.error("DualSense OUTPUT report write refused rc=0x\(hex, privacy: .public) - adaptive triggers disabled (degraded no-op)")
+            log.error("DualSense OUTPUT write refused rc=0x\(hex, privacy: .public) - adaptive triggers disabled")
         }
     }
 
@@ -531,11 +448,6 @@ final class DualSenseHID: @unchecked Sendable {
         return was
     }
 
-    /// CRC32 over the DualSense Bluetooth OUTPUT report: seed byte 0xA2, then
-    /// the report-ID byte, then the report data up to (not including) the 4 CRC
-    /// bytes. Standard IEEE 802.3 CRC32 (reflected, poly 0xEDB88320), the
-    /// algorithm SDL/Linux use for the BT effects report. Computed on the fly
-    /// (no static table) - this runs at most a few times per second.
     private static func dualSenseBTCrc(reportID: UInt8, data: [UInt8]) -> UInt32 {
         var crc: UInt32 = 0xFFFF_FFFF
         func feed(_ byte: UInt8) {

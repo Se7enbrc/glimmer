@@ -24,11 +24,10 @@ enum TerminationGate {
     /// Cmd-Q feel broken.
     static let stopBoundSeconds: TimeInterval = 2.0
 
-    /// The reply to `applicationShouldTerminate`: defer while a session is
-    /// live OR connecting (`isStreaming` flips at stream() entry, and a launch
-    /// already in flight has told the host to start), else quit now.
-    static func reply(isStreaming: Bool) -> NSApplication.TerminateReply {
-        isStreaming ? .terminateLater : .terminateNow
+    /// The reply to `applicationShouldTerminate`: defer while a session object
+    /// exists (live, connecting, or still tearing down), else quit now.
+    static func reply(hasSession: Bool) -> NSApplication.TerminateReply {
+        hasSession ? .terminateLater : .terminateNow
     }
 
     /// Run `operation` and return true if it finished within `seconds`, false
