@@ -92,8 +92,9 @@ final class DualSenseHID: @unchecked Sendable {
     private var buttonsLocked = DualSenseExtraButtons()
     private var retainCount = 0
     private var running = false
-    // Per-device input-report buffers, kept alive while a device-level report
-    // callback is registered. Keyed by the device's opaque pointer.
+    // Per-device input-report buffers, keyed by the device's opaque pointer. IOKit
+    // holds the pointer for the device object's lifetime (the manager keeps those
+    // across close/open), so a buffer is never freed, only reused on re-match.
     private var deviceBuffers: [UnsafeMutableRawPointer: UnsafeMutablePointer<UInt8>] = [:]
     private let bufLen = 128 // ≥ 78 (BT) / 64 (USB)
 
@@ -257,19 +258,23 @@ final class DualSenseHID: @unchecked Sendable {
         resetTriggersBeforeClose()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, nil, nil)
+        // Closing the manager leaves the per-device report callbacks registered;
+        // drop them here. The buffers stay allocated (see `deviceBuffers`).
+        lock.lock()
+        let open = writeDevices.compactMap { key, entry in deviceBuffers[key].map { (entry.device, $0) } }
+        lock.unlock()
+        for (device, buf) in open {
+            IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
+        }
         IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        // Close unregistered the device callbacks; now free the buffers.
         lock.lock()
-        let bufs = deviceBuffers
-        deviceBuffers.removeAll()
         writeDevices.removeAll()
         buttonsLocked = DualSenseExtraButtons()
         batteryLocked = nil
         reportCountLocked = 0
         outputState = DualSenseOutputState()
         lock.unlock()
-        for (_, buf) in bufs { buf.deallocate() }
         log.info("DualSense HID closed")
     }
 
@@ -294,9 +299,10 @@ final class DualSenseHID: @unchecked Sendable {
         let transport = (IOHIDDeviceGetProperty(device, kIOHIDTransportKey as CFString) as? String) ?? ""
         let isBluetooth = !transport.localizedCaseInsensitiveContains("usb")
         lock.lock()
-        guard deviceBuffers[key] == nil else { lock.unlock(); return }
-        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: bufLen)
-        buf.initialize(repeating: 0, count: bufLen)
+        guard writeDevices[key] == nil else { lock.unlock(); return }
+        // Same buffer as any earlier registration on this device, so IOKit's
+        // callback set sees one entry and its report pointer is always live.
+        let buf = deviceBuffers[key] ?? Self.makeReportBuffer(bufLen)
         deviceBuffers[key] = buf
         // Stored as a strong Swift reference - ARC retains the bridged CF
         // object for the lifetime of the map entry, so a SetReport can't race
@@ -312,13 +318,17 @@ final class DualSenseHID: @unchecked Sendable {
     private func unregisterDevice(_ device: IOHIDDevice) {
         let key = Unmanaged.passUnretained(device).toOpaque()
         lock.lock()
-        let buf = deviceBuffers.removeValue(forKey: key)
-        writeDevices.removeValue(forKey: key)
+        let wasOpen = writeDevices.removeValue(forKey: key) != nil
+        let buf = deviceBuffers[key]
         lock.unlock()
-        if let buf {
-            IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
-            buf.deallocate()
-        }
+        guard wasOpen, let buf else { return }
+        IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
+    }
+
+    private static func makeReportBuffer(_ length: Int) -> UnsafeMutablePointer<UInt8> {
+        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: length)
+        buf.initialize(repeating: 0, count: length)
+        return buf
     }
 
     // MARK: Report decode

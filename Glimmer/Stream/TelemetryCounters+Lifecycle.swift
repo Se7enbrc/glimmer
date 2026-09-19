@@ -33,6 +33,7 @@ extension TelemetryCounters {
         presentSuppressedLock.initialize(to: os_unfair_lock_s())
         decodeGatedLock.initialize(to: os_unfair_lock_s())
         pacerTickRealtimeLock.initialize(to: os_unfair_lock_s())
+        reorderDispLock.initialize(to: os_unfair_lock_s())
     }
 
     /// Release every gauge lock. Paired with `initializeGaugeLocks()`;
@@ -45,7 +46,7 @@ extension TelemetryCounters {
         decodeStateLock.deallocate(); fecHealthLock.deallocate()
         audioStateLock.deallocate(); audioFirstPacketLock.deallocate()
         presentSuppressedLock.deallocate(); decodeGatedLock.deallocate()
-        pacerTickRealtimeLock.deallocate()
+        pacerTickRealtimeLock.deallocate(); reorderDispLock.deallocate()
     }
 
     /// Reset everything. Called at the CONNECT-START edge
