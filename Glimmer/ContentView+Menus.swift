@@ -1,12 +1,9 @@
 //
 //  ContentView+Menus.swift
 //
-//  The launcher's two menu surfaces: the MenuBarExtra dropdown (open / stream /
-//  switch PC / controller charm / Settings / updates / quit) and the shared
+//  The launcher's two menu surfaces: the MenuBarExtra dropdown and the shared
 //  per-host right-click menu (Rename / Codec / Unpair) that both the hero card
-//  and Settings' PCTile mount via `.hostContextMenu(host)`. Split out of
-//  ContentView.swift to keep each file under the length limit; the window,
-//  connect surface, and hero live there.
+//  and Settings' PCTile mount via `.hostContextMenu(host)`.
 //
 
 import AppKit
@@ -14,6 +11,8 @@ import SwiftUI
 
 // MARK: - Menu bar content
 
+/// The dropdown: the action you need now first, then what is going on, then
+/// the app. A standard menu (no popover): rows, checkmarks and submenus only.
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
@@ -21,69 +20,18 @@ struct MenuBarContent: View {
 
     var body: some View {
         Group {
-            // Icon-forward, sectioned layout within `.menu`-style MenuBarExtra
-            // constraints (system NSMenu: Labels show their SF Symbol,
-            // Sections render titled groups, custom materials are NOT
-            // honoured - lean on iconography + structure, not glass). Item
-            // order: navigational ("Open Glimmer") FIRST, then stream actions,
-            // then app-wide (Settings / Quit) - Apple's first-party agent
-            // pattern (Time Machine, Bluetooth).
+            attentionRows
+            primaryRows
+            streamingRows
+            pcRows
+            controllerRows
+            Divider()
             Button {
                 openWindow(id: "main")
                 activate()
             } label: {
                 Label("Open Glimmer", systemImage: "macwindow")
             }
-
-            if let host = model.selectedHost {
-                // "Connected to" only when actually streaming this host - the
-                // selected host is not necessarily the connected one.
-                Section(model.isStreaming ? "Connected to \(host.displayName)" : host.displayName) {
-                    Button {
-                        model.streamDefaultApp()
-                        activate()
-                    } label: {
-                        Label("Stream \(model.defaultAppName)", systemImage: "play.fill")
-                    }
-                    .disabled(model.isStreaming)
-
-                    if model.hosts.count > 1 {
-                        Menu {
-                            ForEach(model.hosts) { host in
-                                Button {
-                                    model.selectHost(host)
-                                } label: {
-                                    if host.id == model.selectedHost?.id {
-                                        Label(host.displayName, systemImage: "checkmark")
-                                    } else {
-                                        Text(host.displayName)
-                                    }
-                                }
-                            }
-                        } label: {
-                            Label("Switch PC", systemImage: "desktopcomputer")
-                        }
-                    }
-                }
-            } else {
-                Section {
-                    Label("No PC paired", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
-                }
-            }
-
-            // Controller battery charm - shown whenever a pad reporting battery
-            // is connected to the Mac (sampled on menu open).
-            if let battery = model.menuBarControllerBattery {
-                Section("Controller") {
-                    Label(
-                        "\(battery.percent)% battery\(battery.charging ? " · charging" : "")",
-                        systemImage: battery.charging ? "battery.100.bolt" : "gamecontroller"
-                    )
-                }
-            }
-
-            Divider()
-
             Button {
                 openSettings()
                 activate()
@@ -91,19 +39,6 @@ struct MenuBarContent: View {
                 Label("Settings…", systemImage: "gearshape")
             }
             .keyboardShortcut(",")
-
-            #if canImport(Sparkle)
-            // The menu-bar dropdown is the reliable surface for the accessory
-            // (no-window) case, where the app menu's "Check for Updates..." isn't
-            // visible. `activate()` brings Glimmer forward so Sparkle's panel shows.
-            Button {
-                UpdaterController.shared.updater.checkForUpdates()
-                activate()
-            } label: {
-                Label("Check for Updates…", systemImage: "arrow.triangle.2.circlepath")
-            }
-            #endif
-
             Button {
                 NSApp.terminate(nil)
             } label: {
@@ -111,12 +46,159 @@ struct MenuBarContent: View {
             }
             .keyboardShortcut("q")
         }
+        .onAppear { model.startMenuBarRefresh() }
+        .onDisappear { model.stopMenuBarRefresh() }
+    }
+
+    /// One line of the existing failure copy and the one action that helps.
+    @ViewBuilder private var attentionRows: some View {
+        if let error = model.nativeStreamError {
+            Section {
+                Text(error)
+                if error.localizedCaseInsensitiveContains("pair") {
+                    Button("Open Glimmer") { openWindow(id: "main"); activate() }
+                } else {
+                    Button("Try Again") {
+                        model.nativeStreamError = nil
+                        model.retryLastLaunch()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var primaryRows: some View {
+        Section {
+            switch model.menuBarPrimaryAction {
+            case .stream(let app):
+                Button {
+                    model.streamHeroApp()
+                    activate()
+                } label: {
+                    Label("Stream \(app)", systemImage: "play.fill")
+                }
+                if let host = model.selectedHost {
+                    let apps = host.apps.filter { !$0.hidden }
+                    if apps.count > 1 {
+                        Menu {
+                            ForEach(apps) { app in
+                                Button(app.name) { model.requestStream(app: app, on: host); activate() }
+                            }
+                        } label: {
+                            Label("Stream App", systemImage: "square.grid.2x2")
+                        }
+                    }
+                }
+            case .cancelConnection:
+                Button {
+                    model.cancelConnect()
+                } label: {
+                    Label("Cancel Connection", systemImage: "xmark.circle")
+                }
+            case .backToStream:
+                Button {
+                    model.resumeStreamWindow()
+                    activate()
+                } label: {
+                    Label("Back to Stream", systemImage: "play.rectangle")
+                }
+                Button {
+                    model.stopStreamFromMenu()
+                } label: {
+                    Label(model.menuStopInProgress ? "Stopping…" : "Stop Streaming", systemImage: "stop.fill")
+                }
+                .disabled(model.menuStopInProgress)
+            case .none:
+                Label("No PC paired", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
+            }
+        }
+    }
+
+    /// The status line and Connection Details, only while streaming.
+    @ViewBuilder private var streamingRows: some View {
+        if let status = model.menuBarStatusLine {
+            Section {
+                Text(status)
+                Menu {
+                    ForEach(model.menuBarDetailLines, id: \.self) { Text($0) }
+                    Divider()
+                    Toggle("Show Stream Statistics", isOn: Binding(
+                        get: { model.statsOverlayShown },
+                        set: { _ in model.toggleStatsOverlayFromMenu() }))
+                } label: {
+                    Label("Connection Details", systemImage: "waveform.path.ecg")
+                }
+            }
+        }
+    }
+
+    /// The selected PC's readiness, Wake and Connect when it applies, and the
+    /// PCs submenu; while streaming, a pick here is the next connection.
+    @ViewBuilder private var pcRows: some View {
+        if let host = model.selectedHost {
+            Section(model.isStreaming ? "Next connection" : host.displayName) {
+                if let readiness = model.menuBarReadiness, !model.isStreaming {
+                    Text(readiness)
+                }
+                wakeRows(host: host)
+                if model.hosts.count > 1 {
+                    Menu {
+                        ForEach(model.hosts) { candidate in
+                            Button {
+                                model.selectHost(candidate)
+                            } label: {
+                                if candidate.id == host.id {
+                                    Label(candidate.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(candidate.displayName)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("PCs", systemImage: "desktopcomputer")
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func wakeRows(host: Host) -> some View {
+        if !model.isStreaming, let device = LunaPower.shared.gatedDevice(for: host) {
+            if LunaPower.shared.actionInFlight[host.id] == "on" {
+                Text("Waking \(host.displayName)…")
+                Button("Stop Waiting") { model.cancelWake(host) }
+            } else if model.menuBarHostAsleep, LunaPower.shared.actionInFlight[host.id] == nil {
+                Button {
+                    model.wakeHost(host, device: device, thenConnect: true)
+                } label: {
+                    Label("Wake and Connect", systemImage: "power")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var controllerRows: some View {
+        let pads = model.menuBarControllers
+        if pads.count == 1, let pad = pads.first {
+            Section("Controller") {
+                Label(MenuBarPresentation.batteryRow(name: pad.name, percent: pad.percent, charging: pad.charging),
+                      systemImage: pad.charging ? "battery.100.bolt" : "gamecontroller")
+            }
+        } else if pads.count > 1 {
+            Section {
+                Menu {
+                    ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in
+                        Text(MenuBarPresentation.batteryRow(name: pad.name, percent: pad.percent, charging: pad.charging))
+                    }
+                } label: {
+                    Label("Controllers", systemImage: "gamecontroller")
+                }
+            }
+        }
     }
 
     private func activate() {
-        // NSApp.activate() is the macOS 14+ replacement for
-        // activate(ignoringOtherApps:) - the OS decides foreground policy
-        // system-side now, so the "ignoringOtherApps: true" knob is gone.
+        // The OS decides foreground policy on macOS 14+; this is the request.
         NSApp.activate()
     }
 }

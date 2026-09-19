@@ -61,6 +61,16 @@ stream; muting the Mac remembers which output it silenced and puts that one back
 parked after a stream ended is closed. HDR metadata updates are now handed to
 the decoder as one atomic snapshot.
 
+The menu bar item now shows what is going on and does what you need. The mark
+reads idle, connecting, reconnecting, streaming or needs attention (with one
+line and a Try Again when it does). The first row is Stream, Cancel Connection
+or Back to Stream, with Stop Streaming beneath it and a Stream App list one
+level down. While streaming, a status line and Connection Details (frames,
+latency, bitrate, network, and the stream statistics switch). Controllers show
+their name and battery, the PCs list shows the selected PC's readiness, and an
+asleep PC offers Wake and Connect where luna is set up. Check for Updates lives
+in the app menu and About.
+
 ## 2026.9.3 - 2026-09-14
 
 Fixes a crash after a stream ended, if you had visited the Custom resolution

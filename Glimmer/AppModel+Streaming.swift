@@ -28,6 +28,7 @@ extension AppModel {
            Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
            let occupant = Self.occupant(of: live.state) {
             pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+            presentTakeoverAlertIfNeeded()
             return
         }
         stream(app: app, on: host)
@@ -46,6 +47,16 @@ extension AppModel {
         guard let pending = pendingTakeover else { return }
         pendingTakeover = nil
         stream(app: pending.app, on: pending.host, takeoverAuthorized: true)
+    }
+
+    /// The per-launch UI state, reset at every start.
+    private func armLaunchState(app: LibraryApp, host: Host) {
+        lastLaunchAttempt = (app, host)
+        isReconnecting = false
+        statsOverlayShown = showStreamStats
+        streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
+        nativeStreamError = nil
+        nativeHDRActive = false
     }
 
     /// Retry repeats the last requested launch, not the hero target.
@@ -69,10 +80,7 @@ extension AppModel {
             return
         }
         Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
-        lastLaunchAttempt = (app, host)
-        streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
-        nativeStreamError = nil
-        nativeHDRActive = false
+        armLaunchState(app: app, host: host)
         // Re-arm the disconnect toast for back-to-back cycles: if the
         // previous session's toast is still inside its 2-4 s hold, dropping
         // the flag here unmounts it (cancelling its hold task) so the NEXT
@@ -212,6 +220,7 @@ extension AppModel {
             if let takeover {
                 let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name ?? "another app"
                 self.pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+                self.presentTakeoverAlertIfNeeded()
             }
         }
     }
@@ -273,6 +282,9 @@ extension AppModel {
         AWDLHelperManager.shared.releaseForStream()
         self.nativeStreamBackgrounded = false
         self.nativeSession = nil
+        self.menuStopInProgress = false
+        self.isReconnecting = false
+        self.menuDetails = nil
         // Disconnect beat (#3) - surface the "Stream ended" toast on
         // the launcher only when we actually had a live session.
         // Skipping the toast on the connection-failure path (where
@@ -404,6 +416,7 @@ extension AppModel {
             nativeStreamError = "Couldn't reach \(host.displayName)."
         case .connectionEstablished:
             streamPhase = .streaming
+            isReconnecting = false
             logConnectHoldAdjudication()
             // Receipt wall-clock starts at the LIVE edge (not the click) so
             // "2h 12m" measures time actually streaming, not handshake.
@@ -425,10 +438,12 @@ extension AppModel {
             // window stays up holding the frame. Resolves on .reconnected or, if
             // the engine gives up, a real .connectionTerminated.
             streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)…")
+            isReconnecting = true
         case .reconnected:
             // Resumed in place. (The fresh .connectionEstablished / .firstFrame
             // edges also promote the phase, so this is belt-and-braces.)
             streamPhase = .streaming
+            isReconnecting = false
         case .connectionStatus(let quality):
             // .good / .degraded both leave us in the streaming phase -
             // the stats overlay carries the real-time network signal,

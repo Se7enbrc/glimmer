@@ -42,6 +42,7 @@
 		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
 		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
+		DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */; };
 		A100020A /* DiagnosticsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100020B /* DiagnosticsPane.swift */; };
 		A1009001 /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1009002 /* UpdaterController.swift */; };
 		A1009012 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1009011 /* Sparkle */; };
@@ -240,6 +241,7 @@
 		DEC0DE2026091800000000C3 /* ModifierSides.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C4 /* ModifierSides.swift */; };
 		DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */; };
 		DEC0DE840000000000000009 /* AppModel+RawHID.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000000A /* AppModel+RawHID.swift */; };
+		DEC0DE2026092000000000C1 /* AppModel+MenuBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C2 /* AppModel+MenuBar.swift */; };
 		DEC0DE84000000000000000B /* TerminationGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000000C /* TerminationGate.swift */; };
 		D1000C11 /* StreamWindow+Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000C12 /* StreamWindow+Views.swift */; };
 		D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000D10 /* RtpVideoQueue+AddPacket.swift */; };
@@ -277,6 +279,7 @@
 		DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001C /* WindowPointerTests.swift */; };
 		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
+		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
 		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
 		DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */; };
@@ -367,6 +370,7 @@
 		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
 		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
+		DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentation.swift"; sourceTree = "<group>"; };
 		A100020B /* DiagnosticsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsPane.swift; sourceTree = "<group>"; };
 		A1009002 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6000100000C01 /* HostCodecPreference.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostCodecPreference.swift; sourceTree = "<group>"; };
@@ -563,6 +567,7 @@
 		DEC0DE2026091800000000C4 /* ModifierSides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ModifierSides.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+PointerAffordances.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000000A /* AppModel+RawHID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RawHID.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000C2 /* AppModel+MenuBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MenuBar.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000000C /* TerminationGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminationGate.swift; sourceTree = "<group>"; };
 		D1000C12 /* StreamWindow+Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Views.swift"; sourceTree = "<group>"; };
 		D1000D10 /* RtpVideoQueue+AddPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+AddPacket.swift"; sourceTree = "<group>"; };
@@ -601,6 +606,7 @@
 		DEC0DE84000000000000001C /* WindowPointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPointerTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseBinderTests.swift"; path = "DualSenseBinderTests.swift"; sourceTree = "<group>"; };
@@ -717,6 +723,7 @@
 				DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */,
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
 				A100019B /* AboutPane.swift */,
+				DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */,
 				A100011B /* DualSenseHID.swift */,
 				DEC0DE2026091900000000F8 /* DualSenseDeviceState.swift */,
 				DEC0DE2026091900000000F6 /* DualSenseRouting.swift */,
@@ -785,6 +792,7 @@
 				DEC0DE2026091800000000C4 /* ModifierSides.swift */,
 				DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */,
 				DEC0DE84000000000000000A /* AppModel+RawHID.swift */,
+				DEC0DE2026092000000000C2 /* AppModel+MenuBar.swift */,
 				DEC0DE84000000000000000C /* TerminationGate.swift */,
 				D1000C12 /* StreamWindow+Views.swift */,
 				D100006B /* InputForwarder+StreamView.swift */,
@@ -981,6 +989,7 @@
 				DEC0DE84000000000000001C /* WindowPointerTests.swift */,
 				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
+				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
 				DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */,
@@ -1148,6 +1157,7 @@
 				DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */,
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
+				DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */,
 				A100011A /* DualSenseHID.swift in Sources */,
 				DEC0DE2026091900000000F7 /* DualSenseDeviceState.swift in Sources */,
 				DEC0DE2026091900000000F5 /* DualSenseRouting.swift in Sources */,
@@ -1218,6 +1228,7 @@
 				DEC0DE2026091800000000C3 /* ModifierSides.swift in Sources */,
 				DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */,
 				DEC0DE840000000000000009 /* AppModel+RawHID.swift in Sources */,
+				DEC0DE2026092000000000C1 /* AppModel+MenuBar.swift in Sources */,
 				DEC0DE84000000000000000B /* TerminationGate.swift in Sources */,
 				D1000C11 /* StreamWindow+Views.swift in Sources */,
 				D100006C /* InputForwarder+StreamView.swift in Sources */,
@@ -1400,6 +1411,7 @@
 				DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */,
 				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
+				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,
 				DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */,

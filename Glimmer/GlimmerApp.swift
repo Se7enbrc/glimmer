@@ -173,11 +173,14 @@ struct GlimmerApp: App {
                 .environment(model)
                 .background(OpenWindowCapture())
         } label: {
-            if let symbol = model.menuBarSystemImageName {
-                Image(systemName: symbol)
-            } else {
-                Image("MenuBarIcon")
+            Group {
+                if let symbol = MenuBarPresentation.systemImage(for: model.menuBarIconState) {
+                    Image(systemName: symbol)
+                } else {
+                    Image("MenuBarIcon")
+                }
             }
+            .accessibilityLabel(model.menuBarAccessibilityLabel)
         }
         .menuBarExtraStyle(.menu)
     }

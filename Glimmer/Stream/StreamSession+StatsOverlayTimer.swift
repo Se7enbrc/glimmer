@@ -137,6 +137,22 @@ extension StreamSession {
             self.statsOverlayTimer = timer
         }
     }
+
+    /// One snapshot for the menu bar's Connection Details, plus the overlay state.
+    func menuBarDetails() async -> (snapshot: StreamStatsSnapshot, overlayShown: Bool)? {
+        guard let dec = videoDecoder else { return nil }
+        return await MainActor.run {
+            var snap = dec.statsSnapshot(minWindowSeconds: 1.0)
+            if let rtt = dec.telemetryEstimatedRtt() { snap.rttMs = rtt.rttMs }
+            return (snap, dec.statsOverlayEnabled)
+        }
+    }
+
+    /// The current session's overlay, the same switch the keyboard toggle drives.
+    func setStatsOverlay(_ shown: Bool) async {
+        guard let dec = videoDecoder else { return }
+        await MainActor.run { dec.statsOverlayEnabled = shown }
+    }
 }
 
 /// One-shot, ~10 s into the stream: grade the connect-time RTT prior against

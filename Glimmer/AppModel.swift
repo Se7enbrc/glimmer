@@ -191,6 +191,14 @@ final class AppModel {
         let occupantApp: String
     }
 
+    // Menu bar: reconnect edge, the Stop row's latch, the overlay mirror and
+    // the Connection Details snapshot (see AppModel+MenuBar).
+    var isReconnecting = false
+    var menuStopInProgress = false
+    var statsOverlayShown = false
+    var menuDetails: StreamStatsSnapshot?
+    @ObservationIgnored var menuRefreshTimer: Timer?
+
     var showStreamStats: Bool = false {
         didSet { UserDefaults.standard.set(showStreamStats, forKey: "showStreamStats") }
     }
