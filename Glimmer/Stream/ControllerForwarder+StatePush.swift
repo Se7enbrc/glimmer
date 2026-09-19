@@ -50,7 +50,7 @@ extension InputForwarder {
         // line that makes "I held all four and nothing happened" diagnosable:
         // it names which of the four never registered. Edge-only + rate-limited.
         guard pushed, quitChordUsesCentreButtons() else { return }
-        let hid = DualSenseHID.shared.buttons
+        let hid = dualSenseButtons(pad: pad)
         if hid.options || hid.create {
             quitChordBreadcrumb(.partial, "partial hold on slot \(slot)", pad: pad)
         }
@@ -145,7 +145,7 @@ extension InputForwarder {
         // GameController). Mapped to the host's semantics: Options → Start,
         // Create/Share → Back, PS → Guide, Mute → misc.
         if pad is GCDualSenseGamepad {
-            let hid = DualSenseHID.shared.buttons
+            let hid = dualSenseButtons(pad: pad)
             if hid.options { buttons |= StreamProtocol.PLAY_FLAG }
             if hid.create { buttons |= StreamProtocol.BACK_FLAG }
             if hid.ps { buttons |= StreamProtocol.SPECIAL_FLAG }

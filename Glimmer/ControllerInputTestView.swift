@@ -52,7 +52,7 @@ final class ControllerMonitor {
         // stream's ControllerForwarder holds, so grabbing it here would drop the
         // stream's center-button uplink until a resync.
         if DualSenseHID.isEnabled, !isStreaming() {
-            DualSenseHID.shared.onChange = { [weak self] in self?.revision &+= 1 }
+            DualSenseHID.shared.onChange = { [weak self] _ in self?.revision &+= 1 }
             DualSenseHID.shared.retain()
             hidRetained = true
         }
@@ -61,11 +61,18 @@ final class ControllerMonitor {
 
     private func engage() {
         guard !isStreaming() else { revision &+= 1; return }
+        DualSenseRouting.shared.syncControllers()
+        let live = Set(GCController.controllers().map(ObjectIdentifier.init))
+        for id in engaged.keys where !live.contains(id) {
+            engaged[id]?.extendedGamepad?.valueChangedHandler = nil
+            engaged[id] = nil
+        }
         for controller in GCController.controllers() {
             let id = ObjectIdentifier(controller)
             guard engaged[id] == nil else { continue }
-            controller.extendedGamepad?.valueChangedHandler = { [weak self] _, _ in
+            controller.extendedGamepad?.valueChangedHandler = { [weak self] pad, _ in
                 MainActor.assumeIsolated {
+                    DualSenseRouting.shared.gc(pad: pad)
                     self?.gcEventCount &+= 1
                     self?.revision &+= 1
                 }
@@ -238,7 +245,9 @@ private struct ControllerCard: View {
     /// (DualSense: 0.95/.unknown) keeps its percentage with charging nil.
     /// The 30Hz repaint re-reads, so a reading that materialises appears.
     private var batteryReading: (percent: Int, charging: Bool?)? {
-        if let hid = DualSenseHID.shared.battery { return (hid.percent, hid.charging) }
+        if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(pad))?.battery {
+            return (hid.percent, hid.charging)
+        }
         if let b = pad.battery { return ControllerBattery.uiReading(b) }
         return nil
     }
@@ -260,7 +269,7 @@ private struct ControllerCard: View {
         // System row, wider + full labels. On a DualSense, Options/Create/PS/
         // Mute come from the raw-HID reader (GameController returns false for
         // them); on Xbox/MFi they come from GameController.
-        let hid = DualSenseHID.shared.buttons
+        let hid = dualSenseButtons(pad: gp)
         let tpClicked = touchpad(of: gp)?.button.isPressed ?? false
         let system: [(String, Bool)] = isPlayStation
             ? [("Options", hid.options), ("Create", hid.create),
@@ -269,6 +278,15 @@ private struct ControllerCard: View {
                ("View", gp.buttonOptions?.isPressed ?? false),
                ("Guide", gp.buttonHome?.isPressed ?? false)]
         return VStack(alignment: .leading, spacing: 6) {
+            if gp is GCDualSenseGamepad, DualSenseHID.shared.isActive {
+                if let state = DualSenseHID.shared.state(for: ObjectIdentifier(pad)) {
+                    Text("DualSense: \(state.transport), \(state.reportCount) reports")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("DualSense: not matched yet, press any face button")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             FlowChips(chips: standard)
             FlowChips(chips: system, minWidth: 72)
         }

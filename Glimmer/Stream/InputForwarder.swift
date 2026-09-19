@@ -296,6 +296,7 @@ public final class InputForwarder {
     /// only do it once per connect. Keyed by GCController's hashable identity.
     /// Internal so the ControllerForwarder extension can read/write.
     var attachedHIDControllers: [UInt64: AttachedHIDController] = [:]
+    let dualSenseRouting = DualSenseRouting.shared
     var attachedControllers: [ObjectIdentifier: AttachedController] = [:]
 
     /// Bitmask of slots currently in use; bit N == 1 means slot N is occupied.

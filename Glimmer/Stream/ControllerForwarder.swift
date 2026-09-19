@@ -40,6 +40,7 @@ extension InputForwarder {
     // MARK: - Lifecycle
 
     func setupGamepadObservers() {
+        dualSenseRouting.syncControllers()
         setupHIDGamepads()
         // Notification (and the GCController it carries) are non-Sendable,
         // so we cannot capture them across a MainActor hop directly. The
@@ -77,6 +78,9 @@ extension InputForwarder {
                     } else {
                         // Controller already deallocated; just clear bookkeeping.
                         if let state = self.attachedControllers.removeValue(forKey: id) {
+                            self.dualSenseRouting.syncControllers()
+                            self.dualSenseRouting.unregister(slot: state.slot)
+                            if state.retainedHID { DualSenseHID.shared.release() }
                             self.gamepadMask &= ~(UInt16(1) << state.slot)
                             // The pad object (and its motors) died with the
                             // deallocation - still release the haptics,
@@ -104,6 +108,7 @@ extension InputForwarder {
     }
 
     func attach(gamepad: GCController) {
+        dualSenseRouting.syncControllers()
         // Allocate the lowest free slot 0..15. moonlight-common-c supports up
         // to 16 controllers on Sunshine hosts, up to 4 on GFE. A 17th pad is
         // REFUSED outright: falling back to slot 0 would silently double-map
@@ -211,6 +216,7 @@ extension InputForwarder {
             retainedHID: useHID
         )
         attachedControllers[ObjectIdentifier(gamepad)] = state
+        dualSenseRouting.register(slot: slot, controller: ObjectIdentifier(gamepad))
 
         // Make this slot addressable by inbound host rumble (control 0x010b):
         // we advertise LI_CCAP_RUMBLE unconditionally above, so the actuator
@@ -251,6 +257,8 @@ extension InputForwarder {
 
     func detach(gamepad: GCController) {
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
+        dualSenseRouting.disconnectController(ObjectIdentifier(gamepad))
+        dualSenseRouting.unregister(slot: state.slot)
         gamepadMask &= ~(UInt16(1) << state.slot)
         touchpadStates[state.slot] = nil
         // Stop this pad's rumble engines AND motion sampling: a disconnect
@@ -261,14 +269,14 @@ extension InputForwarder {
         ControllerMotion.shared.unregister(slot: state.slot)
         ControllerBattery.shared.unregister(slot: state.slot)
         if state.retainedHID {
-            DualSenseHID.shared.onChange = nil
             DualSenseHID.shared.release()
         }
         // If this pad armed the in-flight quit-chord dwell, the hold can no
         // longer complete - cancel rather than let the timer re-read a
         // disconnected profile.
         if quitChordDwellSlot == state.slot { cancelQuitChordDwell(reason: "arming pad detached") }
-        log.info("Gamepad detached: slot=\(state.slot) remaining mask=0x\(String(self.gamepadMask, radix: 16), privacy: .public)")
+        let remainingMask = String(gamepadMask, radix: 16)
+        log.info("Gamepad detached: slot=\(state.slot) remaining mask=0x\(remainingMask, privacy: .public)")
         // DETACH-CONTEXT breadcrumb (NOTICE - a detach is rare and is exactly
         // the postmortem anchor the file sink must keep): last-input and
         // last-rumble ages auto-classify the disconnect cause that previously
@@ -318,6 +326,7 @@ extension InputForwarder {
     func releaseAttachedControllers() {
         releaseHIDControllers()
         for state in attachedControllers.values {
+            dualSenseRouting.unregister(slot: state.slot)
             ControllerHaptics.shared.unregister(slot: state.slot)
             ControllerMotion.shared.unregister(slot: state.slot)
             ControllerBattery.shared.unregister(slot: state.slot)
@@ -447,6 +456,7 @@ extension InputForwarder {
                 slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
             MainActor.assumeIsolated {
                 guard let self else { return }
+                self.dualSenseRouting.gc(pad: pad)
                 self.sendGamepadUpdate(pad: pad, slot: slot)
             }
         }
@@ -457,9 +467,11 @@ extension InputForwarder {
         // does NOT re-forward the touchpad (that stays on the GameController path,
         // the single full-state source - no double-feed).
         if state.retainedHID {
-            DualSenseHID.shared.onChange = { [weak self, weak gamepad] in
-                guard let self, let ex = gamepad?.extendedGamepad else { return }
-                self.sendCenterButtonUpdate(pad: ex, slot: slot)
+            DualSenseHID.shared.onChange = { [weak self] device in
+                guard let self, let id = self.dualSenseRouting.controller(for: device),
+                      let attached = self.attachedControllers[id],
+                      let ex = attached.controller?.extendedGamepad else { return }
+                self.sendCenterButtonUpdate(pad: ex, slot: attached.slot)
             }
         }
     }

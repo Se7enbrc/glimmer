@@ -354,15 +354,17 @@ extension ControllerHaptics {
     }
 
     func mirrorRumbleToHID(pad: PadHaptics, lowFreq: UInt16, highFreq: UInt16) {
-        guard hidMergeActive(pad: pad) else { return }
+        guard hidMergeActive(pad: pad), let controller = pad.controller,
+              let device = DualSenseRouting.shared.device(for: ObjectIdentifier(controller)) else { return }
         // 16-bit wire → 8-bit report byte (the DS5EffectsState motor field).
-        DualSenseHID.shared.setRumbleState(left: UInt8(lowFreq >> 8),
+        DualSenseHID.shared.setRumbleState(device: device, left: UInt8(lowFreq >> 8),
                                            right: UInt8(highFreq >> 8))
     }
 
     func mirrorLightToHID(pad: PadHaptics, red: UInt8, green: UInt8, blue: UInt8) {
-        guard hidMergeActive(pad: pad) else { return }
-        DualSenseHID.shared.setLightbarState(red: red, green: green, blue: blue)
+        guard hidMergeActive(pad: pad), let controller = pad.controller,
+              let device = DualSenseRouting.shared.device(for: ObjectIdentifier(controller)) else { return }
+        DualSenseHID.shared.setLightbarState(device: device, red: red, green: green, blue: blue)
     }
 
     // MARK: - Per-pad state

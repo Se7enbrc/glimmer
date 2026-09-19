@@ -24,6 +24,9 @@
 		A100030A /* ContainerMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100030B /* ContainerMigration.swift */; };
 		A100010A /* TroubleshootingPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100010B /* TroubleshootingPane.swift */; };
 		A100011A /* DualSenseHID.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100011B /* DualSenseHID.swift */; };
+		DEC0DE2026091900000000F7 /* DualSenseDeviceState.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F8 /* DualSenseDeviceState.swift */; };
+		DEC0DE2026091900000000F5 /* DualSenseRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F6 /* DualSenseRouting.swift */; };
+		DEC0DE2026091900000000F3 /* DualSenseBinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F4 /* DualSenseBinder.swift */; };
 		D20000A3 /* DualSenseHID+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000A2 /* DualSenseHID+Decode.swift */; };
 		A100012A /* LogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100012B /* LogStore.swift */; };
 		A100013A /* ControllerInputTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100013B /* ControllerInputTestView.swift */; };
@@ -274,6 +277,8 @@
 		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
+		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
+		DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */; };
 		DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */; };
 		DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */; };
 		DEC0DE2026091800000000C5 /* ModifierSidesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C6 /* ModifierSidesTests.swift */; };
@@ -343,6 +348,9 @@
 		A100030B /* ContainerMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerMigration.swift; sourceTree = "<group>"; };
 		A100010B /* TroubleshootingPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TroubleshootingPane.swift; sourceTree = "<group>"; };
 		A100011B /* DualSenseHID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DualSenseHID.swift; path = Stream/DualSenseHID.swift; sourceTree = "<group>"; };
+		DEC0DE2026091900000000F8 /* DualSenseDeviceState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceState.swift"; path = "Stream/DualSenseDeviceState.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000F6 /* DualSenseRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseRouting.swift"; path = "Stream/DualSenseRouting.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000F4 /* DualSenseBinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseBinder.swift"; path = "Stream/DualSenseBinder.swift"; sourceTree = "<group>"; };
 		D20000A2 /* DualSenseHID+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseHID+Decode.swift"; path = "Stream/DualSenseHID+Decode.swift"; sourceTree = "<group>"; };
 		A100012B /* LogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogStore.swift; sourceTree = "<group>"; };
 		A100013B /* ControllerInputTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerInputTestView.swift; sourceTree = "<group>"; };
@@ -592,6 +600,8 @@
 		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseBinderTests.swift"; path = "DualSenseBinderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerLEDsTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HIDGamepadTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C6 /* ModifierSidesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModifierSidesTests.swift"; sourceTree = "<group>"; };
@@ -706,6 +716,9 @@
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
 				A100019B /* AboutPane.swift */,
 				A100011B /* DualSenseHID.swift */,
+				DEC0DE2026091900000000F8 /* DualSenseDeviceState.swift */,
+				DEC0DE2026091900000000F6 /* DualSenseRouting.swift */,
+				DEC0DE2026091900000000F4 /* DualSenseBinder.swift */,
 				D20000A2 /* DualSenseHID+Decode.swift */,
 				A10000013 /* AppModel.swift */,
 				A10000014 /* Assets.xcassets */,
@@ -966,6 +979,8 @@
 				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
+				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
+				DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */,
 				DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */,
 				DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */,
 				DEC0DE2026091800000000C6 /* ModifierSidesTests.swift */,
@@ -1131,6 +1146,9 @@
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
 				A100011A /* DualSenseHID.swift in Sources */,
+				DEC0DE2026091900000000F7 /* DualSenseDeviceState.swift in Sources */,
+				DEC0DE2026091900000000F5 /* DualSenseRouting.swift in Sources */,
+				DEC0DE2026091900000000F3 /* DualSenseBinder.swift in Sources */,
 				D20000A3 /* DualSenseHID+Decode.swift in Sources */,
 				A10000003 /* AppModel.swift in Sources */,
 				AB00000002 /* Types.swift in Sources */,
@@ -1379,6 +1397,8 @@
 				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
+				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,
+				DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */,
 				DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */,
 				DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */,
 				DEC0DE2026091800000000C5 /* ModifierSidesTests.swift in Sources */,

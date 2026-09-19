@@ -217,18 +217,13 @@ final class ControllerBattery: @unchecked Sendable {
 
     // MARK: - Raw-HID (DualSense) battery → wire mapping
 
-    /// The wire reading from the raw-HID DualSense decode, or nil when this pad
-    /// is not a DualSense, the raw-HID reader is not live, or no battery report
-    /// has been decoded yet. Single-pad assumption matches DualSenseHID's: the
-    /// decoded battery belongs to the DualSense the user is holding. The HID
-    /// decode carries percent + charging directly, so map it straight onto the
-    /// FULL/CHARGING/DISCHARGING states the wire wants (no .unknown-with-level
-    /// corner - the raw status byte always gives a real percent when present).
+    /// Battery telemetry from this controller's bound HID device, when available.
     @MainActor
     private func hidReading(for pad: Pad) -> (state: UInt8, percentage: UInt8)? {
         guard pad.controller?.extendedGamepad is GCDualSenseGamepad,
               DualSenseHID.shared.isActive,
-              let hid = DualSenseHID.shared.battery else { return nil }
+              let controller = pad.controller,
+              let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery else { return nil }
         // `DualSenseBattery.charging` collapses the decode's "charging" (charge
         // nibble 0x01) and "full" (0x02) into one Bool, so a pad charging at
         // level 10 is indistinguishable from a full one. Report CHARGING for

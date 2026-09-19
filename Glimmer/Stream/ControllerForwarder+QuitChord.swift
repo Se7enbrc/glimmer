@@ -42,7 +42,7 @@ extension InputForwarder {
     func quitChordState(pad: GCExtendedGamepad) -> (buttons: Int32, analog: GamepadAnalog) {
         // Xbox Share was never a GC quit-chord Mute button; preserve that distinction.
         var buttons = pressedButtonFlags(pad: pad) & ~StreamProtocol.MISC_FLAG
-        let hid = DualSenseHID.shared.buttons
+        let hid = dualSenseButtons(pad: pad)
         // Preserve the raw shoulder/centre fallbacks used by the existing GC chord recorder.
         let extras: [(Bool, Int32)] = [(hid.l1, StreamProtocol.LB_FLAG), (hid.r1, StreamProtocol.RB_FLAG),
                                       (hid.options, StreamProtocol.PLAY_FLAG), (hid.create, StreamProtocol.BACK_FLAG),
@@ -227,7 +227,7 @@ extension InputForwarder {
             guard now - quitChordCrumbs.lastPartialAt >= Self.quitChordBreadcrumbIntervalSeconds else { return }
             quitChordCrumbs.lastPartialAt = now
         }
-        let hid = DualSenseHID.shared.buttons
+        let hid = dualSenseButtons(pad: pad)
         var detail = "chord=\(controllerQuitChordProvider().rawValue) "
             + "hid[opt=\(hid.options) cre=\(hid.create) l1=\(hid.l1) r1=\(hid.r1)]"
         if let pad {
@@ -251,7 +251,7 @@ func heldControllerButtons(pad: GCExtendedGamepad) -> Set<ControllerButton> {
     // Compute the composite (HID + GameController) bools first, then a flat
     // table-driven fold - keeps this off the cyclomatic-complexity radar a
     // 19-way if-chain would trip.
-    let hid = DualSenseHID.shared.buttons
+    let hid = dualSenseButtons(pad: pad)
     let touchpadHeld = ((pad as? GCDualSenseGamepad)?.touchpadButton
         ?? (pad as? GCDualShockGamepad)?.touchpadButton)?.isPressed == true
     let optionsHeld = hid.options || pad.buttonMenu.isPressed

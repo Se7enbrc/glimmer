@@ -1,7 +1,7 @@
 //
 //  AppModel+Pairing.swift
 //
-//  Stream lifecycle hooks, pairing (PIN + pair flow), the Sunshine web-UI opener, and the menu-bar accessors. Split out of AppModel.swift to keep each unit focused.
+//  Stream lifecycle, pairing, Sunshine web UI and menu-bar accessors.
 //
 
 import Foundation
@@ -141,7 +141,8 @@ extension AppModel {
             try checkPairing(attempt)
         } catch {
             guard (try? checkPairing(attempt)) != nil else { return nil }
-            log.error("Pairing: unreachable \(address, privacy: .private) - \(error.localizedDescription, privacy: .private)")
+            let reason = error.localizedDescription
+            log.error("Pairing: unreachable \(address, privacy: .private) - \(reason, privacy: .private)")
             Diag.error("Pairing: host unreachable", "Pairing")
             pairingPhase = .failure("Couldn't reach \(address). Make sure it's on and on this network.")
             return nil
@@ -235,10 +236,10 @@ extension AppModel {
         // makes gamecontrollerd drop the enhanced-report battery, so
         // GCController.battery reads nil while the reader is live. The HID
         // decode keeps the charm working in that case.
-        if let hid = DualSenseHID.shared.battery {
-            return (hid.percent, hid.charging)
-        }
         for controller in GCController.controllers() {
+            if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery {
+                return (hid.percent, hid.charging)
+            }
             guard let battery = controller.battery,
                   let reading = ControllerBattery.uiReading(battery) else { continue }
             // An unknown STATE with a real level (DualSense: 0.95/.unknown)

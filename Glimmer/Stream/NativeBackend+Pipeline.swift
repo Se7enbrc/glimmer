@@ -508,20 +508,14 @@ extension NativeConnectionEvents {
                                                     reportRateHz: reportRateHz)
     }
 
-    /// Adaptive triggers (SET_ADAPTIVE_TRIGGERS 0x5503) → the DualSense raw-HID
-    /// OUTPUT report. Unlike rumble/light (which route through GameController),
-    /// GameController exposes NO adaptive-trigger API, so this is the one host
-    /// feedback that MUST take the raw-HID write path. Single-pad assumption
-    /// matches DualSenseHID's reader; the singleton resolves the open device
-    /// and merges these params with the current lightbar + rumble before
-    /// writing (the 0x02/0x31 report is all-or-nothing). A no-op when the
-    /// raw-HID feature is off or the write is refused (e.g. gamecontrollerd
-    /// grabbed the device) - adaptive triggers simply don't engage, nothing
-    /// else is affected.
+    /// SET_ADAPTIVE_TRIGGERS (0x5503) to the bound pad's OUTPUT report: GameController
+    /// has no adaptive-trigger API, so this is the one feedback that must take the
+    /// raw-HID path. A no-op when the feature is off or the write is refused.
     func setAdaptiveTriggers(controller: UInt16, eventFlags: UInt8,
                              typeLeft: UInt8, typeRight: UInt8,
                              left: [UInt8], right: [UInt8]) {
-        DualSenseHID.shared.setAdaptiveTriggers(eventFlags: eventFlags,
+        guard let device = DualSenseRouting.shared.device(slot: controller) else { return }
+        DualSenseHID.shared.setAdaptiveTriggers(device: device, eventFlags: eventFlags,
                                                 typeLeft: typeLeft, typeRight: typeRight,
                                                 left: left, right: right)
     }

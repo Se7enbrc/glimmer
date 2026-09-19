@@ -2,6 +2,10 @@
 
 ## 2026.9.4 - Unreleased
 
+Two DualSenses now keep their own buttons, battery readings, lights and trigger
+effects. A face-button press matches the pads up when needed; one pad still
+works straight away.
+
 Controllers macOS doesn't know about, a mouse that feels like your Mac, and a
 catch-up with what Sunshine changed over the summer.
 
