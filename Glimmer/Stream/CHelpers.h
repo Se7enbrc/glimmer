@@ -212,6 +212,7 @@ static inline BOOL gl_objc_try(void (NS_NOESCAPE ^ _Nonnull block)(void)) {
 #include <IOKit/hidsystem/IOHIDLib.h>
 #include <IOKit/hidsystem/IOHIDParameter.h>
 #include <IOKit/hidsystem/event_status_driver.h>
+#include <IOKit/hid/IOHIDEventServiceKeys.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -238,6 +239,35 @@ static inline int gl_set_mouse_acceleration(double value) {
     if (!handle) return 0;
     int ok = (IOHIDSetAccelerationWithKey(handle, CFSTR(kIOHIDMouseAccelerationType), value)
               == KERN_SUCCESS);
+    NXCloseEventStatus(handle);
+    return ok;
+}
+/* HIDUseLinearScalingMouseAcceleration: the System Settings "Pointer acceleration"
+   switch. On = no velocity curve, Tracking Speed kept. Returns 1/0, or -1 on failure. */
+static inline int gl_get_linear_mouse_scaling(void) {
+    NXEventHandle handle = NXOpenEventStatus();
+    if (!handle) return -1;
+    CFTypeRef value = NULL;
+    int result = -1;
+    if (IOHIDCopyCFTypeParameter(handle, CFSTR(kIOHIDUseLinearScalingMouseAccelerationKey), &value)
+        == KERN_SUCCESS && value) {
+        if (CFGetTypeID(value) == CFBooleanGetTypeID()) {
+            result = CFBooleanGetValue((CFBooleanRef)value) ? 1 : 0;
+        } else if (CFGetTypeID(value) == CFNumberGetTypeID()) {
+            int number = 0;
+            CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &number);
+            result = number != 0 ? 1 : 0;
+        }
+    }
+    if (value) CFRelease(value);
+    NXCloseEventStatus(handle);
+    return result;
+}
+static inline int gl_set_linear_mouse_scaling(int on) {
+    NXEventHandle handle = NXOpenEventStatus();
+    if (!handle) return 0;
+    int ok = (IOHIDSetCFTypeParameter(handle, CFSTR(kIOHIDUseLinearScalingMouseAccelerationKey),
+                                      on ? kCFBooleanTrue : kCFBooleanFalse) == KERN_SUCCESS);
     NXCloseEventStatus(handle);
     return ok;
 }

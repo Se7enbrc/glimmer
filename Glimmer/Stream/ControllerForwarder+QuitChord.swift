@@ -25,10 +25,32 @@ extension InputForwarder {
     /// user was physically holding could read as not-held. Triggers are digital
     /// here (any pull ≥ 50% counts) so the user doesn't have to slam them.
     func matchesControllerQuitChord(pad: GCExtendedGamepad) -> Bool {
+        guard controllerQuitChordProvider() != .none else { return false }
+        let state = quitChordState(pad: pad)
+        return matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
+                                          rightTrigger: state.analog.rightTrigger)
+    }
+
+    func matchesControllerQuitChord(buttons: Int32, leftTrigger: UInt8, rightTrigger: UInt8) -> Bool {
         let chord = controllerQuitChordProvider()
-        guard chord != .none else { return false }   // no set to build on the hot path
+        guard chord != .none else { return false }
         return Self.chordSatisfied(chord, custom: customControllerChordProvider(),
-                                   held: heldControllerButtons(pad: pad))
+                                   held: heldControllerButtons(buttons: buttons, leftTrigger: leftTrigger,
+                                                        rightTrigger: rightTrigger))
+    }
+
+    func quitChordState(pad: GCExtendedGamepad) -> (buttons: Int32, analog: GamepadAnalog) {
+        // Xbox Share was never a GC quit-chord Mute button; preserve that distinction.
+        var buttons = pressedButtonFlags(pad: pad) & ~StreamProtocol.MISC_FLAG
+        let hid = DualSenseHID.shared.buttons
+        // Preserve the raw shoulder/centre fallbacks used by the existing GC chord recorder.
+        let extras: [(Bool, Int32)] = [(hid.l1, StreamProtocol.LB_FLAG), (hid.r1, StreamProtocol.RB_FLAG),
+                                      (hid.options, StreamProtocol.PLAY_FLAG), (hid.create, StreamProtocol.BACK_FLAG),
+                                      (hid.ps, StreamProtocol.SPECIAL_FLAG), (hid.mute, StreamProtocol.MISC_FLAG)]
+        for (held, flag) in extras where held { buttons |= flag }
+        return (buttons, GamepadAnalog(leftTrigger: pad.leftTrigger.value >= 0.5 ? 255 : 0,
+                                      rightTrigger: pad.rightTrigger.value >= 0.5 ? 255 : 0,
+                                      leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0))
     }
 
     /// The pure chord predicate: every button of `chord` is in `held`. Static
@@ -114,30 +136,26 @@ extension InputForwarder {
     /// frames - so the dwell must complete on its own timer, re-reading the
     /// LIVE pad state at expiry rather than trusting the arming frame.
     func armQuitChordDwell(pad: GCExtendedGamepad, slot: UInt8) {
-        guard quitChordDwellTask == nil else { return }   // already counting
+        armQuitChordDwell(slot: slot, pad: pad) { [weak self, weak pad] in
+            guard let self, let pad else { return nil }
+            return self.quitChordState(pad: pad)
+        }
+    }
+
+    func armQuitChordDwell(slot: UInt8, pad: GCExtendedGamepad? = nil,
+                           readState: @escaping @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
+        guard quitChordDwellTask == nil else { return }
         quitChordDwellSlot = slot
         quitChordBreadcrumb(.armed, "held on slot \(slot) - dwell armed "
             + "(\(Int(Self.quitChordDwellSeconds * 1000))ms)", pad: pad)
-        // Task inherits MainActor isolation from this context, so touching the
-        // forwarder's stored state after the sleep is sound. `pad` is weak: a
-        // disconnect mid-dwell must not extend the profile's lifetime (and
-        // detach(gamepad:) cancels the dwell for the arming slot anyway).
         quitChordDwellTask = Task { [weak self, weak pad] in
             try? await Task.sleep(nanoseconds: UInt64(Self.quitChordDwellSeconds * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
-            // Clear the slot BEFORE any other early return: a bail-out that
-            // left the finished task stored would wedge the arm guard above
-            // for the rest of the session (only a non-matching frame from the
-            // arming slot clears it, and a deliberate hold produces none).
             self.quitChordDwellTask = nil
             self.quitChordDwellSlot = nil
-            // Re-verify against the live profile at expiry: isPressed/value
-            // read current hardware state, so a release that produced no
-            // further value-changed frame still reads released here. isReady
-            // guards the shutdown race - detach() cancels this task, but a
-            // teardown that races the wakeup must not quit a dead session.
-            guard let pad, self.isReady else { return }
-            guard self.matchesControllerQuitChord(pad: pad) else {
+            guard self.isReady, let state = readState() else { return }
+            guard self.matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
+                                                  rightTrigger: state.analog.rightTrigger) else {
                 self.quitChordBreadcrumb(.cycle, "not held at dwell expiry (slot \(slot)) - not quitting", pad: pad)
                 return
             }
@@ -262,5 +280,23 @@ func heldControllerButtons(pad: GCExtendedGamepad) -> Set<ControllerButton> {
     ]
     var held: Set<ControllerButton> = []
     for (pressed, button) in mapping where pressed { held.insert(button) }
+    return held
+}
+
+/// Shared host-mask reader for generic HID pads and the quit-chord predicate.
+func heldControllerButtons(buttons: Int32, leftTrigger: UInt8, rightTrigger: UInt8) -> Set<ControllerButton> {
+    let mapping: [(Int32, ControllerButton)] = [
+        (StreamProtocol.A_FLAG, .faceDown), (StreamProtocol.B_FLAG, .faceRight),
+        (StreamProtocol.X_FLAG, .faceLeft), (StreamProtocol.Y_FLAG, .faceUp),
+        (StreamProtocol.UP_FLAG, .dpadUp), (StreamProtocol.DOWN_FLAG, .dpadDown),
+        (StreamProtocol.LEFT_FLAG, .dpadLeft), (StreamProtocol.RIGHT_FLAG, .dpadRight),
+        (StreamProtocol.LB_FLAG, .l1), (StreamProtocol.RB_FLAG, .r1),
+        (StreamProtocol.LS_CLK_FLAG, .l3), (StreamProtocol.RS_CLK_FLAG, .r3),
+        (StreamProtocol.TOUCHPAD_FLAG, .touchpad), (StreamProtocol.PLAY_FLAG, .options),
+        (StreamProtocol.BACK_FLAG, .create), (StreamProtocol.SPECIAL_FLAG, .ps), (StreamProtocol.MISC_FLAG, .mute)
+    ]
+    var held = Set(mapping.compactMap { buttons & $0.0 != 0 ? $0.1 : nil })
+    if leftTrigger >= 128 { held.insert(.l2) }
+    if rightTrigger >= 128 { held.insert(.r2) }
     return held
 }

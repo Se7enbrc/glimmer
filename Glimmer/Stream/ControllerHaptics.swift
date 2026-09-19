@@ -85,6 +85,7 @@ final class ControllerHaptics: @unchecked Sendable {
     /// write + one flag read under a lock is the entire cost it ever pays.
     private let lock = NSLock()
     private var pendingBySlot: [UInt8: (low: UInt16, high: UInt16)] = [:]
+    private var pendingHIDRumbleTimes: [UInt8: UInt64] = [:]
     /// Latest-wins trigger-motor inbox (SS_RUMBLE_TRIGGERS) - the
     /// pendingBySlot contract, for the independent trigger wire channel.
     private var pendingTriggersBySlot: [UInt8: (left: UInt16, right: UInt16)] = [:]
@@ -223,6 +224,9 @@ final class ControllerHaptics: @unchecked Sendable {
             self.pendingSuspend?.cancel()
             self.pendingSuspend = nil
             self.quiesced = true
+            DispatchQueue.main.async {
+                HIDGamepadManager.shared.stopRumble()
+            }
             for (slot, pad) in self.pads {
                 self.teardown(pad: pad, slot: slot, why: reason)
             }
@@ -251,6 +255,7 @@ final class ControllerHaptics: @unchecked Sendable {
         let slot = UInt8(controllerNumber)
         lock.lock()
         pendingBySlot[slot] = (low: lowFreq, high: highFreq)
+        pendingHIDRumbleTimes[slot] = DispatchTime.now().uptimeNanoseconds
         let schedule = !drainScheduled
         if schedule { drainScheduled = true }
         lock.unlock()
@@ -310,6 +315,8 @@ final class ControllerHaptics: @unchecked Sendable {
     private func drainPending() {
         lock.lock()
         let pending = pendingBySlot
+        let submittedAt = pendingHIDRumbleTimes
+        pendingHIDRumbleTimes.removeAll(keepingCapacity: true)
         pendingBySlot.removeAll(keepingCapacity: true)
         let pendingTriggers = pendingTriggersBySlot
         pendingTriggersBySlot.removeAll(keepingCapacity: true)
@@ -323,6 +330,9 @@ final class ControllerHaptics: @unchecked Sendable {
         // stale nonzero pair (or color) can never sit waiting for a gate to
         // lift and then fire into a session that no longer wants it.
         guard !suspended, !quiesced else { return }
+        DispatchQueue.main.async {
+            HIDGamepadManager.shared.enqueueRumble(pending, submittedAt: submittedAt)
+        }
         for (slot, motors) in pending {
             apply(slot: slot, lowFreq: motors.low, highFreq: motors.high)
         }
@@ -376,6 +386,11 @@ final class ControllerHaptics: @unchecked Sendable {
     private func applySuspended(_ suspended: Bool, why: String) {
         guard self.suspended != suspended else { return }
         self.suspended = suspended
+        if suspended {
+            DispatchQueue.main.async {
+                HIDGamepadManager.shared.stopRumble()
+            }
+        }
         Diag.info("rumble gate \(suspended ? "ON" : "off") (\(why))", Self.logCategory)
         // Resuming needs no action: the next host event re-actuates (and
         // lazily rebuilds engines). Suspending tears engines down - not

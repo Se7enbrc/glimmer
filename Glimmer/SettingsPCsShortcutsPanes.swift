@@ -188,10 +188,8 @@ struct PCTile: View {
 struct ShortcutsPane: View {
     @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
-    // Default-ON: linearize the Mac's mouse acceleration while a stream is
-    // focused so only the game's own sensitivity shapes aim. Key mirrors
-    // MouseAccelerationControl.enabledDefaultsKey (registered true in GlimmerApp,
-    // which is what makes the non-UI UserDefaults.bool read default to on too).
+    // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
+    // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
     @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
     var body: some View {
@@ -284,18 +282,18 @@ struct ShortcutsPane: View {
             }
 
             Section("Mouse") {
-                Toggle(isOn: $rawMouseWhileStreaming) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Aim with raw mouse motion while streaming").fontWeight(.medium)
-                        Text("Only the game's own sensitivity shapes your aim - the Mac's pointer "
-                            + "acceleration stops stacking on top while the stream is focused, and is "
-                            + "restored the instant you leave. Mice only; the trackpad is untouched.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                Picker("Pointer while streaming", selection: $rawMouseWhileStreaming) {
+                    Text("Linear scaling").tag(true)
+                    Text("Mouse acceleration").tag(false)
                 }
-                .help("Linearizes the system mouse acceleration (like `com.apple.mouse.scaling -1`) "
-                    + "for the duration of each focused stream.")
+                .pickerStyle(.segmented)
+                .help("Linear scaling keeps your Tracking Speed and drops the acceleration curve while "
+                    + "the stream is focused; Mouse acceleration leaves the Mac's pointer untouched.")
+                Text("Linear scaling means only the game's own sensitivity shapes your aim, at the "
+                    + "speed you are used to. Your setting is restored the instant you leave the "
+                    + "stream. Mice only; the trackpad is untouched.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -371,6 +369,7 @@ private struct ChordCaptureSheet: View {
     /// ControllerMonitor) so capture works regardless of stream state, and so
     /// every press/release drives `poll()` - not just the timer.
     private func engage() {
+        HIDGamepadManager.shared.retain()
         GCController.shouldMonitorBackgroundEvents = true
         GCController.startWirelessControllerDiscovery {}
         setGamepadHandlers()
@@ -393,6 +392,7 @@ private struct ChordCaptureSheet: View {
     }
 
     private func disengage() {
+        HIDGamepadManager.shared.release()
         for controller in GCController.controllers() {
             controller.extendedGamepad?.valueChangedHandler = nil
         }
@@ -411,8 +411,16 @@ private struct ChordCaptureSheet: View {
     }
 
     private func poll() {
-        guard recording, let pad = GCController.controllers().first?.extendedGamepad else { return }
-        let held = heldControllerButtons(pad: pad)
+        guard recording else { return }
+        var held: Set<ControllerButton> = []
+        for pad in GCController.controllers().compactMap(\.extendedGamepad) {
+            held.formUnion(heldControllerButtons(pad: pad))
+        }
+        for pad in HIDGamepadManager.shared.devices.values {
+            let state = pad.state
+            held.formUnion(heldControllerButtons(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
+                                                 rightTrigger: state.analog.rightTrigger))
+        }
         current = held
         if !held.isEmpty {
             // Sticky: remember every button touched during the hold, so a

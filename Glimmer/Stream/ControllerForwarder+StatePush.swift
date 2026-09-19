@@ -112,7 +112,7 @@ extension InputForwarder {
     /// trips). The DualSense/DualShock touchpad *click* rides here as
     /// TOUCHPAD_FLAG (Sunshine's touchpad button); the touchpad *surface* is
     /// forwarded separately as touch events.
-    private func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
+    func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
         let mapping: [(Bool, Int32)] = [
             (pad.buttonA.isPressed, StreamProtocol.A_FLAG),
             (pad.buttonB.isPressed, StreamProtocol.B_FLAG),

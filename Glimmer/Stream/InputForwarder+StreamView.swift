@@ -253,12 +253,11 @@ extension InputForwarder: StreamInputViewDelegate {
             batchTimestamp = queued.timestamp
         }
 
-        // DRAG-DELTA compensation (before Cruise, so the velocity gate sees the
-        // corrected motion): macOS damps dragged deltas vs free motion for the
-        // same hand speed (owner-verified matched-speed swipes, macOS 27 beta).
-        // Scale button-held batches back to parity; 1.0 disables.
+        // DRAG-DELTA compensation, only while raw aim has linearised the pointer:
+        // that mode damps dragged deltas vs free motion (owner-measured, macOS 27).
+        // With acceleration untouched, drags already match moves. 1.0 disables.
         let isDragBatch = event.type != .mouseMoved
-        if isDragBatch {
+        if isDragBatch && savedLinearScaling != nil {
             let scale = CruiseTraversal.dragDeltaScale
             if scale != 1.0 {
                 accumDx *= scale
@@ -328,13 +327,13 @@ extension InputForwarder: StreamInputViewDelegate {
         // slow trackpad motion under 1px/event isn't rounded away.
         mouseResidualX += accumDx
         mouseResidualY += accumDy  // macOS deltaY is down-positive - matches Windows VK input.
-        let dxInt = Int(mouseResidualX.rounded(.towardZero))
-        let dyInt = Int(mouseResidualY.rounded(.towardZero))
-        if dxInt != 0 || dyInt != 0 {
-            mouseResidualX -= Double(dxInt)
-            mouseResidualY -= Double(dyInt)
-            let outDx = Int16(clamping: dxInt)
-            let outDy = Int16(clamping: dyInt)
+        // Send only what fits the wire's Int16 and keep the rest in the residual,
+        // so an oversized batch never loses the overflow to the clamp.
+        let outDx = Int16(clamping: Int(mouseResidualX.rounded(.towardZero)))
+        let outDy = Int16(clamping: Int(mouseResidualY.rounded(.towardZero)))
+        if outDx != 0 || outDy != 0 {
+            mouseResidualX -= Double(outDx)
+            mouseResidualY -= Double(outDy)
             let rc = backend?.sendMouseMove(dx: outDx, dy: outDy) ?? -2
             record("LiSendMouseMoveEvent", rc)
         }

@@ -40,6 +40,7 @@ extension InputForwarder {
     // MARK: - Lifecycle
 
     func setupGamepadObservers() {
+        setupHIDGamepads()
         // Notification (and the GCController it carries) are non-Sendable,
         // so we cannot capture them across a MainActor hop directly. The
         // closures we hand to NotificationCenter are `@Sendable`, and the
@@ -315,6 +316,7 @@ extension InputForwarder {
     /// .stop() runs this after stopConnection(), so there is no live
     /// connection to tell.
     func releaseAttachedControllers() {
+        releaseHIDControllers()
         for state in attachedControllers.values {
             ControllerHaptics.shared.unregister(slot: state.slot)
             ControllerMotion.shared.unregister(slot: state.slot)

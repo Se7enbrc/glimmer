@@ -46,12 +46,9 @@ enum CruiseTraversal {
     static let defaultVKnee: Double = 1100
     static let defaultVFull: Double = 1800
 
-    /// DRAG-DELTA compensation: macOS (observed on the 27.0 beta) damps
-    /// *MouseDragged deltas relative to free mouseMoved for the same physical
-    /// motion - owner-verified by matched-speed swipes (button held travels
-    /// visibly less; the drag/move velocity histograms read ~0.6-0.7x). Scale
-    /// button-held batch deltas back up so drag aim matches free aim. Hidden
-    /// live-read tunable; 1.0 disables. Clamped so a bad write can't run away.
+    /// DRAG-DELTA compensation, applied only while raw aim is engaged: that mode
+    /// damped *MouseDragged deltas to ~0.6-0.7x of free motion (owner-measured,
+    /// macOS 27 beta). Hidden live-read tunable; 1.0 disables; clamped.
     static let dragDeltaScaleDefaultsKey = "cruiseDragDeltaScale"
     static let defaultDragDeltaScale: Double = 1.35
     static var dragDeltaScale: Double {

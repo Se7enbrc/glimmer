@@ -2,8 +2,23 @@
 
 ## 2026.9.4 - Unreleased
 
-Catches up with what Sunshine changed over the summer, without changing anything
-for hosts that didn't.
+Controllers macOS doesn't know about, a mouse that feels like your Mac, and a
+catch-up with what Sunshine changed over the summer.
+
+Any HID gamepad now works. Glimmer used to see only the pads macOS itself
+recognises (Xbox, PlayStation, Switch and MFi). Pads that show up as plain
+DirectInput devices, like the 8BitDo Ultimate 2C over Bluetooth, were invisible.
+Glimmer now reads those directly, using the same community controller mappings
+Moonlight relies on, with rumble where the hardware offers force feedback,
+battery level where it is reported, the quit chord, and a live readout in
+Settings, Diagnostics. Pads macOS handles keep going through macOS.
+
+The mouse keeps your speed. "Raw aim" used to switch the Mac's pointer to a mode
+that also threw away your Tracking Speed, so the stream ran at roughly a quarter
+of desktop sensitivity, and a crash could leave the desktop that way. It now
+uses macOS's own linear scaling: no acceleration curve in the game, your speed
+unchanged, restored the moment you leave. Settings, Shortcuts has a switch
+between Linear scaling and Mouse acceleration; linear is the default.
 
 Your Mac now pairs under its own name. Sunshine's pairing page used to list
 Glimmer as "roth", a leftover from Moonlight's early days, and every Glimmer on

@@ -168,6 +168,10 @@ extension InputForwarder {
                 // on CHANGE). Re-read + re-forward live held state right after the
                 // arrivals (idempotent; covers reconnects that keep the window key
                 // and so never hit the didBecomeKey resync).
+                for state in attachedHIDControllers.values {
+                    sendHIDArrival(state)
+                    pushHID(state.device)
+                }
                 resyncControllers()
                 installDiagnosticMonitors()
             } else {

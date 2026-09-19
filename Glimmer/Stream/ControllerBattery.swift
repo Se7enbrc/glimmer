@@ -115,6 +115,15 @@ final class ControllerBattery: @unchecked Sendable {
         }
     }
 
+    @MainActor
+    func register(slot: UInt8, hid: HIDGamepadDevice) -> UInt16 {
+        unregister(slot: slot)
+        guard hid.hasBattery else { return 0 }
+        pads[slot] = Pad(hid: hid)
+        startTimerIfNeeded()
+        return UInt16(StreamProtocol.LI_CCAP_BATTERY_STATE)
+    }
+
     // MARK: - Arrival baseline (ControllerForwarder.sendArrival, main thread)
 
     /// Arm the uplink and send `slot`'s baseline reading right behind its
@@ -168,7 +177,10 @@ final class ControllerBattery: @unchecked Sendable {
         // status byte itself, so route that to the host when available and fall
         // back to GCController.battery otherwise (Xbox, or DualSense without the
         // opt-in raw-HID feature on).
-        guard let reading = hidReading(for: pad) ?? pad.controller?.battery.map(Self.wireReading)
+        let genericReading = pad.hid?.batteryPercentage.map {
+            (state: UInt8(StreamProtocol.LI_BATTERY_STATE_DISCHARGING), percentage: $0)
+        }
+        guard let reading = genericReading ?? hidReading(for: pad) ?? pad.controller?.battery.map(Self.wireReading)
         else { return }
         if let last = pad.lastSent, last == reading { return }
         let rc = backend.sendControllerBattery(num: slot, state: reading.state,
@@ -334,10 +346,12 @@ final class ControllerBattery: @unchecked Sendable {
         /// Weak: GameController owns the pad's lifetime; a disconnect must
         /// deallocate it even if our unregister is still in flight.
         weak var controller: GCController?
+        weak var hid: HIDGamepadDevice?
         /// Last reading the host actually got, for send-on-change suppression.
         var lastSent: (state: UInt8, percentage: UInt8)?
 
         init(controller: GCController) { self.controller = controller }
+        init(hid: HIDGamepadDevice) { self.hid = hid }
     }
 }
 

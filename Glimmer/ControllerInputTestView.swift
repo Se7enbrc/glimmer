@@ -32,6 +32,7 @@ final class ControllerMonitor {
     init(isStreaming: @escaping () -> Bool) { self.isStreaming = isStreaming }
 
     func start() {
+        HIDGamepadManager.shared.retain()
         GCController.startWirelessControllerDiscovery {}
         // Receive controller input even though the Settings window - not a
         // game window - is key. Without this, GameController appears to deliver
@@ -75,6 +76,7 @@ final class ControllerMonitor {
     }
 
     func stop() {
+        HIDGamepadManager.shared.release()
         for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
         engaged.removeAll()
         observers.forEach(NotificationCenter.default.removeObserver)
@@ -102,8 +104,11 @@ struct ControllerInputTest: View {
         TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
             let pads = GCController.controllers()
             VStack(alignment: .leading, spacing: 12) {
+                ForEach(HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }) { pad in
+                    HIDGamepadCard(pad: pad)
+                }
                 diagnosticLine
-                if pads.isEmpty {
+                if pads.isEmpty && HIDGamepadManager.shared.devices.isEmpty {
                     emptyState
                 } else {
                     ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in

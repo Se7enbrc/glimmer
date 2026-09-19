@@ -221,6 +221,14 @@
 		DEC0DE840000000000000015 /* PointerMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000016 /* PointerMapping.swift */; };
 		DEC0DE840000000000000017 /* InputForwarder+EscapeHold.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */; };
 		DEC0DE84000000000000001D /* InputForwarder+HoverCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001E /* InputForwarder+HoverCapture.swift */; };
+		DEC0DE2026091900000000D1 /* GameControllerDB+Data.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000D2 /* GameControllerDB+Data.swift */; };
+		DEC0DE2026091900000000D3 /* HIDGamepadMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000D4 /* HIDGamepadMapping.swift */; };
+		DEC0DE2026091900000000D5 /* HIDGamepadElements.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000D6 /* HIDGamepadElements.swift */; };
+		DEC0DE2026091900000000D7 /* HIDGamepadDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000D8 /* HIDGamepadDevice.swift */; };
+		DEC0DE2026091900000000D9 /* HIDGamepadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000DA /* HIDGamepadManager.swift */; };
+		DEC0DE2026091900000000DB /* HIDGamepadRumble.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000DC /* HIDGamepadRumble.swift */; };
+		DEC0DE2026091900000000DD /* ControllerForwarder+HID.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000DE /* ControllerForwarder+HID.swift */; };
+		DEC0DE2026091900000000DF /* HIDGamepadCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E0 /* HIDGamepadCard.swift */; };
 		DEC0DE2026091300000000B3 /* InputForwarder+CommandKeyUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */; };
 		DEC0DE2026091800000000C3 /* ModifierSides.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C4 /* ModifierSides.swift */; };
 		DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */; };
@@ -262,6 +270,7 @@
 		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */; };
+		DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */; };
 		DEC0DE2026091800000000C5 /* ModifierSidesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C6 /* ModifierSidesTests.swift */; };
 		DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */; };
 		D2000037 /* KeyboardScanMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000036 /* KeyboardScanMapTests.swift */; };
@@ -524,6 +533,14 @@
 		DEC0DE840000000000000016 /* PointerMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/PointerMapping.swift; sourceTree = "<group>"; };
 		DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+EscapeHold.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000001E /* InputForwarder+HoverCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+HoverCapture.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000D2 /* GameControllerDB+Data.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/GameControllerDB+Data.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000D4 /* HIDGamepadMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadMapping.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000D6 /* HIDGamepadElements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadElements.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000D8 /* HIDGamepadDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadDevice.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000DA /* HIDGamepadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadManager.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000DC /* HIDGamepadRumble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadRumble.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000DE /* ControllerForwarder+HID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+HID.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000E0 /* HIDGamepadCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadCard.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+CommandKeyUp.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C4 /* ModifierSides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ModifierSides.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+PointerAffordances.swift"; sourceTree = "<group>"; };
@@ -566,6 +583,7 @@
 		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerLEDsTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HIDGamepadTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C6 /* ModifierSidesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModifierSidesTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOReportSamplerLifetimeTests.swift; sourceTree = "<group>"; };
 		D2000036 /* KeyboardScanMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardScanMapTests.swift; sourceTree = "<group>"; };
@@ -730,6 +748,14 @@
 				DEC0DE840000000000000016 /* PointerMapping.swift */,
 				DEC0DE840000000000000018 /* InputForwarder+EscapeHold.swift */,
 				DEC0DE84000000000000001E /* InputForwarder+HoverCapture.swift */,
+				DEC0DE2026091900000000D2 /* GameControllerDB+Data.swift */,
+				DEC0DE2026091900000000D4 /* HIDGamepadMapping.swift */,
+				DEC0DE2026091900000000D6 /* HIDGamepadElements.swift */,
+				DEC0DE2026091900000000D8 /* HIDGamepadDevice.swift */,
+				DEC0DE2026091900000000DA /* HIDGamepadManager.swift */,
+				DEC0DE2026091900000000DC /* HIDGamepadRumble.swift */,
+				DEC0DE2026091900000000DE /* ControllerForwarder+HID.swift */,
+				DEC0DE2026091900000000E0 /* HIDGamepadCard.swift */,
 				DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */,
 				DEC0DE2026091800000000C4 /* ModifierSides.swift */,
 				DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */,
@@ -926,6 +952,7 @@
 				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */,
+				DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */,
 				DEC0DE2026091800000000C6 /* ModifierSidesTests.swift */,
 				DEC0DE2026083000000000A1 /* IOReportSamplerLifetimeTests.swift */,
 				D2000036 /* KeyboardScanMapTests.swift */,
@@ -1143,6 +1170,14 @@
 				DEC0DE840000000000000015 /* PointerMapping.swift in Sources */,
 				DEC0DE840000000000000017 /* InputForwarder+EscapeHold.swift in Sources */,
 				DEC0DE84000000000000001D /* InputForwarder+HoverCapture.swift in Sources */,
+				DEC0DE2026091900000000D1 /* GameControllerDB+Data.swift in Sources */,
+				DEC0DE2026091900000000D3 /* HIDGamepadMapping.swift in Sources */,
+				DEC0DE2026091900000000D5 /* HIDGamepadElements.swift in Sources */,
+				DEC0DE2026091900000000D7 /* HIDGamepadDevice.swift in Sources */,
+				DEC0DE2026091900000000D9 /* HIDGamepadManager.swift in Sources */,
+				DEC0DE2026091900000000DB /* HIDGamepadRumble.swift in Sources */,
+				DEC0DE2026091900000000DD /* ControllerForwarder+HID.swift in Sources */,
+				DEC0DE2026091900000000DF /* HIDGamepadCard.swift in Sources */,
 				DEC0DE2026091300000000B3 /* InputForwarder+CommandKeyUp.swift in Sources */,
 				DEC0DE2026091800000000C3 /* ModifierSides.swift in Sources */,
 				DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */,
@@ -1325,6 +1360,7 @@
 				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */,
+				DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */,
 				DEC0DE2026091800000000C5 /* ModifierSidesTests.swift in Sources */,
 				DEC0DE2026083000000000A2 /* IOReportSamplerLifetimeTests.swift in Sources */,
 				D2000037 /* KeyboardScanMapTests.swift in Sources */,
