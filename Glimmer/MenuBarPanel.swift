@@ -113,29 +113,16 @@ struct MenuBarPanel: View {
         card("Stream", trailing: model.selectedHost?.displayName) {
             let metrics = model.menuBarMetrics
             HStack(alignment: .firstTextBaseline, spacing: 0) {
-                ForEach(metrics.prefix(2), id: \.label) { metric in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(metric.value)
-                            .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
-                        Text(metric.label)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                bigNumber(metrics[2], dot: .accentColor)
+                bigNumber(metrics[1], dot: .pink)
             }
-            FrameChart(values: StreamHistory.shared.fps, target: Double(model.effectiveFPS))
-                .frame(height: 40)
-            HStack {
-                Text(model.menuBarModeLine)
-                if metrics.count > 3 {
-                    Text("·")
-                    Text("\(metrics[2].value) · \(metrics[3].value)")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
+            StreamChart(mbps: StreamHistory.shared.mbps, latency: StreamHistory.shared.rttMs,
+                        asked: Double(model.effectiveBitrateKbps) / 1000)
+                .frame(height: 56)
+            Text("\(metrics[0].value) frames/s · \(model.menuBarModeLine) · \(metrics[3].value)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             Divider()
             actionRow("Back to Stream", systemImage: "play.fill") {
                 model.resumeStreamWindow()
@@ -158,6 +145,23 @@ struct MenuBarPanel: View {
             .toggleStyle(.switch)
             .controlSize(.small)
         }
+    }
+
+    /// A big value with its chart color under it, iStat style.
+    private func bigNumber(_ metric: MenuBarMetric, dot: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(metric.value)
+                .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            HStack(spacing: 5) {
+                Circle().fill(dot).frame(width: 7, height: 7)
+                Text(metric.label.capitalized)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var connectingCard: some View {
@@ -344,26 +348,103 @@ struct MenuBarPanel: View {
     }
 }
 
-/// Sixty bars, newest at the right, each one second of frames arriving
-/// against the requested rate. Dips are hitches, at a glance.
-private struct FrameChart: View {
-    let values: [Double]
-    let target: Double
+/// Sixty seconds, newest at the right, on one baseline: bandwidth in rises
+/// above it (full height is the asked bitrate, or the minute's peak) and
+/// latency hangs below it (30 ms, or the minute's peak), so a hitch is a
+/// pink spike under a blue dip. Hovering reads any second back.
+private struct StreamChart: View {
+    let mbps: [Double]
+    let latency: [Double]
+    let asked: Double
+    @State private var hoverX: CGFloat?
 
     var body: some View {
-        Canvas { context, size in
-            let slots = Double(StreamHistory.capacity)
-            let pitch = size.width / slots
-            let width = max(pitch - 1.5, 1)
-            let scale = max(target, 1)
-            for (index, value) in values.enumerated() {
-                let x = size.width - CGFloat(values.count - index) * pitch
-                let height = max(size.height * CGFloat(min(value / scale, 1)), value > 0 ? 1.5 : 0)
-                let rect = CGRect(x: x, y: size.height - height, width: width, height: height)
-                let low = value < scale * 0.9
-                context.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(low ? .pink : .accentColor))
+        GeometryReader { geo in
+            let pitch = geo.size.width / CGFloat(StreamHistory.capacity)
+            let index = hoverX.flatMap { barIndex(atX: $0, pitch: pitch, width: geo.size.width) }
+            ZStack(alignment: .topLeading) {
+                Canvas { context, size in
+                    draw(in: &context, size: size, pitch: pitch, highlight: index)
+                }
+                seriesLabels
+                if let index, let readout = readout(at: index) {
+                    Text(readout)
+                        .font(.caption2.monospacedDigit())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .position(x: min(max(hoverX ?? 0, 48), geo.size.width - 48), y: 9)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let point): hoverX = point.x
+                case .ended: hoverX = nil
+                }
             }
         }
-        .accessibilityLabel("Frames arriving over the last minute")
+        .accessibilityLabel("Bandwidth and latency over the last minute")
+    }
+
+    private var seriesLabels: some View {
+        VStack(alignment: .leading) {
+            Text("Bandwidth").foregroundStyle(Color.accentColor)
+            Spacer()
+            Text("Latency").foregroundStyle(.pink)
+        }
+        .font(.caption2.weight(.medium))
+        .padding(4)
+        .allowsHitTesting(false)
+    }
+
+    private func draw(in context: inout GraphicsContext, size: CGSize, pitch: CGFloat, highlight: Int?) {
+        let width = max(pitch - 1.5, 1)
+        let baseline = size.height * 0.62
+        let upScale = max(asked, mbps.max() ?? 0, 1)
+        let downScale = max(30, latency.max() ?? 0)
+        for (index, value) in mbps.enumerated() {
+            let x = size.width - CGFloat(mbps.count - index) * pitch
+            let height = max(baseline * CGFloat(min(value / upScale, 1)), value > 0 ? 1.5 : 0)
+            let rect = CGRect(x: x, y: baseline - height, width: width, height: height)
+            let color = Color.accentColor.opacity(highlight == nil || highlight == index ? 1 : 0.55)
+            context.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(color))
+        }
+        for (index, value) in latency.enumerated() {
+            let x = size.width - CGFloat(latency.count - index) * pitch
+            let room = size.height - baseline - 1
+            let height = max(room * CGFloat(min(value / downScale, 1)), value > 0 ? 1.5 : 0)
+            let rect = CGRect(x: x, y: baseline + 1, width: width, height: height)
+            let color = Color.pink.opacity(highlight == nil || highlight == index ? 1 : 0.55)
+            context.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(color))
+        }
+        var line = Path()
+        line.move(to: CGPoint(x: 0, y: baseline + 0.5))
+        line.addLine(to: CGPoint(x: size.width, y: baseline + 0.5))
+        context.stroke(line, with: .color(.secondary.opacity(0.35)), lineWidth: 1)
+        if let highlight {
+            let x = size.width - CGFloat(mbps.count - highlight) * pitch + width / 2
+            var hair = Path()
+            hair.move(to: CGPoint(x: x, y: 0))
+            hair.addLine(to: CGPoint(x: x, y: size.height))
+            context.stroke(hair, with: .color(.secondary.opacity(0.6)), lineWidth: 1)
+        }
+    }
+
+    /// The bar under the cursor; bars are right-aligned, newest last.
+    private func barIndex(atX x: CGFloat, pitch: CGFloat, width: CGFloat) -> Int? {
+        guard pitch > 0, !mbps.isEmpty else { return nil }
+        let slotsFromRight = Int((width - x) / pitch)
+        let index = mbps.count - 1 - slotsFromRight
+        return (0..<mbps.count).contains(index) ? index : nil
+    }
+
+    private func readout(at index: Int) -> String? {
+        guard mbps.indices.contains(index) else { return nil }
+        let ago = mbps.count - 1 - index
+        let when = ago == 0 ? "now" : "\(ago) s ago"
+        let ms = latency.indices.contains(index) ? Int(latency[index].rounded()) : 0
+        return "\(Int(mbps[index].rounded())) Mbps · \(ms) ms · \(when)"
     }
 }

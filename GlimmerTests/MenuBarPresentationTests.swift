@@ -61,17 +61,18 @@ struct MenuBarPresentationTests {
         snap.measuredBitrateMbps = 78.2
         let metrics = MenuBarPresentation.metrics(snapshot: snap, link: "Wi-Fi")
         #expect(metrics.map(\.value) == ["120", "3 ms", "78 Mbps", "Wi-Fi"])
-        #expect(metrics.map(\.label) == ["frames per second", "latency", "bitrate", "network"])
+        #expect(metrics.map(\.label) == ["frames / s", "latency", "bandwidth", "network"])
         #expect(MenuBarPresentation.metrics(snapshot: nil, link: nil).map(\.value) == ["–", "–", "–", "–"])
     }
 
     @Test @MainActor func historyKeepsOneMinute() {
         let history = StreamHistory()
-        for i in 0..<70 { history.append(fps: Double(i), rttMs: nil) }
+        for i in 0..<70 { history.append(mbps: Double(i) / 2, fps: Double(i), rttMs: nil) }
         #expect(history.fps.count == 60)
         #expect(history.fps.first == 10)
+        #expect(history.mbps.last == 34.5)
         #expect(history.rttMs.last == 0)
         history.reset()
-        #expect(history.fps.isEmpty)
+        #expect(history.mbps.isEmpty)
     }
 }

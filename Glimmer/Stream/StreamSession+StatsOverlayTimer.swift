@@ -64,7 +64,8 @@ extension StreamSession {
                     // works with the HUD off - the expensive host/controller
                     // probes below stay gated on `statsOverlayEnabled`.
                     var snap = dec.statsSnapshot(minWindowSeconds: overlayFpsWindowSeconds)
-                    history.tick(fps: snap.receivedFps, rttMs: dec.telemetryEstimatedRtt()?.rttMs)
+                    history.tick(mbps: snap.measuredBitrateMbps, fps: snap.receivedFps,
+                                 rttMs: dec.telemetryEstimatedRtt()?.rttMs)
                     // Auto pill, independent of the stats-HUD toggle so a
                     // degrading PRESENT path reaches the user with the HUD off.
                     // Drives off PERCEIVED present-hitching (render-gap / stale
