@@ -26,9 +26,9 @@ process. No external player, no C engine.
   battery, light bar - whatever the pad has. Hold-to-quit chord. An optional
   raw-input mode (off by default, needs Input Monitoring) adds the DualSense
   buttons macOS hides and the host's adaptive-trigger effects.
-- **Mouse and keyboard.** Raw 1:1 aim with the Mac's pointer acceleration
-  removed, a velocity-gated boost on fast flicks, optional ⌘-shortcut
-  forwarding.
+- **Mouse and keyboard.** Raw 1:1 aim at your Mac's tracking speed with the
+  acceleration curve removed, an optional velocity-gated boost on fast flicks,
+  optional ⌘-shortcut forwarding.
 - **Wi-Fi.** An optional helper parks AWDL (AirDrop's radio time-share) during a
   stream - the usual cause of multi-second Wi-Fi freezes.
 - **Hosts.** mDNS discovery, PIN pairing, hosts by IP or name (Tailscale works),
@@ -36,8 +36,9 @@ process. No external player, no C engine.
 - **Mac things.** Menu bar item, display-matched quality presets, stats overlay,
   hotkeys, notarized, self-updating.
 
-Nothing leaves your Mac. Diagnostics are off by default and write local files
-under `~/Library/Logs/Glimmer`.
+No accounts, no analytics. Glimmer talks to your own PC and, if you leave
+updates on, to the update feed; nothing else. Diagnostics are off by default and
+write local files under `~/Library/Logs/Glimmer`.
 
 ## Install
 

@@ -98,24 +98,28 @@ struct ControllerInputTest: View {
     @State private var monitor: ControllerMonitor?
 
     var body: some View {
-        // Reading monitor.revision establishes the @Observable dependency, so a
-        // value-changed handler firing re-renders this view (which then reads
-        // the now-live element values).
-        // Poll on a 30 Hz timeline so the chips reflect live element state.
-        // (Input IS arriving - the counters prove it - but a revision-based
-        // re-render wasn't repainting the chips; a timeline is reliable.)
-        TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
-            let pads = GCController.controllers()
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }) { pad in
-                    HIDGamepadCard(pad: pad, tick: context.date)
-                }
-                diagnosticLine
-                if pads.isEmpty && HIDGamepadManager.shared.devices.isEmpty {
+        // `monitor.revision` is the @Observable edge for connects; the 30 Hz
+        // timeline only runs while a pad is present (chips need live values).
+        let revision = monitor?.revision ?? 0
+        let pads = GCController.controllers()
+        let hidPads = HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }
+        Group {
+            if pads.isEmpty && hidPads.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    diagnosticLine
                     emptyState
-                } else {
-                    ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in
-                        ControllerCard(pad: pad, tick: context.date)
+                }
+                .id(revision)
+            } else {
+                TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(hidPads) { pad in
+                            HIDGamepadCard(pad: pad, tick: context.date)
+                        }
+                        diagnosticLine
+                        ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in
+                            ControllerCard(pad: pad, tick: context.date)
+                        }
                     }
                 }
             }

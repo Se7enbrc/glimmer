@@ -297,7 +297,8 @@ extension InputForwarder {
     // the tap.
 
     func installDiagnosticMonitors() {
-        guard diagnosticLocalMonitor == nil else { return }
+        // Opt-in diagnostics only: a per-event log line is not a default cost.
+        guard diagnosticLocalMonitor == nil, TelemetryGate.isEnabled else { return }
 
         // Constraint: this monitor must touch ONLY NSEvent primitives
         // documented as valid for every event type - type raw, modifier
