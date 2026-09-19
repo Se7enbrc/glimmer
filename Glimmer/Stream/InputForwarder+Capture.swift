@@ -529,9 +529,10 @@ enum MouseAccelerationControl {
         readBack ? sentinel : false
     }
 
-    /// Restore the user's flag and clear the sentinel.
+    /// Restore the user's flag; the sentinel is cleared only once the write
+    /// took, so a refused restore is retried at the next launch.
     static func restore(_ prior: Bool) {
-        _ = gl_set_linear_mouse_scaling(prior ? 1 : 0)
+        guard gl_set_linear_mouse_scaling(prior ? 1 : 0) != 0 else { return }
         UserDefaults.standard.removeObject(forKey: pendingRestoreKey)
     }
 
@@ -541,10 +542,11 @@ enum MouseAccelerationControl {
         let defaults = UserDefaults.standard
         if defaults.object(forKey: pendingRestoreKey) != nil {
             let prior = defaults.bool(forKey: pendingRestoreKey)
-            _ = gl_set_linear_mouse_scaling(prior ? 1 : 0)
-            defaults.removeObject(forKey: pendingRestoreKey)
-            Diag.notice("Mouse: restored orphaned linear-scaling override to \(prior) "
-                + "(prior session ended while streaming)", "Launch")
+            if gl_set_linear_mouse_scaling(prior ? 1 : 0) != 0 {
+                defaults.removeObject(forKey: pendingRestoreKey)
+                Diag.notice("Mouse: restored orphaned linear-scaling override to \(prior) "
+                    + "(prior session ended while streaming)", "Launch")
+            }
         }
         if defaults.object(forKey: legacyPendingRestoreKey) != nil {
             let saved = max(defaults.double(forKey: legacyPendingRestoreKey), 0)

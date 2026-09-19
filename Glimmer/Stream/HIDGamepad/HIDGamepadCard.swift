@@ -2,6 +2,8 @@ import SwiftUI
 
 struct HIDGamepadCard: View {
     let pad: HIDGamepadDevice
+    /// Timeline date; the pad is a plain reference, so this is what re-renders.
+    let tick: Date
 
     var body: some View {
         let state = pad.state

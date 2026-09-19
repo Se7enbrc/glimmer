@@ -153,18 +153,16 @@ extension InputForwarder: StreamInputViewDelegate {
         noteEscapeKeyUp(event)
         guard isReady else { return }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return }
+        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
 
-        // Mirror the sys-key gate from handleKeyDown: if Cmd is held and
-        // capture is off, the matching key-down was never forwarded, so
-        // sending the key-up alone would leave the host's keyboard state
-        // inconsistent (it would think the key was released without ever
-        // having been pressed).
-        if mods.contains(.command), !captureSysKeys {
+        // Mirror the key-down gate: under ⌘ with capture off the down was never
+        // forwarded, so no up either. A key held from before ⌘ went down was
+        // forwarded and must be released, or the host keeps it pressed.
+        if mods.contains(.command), !captureSysKeys, !heldKeys.contains(wireCode) {
             return
         }
 
-        guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return }
-        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
         let rc = backend?.sendKeyboard(
             keyCode: wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_UP),

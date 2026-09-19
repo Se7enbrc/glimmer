@@ -105,7 +105,7 @@ struct ControllerInputTest: View {
             let pads = GCController.controllers()
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }) { pad in
-                    HIDGamepadCard(pad: pad)
+                    HIDGamepadCard(pad: pad, tick: context.date)
                 }
                 diagnosticLine
                 if pads.isEmpty && HIDGamepadManager.shared.devices.isEmpty {
