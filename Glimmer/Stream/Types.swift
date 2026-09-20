@@ -39,6 +39,9 @@ public struct StreamConfig: Sendable {
     /// value is the LAN default and is unchanged; only the advertised number is
     /// clamped, and only when remote.
     public var packetSize: Int = 1392
+    /// The wired boost folded into `bitrateKbps` (1 = none), so the connect-time
+    /// gate can withdraw it when the measured path says a Wi-Fi hop is present.
+    public var bitrateBoost: Double = 1
     public var remoteness: Remoteness = .auto
     /// Default to whatever the system default-output device can render
     /// natively (stereo / 5.1 / 7.1). The host will downmix if it doesn't

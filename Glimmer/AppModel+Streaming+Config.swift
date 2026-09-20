@@ -47,13 +47,53 @@ extension AppModel {
         return wireBitrateKbps(forFormats: formats)
     }
 
+    /// The dial is sized for Wi-Fi. Wired end to end (the Mac's route says
+    /// Ethernet, the connect-time RTT agrees) asks for twice as much under a
+    /// higher cap; the per-frame budget is what grain tracks, not the average.
+    nonisolated static let wiredBitrateMultiplier = 2.0
+    nonisolated static let wiredBitrateCapKbps = 500_000
+
+    /// Wi-Fi asks for half as much again under the formula's cap; tested on a
+    /// 6 GHz link with no hitches. `defaults write io.ugfugl.Glimmer
+    /// bitrateBoostWifi -float N` overrides it without a rebuild.
+    nonisolated static let wifiBitrateMultiplier = 1.5
+    nonisolated static var wifiBitrateBoost: Double {
+        let value = UserDefaults.standard.double(forKey: "bitrateBoostWifi")
+        return value > 0 ? value : wifiBitrateMultiplier
+    }
+
+    var wiredBitrateBoost: Double {
+        bitrateMode == .highestQuality && hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : 1
+    }
+
     /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
-    /// negotiated codec's efficiency. The spec UI and `nativeStreamConfig` both read
-    /// this so the shown bitrate can't drift from what's sent. Custom is verbatim.
+    /// negotiated codec's efficiency, then by the route. The spec UI and
+    /// `nativeStreamConfig` both read this so the shown bitrate can't drift
+    /// from what's sent. Custom skips the codec discount, as before.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
-        if case .custom = qualityPreset { return effectiveBitrateKbps }
-        let mult = Self.codecBudgetMultiplier(for: formats)
-        return max(5_000, Int((Double(effectiveBitrateKbps) * mult).rounded()))
+        StreamPathMTU.wifiAskKbps(ask: routeAskKbps(forFormats: formats), phyRateMbps: hostRoute.wifiPhyRateMbps)
+    }
+
+    /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
+    /// Bandwidth saver is the lighter ask from before the boosts existed.
+    func routeAskKbps(forFormats formats: VideoFormats) -> Int {
+        var codec = Self.codecBudgetMultiplier(for: formats)
+        if case .custom = qualityPreset { codec = 1 }
+        guard bitrateMode == .highestQuality else {
+            return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
+                                        boost: 1, capKbps: Self.maxBitrateKbps)
+        }
+        let wired = hostRoute.routeClass == .wired
+        return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
+                                    boost: wired ? Self.wiredBitrateMultiplier : Self.wifiBitrateBoost,
+                                    capKbps: wired ? Self.wiredBitrateCapKbps : Self.maxBitrateKbps)
+    }
+
+    /// Pure so the rule is testable: dial × codec × boost, clamped to the floor
+    /// and the route's cap.
+    nonisolated static func wireBitrateKbps(dial: Int, codecMultiplier: Double, boost: Double, capKbps: Int) -> Int {
+        let scaled = Double(dial) * codecMultiplier * boost
+        return min(max(5_000, Int(scaled.rounded())), capKbps)
     }
 
     // MARK: Streaming
@@ -133,7 +173,13 @@ extension AppModel {
         // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
         // scaled by the negotiated codec's efficiency. The spec chip reads the same
         // path so what's shown matches what's sent.
-        cfg.bitrateKbps = wireBitrateKbps(forFormats: cfg.videoFormats)
+        let routeAsk = routeAskKbps(forFormats: cfg.videoFormats)
+        cfg.bitrateKbps = StreamPathMTU.wifiAskKbps(ask: routeAsk, phyRateMbps: hostRoute.wifiPhyRateMbps)
+        if cfg.bitrateKbps < routeAsk, let phy = hostRoute.wifiPhyRateMbps {
+            Diag.notice("Wi-Fi link gate: the radio's PHY rate is \(Int(phy)) Mbps, asking for "
+                + "\(cfg.bitrateKbps / 1000) Mbps instead of \(routeAsk / 1000).", "Stream")
+        }
+        cfg.bitrateBoost = wiredBitrateBoost
         return cfg
     }
 

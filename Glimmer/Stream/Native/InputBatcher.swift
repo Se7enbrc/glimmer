@@ -386,6 +386,7 @@ final class InputBatcher: @unchecked Sendable {
         // (1) Relative mouse: send the accumulated delta, splitting into Int16
         //     chunks exactly like InputStream.c:379-422.
         if relMouseDirty {
+            trace(latencyTracker, "\"event\":\"input_mouse\",\"dx\":\(relMouseDX),\"dy\":\(relMouseDY)")
             while relMouseDX != 0 || relMouseDY != 0 {
                 let chunkX: Int16
                 if relMouseDX < Int(Int16.min) {
@@ -415,6 +416,7 @@ final class InputBatcher: @unchecked Sendable {
 
         // (2) Absolute mouse: latest-only.
         if absMouseDirty {
+            trace(latencyTracker, "\"event\":\"input_mouse_abs\",\"x\":\(absMouseX),\"y\":\(absMouseY)")
             _ = enet.sendInputPacket(
                 InputEncoder.mousePosition(x: absMouseX, y: absMouseY,
                                            refW: absMouseRefW, refH: absMouseRefH),
@@ -450,6 +452,8 @@ final class InputBatcher: @unchecked Sendable {
                 // else → UNRELIABLE.
                 let isGyroNull = motionType == UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
                     && s.x == 0 && s.y == 0 && s.z == 0
+                trace(latencyTracker, "\"event\":\"input_motion\",\"slot\":\(slot),\"type\":\(motionType),"
+                    + "\"x\":\(s.x),\"y\":\(s.y),\"z\":\(s.z)")
                 if isGyroNull {
                     _ = enet.sendInputPacket(plaintext, channel: channel)
                 } else {
@@ -498,9 +502,22 @@ final class InputBatcher: @unchecked Sendable {
     /// Send the latest pending multiController for `slot` and clear its dirty
     /// flag. MUST be called on `queue`. Drain point for both the timer flush and
     /// the button-change flush, so it resolves its own queue→wire age stamp.
+    /// One trace line per merged input the wire actually carried, on the
+    /// per-frame trace's clock. Off with telemetry: the tracker is nil then.
+    private func trace(_ tracker: FrameTimingTracker?, _ fields: String) {
+        guard let tracker else { return }
+        let nowMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
+        tracker.traceWriter.append(
+            "{\"session\":\"\(tracker.sessionId)\",\(fields),\"t_ms\":\(tracker.jsonNumber(nowMs))}")
+    }
+
     private func flushController(_ slot: Int) {
         guard let enet else { return }
         let pending = controllers[slot]
+        let analog = pending.analog
+        trace(FrameTimingTracker.shared, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
+            + "\"lx\":\(analog.leftStickX),\"ly\":\(analog.leftStickY),\"rx\":\(analog.rightStickX),"
+            + "\"ry\":\(analog.rightStickY),\"lt\":\(analog.leftTrigger),\"rt\":\(analog.rightTrigger)")
         _ = enet.sendInputPacket(
             InputEncoder.multiController(num: pending.num, mask: pending.mask,
                                         buttons: pending.buttons, analog: pending.analog),

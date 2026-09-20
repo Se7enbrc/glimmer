@@ -105,7 +105,7 @@ extension AppModel {
     /// encoder receives ~64% of it. 200_000 clipped 4K240 (which now computes
     /// 226) back to a starved budget; 300_000 leaves the largest panels bounded
     /// without clipping the modes this curve exists to serve.
-    static let maxBitrateKbps = 300_000
+    nonisolated static let maxBitrateKbps = 300_000
 
     func bitrateKbps(width: Int, height: Int, fps: Int, preset: QualityPreset) -> Int {
         let pixels = width * height

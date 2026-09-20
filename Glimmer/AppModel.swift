@@ -301,6 +301,11 @@ final class AppModel {
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
+    /// Highest quality (the default) takes the route and radio boosts;
+    /// Bandwidth saver keeps the lighter ask. Read at session start.
+    var bitrateMode: BitrateMode = BitrateMode.defaultMode {
+        didSet { UserDefaults.standard.set(bitrateMode.rawValue, forKey: BitrateMode.defaultsKey) }
+    }
     /// Window-mode pointer chord (default ⌃⌥R): a TOGGLE - hands the mouse to
     /// the game for mouselook, and takes it back. The pointer is normally
     /// grabbed by being over the window and freed by a held Esc; this is how
@@ -552,6 +557,7 @@ final class AppModel {
         // unrecognised raw value lands on the default rather than guessing.
         streamDisplayMode = StreamDisplayMode.persisted(
             rawValue: UserDefaults.standard.string(forKey: StreamDisplayMode.defaultsKey))
+        bitrateMode = BitrateMode.persisted(rawValue: UserDefaults.standard.string(forKey: BitrateMode.defaultsKey))
         releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self) ?? releasePointerHotkey
         miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self) ?? miniPlayerHotkey
         showStreamStats = Self.persistedBool("showStreamStats") ?? showStreamStats

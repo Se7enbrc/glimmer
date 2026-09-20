@@ -229,6 +229,24 @@ struct QualityPane: View {
                 // the radio rows read as extra preset rows (owner's screenshot).
             }
 
+            // Bandwidth in its own card, segmented like "Show the stream": two
+            // values, read at a glance. The number under "Your next stream"
+            // moves with it; the session takes it at launch.
+            Section {
+                Picker("Bandwidth", selection: $model.bitrateMode) {
+                    ForEach(BitrateMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .help("Highest quality asks for the most the link can carry: twice the usual bitrate over Ethernet, "
+                    + "half as much again over Wi-Fi, always held to what the radio is doing. "
+                    + "Bandwidth saver keeps the lighter ask.")
+            } footer: {
+                Text("Highest quality spends more bits on every frame, which is where grain comes from. "
+                    + "Bandwidth saver keeps the lighter ask. Applies next stream.")
+            }
+
             // Notch coverage in its own compact card. DEFAULT ON: full-panel
             // coverage is the product stance on notched MacBooks. Shown ONLY on
             // a notched panel and only for a full-screen stream: elsewhere the

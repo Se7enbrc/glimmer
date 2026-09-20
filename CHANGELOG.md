@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.9.6 - 2026-09-20
+
+More bits on every frame, a mini player that hands the aim back untouched, and
+the input trace to settle the next mystery.
+
+Leaving the mini player no longer moves your aim. Returning to full screen
+re-centred the pointer while the game was already listening, so the jump arrived
+on the host as one large mouse movement.
+
+More bits per frame, by default. The bitrate dial was sized for a cautious Wi-Fi
+link and the encoder was hitting its per-frame ceiling on every session, which
+is what grain is. Settings › Quality has a new Bandwidth switch: Highest
+quality, the default, is everything below; Bandwidth saver keeps the previous
+ask. Wi-Fi now asks for half as much again under the same cap, and the ask is
+held to a share of what the radio is actually doing: while the PC is selected,
+Glimmer watches the Wi-Fi link's rate, and a weak or crowded link gets a smaller
+ask before the stream starts rather than dropped frames after. When the Mac's
+route to the PC is wired, Glimmer asks for twice as much under a higher cap, and
+at connect it checks the other end too: a round trip of 2 ms or more means a
+Wi-Fi hop is on the path somewhere, and the extra is taken back off before the
+stream starts. The number on the launcher and in Settings follows the route. The
+gain is per frame; the average bandwidth barely moves on a game that runs below
+the requested refresh.
+
+Input in the telemetry trace. With telemetry on, every mouse movement, pointer
+position, controller state and motion sample that reaches the wire is recorded
+with a timestamp, so a jump you did not make can be traced to what the Mac sent
+or ruled out.
+
 ## 2026.9.5 - 2026-09-19
 
 Wake the PC yourself, keep the game in view while you do something else, and a
