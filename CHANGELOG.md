@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.9.7 - Unreleased
+
+Scrolling reaches games. A MagSpeed wheel or a trackpad sends the host a stream
+of partial notches, and games that count whole notches ignored every one of
+them, so the wheel worked on the desktop and did nothing in play. Glimmer now
+adds the partial notches up and sends whole ones. A plain wheel is untouched.
+
 ## 2026.9.6 - 2026-09-20
 
 More bits on every frame, a mini player that hands the aim back untouched, and

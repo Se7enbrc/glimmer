@@ -176,6 +176,7 @@
 		D10000C1 /* TelemetryCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C0 /* TelemetryCounters.swift */; };
 		D10000C3 /* WiFiTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C2 /* WiFiTelemetry.swift */; };
 		DEC0DE2026092000000000C9 /* StreamHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000CA /* StreamHistory.swift */; };
+		DEC0DE2026092000000000DD /* ScrollQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000DE /* ScrollQuantizer.swift */; };
 		DEC0DE2026092000000000B1 /* WiFiRoamWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000B2 /* WiFiRoamWatch.swift */; };
 		D10000C5 /* BuildInfo.generated.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C4 /* BuildInfo.generated.swift */; };
 		D10000C7 /* TelemetrySessionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C6 /* TelemetrySessionReport.swift */; };
@@ -284,6 +285,7 @@
 		DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */; };
 		DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */; };
 		DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000DA /* WiredBitrateTests.swift */; };
+		DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */; };
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
 		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
@@ -507,6 +509,7 @@
 		D10000C0 /* TelemetryCounters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetryCounters.swift; sourceTree = "<group>"; };
 		D10000C2 /* WiFiTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/WiFiTelemetry.swift; sourceTree = "<group>"; };
 		DEC0DE2026092000000000CA /* StreamHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamHistory.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000DE /* ScrollQuantizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ScrollQuantizer.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000B2 /* WiFiRoamWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/WiFiRoamWatch.swift"; sourceTree = "<group>"; };
 		D10000C4 /* BuildInfo.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.generated.swift; sourceTree = "<group>"; };
 		D10000C6 /* TelemetrySessionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetrySessionReport.swift; sourceTree = "<group>"; };
@@ -616,6 +619,7 @@
 		DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLANTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MiniPlayerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000DA /* WiredBitrateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WiredBitrateTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollQuantizerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
@@ -856,6 +860,7 @@
 				ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */,
 				D10000C2 /* WiFiTelemetry.swift */,
 				DEC0DE2026092000000000CA /* StreamHistory.swift */,
+				DEC0DE2026092000000000DE /* ScrollQuantizer.swift */,
 				DEC0DE2026092000000000B2 /* WiFiRoamWatch.swift */,
 				ABCD20260610000000005F01 /* EnvSignalController.swift */,
 				D10000E0 /* DisplayTelemetry.swift */,
@@ -1004,6 +1009,7 @@
 				DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */,
 				DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */,
 				DEC0DE2026092000000000DA /* WiredBitrateTests.swift */,
+				DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
@@ -1297,6 +1303,7 @@
 				ABCD20260609000000001002 /* TelemetryCounters+InputActivity.swift in Sources */,
 				D10000C3 /* WiFiTelemetry.swift in Sources */,
 				DEC0DE2026092000000000C9 /* StreamHistory.swift in Sources */,
+				DEC0DE2026092000000000DD /* ScrollQuantizer.swift in Sources */,
 				DEC0DE2026092000000000B1 /* WiFiRoamWatch.swift in Sources */,
 				ABCD20260610000000005F02 /* EnvSignalController.swift in Sources */,
 				D10000E1 /* DisplayTelemetry.swift in Sources */,
@@ -1431,6 +1438,7 @@
 				DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */,
 				DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */,
 				DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */,
+				DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,

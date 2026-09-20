@@ -444,22 +444,25 @@ extension InputForwarder: StreamInputViewDelegate {
         // factor. Sub-half-unit results round to zero and are skipped (the
         // wire can't carry them; the next event in a momentum tail carries
         // fresh magnitude, so nothing accumulates wrongly).
+        //
+        // Whole notches only: a MagSpeed wheel or a trackpad arrives as 40-100
+        // unit slices, and a game dividing by WHEEL_DELTA (120) reads those as
+        // zero. The quantizer banks the slices and releases full notches.
         let lineScale = event.hasPreciseScrollingDeltas ? 0.1 : 1.0
-        let y = Double(event.scrollingDeltaY) * lineScale
-        if y != 0 {
-            let amt = Int16(clamping: Int((y * 120).rounded()))
-            if amt != 0 {
-                let rc = backend?.sendScroll(amt) ?? -2
-                record("LiSendHighResScrollEvent", rc)
-            }
+        let y = Int((Double(event.scrollingDeltaY) * lineScale * 120).rounded())
+        let sendY = Int16(clamping: scrollQuantizer.consumeVertical(y))
+        if sendY != 0 {
+            let rc = backend?.sendScroll(sendY) ?? -2
+            record("LiSendHighResScrollEvent", rc)
         }
-        let x = Double(event.scrollingDeltaX) * lineScale
-        if x != 0 {
-            let amt = Int16(clamping: Int((x * 120).rounded()))
-            if amt != 0 {
-                let rc = backend?.sendHScroll(amt) ?? -2
-                record("LiSendHighResHScrollEvent", rc)
-            }
+        let x = Int((Double(event.scrollingDeltaX) * lineScale * 120).rounded())
+        let sendX = Int16(clamping: scrollQuantizer.consumeHorizontal(x))
+        if sendX != 0 {
+            let rc = backend?.sendHScroll(sendX) ?? -2
+            record("LiSendHighResHScrollEvent", rc)
+        }
+        if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
+            scrollQuantizer.reset()
         }
     }
 

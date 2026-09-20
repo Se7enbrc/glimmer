@@ -170,6 +170,9 @@ public final class InputForwarder {
     /// on, where it TOGGLES capture.
     public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
+    /// Precise scroll slices summed into whole wheel notches (ScrollQuantizer.swift).
+    var scrollQuantizer = ScrollQuantizer()
+
     /// The mini player chord: a client-only toggle, never forwarded.
     public var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
     public var onMiniPlayerHotkey: (@MainActor () -> Void)?
