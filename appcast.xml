@@ -6,6 +6,20 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.9.6</title>
+      <description><![CDATA[
+<p>More bits on every frame, a mini player that hands the aim back untouched, and the input trace to settle the next mystery.</p>
+<p>Leaving the mini player no longer moves your aim. Returning to full screen re-centred the pointer while the game was already listening, so the jump arrived on the host as one large mouse movement.</p>
+<p>More bits per frame, by default. The bitrate dial was sized for a cautious Wi-Fi link and the encoder was hitting its per-frame ceiling on every session, which is what grain is. Settings › Quality has a new Bandwidth switch: Highest quality, the default, is everything below; Bandwidth saver keeps the previous ask. Wi-Fi now asks for half as much again under the same cap, and the ask is held to a share of what the radio is actually doing: while the PC is selected, Glimmer watches the Wi-Fi link's rate, and a weak or crowded link gets a smaller ask before the stream starts rather than dropped frames after. When the Mac's route to the PC is wired, Glimmer asks for twice as much under a higher cap, and at connect it checks the other end too: a round trip of 2 ms or more means a Wi-Fi hop is on the path somewhere, and the extra is taken back off before the stream starts. The number on the launcher and in Settings follows the route. The gain is per frame; the average bandwidth barely moves on a game that runs below the requested refresh.</p>
+<p>Input in the telemetry trace. With telemetry on, every mouse movement, pointer position, controller state and motion sample that reaches the wire is recorded with a timestamp, so a jump you did not make can be traced to what the Mac sent or ruled out.</p>
+]]></description>
+      <pubDate>Sun, 20 Sep 2026 17:02:48 GMT</pubDate>
+      <sparkle:version>20260921</sparkle:version>
+      <sparkle:shortVersionString>2026.9.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.9.6/Glimmer-2026.9.6.zip" type="application/octet-stream" sparkle:edSignature="6GzPohO7Ro0wb7g4tjQSzlpKETCj2ImkgzE7mBQ/uK6P5i8jOmOYiaksNf2/IdvjSVQZ4bmjgl8/Fc0dSnsrAg==" length="8669591" />
+    </item>
+    <item>
       <title>2026.9.5</title>
       <description><![CDATA[
 <p>Wake the PC yourself, keep the game in view while you do something else, and a keyboard that stops passing for a gamepad.</p>
