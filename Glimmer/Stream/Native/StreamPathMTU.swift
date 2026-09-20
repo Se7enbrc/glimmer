@@ -288,6 +288,17 @@ enum StreamPathMTU {
     /// fiber, and distance alone is no reason to trim it.
     static let fullRateRttCeilingMs: Double = 20
 
+    /// Steady RTT at or above this means a Wi-Fi hop is somewhere on the path
+    /// (wired end to end reads 0.5-2 ms); the wired bitrate boost assumes none.
+    static let wiredRttCeilingMs: Double = 2
+
+    /// The launcher's wired ask carries `boost`; the measured path confirms or
+    /// withdraws it. Unmeasured keeps it: the Mac's own route is the best guess.
+    static func wiredAskKbps(capped: Int, boost: Double, steadyRttMs: Double?) -> Int {
+        guard boost > 1, let steadyRttMs, steadyRttMs >= wiredRttCeilingMs else { return capped }
+        return Int((Double(capped) / boost).rounded())
+    }
+
     /// Fewer samples than this cannot cap: "consistently high" needs a sample.
     static let minGateSamples = 5
 

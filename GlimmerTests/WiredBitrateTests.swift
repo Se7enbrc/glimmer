@@ -1,8 +1,8 @@
 //
 //  WiredBitrateTests.swift
 //
-//  The wire bitrate rule: codec discount, the Ethernet multiplier, the floor
-//  and the formula's cap.
+//  The wire bitrate rule: codec discount, the wired boost and its cap, the
+//  floor, and the connect-time withdrawal when the RTT says Wi-Fi.
 //
 
 import Testing
@@ -11,15 +11,24 @@ import Testing
 struct WiredBitrateTests {
 
     @Test func wiFiKeepsTheCodecDiscountedDial() {
-        #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8, wired: false) == 180_800)
+        #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8, boost: 1, capKbps: 300_000) == 180_800)
     }
 
-    @Test func ethernetCarriesHalfAsMuchAgain() {
-        #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8, wired: true) == 271_200)
+    @Test func wiredEndToEndAsksForTwiceAsMuch() {
+        #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8,
+                                         boost: AppModel.wiredBitrateMultiplier,
+                                         capKbps: AppModel.wiredBitrateCapKbps) == 361_600)
     }
 
     @Test func capAndFloorStillApply() {
-        #expect(AppModel.wireBitrateKbps(dial: 300_000, codecMultiplier: 1, wired: true) == AppModel.maxBitrateKbps)
-        #expect(AppModel.wireBitrateKbps(dial: 1_000, codecMultiplier: 0.8, wired: false) == 5_000)
+        #expect(AppModel.wireBitrateKbps(dial: 300_000, codecMultiplier: 1, boost: 2, capKbps: 500_000) == 500_000)
+        #expect(AppModel.wireBitrateKbps(dial: 1_000, codecMultiplier: 0.8, boost: 1, capKbps: 300_000) == 5_000)
+    }
+
+    @Test func rttWithdrawsTheBoostOnlyWhenAWiFiHopShows() {
+        #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: 0.4) == 361_600)
+        #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: nil) == 361_600)
+        #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: 4.2) == 180_800)
+        #expect(StreamPathMTU.wiredAskKbps(capped: 180_800, boost: 1, steadyRttMs: 4.2) == 180_800)
     }
 }

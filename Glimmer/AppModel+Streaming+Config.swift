@@ -47,9 +47,20 @@ extension AppModel {
         return wireBitrateKbps(forFormats: formats)
     }
 
-    /// The dial is sized for Wi-Fi; an Ethernet route to the PC carries this
-    /// much more, still under the formula's cap. The one number to turn.
-    nonisolated static let wiredBitrateMultiplier = 1.5
+    /// The dial is sized for Wi-Fi. Wired end to end (the Mac's route says
+    /// Ethernet, the connect-time RTT agrees) asks for twice as much under a
+    /// higher cap; the per-frame budget is what grain tracks, not the average.
+    nonisolated static let wiredBitrateMultiplier = 2.0
+    nonisolated static let wiredBitrateCapKbps = 500_000
+
+    /// Debug: `defaults write io.ugfugl.Glimmer bitrateBoostWifi -float 1.5`
+    /// tries a Wi-Fi uplift without a rebuild. Unset or 0 means none.
+    nonisolated static var wifiBitrateBoost: Double {
+        let value = UserDefaults.standard.double(forKey: "bitrateBoostWifi")
+        return value > 0 ? value : 1
+    }
+
+    var wiredBitrateBoost: Double { hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : 1 }
 
     /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
     /// negotiated codec's efficiency, then by the route. The spec UI and
@@ -58,15 +69,17 @@ extension AppModel {
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
         var codec = Self.codecBudgetMultiplier(for: formats)
         if case .custom = qualityPreset { codec = 1 }
+        let wired = hostRoute.routeClass == .wired
         return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
-                                    wired: hostRoute.routeClass == .wired)
+                                    boost: wired ? Self.wiredBitrateMultiplier : Self.wifiBitrateBoost,
+                                    capKbps: wired ? Self.wiredBitrateCapKbps : Self.maxBitrateKbps)
     }
 
-    /// Pure so the rule is testable: dial × codec, × the wired multiplier on
-    /// Ethernet, clamped to the formula's floor and cap.
-    nonisolated static func wireBitrateKbps(dial: Int, codecMultiplier: Double, wired: Bool) -> Int {
-        let scaled = Double(dial) * codecMultiplier * (wired ? wiredBitrateMultiplier : 1)
-        return min(max(5_000, Int(scaled.rounded())), maxBitrateKbps)
+    /// Pure so the rule is testable: dial × codec × boost, clamped to the floor
+    /// and the route's cap.
+    nonisolated static func wireBitrateKbps(dial: Int, codecMultiplier: Double, boost: Double, capKbps: Int) -> Int {
+        let scaled = Double(dial) * codecMultiplier * boost
+        return min(max(5_000, Int(scaled.rounded())), capKbps)
     }
 
     // MARK: Streaming
@@ -147,6 +160,7 @@ extension AppModel {
         // scaled by the negotiated codec's efficiency. The spec chip reads the same
         // path so what's shown matches what's sent.
         cfg.bitrateKbps = wireBitrateKbps(forFormats: cfg.videoFormats)
+        cfg.bitrateBoost = wiredBitrateBoost
         return cfg
     }
 

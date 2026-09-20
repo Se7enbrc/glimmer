@@ -50,8 +50,17 @@ extension StreamSession {
         // considered choice, it is the absence of one. Since bitrate is fixed at
         // ANNOUNCE (no client→host rate message exists, and the host never
         // changes it after), choosing well HERE is the only cheap lever there is.
-        let cappedBitrateKbps = StreamPathMTU.cappedBitrateKbps(
+        let pathCappedKbps = StreamPathMTU.cappedBitrateKbps(
             configured: config.bitrateKbps, path: path)
+        // The wired boost assumed Ethernet at both ends; the measured RTT is
+        // the host side's answer, and a Wi-Fi hop there takes the boost off.
+        let cappedBitrateKbps = StreamPathMTU.wiredAskKbps(
+            capped: pathCappedKbps, boost: config.bitrateBoost, steadyRttMs: path.rttMs)
+        if cappedBitrateKbps < pathCappedKbps {
+            Diag.notice("Wired bitrate boost withdrawn: steady RTT "
+                + "\(path.rttMs.map { String(format: "%.1f", $0) } ?? "?") ms says a Wi-Fi hop is on the path - "
+                + "asking for \(cappedBitrateKbps / 1000) Mbps instead of \(pathCappedKbps / 1000).", "Stream")
+        }
         if config.remoteness == .auto {
             log.info("""
                 Path probe: if=\(path.interfaceName ?? "?", privacy: .public) \
@@ -67,14 +76,14 @@ extension StreamSession {
                 bitrate=\(config.bitrateKbps, privacy: .public)→\(cappedBitrateKbps, privacy: .public)kbps
                 """)
         }
-        if cappedBitrateKbps < config.bitrateKbps {
+        if pathCappedKbps < config.bitrateKbps {
             Diag.notice(
                 "Link quality gate: steady \(path.rttMs.map { String(format: "%.0f", $0) } ?? "?")ms RTT "
                 + "(min \(path.rtt.map { String(format: "%.0f", $0.minMs) } ?? "?")ms, "
                 + "p95 \(path.rtt.map { String(format: "%.0f", $0.p95Ms) } ?? "?")ms, "
                 + "\(path.rtt?.count ?? 0) samples\(rttPreLaunch ? " before launch" : "")) over "
                 + "\(path.isTunnel ? "a tunnel" : "this path") - asking for "
-                + "\(cappedBitrateKbps / 1000) Mbps instead of \(config.bitrateKbps / 1000) "
+                + "\(pathCappedKbps / 1000) Mbps instead of \(config.bitrateKbps / 1000) "
                 + "(a LAN-measured rate isn't a defensible ask at this distance).", "Stream")
         }
         // Latch for the downshift tier. Set on EVERY build - including each
