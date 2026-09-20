@@ -6,6 +6,16 @@ Leaving the mini player no longer moves your aim. Returning to full screen
 re-centred the pointer while the game was already listening, so the jump arrived
 on the host as one large mouse movement.
 
+More bits over Ethernet. The bitrate dial is sized for Wi-Fi; when the route to
+the PC is wired, Glimmer now asks for half as much again, up to the same cap as
+before. The number on the launcher and in Settings follows the route, so what
+you see is what is sent.
+
+Input in the telemetry trace. With telemetry on, every mouse movement, pointer
+position, controller state and motion sample that reaches the wire is recorded
+with a timestamp, so a jump you did not make can be traced to what the Mac sent
+or ruled out.
+
 ## 2026.9.5 - 2026-09-19
 
 Wake the PC yourself, keep the game in view while you do something else, and a

@@ -47,13 +47,26 @@ extension AppModel {
         return wireBitrateKbps(forFormats: formats)
     }
 
+    /// The dial is sized for Wi-Fi; an Ethernet route to the PC carries this
+    /// much more, still under the formula's cap. The one number to turn.
+    nonisolated static let wiredBitrateMultiplier = 1.5
+
     /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
-    /// negotiated codec's efficiency. The spec UI and `nativeStreamConfig` both read
-    /// this so the shown bitrate can't drift from what's sent. Custom is verbatim.
+    /// negotiated codec's efficiency, then by the route. The spec UI and
+    /// `nativeStreamConfig` both read this so the shown bitrate can't drift
+    /// from what's sent. Custom skips the codec discount, as before.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
-        if case .custom = qualityPreset { return effectiveBitrateKbps }
-        let mult = Self.codecBudgetMultiplier(for: formats)
-        return max(5_000, Int((Double(effectiveBitrateKbps) * mult).rounded()))
+        var codec = Self.codecBudgetMultiplier(for: formats)
+        if case .custom = qualityPreset { codec = 1 }
+        return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
+                                    wired: hostRoute.routeClass == .wired)
+    }
+
+    /// Pure so the rule is testable: dial × codec, × the wired multiplier on
+    /// Ethernet, clamped to the formula's floor and cap.
+    nonisolated static func wireBitrateKbps(dial: Int, codecMultiplier: Double, wired: Bool) -> Int {
+        let scaled = Double(dial) * codecMultiplier * (wired ? wiredBitrateMultiplier : 1)
+        return min(max(5_000, Int(scaled.rounded())), maxBitrateKbps)
     }
 
     // MARK: Streaming
