@@ -99,7 +99,8 @@ struct GlimmerApp: App {
             // "Show the stream": full screen unless the user picks Window. The
             // registered value keeps the raw read and AppModel's declared
             // default in agreement (see StreamDisplayMode.defaultMode).
-            StreamDisplayMode.defaultsKey: StreamDisplayMode.defaultMode.rawValue
+            StreamDisplayMode.defaultsKey: StreamDisplayMode.defaultMode.rawValue,
+            BitrateMode.defaultsKey: BitrateMode.defaultMode.rawValue
         ])
     }
 

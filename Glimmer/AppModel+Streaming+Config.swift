@@ -62,7 +62,9 @@ extension AppModel {
         return value > 0 ? value : wifiBitrateMultiplier
     }
 
-    var wiredBitrateBoost: Double { hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : 1 }
+    var wiredBitrateBoost: Double {
+        bitrateMode == .highestQuality && hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : 1
+    }
 
     /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
     /// negotiated codec's efficiency, then by the route. The spec UI and
@@ -73,9 +75,14 @@ extension AppModel {
     }
 
     /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
+    /// Bandwidth saver is the lighter ask from before the boosts existed.
     func routeAskKbps(forFormats formats: VideoFormats) -> Int {
         var codec = Self.codecBudgetMultiplier(for: formats)
         if case .custom = qualityPreset { codec = 1 }
+        guard bitrateMode == .highestQuality else {
+            return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
+                                        boost: 1, capKbps: Self.maxBitrateKbps)
+        }
         let wired = hostRoute.routeClass == .wired
         return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
                                     boost: wired ? Self.wiredBitrateMultiplier : Self.wifiBitrateBoost,
