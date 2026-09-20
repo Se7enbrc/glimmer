@@ -2,10 +2,11 @@
 
 ## 2026.9.7 - Unreleased
 
-Scrolling reaches games. A MagSpeed wheel or a trackpad sends the host a stream
-of partial notches, and games that count whole notches ignored every one of
-them, so the wheel worked on the desktop and did nothing in play. Glimmer now
-adds the partial notches up and sends whole ones. A plain wheel is untouched.
+Whole wheel notches. A trackpad or Magic Mouse scrolls in fractions of a notch,
+and a game that counts whole notches ignores fractions. Glimmer now adds them up
+and sends whole notches; a mouse wheel is untouched. With telemetry on, every
+wheel event is in the trace with what macOS delivered and what was sent, so a
+wheel that a game ignores can be shown to have reached the host.
 
 ## 2026.9.6 - 2026-09-20
 

@@ -461,6 +461,17 @@ extension InputForwarder: StreamInputViewDelegate {
             let rc = backend?.sendHScroll(sendX) ?? -2
             record("LiSendHighResHScrollEvent", rc)
         }
+        // Trace: what macOS delivered and what went out, on the frame trace's clock.
+        if let tracker = FrameTimingTracker.shared {
+            let nowMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
+            tracker.traceWriter.append(
+                "{\"session\":\"\(tracker.sessionId)\",\"event\":\"input_scroll\","
+                + "\"precise\":\(event.hasPreciseScrollingDeltas),"
+                + "\"dy\":\(tracker.jsonNumber(Double(event.scrollingDeltaY))),\"dx\":\(tracker.jsonNumber(Double(event.scrollingDeltaX))),"
+                + "\"units_y\":\(y),\"sent_y\":\(sendY),\"sent_x\":\(sendX),"
+                + "\"phase\":\(event.phase.rawValue),\"momentum\":\(event.momentumPhase.rawValue),"
+                + "\"t_ms\":\(tracker.jsonNumber(nowMs))}")
+        }
         if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
             scrollQuantizer.reset()
         }
