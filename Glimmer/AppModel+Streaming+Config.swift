@@ -53,11 +53,13 @@ extension AppModel {
     nonisolated static let wiredBitrateMultiplier = 2.0
     nonisolated static let wiredBitrateCapKbps = 500_000
 
-    /// Debug: `defaults write io.ugfugl.Glimmer bitrateBoostWifi -float 1.5`
-    /// tries a Wi-Fi uplift without a rebuild. Unset or 0 means none.
+    /// Wi-Fi asks for half as much again under the formula's cap; tested on a
+    /// 6 GHz link with no hitches. `defaults write io.ugfugl.Glimmer
+    /// bitrateBoostWifi -float N` overrides it without a rebuild.
+    nonisolated static let wifiBitrateMultiplier = 1.5
     nonisolated static var wifiBitrateBoost: Double {
         let value = UserDefaults.standard.double(forKey: "bitrateBoostWifi")
-        return value > 0 ? value : 1
+        return value > 0 ? value : wifiBitrateMultiplier
     }
 
     var wiredBitrateBoost: Double { hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : 1 }

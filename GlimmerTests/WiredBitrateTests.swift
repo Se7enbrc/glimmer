@@ -10,8 +10,10 @@ import Testing
 
 struct WiredBitrateTests {
 
-    @Test func wiFiKeepsTheCodecDiscountedDial() {
+    @Test func wiFiAsksForHalfAsMuchAgainUnderTheFormulaCap() {
         #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8, boost: 1, capKbps: 300_000) == 180_800)
+        #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8,
+                                         boost: AppModel.wifiBitrateMultiplier, capKbps: AppModel.maxBitrateKbps) == 271_200)
     }
 
     @Test func wiredEndToEndAsksForTwiceAsMuch() {
