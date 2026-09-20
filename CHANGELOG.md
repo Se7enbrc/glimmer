@@ -1,6 +1,9 @@
 # Changelog
 
-## 2026.9.6 - Unreleased
+## 2026.9.6 - 2026-09-20
+
+More bits on every frame, a mini player that hands the aim back untouched, and
+the input trace to settle the next mystery.
 
 Leaving the mini player no longer moves your aim. Returning to full screen
 re-centred the pointer while the game was already listening, so the jump arrived
