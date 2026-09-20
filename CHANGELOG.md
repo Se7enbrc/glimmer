@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.9.6 - Unreleased
+
+Leaving the mini player no longer moves your aim. Returning to full screen
+re-centred the pointer while the game was already listening, so the jump arrived
+on the host as one large mouse movement.
+
 ## 2026.9.5 - 2026-09-19
 
 Wake the PC yourself, keep the game in view while you do something else, and a

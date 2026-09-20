@@ -119,7 +119,9 @@ extension StreamWindow {
         //     is handled by the shared `StreamCursor.warpToCentre` helper (CGWarp
         //     wants Quartz top-left, not AppKit bottom-left; the helper also
         //     handles the non-primary/scaled-screen flip correctly).
-        if let screen {
+        // First show only: on the return from the mini player the forwarder is
+        // live and a warp's distance would land on the host as one huge delta.
+        if firstShow, let screen {
             StreamCursor.warpToCentre(of: screen)
         }
         // NOTE: the actual relative-aim engagement -
