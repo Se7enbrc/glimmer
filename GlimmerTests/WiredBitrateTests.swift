@@ -27,6 +27,14 @@ struct WiredBitrateTests {
         #expect(AppModel.wireBitrateKbps(dial: 1_000, codecMultiplier: 0.8, boost: 1, capKbps: 300_000) == 5_000)
     }
 
+    @Test func wiFiRadioGateCapsTheAskAtAShareOfThePhyRate() {
+        #expect(StreamPathMTU.wifiAskKbps(ask: 271_200, phyRateMbps: 1152) == 271_200)
+        #expect(StreamPathMTU.wifiAskKbps(ask: 271_200, phyRateMbps: nil) == 271_200)
+        #expect(StreamPathMTU.wifiAskKbps(ask: 271_200, phyRateMbps: 600) == 210_000)
+        #expect(StreamPathMTU.wifiAskKbps(ask: 271_200, phyRateMbps: 144) == 50_400)
+        #expect(StreamPathMTU.wifiAskKbps(ask: 271_200, phyRateMbps: 6) == 5_000)
+    }
+
     @Test func rttWithdrawsTheBoostOnlyWhenAWiFiHopShows() {
         #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: 0.4) == 361_600)
         #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: nil) == 361_600)

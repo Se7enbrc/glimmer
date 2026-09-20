@@ -292,6 +292,17 @@ enum StreamPathMTU {
     /// (wired end to end reads 0.5-2 ms); the wired bitrate boost assumes none.
     static let wiredRttCeilingMs: Double = 2
 
+    /// The share of the Wi-Fi PHY rate the ask may reach: real UDP throughput
+    /// runs near 60% of PHY, and bursts and other traffic need the rest.
+    static let wifiPhyRateFraction = 0.35
+
+    /// Cap the ask by the radio's median PHY rate on a Wi-Fi route. Unknown
+    /// rate (not Wi-Fi, no samples yet) changes nothing.
+    static func wifiAskKbps(ask: Int, phyRateMbps: Double?) -> Int {
+        guard let phyRateMbps, phyRateMbps > 0 else { return ask }
+        return max(5_000, min(ask, Int((phyRateMbps * wifiPhyRateFraction * 1000).rounded())))
+    }
+
     /// The launcher's wired ask carries `boost`; the measured path confirms or
     /// withdraws it. Unmeasured keeps it: the Mac's own route is the best guess.
     static func wiredAskKbps(capped: Int, boost: Double, steadyRttMs: Double?) -> Int {

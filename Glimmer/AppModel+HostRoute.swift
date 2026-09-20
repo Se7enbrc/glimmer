@@ -39,6 +39,34 @@ final class HostRouteMonitor {
 
     private(set) var routeClass: RouteClass = .unknown
 
+    /// Median of the last ten 1 Hz PHY-rate reads while the route is Wi-Fi;
+    /// nil otherwise. A single read can catch a rate-adaptation dip (206 Mbps
+    /// seen on a link that sits at 1100), so the ask is gated on the median.
+    private(set) var wifiPhyRateMbps: Double?
+    @ObservationIgnored private var phySamples: [Double] = []
+    @ObservationIgnored private var phyTimer: DispatchSourceTimer?
+    @ObservationIgnored private let radio = WiFiTelemetry()
+
+    private func setPhySampling(_ on: Bool) {
+        phyTimer?.cancel()
+        phyTimer = nil
+        phySamples.removeAll()
+        wifiPhyRateMbps = nil
+        guard on else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .seconds(1))
+        timer.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, let rate = self.radio.sample().txRateMbps else { return }
+                self.phySamples.append(rate)
+                if self.phySamples.count > 10 { self.phySamples.removeFirst() }
+                self.wifiPhyRateMbps = self.phySamples.sorted()[self.phySamples.count / 2]
+            }
+        }
+        timer.resume()
+        phyTimer = timer
+    }
+
     /// Chip glyph for the current route - bolt for wired, arcs for Wi-Fi,
     /// nothing when the route is a tunnel or unknown.
     var glyphSystemName: String? {
@@ -74,6 +102,7 @@ final class HostRouteMonitor {
         connection = nil
         generation += 1
         routeClass = .unknown
+        setPhySampling(false)
         guard let address, !address.isEmpty else { return }
 
         // The port is irrelevant to route selection (only the destination
@@ -86,6 +115,7 @@ final class HostRouteMonitor {
             let fresh = Self.classify(path)
             Task { @MainActor [weak self] in
                 guard let self, self.generation == gen else { return }
+                if (fresh == .wifi) != (self.routeClass == .wifi) { self.setPhySampling(fresh == .wifi) }
                 self.routeClass = fresh
             }
         }

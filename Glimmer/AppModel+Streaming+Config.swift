@@ -69,6 +69,11 @@ extension AppModel {
     /// `nativeStreamConfig` both read this so the shown bitrate can't drift
     /// from what's sent. Custom skips the codec discount, as before.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
+        StreamPathMTU.wifiAskKbps(ask: routeAskKbps(forFormats: formats), phyRateMbps: hostRoute.wifiPhyRateMbps)
+    }
+
+    /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
+    func routeAskKbps(forFormats formats: VideoFormats) -> Int {
         var codec = Self.codecBudgetMultiplier(for: formats)
         if case .custom = qualityPreset { codec = 1 }
         let wired = hostRoute.routeClass == .wired
@@ -161,7 +166,12 @@ extension AppModel {
         // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
         // scaled by the negotiated codec's efficiency. The spec chip reads the same
         // path so what's shown matches what's sent.
-        cfg.bitrateKbps = wireBitrateKbps(forFormats: cfg.videoFormats)
+        let routeAsk = routeAskKbps(forFormats: cfg.videoFormats)
+        cfg.bitrateKbps = StreamPathMTU.wifiAskKbps(ask: routeAsk, phyRateMbps: hostRoute.wifiPhyRateMbps)
+        if cfg.bitrateKbps < routeAsk, let phy = hostRoute.wifiPhyRateMbps {
+            Diag.notice("Wi-Fi link gate: the radio's PHY rate is \(Int(phy)) Mbps, asking for "
+                + "\(cfg.bitrateKbps / 1000) Mbps instead of \(routeAsk / 1000).", "Stream")
+        }
         cfg.bitrateBoost = wiredBitrateBoost
         return cfg
     }
