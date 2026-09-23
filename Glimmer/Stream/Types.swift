@@ -61,14 +61,6 @@ public struct StreamConfig: Sendable {
     public var videoFormats: VideoFormats = .probedSupported
     public var colorSpace: ColorSpace = .rec2020
     public var colorRange: ColorRange = .full
-    /// Default to full-stream encryption (video + audio). Older
-    /// Sunshine/GFE builds defaulted clients to audio-only because
-    /// video-encryption added measurable CPU load on then-current
-    /// hardware; modern hosts have plenty of headroom, and streaming over
-    /// an untrusted LAN (coffee-shop / shared-house WiFi / corp-guest
-    /// VLAN) is exactly the case "audio-only" fails. Users can downgrade
-    /// in Settings → Streaming → Encryption if they need to.
-    public var encryption: EncryptionPreference = .all
 
     /// When true, system-level keyboard combos that use the macOS Cmd key
     /// (⌘-Tab, ⌘-Space, ⌘-Q, ⌘-`, ⌘-H, ⌘-M, ...) are forwarded to the host as
@@ -374,18 +366,6 @@ public enum ColorRange: Sendable {
         switch self {
         case .limited: return StreamProtocol.COLOR_RANGE_LIMITED
         case .full:    return StreamProtocol.COLOR_RANGE_FULL
-        }
-    }
-}
-
-public enum EncryptionPreference: Sendable {
-    case none, audioOnly, all
-
-    var encryptionFlags: Int32 {
-        switch self {
-        case .none:      return StreamProtocol.ENCFLG_NONE
-        case .audioOnly: return StreamProtocol.ENCFLG_AUDIO
-        case .all:       return StreamProtocol.ENCFLG_ALL
         }
     }
 }

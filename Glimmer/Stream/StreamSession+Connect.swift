@@ -122,7 +122,7 @@ extension StreamSession {
             clientRefreshRateX100: Int32(config.fps * 100),
             colorSpace: config.colorSpace.cValue,
             colorRange: config.colorRange.cValue,
-            encryptionFlags: config.encryption.encryptionFlags,
+            encryptionFlags: 0,
             remoteInputAesKey: [UInt8](launch.gcmKey),
             remoteInputAesIv: [UInt8](launch.gcmKeyId))
     }
