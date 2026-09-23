@@ -146,6 +146,7 @@ extension StatsCollector {
         if dropped {
             decoderDroppedFrames &+= 1
             totalDecoderDropped &+= 1
+            clientSkipSinceLastPresent = true
         } else {
             decodedFrames &+= 1
         }
@@ -223,6 +224,7 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         rendererBackpressureDrops &+= 1
+        clientSkipSinceLastPresent = true
     }
 
     /// Total renderer-backpressure drops since reset(). Used by stream-
@@ -263,6 +265,7 @@ extension StatsCollector {
         defer { os_unfair_lock_unlock(&lock) }
         decoderDroppedFrames &+= 1
         totalDecoderDropped &+= 1
+        clientSkipSinceLastPresent = true
     }
 
     // MARK: - Frame-pacer smoothness
@@ -278,6 +281,7 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         presentationLateDrops &+= 1
+        clientSkipSinceLastPresent = true
     }
 
     /// Total presentation-late drops since reset(). Surfaced in the overlay's
@@ -326,6 +330,8 @@ extension StatsCollector {
         defer { os_unfair_lock_unlock(&lock) }
         let hostDeltaMs = (hostPTSSeconds - lastPresentedPtsSeconds) * 1000.0
         if hostPTSSeconds.isFinite { lastPresentedPtsSeconds = hostPTSSeconds }
+        let afterClientSkip = clientSkipSinceLastPresent
+        clientSkipSinceLastPresent = false
         let magnitude = abs(cadenceErrorMs)
         presentCadenceErrorMsSum += magnitude
         presentCadenceSamples &+= 1
@@ -334,7 +340,7 @@ extension StatsCollector {
             onTimePresents &+= 1
         } else {
             latePresents &+= 1
-            if Self.hostTimingExplainsLate(
+            if !afterClientSkip, Self.hostTimingExplainsLate(
                 hostDeltaMs: hostDeltaMs, streamIntervalMs: streamIntervalMs, refreshMs: refreshMs) {
                 hostTimedLatePresents &+= 1
             }

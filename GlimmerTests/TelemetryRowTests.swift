@@ -96,6 +96,24 @@ struct TelemetryRowTests {
         #expect(cadence.lateByHostPercent == 25)
     }
 
+    @Test func aPresentAfterAClientSkipIsNeverChargedToTheHost() throws {
+        // A steady 120 fps host on a 120 Hz display; the pacer trims one frame.
+        let stats = StatsCollector()
+        for frame in 0..<4 {
+            stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000 + UInt64(frame) * 8_333)
+        }
+        func present(errorMs: Double, pts: Double) {
+            stats.recordPresent(cadenceErrorMs: errorMs, hostPTSSeconds: pts,
+                                streamIntervalMs: 8.333, refreshMs: 8.333)
+        }
+        present(errorMs: 0, pts: 1.000)
+        present(errorMs: 0, pts: 1.008333)
+        stats.recordPresentationLateDrop()
+        present(errorMs: 8.33, pts: 1.025)   // a missed vsync: the 16.67 ms delta is the client's
+        let cadence = try #require(stats.snapshot().hostCadence)
+        #expect(cadence.lateByHostPercent == 0)
+    }
+
     // MARK: - Latency tracker
 
     @Test func hostFrameIntervalFollowsAssembledFramesAcrossTheRtpWrap() {

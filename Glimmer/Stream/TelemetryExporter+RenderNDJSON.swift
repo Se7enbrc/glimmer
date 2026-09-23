@@ -220,7 +220,8 @@ extension TelemetryRenderer {
         builder.add("present_cadence_err_ms", snap.presentCadenceErrorMs)
         builder.addCount("present_on_time", snap.presentOnTimeCount)
         builder.addCount("present_late", snap.presentLateCount)
-        // The host-caused share of present_late, and how unevenly the host delivers.
+        // The host-caused share of present_late (network loss counts as host), and how
+        // unevenly the host delivers.
         builder.addCount("present_late_host_cadence", snap.presentLateHostCadenceCount)
         builder.add("host_frame_interval_p50_ms", snap.hostFrameIntervalP50Ms)
         builder.add("host_frame_interval_p95_ms", snap.hostFrameIntervalP95Ms)

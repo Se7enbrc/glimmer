@@ -43,8 +43,9 @@ struct TelemetrySnapshot: Sendable {
     /// Excludes structural stale fills, so it reads smoothness independent of
     /// content-fps vs refresh - the clean judder signal.
     var presentOnTimePercent: Double?
-    /// Late presents the host's own timing explains (StatsCollector.hostTimingExplainsLate);
-    /// present_late minus this is the client's share.
+    /// Late presents the host's own timing explains, never the first after a client
+    /// drop; present_late minus this is the client's share. Frames lost on the network,
+    /// before reaching the Mac, still count on the host side.
     var presentLateHostCadenceCount: UInt64?
     /// Host frame interval percentiles (received PTS deltas, ms) and adjacent
     /// deltas at least 2.5× apart this window: how evenly the game delivers frames.

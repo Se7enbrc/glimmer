@@ -148,6 +148,9 @@ final class StatsCollector: @unchecked Sendable {
     var windowHostUnevenPairs: UInt64 = 0
     var lastPresentedPtsSeconds = Double.nan
     var hostTimedLatePresents: UInt64 = 0
+    /// A client-side drop (pacer, renderer, decoder) since the last present: that
+    /// present's PTS delta spans the skipped frame, so it is never charged to the host.
+    var clientSkipSinceLastPresent = false
 
     // Total-frame counters since reset(), retained so the "frames dropped by
     // decoder" percentage is over the whole stream, not just the current
@@ -299,7 +302,7 @@ final class StatsCollector: @unchecked Sendable {
         windowMaxFrameBytes = 0; windowIdrFrameCount = 0
         lastReceivedPtsUs = 0; lastHostDeltaMs = 0
         windowHostDeltasMs.removeAll(keepingCapacity: true); windowHostUnevenPairs = 0
-        lastPresentedPtsSeconds = .nan; hostTimedLatePresents = 0
+        lastPresentedPtsSeconds = .nan; hostTimedLatePresents = 0; clientSkipSinceLastPresent = false
         os_unfair_lock_unlock(&lock)
         for state in leftover {
             OSSignposter.decode.endInterval(
