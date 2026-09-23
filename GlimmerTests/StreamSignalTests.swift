@@ -24,4 +24,21 @@ struct StreamSignalTests {
         #expect(code(false, 2.5) == -1)
         #expect(code(false, .infinity) == -1)
     }
+
+    // MARK: Stats HUD
+
+    /// With Differentiate Without Color on, warning and critical values are
+    /// heavier than healthy ones; off, weight carries nothing.
+    @Test func warningValuesAreHeavierWithoutColor() {
+        func weight(_ health: StatsRow.Health, _ differentiate: Bool) -> Int {
+            NSFontManager.shared.weight(
+                of: StatsOverlayLayer.valueFont(for: health, differentiateWithoutColor: differentiate))
+        }
+        let regular = weight(.healthy, true)
+        #expect(weight(.warning, true) > regular)
+        #expect(weight(.critical, true) > regular)
+        #expect(weight(.neutral, true) == regular)
+        #expect(weight(.critical, false) == regular)
+        #expect(StatsOverlayLayer.valueFont(for: .critical, differentiateWithoutColor: true).isFixedPitch)
+    }
 }

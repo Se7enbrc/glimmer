@@ -112,10 +112,9 @@ extension StatsOverlayLayer {
 
         let labelFont = NSFont.systemFont(
             ofSize: StatsOverlayLayer.fontSize, weight: .regular)
-        let valueFont = NSFont(
-            name: "SFMono-Regular", size: StatsOverlayLayer.fontSize)
-            ?? NSFont.monospacedSystemFont(
-                ofSize: StatsOverlayLayer.fontSize, weight: .regular)
+        let valueFont = Self.valueFont(
+            for: row.health,
+            differentiateWithoutColor: NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor)
 
         // 80% alpha de-emphasises labels so the value reads as the
         // primary content. The HIG-respecting alternative is the
@@ -145,6 +144,18 @@ extension StatsOverlayLayer {
                 .paragraphStyle: paragraph
             ]))
         return result
+    }
+
+    /// SF Mono for the value column. With Differentiate Without Color on, a
+    /// warning or critical value is also semibold, so it doesn't rely on its
+    /// yellow or red alone.
+    static func valueFont(for health: StatsRow.Health, differentiateWithoutColor: Bool) -> NSFont {
+        let size = StatsOverlayLayer.fontSize
+        if differentiateWithoutColor, health == .warning || health == .critical {
+            return .monospacedSystemFont(ofSize: size, weight: .semibold)
+        }
+        return NSFont(name: "SFMono-Regular", size: size)
+            ?? .monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
     /// Map row health → NSColor for the value text.
