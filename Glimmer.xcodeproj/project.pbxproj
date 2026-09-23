@@ -266,6 +266,7 @@
 		D2B00006 /* AudioPlayoutStallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00005 /* AudioPlayoutStallTests.swift */; };
 		D2B00008 /* MouseAccelerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00007 /* MouseAccelerationTests.swift */; };
 		D2B0000A /* EnvKeepalivePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00009 /* EnvKeepalivePolicyTests.swift */; };
+		DEC0DE202609221100000001 /* AdaptiveRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221100000002 /* AdaptiveRecoveryTests.swift */; };
 		D2B0000C /* PresentTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000B /* PresentTripTests.swift */; };
 		D2B0000E /* AudioPrimeEdgeSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000D /* AudioPrimeEdgeSafetyTests.swift */; };
 		D2B00010 /* HostResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000F /* HostResolutionTests.swift */; };
@@ -600,6 +601,7 @@
 		D2B00005 /* AudioPlayoutStallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayoutStallTests.swift; sourceTree = "<group>"; };
 		D2B00007 /* MouseAccelerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseAccelerationTests.swift; sourceTree = "<group>"; };
 		D2B00009 /* EnvKeepalivePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvKeepalivePolicyTests.swift; sourceTree = "<group>"; };
+		DEC0DE202609221100000002 /* AdaptiveRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveRecoveryTests.swift; sourceTree = "<group>"; };
 		D2B0000B /* PresentTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentTripTests.swift; sourceTree = "<group>"; };
 		D2B0000D /* AudioPrimeEdgeSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPrimeEdgeSafetyTests.swift; sourceTree = "<group>"; };
 		D2B0000F /* HostResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResolutionTests.swift; sourceTree = "<group>"; };
@@ -990,6 +992,7 @@
 				D2B00005 /* AudioPlayoutStallTests.swift */,
 				D2B00007 /* MouseAccelerationTests.swift */,
 				D2B00009 /* EnvKeepalivePolicyTests.swift */,
+				DEC0DE202609221100000002 /* AdaptiveRecoveryTests.swift */,
 				D2B0000B /* PresentTripTests.swift */,
 				D2B0000D /* AudioPrimeEdgeSafetyTests.swift */,
 				D2B0000F /* HostResolutionTests.swift */,
@@ -1419,6 +1422,7 @@
 				D2B00006 /* AudioPlayoutStallTests.swift in Sources */,
 				D2B00008 /* MouseAccelerationTests.swift in Sources */,
 				D2B0000A /* EnvKeepalivePolicyTests.swift in Sources */,
+				DEC0DE202609221100000001 /* AdaptiveRecoveryTests.swift in Sources */,
 				D2B0000C /* PresentTripTests.swift in Sources */,
 				D2B0000E /* AudioPrimeEdgeSafetyTests.swift in Sources */,
 				D2B00010 /* HostResolutionTests.swift in Sources */,
