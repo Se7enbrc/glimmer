@@ -151,18 +151,14 @@ final class HostRouteMonitor {
 
 extension AppModel {
 
-    /// The destination `refreshHostRoute()` monitors for the current
-    /// selection - the same fallback chain `nativeServerInfo(for:)` dials, so
-    /// the glyph always classifies the address a stream would actually use.
-    /// Exposed so the launcher can key its refresh task on the ADDRESS rather
-    /// than `selectedHost?.id`: re-pairing a host after a DHCP move rewrites
-    /// localaddress/manualaddress under the SAME uuid, so an id-keyed task
-    /// never re-fires and the glyph keeps classifying the route to the dead
-    /// IP until a host switch or relaunch.
+    /// The address `refreshHostRoute()` monitors: the one a stream dials. Keyed by
+    /// address, not id, because a heal or re-pair after a DHCP move rewrites it under
+    /// the same uuid and the glyph must follow.
     var selectedHostRouteAddress: String? {
         selectedHost.map(Self.routeAddress)
     }
 
+    /// The address `nativeServerInfo(for:)` dials: discovered, then typed, then the name.
     static func routeAddress(_ host: Host) -> String {
         host.localAddress ?? host.manualAddress ?? host.name
     }

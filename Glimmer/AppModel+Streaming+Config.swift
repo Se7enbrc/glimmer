@@ -227,7 +227,7 @@ extension AppModel {
     /// in this app's lifetime. Internal so HostStatusPoller.swift can call it.
     func nativeServerInfo(for host: Host) -> ServerInfo {
         var info = ServerInfo(
-            address: host.localAddress ?? host.manualAddress ?? host.name,
+            address: Self.routeAddress(host),
             uniqueId: host.id,
             serverName: host.displayName
         )

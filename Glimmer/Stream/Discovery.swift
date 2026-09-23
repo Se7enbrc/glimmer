@@ -24,6 +24,13 @@ public actor HostDiscovery {
     /// announcement doesn't spawn duplicate probes.
     private var resolvers: [String: NWConnection] = [:]
 
+    /// Resolve services to IPv4 only, for a caller that needs an address Wake on LAN reaches.
+    private let ipv4Only: Bool
+
+    public init(ipv4Only: Bool = false) {
+        self.ipv4Only = ipv4Only
+    }
+
     public struct Discovered: Sendable, Hashable, Identifiable {
         public let id: String          // service name, stable across resolves
         public let displayName: String
@@ -110,7 +117,11 @@ public actor HostDiscovery {
     /// path is ready (or the attempt fails) we extract host:port from the
     /// resolved remote endpoint, cache the result, and cancel the connection.
     private func startResolve(name: String, endpoint: NWEndpoint) {
-        let conn = NWConnection(to: endpoint, using: .tcp)
+        let parameters = NWParameters.tcp
+        if ipv4Only, let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
+            ip.version = .v4
+        }
+        let conn = NWConnection(to: endpoint, using: parameters)
         resolvers[name] = conn
         conn.stateUpdateHandler = { [weak self] state in
             switch state {

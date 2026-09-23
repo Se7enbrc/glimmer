@@ -318,8 +318,8 @@ extension AppModel {
     }
 
     /// Replace a PC's stored apps with a fresh /applist, pairing's stand-in Desktop
-    /// included. Apps hidden here stay hidden; an empty list is ignored because
-    /// `loadHosts` drops a PC with no apps. True when the stored list changed.
+    /// included. A hide carried over from moonlight-qt sticks; an empty list is ignored
+    /// because `loadHosts` drops a PC with no apps. True when the stored list changed.
     nonisolated static func storeApps(_ apps: [PairedApp], hostID: String, in defaults: UserDefaults) -> Bool {
         let slot = hostSlot(for: hostID, defaults: defaults)
         guard slot > 0, !apps.isEmpty else { return false }
@@ -365,15 +365,15 @@ extension AppModel {
             || (first == 192 && second == 168) || (first == 169 && second == 254)
     }
 
-    /// A PC on a new DHCP lease still answers mDNS. Browse for up to `seconds` and save
-    /// the first IPv4 address that proves to be this PC over its pinned TLS channel
-    /// (Wake on LAN only sends over IPv4). True when the saved address changed.
+    /// A PC on a new DHCP lease still answers mDNS. Browse for up to `seconds` for an
+    /// IPv4 address (Wake on LAN sends only IPv4) that proves to be this PC over its pinned
+    /// TLS, and save it once the saved address stops answering. True when it changed.
     @discardableResult
     func healAddress(of host: Host, within seconds: Double) async -> Bool {
         var probe = nativeServerInfo(for: host)
         let saved = probe.address
         guard probe.serverCertPEM != nil, Self.canHealAddress(saved) else { return false }
-        let discovery = HostDiscovery()
+        let discovery = HostDiscovery(ipv4Only: true)
         let results = await discovery.start()
         let deadline = Task {
             try? await Task.sleep(for: .seconds(seconds))
@@ -395,7 +395,10 @@ extension AppModel {
         }
         deadline.cancel()
         await discovery.stop()
-        guard let moved, Self.storeAddress(moved, hostID: host.id, in: .standard) else { return false }
+        // A PC with a second LAN interface answers mDNS there too; keep the paired one.
+        guard let moved,
+              await HostReachability.measureRTT(host: saved, port: probe.httpPort, timeoutMs: 2_000) == .unreachable,
+              Self.storeAddress(moved, hostID: host.id, in: .standard) else { return false }
         Diag.notice("\(host.displayName) answered at a new network address; saved it", "Host")
         loadHosts()
         return true
