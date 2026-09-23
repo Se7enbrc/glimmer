@@ -218,11 +218,12 @@ struct SessionSafetyTests {
     }
 
     /// Cancel, the quit chord and the close button all end a connect by choice:
-    /// no banner, no "Stream ended", no last-played stamp. A real failure isn't.
+    /// no banner, no "Stream ended", no last-played stamp. A real failure isn't,
+    /// and neither is Cancel Connection during a reconnect of a live stream.
     @Test func userStopsAreNotConnectFailures() {
         #expect(AppModel.connectWasCancelled(by: CancellationError(), cancelRequested: false))
         #expect(AppModel.connectWasCancelled(by: StreamError.sessionFailed(-1), cancelRequested: true))
-        #expect(AppModel.connectWasCancelled(by: nil, cancelRequested: true))
+        #expect(!AppModel.connectWasCancelled(by: nil, cancelRequested: true))
         #expect(!AppModel.connectWasCancelled(by: StreamError.sessionFailed(-1), cancelRequested: false))
         #expect(!AppModel.connectWasCancelled(by: nil, cancelRequested: false))
     }

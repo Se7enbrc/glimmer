@@ -17,8 +17,10 @@ extension AppModel {
 
     /// A connect the user stopped (Cancel, the quit chord, the close button)
     /// ended by choice: no failure banner, no "Stream ended", no last-played stamp.
+    /// Only a start() throw counts; a stream that went live ended normally.
     nonisolated static func connectWasCancelled(by error: Error?, cancelRequested: Bool) -> Bool {
-        cancelRequested || error is CancellationError
+        guard let error else { return false }
+        return cancelRequested || error is CancellationError
     }
 
     /// Every surface's words for a PC that never answered: the launcher, the
