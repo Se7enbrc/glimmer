@@ -121,8 +121,6 @@ final class AppModel {
     var muteMacWhileStreaming: Bool = false {
         didSet {
             UserDefaults.standard.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming")
-            // Mid-stream flips act immediately - doc on applyMutePreferenceMidStream().
-            applyMutePreferenceMidStream()
         }
     }
 
@@ -137,14 +135,16 @@ final class AppModel {
     /// resign/become-key observers via callbacks on this manager.
     var nativeStreamBackgrounded: Bool = false
 
-    /// Bring the stream window back from the background. Called by the
-    /// launcher's "Back to stream" CTA when nativeStreamBackgrounded is true.
-    public func resumeStreamWindow() {
-        Task { [weak self] in
-            await self?.nativeSession?.resumeWindow()
-        }
-    }
     var nativeStreamError: String?
+
+    /// Coarse kind for the last connect failure, set alongside
+    /// `nativeStreamError` so the banner and menu bar can offer a
+    /// matching action instead of parsing the message text.
+    var nativeStreamErrorKind: StreamErrorKind = .other
+
+    enum StreamErrorKind {
+        case unreachable, pairing, other
+    }
 
     /// Effective HDR-active state from the native engine. True only when the
     /// host signalled HDR mode AND the bitstream is 10-bit AND the Metal
@@ -234,20 +234,6 @@ final class AppModel {
         didSet {
             let raw = statsOverlayCustomRows.map(\.rawValue)
             UserDefaults.standard.set(raw, forKey: "statsOverlayCustomRows")
-        }
-    }
-
-    /// The row set the overlay should actually render, resolved against
-    /// the current preset. Custom mode reaches into `statsOverlayCustomRows`;
-    /// the curated presets resolve to their static sets in
-    /// `StatsOverlayDefaults`. Computed property so the resolution is
-    /// always in sync with the preset - no caching, no invalidation.
-    var effectiveStatsRows: Set<StatsRow.Kind> {
-        switch statsOverlayPreset {
-        case .minimal:  return StatsOverlayDefaults.minimalRows
-        case .micro:    return StatsOverlayDefaults.microRows
-        case .extended: return StatsOverlayDefaults.extendedRows
-        case .custom:   return statsOverlayCustomRows
         }
     }
 
@@ -346,18 +332,12 @@ final class AppModel {
 
     /// User-recorded buttons backing the `.custom` quit chord (press the buttons,
     /// we store them - issue #9). Persisted as JSON.
-    var customControllerChord: Set<ControllerButton> = AppModel.loadCustomChord() {
+    var customControllerChord: Set<ControllerButton> = [] {
         didSet {
             if let data = try? JSONEncoder().encode(customControllerChord) {
                 UserDefaults.standard.set(data, forKey: "customControllerChord")
             }
         }
-    }
-
-    private static func loadCustomChord() -> Set<ControllerButton> {
-        guard let data = UserDefaults.standard.data(forKey: "customControllerChord"),
-              let set = try? JSONDecoder().decode(Set<ControllerButton>.self, from: data) else { return [] }
-        return set
     }
 
     /// Live "is any game controller connected" flag, driven by the
@@ -424,7 +404,6 @@ final class AppModel {
 
     // Pairing
     var pairingAttempt: PairingAttempt?
-    var pairingInFlight: Bool { pairingAttempt != nil }
 
     /// Typed phase of the in-flight pairing handshake. Drives the PairSheet
     /// banner colour, spinner, and result text. `pairingMessage` is the
@@ -581,6 +560,7 @@ final class AppModel {
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self) ?? quitHotkey
         statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self) ?? statsHotkey
         controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self) ?? controllerQuitChord
+        customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self) ?? customControllerChord
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
 
@@ -597,4 +577,11 @@ final class AppModel {
     /// Wake on LAN in flight for this PC, and the PC whose last wake got no answer.
     var wakingHostID: String?
     var wakeFailedHostID: String?
+
+    /// Why the last wake attempt failed, alongside `wakeFailedHostID`.
+    var wakeFailureReason: WakeFailureReason?
+
+    enum WakeFailureReason {
+        case noAnswer, couldNotSend
+    }
 }
