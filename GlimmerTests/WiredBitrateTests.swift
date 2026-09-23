@@ -65,4 +65,18 @@ struct WiredBitrateTests {
         #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: 4.2) == 180_800)
         #expect(StreamPathMTU.wiredAskKbps(capped: 180_800, boost: 1, steadyRttMs: 4.2) == 180_800)
     }
+
+    /// The RTT may only take back the boost the decision actually applied, and
+    /// only on a wired route: Wi-Fi's boost answers to the radio gate.
+    @Test func theWithdrawableBoostComesFromTheDecision() {
+        func decision(_ mode: BitrateMode, _ route: HostRouteMonitor.RouteClass) -> BitrateDecision {
+            BitrateDecision(mode: mode, dialKbps: 226_000, codecMultiplier: 0.8,
+                            boost: mode == .highestQuality ? AppModel.routeBoost(route).boost : 1,
+                            radioGatePhyMbps: nil)
+        }
+        #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .wired), route: .wired) == 2)
+        #expect(AppModel.rttWithdrawableBoost(decision(.bandwidthSaver, .wired), route: .wired) == 1)
+        #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .wifi), route: .wifi) == 1)
+        #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .tunnel), route: .tunnel) == 1)
+    }
 }

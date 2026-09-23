@@ -188,8 +188,7 @@ extension TelemetryExporter {
     /// Module-internal (not private) so `start()` in TelemetryExporter.swift
     /// still opens the file across the file split.
     func openNDJSONFile() {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+        let dir = Self.logsDirectory
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {

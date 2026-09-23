@@ -116,16 +116,17 @@ struct TelemetryRowTests {
 
     // MARK: - Latency tracker
 
-    @Test func hostFrameIntervalFollowsAssembledFramesAcrossTheRtpWrap() {
+    /// Input-to-photon's host interval is the stats window's p50, published once a
+    /// second; assembled frames' RTP deltas no longer keep a second estimate.
+    @Test func hostFrameIntervalHasOneSource() {
         let tracker = FrameTimingTracker(sessionId: "test")
-        var rtp = UInt32.max - 3_000
+        tracker.hostFrameIntervalMs = 1_000.0 / 120.0
         for index in 0..<40 {
-            let nanos = UInt64(index + 1) * 8_333_333
-            tracker.recordAssembled(rtpTimestamp: rtp, frameIndex: Int32(index),
+            let nanos = UInt64(index + 1) * 16_666_667
+            tracker.recordAssembled(rtpTimestamp: 1 + UInt32(index) * 1_500, frameIndex: Int32(index),
                                     receiveNanos: nanos, assembleNanos: nanos)
-            rtp &+= 750   // 8.33 ms on the 90 kHz clock
         }
-        #expect(abs(tracker.hostFrameIntervalMs - 1_000.0 / 120.0) < 0.01)
+        #expect(tracker.hostFrameIntervalMs == 1_000.0 / 120.0)
     }
 
     @Test func inputToPhotonAddsTheInputLegsToGlassToGlass() {

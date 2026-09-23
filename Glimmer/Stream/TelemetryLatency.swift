@@ -167,10 +167,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     private var lastReceiveNanos: UInt64 = 0
     private var lastAssembleNanos: UInt64 = 0
     private var lastOutputNanos: UInt64 = 0
-    /// Smoothed host frame interval (ms) from assembled frames' 90 kHz RTP deltas,
-    /// 0 until two frames; guarded by `mapLock`.
-    private var lastAssembledRtp: UInt32 = 0
-    private var hostFrameIntervalEwmaMs = 0.0
+    /// The PC's frame interval (ms): the last stats window's host_frame_interval_p50,
+    /// published by the exporter so both series read one source. Guarded by `mapLock`.
+    private var hostFrameIntervalP50Ms = 0.0
     /// Cadence deltas above this are a content gap (idle desktop, scene load),
     /// not delivery cadence - skipped so they can't pollute the histogram sum.
     private static let cadenceGapCutoffNanos: UInt64 = 1_000_000_000
@@ -317,7 +316,6 @@ final class FrameTimingTracker: @unchecked Sendable {
         let prevAssemble = lastAssembleNanos
         lastReceiveNanos = receiveNanos
         lastAssembleNanos = assembleNanos
-        foldHostFrameIntervalLocked(rtpTimestamp)
         if inFlight[rtpTimestamp] == nil {
             insertionOrder.append(rtpTimestamp)
         }
@@ -343,21 +341,16 @@ final class FrameTimingTracker: @unchecked Sendable {
         stage.observe(Double(now &- prev) / 1_000_000.0)
     }
 
-    /// Fold one assembled frame's RTP delta into the host-interval EWMA (wrap-safe;
-    /// a backward step or a gap over 1 s is not cadence). Called under `mapLock`.
-    private func foldHostFrameIntervalLocked(_ rtp: UInt32) {
-        defer { lastAssembledRtp = rtp }
-        guard lastAssembledRtp != 0 else { return }
-        let deltaMs = Double(rtp &- lastAssembledRtp) / 90.0
-        guard deltaMs > 0, deltaMs < 1_000 else { return }
-        hostFrameIntervalEwmaMs = hostFrameIntervalEwmaMs == 0
-            ? deltaMs : hostFrameIntervalEwmaMs + 0.1 * (deltaMs - hostFrameIntervalEwmaMs)
-    }
-
-    /// Smoothed host frame interval (ms), 0 before two assembled frames.
+    /// The PC's frame interval (ms) input-to-photon waits half of; 0 until the first window.
     var hostFrameIntervalMs: Double {
-        os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
-        return hostFrameIntervalEwmaMs
+        get {
+            os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
+            return hostFrameIntervalP50Ms
+        }
+        set {
+            os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
+            hostFrameIntervalP50Ms = newValue
+        }
     }
 
     /// Stage t_submit. Called just before VTDecompressionSessionDecodeFrame
@@ -405,7 +398,7 @@ final class FrameTimingTracker: @unchecked Sendable {
         if let idx = insertionOrder.firstIndex(of: rtpTimestamp) {
             insertionOrder.remove(at: idx)
         }
-        let hostFrameIntervalMs = hostFrameIntervalEwmaMs
+        let hostFrameIntervalMs = hostFrameIntervalP50Ms
         os_unfair_lock_unlock(mapLock)
 
         // Compute the five sub-stage deltas in ms. A stage timestamp of 0 means

@@ -111,7 +111,7 @@ extension TelemetryExporter {
         // - the field that proves the cushion holds above 0 (or quantifies a residual
         // drain). Independent of the last-writer-wins state gauge above.
         audio.bufferFillMinMs = counters.takeAudioBufferFillMinMs()
-        audio.gapMaxMs = AudioArrivalGaps.shared.takeMaxMs(now: now.uptimeNanoseconds)
+        audio.gapMaxMs = counters.audioArrivalGaps.takeMaxMs(now: now.uptimeNanoseconds)
         audio.firstPacketMs = counters.audioFirstPacketMs
 
         // Only attach the audio block once audio has actually flowed (any total or

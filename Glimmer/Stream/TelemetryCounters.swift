@@ -566,11 +566,12 @@ final class TelemetryCounters: @unchecked Sendable {
     /// before a scrape sees it). Bumped once per session at GENUINE teardown
     /// (`noteTelemetryDisconnect`); survives `resetForNewSession`.
     let disconnectByReason = DisconnectReasonCounters()
-    /// AUDIO-TTF context: warm/cold host-bring-up classification + the
-    /// host-idle covariate. Self-locked, defined in
-    /// TelemetryCounters+AudioGauges.swift (the P2State idiom); its
-    /// last-stream-end stamp DELIBERATELY survives `resetForNewSession`.
+    /// AUDIO-TTF context: warm/cold host-bring-up classification + the host-idle
+    /// covariate. Self-locked (TelemetryCounters+AudioGauges.swift); its last-stream-end
+    /// stamp DELIBERATELY survives `resetForNewSession`.
     let audioTtf = AudioTtfContext()
+    /// `audio_gap_max_ms`; a reconnect keeps it, since the gap across the drop is real.
+    let audioArrivalGaps = AudioArrivalGaps()
     /// Per-TYPE ignored-control tallies (bounded). Self-locked, defined in
     /// TelemetryCounters+Gauges.swift - durable here (the teardown Diag NOTICE
     /// is lossy) so the session scorecard can render the per-type breakdown.

@@ -53,14 +53,29 @@ struct TelemetryConfigRowTests {
         let second: UInt64 = 1_000_000_000
         let gaps = AudioArrivalGaps()
         #expect(gaps.takeMaxMs(now: second) == nil)
-        gaps.noteArrival(at: second)
-        gaps.noteArrival(at: second + 5_000_000)
+        gaps.noteArrival(at: second, gapNanos: nil)
+        gaps.noteArrival(at: second + 5_000_000, gapNanos: 5_000_000)
         #expect(gaps.takeMaxMs(now: second + 6_000_000) == 5)
         // Two seconds into a blackout the row already shows it.
         #expect(gaps.takeMaxMs(now: 3 * second + 5_000_000) == 2_000)
         // The first packet back closes a six-second gap.
-        gaps.noteArrival(at: 7 * second + 5_000_000)
+        gaps.noteArrival(at: 7 * second + 5_000_000, gapNanos: 6 * second)
         #expect(gaps.takeMaxMs(now: 7 * second + 6_000_000) == 6_000)
+    }
+
+    /// A reconnect's new receiver has no gap of its own for its first datagram:
+    /// the gap across the drop comes from the session's last datagram. A new
+    /// session starts clean.
+    @Test func audioGapMaxSpansAnInPlaceReconnect() {
+        let second: UInt64 = 1_000_000_000
+        let counters = TelemetryCounters()
+        counters.anchorConnectStart(now: second, reconnecting: false)
+        counters.audioArrivalGaps.noteArrival(at: second, gapNanos: nil)
+        counters.anchorConnectStart(now: 2 * second, reconnecting: true)
+        counters.audioArrivalGaps.noteArrival(at: 4 * second, gapNanos: nil)
+        #expect(counters.audioArrivalGaps.takeMaxMs(now: 4 * second) == 3_000)
+        counters.anchorConnectStart(now: 5 * second, reconnecting: false)
+        #expect(counters.audioArrivalGaps.takeMaxMs(now: 5 * second) == nil)
     }
 
     @Test func rowAndReceiptCarryTheCushionCapDeadAirAndPadReportRate() throws {

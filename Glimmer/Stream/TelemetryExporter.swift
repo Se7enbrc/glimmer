@@ -349,14 +349,16 @@ final class TelemetryExporter: @unchecked Sendable {
     /// Diag logs and receipts included. 14 days.
     private static let logsMaxAgeSeconds: TimeInterval = 14 * 24 * 3600
 
+    /// `~/Library/Logs/Glimmer`: the Diag logs, telemetry rows, frame traces and receipts.
+    static let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+
     /// Age-only sweep at app launch, whatever the diagnostics setting, so the
     /// 14-day rule runs even when no diagnostics session ever starts again.
     static func sweepLogsAtLaunch() {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
         let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
         Task.detached(priority: .utility) {
-            sweepLogsDirectory(dir, log: log, enforceBudget: false)
+            sweepLogsDirectory(logsDirectory, log: log, enforceBudget: false)
         }
     }
 

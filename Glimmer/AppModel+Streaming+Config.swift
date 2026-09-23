@@ -73,10 +73,6 @@ extension AppModel {
         return value > 0 ? value : wifiBitrateMultiplier
     }
 
-    var wiredBitrateBoost: Double {
-        bitrateMode == .highestQuality && hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : 1
-    }
-
     /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
     /// negotiated codec's efficiency, then by the route. The spec UI and
     /// `nativeStreamConfig` both read this so the shown bitrate can't drift
@@ -101,6 +97,13 @@ extension AppModel {
         let boost = bitrateMode == .highestQuality ? Self.routeBoost(hostRoute.routeClass).boost : 1
         return BitrateDecision(mode: bitrateMode, dialKbps: effectiveBitrateKbps, codecMultiplier: codec,
                                boost: boost, radioGatePhyMbps: hostRoute.wifiPhyRateMbps)
+    }
+
+    /// The part of the decision's boost the connect-time RTT may withdraw: only
+    /// the wired one, since Wi-Fi has the radio gate instead.
+    nonisolated static func rttWithdrawableBoost(_ decision: BitrateDecision,
+                                                 route: HostRouteMonitor.RouteClass) -> Double {
+        route == .wired ? decision.boost : 1
     }
 
     /// Boost and cap per route. A tunnel, or a route not resolved yet, keeps the
@@ -201,8 +204,9 @@ extension AppModel {
             Diag.notice("Wi-Fi link gate: the radio's PHY rate is \(Int(phy)) Mbps, asking for "
                 + "\(cfg.bitrateKbps / 1000) Mbps instead of \(routeAsk / 1000).", "Stream")
         }
-        cfg.bitrateBoost = wiredBitrateBoost
-        cfg.bitrateDecision = bitrateDecision(forFormats: cfg.videoFormats)
+        let decision = bitrateDecision(forFormats: cfg.videoFormats)
+        cfg.bitrateDecision = decision
+        cfg.bitrateBoost = Self.rttWithdrawableBoost(decision, route: hostRoute.routeClass)
         return cfg
     }
 

@@ -123,6 +123,7 @@ extension TelemetryCounters {
         ctrlIgnoredPerType.reset()
         os_unfair_lock_lock(inputLock); lastInputNanosValue = 0; os_unfair_lock_unlock(inputLock)
         rumbleActivity.reset()
+        audioArrivalGaps.reset()
         os_unfair_lock_lock(decodeStateLock); decodeStateValue = nil; os_unfair_lock_unlock(decodeStateLock)
         awdlHelperState.withLock { $0 = nil }
         os_unfair_lock_lock(audioStateLock)

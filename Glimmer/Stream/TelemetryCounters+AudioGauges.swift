@@ -111,13 +111,14 @@ extension TelemetryCounters {
 /// open at the tick, so a blackout reads as it grows rather than only once it
 /// ends. The receive thread notes every arrival; the exporter takes the max.
 final class AudioArrivalGaps: Sendable {
-    static let shared = AudioArrivalGaps()
-
     private let state = OSAllocatedUnfairLock(initialState: (lastNanos: UInt64(0), maxGapNanos: UInt64(0)))
 
-    func noteArrival(at now: UInt64) {
+    /// `gapNanos` is the receiver's own gap; nil on a receiver's first datagram, whose
+    /// gap (across an in-place reconnect) is measured from the session's last one here.
+    func noteArrival(at now: UInt64, gapNanos: UInt64?) {
         state.withLock {
-            if $0.lastNanos != 0, now > $0.lastNanos { $0.maxGapNanos = max($0.maxGapNanos, now - $0.lastNanos) }
+            let gap = gapNanos ?? ($0.lastNanos != 0 && now > $0.lastNanos ? now - $0.lastNanos : 0)
+            $0.maxGapNanos = max($0.maxGapNanos, gap)
             $0.lastNanos = now
         }
     }

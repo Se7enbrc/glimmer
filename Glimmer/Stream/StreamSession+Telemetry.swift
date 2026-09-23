@@ -79,8 +79,6 @@ extension StreamSession {
         TelemetryCounters.shared.anchorConnectStart(
             now: TelemetryCounters.monotonicNowNanos(), reconnecting: isReconnecting)
         if !isReconnecting {
-            // A reconnect keeps it: the audio gap across the drop is real.
-            AudioArrivalGaps.shared.reset()
             // Isolates the launch-path leg (click → connect-start); no-op without a click.
             ConnectTimingTelemetry.shared.markConnectStart()
         }

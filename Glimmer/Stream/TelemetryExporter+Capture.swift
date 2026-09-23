@@ -176,6 +176,7 @@ extension TelemetryExporter {
             snap.hostFrameIntervalP50Ms = cadence.intervalP50Ms
             snap.hostFrameIntervalP95Ms = cadence.intervalP95Ms
             snap.hostUnevenPairs = cadence.unevenPairs
+            FrameTimingTracker.shared?.hostFrameIntervalMs = cadence.intervalP50Ms
         }
     }
 

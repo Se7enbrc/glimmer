@@ -29,14 +29,6 @@ struct DiagnosticsPane: View {
     /// the telemetry gate.
     @AppStorage("diagFileLogDebug") private var fileLogDebug = false
 
-    /// `~/Library/Logs/Glimmer` - the SAME directory the telemetry NDJSON writer
-    /// and the per-session Diag log sink use (see TelemetryExporter.openNDJSONFile
-    /// + LogStore). Resolved live so it shows the real per-user path.
-    private var telemetryLogDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
-    }
-
     var body: some View {
         // @Bindable shim - surfaces $model.x bindings from the @Observable
         // environment value (matches the other Settings panes).
@@ -151,11 +143,11 @@ struct DiagnosticsPane: View {
     /// Show the path with a leading `~` instead of the absolute home so it reads
     /// cleanly and matches how the doc comments refer to it.
     private var abbreviatedLogPath: String {
-        (telemetryLogDir.path as NSString).abbreviatingWithTildeInPath
+        (TelemetryExporter.logsDirectory.path as NSString).abbreviatingWithTildeInPath
     }
 
     private func revealLogDir() {
-        let dir = telemetryLogDir
+        let dir = TelemetryExporter.logsDirectory
         // Create it if it doesn't exist yet (telemetry may never have run) so
         // the reveal lands somewhere instead of silently no-opping.
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

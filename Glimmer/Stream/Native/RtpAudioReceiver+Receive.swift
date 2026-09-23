@@ -199,8 +199,8 @@ extension RtpAudioReceiver {
     /// recvQueue-confined; always-live, read only when telemetry is on.
     private func noteAudioArrivalGap() {
         let now = DispatchTime.now().uptimeNanoseconds
-        if lastDatagramArrivalNanos != 0 {
-            let gap = now &- lastDatagramArrivalNanos
+        let gap: UInt64? = lastDatagramArrivalNanos != 0 ? now &- lastDatagramArrivalNanos : nil
+        if let gap {
             if gap > 20_000_000 {
                 let counters = TelemetryCounters.shared
                 counters.audioGapOver20msTotal.increment()
@@ -222,6 +222,6 @@ extension RtpAudioReceiver {
             sink?.noteArrivalGap(nanos: gap)
         }
         lastDatagramArrivalNanos = now
-        AudioArrivalGaps.shared.noteArrival(at: now)
+        TelemetryCounters.shared.audioArrivalGaps.noteArrival(at: now, gapNanos: gap)
     }
 }
