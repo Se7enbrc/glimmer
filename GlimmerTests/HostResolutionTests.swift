@@ -97,6 +97,8 @@ final class PairedPathFailureClassificationTests: XCTestCase {
         }
         XCTAssertTrue(text.contains("Pair Again…"))
         XCTAssertTrue(text.hasPrefix("tower"))
+        // Sunshine answers a switched-off client with the same 401 as a forgotten one.
+        XCTAssertTrue(text.contains("switched off on Sunshine's Troubleshooting page"))
     }
 
     func testHandshakeRejectionIsUnpaired() {
@@ -151,7 +153,7 @@ struct PairingFailureBannerTests {
     @Test func theBannerNamesPairAgain() {
         let verdict = NetworkClient.classifyPairedPathFailure("Host requires pairing (401)", hostName: "Den PC")
         let kept = AppModel.connectFailure(for: verdict, hostName: "Den PC").message
-        #expect(kept.hasPrefix("Den PC no longer recognizes this Mac."))
+        #expect(kept.hasPrefix("Den PC no longer recognizes this Mac, or this Mac is switched off"))
         let noPin = AppModel.connectFailure(for: NetworkClient.notPaired("Den PC"), hostName: "Den PC").message
         #expect(noPin == "Den PC isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
         let rejected = AppModel.connectFailure(for: StreamError.pairingRejected, hostName: "Den PC").message

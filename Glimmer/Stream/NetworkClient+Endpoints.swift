@@ -108,9 +108,9 @@ extension NetworkClient {
         return server
     }
 
-    /// Map a paired-path (HTTPS) failure, once plain HTTP proved the host up, by ControlTransport's own `detail`
-    /// strings: "connect to" = Sunshine's 47984 listener wedged (restart it, not a pairing issue); a 401 ("Host
-    /// requires pairing") or "TLS handshake" = the PC forgot this Mac; cert mismatch or none = its cert changed.
+    /// Map a paired-path (HTTPS) failure, once plain HTTP proved the host up, by ControlTransport's `detail`:
+    /// "connect to" = the 47984 listener wedged (restart it); 401 = the PC forgot or switched off this Mac; "TLS
+    /// handshake" = it forgot this Mac; cert mismatch or none = its cert changed. Pairing again fixes the last three.
     static func classifyPairedPathFailure(_ detail: String, hostName: String) -> StreamError {
         let name = hostName.isEmpty ? "The PC" : hostName
         if detail.hasPrefix("connect to") {
@@ -120,7 +120,8 @@ extension NetworkClient {
             )
         }
         if detail.contains("Host requires pairing") {
-            return .pairingFailed("\(name) no longer recognizes this Mac. Choose Pair Again… from the PC's ⋯ menu.")
+            return .pairingFailed("\(name) no longer recognizes this Mac, or this Mac is switched off on "
+                + "Sunshine's Troubleshooting page. Choose Pair Again… from the PC's ⋯ menu.")
         }
         if detail.hasPrefix("TLS handshake") {
             return .pairingFailed("\(name) rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu.")

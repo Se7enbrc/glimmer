@@ -180,7 +180,8 @@ struct SessionSafetyTests {
             (classify("pinned host cert mismatch"), .pairing,
              "Tower's certificate changed. To trust it, choose Pair Again… from the PC's ⋯ menu."),
             (classify("Host requires pairing (Not paired)"), .pairing,
-             "Tower no longer recognizes this Mac. Choose Pair Again… from the PC's ⋯ menu."),
+             "Tower no longer recognizes this Mac, or this Mac is switched off on Sunshine's Troubleshooting page. "
+                + "Choose Pair Again… from the PC's ⋯ menu."),
             (classify("TLS handshake to 192.0.2.10:47984 failed (SSL_connect)"), .pairing,
              "Tower rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu."),
             (NetworkClient.notPaired("Tower"), .pairing,
