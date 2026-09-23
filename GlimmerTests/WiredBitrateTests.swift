@@ -84,7 +84,7 @@ struct WiredBitrateTests {
     @MainActor @Test func theReconnectAskIsTheStartsAsk() throws {
         let model = AppModel()
         let pc = Host(id: "pc-1", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
-                      apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+                      apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         let start = model.nativeStreamConfig(for: pc)
         let decision = try #require(start.bitrateDecision)
         let ask = AppModel.routeAsk(decision, route: model.hostRoute.routeClass)

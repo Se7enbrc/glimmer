@@ -386,7 +386,6 @@ public struct ServerInfo: Sendable {
     public var serverName: String               // friendly name from /serverinfo
     public var pairStatus: PairStatus = .unpaired
     public var appVersion: String?              // GFE/Sunshine version string
-    public var gfeVersion: String?
     /// True only for NVIDIA GameStream, whose `<state>` holds "MJOLNIR" (moonlight-qt's test); Sunshine sends
     /// `GfeVersion` too, so that proves nothing. Pairing and stream start refuse such a PC.
     public var isRealGFE: Bool = false

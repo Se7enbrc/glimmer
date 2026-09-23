@@ -29,7 +29,7 @@ struct AppShellTests {
 
     private var tower: Glimmer.Host {
         Host(id: "UUID-1", name: "Tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
-             apps: [desktop], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil,
+             apps: [desktop], lastConnected: nil, serverCertPEM: nil, appVersion: nil,
              macAddress: nil)
     }
 

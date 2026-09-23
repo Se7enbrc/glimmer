@@ -116,7 +116,7 @@ struct HostsStoreTests {
 
     private static func host(_ id: String, address: String) -> Glimmer.Host {
         Glimmer.Host(id: id, name: id, customName: nil, localAddress: address, manualAddress: nil, apps: [],
-                     lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+                     lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
     }
 
     /// With the launcher closed a second miss lands up to two cycles (interval, 2 s

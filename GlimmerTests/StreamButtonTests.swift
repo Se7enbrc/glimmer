@@ -23,7 +23,7 @@ struct StreamButtonTests {
 
     private let pc = Host(
         id: "pc-1", name: "tower", customName: "Tower", localAddress: "192.0.2.10", manualAddress: nil,
-        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil,
+        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil,
         macAddress: "aa:bb:cc:dd:ee:ff")
 
     @Test func wakeFailureLinesFitTheCapsule() {

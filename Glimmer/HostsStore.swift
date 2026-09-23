@@ -51,7 +51,7 @@ extension AppModel {
             }
             copy("hostname"); copy("uuid"); copy("name")
             copy("localaddress"); copy("manualaddress")
-            copy("srvcert"); copy("appversion"); copy("gfeversion")
+            copy("srvcert"); copy("appversion")
             if mq.object(forKey: "hosts.\(i).customname") != nil {
                 defaults.set(mq.bool(forKey: "hosts.\(i).customname"),
                              forKey: "hosts.\(i).customname")
@@ -123,7 +123,6 @@ extension AppModel {
             }
             let srvCert = readPEM("hosts.\(i).srvcert")
             let appVer  = readPEM("hosts.\(i).appversion")
-            let gfeVer  = readPEM("hosts.\(i).gfeversion")
 
             loaded.append(Host(
                 id: uuid,
@@ -135,7 +134,6 @@ extension AppModel {
                 lastConnected: last,
                 serverCertPEM: srvCert,
                 appVersion: appVer,
-                gfeVersion: gfeVer,
                 // Backfilled from /serverinfo's `<mac>` on every successful
                 // poll/pair (only learnable while the host is online).
                 macAddress: defaults.string(forKey: "hosts.\(i).mac"),
@@ -225,13 +223,10 @@ extension AppModel {
         loadHosts()
     }
 
-    /// Persist a freshly-paired host into the `hosts.N.*` UserDefaults schema
-    /// that `loadHosts` reads. Without this a successful pair pinned the cert
-    /// but never saved the host record, so the PC vanished on the next
-    /// `loadHosts()`. Reuses the existing slot when the uuid is already known
-    /// (re-pair), otherwise appends a new slot. `apps` come from /applist.
+    /// Persists a freshly paired PC into the `hosts.N.*` schema `loadHosts` reads, reusing
+    /// its slot on a re-pair and appending one otherwise. `apps` come from /applist.
     func saveHost(uuid: String, hostname: String, address: String,
-                  serverCertPEM: String?, appVersion: String?, gfeVersion: String?,
+                  serverCertPEM: String?, appVersion: String?,
                   apps: [PairedApp], macAddress: String? = nil) {
         let defaults = UserDefaults.standard
         let prefix = "hosts.\(saveSlot(for: uuid, defaults: defaults))"
@@ -241,7 +236,6 @@ extension AppModel {
         defaults.set(address, forKey: "\(prefix).manualaddress")
         if let pem = serverCertPEM { defaults.set(pem, forKey: "\(prefix).srvcert") }
         if let appVersion { defaults.set(appVersion, forKey: "\(prefix).appversion") }
-        if let gfeVersion { defaults.set(gfeVersion, forKey: "\(prefix).gfeversion") }
         // Pair-time MAC capture (the host is online right now - the only time
         // it's learnable). Zeroed/absent leaves any earlier value in place.
         if let mac = WakeOnLAN.normalizeMac(macAddress) {

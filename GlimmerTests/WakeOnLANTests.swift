@@ -60,7 +60,7 @@ struct WakeOnLANTests {
 
     private func tower(mac: String) -> Glimmer.Host {
         Glimmer.Host(id: "tower", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
-                     apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: mac)
+                     apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: mac)
     }
 
     @MainActor @Test func aWakeThatSendsNothingStopsAtOnce() async {

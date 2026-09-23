@@ -163,7 +163,7 @@ extension AppModel {
                 uuid: paired.uniqueId,
                 hostname: paired.serverName.isEmpty ? address : paired.serverName,
                 address: address, serverCertPEM: paired.serverCertPEM,
-                appVersion: paired.appVersion, gfeVersion: paired.gfeVersion,
+                appVersion: paired.appVersion,
                 apps: apps, macAddress: paired.macAddress)
             pairingPhase = .success
             Diag.notice("Pairing succeeded", "Pairing")

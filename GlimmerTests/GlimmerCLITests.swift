@@ -13,7 +13,7 @@ struct GlimmerCLITests {
 
     private func host(_ name: String, id: String, address: String?, custom: String? = nil) -> Glimmer.Host {
         Host(id: id, name: name, customName: custom, localAddress: address, manualAddress: address,
-             apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+             apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
     }
 
     @Test func theCommandNameOrABareWordTakesOverTheLaunch() {

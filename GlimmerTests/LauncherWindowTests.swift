@@ -79,7 +79,7 @@ struct ConnectBannerActionTests {
     @Test func engineFailuresRecordTheirKind() {
         let model = AppModel()
         let rig = Host(id: "pc-1", name: "rig", customName: "Repair Rig", localAddress: "192.0.2.10", manualAddress: nil,
-                       apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+                       apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.nativeStreamErrorKind = .pairing
         model.handleNativeEvent(.stageFailed(name: "RTSP handshake", errorCode: -1), host: rig)
         #expect(model.nativeStreamError == nil && model.nativeStreamErrorKind == .pairing)
@@ -150,7 +150,7 @@ struct PairAgainSheetTests {
     @Test func pairAgainCarriesThePCToTheSheet() {
         let model = AppModel()
         let tower = Host(id: "pc-1", name: "tower", customName: "Tower", localAddress: nil, manualAddress: "192.0.2.10",
-                         apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+                         apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.requestPairing(for: tower)
         #expect(model.pairSheetShown && model.pairSheetHost == tower)
         model.requestPairing(for: nil)

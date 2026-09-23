@@ -14,7 +14,7 @@ struct HostContextMenuTests {
 
     private let host = Host(
         id: "menu-test-pc", name: "tower", customName: "Tower", localAddress: "192.0.2.10", manualAddress: nil,
-        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
 
     private func model(polled state: HostLiveStatus.State, hostID: String? = nil, age: TimeInterval = 0) -> AppModel {
         let model = AppModel()

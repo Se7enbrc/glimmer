@@ -278,7 +278,6 @@ extension AppModel {
         // migration hint, and a mismatch between the two forces a re-pair.
         info.serverCertPEM = authoritativePin(for: host)
         info.appVersion = host.appVersion
-        info.gfeVersion = host.gfeVersion
         info.pairStatus = .paired      // host is in our local list → already paired
         return info
     }

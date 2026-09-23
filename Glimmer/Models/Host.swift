@@ -22,7 +22,6 @@ struct Host: Identifiable, Hashable {
     let lastConnected: Date?
     let serverCertPEM: String?    // pinned from moonlight-qt's hosts.N.srvcert (migration)
     let appVersion: String?
-    let gfeVersion: String?
 
     /// The PC's MAC from /serverinfo's `<mac>`, for Wake on LAN.
     let macAddress: String?
