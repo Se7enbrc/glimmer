@@ -21,7 +21,23 @@ extension AppModel {
         appDelegate.model = self
     }
 
-    func bootstrap() async {
+    private static var bootstrapTask: Task<Void, Never>?
+
+    /// Runs the launch bootstrap once, then takes command-line requests. App Intents
+    /// await the same task: one can be what launched Glimmer, and until it finishes
+    /// no PCs are loaded.
+    @discardableResult
+    func startBootstrap() -> Task<Void, Never> {
+        if let task = Self.bootstrapTask { return task }
+        let task = Task {
+            await bootstrap()
+            listenForCommands()
+        }
+        Self.bootstrapTask = task
+        return task
+    }
+
+    private func bootstrap() async {
         // ContainerMigration.runIfNeeded() runs earlier, in GlimmerApp.init(),
         // before AppModel reads any UserDefaults.
         // Self-heal the login item: if the user wants launch-at-login but the

@@ -240,10 +240,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let mgr = Self.boundManager {
             self.model = mgr
             mgr.attach(appDelegate: self)
-            Task {
-                await mgr.bootstrap()
-                mgr.listenForCommands()
-            }
+            mgr.startBootstrap()
+            GlimmerShortcuts.trackPCs(of: mgr)
             // A stream started from the menu bar needs the Dock icon; its end
             // may leave nothing to come back to. The first value is launch state.
             Task { [weak self] in

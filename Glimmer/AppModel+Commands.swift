@@ -161,19 +161,22 @@ extension AppModel {
         return settled()
     }
 
-    /// Our stream from that PC ends through stop(), which can't trigger a reconnect.
-    /// stop() cancels on the PC only when this session launched the app there;
-    /// otherwise "notMine" leaves the /cancel to the command line.
+    /// "notMine" leaves the /cancel to the command line.
     private func stopForCommand(_ id: String) {
-        guard let session = nativeSession else {
-            replyToCommand(id, CommandChannel.Event.notMine)
-            return
-        }
         Task {
-            let owns = await session.ownsHostSession
-            stopStreamFromMenu(source: "the command line")
-            replyToCommand(id, owns ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
+            let quit = await stopOwnStream(source: "the command line")
+            replyToCommand(id, quit ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
         }
+    }
+
+    /// Our stream ends through stop(), which can't trigger a reconnect. True when
+    /// that quit the app on the PC too: stop() cancels there only when this
+    /// session launched it.
+    func stopOwnStream(source: String) async -> Bool {
+        guard let session = nativeSession else { return false }
+        let owns = await session.ownsHostSession
+        stopStreamFromMenu(source: source)
+        return owns
     }
 
     private func replyToCommand(_ id: String, _ event: String, _ detail: String? = nil, extra: [String: String] = [:]) {
