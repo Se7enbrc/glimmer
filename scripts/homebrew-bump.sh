@@ -48,10 +48,17 @@ sed -i '' \
 	-e "s|^  sha256 \".*\"$|  sha256 \"$SHA\"|" \
 	"$TAP_DIR/$CASK"
 
-# Fail loud rather than pushing a cask the sed didn't actually touch (a renamed
-# stanza or reindent would silently no-op both expressions above).
-grep -q "^  version \"$VERSION\"$" "$TAP_DIR/$CASK" && grep -q "^  sha256 \"$SHA\"$" "$TAP_DIR/$CASK" || {
-	echo "ERR: $CASK does not carry version $VERSION + that sha256 after the rewrite - check its stanza format" >&2
+# The `glimmer` command is the app binary itself, linked under that name; the
+# app re-execs through the real path. Added once, right after the app stanza.
+BINARY='  binary "#{appdir}/Glimmer.app/Contents/MacOS/Glimmer", target: "glimmer"'
+grep -qxF "$BINARY" "$TAP_DIR/$CASK" || sed -i '' -e "s|^  app \"Glimmer.app\"\$|&\\
+$BINARY|" "$TAP_DIR/$CASK"
+
+# Fail loud rather than pushing a cask the seds didn't actually touch (a renamed
+# stanza or reindent would silently no-op the expressions above).
+grep -q "^  version \"$VERSION\"$" "$TAP_DIR/$CASK" && grep -q "^  sha256 \"$SHA\"$" "$TAP_DIR/$CASK" \
+	&& grep -qxF "$BINARY" "$TAP_DIR/$CASK" || {
+	echo "ERR: $CASK does not carry version $VERSION, that sha256 and the glimmer binary after the rewrite - check its stanza format" >&2
 	exit 1
 }
 
