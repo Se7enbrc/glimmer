@@ -141,7 +141,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         startReceiveLoop()
         startPingLoop()
         Diag.notice("NativeVideo receiver started → \(host):\(videoPort) "
-            + "(packetSize=\(packetSize), \(pingPayload.isEmpty ? "legacy ping" : "16-byte ping")"
+            + "(packetSize=\(packetSize)"
             + (encrypted ? ", encrypted at the PC's request)" : ")"), Self.cat)
     }
 
