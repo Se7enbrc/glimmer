@@ -92,12 +92,17 @@ extension NetworkClient {
             clientKeyPEM: usePaired ? clientKeyPEM : nil,
             pinnedCertPEM: usePaired ? server.serverCertPEM : nil)
         let requestTarget = target
-        let resp = try await StreamAttempt.run(until: deadline) {
-            try await ControlTransport.get(
-                host: address, port: port, target: requestTarget,
-                userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
-                tls: usePaired, credential: credential,
-                timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+        let resp: ControlTransport.Response
+        do {
+            resp = try await StreamAttempt.run(until: deadline) {
+                try await ControlTransport.get(
+                    host: address, port: port, target: requestTarget,
+                    userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
+                    tls: usePaired, credential: credential,
+                    timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+            }
+        } catch {
+            throw Self.requestError(error, requestDeadline: requestDeadline)
         }
         try StreamAttempt.checkDeadline(requestDeadline)
 
@@ -111,6 +116,13 @@ extension NetworkClient {
         } catch {
             throw StreamError.launchFailed("Malformed XML on /\(path): \(error)")
         }
+    }
+
+    /// Without a request deadline (only /launch and a reconnect set one), a
+    /// timeout is this request's own: the PC never answered, whichever timer fired.
+    static func requestError(_ error: Error, requestDeadline: Date?) -> Error {
+        guard requestDeadline == nil, case StreamError.hostTimedOut = error else { return error }
+        return StreamError.hostUnreachable("Control request timed out.")
     }
 
     // MARK: - Status check

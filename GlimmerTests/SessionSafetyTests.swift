@@ -196,6 +196,27 @@ struct SessionSafetyTests {
         }
     }
 
+    /// Before /launch no request deadline is set, so a request that runs out
+    /// its own clock is a PC that never answered, whichever timer wins. Under
+    /// the launch deadline the same timeout means the app was slow to start.
+    @Test func unansweredRequestBeforeLaunchIsUnreachable() async {
+        func failure(requestDeadline: Date?) async -> (message: String, kind: AppModel.StreamErrorKind)? {
+            do {
+                try await StreamAttempt.run(until: Date().addingTimeInterval(0.05)) {
+                    try await Task.sleep(for: .seconds(5))
+                }
+                return nil
+            } catch {
+                let error = NetworkClient.requestError(error, requestDeadline: requestDeadline)
+                return AppModel.connectFailure(for: error, hostName: "Tower")
+            }
+        }
+        let beforeLaunch = await failure(requestDeadline: nil)
+        #expect(beforeLaunch?.kind == .unreachable)
+        let duringLaunch = await failure(requestDeadline: .distantFuture)
+        #expect(duringLaunch?.message == "Tower took too long to start the app.")
+    }
+
     /// Cancel, the quit chord and the close button all end a connect by choice:
     /// no banner, no "Stream ended", no last-played stamp. A real failure isn't.
     @Test func userStopsAreNotConnectFailures() {
