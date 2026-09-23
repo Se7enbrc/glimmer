@@ -97,11 +97,15 @@ enum LoginItemManager {
         let status = activeService(minimized: minimized).status
         switch reconcileAction(status: status, registeredBuild: defaults.string(forKey: registeredBuildKey),
                                currentBuild: currentBuild()) {
-        case .keep where status == .requiresApproval:
-            Diag.notice("login item needs approval in System Settings › General › Login Items", "LoginItem")
-            return status
         case .keep:
-            Diag.info("login item enabled (\(minimized ? "helper" : "main app"))", "LoginItem")
+            // A live registration belongs to this build, including one made
+            // before builds kept a record, so a later removal is recognized.
+            defaults.set(currentBuild(), forKey: registeredBuildKey)
+            if status == .requiresApproval {
+                Diag.notice("login item needs approval in System Settings › General › Login Items", "LoginItem")
+            } else {
+                Diag.info("login item enabled (\(minimized ? "helper" : "main app"))", "LoginItem")
+            }
             return status
         case .reregister:
             Diag.notice("login item drifted (\(statusLabel(status))) - re-registering", "LoginItem")
