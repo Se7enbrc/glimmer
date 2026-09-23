@@ -44,16 +44,20 @@ struct AudioResamplerHoldTests {
         #expect(decoder.resamplerIntegralPpm == -40)
     }
 
-    /// The measured wind-up: pinned at the rail while trims fire. A gap dip
-    /// must not push it further; fill above target must still unwind it.
-    @Test func trimHoldBlocksSlowdownButLetsARailedIntegralUnwind() {
-        let decoder = steadyDecoder(integralPpm: -AudioDecoder.resamplerBoundPpm)
+    /// The measured wind-up: the integral ran to the rail while trims fired. A
+    /// gap dip after a trim must not push it lower; fill above target still unwinds it.
+    @Test func trimHoldBlocksSlowdownButLetsTheIntegralUnwind() {
+        let control = steadyDecoder(integralPpm: -200)
+        control.driveResampler(fillMs: 60, targetMs: 100, engaged: true)
+        #expect(control.resamplerIntegralPpm < -200)
+
+        let decoder = steadyDecoder(integralPpm: -200)
         decoder.lastTrimNanos = DispatchTime.now().uptimeNanoseconds
         decoder.driveResampler(fillMs: 60, targetMs: 100, engaged: true)
-        #expect(decoder.resamplerIntegralPpm == -AudioDecoder.resamplerBoundPpm)
+        #expect(decoder.resamplerIntegralPpm == -200)
         decoder.lastResamplerUpdateNanos = 0
         decoder.driveResampler(fillMs: 110, targetMs: 100, engaged: true)
-        #expect(decoder.resamplerIntegralPpm > -AudioDecoder.resamplerBoundPpm)
+        #expect(decoder.resamplerIntegralPpm > -200)
     }
 
     /// A save window persists the MEAN of its quiet ticks, not the integral's
