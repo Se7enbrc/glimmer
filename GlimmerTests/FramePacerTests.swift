@@ -76,15 +76,18 @@ struct FramePacerTests {
         #expect(!FramePacer.tickOwnsScanout(now: 100, scanout: .nan))
     }
 
-    /// The watchdog's non-empty clock starts on the empty → non-empty submit and
-    /// reads 0 once the queue drains.
+    /// The watchdog's non-empty clock starts on the empty → non-empty submit,
+    /// keeps running through submits that find frames queued (a wedge with
+    /// frames still arriving), and reads 0 once the queue drains.
     @Test func queueNonEmptyClockFollowsSubmits() throws {
         let pacer = try makePacer(fps: 120, queued: 0)
         #expect(pacer.livenessSnapshot().secondsQueueNonEmpty == 0)
         try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 0, timescale: 90_000))
-        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 750, timescale: 90_000))
         let held = pacer.livenessSnapshot().secondsQueueNonEmpty
         #expect(held >= 0 && held < StreamSession.presentStallThreshold)
+        pacer.liveness.queueNonEmptySince -= 2 * StreamSession.presentStallThreshold
+        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 750, timescale: 90_000))
+        #expect(pacer.livenessSnapshot().secondsQueueNonEmpty > StreamSession.presentStallThreshold)
         pacer.queue.removeAll()
         #expect(pacer.livenessSnapshot().secondsQueueNonEmpty == 0)
     }
