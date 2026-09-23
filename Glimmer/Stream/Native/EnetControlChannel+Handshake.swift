@@ -106,7 +106,7 @@ extension EnetControlChannel {
                     } else if let self, !self.interrupted.isSet {
                         // A connected UDP flow that fails (its interface went
                         // away) never recovers: end the peer now, not at the 10s ACK cutoff.
-                        self.declarePeerDead(code: -1, reason: "ENet socket failed (\(err)); peer is gone")
+                        self.declarePeerDead(code: -1, reason: "ENet socket failed (\(err, privacy: .private)); peer is gone")
                     }
                 case .cancelled:
                     // Only our own interrupt()/close() cancel; never a peer death.
@@ -117,7 +117,7 @@ extension EnetControlChannel {
             }
             conn.start(queue: queue)
         }
-        Diag.info("ENet UDP socket ready → \(host):\(port)", Self.logCategory)
+        Diag.info("ENet UDP socket ready → \(host, privacy: .private):\(port)", Self.logCategory)
     }
 
     // MARK: - CONNECT (host.c enet_host_connect)

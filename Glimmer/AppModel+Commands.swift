@@ -144,8 +144,8 @@ extension AppModel {
         }
         if !settled {
             Diag.notice(hostRoute.routeClass == .wifi
-                ? "No Wi-Fi rate for \(host.displayName) yet; asking without the radio gate"
-                : "Route to \(host.displayName) still unknown; asking without a route boost", "Stream")
+                ? "No Wi-Fi rate for \(host.displayName, privacy: .private) yet; asking without the radio gate"
+                : "Route to \(host.displayName, privacy: .private) still unknown; asking without a route boost", "Stream")
         }
     }
 

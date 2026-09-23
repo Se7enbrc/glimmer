@@ -75,7 +75,7 @@ enum LoginItemManager {
             UserDefaults.standard.set(currentBuild(), forKey: registeredBuildKey)
             return activeService(minimized: minimized).status
         } catch {
-            Diag.error("login item registration FAILED: \(error.localizedDescription)", "LoginItem")
+            Diag.error("login item registration FAILED: \(error.localizedDescription, privacy: .private)", "LoginItem")
             return .notFound
         }
     }

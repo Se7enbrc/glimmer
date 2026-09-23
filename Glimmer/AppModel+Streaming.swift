@@ -86,10 +86,11 @@ extension AppModel {
         // its launch surfaces while a session exists, but a double-click can
         // land before SwiftUI re-renders - this guard is the actual wall.
         guard !isStreaming else {
-            Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName)) - a session is already in flight", "Stream")
+            Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName, privacy: .private)) "
+                + "- a session is already in flight", "Stream")
             return
         }
-        Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
+        Diag.notice("Starting stream → \(host.displayName, privacy: .private) · \(app.name)", "Stream")
         armLaunchState(app: app, host: host)
         // NB: the "last played" timestamp is intentionally NOT written here.
         // It records when the stream ENDED, not when it started - writing it
@@ -235,7 +236,7 @@ extension AppModel {
             // and pasted logs never see os.Logger); the banner gets one sentence.
             let localized = (caughtError as NSError).localizedDescription
             self.log.error("Stream start failed for \(hostName, privacy: .private): \(localized, privacy: .private)")
-            Diag.error("Stream start failed for \(hostName): \(localized)", "Stream")
+            Diag.error("Stream start failed for \(hostName, privacy: .private): \(localized, privacy: .private)", "Stream")
             self.showStreamFailure(Self.connectFailure(for: caughtError, hostName: hostName))
         }
         // M3: do NOT unconditionally clear nativeStreamError here. A host-side

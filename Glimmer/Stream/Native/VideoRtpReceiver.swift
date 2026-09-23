@@ -140,7 +140,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         try openSocket()
         startReceiveLoop()
         startPingLoop()
-        Diag.notice("NativeVideo receiver started → \(host):\(videoPort) "
+        Diag.notice("NativeVideo receiver started → \(host, privacy: .private):\(videoPort) "
             + "(packetSize=\(packetSize)"
             + (encrypted ? ", encrypted at the PC's request)" : ")"), Self.cat)
     }
@@ -240,7 +240,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
         fd = sock
-        Diag.info("NativeVideo UDP socket ready (unconnected, recvfrom-any) → \(host):\(videoPort)",
+        Diag.info("NativeVideo UDP socket ready (unconnected, recvfrom-any) → \(host, privacy: .private):\(videoPort)",
                   Self.cat)
     }
 
@@ -420,7 +420,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         // unjudgeable from data. Always-live integer add at ≤13.3Hz.
         EnvSignalController.shared.videoPingsSentTotal.increment()
         if pingCount == 1 {
-            Diag.notice("NativeVideo first video ping sent → \(host):\(videoPort) (seq=\(pingCount))", Self.cat)
+            Diag.notice("NativeVideo first video ping sent → \(host, privacy: .private):\(videoPort) (seq=\(pingCount))", Self.cat)
         }
     }
 

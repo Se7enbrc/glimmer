@@ -188,7 +188,7 @@ extension EnetControlChannel {
                 type: CtrlV2.periodicPing, payload: payload,
                 channel: Enet.ctrlChannelGeneric, label: "PERIODIC_PING")
         } catch {
-            Diag.error("ENet periodic ping failed: \(error)", Self.logCategory)
+            Diag.error("ENet periodic ping failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 

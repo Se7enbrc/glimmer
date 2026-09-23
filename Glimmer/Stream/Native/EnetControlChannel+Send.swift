@@ -49,7 +49,7 @@ extension EnetControlChannel {
                 channel: channel, label: "INPUT")
             return true
         } catch {
-            Diag.error("ENet input send failed (ch \(channel)): \(error)", Self.logCategory)
+            Diag.error("ENet input send failed (ch \(channel)): \(error, privacy: .private)", Self.logCategory)
             return false
         }
     }
@@ -69,7 +69,7 @@ extension EnetControlChannel {
                 channel: channel, label: "INPUT_UNREL")
             return true
         } catch {
-            Diag.error("ENet unreliable input send failed (ch \(channel)): \(error)",
+            Diag.error("ENet unreliable input send failed (ch \(channel)): \(error, privacy: .private)",
                        Self.logCategory)
             return false
         }
@@ -153,7 +153,7 @@ extension EnetControlChannel {
             armIdrRoundTrip()
             Diag.notice("ENet IDR frame requested", Self.logCategory)
         } catch {
-            Diag.error("ENet IDR request failed: \(error)", Self.logCategory)
+            Diag.error("ENet IDR request failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 
@@ -179,7 +179,7 @@ extension EnetControlChannel {
             // rides `rfiTotal`; the round-trip pair is explicit-IDR-only now.
             Diag.notice("ENet RFI sent (\(firstFrame)..\(lastFrame))", Self.logCategory)
         } catch {
-            Diag.error("ENet RFI failed: \(error)", Self.logCategory)
+            Diag.error("ENet RFI failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 
@@ -207,7 +207,7 @@ extension EnetControlChannel {
                 type: CtrlV2.ltrFrameAck, payload: w.bytes,
                 channel: Enet.ctrlChannelUrgent, label: "LTR_ACK")
         } catch {
-            Diag.error("ENet LTR ack failed: \(error)", Self.logCategory)
+            Diag.error("ENet LTR ack failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 

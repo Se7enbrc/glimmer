@@ -271,7 +271,7 @@ final class RtspClient: @unchecked Sendable {
                 if interrupted.isSet { throw RtspError.interrupted }
                 guard case .transportFailure = rtspError else { throw rtspError }
                 guard Date() < deadline else {
-                    Diag.error("RTSP port \(rtspPort) still failing after \(attempt) retries: \(rtspError)",
+                    Diag.error("RTSP port \(rtspPort) still failing after \(attempt) retries: \(rtspError, privacy: .private)",
                                Self.logCategory)
                     throw RtspError.connectTimeout(rtspPort)
                 }
@@ -380,12 +380,12 @@ final class RtspClient: @unchecked Sendable {
             referenceFrameInvalidationSupported: false)
 
         // 1) OPTIONS
-        Diag.info("RTSP OPTIONS \(rtspTargetUrl)", Self.logCategory)
+        Diag.info("RTSP OPTIONS \(rtspTargetUrl, privacy: .private)", Self.logCategory)
         let optionsResp = try await transact(makeRequest("OPTIONS", rtspTargetUrl))
         try check(optionsResp, step: "OPTIONS")
 
         // 2) DESCRIBE → parse SDP.
-        Diag.info("RTSP DESCRIBE \(rtspTargetUrl)", Self.logCategory)
+        Diag.info("RTSP DESCRIBE \(rtspTargetUrl, privacy: .private)", Self.logCategory)
         var describe = makeRequest("DESCRIBE", rtspTargetUrl)
         describe.headers.append(("Accept", "application/sdp"))
         describe.headers.append(("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT"))

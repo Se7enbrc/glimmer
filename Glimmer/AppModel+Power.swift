@@ -103,7 +103,7 @@ extension AppModel {
         let addresses = [host.localAddress, host.manualAddress]
         for burst in 0..<3 {
             let sent = await Task.detached(priority: .userInitiated) { send(mac, addresses) }.value
-            Diag.notice("Wake on LAN: burst \(burst + 1), \(sent) packets for \(host.displayName)", "Power")
+            Diag.notice("Wake on LAN: burst \(burst + 1), \(sent) packets for \(host.displayName, privacy: .private)", "Power")
             if sent == 0 {
                 if burst == 0 { return .couldNotSend }
                 break
@@ -113,18 +113,18 @@ extension AppModel {
         guard let waitSeconds else { return .sent }
         guard await waitForSunshine(host: host, budgetSeconds: waitSeconds) else {
             if !Task.isCancelled {
-                Diag.notice("Wake on LAN: \(host.displayName) did not answer within \(Int(waitSeconds)) s", "Power")
+                Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) did not answer within \(Int(waitSeconds)) s", "Power")
             }
             return .noAnswer
         }
-        Diag.notice("Wake on LAN: \(host.displayName) is answering", "Power")
+        Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) is answering", "Power")
         return .answered
     }
 
     /// Drops our wait only; the packets are already on the wire.
     func cancelWake(_ host: Host) {
         guard wakingHostID == host.id else { return }
-        Diag.notice("Wake on LAN: stopped waiting for \(host.displayName)", "Power")
+        Diag.notice("Wake on LAN: stopped waiting for \(host.displayName, privacy: .private)", "Power")
         Self.wakeTask?.cancel()
         Self.wakeTask = nil
         wakingHostID = nil

@@ -297,7 +297,7 @@ extension StreamSession {
                 setup: (win, inp, dec), network: net, duringReconnect: true, deadline: deadline)
             try checkAttempt(deadline: deadline)
         } catch {
-            Diag.notice("reconnect attempt failed: \(error)", "Stream")
+            Diag.notice("reconnect attempt failed: \(error, privacy: .private)", "Stream")
             fresh.interruptConnection()
             await net.shutdown()
             if self.network === net { self.network = nil }

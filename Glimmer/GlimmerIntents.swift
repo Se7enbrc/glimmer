@@ -125,7 +125,7 @@ struct QuitAppOnPCIntent: AppIntent {
     @MainActor func perform() async throws -> some IntentResult {
         let model = try await AppModel.forIntent()
         let host = try model.pairedHost(pc)
-        Diag.notice("Quit App on PC from Shortcuts: \(host.displayName)", "Stream")
+        Diag.notice("Quit App on PC from Shortcuts: \(host.displayName, privacy: .private)", "Stream")
         if model.streamingHostID == host.id, await model.stopOwnStream(source: "Shortcuts") {
             return .result()
         }

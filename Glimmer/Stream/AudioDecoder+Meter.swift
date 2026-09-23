@@ -355,7 +355,7 @@ extension AudioDecoder {
         let backlog = suppressed > 0 ? " (+\(suppressed) since last line)" : ""
         let deadAir = deadAirGapMs.map { " (dead air: \(Int($0.rounded()))ms arrival gap, cushion unchanged)" } ?? ""
         Diag.notice(
-            "audio under-run #\(ordinal)\(backlog) - playout drained to empty\(deadAir); route \(route), "
+            "audio under-run #\(ordinal)\(backlog) - playout drained to empty\(deadAir); route \(route, privacy: .private), "
             + "cushion target \(Int(targetMs))ms",
             "Stream")
     }

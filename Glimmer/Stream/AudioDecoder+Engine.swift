@@ -220,7 +220,7 @@ extension AudioDecoder {
             applyOutputMute()
         } else if let failure = startEngineSafely() {
             log.error("AVAudioEngine.start: \(failure)")
-            Diag.error("audio engine start FAILED: \(failure)", "Stream.Audio")
+            Diag.error("audio engine start FAILED: \(failure, privacy: .private)", "Stream.Audio")
             return false
         }
         return true
@@ -358,7 +358,7 @@ extension AudioDecoder {
         stateLock.lock(); defer { stateLock.unlock() }
         guard !isShutdown, !engine.isRunning, inputFormat != nil else { return }
         if let failure = startEngineSafely() {
-            Diag.error("audio engine restart retry \(attempt) failed: \(failure)", "Stream.Audio")
+            Diag.error("audio engine restart retry \(attempt) failed: \(failure, privacy: .private)", "Stream.Audio")
             lastOutputFormat = nil
             scheduleEngineRestartRetry()
         } else {
@@ -400,7 +400,7 @@ extension AudioDecoder {
             let failure = startEngineSafely()
             guard failure == nil, engine.isRunning else {
                 Diag.error("audio engine start at prime edge FAILED "
-                    + "(\(failure ?? "engine not running")) "
+                    + "(\(failure ?? "engine not running", privacy: .private)) "
                     + "- staying un-primed, retry armed", "Stream.Audio")
                 scheduleEngineRestartRetry()
                 return false
@@ -431,11 +431,11 @@ extension AudioDecoder {
         Diag.error("audio playout STALLED: scheduled audio unconsumed ≥3s with "
             + "every arrival dropped at the backlog gates (output device "
             + "slept/vanished?) - rebuilding: node stop → engine ensure-running "
-            + "→ re-prime; route \(audioRouteCache)", "Stream.Audio")
+            + "→ re-prime; route \(audioRouteCache, privacy: .private)", "Stream.Audio")
         playerNode.stop()
         if !engine.isRunning {
             if let failure = startEngineSafely() {
-                Diag.error("audio engine restart in stall recovery FAILED: \(failure)", "Stream.Audio")
+                Diag.error("audio engine restart in stall recovery FAILED: \(failure, privacy: .private)", "Stream.Audio")
                 lastOutputFormat = nil
                 scheduleEngineRestartRetry()
             } else {
@@ -499,7 +499,7 @@ extension AudioDecoder {
         }
         if !engine.isRunning {
             if let failure = startEngineSafely() {
-                Diag.error("audio engine restart after config change FAILED: \(failure)", "Stream.Audio")
+                Diag.error("audio engine restart after config change FAILED: \(failure, privacy: .private)", "Stream.Audio")
                 lastOutputFormat = nil
                 scheduleEngineRestartRetry()
             } else {

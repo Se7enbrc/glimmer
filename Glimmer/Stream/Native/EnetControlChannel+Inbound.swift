@@ -24,7 +24,7 @@ extension EnetControlChannel {
             case .ready:
                 self.startReceiveLoop() // transient (an ICMP refusal): keep listening
             case .failed:
-                self.declarePeerDead(code: -1, reason: "ENet receive failed (\(err)) on a failed socket")
+                self.declarePeerDead(code: -1, reason: "ENet receive failed (\(err, privacy: .private)) on a failed socket")
             default:
                 break // the state handler re-arms this loop on the next .ready
             }
@@ -247,7 +247,7 @@ extension EnetControlChannel {
         do {
             inner = try crypto.open(bytes)
         } catch {
-            return rejectInboundControl("decrypt failed: \(error)")
+            return rejectInboundControl("decrypt failed: \(error, privacy: .private)")
         }
         // inner = [type LE][payloadLength LE][payload]
         guard inner.count >= 4 else { return true }

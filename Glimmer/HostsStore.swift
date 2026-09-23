@@ -393,7 +393,7 @@ extension AppModel {
         guard let moved,
               await HostReachability.measureRTT(host: saved, port: probe.httpPort, timeoutMs: 2_000) == .unreachable,
               Self.storeAddress(moved, hostID: host.id, in: .standard) else { return false }
-        Diag.notice("\(host.displayName) answered at a new network address; saved it", "Host")
+        Diag.notice("\(host.displayName, privacy: .private) answered at a new network address; saved it", "Host")
         loadHosts()
         return true
     }

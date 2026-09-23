@@ -184,7 +184,7 @@ extension AudioDecoder {
         }
         Diag.notice(
             "audio cushion backfill +\(Int(deficitMs.rounded()))ms silence → \(Int(targetMs))ms standing fill "
-            + "- no catch-up clump within the re-prime grace (steady link); route \(route)",
+            + "- no catch-up clump within the re-prime grace (steady link); route \(route, privacy: .private)",
             "Stream")
     }
 }
