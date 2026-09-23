@@ -36,13 +36,17 @@ enum CommandChannel {
         static let ended = "ended"
     }
 
-    /// What the app does with one request.
+    /// What the app does with one request. `ready` answers `check`: a stream
+    /// request now would be taken.
     enum Decision: Equatable {
         case stream(LibraryApp, on: Host, takeover: Bool)
         case rejected(String)
+        case ready
         case stop
         case notMine
     }
+
+    static let alreadyStreaming = "Glimmer is already streaming. Stop Streaming, then try again."
 
     static func post(_ name: Notification.Name, _ info: [String: String]) {
         DistributedNotificationCenter.default().postNotificationName(
@@ -51,14 +55,16 @@ enum CommandChannel {
 
     /// The app's rules for a request, without side effects. `handled` holds the
     /// ids already answered, so a repeat gets nil; `streamingFrom` is the PC
-    /// this Mac is streaming from, if any.
+    /// this Mac is streaming from or about to, if any.
     static func decide(
         _ info: [String: String], handled: inout Set<String>, hosts: [Host], streamingFrom: String?
     ) -> Decision? {
         guard let id = info[Key.id], let hostID = info[Key.host], handled.insert(id).inserted else { return nil }
         switch info[Key.verb] {
+        case "check":
+            return streamingFrom == nil ? .ready : .rejected(alreadyStreaming)
         case "stream":
-            guard streamingFrom == nil else { return .rejected("Glimmer is already streaming. Stop that stream first.") }
+            guard streamingFrom == nil else { return .rejected(alreadyStreaming) }
             let appID = info[Key.app].flatMap { Int($0) }
             guard let host = hosts.first(where: { $0.id == hostID }),
                   let app = host.apps.first(where: { $0.id == appID }) else {
@@ -76,6 +82,8 @@ enum CommandChannel {
 extension AppModel {
     private static var commandObserver: NSObjectProtocol?
     private static var handledCommandIDs: Set<String> = []
+    /// The PC of an accepted stream request still waiting for its route.
+    private static var commandStreamHostID: String?
 
     /// Installed once the host list is loaded; the CLI re-posts each second
     /// until it hears back, so a request sent before this is simply repeated.
@@ -95,24 +103,64 @@ extension AppModel {
         guard let id = info[CommandChannel.Key.id],
               let decision = CommandChannel.decide(
                 info, handled: &Self.handledCommandIDs, hosts: hosts,
-                streamingFrom: isStreaming ? lastLaunchAttempt?.host.id : nil)
+                streamingFrom: Self.commandStreamHostID ?? (isStreaming ? lastLaunchAttempt?.host.id : nil))
         else { return }
         switch decision {
         case .stream(let app, let host, let takeover):
             Diag.notice("Stream requested from the command line", "Stream")
+            // The terminal settled the takeover; an older unanswered prompt no longer applies.
+            pendingTakeover = nil
             selectHost(host)
-            stream(app: app, on: host, takeoverAuthorized: takeover)
-            replyToCommand(id, CommandChannel.Event.accepted)
-            reportCommandSession(id)
+            Self.commandStreamHostID = host.id
+            Task { await streamFromCommand(id, app: app, on: host, takeover: takeover) }
         case .rejected(let why):
             replyToCommand(id, CommandChannel.Event.rejected, why)
+        case .ready:
+            replyToCommand(id, CommandChannel.Event.accepted)
         case .stop:
-            // Our own stream from that PC stops through stop(), which cancels
-            // on the host and can't trigger a reconnect; a bare /cancel would.
-            stopStreamFromMenu(source: "the command line")
-            replyToCommand(id, CommandChannel.Event.stopped)
+            stopForCommand(id)
         case .notMine:
             replyToCommand(id, CommandChannel.Event.notMine)
+        }
+    }
+
+    /// A new selection re-points the route monitor and the bitrate ask reads its
+    /// class, so give the first path update up to 500 ms (it's usually one tick).
+    private func streamFromCommand(_ id: String, app: LibraryApp, on host: Host, takeover: Bool) async {
+        let settled = await Self.poll(slices: 20, every: .milliseconds(25)) { hostRoute.routeClass != .unknown }
+        Self.commandStreamHostID = nil
+        if !settled { Diag.notice("Route to \(host.displayName) still unknown; asking without a route boost", "Stream") }
+        guard !isStreaming else {
+            replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
+            return
+        }
+        stream(app: app, on: host, takeoverAuthorized: takeover)
+        replyToCommand(id, CommandChannel.Event.accepted)
+        reportCommandSession(id)
+    }
+
+    /// Checks `settled` up to `slices` times, `slice` apart, stopping at the first
+    /// true answer; false once the budget runs out.
+    static func poll(slices: Int, every slice: Duration, until settled: () -> Bool) async -> Bool {
+        for _ in 0..<slices {
+            if settled() { return true }
+            try? await Task.sleep(for: slice)
+        }
+        return settled()
+    }
+
+    /// Our stream from that PC ends through stop(), which can't trigger a reconnect.
+    /// stop() cancels on the PC only when this session launched the app there;
+    /// otherwise "notMine" leaves the /cancel to the command line.
+    private func stopForCommand(_ id: String) {
+        guard let session = nativeSession else {
+            replyToCommand(id, CommandChannel.Event.notMine)
+            return
+        }
+        Task {
+            let owns = await session.ownsHostSession
+            stopStreamFromMenu(source: "the command line")
+            replyToCommand(id, owns ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
         }
     }
 
@@ -136,7 +184,9 @@ extension AppModel {
                 }
                 try? await Task.sleep(for: .milliseconds(sentLive ? 1000 : 100))
             }
-            let busy = pendingTakeover.map { "\($0.host.displayName) is busy. Choose Take Over in Glimmer, or run again with --force." }
+            let busy = pendingTakeover.map {
+                "\($0.host.displayName) is busy. Choose Quit and Stream in Glimmer, or run again with --force."
+            }
             replyToCommand(id, CommandChannel.Event.ended, nativeStreamError ?? busy)
         }
     }

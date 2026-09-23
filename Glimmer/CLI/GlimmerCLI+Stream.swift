@@ -33,6 +33,12 @@ extension GlimmerCLI {
         }
         var takeover = command.flags.contains("--force")
         if !takeover, let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
+            // Glimmer's own stream may be what keeps the PC busy; it refuses a second one.
+            if runningGlimmer() != nil, let reply = await ask([Key.verb: "check", Key.host: host.id], within: .seconds(2)),
+               reply[Key.event] == Event.rejected {
+                printError(reply[Key.detail] ?? CommandChannel.alreadyStreaming)
+                return Exit.failed
+            }
             guard confirmTakeover(pc: host.displayName, occupant: occupant, app: app.name) else { return Exit.failed }
             takeover = true
         }

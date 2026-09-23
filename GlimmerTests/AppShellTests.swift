@@ -58,7 +58,24 @@ struct AppShellTests {
         #expect(decide(["id": "c", "verb": "stream", "host": "UUID-1"], handled: &handled) == unknown)
         let busy = decide(["id": "d", "verb": "stream", "host": "UUID-1", "app": "7"],
                           streamingFrom: "UUID-2", handled: &handled)
-        #expect(busy == .rejected("Glimmer is already streaming. Stop that stream first."))
+        #expect(busy == .rejected(CommandChannel.alreadyStreaming))
+    }
+
+    @Test func checkTellsTheTerminalWhetherAStreamWouldBeTaken() {
+        var handled: Set<String> = []
+        #expect(decide(["id": "a", "verb": "check", "host": "UUID-1"], handled: &handled) == .ready)
+        // Streaming, or a request still waiting on its route: asking about a takeover would be moot.
+        #expect(decide(["id": "b", "verb": "check", "host": "UUID-1"], streamingFrom: "UUID-1", handled: &handled)
+            == .rejected(CommandChannel.alreadyStreaming))
+    }
+
+    @Test @MainActor func routeWaitStopsAtTheFirstSettledCheckOrAfterTheBudget() async {
+        var checks = 0
+        #expect(await AppModel.poll(slices: 20, every: .milliseconds(1)) { checks += 1; return checks == 3 })
+        #expect(checks == 3)
+        checks = 0
+        #expect(!(await AppModel.poll(slices: 4, every: .milliseconds(1)) { checks += 1; return false }))
+        #expect(checks == 5)
     }
 
     @Test func quitStopsOnlyAStreamFromThatPC() {
