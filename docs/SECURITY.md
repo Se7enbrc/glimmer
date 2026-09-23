@@ -27,9 +27,9 @@ is sized to that.
 - **Same-LAN passive observer** - packet sniffer on the LAN. The HTTP control
   requests run mutual TLS once paired. In the stream itself, the ENet control
   channel, which also carries keyboard, mouse and controller input, is
-  AES-128-GCM encrypted. Audio and video travel unencrypted on the LAN: Sunshine
-  offers audio encryption, which Glimmer doesn't request yet, and Glimmer has no
-  encrypted-video path.
+  AES-128-GCM encrypted, and audio is AES-128-CBC encrypted whenever the PC
+  offers it (Sunshine always does). Video travels unencrypted on the LAN:
+  Glimmer has no encrypted-video path, and refuses a PC that requires one.
 - **Same-LAN active MITM** - an attacker who can intercept or redirect traffic
   between the Mac and the host. Defended by RSA-validated pairing handshake +
   post-pairing cert pinning (see Pairing + Pinning sections below). Pre-pairing
@@ -49,10 +49,10 @@ is sized to that.
 - **Untrusted stream input - the in-tree Swift transport parsers.** The
   streaming engine is pure Swift (`Glimmer/Stream/Native/`): RTSP/SDP response
   parsing, the ENet-subset control channel, RTP video/audio depacketization,
-  Reed-Solomon FEC reassembly, and AES-GCM decrypt all parse bytes that arrive
-  over UDP/TCP from the network. Memory-safety bugs, parser confusion, and
-  malformed-packet crashes in these parsers are **in scope and ours** - report
-  them here, not upstream.
+  Reed-Solomon FEC reassembly, and the AES-GCM control and AES-CBC audio
+  decrypts all parse bytes that arrive over UDP/TCP from the network.
+  Memory-safety bugs, parser confusion, and malformed-packet crashes in these
+  parsers are **in scope and ours** - report them here, not upstream.
 
 **Out of scope:**
 
@@ -218,9 +218,11 @@ the cert cannot also produce the PIN.
   pinned host cert authenticates the host to us. The system trust store is NOT
   consulted; the pinned PEM is the entire trust anchor.
 - **Stream:** the Swift-native engine's RTP video/audio + ENet-subset control
-  channels (`Glimmer/Stream/Native/`). The control channel, input included, is
-  AES-128-GCM under the per-session key exchanged over mutual TLS at `/launch`.
-  RTP audio and video are plaintext on the LAN.
+  channels (`Glimmer/Stream/Native/`). Both ciphers use the per-session key
+  exchanged over mutual TLS at `/launch`. The control channel, input included,
+  is AES-128-GCM. RTP audio is AES-128-CBC whenever the PC offers it, which
+  Sunshine always does. RTP video is plaintext on the LAN; a PC set to require
+  encrypted video is refused right after `DESCRIBE`.
 
 ## Runtime hardening
 
