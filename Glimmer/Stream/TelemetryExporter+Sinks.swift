@@ -179,12 +179,8 @@ extension TelemetryExporter {
             log.error("Telemetry: could not create log dir: \(error.localizedDescription, privacy: .public)")
             return
         }
-        // C2: prune the Logs dir BEFORE creating this session's file (so the
-        // newest files - this session's siblings - always survive). A fresh trio
-        // of files was minted every session and never pruned; over months that
-        // dir grows without bound (the per-frame trace alone is ~1.5GB/6h before
-        // the rollover above caps it). Bounded by a total-byte budget + an age
-        // limit, newest-kept.
+        // C2: prune the Logs dir (age + byte budget) BEFORE this session's
+        // NDJSON and trace files exist, so the sweep can never pick them.
         Self.sweepLogsDirectory(dir, log: log)
         // ISO8601 with ':' is filename-legal on APFS; keep the full timestamp so
         // each session's file is unique and sorts chronologically.

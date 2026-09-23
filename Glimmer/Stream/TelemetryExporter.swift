@@ -252,6 +252,9 @@ final class TelemetryExporter: @unchecked Sendable {
             // crash, see IOReportSampler.swift), so without this its first
             // "delta" would span the gap since the previous session's last tick.
             self.ioReport?.beginSession()
+            // NDJSON first: its budget sweep must run before the trace writer
+            // creates this session's segment, or the sweep could delete it.
+            self.openNDJSONFile()
             // Per-frame latency tracker + its batched trace writer. Installs the
             // gate-checked `FrameTimingTracker.shared` the hot-path stage call
             // sites read; when the gate is off (default) nothing is installed and
@@ -259,7 +262,6 @@ final class TelemetryExporter: @unchecked Sendable {
             // the exporter's lifecycle, session id, and ISO stamp.
             FrameTimingTracker.startIfEnabled(
                 sessionId: self.sessionId, isoStamp: self.isoFormatter.string(from: Date()))
-            self.openNDJSONFile()
             // One-shot CONFIG/DIAL breadcrumb first, so every session file is
             // self-describing from line 1 (see writeConfigEvent).
             self.writeConfigEvent()
@@ -339,22 +341,29 @@ final class TelemetryExporter: @unchecked Sendable {
 
     // MARK: - C2 Logs-directory sweep
 
-    /// Total-byte budget for `~/Library/Logs/Glimmer` after a sweep. Once the
-    /// dir exceeds this, the OLDEST Glimmer log files are pruned (newest kept)
-    /// until it fits. 300MB holds many sessions of NDJSON + the size-capped
-    /// per-frame trace tails while bounding unbounded growth.
-    private static let logsByteBudget: UInt64 = 300 * 1024 * 1024
-    /// Age limit (seconds): a Glimmer log file older than this is pruned
-    /// regardless of the byte budget. 14 days.
+    /// Byte budget for the per-frame traces + 1Hz NDJSON in Logs/Glimmer,
+    /// enforced at each diagnostics session start (before its files exist, so
+    /// the session being recorded may exceed it).
+    static let logsByteBudget: UInt64 = 300 * 1024 * 1024
+    /// Age limit (seconds): any Glimmer log file older than this is pruned,
+    /// Diag logs and receipts included. 14 days.
     private static let logsMaxAgeSeconds: TimeInterval = 14 * 24 * 3600
 
-    /// Prune the Glimmer Logs dir to the age limit + the byte budget, newest
-    /// kept. Touches ONLY our own log files (`telemetry-*` / `glimmer-*` - the
-    /// NDJSON, per-frame trace, session report, and Diag log families) so it can
-    /// never remove anything else in the dir. Best-effort: any error per file is
-    /// swallowed (a failed prune must never break telemetry bring-up). On the
-    /// exporter's `workQueue` (called once at session start) - never a hot path.
-    static func sweepLogsDirectory(_ dir: URL, log: Logger) {
+    /// Age-only sweep at app launch, whatever the diagnostics setting, so the
+    /// 14-day rule runs even when no diagnostics session ever starts again.
+    static func sweepLogsAtLaunch() {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+        let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
+        Task.detached(priority: .utility) {
+            sweepLogsDirectory(dir, log: log, enforceBudget: false)
+        }
+    }
+
+    /// Prune the Glimmer Logs dir: the age limit for every family, then (when
+    /// `enforceBudget`) the byte budget over traces first, then 1Hz NDJSON,
+    /// oldest-first. Diag logs + receipts are tiny and only ever age out.
+    static func sweepLogsDirectory(_ dir: URL, log: Logger, enforceBudget: Bool = true) {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
         guard let entries = try? fm.contentsOfDirectory(
@@ -384,10 +393,18 @@ final class TelemetryExporter: @unchecked Sendable {
                 survivors.append(entry)
             }
         }
-        // (2) BYTE-BUDGET prune: oldest-first until under budget.
-        var total = survivors.reduce(UInt64(0)) { $0 &+ $1.size }
-        if total > logsByteBudget {
-            for entry in survivors.sorted(by: { $0.modified < $1.modified }) {
+        // (2) BYTE-BUDGET prune over the bulky families: traces first, then
+        // 1Hz NDJSON, oldest-first within each.
+        let bulky = survivors.filter {
+            let name = $0.url.lastPathComponent
+            return !name.hasPrefix("glimmer-") && !name.hasPrefix("telemetry-session-")
+        }
+        let rank = { (entry: Entry) in
+            (entry.url.lastPathComponent.hasPrefix("telemetry-frames-") ? 0 : 1, entry.modified)
+        }
+        var total = bulky.reduce(UInt64(0)) { $0 &+ $1.size }
+        if enforceBudget && total > logsByteBudget {
+            for entry in bulky.sorted(by: { rank($0) < rank($1) }) {
                 guard total > logsByteBudget else { break }
                 if (try? fm.removeItem(at: entry.url)) != nil {
                     total &-= entry.size
