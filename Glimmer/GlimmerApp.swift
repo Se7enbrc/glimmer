@@ -200,7 +200,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// NSWindow open/close observers wired in applicationWillFinishLaunching
     /// that keep `NSApp.activationPolicy` in step (see `activationPolicy`).
-    /// Tracked so deinit can detach.
     private var windowVisibilityObservers: [NSObjectProtocol] = []
 
     /// A Dock icon and Cmd-Tab entry while there's something to come back to:
