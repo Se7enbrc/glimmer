@@ -130,6 +130,8 @@ extension RtspClient {
         // (0x02 = LI_FF_CONTROLLER_TOUCH_EVENTS).
         result.featureFlags =
             SdpScan.attributeUInt(sdp, "x-ss-general.featureFlags") ?? 0
+        let channels = Int(gl_channel_count_from_audio_configuration(config.audioConfiguration))
+        (result.opusConfig, result.highQualityAudio) = SdpScan.audioLayout(sdp, channelCount: channels)
     }
 
     static let ssEncControlV2: UInt32 = 0x01

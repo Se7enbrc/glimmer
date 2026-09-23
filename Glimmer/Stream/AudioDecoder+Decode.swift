@@ -202,57 +202,19 @@ extension AudioDecoder {
 extension AudioDecoder: NativeAudioSink {
     public func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
         let chCount = Int(gl_channel_count_from_audio_configuration(audioConfig))
-        // ★5 - NEGOTIATED multistream config. The passed `opus` carries the
-        // STEREO defaults (RtspHandshakeResult.defaultOpusConfig); the RTSP
-        // SETUP-audio response does NOT send an explicit per-channel opus
-        // stream layout. As in moonlight-common-c (AudioStream.c's
-        // `opusConfigArray`, indexed by the negotiated AudioConfiguration), the
-        // host encodes the opus multistream packets per the channel count it was
-        // asked for, and the client derives {streams, coupledStreams, mapping}
-        // from that same channel count. Feeding the hardcoded stereo
-        // {streams:1, coupled:1, mapping:[0,1]} into a 6/8-channel decoder
-        // produces inconsistent surround (the bug). Resolve the real config
-        // from `chCount` so a 5.1/7.1 stream decodes coherently; stereo is
-        // unchanged (config(forChannels:2) == the stereo default).
-        let cfg = Self.opusMultistreamConfig(forChannels: chCount, fallback: opus)
+        // `opus` is the layout the PC encodes with (SdpScan.audioLayout). Opus reads
+        // one mapping entry per channel, so a short mapping must never reach it.
+        guard opus.mapping.count == chCount else {
+            log.error("opus layout has \(opus.mapping.count) channels, the stream has \(chCount)")
+            return -1
+        }
         return initDecoderCore(
             channelCount: chCount,
             sampleRate: opus.sampleRate,
-            streams: cfg.streams,
-            coupledStreams: cfg.coupledStreams,
+            streams: opus.streams,
+            coupledStreams: opus.coupledStreams,
             samplesPerFrame: Int(opus.samplesPerFrame),
-            mapping: cfg.mapping)
-    }
-
-    /// Canonical opus MULTISTREAM config (streams / coupledStreams / channel
-    /// mapping) for a channel count, mirroring moonlight-common-c's
-    /// `opusConfigArray` (AudioStream.c). The host builds its multistream
-    /// encoder from the SAME table keyed by the negotiated AudioConfiguration,
-    /// so these MUST match byte-for-byte or surround decodes to garbage:
-    ///   2ch stereo : streams 1, coupled 1, mapping [0,1]
-    ///   6ch  5.1   : streams 4, coupled 2, mapping [0,4,1,5,2,3]
-    ///   8ch  7.1   : streams 5, coupled 3, mapping [0,6,1,7,2,3,4,5]
-    /// The mapping is the opus surround mapping (which opus stream feeds which
-    /// output channel); the front L/R + back/side reorder onto Apple's layout
-    /// is a SEPARATE, later step (`outputReorder` in `initDecoderCore`). An
-    /// unrecognized channel count falls back to the passed config (the stereo
-    /// default), padded/trimmed to the channel count - the prior behavior.
-    static func opusMultistreamConfig(
-        forChannels channels: Int, fallback: OpusConfig
-    ) -> (streams: Int32, coupledStreams: Int32, mapping: [UInt8]) {
-        switch channels {
-        case 2: return (1, 1, [0, 1])
-        case 6: return (4, 2, [0, 4, 1, 5, 2, 3])
-        case 8: return (5, 3, [0, 6, 1, 7, 2, 3, 4, 5])
-        default:
-            // The opus mapping array carries `channels` valid entries; pad/trim
-            // the fallback so the core sees a consistent layout.
-            var map = fallback.mapping
-            if map.count < channels {
-                map += [UInt8](repeating: 0, count: channels - map.count)
-            }
-            return (fallback.streams, fallback.coupledStreams, Array(map.prefix(channels)))
-        }
+            mapping: opus.mapping)
     }
 
     public func decodeAndPlay(_ opus: [UInt8]) {

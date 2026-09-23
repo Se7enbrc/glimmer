@@ -273,7 +273,7 @@ extension NativeBackend {
     /// start only its ping, so Sunshine has our ping and return port by PLAY. Best-effort (audio is non-fatal);
     /// startAudioReceive() later brings up the SAME receiver's recv side, and run()'s catch tears it down.
     func startAudioPing(
-        audioPort: UInt16, pingPayload: [UInt8], audioEncryption: Bool,
+        audioPort: UInt16, pingPayload: [UInt8], audioEncryption: Bool, opusConfig: OpusConfig,
         config: BackendStreamConfig, server: BackendServerInfo, host: NWEndpoint.Host
     ) {
         guard let sink = withState({ audioSink }) else {
@@ -288,7 +288,7 @@ extension NativeBackend {
             pingPayload: pingPayload,
             appVersionQuad: appVersionQuad,
             audioPacketDuration: 5,                 // SDP x-nv-aqos.packetDuration default
-            opusConfig: RtspHandshakeResult.defaultOpusConfig,
+            opusConfig: opusConfig,
             audioConfig: config.audioConfiguration,
             audioEncryption: audioEncryption,
             aesKey: config.remoteInputAesKey,
@@ -380,9 +380,9 @@ extension NativeBackend {
         // Fast-start audio: the instant the handshake parses SETUP-audio (BEFORE
         // PLAY), open the audio socket + start the burst ping so the host has our
         // ping by PLAY. moonlight's notifyAudioPortNegotiationComplete() ordering.
-        rtsp.onAudioPortNegotiated = { [weak self] audioPort, pingPayload, audioEncryption in
+        rtsp.onAudioPortNegotiated = { [weak self] audioPort, pingPayload, audioEncryption, opus in
             self?.startAudioPing(audioPort: audioPort, pingPayload: pingPayload,
-                                 audioEncryption: audioEncryption,
+                                 audioEncryption: audioEncryption, opusConfig: opus,
                                  config: config, server: server, host: host)
         }
         withState { rtspClient = rtsp }

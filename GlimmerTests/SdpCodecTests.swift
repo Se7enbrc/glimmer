@@ -218,4 +218,73 @@ struct SdpCodecTests {
         let sdp = sdpString(builder(format: StreamProtocol.VIDEO_FORMAT_H265))
         #expect(sdp.contains("a=x-nv-video[0].maxNumReferenceFrames:1 \r\n"))
     }
+
+    @Test func buildAudioQualityFollowsTheNegotiatedTier() {
+        var announce = builder(format: StreamProtocol.VIDEO_FORMAT_H264)
+        #expect(sdpString(announce).contains("a=x-nv-audio.surround.AudioQuality:1 \r\n"))
+        announce.highQualityAudio = false
+        #expect(sdpString(announce).contains("a=x-nv-audio.surround.AudioQuality:0 \r\n"))
+    }
+
+    // MARK: - SdpScan.audioLayout (DESCRIBE surround-params)
+
+    /// Sunshine's DESCRIBE lists every tier: stereo, 5.1 and 7.1, each normal then high.
+    private let sunshineTiers = """
+        a=fmtp:97 surround-params=21101
+        a=fmtp:97 surround-params=21101
+        a=fmtp:97 surround-params=642012453
+        a=fmtp:97 surround-params=660012345
+        a=fmtp:97 surround-params=85301245367
+        a=fmtp:97 surround-params=88001234567
+        """
+
+    private struct Layout: Equatable {
+        var streams: Int32, coupled: Int32, mapping: [UInt8], high: Bool
+    }
+
+    private func layout(_ sdp: String, _ channels: Int) -> Layout {
+        let result = SdpScan.audioLayout(sdp, channelCount: channels)
+        #expect(result.opus.channelCount == Int32(channels))
+        #expect(result.opus.sampleRate == 48000 && result.opus.samplesPerFrame == 240)
+        return Layout(streams: result.opus.streams, coupled: result.opus.coupledStreams,
+                      mapping: result.opus.mapping, high: result.highQuality)
+    }
+
+    @Test func stereoIsTheSameLayoutInBothTiers() {
+        let stereo = Layout(streams: 1, coupled: 1, mapping: [0, 1], high: true)
+        #expect(layout(sunshineTiers, 2) == stereo)
+        #expect(layout("", 2) == stereo)
+    }
+
+    @Test func surroundTakesTheHighTierThePcLists() {
+        #expect(layout(sunshineTiers, 6) == Layout(streams: 6, coupled: 0, mapping: [0, 1, 2, 3, 4, 5], high: true))
+        #expect(layout(sunshineTiers, 8)
+            == Layout(streams: 8, coupled: 0, mapping: [0, 1, 2, 3, 4, 5, 6, 7], high: true))
+    }
+
+    @Test func normalTierMovesLfeBackBehindCenter() {
+        // Sunshine pre-rotates its 5.1 line, so undoing GFE's order lands on its identity layout.
+        #expect(layout("a=fmtp:97 surround-params=642012453\n", 6)
+            == Layout(streams: 4, coupled: 2, mapping: [0, 1, 2, 3, 4, 5], high: false))
+        #expect(layout("a=fmtp:97 surround-params=85301234567\n", 8)
+            == Layout(streams: 5, coupled: 3, mapping: [0, 1, 2, 7, 3, 4, 5, 6], high: false))
+    }
+
+    @Test func malformedHighTierFallsBackToNormal() {
+        let sdp = "a=fmtp:97 surround-params=642012453\na=fmtp:97 surround-params=66x012345\n"
+        #expect(layout(sdp, 6) == Layout(streams: 4, coupled: 2, mapping: [0, 1, 2, 3, 4, 5], high: false))
+    }
+
+    @Test func missingOrMalformedParamsKeepTheFixedLayouts() {
+        let fixed51 = Layout(streams: 4, coupled: 2, mapping: [0, 4, 1, 5, 2, 3], high: false)
+        #expect(layout("", 6) == fixed51)
+        #expect(layout("a=fmtp:97 surround-params=6420124\n", 6) == fixed51)
+        #expect(layout("", 8) == Layout(streams: 5, coupled: 3, mapping: [0, 6, 1, 7, 2, 3, 4, 5], high: false))
+    }
+
+    @Test func decoderRefusesALayoutForAnotherChannelCount() {
+        // A stereo layout on a 5.1 stream: opus would read six mapping entries from two.
+        let stereoLayout = RtspHandshakeResult.defaultOpusConfig
+        #expect(AudioDecoder().initialize(audioConfig: AudioConfig.surround51.cValue, opus: stereoLayout) == -1)
+    }
 }

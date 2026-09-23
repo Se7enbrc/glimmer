@@ -153,6 +153,59 @@ enum SdpScan {
     }
 }
 
+// MARK: - Audio layout (DESCRIBE surround-params)
+
+extension SdpScan {
+    /// parseOpusConfigurations (RtspConnection.c): the Opus layout to decode and whether to ask for the high tier.
+    /// Stereo is the same in both tiers; surround takes high only when the PC lists a layout for it.
+    static func audioLayout(_ sdp: String, channelCount: Int) -> (opus: OpusConfig, highQuality: Bool) {
+        guard let fixed = fixedSurroundLayout(channelCount) else {
+            return (RtspHandshakeResult.defaultOpusConfig, true)
+        }
+        let tiers = surroundParams(sdp, channelCount: channelCount)
+        if tiers.count == 2 { return (tiers[1], true) }
+        guard var normal = tiers.first else { return (fixed, false) }
+        // GFE lists the normal tier's LFE last (FL FR C RL RR SL SR LFE); move it back behind C.
+        let map = normal.mapping
+        normal.mapping = Array(map[..<3]) + [map[map.count - 1]] + Array(map[3..<(map.count - 1)])
+        return (normal, false)
+    }
+
+    /// Each "a=fmtp:97 surround-params=<channels><streams><coupled><mapping>" line for this channel count,
+    /// normal tier first. The scan stops at a malformed one, as the C parser does.
+    private static func surroundParams(_ sdp: String, channelCount: Int) -> [OpusConfig] {
+        let prefix = "a=fmtp:97 surround-params=\(channelCount)"
+        var tiers: [OpusConfig] = []
+        var rest = sdp[...]
+        while tiers.count < 2, let hit = rest.range(of: prefix) {
+            rest = rest[hit.upperBound...]
+            let digits = rest.utf8.prefix(channelCount + 2).map { Int($0) - Int(UInt8(ascii: "0")) }
+            guard digits.count == channelCount + 2, digits.allSatisfy({ (0...9).contains($0) }) else { break }
+            tiers.append(opusLayout(channelCount, streams: digits[0], coupled: digits[1],
+                                    mapping: digits.dropFirst(2).map { UInt8($0) }))
+        }
+        return tiers
+    }
+
+    /// The fixed surround layouts, kept for a PC whose DESCRIBE lists none. Nil for stereo.
+    private static func fixedSurroundLayout(_ channelCount: Int) -> OpusConfig? {
+        switch channelCount {
+        case 6: return opusLayout(6, streams: 4, coupled: 2, mapping: [0, 4, 1, 5, 2, 3])
+        case 8: return opusLayout(8, streams: 5, coupled: 3, mapping: [0, 6, 1, 7, 2, 3, 4, 5])
+        default: return nil
+        }
+    }
+
+    private static func opusLayout(_ channelCount: Int, streams: Int, coupled: Int, mapping: [UInt8]) -> OpusConfig {
+        var opus = RtspHandshakeResult.defaultOpusConfig
+        opus.channelCount = Int32(channelCount)
+        opus.streams = Int32(streams)
+        opus.coupledStreams = Int32(coupled)
+        opus.mapping = mapping
+        return opus
+    }
+}
+
 // MARK: - SDP builder (ANNOUNCE payload)
 
 /// The control ANNOUNCE's SDP, faithful to moonlight's getSdpPayloadForStreamConfig. RFI is advertised only when
@@ -183,6 +236,9 @@ struct SdpBuilder {
     /// CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC/HEVC/AV1). Matched against
     /// the negotiated codec in `referenceFrameInvalidationActive`.
     var decoderRfiCapabilities: Int32 = 0
+    /// Ask for the high Opus tier (`SdpScan.audioLayout`): always for stereo, for surround only when the PC
+    /// lists a high-tier layout, since that is the layout the decoder is built from.
+    var highQualityAudio = true
 
     private static let ML_FF_FEC_STATUS: UInt32 = 0x01
     private static let ML_FF_SESSION_ID_V1: UInt32 = 0x04
@@ -377,11 +433,9 @@ struct SdpBuilder {
         attrs.append(("x-nv-audio.surround.channelMask", "\(audioChannelMask)"))
         attrs.append(("x-nv-audio.surround.enable", audioChannelCount > 2 ? "1" : "0"))
 
-        // q[0]>=7 audio quality + packet duration. AudioQuality "1" requests
-        // Sunshine's HIGH opus tier (~256 kbps stereo) instead of "0" (~96 kbps) -
-        // there's no bandwidth reason to ship low-bitrate audio, and the link-aware
-        // cushion already absorbs the slightly larger packets on a bad link.
-        attrs.append(("x-nv-audio.surround.AudioQuality", "1"))
+        // q[0]>=7 audio quality + packet duration. The high tier costs little bandwidth
+        // and the link-aware cushion absorbs its larger packets.
+        attrs.append(("x-nv-audio.surround.AudioQuality", highQualityAudio ? "1" : "0"))
         attrs.append(("x-nv-aqos.packetDuration", "5"))
 
         // q[0]>=7 csc mode = (colorSpace<<1)|colorRange.

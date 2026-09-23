@@ -48,15 +48,10 @@ struct RtspHandshakeResult {
     var videoPingPayload: [UInt8] = []
     /// Same for SETUP-audio - the 16-byte ping the RtpAudioReceiver sends.
     var audioPingPayload: [UInt8] = []
-    /// The OPUS_MULTISTREAM config seed. Stereo default (sampleRate 48000,
-    /// channelCount 2, streams 1, coupledStreams 1, mapping [0,1],
-    /// samplesPerFrame 240). The RTSP SETUP-audio response carries NO explicit
-    /// per-channel opus stream layout, so for surround the decoder derives the
-    /// real {streams, coupledStreams, mapping} from the negotiated channel count
-    /// (the host encodes from the same table) - see
-    /// `AudioDecoder.opusMultistreamConfig(forChannels:)`. This seed supplies
-    /// sampleRate + samplesPerFrame for every tier.
+    /// The Opus layout the decoder is built from, read from DESCRIBE's surround-params (`SdpScan.audioLayout`).
     var opusConfig: OpusConfig = RtspHandshakeResult.defaultOpusConfig
+    /// Whether ANNOUNCE asks for the high tier that `opusConfig` describes.
+    var highQualityAudio = true
 
     /// Stereo default OPUS_MULTISTREAM config - the single source the struct
     /// default and the fast-start audio ping (constructed mid-handshake, before
@@ -131,7 +126,9 @@ final class RtspClient: @unchecked Sendable {
     /// Fired synchronously once SETUP-audio is parsed (encryption settled at DESCRIBE), before SETUP video,
     /// ANNOUNCE and PLAY, so the audio ping is running first: moonlight's notifyAudioPortNegotiationComplete(),
     /// since Sunshine won't aim audio at us (and GFE 3.22 won't answer PLAY) until it has seen a ping.
-    var onAudioPortNegotiated: ((_ audioPort: UInt16, _ pingPayload: [UInt8], _ audioEncryption: Bool) -> Void)?
+    var onAudioPortNegotiated: ((
+        _ audioPort: UInt16, _ pingPayload: [UInt8], _ audioEncryption: Bool, _ opus: OpusConfig
+    ) -> Void)?
 
     /// Cancellation flag flipped by the orchestrator on interrupt.
     let interrupted = ManagedAtomicFlag()
@@ -424,7 +421,9 @@ final class RtspClient: @unchecked Sendable {
         Diag.info("RTSP negotiated codec=\(codecName(result.negotiatedVideoFormat)) "
             + "encSupported=\(result.encryptionFeaturesSupported) "
             + "encEnabled=\(result.encryptionFeaturesEnabled) "
-            + "RFI=\(result.referenceFrameInvalidationSupported)", Self.logCategory)
+            + "RFI=\(result.referenceFrameInvalidationSupported) "
+            + "opus=\(result.opusConfig.streams)/\(result.opusConfig.coupledStreams)/\(result.opusConfig.mapping) "
+            + "high=\(result.highQualityAudio)", Self.logCategory)
 
         // 3-5) SETUP audio / video / control.
         try await performSetupRounds(into: &result)
@@ -443,7 +442,8 @@ final class RtspClient: @unchecked Sendable {
             // offered it (DESCRIBE SDP) AND our decoder supports it for the
             // negotiated codec - the VideoSink's RFI capability bits.
             serverSupportsRfi: result.referenceFrameInvalidationSupported,
-            decoderRfiCapabilities: VideoDecoder.rfiCapabilities)
+            decoderRfiCapabilities: VideoDecoder.rfiCapabilities,
+            highQualityAudio: result.highQualityAudio)
         let sdpPayload = sdpBuilder.build()
         Diag.info("RTSP ANNOUNCE \(Self.controlStreamId) (SDP \(sdpPayload.count) bytes)",
                   Self.logCategory)
@@ -485,7 +485,8 @@ final class RtspClient: @unchecked Sendable {
         // notifyAudioPortNegotiationComplete() at exactly this point
         // (RtspConnection.c:1212). The callback is best-effort: a ping failure
         // must not abort the handshake (audio is non-fatal); the pipeline logs it.
-        onAudioPortNegotiated?(result.audioPort, result.audioPingPayload, result.audioEncryption)
+        onAudioPortNegotiated?(result.audioPort, result.audioPingPayload, result.audioEncryption,
+                               result.opusConfig)
 
         try captureSession(from: audioResp, step: "SETUP audio")
         result.sessionId = sessionIdString
