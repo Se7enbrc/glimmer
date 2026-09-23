@@ -2,9 +2,9 @@
 
 ## 2026.9.7 - Unreleased
 
-A command line and Shortcuts actions, safer pairing, a way out of every stuck
-stream, ⌘ shortcuts and paste that reach the PC, and video and audio that
-recover on their own.
+A command line and Shortcuts actions, safer pairing, streams from PCs that
+require encryption, a way out of every stuck stream, ⌘ shortcuts and paste that
+reach the PC, and video and audio that recover on their own.
 
 Glimmer now has a command line. With the app linked as `glimmer`, you can run
 `glimmer pair`, `glimmer list`, `glimmer wake`, `glimmer quit` and
@@ -113,7 +113,9 @@ keyframe instead of feeding broken frames to the decoder, and a decode session
 that stops producing frames is rebuilt within a few seconds. Before, the stream
 could sit on "Holding…" until you reconnected. Requests for a fresh keyframe or
 recovery frame after packet loss now leave at once instead of waiting up to 20
-ms.
+ms. When a PC's Sunshine settings limit the video packet size, packets rebuilt
+after network loss now keep their real size, so the picture no longer breaks up
+at the moment error correction should have saved it.
 
 Pacing settles faster after a network hiccup. At 120 fps on a 120 Hz display,
 the stream no longer carries about five frames of extra latency for half a
@@ -149,13 +151,15 @@ released when its connection stops. Unplugging a dock, handing AirPods off or
 losing HDMI mid-stream can no longer crash Glimmer while the audio engine
 restarts.
 
-Audio stays with the picture. After a long dropout, audio no longer ends up
-about 200 ms behind video: a gap longer than the audio buffer can cover no
-longer makes the buffer deeper, and a burst of dropouts deepens it by at most
-one step. Clock correction no longer winds up against the buffer trim and
-settles on the real clock difference. Each output device's correction is
-remembered separately, so switching speakers no longer starts the next stream
-with the wrong one.
+Audio stays with the picture and comes out of the right speaker. With 5.1 or 7.1
+surround, each channel now plays from its own speaker. Before, a surround stream
+sent sounds to the wrong speakers and pushed most of the rear and side channels
+into the subwoofer. After a long dropout, audio no longer ends up about 200 ms
+behind video: a gap longer than the audio buffer can cover no longer makes the
+buffer deeper, and a burst of dropouts deepens it by at most one step. Clock
+correction no longer winds up against the buffer trim and settles on the real
+clock difference. Each output device's correction is remembered separately, so
+switching speakers no longer starts the next stream with the wrong one.
 
 Mute this Mac while streaming is now Play sound on the PC, and does just that:
 the PC keeps the game's sound and only the stream is silent on the Mac. It no
@@ -183,18 +187,25 @@ scroll. With telemetry on, every wheel event is in the trace with what macOS
 delivered and what was sent, so a wheel that a game ignores can be shown to have
 reached the PC.
 
-Gyro and motion aiming reach the PC as soon as the controller reports them,
-instead of being polled on a fixed timer. Samples arrive evenly spaced and up to
-10 ms fresher, and the Mac no longer wakes 200 times a second to poll.
+Controllers stay in step with the PC. Gyro and motion aiming reach the PC as
+soon as the controller reports them, instead of being polled on a fixed timer.
+Samples arrive evenly spaced and up to 10 ms fresher, and the Mac no longer
+wakes 200 times a second to poll. A controller that stays connected through a
+reconnect keeps its place on the PC, so the game doesn't see it unplug. If you
+unplug or swap a controller while Glimmer is reconnecting, the PC no longer
+keeps a phantom controller, and a different controller that takes the same place
+shows up on the PC as the right kind. Glimmer now offers the PC rumble only for
+controllers the Mac can actually rumble.
 
 The Input Monitoring prompt for a generic controller no longer comes back every
 time the controller reconnects: any answer quiets it for that controller until
 Glimmer relaunches. Granting access from Glimmer's own prompt now turns on Extra
-DualSense buttons right away, with no relaunch. You only need to relaunch after
-turning the switch on by hand in System Settings, and the instructions now say
-so. The "use this controller" prompt for an unrecognized gamepad has a Don't Ask
-Again option, and both DualSense prompts, in the launcher and in Settings, now
-read "Turn on Extra DualSense buttons?" with a Turn On button.
+DualSense buttons right away, with no relaunch, and with them on, the PC now
+knows a DualSense has a Mute button. You only need to relaunch after turning the
+switch on by hand in System Settings, and the instructions now say so. The "use
+this controller" prompt for an unrecognized gamepad has a Don't Ask Again
+option, and both DualSense prompts, in the launcher and in Settings, now read
+"Turn on Extra DualSense buttons?" with a Turn On button.
 
 "Use ⌘ shortcuts inside the game" now does what it says. While the stream has
 the pointer, ⌘-Tab, ⌘-Space, ⌘Q and the rest go to the PC instead of the Mac,
@@ -229,9 +240,16 @@ Pairing is easier to follow. The pairing sheet names the PC instead of showing
 its IP address, including when you choose Pair Again… for a saved PC. It tells
 you to open Sunshine's web page and choose PIN, and can open that page on this
 Mac. It waits up to five minutes for the code, a timeout gets its own message
-separate from a rejected code, and Try Again appears only after a failure and
-gives you a new code. Pairing a new PC no longer closes the sheet the instant
-the PIN is accepted, so the checkmark and "Stream now" screen show as intended.
+separate from a rejected code, including a request the PC let expire, and Try
+Again appears only after a failure and gives you a new code. If the PC is still
+holding an earlier pairing request, pairing tells you so and explains how to
+clear it, instead of saying the PC didn't accept the code. Pairing a new PC no
+longer closes the sheet the instant the PIN is accepted, so the checkmark and
+"Stream now" screen show as intended. When the PC won't accept this Mac, the
+message now also says this Mac may be switched off on Sunshine's Troubleshooting
+page, and Pair Again… fixes both cases. A PC still running NVIDIA GameStream is
+spotted as soon as you pair with it or stream from it, and Glimmer says it needs
+Sunshine on that PC instead of failing partway through connecting.
 
 Adding a PC is more forgiving. You can paste Sunshine's web address into the
 address field: the scheme, port and path are removed, and Continue stays off
@@ -249,10 +267,12 @@ Glimmer, and control replies are capped at 4 MiB and stopped at their deadline,
 so a slow or oversized reply can't tie up the app.
 
 Stream audio is now encrypted whenever the PC offers it, which Sunshine does by
-default. A PC set to require encrypted video now gets a clear message instead of
-a misleading "Couldn't reach". The security notes now describe what the app
-does: audio is encrypted whenever the PC offers it, video is not, and any
-process running as you can read the pairing key.
+default, and the stream's setup messages with the PC are encrypted too. Glimmer
+now streams from a PC whose Sunshine encryption setting is Mandatory: the video
+arrives encrypted and plays normally, where before the stream failed with a
+misleading "Couldn't reach". The security notes now describe what the app does:
+audio is encrypted whenever the PC offers it, video only when the PC requires
+it, and any process running as you can read the pairing key.
 
 Glimmer keeps up with your PCs. Games added or renamed in Sunshine show up
 without pairing again: Glimmer refreshes a PC's app list when it first reaches
