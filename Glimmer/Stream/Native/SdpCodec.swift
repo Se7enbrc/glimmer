@@ -163,7 +163,8 @@ extension SdpScan {
         let tiers = surroundParams(sdp, channelCount: channelCount)
         if tiers.count == 2 { return (tiers[1], true) }
         guard var normal = tiers.first else { return (fixed, false) }
-        // GFE lists the normal tier's LFE last (FL FR C RL RR SL SR LFE); move it back behind C.
+        // GFE listed the normal tier's LFE last (FL FR C RL RR SL SR LFE) and Sunshine pre-rotates its line to
+        // match (rtsp.cpp), so this undo stays even with GameStream refused: move LFE back behind C.
         let map = normal.mapping
         normal.mapping = Array(map[..<3]) + [map[map.count - 1]] + Array(map[3..<(map.count - 1)])
         return (normal, false)
