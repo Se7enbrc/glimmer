@@ -58,6 +58,20 @@ Top-level pieces:
 > a hand-rolled OpenSSL + POSIX-socket mutual-TLS client, deliberately **not**
 > `URLSession` - this keeps the (sleep-locking) keychain out of the path.
 
+**Command line.** The same binary is the `glimmer` command. `GlimmerMain`
+(`Glimmer/CLI/`) is the entry point: run as `glimmer` (the cask's link), or with
+a bare word or `-h`/`--help` as the first argument, it runs `GlimmerCLI`;
+anything else (no arguments, `--launched-at-login`, `-psn_*`, `-NS*`, Xcode and
+test arguments) starts the app. Login, Launch Services, Sparkle and test
+launches depend on that, so any new launch argument the app takes must start
+with a dash. Verbs run headless through the app's own `AppModel`, pairing and
+`NetworkClient` code. `glimmer stream` opens the app if needed and hands it the
+launch over distributed notifications (`CommandChannel`,
+`AppModel+Commands.swift`), so no stream ever runs in the terminal's process;
+`glimmer quit` ends the app's own stream from that PC the same way. Run through
+a symlink, the binary re-execs through its real path so `Bundle.main` and the
+defaults domain resolve.
+
 ## The `StreamingBackend` boundary
 
 `Glimmer/Stream/StreamingBackend.swift` is **the** streaming-engine abstraction:

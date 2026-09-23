@@ -54,7 +54,10 @@ brew install --cask glimmer
 
 Or the notarized `.dmg` from
 [Releases](https://github.com/Se7enbrc/glimmer/releases). Either way it updates
-itself.
+itself. The cask also links the `glimmer` command. An existing Homebrew install
+gets it with `brew upgrade --greedy glimmer` (or
+`brew reinstall --cask glimmer`), because the app updates itself outside
+Homebrew.
 
 Signed and notarized, not sandboxed, not on the App Store - the Wi-Fi helper
 needs that freedom ([docs/SECURITY.md](docs/SECURITY.md)).
@@ -66,6 +69,41 @@ for: a virtual display driver on Windows, a current Sunshine on Linux.
 The Wi-Fi helper lives in Settings > Quality > Wi-Fi; macOS asks for one
 approval under Login Items & Extensions. If it reports `rejected by BTM`, run
 `sudo sfltool resetbtm` once.
+
+## Command line
+
+`glimmer` is the app itself, run from a terminal: it pairs, lists, wakes and
+quits headless, and hands a stream to the app so it gets its window. Stream
+settings come from Glimmer's Settings. `glimmer help` is the full reference.
+Installed from the `.dmg`, run
+`/Applications/Glimmer.app/Contents/MacOS/Glimmer` with the same commands, or
+link that path as `glimmer` on your `PATH`.
+
+```bash
+glimmer pair 192.0.2.10          # prints the PIN to enter in Sunshine
+glimmer list                     # paired PCs and whether each is ready
+glimmer stream "Living Room" Steam --wait
+```
+
+Coming from moonlight-qt:
+
+| moonlight-qt                         | Glimmer                               | Difference                                     |
+| ------------------------------------ | ------------------------------------- | ---------------------------------------------- |
+| `moonlight pair <host> [--pin NNNN]` | `glimmer pair <address> [--pin NNNN]` | None.                                          |
+| `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list` alone lists the paired PCs.     |
+| `moonlight stream <host> <app> ...`  | `glimmer stream <pc> [<app>]`         | The app is optional; see below.                |
+| `moonlight quit <host>`              | `glimmer quit <pc>`                   | None.                                          |
+|                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer. |
+
+Without an app, `glimmer stream` resumes the running app, else follows Settings
+› General › Default action. The `--resolution`, `--bitrate` and other
+moonlight-qt stream options are refused, since Settings holds them; Glimmer adds
+`--force`, `--wait`, `--exit-after-first-frame` and `--json`. The CSV from
+`glimmer list <pc> --csv` has Name, ID, HDR Support and Hidden.
+
+`<pc>` is a paired PC's name or address, ignoring case. Exit status: 0 success,
+1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired or no paired PC by
+that name.
 
 ## Build
 
