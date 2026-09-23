@@ -196,13 +196,13 @@ public actor HostDiscovery {
             @unknown default:           resolvedHost = name
             }
             guard let resolvedHost else {
-                log.info("Skipped \(name, privacy: .public): only a link-local IPv6 address, which can't be saved")
+                log.info("Skipped \(name, privacy: .private): only a link-local IPv6 address, which can't be saved")
                 return
             }
             let resolvedPort = Int(port.rawValue)
             seen[name] = Discovered(id: name, displayName: name,
                                     host: resolvedHost, port: resolvedPort)
-            log.info("Resolved host \(name, privacy: .public) → \(resolvedHost, privacy: .public):\(resolvedPort)")
+            log.info("Resolved host \(name, privacy: .private) → \(resolvedHost, privacy: .private):\(resolvedPort)")
             publish()
         }
     }
@@ -223,10 +223,10 @@ public actor HostDiscovery {
         conn.cancel()
         resolvers.removeValue(forKey: name)
         guard let endpoint else {
-            log.error("Resolve failed for \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            log.error("Resolve failed for \(name, privacy: .private): \(error.localizedDescription, privacy: .private)")
             return
         }
-        log.info("No IPv4 answer for \(name, privacy: .public) (\(error.localizedDescription, privacy: .public)); trying any family")
+        log.info("No IPv4 answer for \(name, privacy: .private) (\(error.localizedDescription, privacy: .private)); trying any family")
         startResolve(name: name, endpoint: endpoint, anyFamily: true)
     }
 }

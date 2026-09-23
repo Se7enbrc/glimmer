@@ -49,7 +49,7 @@ public actor PairingClient {
         let pairingIntervalState = OSSignposter.pairing.beginInterval(
             "PairingFlow",
             id: pairingSignpostID,
-            "host=\(self.server.address, privacy: .public)")
+            "host=\(self.server.address, privacy: .private)")
 
         // Outcome is appended to the interval close. Default = "failed" so a
         // thrown error from anywhere below still closes the interval cleanly.
@@ -203,7 +203,7 @@ public actor PairingClient {
         // A rotated host cert hits fetchServerInfo's pin-mismatch error; the next pairing overwrites it.
         persistPinnedCert(serverCertPEM: serverCertPEM)
 
-        log.info("Pairing succeeded for \(self.server.address, privacy: .public)")
+        log.info("Pairing succeeded for \(self.server.address, privacy: .private)")
         pairingOutcome = "success"
         return server
     }
@@ -460,7 +460,7 @@ public actor PairingClient {
         do {
             try PinnedCertStore.store(pem: serverCertPEM,
                                       forHostID: self.server.uniqueId)
-            log.info("Persisted pinned host cert (file-store) for host id=\(self.server.uniqueId, privacy: .public)")
+            log.info("Persisted pinned host cert (file-store) for host id=\(self.server.uniqueId, privacy: .private)")
         } catch {
             // Storage failure should not abort a successful pair -
             // the cert is still good for THIS process (it's in
@@ -469,8 +469,8 @@ public actor PairingClient {
             // doesn't go silent.
             log.error(
                 """
-                Failed to persist pinned host cert for \(self.server.uniqueId, privacy: .public): \
-                \(String(describing: error), privacy: .public)
+                Failed to persist pinned host cert for \(self.server.uniqueId, privacy: .private): \
+                \(String(describing: error), privacy: .private)
                 """
             )
         }

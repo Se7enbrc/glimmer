@@ -57,7 +57,7 @@ extension NetworkClient {
                 fetchedOverPaired = true
             } catch let err as StreamError {
                 if case .hostUnreachable(let detail) = err {
-                    log.error("HTTPS to pinned host failed (\(detail, privacy: .public)) - refusing HTTP fallback to preserve cert pin")
+                    log.error("HTTPS to pinned host failed (\(detail, privacy: .private)) - refusing HTTP fallback to preserve cert pin")
                     // A different certificate proves 47984 answered, so the PC is up
                     // whatever the plain port says; don't let a blocked 47989 hide it.
                     if Self.isCertChange(detail) {

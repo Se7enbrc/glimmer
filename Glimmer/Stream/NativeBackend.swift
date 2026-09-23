@@ -149,7 +149,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         completion: @escaping @Sendable (Error?) -> Void
     ) {
         Diag.notice("native backend: starting connection to \(server.address)", Self.logCategory)
-        log.notice("NativeBackend.startConnection → \(server.address, privacy: .public)")
+        log.notice("NativeBackend.startConnection → \(server.address, privacy: .private)")
         let resultBox = ErrorBox()
         let timedOutBox = AtomicCounter()
         let bridgeThread = Thread { [weak self, server, config] in

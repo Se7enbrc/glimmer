@@ -208,7 +208,7 @@ extension AppModel {
         }
         guard let idx = matchIndex else {
             Logger(subsystem: "io.ugfugl.Glimmer", category: "HostsStore")
-                .info("rename: no slot matched id=\(host.id, privacy: .public)")
+                .info("rename: no slot matched id=\(host.id, privacy: .private)")
             return
         }
         let prefix = "hosts.\(idx)"

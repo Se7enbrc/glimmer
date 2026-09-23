@@ -152,7 +152,7 @@ extension StreamSession {
         connectFlowState = OSSignposter.network.beginInterval(
             "ConnectFlow",
             id: connectFlowSignpostID,
-            "host=\(serverInfo.address, privacy: .public)")
+            "host=\(serverInfo.address, privacy: .private)")
 
         // SESSION-SCOPED telemetry reset + P2 CONNECT-HANDSHAKE anchor HERE -
         // before startConnection runs the handshake whose stage edges fill the

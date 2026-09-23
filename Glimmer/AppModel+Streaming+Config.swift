@@ -298,7 +298,7 @@ extension AppModel {
             if let hint, hint != filePin {
                 log.error(
                     """
-                    Pinned cert for host id=\(host.id, privacy: .public) DISAGREES with the \
+                    Pinned cert for host id=\(host.id, privacy: .private) DISAGREES with the \
                     UserDefaults hint - refusing to stream and forcing re-pair (possible MITM).
                     """
                 )
@@ -319,7 +319,7 @@ extension AppModel {
                 log.error(
                     """
                     Failed to migrate the UserDefaults cert hint into the file store for host \
-                    id=\(host.id, privacy: .public): \(error.localizedDescription, privacy: .public) - \
+                    id=\(host.id, privacy: .private): \(error.localizedDescription, privacy: .private) - \
                     forcing re-pair instead of pinning a writable value.
                     """
                 )
@@ -331,7 +331,7 @@ extension AppModel {
         // pairStatus gate handles it), not TOFU on a writable cert.
         log.error(
             """
-            No pinned cert for host id=\(host.id, privacy: .public) - forcing re-pair. \
+            No pinned cert for host id=\(host.id, privacy: .private) - forcing re-pair. \
             Check that host.id matches server.uniqueId (the host's `<uniqueid>` from /serverinfo).
             """
         )

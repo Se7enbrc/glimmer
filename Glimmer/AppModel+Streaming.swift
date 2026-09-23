@@ -234,7 +234,7 @@ extension AppModel {
             // The raw NSError tail goes to the log and to Diag (the in-app viewer
             // and pasted logs never see os.Logger); the banner gets one sentence.
             let localized = (caughtError as NSError).localizedDescription
-            self.log.error("Stream start failed for \(hostName, privacy: .public): \(localized, privacy: .public)")
+            self.log.error("Stream start failed for \(hostName, privacy: .private): \(localized, privacy: .private)")
             Diag.error("Stream start failed for \(hostName): \(localized)", "Stream")
             self.showStreamFailure(Self.connectFailure(for: caughtError, hostName: hostName))
         }
