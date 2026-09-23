@@ -138,12 +138,11 @@ extension RtspClient {
     static let ssEncVideo: UInt32 = 0x02
     static let ssEncAudio: UInt32 = 0x04
 
-    /// getAttributesList: control-V2 and audio encryption are on whenever the
-    /// host supports them (upstream's default). Video decrypt isn't built, so a
-    /// host that requires encrypted video (mandatory mode) is refused here.
-    static func computeEncryptionEnabled(supported: UInt32, requested: UInt32) throws -> UInt32 {
-        guard requested & ssEncVideo == 0 else { throw RtspError.encryptedVideoRequired }
-        return supported & (ssEncControlV2 | ssEncAudio)
+    /// getAttributesList: control-V2 and audio encryption whenever the PC supports them (upstream's
+    /// default). Video only when the PC requests it (its mandatory mode): like upstream we don't
+    /// opt in, since decrypting costs CPU on every video packet.
+    static func computeEncryptionEnabled(supported: UInt32, requested: UInt32) -> UInt32 {
+        (supported & (ssEncControlV2 | ssEncAudio)) | (requested & ssEncVideo)
     }
 
     func codecName(_ format: Int32) -> String {

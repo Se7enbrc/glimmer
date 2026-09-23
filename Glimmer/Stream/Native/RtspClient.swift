@@ -72,11 +72,7 @@ enum RtspError: Error, CustomStringConvertible {
     case badResponse(String)
     case nonOK(step: String, code: Int)
     case noSdp
-    case encryptedVideoRequired
     case responseTooLarge(Int)
-
-    /// Session code for `.encryptedVideoRequired`, the 403 the host would send.
-    static let encryptedVideoRequiredCode: Int32 = -403
 
     var description: String {
         switch self {
@@ -86,8 +82,6 @@ enum RtspError: Error, CustomStringConvertible {
         case .badResponse(let reason): return "RTSP bad response: \(reason)"
         case .nonOK(let step, let code): return "RTSP \(step) returned \(code)"
         case .noSdp: return "RTSP DESCRIBE returned no SDP payload"
-        case .encryptedVideoRequired:
-            return "This PC requires encrypted video, which Glimmer doesn't support yet."
         case .responseTooLarge(let bytes): return "RTSP response passed \(bytes) bytes"
         }
     }
@@ -410,7 +404,7 @@ final class RtspClient: @unchecked Sendable {
             throw RtspError.noSdp
         }
         negotiate(sdp: sdp, into: &result)
-        result.encryptionFeaturesEnabled = try Self.computeEncryptionEnabled(
+        result.encryptionFeaturesEnabled = Self.computeEncryptionEnabled(
             supported: result.encryptionFeaturesSupported,
             requested: SdpScan.attributeUInt(sdp, "x-ss-general.encryptionRequested") ?? 0)
         result.audioEncryption = result.encryptionFeaturesEnabled & Self.ssEncAudio != 0

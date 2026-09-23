@@ -210,7 +210,7 @@ extension SdpScan {
 
 /// The control ANNOUNCE's SDP, faithful to moonlight's getSdpPayloadForStreamConfig. RFI is advertised only when
 /// the host and our decoder both support it (`referenceFrameInvalidationActive`); the codec block follows the
-/// negotiated format, and control-V2 and audio encryption follow the host (video stays plaintext).
+/// negotiated format, and the encryption bits are the ones `computeEncryptionEnabled` settled on.
 struct SdpBuilder {
     let config: BackendStreamConfig
     let videoPort: UInt16
@@ -223,7 +223,7 @@ struct SdpBuilder {
     /// NegotiatedVideoFormat from DESCRIBE (VIDEO_FORMAT_*). Drives the codec
     /// attribute block.
     let negotiatedVideoFormat: Int32
-    /// EncryptionFeaturesEnabled (control-V2 and audio when the host supports them).
+    /// EncryptionFeaturesEnabled (control-V2 and audio when the PC supports them, video when it requires it).
     let encryptionFeaturesEnabled: UInt32
     /// 7.1.446+ DRC gate uses these.
     let appVersionQuad: [Int32]
@@ -251,6 +251,10 @@ struct SdpBuilder {
     private var audioChannelCount: Int { Int((config.audioConfiguration >> 8) & 0xFF) }
     /// CHANNEL_MASK_FROM_AUDIO_CONFIGURATION(x) = (x >> 16) & 0xFFFF
     private var audioChannelMask: Int { Int((config.audioConfiguration >> 16) & 0xFFFF) }
+    /// The configured packet size, less ENC_VIDEO_HEADER when video is encrypted.
+    private var videoPacketSize: Int {
+        VideoDecryptor.packetSize(Int(config.packetSize), encryptionFeaturesEnabled: encryptionFeaturesEnabled)
+    }
 
     /// Port of moonlight-common-c's isReferenceFrameInvalidationSupportedByDecoder
     /// (Misc.c): RFI is decoder-supported iff the negotiated codec FAMILY pairs
@@ -295,25 +299,9 @@ struct SdpBuilder {
         attrs.append(("x-nv-video[0].clientViewportWd", "\(config.width)"))
         attrs.append(("x-nv-video[0].clientViewportHt", "\(config.height)"))
         attrs.append(("x-nv-video[0].maxFPS", "\(config.fps)"))
-        // REMOTE MTU clamp (moonlight-common-c's STREAM_CFG_AUTO Internet cap,
-        // which this port had only documented, never applied): on a remote
-        // session cap the advertised video packetSize to 1024 so a full RTP
-        // packet fits inside common VPN path MTUs (WireGuard/Tailscale
-        // ~1280-1420) after UDP/IP + tunnel encapsulation. A LAN-tuned 1392 +
-        // headers can exceed the tunnel MTU and force IP fragmentation (or a
-        // black-holed packet on a DF-set path). The clamp lets PMTU-friendly
-        // sizing happen without IP_DONTFRAG (which would hard-fail oversized
-        // packets instead of letting them fragment). LAN sessions keep the
-        // full configured size.
-        //
-        // The clamp is APPLIED UPSTREAM now, in StreamSession.makeBackendConfig,
-        // so `config.packetSize` is already the resolved value and this line
-        // simply echoes it. That is deliberate and load-bearing: the same number
-        // has to reach the host, the receive buffer, AND the Reed-Solomon shard
-        // length the FEC reconstructor rebuilds recovered packets at. Advertising
-        // one size while reconstructing at another corrupts every FEC-recovered
-        // frame (see makeBackendConfig).
-        attrs.append(("x-nv-video[0].packetSize", "\(config.packetSize)"))
+        // Resolved once upstream (StreamSession.makeBackendConfig, remote MTU clamp included) so the
+        // PC, the receive buffer and FEC agree; encrypted video fits its header inside it.
+        attrs.append(("x-nv-video[0].packetSize", "\(videoPacketSize)"))
         attrs.append(("x-nv-video[0].rateControlMode", "4"))
         attrs.append(("x-nv-video[0].timeoutLengthMs", "7000"))
         // framesWithInvalidRefThreshold "0" is the moonlight-common-c default,

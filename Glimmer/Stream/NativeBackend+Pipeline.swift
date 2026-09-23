@@ -164,10 +164,12 @@ extension NativeBackend {
             host: host,
             videoPort: handshake.videoPort,
             pingPayload: handshake.videoPingPayload,
-            packetSize: Int(config.packetSize),
+            packetSize: VideoDecryptor.packetSize(
+                Int(config.packetSize), encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled),
             bitrateKbps: Int(config.bitrate),
             negotiatedVideoFormat: videoFormat,
             encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled,
+            aesKey: config.remoteInputAesKey,
             appVersionQuad: appVersionQuad,
             colorSpace: config.colorSpace,
             multiFecCapable: multiFecCapable,

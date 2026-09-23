@@ -59,9 +59,6 @@ extension AppModel {
             return (needsSunshineMessage(hostName), .pairing)
         case .pairingRejected:
             return ("Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu.", .pairing)
-        case .sessionFailed(RtspError.encryptedVideoRequiredCode):
-            // The PC answered and refused us: its settings require encrypted video.
-            return (RtspError.encryptedVideoRequired.description, .other)
         case .streamPortsBlocked(let proto, let port):
             return ("\(hostName) answered, but the stream couldn't get through. "
                 + "Check that the PC's firewall allows \(proto) \(port).", .other)

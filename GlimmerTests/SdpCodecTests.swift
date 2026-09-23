@@ -197,6 +197,18 @@ struct SdpCodecTests {
         #expect(sdp.contains("a=x-nv-video[0].packetSize:1392 \r\n"))
     }
 
+    @Test func encryptedVideoAdvertisesThePacketSizeLessItsHeader() {
+        func sdp(encryption: UInt32) -> String {
+            sdpString(SdpBuilder(
+                config: makeConfig(), videoPort: 47998, urlSafeAddr: "10.0.0.5", addrFamilyToken: "IPv4",
+                rtspClientVersion: 14, negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_H265,
+                encryptionFeaturesEnabled: encryption, appVersionQuad: [7, 1, 450, 0]))
+        }
+        #expect(sdp(encryption: 7).contains("a=x-nv-video[0].packetSize:1360 \r\n"))
+        #expect(sdp(encryption: 7).contains("a=x-ss-general.encryptionEnabled:7 \r\n"))
+        #expect(sdp(encryption: 5).contains("a=x-nv-video[0].packetSize:1392 \r\n"))
+    }
+
     @Test func buildRemoteSetsQosAndEchoesTheResolvedPacketSize() {
         let sdp = sdpString(builder(format: StreamProtocol.VIDEO_FORMAT_H264, remote: 1))
         #expect(sdp.contains("a=x-nv-vqos[0].qosTrafficType:0 \r\n"))

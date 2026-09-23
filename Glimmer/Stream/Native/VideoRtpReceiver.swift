@@ -23,9 +23,9 @@
 //  start sending video until it receives a ping - this is the most likely fix
 //  for the frame watchdog firing on the native path today.
 //
-//  RECEIVE (VideoStream.c:85-236): we never enable SS_ENC_VIDEO, so video is PLAINTEXT. Drop runt
-//  packets (< 12 bytes) and hand the rest to RtpVideoQueue, which host-byteswaps the RTP header, runs
-//  FEC and feeds the depacketizer → VideoSink.
+//  RECEIVE (VideoStream.c:85-236): drop runts, open SS_ENC_VIDEO packets (only when the PC requires
+//  it) with VideoDecryptor, and hand the rest to RtpVideoQueue, which host-byteswaps the RTP header,
+//  runs FEC and feeds the depacketizer → VideoSink.
 //
 //  Teardown is bounded: the recv loop blocks in recvfrom with a 100ms SO_RCVTIMEO
 //  so it polls `interrupted` and exits within 100ms; stop() also close()s the fd,
@@ -46,6 +46,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// product (see `openSocket`) instead of a fixed packet count.
     private let bitrateKbps: Int
     private let encryptionFeaturesEnabled: UInt32
+    /// remoteInputAesKey, the video key when SS_ENC_VIDEO is on.
+    private let aesKey: [UInt8]
     private weak var sink: VideoSink?
     /// Called when the depacketizer wants an IDR (host should resend a key
     /// frame). Wired to the ENet control loop by NativeBackend.
@@ -86,10 +88,6 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// The open RFI loss episode, if any (receive thread only; +Recovery).
     var lossEpisode = VideoLossEpisode()
 
-    // SS_ENC_VIDEO bit (Limelight: ENCFLG_VIDEO maps to SS_ENC_VIDEO on the
-    // EncryptionFeaturesEnabled bitmask). For our SDP this is 0 → plaintext.
-    private static let SS_ENC_VIDEO: UInt32 = 0x02
-
     // SO_RCVBUF bandwidth-delay-product sizing (see openSocket). Kept LOCAL to
     // this file (not EnetWire) so the change stays self-contained.
     //
@@ -107,6 +105,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
          bitrateKbps: Int,
          negotiatedVideoFormat: Int32,
          encryptionFeaturesEnabled: UInt32,
+         aesKey: [UInt8],
          appVersionQuad: [Int32],
          colorSpace: Int32,
          multiFecCapable: Bool,
@@ -120,6 +119,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         self.packetSize = packetSize
         self.bitrateKbps = bitrateKbps
         self.encryptionFeaturesEnabled = encryptionFeaturesEnabled
+        self.aesKey = aesKey
         self.sink = sink
         self.requestIdr = requestIdr
         self.invalidateReferenceFrames = invalidateReferenceFrames
@@ -140,7 +140,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     }
 
     private var encrypted: Bool {
-        (encryptionFeaturesEnabled & Self.SS_ENC_VIDEO) != 0
+        (encryptionFeaturesEnabled & RtspClient.ssEncVideo) != 0
     }
 
     // MARK: - Lifecycle
@@ -149,21 +149,12 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// VideoStream.c start order: receive thread BEFORE ping thread so we're
     /// already listening when the first ping goes out.
     func start() async throws {
-        if encrypted {
-            // Defensive: we never enable SS_ENC_VIDEO (computeEncryptionEnabled). We do not yet
-            // implement the AES-GCM ENC_VIDEO_HEADER path; fail loudly rather
-            // than silently AES-fail every packet.
-            Diag.error("NativeVideo SS_ENC_VIDEO set but native video decrypt "
-                + "is unimplemented; aborting video receive", Self.cat)
-            throw EnetError.socketFailure("encrypted video not supported on native path")
-        }
-
         try openSocket()
         startReceiveLoop()
         startPingLoop()
         Diag.notice("NativeVideo receiver started → \(host):\(videoPort) "
-            + "(packetSize=\(packetSize), \(pingPayload.isEmpty ? "legacy ping" : "16-byte ping"))",
-            Self.cat)
+            + "(packetSize=\(packetSize), \(pingPayload.isEmpty ? "legacy ping" : "16-byte ping")"
+            + (encrypted ? ", encrypted at the PC's request)" : ")"), Self.cat)
     }
 
     func stop() {
@@ -283,6 +274,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     private func startReceiveLoop() {
         let sock = fd
         let bufSize = packetSize + 64
+        let videoKey = encrypted ? aesKey : nil
         recvQueue.async { [weak self] in
             // Name the thread this loop OWNS for the session: the blocking
             // recv loop occupies one worker until teardown, so this is an
@@ -294,15 +286,17 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // anonymous instead of mislabeling later unrelated work.
             pthread_setname_np("Glimmer.videoRecv")
             defer { pthread_setname_np("") }
-            // Batched receive: up to `cap` datagrams per recvmsg_x
-            // syscall, cutting the ~14k recvfrom/s floor at 4K240 (measurably
-            // smoother). Buffers allocated once and reused; handleDatagram
-            // copies each out - the win is the syscall COUNT. recvmsg_x is a
-            // Darwin-PRIVATE syscall with no public contract; if a future kernel
-            // ever drops it the call returns ENOSYS and we fall back to one
-            // recvfrom per datagram (slower - the syscall-count win is gone - but
-            // correct) for the rest of the session. A removed SPI then degrades
-            // the stream, it doesn't kill it.
+            // libcrypto keeps per-thread state; release it before GCD can retire this worker (see
+            // ControlTransport). Plaintext video never touches libcrypto.
+            defer { if videoKey != nil { OPENSSL_thread_stop() } }
+            let decryptor = videoKey.flatMap { VideoDecryptor(key: $0) }
+            guard videoKey == nil || decryptor != nil else {
+                Diag.error("NativeVideo couldn't set up video decryption; no video", Self.cat)
+                return
+            }
+            // Batched receive: up to `cap` datagrams per recvmsg_x into buffers allocated once; receive()
+            // copies each out, so the win is the syscall count (~14k/s at 4K240). recvmsg_x is private
+            // SPI: ENOSYS drops to one recvfrom per datagram for the session, slower but correct.
             let cap = 32
             let stride = bufSize
             let storage = UnsafeMutablePointer<UInt8>.allocate(capacity: cap * stride)
@@ -318,7 +312,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                             // private-API misread would be) must not read OOB.
                             let len = min(Int(lengths[i]), stride)
                             guard len > 0 else { continue }
-                            self.handleDatagram(Array(UnsafeBufferPointer(start: storage + i * stride, count: len)))
+                            self.receive(storage + i * stride, count: len, decryptor: decryptor)
                         }
                     } else if n < 0 {
                         let err = errno
@@ -337,7 +331,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                     // EAGAIN cancellation as the batched path; close(fd) unblocks it.
                     let len = recvfrom(sock, storage, stride, 0, nil, nil)
                     if len > 0 {
-                        self.handleDatagram(Array(UnsafeBufferPointer(start: storage, count: min(len, stride))))
+                        self.receive(storage, count: min(len, stride), decryptor: decryptor)
                     } else if len < 0 {
                         let err = errno
                         if err == EAGAIN || err == EWOULDBLOCK || err == EINTR { continue }
@@ -346,6 +340,17 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// Copies one datagram out of the socket buffer, opening it on the way when video is encrypted.
+    private func receive(_ bytes: UnsafeMutablePointer<UInt8>, count: Int, decryptor: VideoDecryptor?) {
+        guard let decryptor else {
+            handleDatagram(Array(UnsafeBufferPointer(start: bytes, count: count)))
+            return
+        }
+        let datagram = UnsafeRawBufferPointer(start: bytes, count: count)
+        guard let packet = decryptor.open(datagram, currentFrame: rtpQueue.currentFrameNumber) else { return }
+        handleDatagram(packet)
     }
 
     private func handleDatagram(_ bytes: [UInt8]) {

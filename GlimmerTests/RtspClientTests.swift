@@ -1,9 +1,9 @@
 //
 //  RtspClientTests.swift
 //
-//  The RTSP client's connect/cancel contract and response cap (against real
-//  loopback sockets), the encryption it negotiates, and the audio decrypt that
-//  negotiation turns on (checked against a host-side AES-CBC encrypt).
+//  The RTSP client's connect/cancel contract and response cap (against real loopback sockets),
+//  its sealed RTSP framing and the encryption it negotiates, and the audio decrypt that
+//  negotiation turns on, each checked against the PC's side of the cipher.
 //
 
 import CommonCrypto
@@ -143,31 +143,17 @@ struct RtspClientTests {
 
     // MARK: - Encryption negotiation
 
-    @Test func controlAndAudioEncryptionFollowTheHostOffer() throws {
-        // Sunshine's default offer is control + audio (5); video is never enabled.
-        #expect(try RtspClient.computeEncryptionEnabled(supported: 5, requested: 1) == 5)
-        #expect(try RtspClient.computeEncryptionEnabled(supported: 7, requested: 1) == 5)
-        #expect(try RtspClient.computeEncryptionEnabled(supported: 1, requested: 0) == 1)
+    @Test func controlAndAudioEncryptionFollowTheHostOffer() {
+        // Sunshine offers control + audio (5), plus video (7) where it allows but doesn't require it.
+        #expect(RtspClient.computeEncryptionEnabled(supported: 5, requested: 1) == 5)
+        #expect(RtspClient.computeEncryptionEnabled(supported: 7, requested: 1) == 5)
+        #expect(RtspClient.computeEncryptionEnabled(supported: 1, requested: 0) == 1)
     }
 
-    @Test func hostRequiringEncryptedVideoIsRefused() {
-        do {
-            _ = try RtspClient.computeEncryptionEnabled(supported: 7, requested: 3)
-            Issue.record("a host requiring encrypted video was accepted")
-        } catch RtspError.encryptedVideoRequired {
-        } catch {
-            Issue.record("expected RtspError.encryptedVideoRequired, got \(error)")
-        }
-    }
-
-    @MainActor @Test func encryptedVideoRefusalReachesTheBanner() {
-        let code = NativeBackend.rtspCode(RtspError.encryptedVideoRequired)
-        #expect(code == RtspError.encryptedVideoRequiredCode)
-        let banner = AppModel.connectFailure(for: StreamError.sessionFailed(code), hostName: "Den PC")
-        #expect(banner.message == "This PC requires encrypted video, which Glimmer doesn't support yet.")
-        #expect(banner.kind == .other)
-        let other = AppModel.connectFailure(for: StreamError.sessionFailed(-1), hostName: "Den PC")
-        #expect(other.message == "Den PC answered, but the stream couldn't start.")
+    @Test func videoIsEncryptedOnlyWhenThePcRequiresIt() {
+        // Mandatory mode requests control, video and audio (7), and refuses an ANNOUNCE without both.
+        #expect(RtspClient.computeEncryptionEnabled(supported: 7, requested: 7) == 7)
+        #expect(RtspClient.computeEncryptionEnabled(supported: 7, requested: 1) & RtspClient.ssEncVideo == 0)
     }
 
     // MARK: - Audio decrypt (SS_ENC_AUDIO)

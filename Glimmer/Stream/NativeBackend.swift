@@ -203,7 +203,6 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     static func rtspCode(_ error: Error) -> Int32 {
         switch error as? RtspError {
         case .nonOK(_, let code): return Int32(code)
-        case .encryptedVideoRequired: return RtspError.encryptedVideoRequiredCode
         default: return -1
         }
     }

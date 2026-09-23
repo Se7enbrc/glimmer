@@ -28,8 +28,8 @@ is sized to that.
   requests run mutual TLS once paired. In the stream itself, the ENet control
   channel, which also carries keyboard, mouse and controller input, is
   AES-128-GCM encrypted, and audio is AES-128-CBC encrypted whenever the PC
-  offers it (Sunshine always does). Video travels unencrypted on the LAN:
-  Glimmer has no encrypted-video path, and refuses a PC that requires one.
+  offers it (Sunshine always does). Video travels unencrypted unless the PC is
+  set to require encryption, and then it is AES-128-GCM too.
 - **Same-LAN active MITM** - an attacker who can intercept or redirect traffic
   between the Mac and the host. Defended by RSA-validated pairing handshake +
   post-pairing cert pinning (see Pairing + Pinning sections below). Pre-pairing
@@ -230,8 +230,8 @@ the cert cannot also produce the PIN.
   exchanged over mutual TLS at `/launch`. The RTSP handshake is AES-128-GCM
   (`/launch` asks for `rtspenc://`), as is the control channel, input included.
   RTP audio is AES-128-CBC whenever the PC offers it, which Sunshine always
-  does. RTP video is plaintext on the LAN; a PC set to require encrypted video
-  is refused right after `DESCRIBE`.
+  does. RTP video is plaintext unless the PC requires encryption (Sunshine's
+  mandatory mode), and then it is AES-128-GCM.
 
 ## Runtime hardening
 
