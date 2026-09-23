@@ -7,6 +7,7 @@
 //
 
 import CommonCrypto
+import CryptoKit
 import Foundation
 import Network
 import Testing
@@ -94,6 +95,50 @@ struct RtspClientTests {
         } catch {
             Issue.record("expected RtspError.responseTooLarge, got \(error)")
         }
+    }
+
+    // MARK: - Encrypted RTSP (rtspenc://)
+
+    @Test func launchAsksTheHostForEncryptedRtsp() {
+        let config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)
+        let query = NetworkClient.launchQuery(config: config, riKeyHex: "00", riKeyID: 0, appID: 1)
+        #expect(query["corever"] == "1")
+        #expect(query["sops"] == "1")
+    }
+
+    /// Sunshine's RTSP IV: the message seq little-endian, then the originator and 'R'.
+    private static func rtspNonce(seq: UInt32, originator: Character) throws -> AES.GCM.Nonce {
+        var iv = withUnsafeBytes(of: seq.littleEndian, Array.init) + [UInt8](repeating: 0, count: 8)
+        iv[10] = originator.asciiValue ?? 0
+        iv[11] = 0x52
+        return try AES.GCM.Nonce(data: iv)
+    }
+
+    @Test func sealedRequestOpensWithTheHostsFraming() throws {
+        let rtsp = Self.makeClient(port: 9)
+        let request = Data("OPTIONS rtspenc://10.0.0.5:48010 RTSP/1.0\r\nCSeq: 1\r\n\r\n".utf8)
+        let first = [UInt8](try rtsp.sealRtsp(request))
+        let second = [UInt8](try rtsp.sealRtsp(request))
+        #expect(RtspClient.beUInt32(first, 0) == 0x8000_0000 | UInt32(request.count))
+        #expect(RtspClient.beUInt32(first, 4) == 1)
+        #expect(RtspClient.beUInt32(second, 4) == 2)
+        let box = try AES.GCM.SealedBox(
+            nonce: Self.rtspNonce(seq: 1, originator: "C"),
+            ciphertext: first[24...], tag: first[8..<24])
+        #expect(try AES.GCM.open(box, using: SymmetricKey(data: Self.key)) == request)
+    }
+
+    @Test func hostSealedResponseUnsealsAndTamperingIsRefused() throws {
+        let response = Data("RTSP/1.0 200 OK\r\nCSeq: 1\r\n\r\n".utf8)
+        let seq: UInt32 = 0x0102_0304
+        let box = try AES.GCM.seal(response, using: SymmetricKey(data: Self.key),
+                                   nonce: Self.rtspNonce(seq: seq, originator: "H"))
+        var wire = RtspClient.beBytes(0x8000_0000 | UInt32(response.count)) + RtspClient.beBytes(seq)
+        wire += [UInt8](box.tag) + [UInt8](box.ciphertext)
+        let rtsp = Self.makeClient(port: 9)
+        #expect(try rtsp.unsealRtsp(Data(wire)) == response)
+        wire[wire.count - 1] ^= 0x01
+        #expect(throws: (any Error).self) { try rtsp.unsealRtsp(Data(wire)) }
     }
 
     // MARK: - Encryption negotiation

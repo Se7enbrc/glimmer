@@ -227,10 +227,11 @@ the cert cannot also produce the PIN.
   consulted; the pinned PEM is the entire trust anchor.
 - **Stream:** the Swift-native engine's RTP video/audio + ENet-subset control
   channels (`Glimmer/Stream/Native/`). Both ciphers use the per-session key
-  exchanged over mutual TLS at `/launch`. The control channel, input included,
-  is AES-128-GCM. RTP audio is AES-128-CBC whenever the PC offers it, which
-  Sunshine always does. RTP video is plaintext on the LAN; a PC set to require
-  encrypted video is refused right after `DESCRIBE`.
+  exchanged over mutual TLS at `/launch`. The RTSP handshake is AES-128-GCM
+  (`/launch` asks for `rtspenc://`), as is the control channel, input included.
+  RTP audio is AES-128-CBC whenever the PC offers it, which Sunshine always
+  does. RTP video is plaintext on the LAN; a PC set to require encrypted video
+  is refused right after `DESCRIBE`.
 
 ## Runtime hardening
 

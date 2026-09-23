@@ -1,39 +1,17 @@
 //
 //  StreamCrypto.swift
 //
-//  AES-128-GCM sealing/unsealing for the Swift-native streaming engine. Source:
-//  ControlStream.c:548-660 (encrypt/decrypt) + RtspConnection.c:93-244 (rtspenc
-//  framing).
+//  AES-128-GCM for the native engine, keyed by the launch's rikey: the control-V2 envelope here
+//  (ControlStream.c). Encrypted RTSP (rtspenc://, which /launch asks for with corever=1) is sealed
+//  in RtspClient.swift with the same cipher (RtspConnection.c).
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  Two distinct framings live here:
+//  CONTROL-V2 wire: [u16 0x0001 LE][u16 length LE][u32 seq LE][16-byte tag][ciphertext of the
+//  inner V2 header + payload]. IV: seq LE in [0..3], then the originator ('C' or 'H') and 'C'.
 //
-//   1. CONTROL-V2 (Gen7 encrypted ENet control stream). Wire layout:
-//        [u16 encryptedHeaderType = 0x0001 LE]
-//        [u16 length              LE]   // = sizeof(seq) + 16(tag) + V2hdr + payload
-//        [u32 seq                 LE]
-//        [16-byte AES-GCM tag]          // tag BEFORE ciphertext (non-default!)
-//        [ciphertext]                   // of (V2 inner header + payload)
-//      The plaintext is the inner V2 header (u16 type LE + u16 payloadLength LE)
-//      followed by the payload. IV is 12 bytes: seq as LE u32 in iv[0..3], then
-//      iv[10]='C', iv[11]='C' for client->host (encrypt); iv[10]='H' on decrypt
-//      (host->client). No AAD. Key = the 16-byte rikey (remoteInputAesKey).
-//
-//   2. ENCRYPTED-RTSP (rtspenc://). 24-byte header then ciphertext:
-//        [u32 typeAndLength BE = 0x80000000 | plaintextLen]
-//        [u32 sequenceNumber BE]
-//        [16-byte tag]
-//        [ciphertext]
-//      IV is 12 bytes LE: iv[0..3]=seq (LE), iv[10]='C', iv[11]='R' (client->
-//      host); 'H','R' host->client. For THIS increment the RTSP path detects
-//      rtspenc:// and fails the stage cleanly rather than risk a GCM nonce bug
-//      (Sunshine-over-TCP uses plaintext rtsp:// in the common case).
-//
-//  CryptoKit's `SealedBox.combined` emits tag AFTER ciphertext; both wire
-//  formats above put the tag BEFORE the ciphertext. We therefore ALWAYS
-//  assemble/parse the bytes manually using `.ciphertext` and `.tag` separately
-//  and never touch `.combined`.
+//  The tag sits BEFORE the ciphertext, the reverse of CryptoKit's `.combined`, so the bytes are
+//  always assembled from `.ciphertext` and `.tag` and never from `.combined`.
 
 import Foundation
 import CryptoKit

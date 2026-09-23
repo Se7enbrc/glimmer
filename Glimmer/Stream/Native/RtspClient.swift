@@ -71,7 +71,6 @@ enum RtspError: Error, CustomStringConvertible {
     case transportFailure(String)
     case badResponse(String)
     case nonOK(step: String, code: Int)
-    case encryptedRtspUnsupported
     case noSdp
     case encryptedVideoRequired
     case responseTooLarge(Int)
@@ -86,8 +85,6 @@ enum RtspError: Error, CustomStringConvertible {
         case .transportFailure(let reason): return "RTSP transport failure: \(reason)"
         case .badResponse(let reason): return "RTSP bad response: \(reason)"
         case .nonOK(let step, let code): return "RTSP \(step) returned \(code)"
-        case .encryptedRtspUnsupported:
-            return "rtspenc:// (encrypted RTSP) not yet supported by the native backend"
         case .noSdp: return "RTSP DESCRIBE returned no SDP payload"
         case .encryptedVideoRequired:
             return "This PC requires encrypted video, which Glimmer doesn't support yet."

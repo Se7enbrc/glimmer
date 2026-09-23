@@ -355,7 +355,10 @@ extension NetworkClient {
             "surroundAudioInfo": "\(gl_surround_audio_info_from_audio_configuration(config.audio.cValue))",
             "remoteControllersBitmap": "0",
             "gcmap": "0",
-            "gcpersist": "0"
+            "gcpersist": "0",
+            // Encrypted RTSP (rtspenc://), as moonlight's LiGetLaunchUrlQueryParameters asks.
+            // A GameStream PC is refused before /launch, so only Sunshine sees it.
+            "corever": "1"
         ]
         if let appID { query["appid"] = "\(appID)" }
         return query
