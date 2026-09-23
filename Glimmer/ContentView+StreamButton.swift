@@ -1,12 +1,9 @@
 //
 //  ContentView+StreamButton.swift
 //
-//  The hero's morphing primary action and the material-weighted button style it
-//  shares with the other accent CTAs: the six `ButtonRole` states (choose a PC,
-//  stream, connecting, back-to-stream, wake, waking) and the two roles that are
-//  really CANCELS - `.connecting` and `.waking` both stay enabled, carry a quiet
-//  trailing cancel label, and bind ⎋. Split out of ContentViewSubviews.swift to keep
-//  each file under the length limit.
+//  The hero's morphing primary action and the accent button style it shares
+//  with the other CTAs. `.connecting` and `.waking` are really cancels: they
+//  stay enabled, carry a quiet trailing label and bind ⎋.
 //
 
 import SwiftUI
@@ -64,17 +61,9 @@ struct StreamButton: View {
         model.streamPhase == .streaming
     }
 
-    /// Four button states, depending on session lifecycle and selection:
-    ///   * `.noPC`        - no host paired/selected. "Choose a PC"; tap is a
-    ///                       no-op, the label tells the user what to do next.
-    ///   * `.connect`     - host selected, no stream yet. "Stream <app>" (the
-    ///                       resume target if known - host-reported session or
-    ///                       last-played - else the default app). Tap launches.
-    ///   * `.connecting`  - handshake in flight. "Connecting to <Host>..." +
-    ///                       stage subtext. Tap (or ⎋) CANCELS the attempt -
-    ///                       a stuck connect must never strand the user.
-    ///   * `.liveBackgrounded` - stream running, window hidden. Tap = "Back
-    ///                       to Stream".
+    /// Choose a PC (disabled), Stream <app>, connecting (a cancel, so a stuck
+    /// connect never strands the user), Back to Stream for a hidden stream
+    /// window, then the two wake states below.
     private enum ButtonRole {
         case noPC
         case connect
@@ -94,7 +83,7 @@ struct StreamButton: View {
         }
         guard let host = model.selectedHost else { return .noPC }
         if model.isWaking(host) { return .waking }
-        if model.canWake(host), hostIsAsleep(host) { return .wake }
+        if model.canWake(host), model.polledChip(for: host) == .asleep { return .wake }
         return .connect
     }
 
@@ -103,17 +92,6 @@ struct StreamButton: View {
     /// the Return key, which users mash.
     private var isCancelRole: Bool {
         role == .connecting || role == .waking
-    }
-
-    /// Fresh polled truth says the selected host is asleep (mirrors the
-    /// readiness chip's staleness rules).
-    private func hostIsAsleep(_ host: Host) -> Bool {
-        guard let live = model.hostLiveStatus, live.hostID == host.id,
-              Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale else {
-            return false
-        }
-        if case .asleep = live.state { return true }
-        return false
     }
 
     var body: some View {

@@ -39,7 +39,7 @@ struct ConnectBanner: View {
     var body: some View {
         Group {
             // The "stream is in the background" affordance lives on the
-            // StreamButton itself ("Back to stream" role), so the banner only
+            // StreamButton itself (its Back to Stream role), so the banner only
             // handles the load-bearing recovery case: stream errors.
             if let err = model.nativeStreamError, !err.isEmpty {
                 HStack(alignment: .center, spacing: 12) {

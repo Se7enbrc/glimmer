@@ -171,13 +171,9 @@ private struct ConnectSurface: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// True while we're between "user pressed Stream" and "stream window
-    /// fades in" - the RAW connecting edge. `streamPhase == .connecting` is
-    /// the whole condition (`isStreaming` must NOT be a guard - it flips at
-    /// stream() ENTRY as the in-flight flag, and guarding on it made the
-    /// connecting UI unreachable dead code: a stuck connect showed nothing).
-    /// Suppressed while the stream window is just hiding in the background -
-    /// the StreamButton's "Back to stream" role owns that affordance.
+    /// The raw connecting edge: `streamPhase` alone, since `isStreaming` flips at
+    /// stream() entry and would hide a stuck connect. Off while the stream window
+    /// only hides in the background, where Back to Stream takes over.
     private var isConnecting: Bool {
         guard case .connecting = model.streamPhase else { return false }
         guard !model.nativeStreamBackgrounded else { return false }
