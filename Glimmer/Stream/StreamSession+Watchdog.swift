@@ -234,9 +234,18 @@ extension StreamSession {
             // NOTICE, not WARNING: this is a RECOVERABLE degradation the watchdog
             // self-heals, not a crisis. The genuine hard-freeze (decode-silent,
             // frameWatchdogTimeout) stays error-level.
-            self.log.notice(
-                // swiftlint:disable:next line_length
-                "Present-path stall detected - linkDead=\(trip.linkDead, privacy: .public) tickDeficit=\(trip.tickDeficit, privacy: .public) rendererRejecting=\(trip.rendererRejecting, privacy: .public) rendererStarved=\(trip.rendererStarved, privacy: .public) rejectStreak=\(live.presentRejectStreak, privacy: .public) sinceTick=\(live.secondsSinceLastTick * 1000, privacy: .public)ms sinceRelease=\(live.secondsSinceLastRelease * 1000, privacy: .public)ms ticks/s=\(live.recentTicksPerSecond, privacy: .public) releases/s=\(live.recentReleasesPerSecond, privacy: .public) depth=\(live.depth, privacy: .public) decodeIdle=\(decodeIdle * 1000, privacy: .public)ms clusterTrips=\(StreamSession.presentTripsInCluster, privacy: .public) - self-healing")
+            self.log.notice("""
+                Present-path stall detected - linkDead=\(trip.linkDead, privacy: .public) \
+                tickDeficit=\(trip.tickDeficit, privacy: .public) rendererRejecting=\(trip.rendererRejecting, privacy: .public) \
+                rendererStarved=\(trip.rendererStarved, privacy: .public) \
+                rejectStreak=\(live.presentRejectStreak, privacy: .public) \
+                sinceTick=\(live.secondsSinceLastTick * 1000, privacy: .public)ms \
+                sinceRelease=\(live.secondsSinceLastRelease * 1000, privacy: .public)ms \
+                ticks/s=\(live.recentTicksPerSecond, privacy: .public) \
+                releases/s=\(live.recentReleasesPerSecond, privacy: .public) depth=\(live.depth, privacy: .public) \
+                decodeIdle=\(decodeIdle * 1000, privacy: .public)ms \
+                clusterTrips=\(StreamSession.presentTripsInCluster, privacy: .public) - self-healing
+                """)
             Diag.info(
                 "Present-path stall detected (linkDead=\(trip.linkDead) "
                 + "tickDeficit=\(trip.tickDeficit) "
@@ -299,9 +308,10 @@ extension StreamSession {
         if self.directPresentStallSince == nil {
             self.directPresentStallSince = now
             TelemetryCounters.shared.presentStallTotal.increment()
-            self.log.notice(
-                // swiftlint:disable:next line_length
-                "Direct present-path stall detected - sincePresent=\(sincePresent * 1000, privacy: .public)ms decodeIdle=\(decodeIdle * 1000, privacy: .public)ms - self-healing")
+            self.log.notice("""
+                Direct present-path stall detected - sincePresent=\(sincePresent * 1000, privacy: .public)ms \
+                decodeIdle=\(decodeIdle * 1000, privacy: .public)ms - self-healing
+                """)
             Diag.info(
                 "Direct present-path stall detected (screen frozen while decode healthy); self-healing",
                 "Stream")
