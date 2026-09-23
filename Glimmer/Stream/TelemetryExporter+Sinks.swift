@@ -70,15 +70,9 @@ extension TelemetryExporter {
 
     // MARK: - Bookmark ("that felt bad") - signal 4
 
-    /// Record a user bookmark: the client-only chord fired during the stream to
-    /// flag jank. Bumps the always-live `bookmark_total` counter (so a dashboard
-    /// `increase()` marks the beat), and writes an explicit EVENT line into the
-    /// NDJSON, the frame trace and the Diag log so a review jumps straight to
-    /// the moment. Safe to call from the main actor (the chord fires
-    /// on the input thread) - the file write hops onto `workQueue`, the same
-    /// queue the 1Hz capture uses, so NDJSON lines never interleave mid-write.
-    /// No-op-safe before the file is open (the line is simply dropped, the counter
-    /// still increments).
+    /// Record a ⌃B bookmark: bump `bookmark_total` and write a bookmark row to the
+    /// NDJSON (on `workQueue`, like the 1 Hz capture), the frame trace and the Diag
+    /// log. Before the NDJSON file opens, its row is dropped; the counter still counts.
     func recordBookmark() {
         counters.bookmarkTotal.increment()
         let now = DispatchTime.now()
