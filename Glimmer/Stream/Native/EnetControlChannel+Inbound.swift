@@ -320,7 +320,7 @@ extension EnetControlChannel {
             return rejectedInboundControl == 1
         }
         if first {
-            Diag.error("ENet rejected inbound control (" + why + "); counting further rejections quietly",
+            Diag.error("ENet rejected inbound control (\(why)); counting further rejections quietly",
                        Self.logCategory)
         }
         return false

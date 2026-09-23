@@ -67,6 +67,16 @@ struct DiagMessageTests {
         #expect(plain.systemLogText == "no secrets")
     }
 
+    @Test func nestedMessageKeepsItsPrivateValues() {
+        let why: DiagMessage = "decrypt failed: \("bad tag", privacy: .private)"
+        let message: DiagMessage = "rejected (\(why)) after \(2) tries"
+        #expect(message.text == "rejected (decrypt failed: bad tag) after 2 tries")
+        #expect(message.systemLogText == "rejected (decrypt failed: <private>) after 2 tries")
+        let plain: DiagMessage = "rejected (\("runt" as DiagMessage))"
+        #expect(plain.text == "rejected (runt)")
+        #expect(plain.systemLogText == plain.text)
+    }
+
     @Test func viewerKeepsTheFullText() {
         let marker = UUID().uuidString
         Diag.info("\(marker) at \("192.0.2.10", privacy: .private)", "Tests")

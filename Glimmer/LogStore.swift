@@ -181,6 +181,13 @@ struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
             }
             text += rendered
         }
+
+        /// A nested line keeps its own private values instead of rendering as a struct dump.
+        mutating func appendInterpolation(_ message: DiagMessage) {
+            if redacted == nil, message.redacted != nil { redacted = text }
+            redacted? += message.systemLogText
+            text += message.text
+        }
     }
 }
 
