@@ -227,13 +227,12 @@ extension FramePacer {
     /// backing scale. The three things whose change makes a rebind MATERIAL -
     /// anything else arriving via screen-parameter notifications is VRR/HDR
     /// housekeeping the bound link already follows. Falls back to "none" when
-    /// the view has no window/screen yet, which never equals a real signature,
-    /// so the degenerate case still rebinds (matching the old behavior).
+    /// the view has no window/screen (or the screen no display ID) yet, which
+    /// never equals a real signature, so the degenerate case still rebinds.
     @MainActor
     static func screenSignature(for view: NSView) -> String {
         guard let screen = view.window?.screen else { return "none" }
-        let displayID = (screen.deviceDescription[
-            NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+        let displayID = screen.cgDirectDisplayID.map { String($0) } ?? "none"
         return "\(displayID)|\(screen.maximumFramesPerSecond)|\(screen.backingScaleFactor)"
     }
 

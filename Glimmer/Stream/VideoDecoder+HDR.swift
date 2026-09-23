@@ -524,7 +524,7 @@ extension VideoDecoder {
         // anything else means the user is in a non-standard scale.
         var panelPxW: Int = 0
         var panelPxH: Int = 0
-        if let displayID = resolvedScreen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+        if let displayID = resolvedScreen?.cgDirectDisplayID,
            let mode = CGDisplayCopyDisplayMode(displayID) {
             panelPxW = mode.pixelWidth
             panelPxH = mode.pixelHeight
