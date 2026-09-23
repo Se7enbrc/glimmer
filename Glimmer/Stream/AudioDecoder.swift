@@ -35,9 +35,6 @@ public final class AudioDecoder: @unchecked Sendable {
     /// is `@unchecked Sendable` on the strength of this lock.
     let stateLock = NSLock()
     var isShutdown = false
-    /// True while the PC plays this stream's sound: the Mac's main mixer sits at 0
-    /// and the engine keeps running. Guarded by `stateLock`; see `setOutputMuted`.
-    var outputMuted = false
 
     var decoder: OpaquePointer?                    // OpusMSDecoder*
     let engine = AVAudioEngine()
