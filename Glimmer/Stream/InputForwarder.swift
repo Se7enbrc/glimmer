@@ -37,12 +37,11 @@
 //     to `keyDown(with:)`/`keyUp(with:)` independently. With four fingers on
 //     four keys we send four down events; lifting any one sends exactly one
 //     up event for that key. `raiseAllHeldInputs()` (keys + buttons +
-//     modifiers) fires only on focus loss, a reconnect and `detach()` (stream
-//     teardown), so state never resets mid-game while the window stays key.
+//     modifiers) fires only on focus loss, a paste, `detach()` and a reconnect,
+//     whose new session starts with nothing held on the PC.
 //     `heldModifierVKs` (one entry per modifier SIDE) is diffed in
-//     `flagsChanged`, and before a key-down only after a raise-all, so we only
-//     emit modifier transitions, and releasing one of two held Shifts releases
-//     exactly that one on the host.
+//     `flagsChanged`, and before the first key-down after a raise-all, so
+//     releasing one of two held Shifts releases exactly that one on the host.
 //
 //   * Mouse motion is *relative* via the SDL associate-false model
 //     (P0 mouse-snap fix). When relative aim is engaged we call
@@ -520,6 +519,41 @@ public final class InputForwarder {
     /// physical release goes elsewhere, and a held W would walk forever.
     var heldKeys: Set<VKScanCode> = []
     var heldMouseButtons: Set<Int32> = []
+
+    /// Send key-up / button-release for everything we believe the host holds,
+    /// then clear the bookkeeping (modifiers included). A key still physically
+    /// held stays released until re-pressed, as in upstream clients.
+    func raiseAllHeldInputs(reason: String) {
+        let keyCount = heldKeys.count
+        let buttonCount = heldMouseButtons.count
+        if isReady {
+            for key in heldKeys {
+                let rc = backend?.sendKeyboard(
+                    keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_UP),
+                    modifiers: 0, flags: key.flags) ?? -2
+                record("LiSendKeyboardEvent2(raise-all)", rc)
+            }
+            for button in heldMouseButtons {
+                let rc = backend?.sendMouseButton(
+                    action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
+                record("LiSendMouseButtonEvent(raise-all)", rc)
+            }
+            for vk in heldModifierVKs.sorted() {
+                let rc = backend?.sendKeyboard(
+                    keyCode: VKScanCode(vk: vk).wireCode,
+                    action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
+                record("LiSendKeyboardEvent2(modifier release)", rc)
+            }
+            if keyCount + buttonCount > 0 {
+                Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
+                    + "mouse button(s) on \(reason)", "Stream")
+            }
+        }
+        heldKeys.removeAll()
+        heldMouseButtons.removeAll()
+        heldModifierVKs.removeAll()
+        modifiersNeedResync = true
+    }
 
     /// True from attach until the first connection goes live: Esc cancels the
     /// connect then, and is game input from then on (reconnects included).
