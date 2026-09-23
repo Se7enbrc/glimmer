@@ -8,9 +8,9 @@
 //  Tailscale/WireGuard tunnel - advertised the 1392-byte LAN packet size, which
 //  IP-fragments on that path and multiplies pre-FEC loss.
 //
-//  The syscall probe itself (connect/getsockname/getifaddrs) is not unit-tested -
-//  it depends on the machine's live route table. The DECISION functions it feeds
-//  are pure, and those are what this file pins.
+//  The syscall probe itself (connect/getsockname/getifaddrs) runs only against
+//  loopback here; real routes depend on the machine. The DECISION functions it
+//  feeds are pure, and those are what this file pins.
 //
 
 import Foundation
@@ -381,4 +381,65 @@ struct StreamPathMTUTests {
         let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: stats)
         #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 42_000)
     }
+
+    // MARK: - RTT sampling against a loopback port
+
+    @Test func fullWindowReleasesLaunchWithoutWaitingOutTheCap() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        let start = ContinuousClock.now
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
+        #expect(ContinuousClock.now - start < .seconds(5))
+        sampler.markLaunch()
+        #expect(sampler.usesPreLaunchWindow)
+        #expect((sampler.harvest()?.count ?? 0) >= RttSampler.minPreLaunchSamples)
+    }
+
+    @Test func unreachablePortWaitsOnlyToTheCap() async throws {
+        let port = try #require(LoopbackPort(listening: false))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        let start = ContinuousClock.now
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 150)
+        let waited = ContinuousClock.now - start
+        #expect(waited >= .milliseconds(140) && waited < .seconds(5))
+        #expect(sampler.harvest() == nil)
+    }
+
+    @Test func harvestReleasesAWaitingLaunch() async throws {
+        let port = try #require(LoopbackPort(listening: false))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        let start = ContinuousClock.now
+        let waiting = Task { await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000) }
+        try await Task.sleep(for: .milliseconds(50))
+        _ = sampler.harvest()
+        await waiting.value
+        #expect(ContinuousClock.now - start < .seconds(5))
+    }
+}
+
+/// A loopback TCP port for the RTT probes. Listening, the kernel completes each
+/// handshake from the backlog with nothing accepting; bound only, it refuses.
+private final class LoopbackPort {
+    let fd: Int32
+    let port: UInt16
+
+    init?(listening: Bool) {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return nil }
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, len) == 0 && getsockname(fd, $0, &len) == 0
+            }
+        }
+        guard bound, !listening || listen(fd, 128) == 0 else { close(fd); return nil }
+        self.fd = fd
+        self.port = UInt16(bigEndian: addr.sin_port)
+    }
+
+    deinit { close(fd) }
 }

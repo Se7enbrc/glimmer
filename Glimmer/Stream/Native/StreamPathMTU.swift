@@ -115,6 +115,10 @@ final class RttSampler: @unchecked Sendable {
     private var stopped = false
     /// Sample count when `markLaunch()` was called; nil until then.
     private var preLaunchCount: Int?
+    /// The connect path parked in `awaitPreLaunchWindow`, released by the
+    /// sample that fills the window, the time cap, cancellation or `harvest()`.
+    private var windowWaiter: (minSamples: Int, continuation: CheckedContinuation<Void, Never>)?
+    private let startedAt = DispatchTime.now()
 
     /// Gap between handshakes. Fast enough to fill the pre-launch window on a
     /// quiet host without hammering its web port.
@@ -124,10 +128,9 @@ final class RttSampler: @unchecked Sendable {
     /// Pre-launch samples needed before the launch-window ones are ignored.
     static let minPreLaunchSamples = 8
 
-    /// Starts sampling immediately - there is no useful window between
-    /// construction and the first sample, and the loop captures self WEAKLY, so
-    /// the sampler going out of scope (an early throw on the connect path) ends
-    /// it on the next iteration without any explicit teardown.
+    /// Starts sampling immediately: there is no useful window between
+    /// construction and the first sample. The loop holds the sampler until
+    /// `harvest()` or `maxSamples` ends it, so every exit path must harvest.
     init(host: String, port: UInt16) {
         self.host = host
         self.port = port
@@ -143,7 +146,11 @@ final class RttSampler: @unchecked Sendable {
                 lock.unlock()
                 if done { return }
                 if let sample = StreamPathMTU.measureOneRttMs(host: host, port: port) {
-                    lock.lock(); samples.append(sample); lock.unlock()
+                    lock.lock()
+                    samples.append(sample)
+                    let filled = takeWaiterLocked(force: false)
+                    lock.unlock()
+                    filled?.resume()
                 }
                 usleep(Self.intervalMs * 1000)
             }
@@ -151,19 +158,50 @@ final class RttSampler: @unchecked Sendable {
     }
 
     /// Wait until the pre-launch window holds `minSamples`, or `maxWaitMs` has
-    /// passed. Called on the connect path right before `/launch`.
+    /// passed. Called on the connect path right before `/launch`; logs how long
+    /// the window took and how much of it launch spent waiting.
     func awaitPreLaunchWindow(minSamples: Int = RttSampler.minPreLaunchSamples,
                               maxWaitMs: Int = 400) async {
-        let deadline = DispatchTime.now() + .milliseconds(maxWaitMs)
-        while DispatchTime.now() < deadline {
-            if windowIsReady(minSamples: minSamples) { return }
-            try? await Task.sleep(for: .milliseconds(20))
+        let waitStart = DispatchTime.now()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                lock.lock()
+                guard samples.count < minSamples, !stopped, !Task.isCancelled else {
+                    lock.unlock()
+                    continuation.resume()
+                    return
+                }
+                windowWaiter = (minSamples, continuation)
+                lock.unlock()
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                    deadline: waitStart + .milliseconds(maxWaitMs)) { [weak self] in
+                    self?.releaseWindowWaiter()
+                }
+            }
+        } onCancel: {
+            releaseWindowWaiter()
         }
+        let count = lock.withLock { samples.count }
+        Diag.notice("RTT window: \(count) sample(s) in \(Self.msSince(startedAt)) ms, "
+            + "launch waited \(Self.msSince(waitStart)) ms for it", "Stream")
     }
 
-    private func windowIsReady(minSamples: Int) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        return samples.count >= minSamples || stopped
+    private func releaseWindowWaiter() {
+        lock.lock()
+        let waiter = takeWaiterLocked(force: true)
+        lock.unlock()
+        waiter?.resume()
+    }
+
+    /// Take the parked waiter if the window is full (or `force`). Caller holds `lock`.
+    private func takeWaiterLocked(force: Bool) -> CheckedContinuation<Void, Never>? {
+        guard let waiter = windowWaiter, force || samples.count >= waiter.minSamples else { return nil }
+        windowWaiter = nil
+        return waiter.continuation
+    }
+
+    private static func msSince(_ start: DispatchTime) -> Int {
+        Int((DispatchTime.now().uptimeNanoseconds &- start.uptimeNanoseconds) / 1_000_000)
     }
 
     /// Freeze the pre-launch boundary: everything sampled after this rides the
@@ -180,7 +218,9 @@ final class RttSampler: @unchecked Sendable {
         stopped = true
         let collected = samples
         let boundary = preLaunchCount
+        let waiter = takeWaiterLocked(force: true)
         lock.unlock()
+        waiter?.resume()
         return RttStats(samples: Self.gateSamples(collected, preLaunchCount: boundary))
     }
 
