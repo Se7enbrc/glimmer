@@ -290,29 +290,8 @@ extension NetworkClient {
               + "&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0"
             : ""
 
-        // GFE >60fps SOPS quirk: feeding real GFE a value >60 makes it pick
-        // 720p60 instead of the resolution we asked for. Sunshine, which
-        // pretends to be GFE in /serverinfo for compatibility, does NOT have
-        // this bug - and crucially, sending fps=0 to Sunshine makes it
-        // misinterpret the request and fall back to safe SDR 8-bit defaults,
-        // which silently kills HDR negotiation. Gate the workaround on the
-        // MJOLNIR-detected `isRealGFE` flag instead of any-non-empty
-        // gfeVersion.
-        let fpsField = (server.isRealGFE && config.fps > 60) ? 0 : config.fps
-
-        var query: [String: String] = [
-            "mode": "\(config.width)x\(config.height)x\(fpsField)",
-            "additionalStates": "1",
-            "sops": "1",
-            "rikey": riKeyHex,
-            "rikeyid": "\(riKeyID)",
-            "localAudioPlayMode": "0",
-            "surroundAudioInfo": "\(gl_surround_audio_info_from_audio_configuration(config.audio.cValue))",
-            "remoteControllersBitmap": "0",
-            "gcmap": "0",
-            "gcpersist": "0"
-        ]
-        if let appID { query["appid"] = "\(appID)" }
+        let query = Self.launchQuery(config: config, isRealGFE: server.isRealGFE,
+                                     riKeyHex: riKeyHex, riKeyID: riKeyID, appID: appID)
         // Append HDR params as an ordered tail blob so we keep the exact key
         // order the host expects. Building it through the dictionary would lose
         // that ordering.
@@ -386,6 +365,32 @@ extension NetworkClient {
         return LaunchResponse(sessionURL: sessionURL,
                               gcmKey: gcmKey,
                               gcmKeyId: gcmKeyId)
+    }
+
+    /// The keyed part of the /launch and /resume query (HDR rides separately,
+    /// as an ordered tail). Static so the wire values are checkable offline.
+    static func launchQuery(config: StreamConfig, isRealGFE: Bool,
+                            riKeyHex: String, riKeyID: Int32, appID: Int?) -> [String: String] {
+        // Real GFE given fps > 60 picks 720p60, so it gets 0. Sunshine needs the
+        // real rate: fps=0 drops it to SDR 8-bit and kills HDR. Gated on the
+        // MJOLNIR-detected `isRealGFE`, not gfeVersion (Sunshine sends one too).
+        let fpsField = (isRealGFE && config.fps > 60) ? 0 : config.fps
+
+        var query: [String: String] = [
+            "mode": "\(config.width)x\(config.height)x\(fpsField)",
+            "additionalStates": "1",
+            "sops": "1",
+            "rikey": riKeyHex,
+            "rikeyid": "\(riKeyID)",
+            // 1 = the PC keeps playing its own sound (Moonlight's "play audio on host").
+            "localAudioPlayMode": config.playAudioOnHost ? "1" : "0",
+            "surroundAudioInfo": "\(gl_surround_audio_info_from_audio_configuration(config.audio.cValue))",
+            "remoteControllersBitmap": "0",
+            "gcmap": "0",
+            "gcpersist": "0"
+        ]
+        if let appID { query["appid"] = "\(appID)" }
+        return query
     }
 
     // MARK: - Endpoint: /cancel

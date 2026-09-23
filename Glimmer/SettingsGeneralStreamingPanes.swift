@@ -95,8 +95,8 @@ struct GeneralPane: View {
                     }
                 }
                 Toggle("Mute this Mac while streaming", isOn: $model.muteMacWhileStreaming)
-                Text("Turns this Mac's volume all the way down while you stream, so other apps go quiet "
-                    + "too, and back up when you stop. The PC doesn't play the sound instead.")
+                Text("The PC plays the game's sound and this Mac stays quiet. Other apps and this Mac's "
+                    + "volume aren't changed. Takes effect the next time you stream.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

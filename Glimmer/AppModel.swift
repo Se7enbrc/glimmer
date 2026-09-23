@@ -118,10 +118,10 @@ final class AppModel {
     var defaultLaunchApp: String = "Desktop" {
         didSet { UserDefaults.standard.set(defaultLaunchApp, forKey: "defaultLaunchApp") }
     }
+    /// Play the stream's sound on the PC instead of this Mac. Read at stream
+    /// start (localAudioPlayMode), so a change applies to the next stream.
     var muteMacWhileStreaming: Bool = false {
-        didSet {
-            UserDefaults.standard.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming")
-        }
+        didSet { UserDefaults.standard.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming") }
     }
 
     /// Connection lifecycle published from the native engine. Drives the
@@ -559,13 +559,6 @@ final class AppModel {
         customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self) ?? customControllerChord
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
-
-    // MARK: Mute/restore Mac audio
-
-    /// Pre-mute capture of the output device and its level. Non-nil doubles as
-    /// the did-mute LATCH: the stream-end restore keys off THIS, never the live
-    /// toggle - see AppModel+Audio.swift for the full contract.
-    @ObservationIgnored var prePausedMacOutput: MutedOutput?
 
     /// The launch the user last asked for, so Retry repeats exactly that.
     @ObservationIgnored var lastLaunchAttempt: (app: LibraryApp, host: Host)?

@@ -67,6 +67,7 @@ extension StreamSession {
         self.reconnectServer = server
         self.reconnectConfig = config
         self.reconnectAppID = appID
+        audioDecoder.setOutputMuted(config.playAudioOnHost)
 
         // Keep the Mac (and its display) awake AND opt OUT of App Nap for the
         // whole session. Begun here so a slow handshake can't let the machine

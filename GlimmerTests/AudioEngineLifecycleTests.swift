@@ -1,8 +1,8 @@
 //
 //  AudioEngineLifecycleTests.swift
 //
-//  The audio engine's lifecycle edges: the guarded engine start, and
-//  route-listener removal that actually removes.
+//  The audio engine's lifecycle edges: the stream-only mute, the guarded
+//  engine start, and route-listener removal that actually removes.
 //
 
 import AVFAudio
@@ -12,6 +12,35 @@ import Testing
 @testable import Glimmer
 
 struct AudioEngineLifecycleTests {
+
+    /// Once audio is up, muting silences the stream's own mixer immediately and
+    /// unmuting restores it.
+    @Test func muteTogglesTheStreamMixerOnceAudioIsUp() {
+        let decoder = AudioDecoder()
+        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        #expect(decoder.inputFormat != nil)
+        decoder.setOutputMuted(true)
+        #expect(decoder.engine.mainMixerNode.outputVolume == 0)
+        decoder.setOutputMuted(false)
+        #expect(decoder.engine.mainMixerNode.outputVolume == 1)
+    }
+
+    /// The stream start asks for the mute before audio exists; it must survive
+    /// until the engine starts and be applied there.
+    @Test func muteRequestedBeforeAudioStartsIsAppliedAtStart() {
+        let decoder = AudioDecoder()
+        let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        decoder.engine.attach(decoder.playerNode)
+        decoder.engine.connect(decoder.playerNode, to: decoder.engine.mainMixerNode, format: format)
+        decoder.setOutputMuted(true)
+        decoder.stateLock.lock()
+        let failure = decoder.startEngineSafely()
+        let volume = decoder.engine.mainMixerNode.outputVolume
+        decoder.stateLock.unlock()
+        decoder.shutdown()
+        // No output device (a headless runner) can't start; there's nothing to mute.
+        if failure == nil { #expect(volume == 0) }
+    }
 
     /// An empty graph makes `engine.start()` RAISE: the guarded start must report
     /// a failure instead of aborting the process.
