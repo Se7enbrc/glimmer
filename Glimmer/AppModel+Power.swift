@@ -34,8 +34,8 @@ extension AppModel {
 
     func isWaking(_ host: Host) -> Bool { wakingHostID == host.id }
 
-    /// Wake and Connect with the button's state around it. With Glimmer in front the
-    /// stream starts as soon as the PC answers; with another app in front a
+    /// Wake and Connect with the button's state around it. The stream starts as soon as
+    /// the PC answers, unless another app is in front and Glimmer may notify: then a
     /// notification reports the result instead of a stream opening over that app.
     func wakeHost(_ host: Host, thenConnect: Bool) {
         guard WakeOnLAN.normalizeMac(host.macAddress) != nil else { return }
@@ -58,7 +58,12 @@ extension AppModel {
                 wakeFailureReason = reason
                 if !NSApp.isActive { WakeNotifier.shared.postFailed(host, reason: reason) }
             } else if outcome == .answered, thenConnect, selectedHost?.id == host.id, !isStreaming {
-                if NSApp.isActive { streamHeroApp() } else { WakeNotifier.shared.postAwake(host) }
+                // A notice the user won't see would drop the connect they asked for.
+                if !NSApp.isActive, await WakeNotifier.canPost() {
+                    WakeNotifier.shared.postAwake(host)
+                } else if !Task.isCancelled {
+                    streamHeroApp()
+                }
             }
         }
     }
@@ -147,6 +152,15 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
             ], intentIdentifiers: [])
         ])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    /// Notifications are allowed; declined, off or not yet answered is a no.
+    static func canPost() async -> Bool {
+        shows(await UNUserNotificationCenter.current().notificationSettings().authorizationStatus)
+    }
+
+    nonisolated static func shows(_ status: UNAuthorizationStatus) -> Bool {
+        status == .authorized || status == .provisional
     }
 
     func postAwake(_ host: Host) {

@@ -2,12 +2,13 @@
 //  WakeOnLANTests.swift
 //
 //  The wake packet and where it goes: MAC normalisation (zeroed or malformed
-//  fails closed), the 102-byte magic packet, the target list, and what a wake
-//  that sent nothing reports.
+//  fails closed), the 102-byte magic packet, the target list, what a wake that
+//  sent nothing reports, and when a PC that woke gets a notification instead.
 //
 
 import Foundation
 import Testing
+import UserNotifications
 @testable import Glimmer
 
 struct WakeOnLANTests {
@@ -74,5 +75,14 @@ struct WakeOnLANTests {
         let outcome = await AppModel().sendWakeAndWait(tower(mac: "00:00:00:00:00:00"), waitSeconds: nil) { _, _ in 1 }
         #expect(outcome == .noMac)
         #expect(outcome.failureReason == nil)
+    }
+
+    /// Declined, turned off or not yet answered: the notice would never show, so
+    /// Wake and Connect opens the stream as it did before notifications.
+    @Test func aWakeFromAnotherAppNotifiesOnlyWhenTheNoticeCanShow() {
+        #expect(WakeNotifier.shows(.authorized))
+        #expect(WakeNotifier.shows(.provisional))
+        #expect(!WakeNotifier.shows(.denied))
+        #expect(!WakeNotifier.shows(.notDetermined))
     }
 }
