@@ -27,26 +27,25 @@ struct OpenWindowCapture: View {
 /// we control both sides of the launch.
 private let launchedAtLogin = ProcessInfo.processInfo.arguments.contains("--launched-at-login")
 
-@main
+/// The app itself; `GlimmerMain` starts it unless argv names a CLI command.
 struct GlimmerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model: AppModel
 
     init() {
-        // MUST precede AppModel(): its init reads ~20 UserDefaults keys,
-        // which the unsandbox-flip orphaned in the old container until this runs.
-        ContainerMigration.runIfNeeded()
-        // Also MUST precede AppModel(), for the same reason: a registered
-        // default only answers reads that come AFTER the registration, and
-        // AppModel's init (and its property initializers) read these keys
-        // immediately. This block used to live in
-        // applicationWillFinishLaunching, which runs after this initializer -
-        // so every key AppModel reads was already past its chance to see a
-        // registered default.
-        Self.registerDefaults()
+        Self.prepareDefaults()
         let mgr = AppModel()
         _model = State(wrappedValue: mgr)
         AppDelegate.boundManager = mgr
+    }
+
+    /// MUST precede AppModel(), here and in the CLI: its init reads defaults
+    /// the container migration may still have to move, and a registered
+    /// default only answers reads made after the registration.
+    @MainActor
+    static func prepareDefaults() {
+        ContainerMigration.runIfNeeded()
+        registerDefaults()
     }
 
     /// Defaults for prefs whose readers use bare `UserDefaults.bool(forKey:)`.
@@ -244,7 +243,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let mgr = Self.boundManager {
             self.model = mgr
             mgr.attach(appDelegate: self)
-            Task { await mgr.bootstrap() }
+            Task {
+                await mgr.bootstrap()
+                mgr.listenForCommands()
+            }
             // A stream started from the menu bar needs the Dock icon; its end
             // may leave nothing to come back to. The first value is launch state.
             Task { [weak self] in
