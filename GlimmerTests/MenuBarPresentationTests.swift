@@ -5,6 +5,7 @@
 //  readings are worded.
 //
 
+import Accessibility
 import Testing
 @testable import Glimmer
 
@@ -63,6 +64,30 @@ struct MenuBarPresentationTests {
         #expect(metrics.map(\.value) == ["120", "3 ms", "78 Mbps", "Wi-Fi"])
         #expect(metrics.map(\.label) == ["Frames/s", "Latency", "Bandwidth", "Network"])
         #expect(MenuBarPresentation.metrics(snapshot: nil, link: nil).map(\.value) == ["–", "–", "–", "–"])
+    }
+
+    @Test func chartsSummariseTheMinuteForVoiceOver() {
+        #expect(MenuBarChartSummary.bandwidth(mbps: [48.2, 80.4, 61], latency: [3, 31.4, 5])
+                == "Bandwidth 48 to 80 Mbps, latency peak 31 ms")
+        #expect(MenuBarChartSummary.bandwidth(mbps: [80, 80.2], latency: []) == "Bandwidth 80 Mbps")
+        #expect(MenuBarChartSummary.bandwidth(mbps: [], latency: []) == "No readings yet")
+        #expect(MenuBarChartSummary.frames([120, 119, 100, 120], target: 120) == "1 second below 120 fps")
+        #expect(MenuBarChartSummary.frames([60, 40, 30], target: 60) == "2 seconds below 60 fps")
+        #expect(MenuBarChartSummary.frames([120], target: 120) == "No seconds below 120 fps")
+    }
+
+    @Test func chartDescriptorsReachEverySecond() {
+        let stream = StreamChartDescriptor(mbps: [50, 60, 70], latency: [4, 9, 6]).makeChartDescriptor()
+        let time = stream.xAxis as? AXNumericDataAxisDescriptor
+        #expect(stream.series.first?.dataPoints.count == 3)
+        #expect(time?.range == -2...0)
+        #expect(time?.valueDescriptionProvider(0) == "now")
+        #expect(time?.valueDescriptionProvider(-2) == "2 s ago")
+        #expect(stream.yAxis?.range == 0...70)
+        #expect(stream.additionalAxes.map(\.title) == ["Latency"])
+        let frames = FramesChartDescriptor(values: [120, 90], target: 120).makeChartDescriptor()
+        #expect(frames.series.first?.dataPoints.count == 2)
+        #expect(frames.summary == "1 second below 120 fps")
     }
 
     @Test @MainActor func historyKeepsOneMinute() {

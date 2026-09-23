@@ -120,9 +120,10 @@ struct MenuBarPanel: View {
             }
             VStack(spacing: 6) {
                 StreamChart(mbps: StreamHistory.shared.mbps, latency: StreamHistory.shared.rttMs,
-                            asked: Double(model.effectiveBitrateKbps) / 1000)
+                            asked: model.menuDetails?.negotiatedBitrateMbps ?? Double(model.displayBitrateKbps) / 1000)
                     .frame(height: 54)
-                FramesChart(values: StreamHistory.shared.fps, target: Double(model.effectiveFPS))
+                FramesChart(values: StreamHistory.shared.fps,
+                            target: model.menuDetails?.hostFps ?? Double(model.effectiveFPS))
                     .frame(height: 22)
             }
             .padding(.top, 2)
@@ -358,9 +359,9 @@ struct MenuBarPanel: View {
 }
 
 /// Sixty seconds, newest at the right, on one baseline: bandwidth bars rise
-/// above it (full height is the asked bitrate, or the minute's peak) and
-/// latency runs as a line below it (30 ms, or the minute's peak), so a hitch
-/// is a pink spike under a blue dip. Hovering reads any second back.
+/// above it (full height is the session's asked bitrate, or the minute's peak)
+/// and latency runs as a line below it (30 ms, or the minute's peak), so a
+/// hitch is a pink spike under a blue dip. Hovering reads any second back.
 private struct StreamChart: View {
     let mbps: [Double]
     let latency: [Double]
@@ -389,7 +390,10 @@ private struct StreamChart: View {
                 }
             }
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Bandwidth and latency over the last minute")
+        .accessibilityValue(MenuBarChartSummary.bandwidth(mbps: mbps, latency: latency))
+        .accessibilityChartDescriptor(StreamChartDescriptor(mbps: mbps, latency: latency))
     }
 
     private func draw(in context: inout GraphicsContext, size: CGSize, pitch: CGFloat, highlight: Int?) {
@@ -438,13 +442,13 @@ private struct StreamChart: View {
     private func readout(at index: Int) -> String? {
         guard mbps.indices.contains(index) else { return nil }
         let ms = latency.indices.contains(index) ? Int(latency[index].rounded()) : 0
-        let when = ChartGeometry.when(ago: mbps.count - 1 - index)
+        let when = MenuBarChartSummary.when(ago: mbps.count - 1 - index)
         return "\(Int(mbps[index].rounded())) Mbps · \(ms) ms · \(when)"
     }
 }
 
-/// Sixty seconds of frames arriving against the requested rate, newest at
-/// the right; a second under 90 % of it is drawn orange. Hovering reads it.
+/// Sixty seconds of frames arriving against the session's rate, newest at
+/// the right; a short second is drawn orange. Hovering reads it.
 private struct FramesChart: View {
     let values: [Double]
     let target: Double
@@ -464,7 +468,7 @@ private struct FramesChart: View {
                         let x = size.width - CGFloat(values.count - bar) * pitch
                         let height = max(size.height * CGFloat(min(value / scale, 1)), value > 0 ? 1 : 0)
                         let rect = CGRect(x: x, y: size.height - height, width: width, height: height)
-                        let low = value < target * 0.9
+                        let low = MenuBarChartSummary.isShort(value, target: target)
                         let dim = index != nil && index != bar
                         let color = (low ? Color.orange : Color.green).opacity(dim ? 0.45 : 1)
                         context.fill(Path(roundedRect: rect, cornerRadius: 0.75), with: .color(color))
@@ -475,7 +479,7 @@ private struct FramesChart: View {
                     }
                 }
                 if let index, values.indices.contains(index) {
-                    let when = ChartGeometry.when(ago: values.count - 1 - index)
+                    let when = MenuBarChartSummary.when(ago: values.count - 1 - index)
                     ChartReadout(text: "\(Int(values[index].rounded())) fps · \(when)", x: hoverX ?? 0, width: geo.size.width)
                 }
             }
@@ -487,7 +491,10 @@ private struct FramesChart: View {
                 }
             }
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Frames per second over the last minute")
+        .accessibilityValue(MenuBarChartSummary.frames(values, target: target))
+        .accessibilityChartDescriptor(FramesChartDescriptor(values: values, target: target))
     }
 }
 
@@ -523,9 +530,5 @@ private enum ChartGeometry {
         hair.move(to: CGPoint(x: x, y: 0))
         hair.addLine(to: CGPoint(x: x, y: size.height))
         context.stroke(hair, with: .color(.secondary.opacity(0.6)), lineWidth: 1)
-    }
-
-    static func when(ago: Int) -> String {
-        ago == 0 ? "now" : "\(ago) s ago"
     }
 }
