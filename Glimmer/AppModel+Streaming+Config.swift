@@ -78,23 +78,19 @@ extension AppModel {
     /// `nativeStreamConfig` both read this so the shown bitrate can't drift
     /// from what's sent. Custom skips the codec discount, as before.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
-        StreamPathMTU.wifiAskKbps(ask: routeAskKbps(forFormats: formats), phyRateMbps: hostRoute.wifiPhyRateMbps)
+        Self.routeAsk(bitrateDecision(forFormats: formats), route: hostRoute.routeClass).kbps
     }
 
     /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
     /// Bandwidth saver is the lighter ask from before the boosts existed.
-    func routeAskKbps(forFormats formats: VideoFormats) -> Int {
-        Self.routeAskKbps(bitrateDecision(forFormats: formats), route: hostRoute.routeClass)
-    }
-
     nonisolated static func routeAskKbps(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> Int {
         let cap = decision.mode == .highestQuality ? routeBoost(route).capKbps : maxBitrateKbps
         return wireBitrateKbps(dial: decision.dialKbps, codecMultiplier: decision.codecMultiplier,
                                boost: decision.boost, capKbps: cap)
     }
 
-    /// What a reconnect asks the route it finds for: the ask after the radio gate,
-    /// with the wired boost the measured RTT may still withdraw.
+    /// The one ask the launch, the spec chip and every reconnect use: after the
+    /// radio gate, with the wired boost the measured RTT may still withdraw.
     nonisolated static func routeAsk(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> RouteAsk {
         RouteAsk(kbps: StreamPathMTU.wifiAskKbps(ask: routeAskKbps(decision, route: route),
                                                  phyRateMbps: decision.radioGatePhyMbps),
@@ -219,26 +215,20 @@ extension AppModel {
         cfg.coversNotch = effectiveStreamCoversNotch
         cfg.displayMode = effectiveDisplayMode
         cfg.videoFormats = offeredVideoFormats(for: host)
-        let ask = routeAsk(for: host)
-        cfg.bitrateKbps = ask.kbps
-        cfg.bitrateBoost = ask.boost
-        cfg.bitrateDecision = bitrateDecision(forFormats: cfg.videoFormats)
-        let ungated = routeAskKbps(forFormats: cfg.videoFormats)
-        if ask.kbps < ungated, let phy = hostRoute.wifiPhyRateMbps {
+        // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
+        // scaled by the negotiated codec's efficiency. The spec chip reads the same
+        // path so what's shown matches what's sent.
+        let decision = bitrateDecision(forFormats: cfg.videoFormats)
+        let ask = Self.routeAsk(decision, route: hostRoute.routeClass)
+        let ungated = Self.routeAskKbps(decision, route: hostRoute.routeClass)
+        if ask.kbps < ungated, let phy = decision.radioGatePhyMbps {
             Diag.notice("Wi-Fi link gate: the radio's PHY rate is \(Int(phy)) Mbps, asking for "
                 + "\(ask.kbps / 1000) Mbps instead of \(ungated / 1000).", "Stream")
         }
+        cfg.bitrateDecision = decision
+        cfg.bitrateKbps = ask.kbps
+        cfg.bitrateBoost = ask.boost
         return cfg
-    }
-
-    /// The codec-aware wire ask for the route the Mac is on now, radio gate
-    /// included, with the boost the connect-time RTT may withdraw. A start takes
-    /// it through `nativeStreamConfig`, and every reconnect asks again.
-    func routeAsk(for host: Host) -> RouteAsk {
-        let formats = offeredVideoFormats(for: host)
-        let decision = bitrateDecision(forFormats: formats)
-        return RouteAsk(kbps: wireBitrateKbps(forFormats: formats),
-                        boost: Self.rttWithdrawableBoost(decision, route: hostRoute.routeClass))
     }
 
     /// Title for the Window-mode stream window: the PC's name, then the app

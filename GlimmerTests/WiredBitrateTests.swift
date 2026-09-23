@@ -81,12 +81,13 @@ struct WiredBitrateTests {
     }
 
     /// A reconnect rebuilds from the same ask a fresh start on this route sends.
-    @MainActor @Test func theReconnectAskIsTheStartsAsk() {
+    @MainActor @Test func theReconnectAskIsTheStartsAsk() throws {
         let model = AppModel()
         let pc = Host(id: "pc-1", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
                       apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
         let start = model.nativeStreamConfig(for: pc)
-        let ask = model.routeAsk(for: pc)
+        let decision = try #require(start.bitrateDecision)
+        let ask = AppModel.routeAsk(decision, route: model.hostRoute.routeClass)
         #expect(ask == RouteAsk(kbps: start.bitrateKbps, boost: start.bitrateBoost))
         #expect(ask.kbps == model.wireBitrateKbps(forFormats: model.offeredVideoFormats(for: pc)))
     }
