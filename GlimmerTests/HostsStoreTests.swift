@@ -1,7 +1,8 @@
 //
 //  HostsStoreTests.swift
 //
-//  The paired-PC store: what a PC that replaces the selection gets.
+//  The paired-PC store and its poller: what a PC that replaces the selection
+//  gets, and how often it's polled.
 //
 
 import Foundation
@@ -9,6 +10,11 @@ import Testing
 @testable import Glimmer
 
 struct HostsStoreTests {
+
+    @MainActor @Test func theClosedLauncherPollStaysFresh() {
+        let tolerance: TimeInterval = 2, probeTimeout: TimeInterval = 2
+        #expect(AppModel.idleHostStatusPollSeconds + tolerance + probeTimeout < HostLiveStatus.stale)
+    }
 
     private static func host(_ id: String, address: String) -> Glimmer.Host {
         Glimmer.Host(id: id, name: id, customName: nil, localAddress: address, manualAddress: nil, apps: [],

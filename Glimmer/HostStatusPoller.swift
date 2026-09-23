@@ -13,33 +13,9 @@ import Foundation
 
 extension AppModel {
 
-    /// Cancel any in-flight chip poller and spin up a fresh one for the
-    /// currently selected host. Single source of truth for the chip's
-    /// background work - `selectHost`, `bootstrap`, `appDidBecomeActive`,
-    /// and the stream-end cleanup all funnel through here.
-    ///
-    /// The poll loop fires:
-    ///   * Once immediately (so the chip transitions from "Ready" → "Ready ·
-    ///     12 ms" within ~one RTT of host selection, not 10s later)
-    ///   * Then every `hostStatusPollSeconds` while we're not streaming AND a
-    ///     host is still selected.
-    ///
-    /// It is NOT gated on the app being frontmost. Moonlight polls its host
-    /// grid continuously while on the launcher regardless of window focus, and
-    /// so do we: the chip is just as visible when Glimmer's window sits behind
-    /// another app, and the old `NSApp.isActive` gate left it stranded on
-    /// "Checking..." the moment the user clicked away (the resign-active handler
-    /// cancelled the loop, then the last sample aged past `HostLiveStatus.stale`
-    /// and the chip reverted). A TCP probe + one `/serverinfo` every 10s is
-    /// negligible chatter - the cost the gate saved was never worth a chip that
-    /// lies whenever Glimmer isn't frontmost. We still pause for the cases that
-    /// genuinely warrant it: an active stream (the engine owns RTT), no host
-    /// selected, and system sleep (a poll caught mid-exchange by the nap wedges
-    /// Sunshine's HTTPS thread - see AppModel+Lifecycle).
-    ///
-    /// We deliberately don't fan out across multiple hosts - only the
-    /// selected one is on screen. Background hosts get a stale chip; no
-    /// problem, the moment the user switches to them this method re-fires.
+    /// Restart the selected PC's chip poller: one probe now, then every 10 s while the
+    /// launcher window is open (frontmost or not, since the chip shows either way) and
+    /// every 30 s while it's closed. Only the selected PC is polled.
     func restartHostStatusPolling(afterStream: Bool = false) {
         hostStatusTask?.cancel()
         hostStatusTask = nil
@@ -65,36 +41,24 @@ extension AppModel {
             // task's results land into `hostLiveStatus` only if its id still
             // matches `selectedHost` at the moment of publication.
             let pollHostID = host.id
-            // Re-armed right after a stream ended: wait out the host's
-            // `/cancel`-induced HTTP blip before the FIRST probe so we don't
-            // race it and publish a false `.asleep` on a host that was
-            // streaming moments ago. Sliced so cancellation (host switch /
-            // stream restart) stays responsive.
+            // Right after a stream, wait out the host's `/cancel` HTTP blip before
+            // the first probe so it can't publish a false Asleep. Sleep throws on cancel.
             if afterStream {
-                let settleMs = UInt64(Self.postStreamPollSettle * 1000)
-                let sliceMs: UInt64 = 250
-                let slices = Int(settleMs / sliceMs)
-                for _ in 0..<slices {
-                    if Task.isCancelled { return }
-                    try? await Task.sleep(nanoseconds: sliceMs * 1_000_000)
-                }
+                do { try await Task.sleep(for: .seconds(Self.postStreamPollSettle)) } catch { return }
             }
             while !Task.isCancelled {
                 await self?.pollHostStatusOnce(for: pollHostID)
-                // Sleep in small slices so cancellation is responsive - a
-                // single 10s sleep would block stream-start by up to that
-                // long before the cancel propagates.
-                let interval = Self.hostStatusPollSeconds
-                let sliceMs: UInt64 = 250
-                let slices = Int(interval * 1000) / Int(sliceMs)
-                for _ in 0..<slices {
-                    if Task.isCancelled { return }
-                    try? await Task.sleep(nanoseconds: sliceMs * 1_000_000)
-                }
+                let open = self?.mainWindowVisible == true
+                let interval = open ? Self.hostStatusPollSeconds : Self.idleHostStatusPollSeconds
+                do { try await Task.sleep(for: .seconds(interval), tolerance: .seconds(2)) } catch { return }
             }
         }
         hostStatusTask = task
     }
+
+    /// Poll interval while the launcher is closed. Only the menu bar panel shows
+    /// readiness then, and 30 s (plus tolerance) stays inside `HostLiveStatus.stale`.
+    static let idleHostStatusPollSeconds: TimeInterval = 30
 
     /// Publish the chip state for a TCP-unreachable probe, with hysteresis so a
     /// transient miss can't flap the chip. A single timed-out 2 s probe is NOT
