@@ -78,22 +78,30 @@ extension AppModel {
     /// Bandwidth saver is the lighter ask from before the boosts existed.
     func routeAskKbps(forFormats formats: VideoFormats) -> Int {
         let decision = bitrateDecision(forFormats: formats)
-        let wiredCap = decision.mode == .highestQuality && hostRoute.routeClass == .wired
+        let cap = decision.mode == .highestQuality ? Self.routeBoost(hostRoute.routeClass).capKbps : Self.maxBitrateKbps
         return Self.wireBitrateKbps(dial: decision.dialKbps, codecMultiplier: decision.codecMultiplier,
-                                    boost: decision.boost,
-                                    capKbps: wiredCap ? Self.wiredBitrateCapKbps : Self.maxBitrateKbps)
+                                    boost: decision.boost, capKbps: cap)
     }
 
     /// The inputs `routeAskKbps` multiplies, also recorded in the telemetry config event.
     func bitrateDecision(forFormats formats: VideoFormats) -> BitrateDecision {
         var codec = Self.codecBudgetMultiplier(for: formats)
         if case .custom = qualityPreset { codec = 1 }
-        var boost = 1.0
-        if bitrateMode == .highestQuality {
-            boost = hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : Self.wifiBitrateBoost
-        }
+        let boost = bitrateMode == .highestQuality ? Self.routeBoost(hostRoute.routeClass).boost : 1
         return BitrateDecision(mode: bitrateMode, dialKbps: effectiveBitrateKbps, codecMultiplier: codec,
                                boost: boost, radioGatePhyMbps: hostRoute.wifiPhyRateMbps)
+    }
+
+    /// Boost and cap per route. A tunnel, or a route not resolved yet, keeps the
+    /// unboosted ask: neither the radio gate nor the RTT withdrawal can trim it.
+    nonisolated static func routeBoost(
+        _ route: HostRouteMonitor.RouteClass, wifiBoost: Double = wifiBitrateBoost
+    ) -> (boost: Double, capKbps: Int) {
+        switch route {
+        case .wired: (wiredBitrateMultiplier, wiredBitrateCapKbps)
+        case .wifi: (wifiBoost, maxBitrateKbps)
+        case .tunnel, .unknown: (1, maxBitrateKbps)
+        }
     }
 
     /// Pure so the rule is testable: dial × codec × boost, clamped to the floor
@@ -125,7 +133,7 @@ extension AppModel {
 
     /// The app the host is running right now, when a fresh /serverinfo
     /// snapshot names one that is in the applist. Host truth is the one thing
-    /// allowed to override the Default action: the button then resumes it.
+    /// allowed to override the Default action: the button then restarts it.
     var resumableAppName: String? {
         guard let host = selectedHost, let live = hostLiveStatus,
               Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
@@ -141,10 +149,9 @@ extension AppModel {
         resumableAppName ?? defaultAppName
     }
 
-    /// Primary-button copy. Always "Stream <app>" - this button only shows on the
-    /// launcher (never mid-stream), so "Resume" read as confusing. The verb is the
-    /// same whether we resume the host's running session or launch fresh;
-    /// `streamHeroApp()` still picks /resume vs /launch under the hood.
+    /// Primary-button copy. Always "Stream <app>": every stream is a fresh
+    /// /launch, and an app already running on the PC is quit first
+    /// (`launchWithBusyRecovery`), so there is no resume to name.
     var heroActionLabel: String {
         "Stream \(heroTargetAppName)"
     }
@@ -212,10 +219,9 @@ extension AppModel {
             uniqueId: host.id,
             serverName: host.displayName
         )
-        // H1: the mode-0600 file store is the ONLY authoritative pin source.
-        // `host.serverCertPEM` lives in same-UID-writable UserDefaults
-        // (hosts.N.srvcert) - an attacker can swap it for a MITM cert via
-        // cfprefsd, so we treat it as an untrusted HINT, never a direct pin.
+        // The pin file our pairing flow writes is the only pin source. The
+        // legacy `host.serverCertPEM` copy (hosts.N.srvcert) is just a one-way
+        // migration hint, and a mismatch between the two forces a re-pair.
         info.serverCertPEM = authoritativePin(for: host)
         info.appVersion = host.appVersion
         info.gfeVersion = host.gfeVersion

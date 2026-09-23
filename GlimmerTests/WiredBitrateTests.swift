@@ -1,8 +1,8 @@
 //
 //  WiredBitrateTests.swift
 //
-//  The wire bitrate rule: codec discount, the wired boost and its cap, the
-//  floor, and the connect-time withdrawal when the RTT says Wi-Fi.
+//  The wire bitrate rule: codec discount, the boost and cap each route class
+//  gets, the floor, and the connect-time withdrawal when the RTT says Wi-Fi.
 //
 
 import Testing
@@ -20,6 +20,30 @@ struct WiredBitrateTests {
         #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8,
                                          boost: AppModel.wiredBitrateMultiplier,
                                          capKbps: AppModel.wiredBitrateCapKbps) == 361_600)
+    }
+
+    private func highestQualityAsk(_ route: HostRouteMonitor.RouteClass) -> Int {
+        let pick = AppModel.routeBoost(route, wifiBoost: AppModel.wifiBitrateMultiplier)
+        return AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8, boost: pick.boost, capKbps: pick.capKbps)
+    }
+
+    @Test func wiredRouteDoublesUnderTheHigherCap() {
+        #expect(highestQualityAsk(.wired) == 361_600)
+        #expect(AppModel.routeBoost(.wired).capKbps == 500_000)
+    }
+
+    @Test func wiFiRouteTakesHalfAsMuchAgainUnderTheFormulaCap() {
+        #expect(highestQualityAsk(.wifi) == 271_200)
+        #expect(AppModel.routeBoost(.wifi).capKbps == 300_000)
+    }
+
+    @Test func tunnelRouteKeepsTheUnboostedAsk() {
+        // A VPN has no radio gate and no RTT withdrawal to trim a boost.
+        #expect(highestQualityAsk(.tunnel) == 180_800)
+    }
+
+    @Test func unresolvedRouteKeepsTheUnboostedAsk() {
+        #expect(highestQualityAsk(.unknown) == 180_800)
     }
 
     @Test func capAndFloorStillApply() {
