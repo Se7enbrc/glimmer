@@ -145,7 +145,6 @@ extension StreamSession {
         let backendServer = BackendServerInfo(
             address: serverInfo.address,
             appVersion: serverInfo.appVersion ?? "unknown",
-            gfeVersion: serverInfo.gfeVersion ?? "3.23.0.74",
             rtspSessionUrl: launch.sessionURL,
             // RAW SCM_* bitmask from /serverinfo - see the landmine note in
             // StreamProtocol.SCM_*.

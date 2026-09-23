@@ -63,19 +63,17 @@ public struct GamepadAnalog: Sendable {
 public struct BackendServerInfo: Sendable {
     public var address: String
     public var appVersion: String
-    public var gfeVersion: String
     public var rtspSessionUrl: String
     /// The RAW SCM_* bitmask straight from /serverinfo. NOT the VIDEO_FORMAT_*
     /// layout - see StreamProtocol.SCM_* landmine note.
     public var serverCodecModeRaw: Int32
 
     public init(
-        address: String, appVersion: String, gfeVersion: String,
+        address: String, appVersion: String,
         rtspSessionUrl: String, serverCodecModeRaw: Int32
     ) {
         self.address = address
         self.appVersion = appVersion
-        self.gfeVersion = gfeVersion
         self.rtspSessionUrl = rtspSessionUrl
         self.serverCodecModeRaw = serverCodecModeRaw
     }
