@@ -467,9 +467,12 @@ extension FramePacer {
         shouldLog: Bool, forcedSelfHeal: Bool, snapshot snap: StarvationSnapshot
     ) {
         if shouldLog {
-            log.warning(
-                // swiftlint:disable:next line_length
-                "FramePacer starved: \(snap.streak, privacy: .public) ticks with frames queued (depth=\(snap.depth, privacy: .public)) and nothing released - sinceLast=\(snap.sinceLastMs, privacy: .public)ms targetTimestamp=\(snap.targetTimestamp, privacy: .public) lastPresentMediaTime=\(snap.lastPresent, privacy: .public) streamInterval=\(snap.intervalMs, privacy: .public)ms")
+            log.warning("""
+                FramePacer starved: \(snap.streak, privacy: .public) ticks with frames queued \
+                (depth=\(snap.depth, privacy: .public)) and nothing released - sinceLast=\(snap.sinceLastMs, privacy: .public)ms \
+                targetTimestamp=\(snap.targetTimestamp, privacy: .public) \
+                lastPresentMediaTime=\(snap.lastPresent, privacy: .public) streamInterval=\(snap.intervalMs, privacy: .public)ms
+                """)
             OSSignposter.render.emitEvent(
                 "PacerStarved",
                 "depth=\(snap.depth, privacy: .public) sinceLastMs=\(snap.sinceLastMs, privacy: .public)")
