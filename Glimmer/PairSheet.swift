@@ -31,10 +31,11 @@ struct PairSheet: View {
     private var paired: Bool { pairedHost != nil }
 
     /// Optional pre-fill, used by the "re-pair" recovery path so the user
-    /// doesn't retype the host's address - that path jumps straight to the PIN
-    /// step. The normal "Pair a new PC" entry starts on the discovery chooser.
-    init(initialAddress: String = "") {
+    /// doesn't retype the host's address or lose its name - that path jumps
+    /// straight to the PIN step. "Pair a new PC" starts on the chooser.
+    init(initialAddress: String = "", initialName: String? = nil) {
         _hostnameOrIP = State(initialValue: initialAddress)
+        _pcName = State(initialValue: initialName)
         _chosen = State(initialValue: !initialAddress.isEmpty)
     }
 

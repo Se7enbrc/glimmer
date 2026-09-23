@@ -192,7 +192,7 @@ struct ReadinessChip: View {
         .sheet(isPresented: $showRePair) {
             // Pre-fill the host's address so the re-pair lands straight on the
             // PIN step (the initialAddress path that was previously dead).
-            PairSheet(initialAddress: rePairAddress).environment(model)
+            PairSheet(initialAddress: rePairAddress, initialName: model.selectedHost?.displayName).environment(model)
         }
     }
 
