@@ -92,6 +92,7 @@ struct ReadinessChipRunningLabelTests {
 
     @Test func certMismatchIsUnaffectedByTheRunningRewording() {
         #expect(ChipPresentation.certMismatch.label == "Trust needed")
+        #expect(ChipPresentation.certMismatch.accessibility == ChipPresentation.certMismatch.label)
         #expect(ChipPresentation.certMismatch.dotColor == Color.orange)
     }
 
@@ -102,18 +103,19 @@ struct ReadinessChipRunningLabelTests {
     }
 }
 
+@MainActor
 struct TakeoverDialogCopyTests {
 
-    @Test func capitalizesARealAppName() {
+    @Test func keepsARealAppNameAsTyped() {
         #expect(TakeoverDialogCopy.title(occupantApp: "Helldivers 2", hostName: "Tower")
             == "Helldivers 2 is running on Tower.")
+        #expect(TakeoverDialogCopy.title(occupantApp: "iRacing", hostName: "Tower")
+            == "iRacing is running on Tower.")
     }
 
-    @Test func capitalizesTheAnotherAppFallback() {
-        // occupant(of:) and the TakeoverRequired path both fall back to the
-        // lowercase phrase "another app" - the dialog title must still read
-        // as a sentence.
-        #expect(TakeoverDialogCopy.title(occupantApp: "another app", hostName: "Tower")
+    @Test func capitalizesTheAnotherAppFallback() throws {
+        let fallback = try #require(AppModel.occupant(of: .streamingUnknownApp(id: 9)))
+        #expect(TakeoverDialogCopy.title(occupantApp: fallback, hostName: "Tower")
             == "Another app is running on Tower.")
     }
 }

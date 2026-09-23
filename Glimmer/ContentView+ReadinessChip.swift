@@ -52,7 +52,9 @@ enum ChipPresentation: Equatable {
         case .connecting(let phase): return phase
         case .streamingElsewhere(let name): return "\(name ?? "An app") is running on this PC"
         case .asleep: return "PC is asleep or unreachable"
-        case .certMismatch: return "PC certificate changed, re-pair to trust it"
+        // Matches the visible label so Voice Control's "Click Trust needed"
+        // finds the button; the hint carries the re-pair action.
+        case .certMismatch: return "Trust needed"
         case .unknown: return "Checking PC status"
         }
     }
@@ -144,10 +146,7 @@ struct ReadinessChip: View {
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                // Label must contain the visible text ("Trust needed") so Voice
-                // Control's "Click Trust needed" finds this button; the hint
-                // below carries the action, not just the fact.
-                .accessibilityLabel(chip == .certMismatch ? "Trust needed" : accessibilitySummary(for: chip))
+                .accessibilityLabel(accessibilitySummary(for: chip))
                 .accessibilityAddTraits(chip == .certMismatch ? .isButton : [])
                 .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
 

@@ -3,13 +3,13 @@ import AppKit
 
 // MARK: - Main Window
 
-/// The takeover dialog's title, sentence-capitalized. `occupantApp` is
-/// already capitalized for a real app name but lowercase for the "another
-/// app" fallback (AppModel+Streaming.swift), so this normalizes both.
+/// The takeover dialog's title. App names show exactly as typed ("iRacing");
+/// only the lowercase "another app" fallback (AppModel+Streaming.swift) is
+/// capitalized to start the sentence.
 enum TakeoverDialogCopy {
     static func title(occupantApp: String, hostName: String) -> String {
-        let sentence = "\(occupantApp) is running on \(hostName)."
-        return sentence.prefix(1).uppercased() + sentence.dropFirst()
+        let app = occupantApp == "another app" ? "Another app" : occupantApp
+        return "\(app) is running on \(hostName)."
     }
 }
 
