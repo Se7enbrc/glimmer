@@ -192,10 +192,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     private func mapToStreamError(_ error: Error) -> StreamError {
         if let streamError = error as? StreamError { return streamError }
-        if let rtsp = error as? RtspError, case .nonOK(_, let code) = rtsp {
-            return StreamError.sessionFailed(Int32(code))
-        }
-        return StreamError.sessionFailed(-1)
+        return StreamError.sessionFailed(rtspCode(error))
     }
 
     func checkInterrupted() -> Bool {
@@ -203,10 +200,11 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     }
 
     func rtspCode(_ error: Error) -> Int32 {
-        if let rtsp = error as? RtspError, case .nonOK(_, let code) = rtsp {
-            return Int32(code)
+        switch error as? RtspError {
+        case .nonOK(_, let code): return Int32(code)
+        case .encryptedVideoRequired: return RtspError.encryptedVideoRequiredCode
+        default: return -1
         }
-        return -1
     }
 
     public func stopConnection() {

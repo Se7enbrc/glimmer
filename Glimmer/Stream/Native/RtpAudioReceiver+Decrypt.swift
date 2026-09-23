@@ -2,8 +2,8 @@
 //  RtpAudioReceiver+Decrypt.swift
 //
 //  The decode hand-off: strip the 12-byte RTP header and hand the opus bytes
-//  to the sink, with the deferred AES-128-CBC path (plaintext on the live
-//  host) and its CommonCrypto no-padding helper. Split out of
+//  to the sink, with the AES-128-CBC path (on whenever the host offers
+//  SS_ENC_AUDIO) and its CommonCrypto helper. Split out of
 //  RtpAudioReceiver.swift - pure move, the FramePacer split idiom -
 //  to keep that file under the length limit; the aesKey/avRiKeyId material
 //  stays declared on the receiver.
@@ -38,7 +38,11 @@ extension RtpAudioReceiver {
             // The host's seq lives in the assembled header (host built it BE).
             let seq = UInt16(packet[2]) << 8 | UInt16(packet[3])
             guard let opus = decryptCbc(payload, sequenceNumber: seq) else {
-                Diag.warn("NativeAudio AES-CBC decrypt failed (seq=\(seq))", Self.cat)
+                if !loggedDecryptFailure {
+                    loggedDecryptFailure = true
+                    Diag.warn("NativeAudio AES-CBC decrypt failed (seq=\(seq)); "
+                        + "dropping undecryptable packets, first sighting this session", Self.cat)
+                }
                 return
             }
             sink?.decodeAndPlay(opus)
@@ -49,10 +53,9 @@ extension RtpAudioReceiver {
 
     /// AES-128-CBC decrypt one audio payload (AudioStream.c:178-219). IV =
     /// BE32(avRiKeyId &+ seq) in iv[0..3], iv[4..15] = 0. Key = remoteInputAesKey.
-    /// No PKCS7 padding removal (the host pads to the block boundary and the
-    /// decrypted length is fed straight to opus). Deferred path - plaintext on the
-    /// live host. Returns nil on failure.
-    private func decryptCbc(_ ciphertext: [UInt8], sequenceNumber seq: UInt16) -> [UInt8]? {
+    /// The host pads with PKCS7 (Sunshine's cbc_t), which is stripped here so
+    /// opus never sees the pad bytes. Returns nil on failure.
+    func decryptCbc(_ ciphertext: [UInt8], sequenceNumber seq: UInt16) -> [UInt8]? {
         guard aesKey.count == 16, !ciphertext.isEmpty else { return nil }
 
         // IV first 4 bytes = BE32(avRiKeyId &+ seq); remaining 12 bytes zero.
@@ -63,18 +66,17 @@ extension RtpAudioReceiver {
         iv[2] = UInt8((ivSeq >> 8) & 0xFF)
         iv[3] = UInt8(ivSeq & 0xFF)
 
-        return AesCbc.decryptNoPadding(ciphertext, key: aesKey, iv: iv)
+        return AesCbc.decryptPkcs7(ciphertext, key: aesKey, iv: iv)
     }
 }
 
-/// AES-128-CBC via CommonCrypto, no padding (whole-block in/out). Used only for
-/// the deferred encrypted-audio path; the live host streams plaintext audio.
+/// AES-128-CBC via CommonCrypto with PKCS7 padding removal, the host's audio
+/// cipher (moonlight's OpenSSL/mbedTLS decrypt strips the same padding).
 private enum AesCbc {
-    static func decryptNoPadding(_ ciphertext: [UInt8], key: [UInt8], iv: [UInt8]) -> [UInt8]? {
+    static func decryptPkcs7(_ ciphertext: [UInt8], key: [UInt8], iv: [UInt8]) -> [UInt8]? {
         guard key.count == kCCKeySizeAES128, iv.count == kCCBlockSizeAES128 else { return nil }
-        // Round the output buffer up to the block boundary (the C sizes it to
-        // ROUND_TO_PKCS7_PADDED_LEN(1400)).
-        let outCapacity = ((ciphertext.count + kCCBlockSizeAES128 - 1) / kCCBlockSizeAES128) * kCCBlockSizeAES128 + kCCBlockSizeAES128
+        // One spare block, like the C's ROUND_TO_PKCS7_PADDED_LEN buffer.
+        let outCapacity = ciphertext.count + kCCBlockSizeAES128
         var out = [UInt8](repeating: 0, count: outCapacity)
         var outMoved = 0
         let status = ciphertext.withUnsafeBytes { ctPtr in
@@ -83,7 +85,7 @@ private enum AesCbc {
                     out.withUnsafeMutableBytes { outPtr in
                         CCCrypt(CCOperation(kCCDecrypt),
                                 CCAlgorithm(kCCAlgorithmAES),
-                                CCOptions(0),  // no kCCOptionPKCS7Padding - whole blocks
+                                CCOptions(kCCOptionPKCS7Padding),
                                 keyPtr.baseAddress, key.count,
                                 ivPtr.baseAddress,
                                 ctPtr.baseAddress, ciphertext.count,

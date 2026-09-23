@@ -164,9 +164,9 @@ enum SdpScan {
 /// bits) - see `referenceFrameInvalidationActive`. That gate drives
 /// maxNumReferenceFrames (0 = host may keep older good refs for an RFI
 /// recovery; 1 = single ref ⇒ every loss recovery is a full IDR). YUV444 and
-/// the codec block follow the negotiated format; video/audio encryption stays
-/// disabled (encryptionFlags=0) - only control-V2 may auto-enable, which is
-/// the CONTROL stream's concern.
+/// the codec block follow the negotiated format; control-V2 and audio
+/// encryption follow what the host supports (RtspClient.computeEncryptionEnabled),
+/// and video stays plaintext.
 struct SdpBuilder {
     let config: BackendStreamConfig
     let videoPort: UInt16
@@ -179,7 +179,7 @@ struct SdpBuilder {
     /// NegotiatedVideoFormat from DESCRIBE (VIDEO_FORMAT_*). Drives the codec
     /// attribute block.
     let negotiatedVideoFormat: Int32
-    /// EncryptionFeaturesEnabled (control-V2 only for connect-only).
+    /// EncryptionFeaturesEnabled (control-V2 and audio when the host supports them).
     let encryptionFeaturesEnabled: UInt32
     /// 7.1.446+ DRC gate uses these.
     let appVersionQuad: [Int32]

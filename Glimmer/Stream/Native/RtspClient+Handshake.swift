@@ -132,15 +132,16 @@ extension RtspClient {
             SdpScan.attributeUInt(sdp, "x-ss-general.featureFlags") ?? 0
     }
 
-    /// getAttributesList: control-V2 is enabled whenever supported (Sunshine).
-    /// Video/audio encryption stays off for connect-only (encryptionFlags=0).
-    func computeEncryptionEnabled(supported: UInt32) -> UInt32 {
-        let ssEncControlV2: UInt32 = 0x01
-        var enabled: UInt32 = 0
-        if supported & ssEncControlV2 != 0 {
-            enabled |= ssEncControlV2
-        }
-        return enabled
+    static let ssEncControlV2: UInt32 = 0x01
+    static let ssEncVideo: UInt32 = 0x02
+    static let ssEncAudio: UInt32 = 0x04
+
+    /// getAttributesList: control-V2 and audio encryption are on whenever the
+    /// host supports them (upstream's default). Video decrypt isn't built, so a
+    /// host that requires encrypted video (mandatory mode) is refused here.
+    static func computeEncryptionEnabled(supported: UInt32, requested: UInt32) throws -> UInt32 {
+        guard requested & ssEncVideo == 0 else { throw RtspError.encryptedVideoRequired }
+        return supported & (ssEncControlV2 | ssEncAudio)
     }
 
     func codecName(_ format: Int32) -> String {

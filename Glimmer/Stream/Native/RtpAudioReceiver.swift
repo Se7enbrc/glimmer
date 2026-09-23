@@ -28,9 +28,9 @@
 //  decoder. Where the C drops a fixed first-500ms of audio (GFE buffers samples
 //  before the client is ready), we run a backlog-aware startup gate instead -
 //  Sunshine paces audio live from seq ~0, so the fixed drop cost half a second
-//  of LIVE audio per session (see the gate state docs below). For our SDP
-//  (encEnabled=0) audio is PLAINTEXT - no AES-CBC decrypt. (Encryption support
-//  is deferred; see the host constraints.)
+//  of LIVE audio per session (see the gate state docs below). Audio is AES-CBC
+//  encrypted whenever the host supports it (SS_ENC_AUDIO), decrypted at the
+//  decode hand-off.
 //
 //  Teardown is bounded: recvfrom blocks with a 100ms SO_RCVTIMEO so the loop
 //  polls `interrupted` and exits within 100ms; stop() also close()s the fd, which
@@ -101,9 +101,11 @@ final class RtpAudioReceiver: @unchecked Sendable {
     private let opusConfig: OpusConfig
     private let audioConfig: Int32
 
-    // Audio encryption (AES-128-CBC). For our connect-only SDP (encEnabled=0)
-    // this is false → plaintext. Support is wired but the live host is plaintext.
+    // Audio encryption (AES-128-CBC), on whenever the host offered SS_ENC_AUDIO.
     let audioEncryption: Bool
+    /// First-failure latch so a key mismatch logs once, not at packet rate.
+    /// recvQueue-confined.
+    var loggedDecryptFailure = false
     let aesKey: [UInt8]      // remoteInputAesKey (16 bytes)
     let avRiKeyId: UInt32    // BE32 of the first 4 bytes of remoteInputAesIv
 
@@ -297,8 +299,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     ///   - opusConfig: the negotiated OPUS_MULTISTREAM config (samplesPerFrame is
     ///     expected to already be 48 * audioPacketDuration).
     ///   - audioConfig: GFE/Sunshine channel-layout code (STREAM_CFG audio config).
-    ///   - audioEncryption: true iff the host negotiated AES-CBC audio (deferred;
-    ///     plaintext on the live host).
+    ///   - audioEncryption: true iff we enabled AES-CBC audio (SS_ENC_AUDIO).
     ///   - aesKey: remoteInputAesKey (16 bytes). Unused when not encrypting.
     ///   - aesIvId: remoteInputAesIv (first 4 bytes seed the per-packet IV).
     ///   - sink: the decode/playback sink.

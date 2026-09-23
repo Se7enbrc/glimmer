@@ -286,17 +286,16 @@ extension NativeBackend {
     /// (notifyAudioPortNegotiationComplete), because Sunshine won't aim audio at us
     /// (and GFE 3.22 won't even reply to PLAY) until it has received a ping.
     ///
-    /// Only audioPort + pingPayload are negotiated; opus/packetDuration use the
-    /// fixed defaults (they're never mutated by later handshake steps) and
-    /// audioEncryption is structurally false for our connect-only SDP
-    /// (computeEncryptionEnabled never enables SS_ENC_AUDIO). The recv side +
-    /// decoder init happen later in startAudioReceive() on the SAME receiver.
+    /// audioPort, pingPayload and audioEncryption are settled by now;
+    /// opus/packetDuration use the fixed defaults (they're never mutated by later
+    /// handshake steps). The recv side + decoder init happen later in
+    /// startAudioReceive() on the SAME receiver.
     ///
     /// Best-effort: a ping failure logs but does NOT abort the handshake (audio is
     /// non-fatal). The receiver is stored so a later-stage failure tears it down
     /// (run()'s catch → tearDownAudio).
     func startAudioPing(
-        audioPort: UInt16, pingPayload: [UInt8],
+        audioPort: UInt16, pingPayload: [UInt8], audioEncryption: Bool,
         config: BackendStreamConfig, server: BackendServerInfo, host: NWEndpoint.Host
     ) {
         guard let sink = withState({ audioSink }) else {
@@ -313,7 +312,7 @@ extension NativeBackend {
             audioPacketDuration: 5,                 // SDP x-nv-aqos.packetDuration default
             opusConfig: RtspHandshakeResult.defaultOpusConfig,
             audioConfig: config.audioConfiguration,
-            audioEncryption: false,                 // plaintext on the connect-only SDP
+            audioEncryption: audioEncryption,
             aesKey: config.remoteInputAesKey,
             aesIvId: config.remoteInputAesIv,
             sink: sink)
@@ -403,8 +402,9 @@ extension NativeBackend {
         // Fast-start audio: the instant the handshake parses SETUP-audio (BEFORE
         // PLAY), open the audio socket + start the burst ping so the host has our
         // ping by PLAY. moonlight's notifyAudioPortNegotiationComplete() ordering.
-        rtsp.onAudioPortNegotiated = { [weak self] audioPort, pingPayload in
+        rtsp.onAudioPortNegotiated = { [weak self] audioPort, pingPayload, audioEncryption in
             self?.startAudioPing(audioPort: audioPort, pingPayload: pingPayload,
+                                 audioEncryption: audioEncryption,
                                  config: config, server: server, host: host)
         }
         withState { rtspClient = rtsp }
@@ -433,8 +433,7 @@ extension NativeBackend {
     ) async throws {
         // Control-V2 must be negotiated for the encrypted START packets; if the
         // host didn't enable it, fail cleanly rather than send plaintext garbage.
-        let ssEncControlV2: UInt32 = 0x01
-        guard handshake.encryptionFeaturesEnabled & ssEncControlV2 != 0 else {
+        guard handshake.encryptionFeaturesEnabled & RtspClient.ssEncControlV2 != 0 else {
             Diag.error("native backend: control-V2 not negotiated "
                 + "(encEnabled=\(handshake.encryptionFeaturesEnabled)); "
                 + "native control stream requires it", Self.logCategory)

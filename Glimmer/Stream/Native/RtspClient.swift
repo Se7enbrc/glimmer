@@ -66,8 +66,8 @@ struct RtspHandshakeResult {
         samplesPerFrame: 240, mapping: [0, 1])
     /// AudioPacketDuration in ms (5 default; SDP sends x-nv-aqos.packetDuration 5).
     var audioPacketDuration: Int = 5
-    /// True iff the host negotiated AES-CBC audio (SS_ENC_AUDIO). Plaintext on
-    /// the live host (encEnabled=0) - deferred encrypted path.
+    /// True iff we enabled AES-CBC audio (SS_ENC_AUDIO), which we do whenever
+    /// the host supports it.
     var audioEncryption: Bool = false
 }
 
@@ -79,6 +79,11 @@ enum RtspError: Error, CustomStringConvertible {
     case nonOK(step: String, code: Int)
     case encryptedRtspUnsupported
     case noSdp
+    case encryptedVideoRequired
+    case responseTooLarge(Int)
+
+    /// Session code for `.encryptedVideoRequired`, the 403 the host would send.
+    static let encryptedVideoRequiredCode: Int32 = -403
 
     var description: String {
         switch self {
@@ -90,6 +95,9 @@ enum RtspError: Error, CustomStringConvertible {
         case .encryptedRtspUnsupported:
             return "rtspenc:// (encrypted RTSP) not yet supported by the native backend"
         case .noSdp: return "RTSP DESCRIBE returned no SDP payload"
+        case .encryptedVideoRequired:
+            return "This PC requires encrypted video, which Glimmer doesn't support yet."
+        case .responseTooLarge(let bytes): return "RTSP response passed \(bytes) bytes"
         }
     }
 }
@@ -121,12 +129,13 @@ final class RtspClient: @unchecked Sendable {
     var encryptionSeq: UInt32 = 0
 
     /// Invoked the instant SETUP-audio is parsed (audioPort + audioPingPayload
-    /// known), BEFORE SETUP video / ANNOUNCE / PLAY. The pipeline uses this to
+    /// known, audio encryption settled at DESCRIBE), BEFORE SETUP video /
+    /// ANNOUNCE / PLAY. The pipeline uses this to
     /// open the audio socket + start the burst ping mid-handshake, mirroring
     /// moonlight's notifyAudioPortNegotiationComplete() - Sunshine won't aim audio
     /// at us (and GFE 3.22 won't even reply to PLAY) until it has seen a ping.
     /// Synchronous so the ping is provably running before the handshake proceeds.
-    var onAudioPortNegotiated: ((_ audioPort: UInt16, _ pingPayload: [UInt8]) -> Void)?
+    var onAudioPortNegotiated: ((_ audioPort: UInt16, _ pingPayload: [UInt8], _ audioEncryption: Bool) -> Void)?
 
     /// Cancellation flag flipped by the orchestrator on interrupt.
     let interrupted = ManagedAtomicFlag()
@@ -142,6 +151,8 @@ final class RtspClient: @unchecked Sendable {
     }
 
     static let controlStreamId = "streamid=control/13/0"
+    /// SDP responses are a few KiB; anything past this is a hostile or broken peer.
+    static let maxResponseBytes = 256 * 1024
 
     init(
         host: NWEndpoint.Host,
@@ -280,6 +291,7 @@ final class RtspClient: @unchecked Sendable {
             } catch let rtspError as RtspError {
                 // Connection-refused-style failures get retried until the
                 // deadline; everything else propagates.
+                if interrupted.isSet { throw RtspError.interrupted }
                 if case .transportFailure = rtspError, Date() < deadline {
                     attempt += 1
                     Diag.info("RTSP TCP connect not ready (attempt \(attempt)); retry in 500ms",
@@ -303,29 +315,17 @@ final class RtspClient: @unchecked Sendable {
         let connection = NWConnection(host: host, port: nwPort, using: params)
         setActiveConnection(connection)
         defer { setActiveConnection(nil) }
+        // An interrupt() that landed before the store above had nothing to cancel.
+        if interrupted.isSet { throw RtspError.interrupted }
         let queue = DispatchQueue(label: "io.ugfugl.Glimmer.rtsp")
 
         // 1) Wait for the connection to become ready (or fail).
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let resumed = ManagedAtomicFlag()
             connection.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    if resumed.testAndSet() { cont.resume() }
-                case .failed(let err):
-                    if resumed.testAndSet() {
-                        cont.resume(throwing: RtspError.transportFailure("\(err)"))
-                    }
-                case .waiting(let err):
-                    // .waiting on UDP/TCP usually means the endpoint isn't
-                    // accepting yet (connection refused). Treat as retryable.
-                    if resumed.testAndSet() {
-                        connection.cancel()
-                        cont.resume(throwing: RtspError.transportFailure("waiting: \(err)"))
-                    }
-                default:
-                    break
-                }
+                guard let verdict = Self.connectVerdict(state), resumed.testAndSet() else { return }
+                if case .waiting = state { connection.cancel() }
+                cont.resume(with: verdict)
             }
             connection.start(queue: queue)
         }
@@ -346,10 +346,27 @@ final class RtspClient: @unchecked Sendable {
         while true {
             let (chunk, isComplete) = try await receiveChunk(connection)
             if let chunk { accumulated.append(chunk) }
+            guard accumulated.count <= Self.maxResponseBytes else {
+                connection.cancel()
+                throw RtspError.responseTooLarge(accumulated.count)
+            }
             if isComplete { break }
         }
         connection.cancel()
         return accumulated
+    }
+
+    /// How the connect wait ends for one state change; nil keeps waiting.
+    /// `.waiting` usually means the port isn't accepting yet (retryable), and
+    /// `.cancelled` before ready can only be interrupt().
+    static func connectVerdict(_ state: NWConnection.State) -> Result<Void, RtspError>? {
+        switch state {
+        case .ready: return .success(())
+        case .failed(let err): return .failure(.transportFailure("\(err)"))
+        case .waiting(let err): return .failure(.transportFailure("waiting: \(err)"))
+        case .cancelled: return .failure(.interrupted)
+        default: return nil
+        }
     }
 
     func receiveChunk(_ connection: NWConnection) async throws -> (Data?, Bool) {
@@ -401,6 +418,10 @@ final class RtspClient: @unchecked Sendable {
             throw RtspError.noSdp
         }
         negotiate(sdp: sdp, into: &result)
+        result.encryptionFeaturesEnabled = try Self.computeEncryptionEnabled(
+            supported: result.encryptionFeaturesSupported,
+            requested: SdpScan.attributeUInt(sdp, "x-ss-general.encryptionRequested") ?? 0)
+        result.audioEncryption = result.encryptionFeaturesEnabled & Self.ssEncAudio != 0
         Diag.info("RTSP negotiated codec=\(codecName(result.negotiatedVideoFormat)) "
             + "encSupported=\(result.encryptionFeaturesSupported) "
             + "encEnabled=\(result.encryptionFeaturesEnabled) "
@@ -410,12 +431,6 @@ final class RtspClient: @unchecked Sendable {
         try await performSetupRounds(into: &result)
 
         // 6) ANNOUNCE (control stream id) with the SDP payload.
-        result.encryptionFeaturesEnabled = computeEncryptionEnabled(
-            supported: result.encryptionFeaturesSupported)
-        // Audio is AES-CBC only if SS_ENC_AUDIO (0x04) was negotiated; our
-        // connect-only SDP never enables it, so this stays false (plaintext).
-        let ssEncAudio: UInt32 = 0x04
-        result.audioEncryption = result.encryptionFeaturesEnabled & ssEncAudio != 0
         let sdpBuilder = SdpBuilder(
             config: config,
             videoPort: result.videoPort,
@@ -471,7 +486,7 @@ final class RtspClient: @unchecked Sendable {
         // notifyAudioPortNegotiationComplete() at exactly this point
         // (RtspConnection.c:1212). The callback is best-effort: a ping failure
         // must not abort the handshake (audio is non-fatal); the pipeline logs it.
-        onAudioPortNegotiated?(result.audioPort, result.audioPingPayload)
+        onAudioPortNegotiated?(result.audioPort, result.audioPingPayload, result.audioEncryption)
 
         try captureSession(from: audioResp, step: "SETUP audio")
         result.sessionId = sessionIdString

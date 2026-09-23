@@ -1,0 +1,168 @@
+//
+//  RtspClientTests.swift
+//
+//  The RTSP client's connect/cancel contract and response cap (against real
+//  loopback sockets), the encryption it negotiates, and the audio decrypt that
+//  negotiation turns on (checked against a host-side AES-CBC encrypt).
+//
+
+import CommonCrypto
+import Foundation
+import Network
+import Testing
+@testable import Glimmer
+
+struct RtspClientTests {
+
+    private static let key: [UInt8] = Array(0..<16).map { UInt8($0) }
+
+    private static func makeClient(port: UInt16) -> RtspClient {
+        let config = BackendStreamConfig(
+            width: 1920, height: 1080, fps: 60, bitrate: 20_000, packetSize: 1392,
+            streamingRemotely: 0, audioConfiguration: 0, supportedVideoFormats: 0,
+            clientRefreshRateX100: 6000, colorSpace: 0, colorRange: 0, encryptionFlags: 0,
+            remoteInputAesKey: key, remoteInputAesIv: key)
+        return RtspClient(
+            host: "127.0.0.1", rtspPort: port, rtspTargetUrl: "rtsp://127.0.0.1:\(port)",
+            urlAddr: "127.0.0.1", urlSafeAddr: "127.0.0.1", addrFamilyToken: "IPv4",
+            rtspClientVersion: 14, config: config, serverCodecModeRaw: 0,
+            appVersionQuad: [7, 1, 450, 0])
+    }
+
+    // MARK: - Cancel never strands the connect
+
+    @Test func cancelledConnectEndsTheWaitAsInterrupted() {
+        guard case .failure(.interrupted) = RtspClient.connectVerdict(.cancelled) else {
+            Issue.record("a cancelled connect must end the wait with .interrupted")
+            return
+        }
+        #expect(RtspClient.connectVerdict(.setup) == nil)
+        #expect(RtspClient.connectVerdict(.preparing) == nil)
+    }
+
+    @Test func interruptBeforeConnectThrowsInterrupted() async {
+        let rtsp = Self.makeClient(port: 9)
+        rtsp.interrupt()
+        do {
+            _ = try await rtsp.oneShot(Data("OPTIONS".utf8))
+            Issue.record("oneShot succeeded after interrupt()")
+        } catch RtspError.interrupted {
+        } catch {
+            Issue.record("expected RtspError.interrupted, got \(error)")
+        }
+    }
+
+    /// Keeps the loopback server's accepted connections alive for the test.
+    private final class Accepted: @unchecked Sendable {
+        private let lock = NSLock()
+        private var conns: [NWConnection] = []
+        func keep(_ conn: NWConnection) { lock.lock(); conns.append(conn); lock.unlock() }
+        func cancelAll() { lock.lock(); conns.forEach { $0.cancel() }; lock.unlock() }
+    }
+
+    @Test func oversizedResponseIsRefused() async throws {
+        let listener = try NWListener(using: .tcp, on: .any)
+        let accepted = Accepted()
+        let queue = DispatchQueue(label: "RtspClientTests.listener")
+        let blob = Data(repeating: 0x41, count: RtspClient.maxResponseBytes + 64 * 1024)
+        listener.newConnectionHandler = { conn in
+            accepted.keep(conn)
+            conn.start(queue: queue)
+            conn.send(content: blob, isComplete: true, completion: .contentProcessed { _ in })
+        }
+        let port: UInt16 = try await withCheckedThrowingContinuation { cont in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    listener.stateUpdateHandler = nil
+                    cont.resume(returning: listener.port?.rawValue ?? 0)
+                case .failed(let error):
+                    listener.stateUpdateHandler = nil
+                    cont.resume(throwing: error)
+                default:
+                    break
+                }
+            }
+            listener.start(queue: queue)
+        }
+        defer { accepted.cancelAll(); listener.cancel() }
+
+        do {
+            _ = try await Self.makeClient(port: port).oneShot(Data("OPTIONS".utf8))
+            Issue.record("a response past the cap was accepted")
+        } catch RtspError.responseTooLarge {
+        } catch {
+            Issue.record("expected RtspError.responseTooLarge, got \(error)")
+        }
+    }
+
+    // MARK: - Encryption negotiation
+
+    @Test func controlAndAudioEncryptionFollowTheHostOffer() throws {
+        // Sunshine's default offer is control + audio (5); video is never enabled.
+        #expect(try RtspClient.computeEncryptionEnabled(supported: 5, requested: 1) == 5)
+        #expect(try RtspClient.computeEncryptionEnabled(supported: 7, requested: 1) == 5)
+        #expect(try RtspClient.computeEncryptionEnabled(supported: 1, requested: 0) == 1)
+    }
+
+    @Test func hostRequiringEncryptedVideoIsRefused() {
+        do {
+            _ = try RtspClient.computeEncryptionEnabled(supported: 7, requested: 3)
+            Issue.record("a host requiring encrypted video was accepted")
+        } catch RtspError.encryptedVideoRequired {
+        } catch {
+            Issue.record("expected RtspError.encryptedVideoRequired, got \(error)")
+        }
+    }
+
+    @MainActor @Test func encryptedVideoRefusalReachesTheBanner() {
+        let code = NativeBackend().rtspCode(RtspError.encryptedVideoRequired)
+        #expect(code == RtspError.encryptedVideoRequiredCode)
+        let banner = AppModel.connectFailureBanner(for: StreamError.sessionFailed(code), hostName: "Den PC")
+        #expect(banner == "This PC requires encrypted video, which Glimmer doesn't support yet.")
+        let other = AppModel.connectFailureBanner(for: StreamError.sessionFailed(-1), hostName: "Den PC")
+        #expect(other.hasPrefix("Couldn't reach Den PC."))
+    }
+
+    // MARK: - Audio decrypt (SS_ENC_AUDIO)
+
+    private final class NullAudioSink: NativeAudioSink {
+        func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 { 0 }
+        func decodeAndPlay(_ opus: [UInt8]) {}
+        func decodeAndPlayPLC() {}
+        func cleanup() {}
+    }
+
+    /// The host side: AES-128-CBC with PKCS7 padding and IV = BE32(keyId + seq).
+    private static func hostEncrypt(_ plaintext: [UInt8], seq: UInt16, keyId: UInt32) -> [UInt8]? {
+        let ivSeq = keyId &+ UInt32(seq)
+        var iv = [UInt8](repeating: 0, count: kCCBlockSizeAES128)
+        iv[0] = UInt8(ivSeq >> 24)
+        iv[1] = UInt8((ivSeq >> 16) & 0xFF)
+        iv[2] = UInt8((ivSeq >> 8) & 0xFF)
+        iv[3] = UInt8(ivSeq & 0xFF)
+        let capacity = plaintext.count + kCCBlockSizeAES128
+        var out = [UInt8](repeating: 0, count: capacity)
+        var moved = 0
+        let status = CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES),
+                             CCOptions(kCCOptionPKCS7Padding), key, key.count, iv,
+                             plaintext, plaintext.count, &out, capacity, &moved)
+        return status == kCCSuccess ? Array(out[0..<moved]) : nil
+    }
+
+    /// 60 bytes pads to 64; 64 gets a whole pad block, which opus must never see.
+    @Test(arguments: [60, 64])
+    func encryptedAudioDecryptsToTheOpusBytes(length: Int) throws {
+        // keyId + seq wraps past UInt32.max, as the host's u32 add does.
+        let ivId: [UInt8] = [0xFF, 0xFF, 0xFF, 0xF0] + [UInt8](repeating: 0, count: 12)
+        let receiver = RtpAudioReceiver(
+            host: "127.0.0.1", audioPort: 48000, pingPayload: [], appVersionQuad: [7, 1, 450, 0],
+            audioPacketDuration: 5, opusConfig: RtspHandshakeResult.defaultOpusConfig,
+            audioConfig: 0, audioEncryption: true, aesKey: Self.key, aesIvId: ivId,
+            sink: NullAudioSink())
+        let opus = (0..<length).map { UInt8(truncatingIfNeeded: $0 &* 7) }
+        let seq: UInt16 = 0x0123
+        let ciphertext = try #require(Self.hostEncrypt(opus, seq: seq, keyId: 0xFFFF_FFF0))
+        #expect(receiver.decryptCbc(ciphertext, sequenceNumber: seq) == opus)
+    }
+}

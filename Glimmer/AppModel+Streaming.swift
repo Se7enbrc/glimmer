@@ -372,6 +372,9 @@ extension AppModel {
                 return detail
             }
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
+        case .sessionFailed(RtspError.encryptedVideoRequiredCode):
+            // The PC answered and refused us: its settings require encrypted video.
+            return RtspError.encryptedVideoRequired.description
         case .sessionFailed, .binaryNotFound, .truncatedRead:
             // Genuinely never reached the host / handshake aborted before
             // establishment (a truncated control read = the host dropped mid-
