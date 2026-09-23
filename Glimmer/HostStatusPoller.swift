@@ -15,7 +15,7 @@ extension AppModel {
 
     /// Restart the selected PC's chip poller: one probe now, then every 10 s while the
     /// launcher window is open (frontmost or not, since the chip shows either way) and
-    /// every 30 s while it's closed. Only the selected PC is polled.
+    /// every 20 s while it's closed. Only the selected PC is polled.
     func restartHostStatusPolling(afterStream: Bool = false) {
         hostStatusTask?.cancel()
         hostStatusTask = nil
@@ -31,8 +31,8 @@ extension AppModel {
         guard let host = selectedHost else { return }
 
         // Fresh poll loop → fresh unreachable streak. A miss accrued against
-        // the previous host (or before a stream) must not count toward the
-        // two-strikes `.asleep` threshold for this loop.
+        // the previous host (or before a stream) must not count toward
+        // `asleepProbeThreshold` for this loop.
         hostUnreachableStreak = 0
 
         let task = Task { [weak self] in
@@ -57,9 +57,10 @@ extension AppModel {
         hostStatusTask = task
     }
 
-    /// Poll interval while the launcher is closed. Only the menu bar panel shows
-    /// readiness then, and 30 s (plus tolerance) stays inside `HostLiveStatus.stale`.
-    static let idleHostStatusPollSeconds: TimeInterval = 30
+    /// Poll interval while the launcher is closed. Two held misses (interval, 2 s
+    /// tolerance and 2 s probe each) stay inside `HostLiveStatus.stale`, so the
+    /// last good status is still fresh and the third strike decides Asleep.
+    static let idleHostStatusPollSeconds: TimeInterval = 20
 
     /// /applist is fetched on a poll loop's first answer (once per selection or
     /// activation), then only for a running app the list lacks, once per app id,
@@ -69,28 +70,16 @@ extension AppModel {
         return runningID != 0 && runningID != fetchedFor && !known.contains(runningID)
     }
 
-    /// Publish the chip state for a TCP-unreachable probe, with hysteresis so a
-    /// transient miss can't flap the chip. A single timed-out 2 s probe is NOT
-    /// proof of anything - Wi-Fi blips, a momentarily busy host, or the
-    /// post-stream `/cancel` HTTP blip drop one probe on a perfectly awake box.
-    /// So a sub-threshold miss publishes NOTHING: the chip HOLDS its last-good
-    /// status ("Ready · 12 ms") instead of blanking to "Checking...", and the
-    /// next poll (~10 s) either refreshes it or accrues another strike. Only
-    /// once `asleepProbeThreshold` CONSECUTIVE probes have missed do we assert
-    /// `.asleep`. (If polling were to stop entirely, the chip's own
-    /// `HostLiveStatus.stale` age-out still falls back to "Checking..." - the
-    /// honest "we genuinely don't know anymore" path.)
+    /// A missed probe, with hysteresis so a Wi-Fi blip or the post-stream `/cancel` blip
+    /// can't flap the chip: below `asleepProbeThreshold` misses in a row it holds a fresh
+    /// last good status and publishes nothing. With none to hold, one miss shows Asleep.
     func publishUnreachable(hostID: String, expectedHostID: String) async {
         let (streak, hasFreshLastGood): (Int, Bool) = await MainActor.run { [weak self] in
             guard let self else { return (0, false) }
             self.hostUnreachableStreak += 1
-            // Is there a FRESH last-good status this miss would be protecting?
-            // The 3-strike bar exists so a transient blip can't slander a host
-            // that was answering moments ago (the post-/cancel window). With
-            // nothing published yet (app launch / host switch: the chip is
-            // stuck on "Checking..."), that protection protects nothing - it
-            // just delays the honest Asleep (and the wake controls behind it)
-            // by ~30-40s.
+            // The bar protects a fresh last good status from a blip. With none
+            // (launch, a PC switch) it would only delay the honest Asleep and the
+            // wake controls behind it.
             let live = self.hostLiveStatus
             let fresh = live != nil
                 && live?.hostID == hostID
@@ -98,10 +87,8 @@ extension AppModel {
                 && Date().timeIntervalSince(live?.capturedAt ?? .distantPast) <= HostLiveStatus.stale
             return (self.hostUnreachableStreak, fresh)
         }
-        // Steady state: hold last-good until confirmed unreachable - no flap.
-        // Cold start (no fresh last-good): ONE 2s miss publishes Asleep now;
-        // if the host was merely blipping, the next probe (≤10s) corrects to
-        // Ready - a far cheaper error than 40s of "Checking...".
+        // A cold start's false Asleep is corrected by the next answered poll,
+        // a far cheaper error than a minute of "Checking...".
         guard streak >= (hasFreshLastGood ? Self.asleepProbeThreshold : 1) else { return }
         await publishLiveStatus(HostLiveStatus(
             hostID: hostID,
@@ -219,6 +206,7 @@ extension AppModel {
         if Self.needsAppList(runningID: running, known: Set(host.apps.map(\.id)), fetchedFor: appListFor) {
             fetchedFor = running
             await refreshAppList(for: host)
+            if Task.isCancelled { return fetchedFor }
         }
         let name = (selectedHost?.apps ?? host.apps).first { $0.id == running }?.name
         let state: HostLiveStatus.State = running == 0 ? .idle

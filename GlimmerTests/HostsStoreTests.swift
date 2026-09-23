@@ -114,14 +114,25 @@ struct HostsStoreTests {
         #expect(!AppModel.needsAppList(runningID: 7, known: [1], fetchedFor: 7))
     }
 
-    @MainActor @Test func theClosedLauncherPollStaysFresh() {
-        let tolerance: TimeInterval = 2, probeTimeout: TimeInterval = 2
-        #expect(AppModel.idleHostStatusPollSeconds + tolerance + probeTimeout < HostLiveStatus.stale)
-    }
-
     private static func host(_ id: String, address: String) -> Glimmer.Host {
         Glimmer.Host(id: id, name: id, customName: nil, localAddress: address, manualAddress: nil, apps: [],
                      lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+    }
+
+    /// With the launcher closed a second miss lands up to two cycles (interval, 2 s
+    /// tolerance, 2 s probe) after the last good status. It's still held; a third shows Asleep.
+    @MainActor @Test func theClosedLauncherPollHoldsASecondMiss() async {
+        let model = AppModel()
+        model.selectedHost = Self.host("tower", address: "192.0.2.10")
+        model.hostStatusTask?.cancel()
+        let cycle = AppModel.idleHostStatusPollSeconds + 2 + 2
+        model.hostLiveStatus = HostLiveStatus(hostID: "tower", state: .idle, rttMs: 3, sunshineVersion: nil,
+                                              capturedAt: Date().addingTimeInterval(-2 * cycle))
+        model.hostUnreachableStreak = 1
+        await model.publishUnreachable(hostID: "tower", expectedHostID: "tower")
+        #expect(model.hostLiveStatus?.state == .idle)
+        await model.publishUnreachable(hostID: "tower", expectedHostID: "tower")
+        #expect(model.hostLiveStatus?.state == .asleep)
     }
 
     @MainActor @Test func aPCThatReplacesTheSelectionGetsAFreshChipAndPoll() {

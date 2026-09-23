@@ -168,9 +168,8 @@ final class AppModel {
     /// line. Persistence contract: AppModel+SessionReceipt.swift.
     var lastSessionReceipt: SessionReceipt?
 
-    /// Always-on route monitor for the SELECTED host (the readiness chip's
-    /// quiet bolt / Wi-Fi glyph). Deliberately independent of the gate-on
-    /// telemetry probe - see AppModel+HostRoute.swift. Re-pointed from
+    /// Always-on route monitor for the SELECTED host (the readiness chip's quiet bolt
+    /// or Wi-Fi glyph), independent of the gate-on telemetry probe. Re-pointed from
     /// `selectedHost`'s didSet whenever the route address changes.
     let hostRoute = HostRouteMonitor()
 
@@ -463,12 +462,9 @@ final class AppModel {
     /// resets it when re-arming for a (possibly different) host.
     @ObservationIgnored var hostUnreachableStreak = 0
 
-    /// Number of consecutive unreachable probes required before the chip
-    /// asserts `.asleep`. Sub-threshold misses publish NOTHING (the chip holds
-    /// its last-good status - see `publishUnreachable`), so this is purely the
-    /// confidence bar for declaring a host down: 3 consecutive 2 s misses
-    /// (~30 s) ride out Wi-Fi double-blips and a momentarily busy host without
-    /// a false "Asleep", while a genuinely-off box still resolves cleanly.
+    /// Consecutive missed probes before the chip shows Asleep while it holds a fresh
+    /// last good status (see `publishUnreachable`). Three ride out a Wi-Fi double blip
+    /// or a momentarily busy PC without a false Asleep.
     static let asleepProbeThreshold = 3
 
     /// Settle delay before the FIRST chip probe when the poller is re-armed
