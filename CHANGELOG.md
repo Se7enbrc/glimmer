@@ -75,9 +75,14 @@ launcher without a menu bar or Dock.
 Connecting is quicker and easier to call off. Connects and in-place reconnects
 are about 50 ms faster, and the first frame no longer waits for audio setup.
 Cancel or Quit during the connection handshake takes effect immediately instead
-of locking out new streams for up to 30 seconds. Esc cancels a connection that
-hasn't started streaming yet; once the stream is live, Esc goes to the game as
-before, including during a reconnect.
+of locking out new streams for up to 30 seconds. Stopping a stream during the
+handshake with the Stop Streaming shortcut or the window's close button now
+works like Cancel: no "Couldn't reach" banner, no "Stream ended" toast, and the
+PC list keeps its order and ⌘ shortcuts. Esc cancels a connection that hasn't
+started streaming yet; once the stream is live, Esc goes to the game as before,
+including during a reconnect. A connection that fails before the stream starts,
+for example to a sleeping or unpaired PC or after Cancel, now stops probing the
+PC right away. Before, a loop kept opening connections to it.
 
 Streams end the way you meant. Quitting the game on your PC, pressing Force Stop
 in Sunshine, or another device taking over now ends the stream cleanly, and
@@ -91,14 +96,17 @@ Reconnects hold up. A stream that drops just before the Mac goes to sleep now
 reconnects on wake instead of ending as unexpected, because the 30 second
 reconnect window only counts time the Mac is awake. Unplugging a dock or
 Ethernet mid-stream starts the reconnect right away instead of freezing for
-about 10 seconds.
+about 10 seconds. A reconnect that comes back no longer leaves a red banner
+behind.
 
 Streams over a VPN, and streams started before Glimmer has worked out the route
 to the PC, now ask for the same bitrate as in 2026.9.5. The Wi-Fi 1.5x boost
 applies only when the route really is Wi-Fi, where the check on the radio's link
 rate can still trim it. A reconnect after a route change or a wake asks for the
 bitrate that fits the current connection, never more than an earlier quality
-drop allowed, and Stream stats shows the new rate.
+drop allowed, and Stream stats shows the new rate. Changing the preset, the
+custom size or Bandwidth in Settings during a stream doesn't change the bitrate
+a reconnect asks for: as the pane says, the change applies to the next stream.
 
 Video recovers by itself. After a decode error Glimmer waits for the next
 keyframe instead of feeding broken frames to the decoder, and a decode session
@@ -136,9 +144,10 @@ once-a-second hitch while idle and while streaming.
 
 Audio holds up when devices change. Switching output devices no longer sets off
 a burst of audio errors left behind by every earlier stream, because each stream
-now lets go of its output-device listener when it ends. Unplugging a dock,
-handing AirPods off or losing HDMI mid-stream can no longer crash Glimmer while
-the audio engine restarts.
+now lets go of its output-device listener when it ends, and its audio engine is
+released when its connection stops. Unplugging a dock, handing AirPods off or
+losing HDMI mid-stream can no longer crash Glimmer while the audio engine
+restarts.
 
 Audio stays with the picture. After a long dropout, audio no longer ends up
 about 200 ms behind video: a gap longer than the audio buffer can cover no
@@ -280,8 +289,17 @@ uses that PC's own wired or Wi-Fi bitrate.
 A failed connection offers the matching fix: Wake and Connect when the PC is
 genuinely unreachable and Wake on LAN is set up for it, Pair Again… for a
 pairing or certificate problem, including a PC whose certificate changed, and
-Try Again otherwise. Starting a stream that would end a running app on the PC
-now asks with the app and PC in the title, says the app will quit and offers one
+Try Again otherwise. A failure after the PC started the app offers Try Again
+instead of Wake and Connect, and a PC with "cert" in its name or address no
+longer gets Pair Again… for a failure that has nothing to do with its
+certificate. Failure messages say what went wrong. A stream port blocked by the
+PC's firewall is named, for example "Tower answered, but the stream couldn't get
+through. Check that the PC's firewall allows UDP 47999." A slow launch says the
+PC took too long to start the app, an error from the PC shows Sunshine's own
+message, and a stream that lost its connection says "Lost the connection to
+Tower." The message for a PC whose secure port is stuck no longer ends with
+transport jargon. Starting a stream that would end a running app on the PC now
+asks with the app and PC in the title, says the app will quit and offers one
 destructive Quit and Stream button, instead of a generic "Take over the stream?"
 that implied an unexplained resume. During a reconnect, the Stream button and
 the menu bar read "Reconnecting to" the PC on one line until the stream is back,
