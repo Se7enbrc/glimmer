@@ -10,8 +10,8 @@ import Testing
 
 struct GlimmerIntentsTests {
 
-    private func pc(customName: String? = nil, apps: [String]) -> Glimmer.Host {
-        Glimmer.Host(id: "pc-1", name: "DESKTOP-7Q2", customName: customName, localAddress: nil, manualAddress: nil,
+    private func pc(id: String = "pc-1", customName: String? = nil, apps: [String]) -> Glimmer.Host {
+        Glimmer.Host(id: id, name: "DESKTOP-7Q2", customName: customName, localAddress: nil, manualAddress: nil,
                      apps: apps.enumerated().map { LibraryApp(id: $0.offset + 1, name: $0.element, hdr: false, hidden: false) },
                      lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
     }
@@ -40,5 +40,20 @@ struct GlimmerIntentsTests {
         let known = Set([PCEntity(host: pc(apps: ["Desktop"]))])
         #expect(Set([PCEntity(host: pc(apps: ["Desktop", "Steam"]))]) == known)
         #expect(Set([PCEntity(host: pc(customName: "Den", apps: ["Desktop"]))]) != known)
+    }
+
+    @Test func streamingThePCAgainMeansTheLiveStream() {
+        let host = pc(apps: ["Desktop", "Steam"])
+        let live = (app: host.apps[1], host: host)
+        #expect(AppModel.isLiveStream(nil, on: host, live: live))
+        #expect(AppModel.isLiveStream(host.app(named: "steam"), on: host, live: live))
+    }
+
+    @Test func anotherPCOrAppIsNotTheLiveStream() {
+        let host = pc(apps: ["Desktop", "Steam"])
+        let live = (app: host.apps[1], host: host)
+        #expect(!AppModel.isLiveStream(host.app(named: "Desktop"), on: host, live: live))
+        #expect(!AppModel.isLiveStream(nil, on: pc(id: "pc-2", apps: ["Steam"]), live: live))
+        #expect(!AppModel.isLiveStream(nil, on: host, live: nil))
     }
 }

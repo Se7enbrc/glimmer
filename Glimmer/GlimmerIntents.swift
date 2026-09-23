@@ -58,9 +58,16 @@ struct StreamIntent: AppIntent {
     @MainActor func perform() async throws -> some IntentResult {
         let model = try await AppModel.forIntent()
         let host = try model.pairedHost(pc)
-        guard !model.isStreaming else { throw PCIntentError.alreadyStreaming }
         let target = app.flatMap(host.app(named:))
         if let app, target == nil { throw PCIntentError.noApp(app, pc: host.displayName) }
+        if model.isStreaming {
+            // Asking for the stream already running just shows it, as activating Glimmer may have.
+            guard AppModel.isLiveStream(target, on: host, live: model.lastLaunchAttempt) else {
+                throw PCIntentError.alreadyStreaming
+            }
+            model.resumeStreamWindow()
+            return .result()
+        }
         if model.selectedHost?.id != host.id { model.selectHost(host) }
         if let target { model.requestStream(app: target, on: host) } else { model.streamHeroApp() }
         return .result()
@@ -184,6 +191,13 @@ extension AppModel {
         guard let model = AppDelegate.boundManager else { throw PCIntentError.notReady }
         await model.startBootstrap().value
         return model
+    }
+
+    /// A shortcut naming the PC being streamed, and its app or none, means
+    /// the stream already running.
+    nonisolated static func isLiveStream(_ app: LibraryApp?, on host: Host, live: (app: LibraryApp, host: Host)?) -> Bool {
+        guard let live, live.host.id == host.id else { return false }
+        return app.map { $0.id == live.app.id } ?? true
     }
 
     func pairedHost(_ pc: PCEntity) throws -> Host {
