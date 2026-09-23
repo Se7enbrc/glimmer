@@ -58,13 +58,7 @@ extension StreamSession {
         }
         // Honesty: a Create/Mute-based chord can't fire on a DualSense without
         // the raw-HID reader; drop the clause rather than promise it.
-        let needsRawHID: Bool
-        switch chord {
-        case .startSelectL1R1: needsRawHID = true
-        case .custom: needsRawHID = !customChord.isDisjoint(with: [.create, .mute])
-        case .none, .l1r1, .l1r1l2r2, .l3r3: needsRawHID = false
-        }
-        if needsRawHID && !DualSenseHID.isEnabled {
+        if InputForwarder.needsRawHIDCenterButtons(chord: chord, custom: customChord) && !DualSenseHID.isEnabled {
             return "\(base) to stop streaming"
         }
         let chordText = chord == .custom
