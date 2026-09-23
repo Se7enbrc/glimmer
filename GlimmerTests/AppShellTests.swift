@@ -78,6 +78,15 @@ struct AppShellTests {
         #expect(checks == 5)
     }
 
+    @Test func routeSettlesOnceTheAskHasEverythingALauncherClickWouldHave() {
+        #expect(AppModel.routeSettled(.wired, phyMbps: nil))
+        #expect(AppModel.routeSettled(.tunnel, phyMbps: nil))
+        // Wi-Fi before its first PHY read would ask the full boost with no radio gate.
+        #expect(!AppModel.routeSettled(.wifi, phyMbps: nil))
+        #expect(AppModel.routeSettled(.wifi, phyMbps: 1100))
+        #expect(!AppModel.routeSettled(.unknown, phyMbps: nil))
+    }
+
     @Test func quitStopsOnlyAStreamFromThatPC() {
         var handled: Set<String> = []
         #expect(decide(["id": "a", "verb": "quit", "host": "UUID-1"], handled: &handled) == .notMine)

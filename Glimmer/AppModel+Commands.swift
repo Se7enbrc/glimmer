@@ -124,12 +124,18 @@ extension AppModel {
         }
     }
 
-    /// A new selection re-points the route monitor and the bitrate ask reads its
-    /// class, so give the first path update up to 500 ms (it's usually one tick).
+    /// A new selection re-points the route monitor, and the ask reads its class and,
+    /// on Wi-Fi, the radio's PHY rate: give both up to 500 ms (usually one tick).
     private func streamFromCommand(_ id: String, app: LibraryApp, on host: Host, takeover: Bool) async {
-        let settled = await Self.poll(slices: 20, every: .milliseconds(25)) { hostRoute.routeClass != .unknown }
+        let settled = await Self.poll(slices: 20, every: .milliseconds(25)) {
+            Self.routeSettled(hostRoute.routeClass, phyMbps: hostRoute.wifiPhyRateMbps)
+        }
         Self.commandStreamHostID = nil
-        if !settled { Diag.notice("Route to \(host.displayName) still unknown; asking without a route boost", "Stream") }
+        if !settled {
+            Diag.notice(hostRoute.routeClass == .wifi
+                ? "No Wi-Fi rate for \(host.displayName) yet; asking without the radio gate"
+                : "Route to \(host.displayName) still unknown; asking without a route boost", "Stream")
+        }
         guard !isStreaming else {
             replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
             return
@@ -137,6 +143,12 @@ extension AppModel {
         stream(app: app, on: host, takeoverAuthorized: takeover)
         replyToCommand(id, CommandChannel.Event.accepted)
         reportCommandSession(id)
+    }
+
+    /// The ask a launcher click would make is ready: the route is known and, on
+    /// Wi-Fi, the radio gate has its first PHY read.
+    nonisolated static func routeSettled(_ route: HostRouteMonitor.RouteClass, phyMbps: Double?) -> Bool {
+        route != .unknown && (route != .wifi || phyMbps != nil)
     }
 
     /// Checks `settled` up to `slices` times, `slice` apart, stopping at the first
