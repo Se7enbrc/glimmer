@@ -59,9 +59,12 @@ extension AppModel {
         hostStatusTask = nil
         WakeNotifier.shared.prepare(for: self, host: host)
         Self.wakeTask = Task { @MainActor in
+            // A stopped or superseded wake leaves the state to whoever cancelled it.
             defer {
-                if wakingHostID == host.id { wakingHostID = nil }
-                restartHostStatusPolling()
+                if !Task.isCancelled {
+                    if wakingHostID == host.id { wakingHostID = nil }
+                    restartHostStatusPolling()
+                }
             }
             let outcome = await sendWakeAndWait(host, waitSeconds: Self.wakeBudgetSeconds)
             guard !Task.isCancelled else { return }

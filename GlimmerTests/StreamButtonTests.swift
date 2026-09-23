@@ -2,7 +2,8 @@
 //  StreamButtonTests.swift
 //
 //  The launcher's Stream capsule: a failed wake explains itself in a line
-//  that fits, and a reconnect reads as a reconnect to the right PC.
+//  that fits, a stopped wake shows nothing, and a reconnect reads as a
+//  reconnect to the right PC.
 //
 
 import AppKit
@@ -16,6 +17,11 @@ struct StreamButtonTests {
     /// the 16 pt glyph and 10 pt of spacing.
     private let lineWidth: CGFloat = 380 - 2 * 22 - 16 - 10
 
+    private let pc = Host(
+        id: "pc-1", name: "tower", customName: "Tower", localAddress: "192.0.2.10", manualAddress: nil,
+        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil,
+        macAddress: "aa:bb:cc:dd:ee:ff")
+
     @Test func wakeFailureLinesFitTheCapsule() {
         let font = NSFont.systemFont(ofSize: 11)
         for reason in [AppModel.WakeFailureReason.noAnswer, .couldNotSend] {
@@ -28,6 +34,16 @@ struct StreamButtonTests {
     @Test func wakeFailureLineNamesTheCause() {
         #expect(StreamButton.wakeFailureLine(.noAnswer, pcName: "Tower").contains("Tower"))
         #expect(StreamButton.wakeFailureLine(.couldNotSend, pcName: "Tower").contains("this Mac"))
+    }
+
+    /// Stop Waiting during the bursts ends the wake at once, and not as a failure.
+    @Test func aStoppedWakeEndsAtOnceWithoutAFailure() async {
+        let model = AppModel()
+        let wake = Task { await model.sendWakeAndWait(pc, waitSeconds: 90) { _, _ in 1 } }
+        wake.cancel()
+        let outcome = await wake.value
+        #expect(outcome == .sent)
+        #expect(outcome.failureReason == nil)
     }
 
     @Test func reconnectShowsOneLineNamingTheSessionsPC() {
