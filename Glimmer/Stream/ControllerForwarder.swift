@@ -26,11 +26,16 @@ extension InputForwarder {
 
     // MARK: - Per-controller state
 
+    /// What an arrival tells the PC about a pad: LI_CTYPE_*, button flags, LI_CCAP_* bits.
+    struct ControllerArrival: Equatable {
+        let type: UInt8
+        let supportedButtons: UInt32
+        let caps: UInt16
+    }
+
     struct AttachedController {
         let slot: UInt8           // 0..15, used as `controllerNumber`
-        let kind: UInt8           // LI_CTYPE_*
-        let capabilities: UInt16  // LI_CCAP_* bitset
-        let supportedButtonFlags: UInt32
+        let arrival: ControllerArrival
         weak var controller: GCController?
         /// True if this is a DualSense and we `retain()`ed the raw-HID reader
         /// for it (so detach can `release()` it).
@@ -82,6 +87,7 @@ extension InputForwarder {
                             self.dualSenseRouting.unregister(slot: state.slot)
                             if state.retainedHID { DualSenseHID.shared.release() }
                             self.gamepadMask &= ~(UInt16(1) << state.slot)
+                            if self.isReady { self.sendControllerRemoval(slot: state.slot) }
                             // The pad object (and its motors) died with the
                             // deallocation - still release the haptics,
                             // motion and battery slots so a future attach
@@ -218,9 +224,8 @@ extension InputForwarder {
         let buttons = supportedButtonMask(for: gamepad, forwardsMute: useHID)
 
         let state = AttachedController(
-            slot: slot, kind: kind, capabilities: caps,
-            supportedButtonFlags: buttons, controller: gamepad,
-            retainedHID: useHID
+            slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
+            controller: gamepad, retainedHID: useHID
         )
         attachedControllers[ObjectIdentifier(gamepad)] = state
         dualSenseRouting.register(slot: slot, controller: ObjectIdentifier(gamepad))
@@ -255,7 +260,7 @@ extension InputForwarder {
         // If the stream is already up, announce arrival immediately;
         // otherwise it'll go out when `setReady(true)` is called.
         if isReady {
-            sendArrival(state)
+            sendArrival(slot: slot, state.arrival)
         }
     }
 
@@ -296,15 +301,7 @@ extension InputForwarder {
             + "last_input_age_ms=\(inputAge) last_rumble_age_ms=\(rumbleAge) "
             + "rumble_events_total=\(counters.rumbleEventTotal.value)", "Controller")
 
-        if isReady {
-            // Empty event with the slot bit cleared signals removal to the host.
-            let rc = backend?.sendMultiController(
-                num: Int16(state.slot), mask: Int16(bitPattern: gamepadMask), buttons: 0,
-                analog: GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-                                      leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
-            ) ?? -2
-            record("LiSendMultiControllerEvent(detach)", rc)
-        }
+        if isReady { sendControllerRemoval(slot: state.slot) }
     }
 
     /// Session-teardown twin of `detach(gamepad:)`, called from
@@ -342,27 +339,59 @@ extension InputForwarder {
         attachedControllers.removeAll()
         touchpadStates.removeAll()
         gamepadMask = 0
+        announcedControllers.removeAll()
     }
 
-    func sendArrival(_ state: AttachedController) {
+    func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
         let rc = backend?.sendControllerArrival(
-            num: state.slot,
-            mask: gamepadMask,
-            type: state.kind,
-            supportedButtons: UInt32(state.supportedButtonFlags),
-            caps: state.capabilities
+            num: slot, mask: gamepadMask, type: arrival.type,
+            supportedButtons: arrival.supportedButtons, caps: arrival.caps
         ) ?? -2
         record("LiSendControllerArrivalEvent", rc)
-        // Durable per-session witness of WHAT we told the host and whether the
-        // enqueue took (record() above logs failures to os_log only, and only
-        // once per code). Arrivals replay once per pad per stream - bounded.
-        Diag.info("controller \(state.slot) arrival sent: "
-            + "caps=0x\(String(state.capabilities, radix: 16)) rc=\(rc)", "Controller")
-        // Battery baseline rides right behind the arrival: the host learns
-        // the pad exists, then what its battery holds (change reports follow
-        // on the monitor's poll). Also (re)arms the uplink per session, since
-        // setReady(true) replays arrivals at every stream start.
-        ControllerBattery.shared.announce(slot: state.slot, backend: backend)
+        announcedControllers[slot] = arrival
+        // Durable per-session witness of what the PC was told; record() only
+        // reaches os_log. Arrivals replay once per pad per stream, so bounded.
+        Diag.info("controller \(slot) arrival sent: "
+            + "caps=0x\(String(arrival.caps, radix: 16)) rc=\(rc)", "Controller")
+        // The battery baseline rides right behind the arrival, which also
+        // re-arms the uplink at every stream start.
+        ControllerBattery.shared.announce(slot: slot, backend: backend)
+    }
+
+    /// An empty event with the slot's bit cleared, which Sunshine takes as the pad leaving.
+    func sendControllerRemoval(slot: UInt8) {
+        let rc = backend?.sendMultiController(
+            num: Int16(slot), mask: Int16(bitPattern: gamepadMask & ~(UInt16(1) << slot)), buttons: 0,
+            analog: GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
+                                  leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        ) ?? -2
+        record("LiSendMultiControllerEvent(removal)", rc)
+        announcedControllers[slot] = nil
+    }
+
+    /// Every stream start: retire the slots whose pad left or changed while the link was down,
+    /// then replay each arrival and re-push held state, which the arrival's fallback event zeroed.
+    /// Removals go first so the first arrival's flush carries them ahead of any new pad.
+    func announceControllers() {
+        var current: [UInt8: ControllerArrival] = [:]
+        for state in attachedControllers.values { current[state.slot] = state.arrival }
+        for state in attachedHIDControllers.values { current[state.slot] = state.arrival }
+        for slot in Self.staleControllerSlots(announced: announcedControllers, current: current) {
+            sendControllerRemoval(slot: slot)
+        }
+        for state in attachedControllers.values { sendArrival(slot: state.slot, state.arrival) }
+        for state in attachedHIDControllers.values {
+            sendArrival(slot: state.slot, state.arrival)
+            pushHID(state.device)
+        }
+        resyncControllers()
+    }
+
+    /// Announced slots whose pad is gone or no longer matches. Sunshine keeps a paired
+    /// client's pads across a reconnect and ignores an arrival for a slot it holds.
+    static func staleControllerSlots(announced: [UInt8: ControllerArrival],
+                                     current: [UInt8: ControllerArrival]) -> [UInt8] {
+        announced.filter { current[$0.key] != $0.value }.keys.sorted()
     }
 
     // MARK: - GCController -> moonlight type/flag derivation

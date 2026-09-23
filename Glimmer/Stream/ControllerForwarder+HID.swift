@@ -4,7 +4,7 @@ extension InputForwarder {
     struct AttachedHIDController {
         let slot: UInt8
         let device: HIDGamepadDevice
-        let capabilities: UInt16
+        let arrival: ControllerArrival
     }
 
     func setupHIDGamepads() {
@@ -27,19 +27,11 @@ extension InputForwarder {
         if pad.mapping.hasAnalogTriggers { caps |= UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS) }
         if pad.rumble.available { caps |= UInt16(StreamProtocol.LI_CCAP_RUMBLE) }
         // Generic HID has no standard player LEDs, motion or touchpad surface; those remain GameController-only.
-        let state = AttachedHIDController(slot: slot, device: pad, capabilities: caps)
-        attachedHIDControllers[pad.id] = state
+        let arrival = ControllerArrival(type: pad.mapping.controllerType,
+                                        supportedButtons: pad.mapping.supportedButtons, caps: caps)
+        attachedHIDControllers[pad.id] = AttachedHIDController(slot: slot, device: pad, arrival: arrival)
         HIDGamepadManager.shared.register(slot: slot, pad: pad)
-        if isReady { sendHIDArrival(state); pushHID(pad) }
-    }
-
-    func sendHIDArrival(_ state: AttachedHIDController) {
-        let mapping = state.device.mapping
-        let result = backend?.sendControllerArrival(num: state.slot, mask: gamepadMask, type: mapping.controllerType,
-                                                     supportedButtons: mapping.supportedButtons,
-                                                     caps: state.capabilities) ?? -2
-        record("LiSendControllerArrivalEvent(HID)", result)
-        ControllerBattery.shared.announce(slot: state.slot, backend: backend)
+        if isReady { sendArrival(slot: slot, arrival); pushHID(pad) }
     }
 
     func pushHID(_ pad: HIDGamepadDevice) {
@@ -66,13 +58,7 @@ extension InputForwarder {
         ControllerBattery.shared.unregister(slot: attached.slot)
         pad.rumble.close()
         if quitChordDwellSlot == attached.slot { cancelQuitChordDwell(reason: "HID pad detached") }
-        if isReady && sendFinal {
-            let result = backend?.sendMultiController(
-                num: Int16(attached.slot), mask: Int16(bitPattern: gamepadMask), buttons: 0,
-                analog: GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
-                                      rightStickX: 0, rightStickY: 0)) ?? -2
-            record("LiSendMultiControllerEvent(HID detach)", result)
-        }
+        if isReady && sendFinal { sendControllerRemoval(slot: attached.slot) }
     }
 
     func releaseHIDControllers() {

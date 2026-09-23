@@ -302,6 +302,10 @@ public final class InputForwarder {
     /// Sent to the host as `activeGamepadMask` on every controller event.
     var gamepadMask: UInt16 = 0
 
+    /// Each slot's last arrival as the PC saw it. It outlives a reconnect, as
+    /// Sunshine's virtual pads do, so the next stream start can retire stale ones.
+    var announcedControllers: [UInt8: ControllerArrival] = [:]
+
     /// Per-slot DualSense/DualShock touchpad finger tracking, so the touchpad
     /// surface can be forwarded as host touch events (down/move/up). Keyed by
     /// controller slot. The physical touchpad *click* rides the normal button
