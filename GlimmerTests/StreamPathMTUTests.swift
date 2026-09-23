@@ -1,16 +1,8 @@
 //
 //  StreamPathMTUTests.swift
 //
-//  Coverage for the connect-time path clamp that decides the video packet size
-//  we ADVERTISE to the host. The regression under test: `StreamConfig.remoteness`
-//  defaults to `.auto` (STREAM_CFG_AUTO = 2), so SdpBuilder's `== 1` remote check
-//  never fired and every session - including one routed over a 1280-MTU
-//  Tailscale/WireGuard tunnel - advertised the 1392-byte LAN packet size, which
-//  IP-fragments on that path and multiplies pre-FEC loss.
-//
-//  The syscall probe itself (connect/getsockname/getifaddrs) runs only against
-//  loopback here; real routes depend on the machine. The DECISION functions it
-//  feeds are pure, and those are what this file pins.
+//  Pins the connect-time path decisions (packet-size clamp, bitrate gates, the
+//  reconnect ask). The syscall probe runs only against loopback here.
 //
 
 import Foundation
@@ -464,6 +456,17 @@ struct StreamPathMTUTests {
         await sampler.awaitPreLaunchWindow(maxWaitMs: 150)
         let waited = ContinuousClock.now - start
         #expect(waited >= .milliseconds(100) && waited < .seconds(5))
+        #expect(sampler.harvest() == nil)
+    }
+
+    /// A PC that refuses every handshake used to keep the loop sampling for the
+    /// life of the process. Out of attempts, it stops and lets launch go.
+    @Test func refusedPortStopsAfterItsAttempts() async throws {
+        let port = try #require(LoopbackPort(listening: false))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 2)
+        let start = ContinuousClock.now
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000)
+        #expect(ContinuousClock.now - start < .seconds(5))
         #expect(sampler.harvest() == nil)
     }
 

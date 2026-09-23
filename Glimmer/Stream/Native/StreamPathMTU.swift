@@ -123,28 +123,26 @@ final class RttSampler: @unchecked Sendable {
     /// Gap between handshakes. Fast enough to fill the pre-launch window on a
     /// quiet host without hammering its web port.
     private static let intervalMs: UInt32 = 30
-    /// Hard cap so a pathologically slow launch can't sample forever.
-    private static let maxSamples = 80
+    /// Handshake attempts before the loop gives up, so a slow launch or an
+    /// unreachable PC can't sample forever.
+    static let maxAttempts = 80
     /// Pre-launch samples needed before the launch-window ones are ignored.
     static let minPreLaunchSamples = 8
 
     /// Starts sampling immediately: there is no useful window between
     /// construction and the first sample. The loop holds the sampler until
-    /// `harvest()` or `maxSamples` ends it; a connect that throws first runs to the cap.
-    init(host: String, port: UInt16) {
+    /// `harvest()` or `maxAttempts` ends it, whether or not the connect succeeds.
+    init(host: String, port: UInt16, maxAttempts: Int = RttSampler.maxAttempts) {
         self.host = host
         self.port = port
-        start()
+        start(maxAttempts: maxAttempts)
     }
 
-    private func start() {
+    private func start(maxAttempts: Int) {
         queue.async { [weak self] in
             guard let self else { return }
-            while true {
-                lock.lock()
-                let done = stopped || samples.count >= Self.maxSamples
-                lock.unlock()
-                if done { return }
+            for _ in 0..<maxAttempts {
+                if lock.withLock({ stopped }) { return }
                 if let sample = StreamPathMTU.measureOneRttMs(host: host, port: port) {
                     lock.lock()
                     samples.append(sample)
@@ -154,6 +152,8 @@ final class RttSampler: @unchecked Sendable {
                 }
                 usleep(Self.intervalMs * 1000)
             }
+            lock.withLock { stopped = true }
+            releaseWindowWaiter()
         }
     }
 
