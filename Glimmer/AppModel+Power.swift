@@ -24,7 +24,8 @@ enum WakeOutcome: Equatable {
 }
 
 extension AppModel.WakeFailureReason {
-    /// Under Wake and Connect after a failed wake, in the launcher and the menu bar.
+    /// Under the menu bar's Wake and Connect after a failed wake. The launcher's
+    /// capsule has room for less (`StreamButton.wakeFailureLine`).
     var line: String {
         switch self {
         case .couldNotSend: "Couldn't send the wake signal. Check this Mac's network."
@@ -36,10 +37,20 @@ extension AppModel.WakeFailureReason {
 extension AppModel {
     private static var wakeTask: Task<Void, Never>?
     static let wakeBudgetSeconds: Double = 90
-    /// The launcher and `glimmer wake` both say this when a wake gets no answer.
+    /// Every surface adds this when a wake gets no answer.
     nonisolated static let wakeNoAnswerHint = "Wake on LAN works on your home network; over Tailscale it can't reach the PC."
 
-    /// The PC opted in and Sunshine has told us its network address.
+    /// Why a PC can't be woken yet, in the same words in the ⋯ menu,
+    /// `glimmer wake` and the Wake PC shortcut.
+    nonisolated static func wakeNoMacMessage(_ pc: String) -> String {
+        "Glimmer doesn't have the MAC address of \(pc) yet. Select it in Glimmer once while it's on."
+    }
+
+    nonisolated static func wakeOffMessage(_ pc: String) -> String {
+        "Wake on LAN is off for \(pc). Turn it on from the PC's ⋯ menu in Glimmer."
+    }
+
+    /// The PC opted in and Sunshine has told us its MAC address.
     func canWake(_ host: Host) -> Bool {
         host.wakeOnLAN && WakeOnLAN.normalizeMac(host.macAddress) != nil
     }
@@ -187,8 +198,7 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
     func postFailed(_ host: Host, reason: AppModel.WakeFailureReason) {
         let body = switch reason {
         case .couldNotSend: reason.line
-        case .noAnswer: "No answer within \(Int(AppModel.wakeBudgetSeconds)) seconds. "
-            + "Wake on LAN works on your home network, not over Tailscale."
+        case .noAnswer: "No answer within \(Int(AppModel.wakeBudgetSeconds)) seconds. \(AppModel.wakeNoAnswerHint)"
         }
         post(host, title: "\(host.displayName) didn't wake up", body: body, category: Self.failedCategory)
     }

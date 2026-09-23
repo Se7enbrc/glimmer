@@ -36,8 +36,9 @@ enum MenuBarPrimaryAction: Equatable {
     case backToStream
     case none
 
-    /// Try Again only helps when the PC looks able to stream.
-    var allowsRetry: Bool {
+    /// The Attention card offers the failure's recovery only under a plain
+    /// Stream button: Wake and Connect and Pair Again… already are one.
+    var allowsRecovery: Bool {
         if case .stream = self { return true }
         return false
     }
@@ -90,8 +91,8 @@ enum MenuBarPresentation {
         }
     }
 
-    /// The launcher's one button, in the menu bar: a sleeping PC wakes, an
-    /// untrusted one pairs again, and a reconnect is a stream you can stop.
+    /// The launcher's one button, which the menu bar shows too: a sleeping PC
+    /// wakes, an untrusted one pairs again, and a reconnect is a stream you can stop.
     static func primaryAction(phase: StreamPhase, reconnecting: Bool, host: MenuBarHost?,
                               heroApp: String) -> MenuBarPrimaryAction {
         switch phase {
@@ -113,12 +114,6 @@ enum MenuBarPresentation {
     static func controllers(gameController: [MenuBarController], rawHID: [MenuBarController]) -> [MenuBarController] {
         let owned = Set(gameController.map(\.name))
         return gameController + rawHID.filter { !owned.contains($0.name) }
-    }
-
-    /// The takeover question's first line; the running app will quit. Only
-    /// the "another app" fallback is capitalized, real names pass through.
-    static func takeoverMessage(app: String, pc: String) -> String {
-        (app == "another app" ? "Another app" : app) + " is running on \(pc)."
     }
 
     /// The mode line under the stream card's header, in the launcher's wording.

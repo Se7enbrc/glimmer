@@ -53,11 +53,11 @@ struct MenuBarPresentationTests {
         #expect(action(.connecting(stage: "Reconnecting to Tower…"), reconnecting: true) == .stopStreaming)
     }
 
-    @Test func tryAgainOnlyWhereTheLaunchWouldGoThrough() {
-        #expect(action().allowsRetry)
-        #expect(!action(chip: .asleep).allowsRetry)
-        #expect(!action(chip: .certMismatch).allowsRetry)
-        #expect(!action(.streaming).allowsRetry)
+    @Test func theAttentionCardRecoversOnlyUnderAPlainStreamButton() {
+        #expect(action().allowsRecovery)
+        #expect(!action(chip: .asleep).allowsRecovery)
+        #expect(!action(chip: .certMismatch).allowsRecovery)
+        #expect(!action(.streaming).allowsRecovery)
     }
 
     @Test func aFailedWakeSaysWhy() {
@@ -94,10 +94,6 @@ struct MenuBarPresentationTests {
     @Test func readingsAreWordedPlainly() {
         #expect(MenuBarPresentation.modeLine(width: 3024, height: 1964, fps: 120, hdr: true) == "3024 × 1964 · 120 Hz · HDR")
         #expect(MenuBarPresentation.modeLine(width: 1920, height: 1080, fps: 60, hdr: false) == "1920 × 1080 · 60 Hz")
-        #expect(MenuBarPresentation.takeoverMessage(app: "Elden Ring", pc: "Tower") == "Elden Ring is running on Tower.")
-        #expect(MenuBarPresentation.takeoverMessage(app: "another app", pc: "Tower") == "Another app is running on Tower.")
-        #expect(MenuBarPresentation.takeoverMessage(app: "iRacing", pc: "Tower") == "iRacing is running on Tower.")
-        #expect(MenuBarPresentation.takeoverMessage(app: "eFootball", pc: "Tower") == "eFootball is running on Tower.")
     }
 
     @Test func metricsUseWhatArrivesAndDashTheRest() {

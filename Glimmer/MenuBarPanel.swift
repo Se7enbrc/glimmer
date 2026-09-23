@@ -112,11 +112,11 @@ struct MenuBarPanel: View {
             Text(message)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
-            if model.menuBarPrimaryAction.allowsRetry {
-                actionRow("Try Again", systemImage: "arrow.clockwise") {
-                    model.nativeStreamError = nil
-                    model.retryLastLaunch()
-                    activate()
+            if model.menuBarPrimaryAction.allowsRecovery {
+                let action = model.streamErrorAction
+                actionRow(action.title, systemImage: action.systemImage) {
+                    model.runStreamErrorAction()
+                    if action == .pairAgain { openLauncher() } else if action == .tryAgain { activate() }
                 }
             }
             actionRow("Dismiss", systemImage: "xmark") { model.nativeStreamError = nil }

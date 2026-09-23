@@ -94,7 +94,7 @@ struct GeneralPane: View {
                         Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
                     }
                 }
-                Toggle("Mute this Mac while streaming", isOn: $model.muteMacWhileStreaming)
+                Toggle("Play sound on the PC", isOn: $model.muteMacWhileStreaming)
                 Text("The PC plays the game's sound and this Mac stays quiet. Other apps and this Mac's "
                     + "volume aren't changed. Takes effect the next time you stream.")
                     .font(.footnote)

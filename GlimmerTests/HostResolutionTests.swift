@@ -139,9 +139,9 @@ struct PairingFailureBannerTests {
 
     @Test func theBannerNamesPairAgain() {
         let verdict = NetworkClient.classifyPairedPathFailure("Host requires pairing (401)", hostName: "Den PC")
-        let kept = AppModel.connectFailureBanner(for: verdict, hostName: "Den PC")
+        let kept = AppModel.connectFailure(for: verdict, hostName: "Den PC").message
         #expect(kept.hasPrefix("Den PC no longer recognizes this Mac."))
-        let rejected = AppModel.connectFailureBanner(for: StreamError.pairingRejected, hostName: "Den PC")
+        let rejected = AppModel.connectFailure(for: StreamError.pairingRejected, hostName: "Den PC").message
         #expect(rejected.hasPrefix("Couldn't pair with Den PC.") && rejected.contains("Pair Again…"))
     }
 }

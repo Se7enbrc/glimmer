@@ -101,10 +101,10 @@ private struct HostContextMenu: ViewModifier {
         } message: {
             Text("Glimmer will forget \(host.displayName). You can pair it again at any time.")
         }
-        // Pre-filled so it lands on the PIN step; pairing re-pins the PC's certificate.
+        // Lands on the PIN step; pairing re-pins the PC's certificate. Settings'
+        // PC list has no launcher sheet to hand this to, so it carries its own.
         .sheet(isPresented: $showPairAgain) {
-            PairSheet(initialAddress: host.localAddress ?? host.manualAddress ?? "", initialName: host.displayName)
-                .environment(model)
+            PairSheet(repairing: host).environment(model)
         }
     }
 
@@ -130,15 +130,15 @@ private struct HostContextMenu: ViewModifier {
         // change on one is reflected in the other's checkmark.
         .onAppear { codecPref = HostCodecPreference.load(for: host.id) }
         // Wake on LAN needs the MAC Sunshine reports; without one the switch
-        // is off and disabled, and its title says why.
+        // is off and disabled, and its title and tooltip say why.
         let hasMac = WakeOnLAN.normalizeMac(host.macAddress) != nil
         Toggle(isOn: Binding(
             get: { host.wakeOnLAN && hasMac },
             set: { model.setWakeOnLAN(host, enabled: $0) })) {
-            Label(hasMac ? "Wake on LAN" : "Wake on LAN (PC hasn't reported its network address)",
-                  systemImage: "powersleep")
+            Label(hasMac ? "Wake on LAN" : "Wake on LAN (no MAC address yet)", systemImage: "powersleep")
         }
         .disabled(!hasMac)
+        .help(hasMac ? "" : AppModel.wakeNoMacMessage(host.displayName))
         Divider()
         Button {
             showPairAgain = true

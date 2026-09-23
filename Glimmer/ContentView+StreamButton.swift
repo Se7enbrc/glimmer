@@ -2,8 +2,8 @@
 //  ContentView+StreamButton.swift
 //
 //  The hero's morphing primary action and the accent button style it shares
-//  with the other CTAs. `.connecting` and `.waking` are really cancels: they
-//  stay enabled, carry a quiet trailing label and bind ⎋.
+//  with the other CTAs. `.connecting`, `.reconnecting` and `.waking` are ways
+//  out: they stay enabled, carry a quiet trailing label and bind ⎋.
 //
 
 import SwiftUI
@@ -62,13 +62,15 @@ struct StreamButton: View {
     }
 
     /// Choose a PC (disabled), Stream <app>, connecting (a cancel, so a stuck
-    /// connect never strands the user), Back to Stream for a hidden stream
-    /// window, then the two wake states below.
-    private enum ButtonRole {
+    /// connect never strands the user), reconnecting (Stop Streaming), Back to
+    /// Stream for a hidden stream window, Pair Again…, then the two wake states.
+    enum ButtonRole: Equatable {
         case noPC
         case connect
         case connecting
+        case reconnecting
         case liveBackgrounded
+        case pairAgain
         /// PC asleep with Wake on LAN on: the hero CTA becomes the one obvious
         /// action (Wake and Connect) instead of a dead Stream button.
         case wake
@@ -76,22 +78,33 @@ struct StreamButton: View {
         /// Like `.connecting` the capsule stays enabled and is the cancel.
         case waking
     }
-    private var role: ButtonRole {
-        if isConnecting { return .connecting }
-        if model.isStreaming, model.nativeStreamBackgrounded {
-            return .liveBackgrounded
+
+    /// The menu bar's primary action, so the two never disagree. Only the launcher
+    /// hides a stream window it can bring back, and a connect reads as Stream
+    /// until the 400 ms hold shows the capsule.
+    static func role(for action: MenuBarPrimaryAction, backgrounded: Bool, connectingShown: Bool) -> ButtonRole {
+        if backgrounded { return .liveBackgrounded }
+        switch action {
+        case .none: return .noPC
+        case .stream, .backToStream: return .connect
+        case .cancelConnection: return connectingShown ? .connecting : .connect
+        case .stopStreaming: return connectingShown ? .reconnecting : .connect
+        case .pairAgain: return .pairAgain
+        case .wake: return .wake
+        case .waking: return .waking
         }
-        guard let host = model.selectedHost else { return .noPC }
-        if model.isWaking(host) { return .waking }
-        if model.canWake(host), model.polledChip(for: host) == .asleep { return .wake }
-        return .connect
     }
 
-    /// The two roles whose click is a cancel, not a launch. They share the ⎋
-    /// binding (Escape-to-cancel is platform muscle memory) and must never take
-    /// the Return key, which users mash.
+    private var role: ButtonRole {
+        Self.role(for: model.menuBarPrimaryAction, backgrounded: model.isStreaming && model.nativeStreamBackgrounded,
+                  connectingShown: isConnecting)
+    }
+
+    /// The roles whose click ends something rather than launching. They share
+    /// the ⎋ binding (Escape-to-cancel is platform muscle memory) and must never
+    /// take the Return key, which users mash.
     private var isCancelRole: Bool {
-        role == .connecting || role == .waking
+        role == .connecting || role == .reconnecting || role == .waking
     }
 
     var body: some View {
@@ -100,7 +113,9 @@ struct StreamButton: View {
             case .noPC: break                                  // disabled - copy is the affordance
             case .connect: model.streamHeroApp()
             case .connecting: model.cancelConnect()        // the working exit from a stuck connect
+            case .reconnecting: model.stopStreamFromMenu(source: "the launcher")  // a live stream, so it stops
             case .liveBackgrounded: model.resumeStreamWindow()
+            case .pairAgain: model.requestPairing(for: model.selectedHost)
             case .wake:
                 if let host = model.selectedHost { model.wakeHost(host, thenConnect: true) }
             case .waking:
@@ -118,7 +133,7 @@ struct StreamButton: View {
                     Text("Choose a PC")
                         .font(.system(size: 17, weight: .semibold))
                         .contentTransition(.opacity)
-                case .connecting:
+                case .connecting, .reconnecting:
                     // Steady primary line; engine-stage churn flows through
                     // the subtext - calmer than swapping the whole label.
                     ProgressView()
@@ -136,7 +151,7 @@ struct StreamButton: View {
                         }
                     }
                     // The whole capsule is the cancel button - say so, quietly.
-                    Text("Cancel")
+                    Text(role == .reconnecting ? "Stop Streaming" : "Cancel")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 4)
@@ -144,6 +159,12 @@ struct StreamButton: View {
                     Image(systemName: "play.tv.fill")
                         .font(.system(size: 16, weight: .semibold))
                     Text("Back to Stream")
+                        .font(.system(size: 17, weight: .semibold))
+                        .contentTransition(.opacity)
+                case .pairAgain:
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Pair Again…")
                         .font(.system(size: 17, weight: .semibold))
                         .contentTransition(.opacity)
                 case .wake:
@@ -200,7 +221,7 @@ struct StreamButton: View {
         // platform muscle memory, and Return must NOT cancel (users mash it).
         .keyboardShortcut(isCancelRole ? .cancelAction : .defaultAction)
         .controlSize(.large)
-        // .connecting and .waking stay ENABLED - they're the cancel affordances.
+        // The cancel roles stay ENABLED - they're the way out.
         .disabled(
             role == .noPC ||
             (role == .connect && model.isStreaming)
@@ -235,7 +256,9 @@ struct StreamButton: View {
         case .noPC: ("Pair a PC first to start streaming", "Pair a PC first to start streaming")
         case .connect: ("Right-click to choose an app", "Right-click to choose an app")
         case .connecting: ("Cancel the connection attempt", "Cancels the connection attempt")
+        case .reconnecting: ("End the stream", "Ends the stream")
         case .liveBackgrounded: ("Show the stream window", "Shows the stream window")
+        case .pairAgain: ("Pair again to trust this PC's new certificate", "Pairs again to trust this PC's new certificate")
         case .wake where wakeFailure == .noAnswer: (Self.wakeLimits, Self.wakeLimits)
         case .wake:
             ("Wake this PC, then connect. Right-click to choose an app.",

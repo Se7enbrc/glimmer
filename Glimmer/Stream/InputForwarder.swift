@@ -29,19 +29,9 @@
 //     at their physical keyboard). This is the same convention moonlight-qt
 //     uses in its Mac build.
 //
-//   * NKRO: every physical key-down or key-up emits one and only one
-//     `LiSendKeyboardEvent2` - there is NO "single key in flight" state, no
-//     per-event modifier reset, no "release before press" coalescing. macOS
-//     delivers each physical-key transition as its own NSEvent (AppKit does
-//     not collapse simultaneous presses), and the responder chain hands each
-//     to `keyDown(with:)`/`keyUp(with:)` independently. With four fingers on
-//     four keys we send four down events; lifting any one sends exactly one
-//     up event for that key. `raiseAllHeldInputs()` (keys + buttons +
-//     modifiers) fires only on focus loss, a paste, `detach()` and a reconnect,
-//     whose new session starts with nothing held on the PC.
-//     `heldModifierVKs` (one entry per modifier SIDE) is diffed in
-//     `flagsChanged`, and before the first key-down after a raise-all, so
-//     releasing one of two held Shifts releases exactly that one on the host.
+//   * NKRO: each physical key transition sends exactly one event, with no coalescing; `raiseAllHeldInputs()`
+//     runs only on focus loss, a paste, `detach()` and a reconnect. `heldModifierVKs` (one entry per side) is
+//     diffed in `flagsChanged`, so releasing one of two held Shifts releases exactly that one on the PC.
 //
 //   * Mouse motion is *relative* via the SDL associate-false model
 //     (P0 mouse-snap fix). When relative aim is engaged we call

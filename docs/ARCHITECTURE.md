@@ -72,6 +72,14 @@ launch over distributed notifications (`CommandChannel`,
 a symlink, the binary re-execs through its real path so `Bundle.main` and the
 defaults domain resolve.
 
+**Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares three App
+Intents: Stream from PC, Wake PC and Quit App on PC, with the paired PCs as a
+`PCEntity` query. They run inside the app, once `AppModel.forIntent()` has
+loaded the PCs, and call the launcher's own entry points (`requestStream`,
+`sendWakeAndWait`, `quitRunningApp`), so they share its rules and its wording.
+`GlimmerShortcuts` refreshes the PC names Siri knows whenever one is paired,
+renamed or removed.
+
 ## The `StreamingBackend` boundary
 
 `Glimmer/Stream/StreamingBackend.swift` is **the** streaming-engine abstraction:

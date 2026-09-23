@@ -92,16 +92,25 @@ struct GlimmerCLITests {
             == "Tower wouldn't quit the app.")
     }
 
+    /// `glimmer list` prints the readiness chip's words, with room for a long name.
     @Test func statusReadsLikeTheReadinessChip() {
         let now = Date()
-        let ready = HostLiveStatus(hostID: "a", state: .idle, rttMs: 3, sunshineVersion: nil, capturedAt: now)
-        let busy = HostLiveStatus(hostID: "a", state: .streamingApp(name: "Desktop"), rttMs: nil,
-                                  sunshineVersion: nil, capturedAt: now)
-        let asleep = HostLiveStatus(hostID: "a", state: .asleep, rttMs: 9, sunshineVersion: nil, capturedAt: now)
-        #expect(GlimmerCLI.statusText(ready) == "Ready · 3 ms")
-        #expect(GlimmerCLI.statusText(busy) == "Busy: Desktop")
-        #expect(GlimmerCLI.statusText(asleep) == "Asleep")
-        #expect(GlimmerCLI.statusText(nil) == "Unavailable")
+        func status(_ state: HostLiveStatus.State, rtt: Int? = nil) -> String {
+            ChipPresentation(live: HostLiveStatus(hostID: "a", state: state, rttMs: rtt, sunshineVersion: nil,
+                                                  capturedAt: now), now: now).fullLabel
+        }
+        #expect(status(.idle, rtt: 3) == "Ready · 3 ms")
+        #expect(status(.streamingApp(name: "A Very Long Game Title Indeed")) == "A Very Long Game Title Indeed running")
+        #expect(status(.streamingUnknownApp(id: 9)) == "App running")
+        #expect(status(.asleep, rtt: 9) == "Asleep")
+        #expect(status(.certMismatch) == "Trust needed")
+        #expect(ChipPresentation(live: nil).fullLabel == "Checking…")
+    }
+
+    /// The pair sheet's address cleanup applies before anything is printed or dialled.
+    @MainActor @Test func pairRefusesAnAddressThatIsNotOne() async throws {
+        let command = try GlimmerCLI.parse(["pair", "my gaming pc"])
+        #expect(await GlimmerCLI.pair(command, model: AppModel()) == GlimmerCLI.Exit.usage)
     }
 
     @Test func aFailedPairSaysToRunItAgainNotToClickTryAgain() {

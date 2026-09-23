@@ -18,26 +18,13 @@ extension GlimmerCLI {
             printError("No paired PCs. Pair one with: glimmer pair <address>")
             return Exit.ok
         }
-        // One PC at a time: a handful of 2-second probes at most.
+        // One PC at a time: a handful of 2-second probes at most. The status
+        // is the launcher chip's own words, untruncated.
         for host in model.hosts {
             let live = await probe(host, model: model)
-            print("\(host.displayName)\t\(AppModel.routeAddress(host))\t\(statusText(live))")
+            print("\(host.displayName)\t\(AppModel.routeAddress(host))\t\(ChipPresentation(live: live).fullLabel)")
         }
         return Exit.ok
-    }
-
-    /// The PC's polled state in a word or two, with the round trip when there is one.
-    nonisolated static func statusText(_ live: HostLiveStatus?) -> String {
-        let word = switch live?.state {
-        case .idle: "Ready"
-        case .streamingApp(let name): "Busy: \(name)"
-        case .streamingUnknownApp: "Busy"
-        case .asleep: "Asleep"
-        case .certMismatch: "Needs pairing again"
-        case .unknown, nil: "Unavailable"
-        }
-        guard let rtt = live?.rttMs, live?.state != .asleep else { return word }
-        return "\(word) · \(rtt) ms"
     }
 
     /// /serverinfo first, so a pairing or trust failure is named as one;

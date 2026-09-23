@@ -20,7 +20,7 @@ extension GlimmerCLI {
         switch live?.state {
         case .asleep, nil:
             let hint = model.canWake(host) ? " To wake it: glimmer wake \"\(host.displayName)\" --wait" : ""
-            printError(unreachableMessage(host.displayName) + hint)
+            printError(AppModel.unreachableMessage(host.displayName) + hint)
             return Exit.unreachable
         case .certMismatch:
             printError(notPairedMessage(host))
@@ -60,7 +60,8 @@ extension GlimmerCLI {
 
     /// The launcher's takeover question, asked in the terminal. Scripts
     /// can't answer it, so without a terminal they need --force.
-    private static func confirmTakeover(pc: String, occupant: String, app: String) -> Bool {
+    private static func confirmTakeover(pc: String, occupant: String?, app: String) -> Bool {
+        let occupant = occupant ?? "another app"
         guard isatty(STDIN_FILENO) == 1 else {
             printError("\(pc) is running \(occupant). Run again with --force to quit it and start \(app).")
             return false

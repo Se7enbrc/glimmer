@@ -200,19 +200,26 @@ extension AppModel {
         cfg.coversNotch = effectiveStreamCoversNotch
         cfg.displayMode = effectiveDisplayMode
         cfg.videoFormats = offeredVideoFormats(for: host)
-        // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
-        // scaled by the negotiated codec's efficiency. The spec chip reads the same
-        // path so what's shown matches what's sent.
-        let routeAsk = routeAskKbps(forFormats: cfg.videoFormats)
-        cfg.bitrateKbps = StreamPathMTU.wifiAskKbps(ask: routeAsk, phyRateMbps: hostRoute.wifiPhyRateMbps)
-        if cfg.bitrateKbps < routeAsk, let phy = hostRoute.wifiPhyRateMbps {
+        let ask = routeAsk(for: host)
+        cfg.bitrateKbps = ask.kbps
+        cfg.bitrateBoost = ask.boost
+        cfg.bitrateDecision = bitrateDecision(forFormats: cfg.videoFormats)
+        let ungated = routeAskKbps(forFormats: cfg.videoFormats)
+        if ask.kbps < ungated, let phy = hostRoute.wifiPhyRateMbps {
             Diag.notice("Wi-Fi link gate: the radio's PHY rate is \(Int(phy)) Mbps, asking for "
-                + "\(cfg.bitrateKbps / 1000) Mbps instead of \(routeAsk / 1000).", "Stream")
+                + "\(ask.kbps / 1000) Mbps instead of \(ungated / 1000).", "Stream")
         }
-        let decision = bitrateDecision(forFormats: cfg.videoFormats)
-        cfg.bitrateDecision = decision
-        cfg.bitrateBoost = Self.rttWithdrawableBoost(decision, route: hostRoute.routeClass)
         return cfg
+    }
+
+    /// The codec-aware wire ask for the route the Mac is on now, radio gate
+    /// included, with the boost the connect-time RTT may withdraw. A start takes
+    /// it through `nativeStreamConfig`, and every reconnect asks again.
+    func routeAsk(for host: Host) -> RouteAsk {
+        let formats = offeredVideoFormats(for: host)
+        let decision = bitrateDecision(forFormats: formats)
+        return RouteAsk(kbps: wireBitrateKbps(forFormats: formats),
+                        boost: Self.rttWithdrawableBoost(decision, route: hostRoute.routeClass))
     }
 
     /// Title for the Window-mode stream window: the PC's name, then the app

@@ -34,10 +34,12 @@ extension AppModel {
         stream(app: app, on: host)
     }
 
-    static func occupant(of state: HostLiveStatus.State) -> String? {
+    /// The app a launch would quit: nil when the PC is free, and `.some(nil)`
+    /// when it runs an app it didn't name.
+    static func occupant(of state: HostLiveStatus.State) -> String?? {
         switch state {
         case .streamingApp(let name): name
-        case .streamingUnknownApp: "another app"
+        case .streamingUnknownApp: .some(nil)
         default: nil
         }
     }
@@ -147,6 +149,7 @@ extension AppModel {
             // The Swift-native engine is the only path.
             let session = StreamSession(backend: NativeBackend())
             await MainActor.run { self.nativeSession = session }
+            await session.setRouteAskProvider { [weak self] in self?.routeAsk(for: host) }
             await session.authorizeTakeover(takeoverAuthorized)
             var caughtError: Error?
             var takeover: TakeoverRequired?
@@ -191,12 +194,8 @@ extension AppModel {
                     customControllerChordProvider: { [weak self] in
                         self?.customControllerChord ?? []
                     },
-                    onBackgroundedChanged: { [weak self] backgrounded in
-                        self?.nativeStreamBackgrounded = backgrounded
-                    },
-                    onMiniPlayerChanged: { [weak self] mini in
-                        self?.isMiniPlayer = mini
-                    },
+                    onBackgroundedChanged: { [weak self] in self?.nativeStreamBackgrounded = $0 },
+                    onMiniPlayerChanged: { [weak self] in self?.isMiniPlayer = $0 },
                     onCancelConnect: { [weak self] in self?.cancelConnect() }
                 )
                 for await event in events {
@@ -217,7 +216,7 @@ extension AppModel {
             if takeover != nil { self.isStreaming = false }
             self.cleanupAfterStream(host: host, caughtError: caughtError)
             if let takeover {
-                let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name ?? "another app"
+                let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name
                 self.pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
                 self.presentTakeoverAlertIfNeeded()
             }
@@ -238,31 +237,14 @@ extension AppModel {
             self.nativeStreamError = nil
         } else if let caughtError {
             let hostName = host.displayName
-            // One human sentence - never splice the raw NSError tail
-            // ("The request timed out", domain codes, ...) into the
-            // banner. The technical detail goes to the log; the user
-            // gets an actionable line. StreamError already carries
-            // user-facing copy and is handled on its own path.
+            // The raw NSError tail goes to the log and to Diag (the in-app viewer
+            // and pasted logs never see os.Logger); the banner gets one sentence.
             let localized = (caughtError as NSError).localizedDescription
             self.log.error("Stream start failed for \(hostName, privacy: .public): \(localized, privacy: .public)")
-            // Diag too - the os.Logger line above never reaches the in-app
-            // log viewer or the Diag file, which made pre-flight failures
-            // (the only line naming the real cause) invisible in every
-            // pasted log. One line, ERROR level, same redaction rules.
             Diag.error("Stream start failed for \(hostName): \(localized)", "Stream")
-            // HONEST banner: only show the "make sure it's awake" copy
-            // for a GENUINE reach failure (host off / not on the
-            // network). A pairing or launch failure means the host
-            // demonstrably answered - telling the user it's "asleep"
-            // there is a false negative that sends them chasing the
-            // wrong problem. Reserve the asleep guidance for the
-            // unreachable / never-established cases; surface the real
-            // cause otherwise. (This is the start()-throw path only:
-            // start() throwing means the connection never reached
-            // established and no frames ever decoded, so the
-            // reach-failure copy is correct there.)
-            self.nativeStreamError =
-                Self.connectFailureBanner(for: caughtError, hostName: hostName)
+            let failure = Self.connectFailure(for: caughtError, hostName: hostName)
+            self.nativeStreamError = failure.message
+            self.nativeStreamErrorKind = failure.kind
         }
         // M3: do NOT unconditionally clear nativeStreamError here. A host-side
         // "ended unexpectedly" terminate (code != 0) already set the banner on
@@ -345,58 +327,44 @@ extension AppModel {
         afterStreamEnd()
     }
 
-    /// Map a start()-throw error to an honest user-facing banner. The
-    /// "asleep / make sure it's awake" copy is reserved for a GENUINE reach
-    /// failure (host off / not on the network / handshake never completed) -
-    /// it must never be shown for a pairing or launch failure, where the host
-    /// demonstrably answered. Static so it has no actor state and is trivially
-    /// unit-testable.
-    static func connectFailureBanner(for error: Error, hostName: String) -> String {
-        guard let streamError = error as? StreamError else {
-            // Any non-StreamError on the start path is unexpected - the control
-            // layer always throws StreamError - so treat it as a reach failure,
-            // by far the most likely cause.
-            return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
-        }
+    /// Every surface's words for a PC that never answered: the launcher, the
+    /// pair sheet, `glimmer` and the Shortcuts actions.
+    nonisolated static func unreachableMessage(_ pcName: String) -> String {
+        "Couldn't reach \(pcName). Make sure it's awake and on the same network."
+    }
+
+    /// A start()-throw as the banner's sentence and the recovery it calls for.
+    /// The "make sure it's awake" copy is only for a genuine reach failure, never
+    /// for a PC that answered and refused (pairing, launch).
+    static func connectFailure(for error: Error, hostName: String) -> (message: String, kind: StreamErrorKind) {
+        let unreachable = (message: unreachableMessage(hostName), kind: StreamErrorKind.unreachable)
+        // The control layer always throws StreamError; anything else is most likely a reach failure.
+        guard let streamError = error as? StreamError else { return unreachable }
         switch streamError {
-        case .hostUnreachable(let detail):
-            // The network layer crafts user-facing guidance for the cases it
-            // can prove (cert mismatch / not-paired disambiguation) - dropping
-            // that for generic "is it awake" copy buries the real fix.
-            // "Restart Sunshine" marks the wedged-HTTPS-listener verdict
-            // (NetworkClient.classifyPairedPathFailure): the box is awake, so
-            // the "is it awake" copy would send the user to the wrong fix.
-            if detail.contains("cert") || detail.contains("Restart Sunshine") {
-                return detail
-            }
-            return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
+        case .hostUnreachable(let detail) where detail.contains("cert"):
+            // The network layer's own sentence for a changed PC certificate.
+            return (detail, .pairing)
+        case .hostUnreachable(let detail) where detail.contains("Restart Sunshine"):
+            // A wedged HTTPS listener (classifyPairedPathFailure): the PC is awake.
+            return (detail, .other)
         case .sessionFailed(RtspError.encryptedVideoRequiredCode):
             // The PC answered and refused us: its settings require encrypted video.
-            return RtspError.encryptedVideoRequired.description
-        case .sessionFailed, .binaryNotFound, .truncatedRead:
-            // Genuinely never reached the host / handshake aborted before
-            // establishment (a truncated control read = the host dropped mid-
-            // response) → asleep guidance is honest.
-            return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
+            return (RtspError.encryptedVideoRequired.description, .other)
+        case .hostUnreachable, .sessionFailed, .binaryNotFound, .truncatedRead:
+            return unreachable
         case .pairingFailed(let detail) where detail.contains("Pair Again…"):
-            // The paired-path classification (NetworkClient.
-            // classifyPairedPathFailure) - already the actionable, host-named
-            // sentence (401 or a TLS-level rejection of our client cert).
-            return detail
+            // classifyPairedPathFailure's host-named sentence (a 401 or a TLS rejection).
+            return (detail, .pairing)
         case .pairingFailed, .pairingRejected:
-            // The host answered but pairing failed - point the user at the
-            // real fix, not at the power switch.
-            return "Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu."
+            return ("Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu.", .pairing)
         case .launchFailed:
-            return "\(hostName) answered but couldn't start the app. It may already be in use."
+            return ("\(hostName) answered but couldn't start the app. It may already be in use.", .other)
         case .decoderFailed:
-            return "Couldn't start the video decoder for \(hostName)."
+            return ("Couldn't start the video decoder for \(hostName).", .other)
         case .audioFailed:
-            // Audio is non-fatal to the visual stream, but if start() threw on
-            // it the session never came up - keep the message about the host.
-            return "Couldn't start audio for \(hostName)."
+            return ("Couldn't start audio for \(hostName).", .other)
         case .crypto:
-            return "A security error stopped the connection to \(hostName)."
+            return ("A security error stopped the connection to \(hostName).", .other)
         }
     }
 
@@ -432,6 +400,7 @@ extension AppModel {
         case .stageComplete:              break
         case .stageFailed:
             nativeStreamError = "Couldn't reach \(host.displayName)."
+            nativeStreamErrorKind = .unreachable
         case .connectionEstablished:
             streamPhase = .streaming
             isReconnecting = false
@@ -447,6 +416,7 @@ extension AppModel {
             nativeHDRActive = false
             if code != 0 {
                 nativeStreamError = Self.streamEndedMessage(code: code, hostName: host.displayName)
+                nativeStreamErrorKind = .other
             }
         case .reconnecting:
             // The host closed a live session (it likely restarted across a

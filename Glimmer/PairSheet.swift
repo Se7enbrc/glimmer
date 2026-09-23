@@ -30,13 +30,17 @@ struct PairSheet: View {
     @State private var pairingTask: Task<Void, Never>?
     private var paired: Bool { pairedHost != nil }
 
-    /// Optional pre-fill, used by the "re-pair" recovery path so the user
-    /// doesn't retype the host's address or lose its name - that path jumps
-    /// straight to the PIN step. "Pair a new PC" starts on the chooser.
-    init(initialAddress: String = "", initialName: String? = nil) {
-        _hostnameOrIP = State(initialValue: initialAddress)
-        _pcName = State(initialValue: initialName)
-        _chosen = State(initialValue: !initialAddress.isEmpty)
+    /// Pair Again… for this PC until Back returns to the chooser; nil pairs a new one.
+    @State private var rePairName: String?
+
+    /// A typed address or a PC to pair again jumps straight to the PIN step,
+    /// dialling what a stream dials; with neither the sheet starts on the chooser.
+    init(initialAddress: String = "", repairing host: Host? = nil) {
+        let address = host.map(AppModel.routeAddress) ?? initialAddress
+        _hostnameOrIP = State(initialValue: address)
+        _pcName = State(initialValue: host?.displayName)
+        _chosen = State(initialValue: !address.isEmpty)
+        _rePairName = State(initialValue: host?.displayName)
     }
 
     /// The host we're pairing with, whitespace-trimmed. Empty means the user
@@ -55,7 +59,7 @@ struct PairSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Text(titleText)
+            Text(Self.title(paired: paired, chosen: chosen, rePairName: rePairName))
                 .font(.title2.bold())
                 .contentTransition(.opacity)
 
@@ -81,9 +85,10 @@ struct PairSheet: View {
         .onDisappear { cancelPairing() }
     }
 
-    private var titleText: String {
+    static func title(paired: Bool, chosen: Bool, rePairName: String?) -> String {
         if paired { return "Paired" }
-        return chosen ? "Pair a new PC" : "Choose a PC"
+        guard chosen else { return "Choose a PC" }
+        return rePairName.map { "Pair \($0) again" } ?? "Pair a new PC"
     }
 
     @ViewBuilder private var successBody: some View {
@@ -183,6 +188,7 @@ struct PairSheet: View {
                 Button("Back") {
                     cancelPairing()
                     chosen = false
+                    rePairName = nil
                     pin = ""
                 }
                 Button("Cancel") { cancelPairing(); dismiss() }

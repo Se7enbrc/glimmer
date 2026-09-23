@@ -155,7 +155,7 @@ extension NetworkClient {
         if let gfeVer = xml.string(forChild: "GfeVersion") {
             server.gfeVersion = gfeVer
         }
-        // Host primary-NIC MAC (WoL / Luna power gate). Falls through when
+        // Host primary-NIC MAC (Wake on LAN). Falls through when
         // omitted; a zeroed value is stored as-is and rejected downstream.
         if let mac = xml.string(forChild: "mac"), !mac.isEmpty {
             server.macAddress = mac

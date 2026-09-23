@@ -207,16 +207,12 @@ enum GlimmerCLI {
             return detail
         }
         switch exitCode(for: error) {
-        case Exit.unreachable: return unreachableMessage(name)
+        case Exit.unreachable: return AppModel.unreachableMessage(name)
         case Exit.notPaired: return notPairedMessage(host)
         default:
             if case .launchFailed(let detail) = error as? StreamError { return detail }
             return (error as? StreamError)?.description ?? error.localizedDescription
         }
-    }
-
-    nonisolated static func unreachableMessage(_ name: String) -> String {
-        "Couldn't reach \(name). Make sure it's awake and on the same network."
     }
 
     nonisolated static func notPairedMessage(_ host: Host) -> String {

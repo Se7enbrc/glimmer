@@ -36,7 +36,8 @@ process. No external player, no C engine.
 - **Hosts.** mDNS discovery, PIN pairing, hosts by IP or name (Tailscale works),
   one-time import of moonlight-qt pairings.
 - **Mac things.** Menu bar item, display-matched quality presets, stats overlay,
-  hotkeys, notarized, self-updating.
+  hotkeys, notarized, self-updating. Shortcuts, Siri and Spotlight actions
+  stream from a PC, wake it, or quit the app it's running.
 
 No accounts, no analytics. Glimmer talks to your own PC and, if you leave
 updates on, to the update feed; nothing else. Diagnostics are off by default and

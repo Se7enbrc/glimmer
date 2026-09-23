@@ -35,7 +35,7 @@ enum PairingFailure: Error, Equatable {
     func message(pc: String) -> String {
         switch self {
         case .invalidAddress: return Self.addressHint
-        case .unreachable: return "Couldn't reach \(pc). Make sure it's awake and on the same network."
+        case .unreachable: return AppModel.unreachableMessage(pc)
         case .timedOut: return "The code wasn't entered on \(pc) in time. Choose Try Again to get a new code."
         case .rejected: return "\(pc) didn't accept the pairing. Choose Try Again to get a new code."
         }

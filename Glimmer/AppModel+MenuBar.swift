@@ -65,9 +65,10 @@ extension AppModel {
         Task { await session.setStatsOverlay(next) }
     }
 
-    /// Opens the launcher's pair sheet; a PC's address skips to the PIN step.
+    /// Opens the launcher's pair sheet: Pair Again… for `host`, or Pair a PC… for nil.
     func requestPairing(for host: Host?) {
-        pairSheetAddress = host.map { $0.localAddress ?? $0.manualAddress ?? "" } ?? ""
+        pairSheetHost = host
+        pairSheetShown = true
     }
 
     /// Refresh Connection Details about once a second while the menu is open.
@@ -122,8 +123,8 @@ extension AppModel {
     func presentTakeoverAlertIfNeeded() {
         guard let pending = pendingTakeover, !mainWindowVisible else { return }
         let alert = NSAlert()
-        alert.messageText = MenuBarPresentation.takeoverMessage(app: pending.occupantApp, pc: pending.host.displayName)
-        alert.informativeText = "It will quit and your stream will start."
+        alert.messageText = TakeoverDialogCopy.title(occupantApp: pending.occupantApp, hostName: pending.host.displayName)
+        alert.informativeText = TakeoverDialogCopy.message
         alert.addButton(withTitle: "Quit and Stream").hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
         NSApp.activate()

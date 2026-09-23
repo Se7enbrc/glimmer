@@ -53,27 +53,9 @@ extension InputForwarder {
     //     resign-key / teardown so Cmd-Tab and stream-end always restore a
     //     normal, OS-controlled pointer.
     //
-    // Gesture suppression (unchanged, still needed under associate-false):
-    //   * Trackpad gesture family (pinch/.magnify, smart-zoom/.smartMagnify,
-    //     three-finger-swipe/.swipe, .rotate): the NSEvent local monitor below
-    //     consumes them for our key stream window. Sufficient on its own -
-    //     these dispatch through AppKit, so returning nil stops the default
-    //     zoom/swipe handlers.
-    //   * Accessibility Zoom's ⌥⌘8/=/- are global hotkeys the app never sees,
-    //     except while ⌘ shortcuts go to the game (global hotkeys off, see
-    //     GlobalHotKeys below); then they go to the PC like any other ⌘ chord.
-    //   * Hot corners (Mission Control etc.): under associate-false the OS does
-    //     not move the cursor, so it can never reach a corner - the warp's old
-    //     job is gone entirely (warpCursorIfNearEdge deleted).
-    //   * Ctrl+scroll Accessibility Zoom: this is interlocked at the
-    //     WindowServer/SkyLight layer BELOW NSEvent dispatch, so neither the
-    //     monitor above nor any key handler can cancel it. With the cursor
-    //     associate-false the scroll still reaches us as a relative event; the
-    //     documented non-freezing replacement remains the kCGAnnotatedSession-
-    //     EventTap escalation scoped in the diagnostic-tap comment below (a
-    //     session-scoped CGEventTap consuming control+scrollWheel for our PID,
-    //     needs Accessibility permission). Not installed yet - gated behind the
-    //     diagnostic.
+    // Gesture suppression: the local monitor below eats pinch, smart zoom, swipe and rotate; the cursor can't reach a
+    // hot corner under associate-false; Zoom's ⌥⌘8/=/- reach the PC only while ⌘ shortcuts go to the game. Ctrl+scroll
+    // Zoom is interlocked below NSEvent and needs the session event tap the diagnostic-tap comment scopes (not installed).
 
     func installFocusObservers(for window: NSWindow) {
         // Tear down any prior observers so re-entry is safe.

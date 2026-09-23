@@ -431,10 +431,9 @@ public struct ServerInfo: Sendable {
     public var serverCodecModeRaw: Int = 0
     public var isBusy = false
     public var currentGameID: Int = 0           // 0 = host is idle; otherwise the app ID that's streaming
-    /// Host's primary-NIC MAC from /serverinfo's `<mac>` (stock Moonlight uses
-    /// the same field for WoL). Only learnable while the host is ONLINE; some
-    /// Sunshine NIC configs report a zeroed MAC - consumers must treat
-    /// `00:00:00:00:00:00` as absent (the Luna power gate fails closed on it).
+    /// Host's primary-NIC MAC from /serverinfo's `<mac>`, as stock Moonlight uses for WoL.
+    /// Only learnable while the host is ONLINE; some Sunshine NIC configs report a zeroed
+    /// MAC, which `WakeOnLAN.normalizeMac` treats as absent (Wake on LAN fails closed on it).
     public var macAddress: String?
 
     public init(address: String, uniqueId: String, serverName: String) {

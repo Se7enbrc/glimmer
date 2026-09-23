@@ -126,16 +126,14 @@ struct QuitAppOnPCIntent: AppIntent {
         let model = try await AppModel.forIntent()
         let host = try model.pairedHost(pc)
         Diag.notice("Quit App on PC from Shortcuts: \(host.displayName)", "Stream")
-        if model.isStreaming, model.lastLaunchAttempt?.host.id == host.id,
-           await model.stopOwnStream(source: "Shortcuts") {
+        if model.streamingHostID == host.id, await model.stopOwnStream(source: "Shortcuts") {
             return .result()
         }
         do {
             try await model.quitRunningApp(on: host)
-        } catch StreamError.launchFailed(let why), StreamError.pairingFailed(let why) {
-            throw PCIntentError.failed(why)
         } catch {
-            throw PCIntentError.unreachable(host.displayName)
+            // The launcher's words: a changed certificate says Pair Again…, not "couldn't reach".
+            throw PCIntentError.failed(AppModel.quitFailureMessage(for: error, hostName: host.displayName))
         }
         return .result()
     }
@@ -166,7 +164,7 @@ struct GlimmerShortcuts: AppShortcutsProvider {
 enum PCIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
     case notReady, notPaired, alreadyStreaming, notSent
     case noApp(String, pc: String)
-    case wakeOff(String), noAddress(String), noAnswer(String), unreachable(String), failed(String)
+    case wakeOff(String), noAddress(String), noAnswer(String), failed(String)
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -175,10 +173,9 @@ enum PCIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
         case .alreadyStreaming: "\(CommandChannel.alreadyStreaming)"
         case .notSent: "\(AppModel.WakeFailureReason.couldNotSend.line)"
         case let .noApp(app, pc): "\(pc) has no app named \(app)."
-        case .wakeOff(let pc): "Wake on LAN is off for \(pc). Turn it on from the PC's ⋯ menu in Glimmer."
-        case .noAddress(let pc): "Glimmer doesn't have the MAC address of \(pc) yet. Select it in Glimmer once while it's on."
+        case .wakeOff(let pc): "\(AppModel.wakeOffMessage(pc))"
+        case .noAddress(let pc): "\(AppModel.wakeNoMacMessage(pc))"
         case .noAnswer(let pc): "No answer from \(pc). \(AppModel.wakeNoAnswerHint)"
-        case .unreachable(let pc): "\(GlimmerCLI.unreachableMessage(pc))"
         case .failed(let why): "\(why)"
         }
     }

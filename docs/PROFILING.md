@@ -31,7 +31,8 @@ After opening, drag the **os_signpost** track into view and filter by subsystem
 ## Unified log
 
 The app logs under one subsystem: **`io.ugfugl.Glimmer`**. Per-file categories
-partition the output. The full list (grep `Logger(subsystem:` to verify):
+partition the output. The full list (grep `subsystem: "io.ugfugl.Glimmer"` to
+verify; some `Logger(` calls put the category on the next line):
 
 | Category               | File                                                                              |
 | ---------------------- | --------------------------------------------------------------------------------- |
@@ -41,7 +42,6 @@ partition the output. The full list (grep `Logger(subsystem:` to verify):
 | `Diag.FileSink`        | `Glimmer/LogStore.swift`                                                          |
 | `DualSenseHID`         | `Glimmer/Stream/DualSenseHID.swift`                                               |
 | `HostsStore`           | `Glimmer/HostsStore.swift`                                                        |
-| `LunaPower`            | `Glimmer/LunaPower.swift`                                                         |
 | `MacSystemStats`       | `Glimmer/MacSystemStats.swift`                                                    |
 | `Stream.Audio`         | `Glimmer/Stream/AudioDecoder.swift`                                               |
 | `Stream.Capabilities`  | `Glimmer/Stream/Types.swift` (the VT codec probe)                                 |

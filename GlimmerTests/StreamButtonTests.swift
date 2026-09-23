@@ -73,4 +73,28 @@ struct StreamButtonTests {
         #expect(StreamButton.connectingPrimary(stage: "Cancelling…", selectedName: "Tower") == "Cancelling…")
         #expect(StreamButton.connectingPrimary(stage: nil, selectedName: nil) == "Connecting…")
     }
+
+    private func role(_ phase: StreamPhase = .idle, reconnecting: Bool = false, chip: ChipPresentation = .ready(rttMs: 3),
+                      backgrounded: Bool = false, shown: Bool = true) -> StreamButton.ButtonRole {
+        let action = MenuBarPresentation.primaryAction(
+            phase: phase, reconnecting: reconnecting,
+            host: MenuBarHost(chip: chip, canWake: true, waking: false), heroApp: "Desktop")
+        return StreamButton.role(for: action, backgrounded: backgrounded, connectingShown: shown)
+    }
+
+    /// The capsule and the menu bar's first row make the same call.
+    @Test func theCapsuleFollowsTheMenuBarsPrimaryAction() {
+        #expect(role() == .connect)
+        #expect(role(chip: .certMismatch) == .pairAgain)
+        #expect(role(chip: .asleep) == .wake)
+        #expect(role(.connecting(stage: "Connecting to Tower…")) == .connecting)
+        #expect(role(.connecting(stage: "Reconnecting to Tower…"), reconnecting: true) == .reconnecting)
+        #expect(role(.streaming, backgrounded: true) == .liveBackgrounded)
+    }
+
+    /// Inside the 400 ms hold a connect still reads as the Stream button.
+    @Test func aConnectInsideTheHoldKeepsTheStreamButton() {
+        #expect(role(.connecting(stage: "Connecting to Tower…"), shown: false) == .connect)
+        #expect(role(.connecting(stage: "Reconnecting to Tower…"), reconnecting: true, shown: false) == .connect)
+    }
 }

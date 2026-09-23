@@ -43,6 +43,13 @@ is sized to that.
   running as you can read the client key, impersonate this Mac to every paired
   PC, and rewrite the pinned host certificates. This is an accepted risk that
   moonlight-qt shares.
+- **Local control surface** - the running app takes `glimmer` requests over
+  distributed notifications (`CommandChannel`, `AppModel+Commands.swift`), with
+  no authentication. Any process running as you can post one: start a stream
+  from a paired PC, end Glimmer's own stream, or post `stream` with takeover
+  set, which quits the app running on the PC without asking. There is no URL
+  scheme, so a web page can't reach it. This falls under the same-UID risk
+  above.
 - **Hostile host** - a host that has somehow been compromised cannot escalate
   beyond producing bad video / audio / input echoes. The pinned-cert pairing
   limits a hostile host to one the user has explicitly trusted out-of-band.

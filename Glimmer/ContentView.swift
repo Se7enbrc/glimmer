@@ -3,14 +3,14 @@ import AppKit
 
 // MARK: - Main Window
 
-/// The takeover dialog's title. App names show exactly as typed ("iRacing");
-/// only the lowercase "another app" fallback (AppModel+Streaming.swift) is
-/// capitalized to start the sentence.
+/// The takeover question, in the launcher's dialog and the menu bar's alert.
+/// App names show exactly as typed ("iRacing"); nil is an app the PC didn't name.
 enum TakeoverDialogCopy {
-    static func title(occupantApp: String, hostName: String) -> String {
-        let app = occupantApp == "another app" ? "Another app" : occupantApp
-        return "\(app) is running on \(hostName)."
+    static func title(occupantApp: String?, hostName: String) -> String {
+        "\(occupantApp ?? "Another app") is running on \(hostName)."
     }
+
+    static let message = "It will quit and your stream will start."
 }
 
 struct MainWindow: View {
@@ -64,10 +64,10 @@ struct MainWindow: View {
         .sheet(isPresented: $showAWDLPrompt) {
             AWDLEnablePrompt(manager: AWDLHelperManager.shared)
         }
-        // Pair a PC… and Pair Again… from the menu bar land here.
-        .sheet(isPresented: Binding(get: { model.pairSheetAddress != nil },
-                                    set: { if !$0 { model.pairSheetAddress = nil } })) {
-            PairSheet(initialAddress: model.pairSheetAddress ?? "").environment(model)
+        // Pair a PC… from the menu bar, and Pair Again… from the menu bar, the
+        // Stream button, the banner and the Trust needed chip land here.
+        .sheet(isPresented: $model.pairSheetShown) {
+            PairSheet(repairing: model.pairSheetHost).environment(model)
         }
         .task {
             guard !awdlPromptChecked else { return }
@@ -112,7 +112,7 @@ struct MainWindow: View {
             Button("Quit and Stream", role: .destructive) { model.confirmPendingTakeover() }
             Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
         } message: { _ in
-            Text("It will quit and your stream will start.")
+            Text(TakeoverDialogCopy.message)
         }
         .background {
             // ⌘1-⌘9 host switching (multi-PC households only) - invisible,
@@ -186,11 +186,6 @@ private struct ConnectSurface: View {
     /// - while a genuinely slow path gets the calm single-capsule treatment.
     @State private var showsConnectingUI = false
 
-    /// The re-pair sheet behind the banner's Pair Again and the Trust needed
-    /// chip, owned here because this view stays mounted while the banner
-    /// empties itself on the same click.
-    @State private var showRePair = false
-
     /// True once the stream is established and the fullscreen window is
     /// taking over - Glimmer's window fades down so the handoff doesn't
     /// strobe two competing surfaces. NOT true while backgrounded (the
@@ -210,10 +205,10 @@ private struct ConnectSurface: View {
         VStack(spacing: 16) {
             // Banner sits above the hero so it can't be missed. NOT behind
             // the 400 ms hold: errors must surface the instant they exist.
-            ConnectBanner(showRePair: $showRePair)
+            ConnectBanner()
                 .padding(.horizontal, 4)
 
-            HostHero(host: model.selectedHost, showRePair: $showRePair)
+            HostHero(host: model.selectedHost)
                 .scaleEffect((showsConnectingUI && !reduceMotion) ? 1.04 : 1.0)
                 .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: showsConnectingUI)
 
@@ -284,12 +279,6 @@ private struct ConnectSurface: View {
                 // the actual flip, not inferred from the span.
                 model.noteConnectCapsuleShown()
             }
-        }
-        // Pre-filled so a re-pair lands straight on the PIN step.
-        .sheet(isPresented: $showRePair) {
-            let host = model.selectedHost
-            PairSheet(initialAddress: host?.localAddress ?? host?.manualAddress ?? "", initialName: host?.displayName)
-                .environment(model)
         }
     }
 }
@@ -402,7 +391,6 @@ var accentSurfaceGradient: LinearGradient {
 
 private struct HostHero: View {
     let host: Host?
-    @Binding var showRePair: Bool
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -437,7 +425,7 @@ private struct HostHero: View {
 
             // Top-leading readiness chip: reachability, activity, and the
             // re-pair affordance for a changed host certificate.
-            ReadinessChip(showRePair: $showRePair)
+            ReadinessChip()
                 .padding(14)
 
             // Centered content

@@ -2,7 +2,7 @@
 //  GlimmerCLI+Commands.swift
 //
 //  `glimmer pair`, `glimmer wake` and `glimmer quit`: the pairing sheet's
-//  handshake, the Wake and Connect packets, and /cancel, all headless.
+//  handshake, the Wake and Connect signal, and /cancel, all headless.
 //
 
 import AppKit
@@ -13,7 +13,11 @@ extension GlimmerCLI {
     // MARK: pair
 
     static func pair(_ command: Command, model: AppModel) async -> Int32 {
-        let address = command.arguments[0]
+        // The pair sheet's cleanup, so a pasted Sunshine URL or [IPv6]:port dials.
+        guard let address = AppModel.normalizedPCAddress(command.arguments[0]) else {
+            printError(PairingFailure.addressHint)
+            return Exit.usage
+        }
         if let known = matchHost(address, in: model.hosts), await isStillPaired(known, model: model) {
             print("Already paired with \(known.displayName).")
             return Exit.ok
@@ -59,18 +63,17 @@ extension GlimmerCLI {
         guard let host = resolveHost(command.arguments[0], model: model) else { return Exit.notPaired }
         let name = host.displayName
         guard model.canWake(host) else {
-            printError("Wake on LAN is off for \(name), or Glimmer hasn't learned its network address yet. "
-                + "Connect once while it's awake.")
+            printError(host.wakeOnLAN ? AppModel.wakeNoMacMessage(name) : AppModel.wakeOffMessage(name))
             return Exit.failed
         }
         let wait = command.flags.contains("--wait")
-        if wait { printError("Sending wake packets to \(name) and waiting for it to answer…") }
+        if wait { printError("Sending the wake signal to \(name) and waiting for it to answer…") }
         switch await model.sendWakeAndWait(host, waitSeconds: wait ? AppModel.wakeBudgetSeconds : nil) {
         case .noMac, .couldNotSend:
-            printError("Couldn't send wake packets to \(name). Check this Mac's network.")
+            printError(AppModel.WakeFailureReason.couldNotSend.line)
             return Exit.failed
         case .sent:
-            print("Sent wake packets to \(name).")
+            print("Sent the wake signal to \(name).")
             return Exit.ok
         case .answered:
             print("\(name) is awake.")
@@ -88,7 +91,7 @@ extension GlimmerCLI {
         let running: String
         switch await probe(host, model: model)?.state {
         case .asleep, nil:
-            printError(unreachableMessage(host.displayName))
+            printError(AppModel.unreachableMessage(host.displayName))
             return Exit.unreachable
         case .certMismatch:
             printError(notPairedMessage(host))
@@ -119,12 +122,13 @@ extension GlimmerCLI {
         }
     }
 
-    /// The Glimmer app, if one is running besides this process.
+    /// The Glimmer app, if one is running. Every `glimmer` command registers
+    /// under the app's bundle ID too, but with a prohibited activation policy.
     static func runningGlimmer() -> NSRunningApplication? {
         guard let bundleID = Bundle.main.bundleIdentifier else { return nil }
         let own = ProcessInfo.processInfo.processIdentifier
         return NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-            .first { $0.processIdentifier != own }
+            .first { $0.processIdentifier != own && $0.activationPolicy != .prohibited }
     }
 
     /// Opens (or brings forward) the app through Launch Services. Returns its

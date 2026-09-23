@@ -25,20 +25,27 @@ enum ChipPresentation: Equatable {
     /// hero, and game names can be long; we cap at 22 chars.
     var label: String {
         switch self {
-        case .noPC: return "No PC"
-        case .ready(nil): return "Ready"
-        case .ready(let ms?): return "Ready · \(ms) ms"
-        case .streamingOurs: return "Streaming"
-        case .connecting(let phase):
-            // Friendly strings ("Connecting to Tower...") - pass through.
-            return Self.truncate(phase, to: 22)
-        case .streamingElsewhere(let name):
-            // "Streaming" implied someone else was connected; the host only
-            // knows an app is running, not who (if anyone) is watching it.
-            return name.map { "\(Self.truncate($0, to: 14)) running" } ?? "App running"
-        case .asleep: return "Asleep"
-        case .certMismatch: return "Trust needed"
-        case .unknown: return "Checking…"
+        case .connecting(let phase): Self.truncate(phase, to: 22)
+        case .streamingElsewhere(let name?): "\(Self.truncate(name, to: 14)) running"
+        default: fullLabel
+        }
+    }
+
+    /// The same words untruncated, where there's room (`glimmer list`).
+    var fullLabel: String {
+        switch self {
+        case .noPC: "No PC"
+        case .ready(nil): "Ready"
+        case .ready(let ms?): "Ready · \(ms) ms"
+        case .streamingOurs: "Streaming"
+        // Friendly strings ("Connecting to Tower...") - pass through.
+        case .connecting(let phase): phase
+        // "Streaming" implied someone else was connected; the host only
+        // knows an app is running, not who (if anyone) is watching it.
+        case .streamingElsewhere(let name): name.map { "\($0) running" } ?? "App running"
+        case .asleep: "Asleep"
+        case .certMismatch: "Trust needed"
+        case .unknown: "Checking…"
         }
     }
 
@@ -107,9 +114,6 @@ enum ChipPresentation: Equatable {
 struct ReadinessChip: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Opens ConnectSurface's re-pair sheet, the Trust recovery (re-pairing
-    /// re-pins the host's new cert).
-    @Binding var showRePair: Bool
 
     /// Resolve the user-facing chip presentation. Priority order matters -
     /// our own session beats the polled host state (we'd rather show the live
@@ -141,9 +145,9 @@ struct ReadinessChip: View {
                 Group {
                     // certMismatch is the Trust affordance: a REAL Button, so
                     // Tab and VoiceOver can reach it (an .onTapGesture alone
-                    // is invisible to both). Inert everywhere else.
+                    // is invisible to both). Re-pairing re-pins the new cert.
                     if chip == .certMismatch {
-                        Button { showRePair = true } label: { pill(for: chip) }
+                        Button { model.requestPairing(for: model.selectedHost) } label: { pill(for: chip) }
                             .buttonStyle(.plain)
                     } else {
                         pill(for: chip)

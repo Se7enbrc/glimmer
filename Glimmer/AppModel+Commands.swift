@@ -247,10 +247,10 @@ extension AppModel {
         }
     }
 
-    /// A failed quit in the launcher: the refusal reads as the command line
-    /// prints it, anything else as a failed connect does.
+    /// A failed quit in the launcher and Shortcuts: the refusal reads as the
+    /// command line prints it, anything else as a failed connect does.
     static func quitFailureMessage(for error: Error, hostName: String) -> String {
         if case .launchFailed(let detail) = error as? StreamError { return detail }
-        return connectFailureBanner(for: error, hostName: hostName)
+        return connectFailure(for: error, hostName: hostName).message
     }
 }

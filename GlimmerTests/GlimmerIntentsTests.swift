@@ -85,4 +85,13 @@ struct GlimmerIntentsTests {
         #expect(PCIntentError(.noAnswer, pc: "Den") == .noAnswer("Den"))
         #expect(PCIntentError(.sent, pc: "Den") == .noAnswer("Den"))
     }
+
+    /// Quit App on PC reads a failure as the launcher's quit does: a changed
+    /// certificate points at Pair Again…, and only a silent PC is unreachable.
+    @MainActor @Test func quitAppOnPCNamesACertificateChangeAsOne() {
+        let changed = NetworkClient.classifyPairedPathFailure("pinned host cert mismatch", hostName: "Den")
+        #expect(AppModel.quitFailureMessage(for: changed, hostName: "Den").contains("Pair Again…"))
+        #expect(AppModel.quitFailureMessage(for: StreamError.hostUnreachable("control write failed"), hostName: "Den")
+            == AppModel.unreachableMessage("Den"))
+    }
 }

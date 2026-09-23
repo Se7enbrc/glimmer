@@ -10,14 +10,14 @@ import SwiftUI
 import Testing
 @testable import Glimmer
 
-/// Driven by the real producers (the connect path's banner copy and the
-/// paired-path classifier), so a copy change breaks a test here instead of
+/// Driven by the real producers (the connect path's failure kind and the
+/// paired-path classifier), so a change there breaks a test here instead of
 /// quietly downgrading the banner's button.
 @MainActor
 struct ConnectBannerActionTests {
 
-    private func action(for error: Error, canWake: Bool = true) -> ConnectBannerAction {
-        ConnectBannerAction.forError(AppModel.connectFailureBanner(for: error, hostName: "Tower"), canWake: canWake)
+    private func action(for error: Error, canWake: Bool = true, pc: String = "Tower") -> ConnectBannerAction {
+        ConnectBannerAction(kind: AppModel.connectFailure(for: error, hostName: pc).kind, canWake: canWake)
     }
 
     private func pairedPath(_ detail: String) -> StreamError {
@@ -68,6 +68,24 @@ struct ConnectBannerActionTests {
             #expect(action(for: error) == .tryAgain, "\(error)")
         }
     }
+
+    /// The PC's name can't change the recovery: "Repair Rig" is asleep, not unpaired.
+    @Test func aPCNamedLikePairingStillOffersWake() {
+        #expect(action(for: StreamError.hostUnreachable("control write failed"), pc: "Repair Rig") == .wakeAndConnect)
+        #expect(action(for: StreamError.launchFailed("busy"), pc: "Repair Rig") == .tryAgain)
+    }
+
+    /// The engine's own failure edges record their kind alongside the sentence.
+    @Test func engineFailuresRecordTheirKind() {
+        let model = AppModel()
+        let rig = Host(id: "pc-1", name: "rig", customName: "Repair Rig", localAddress: "192.0.2.10", manualAddress: nil,
+                       apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+        model.nativeStreamErrorKind = .pairing
+        model.handleNativeEvent(.stageFailed(name: "RTSP handshake", errorCode: -1), host: rig)
+        #expect(model.nativeStreamErrorKind == .unreachable)
+        model.handleNativeEvent(.connectionTerminated(errorCode: -1), host: rig)
+        #expect(model.nativeStreamErrorKind == .other)
+    }
 }
 
 struct ReadinessChipRunningLabelTests {
@@ -111,11 +129,37 @@ struct TakeoverDialogCopyTests {
             == "Helldivers 2 is running on Tower.")
         #expect(TakeoverDialogCopy.title(occupantApp: "iRacing", hostName: "Tower")
             == "iRacing is running on Tower.")
+        #expect(TakeoverDialogCopy.title(occupantApp: "eFootball", hostName: "Tower")
+            == "eFootball is running on Tower.")
     }
 
-    @Test func capitalizesTheAnotherAppFallback() throws {
-        let fallback = try #require(AppModel.occupant(of: .streamingUnknownApp(id: 9)))
-        #expect(TakeoverDialogCopy.title(occupantApp: fallback, hostName: "Tower")
+    @Test func anAppThePCDidntNameReadsAsAnotherApp() throws {
+        let unnamed = try #require(AppModel.occupant(of: .streamingUnknownApp(id: 9)))
+        #expect(unnamed == nil)
+        #expect(TakeoverDialogCopy.title(occupantApp: unnamed, hostName: "Tower")
             == "Another app is running on Tower.")
+        #expect(AppModel.occupant(of: .idle) == nil)
+    }
+}
+
+/// Every Pair Again… lands on the one launcher sheet, which names the PC.
+@MainActor
+struct PairAgainSheetTests {
+
+    @Test func pairAgainCarriesThePCToTheSheet() {
+        let model = AppModel()
+        let tower = Host(id: "pc-1", name: "tower", customName: "Tower", localAddress: nil, manualAddress: "192.0.2.10",
+                         apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+        model.requestPairing(for: tower)
+        #expect(model.pairSheetShown && model.pairSheetHost == tower)
+        model.requestPairing(for: nil)
+        #expect(model.pairSheetShown && model.pairSheetHost == nil)
+    }
+
+    @Test func aRePairIsTitledWithThePCsName() {
+        #expect(PairSheet.title(paired: false, chosen: true, rePairName: "Tower") == "Pair Tower again")
+        #expect(PairSheet.title(paired: false, chosen: true, rePairName: nil) == "Pair a new PC")
+        #expect(PairSheet.title(paired: false, chosen: false, rePairName: nil) == "Choose a PC")
+        #expect(PairSheet.title(paired: true, chosen: true, rePairName: "Tower") == "Paired")
     }
 }

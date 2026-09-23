@@ -118,10 +118,11 @@ struct RtspClientTests {
     @MainActor @Test func encryptedVideoRefusalReachesTheBanner() {
         let code = NativeBackend().rtspCode(RtspError.encryptedVideoRequired)
         #expect(code == RtspError.encryptedVideoRequiredCode)
-        let banner = AppModel.connectFailureBanner(for: StreamError.sessionFailed(code), hostName: "Den PC")
-        #expect(banner == "This PC requires encrypted video, which Glimmer doesn't support yet.")
-        let other = AppModel.connectFailureBanner(for: StreamError.sessionFailed(-1), hostName: "Den PC")
-        #expect(other.hasPrefix("Couldn't reach Den PC."))
+        let banner = AppModel.connectFailure(for: StreamError.sessionFailed(code), hostName: "Den PC")
+        #expect(banner.message == "This PC requires encrypted video, which Glimmer doesn't support yet.")
+        #expect(banner.kind == .other)
+        let other = AppModel.connectFailure(for: StreamError.sessionFailed(-1), hostName: "Den PC")
+        #expect(other.message == AppModel.unreachableMessage("Den PC"))
     }
 
     // MARK: - Audio decrypt (SS_ENC_AUDIO)

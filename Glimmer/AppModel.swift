@@ -188,17 +188,19 @@ final class AppModel {
     struct PendingTakeover: Equatable {
         let app: LibraryApp
         let host: Host
-        let occupantApp: String
+        /// nil when the PC runs an app it didn't name.
+        let occupantApp: String?
     }
 
     // Menu bar (see AppModel+MenuBar): reconnect edge, Stop latch, overlay mirror,
-    // Connection Details, the pads, and a pair sheet asked of the launcher.
+    // Connection Details, the pads, and the launcher's pair sheet (a nil PC pairs a new one).
     var isReconnecting = false
     var menuStopInProgress = false
     var statsOverlayShown = false
     var menuDetails: StreamStatsSnapshot?
     var menuBarControllers: [MenuBarController] = []
-    var pairSheetAddress: String?
+    var pairSheetShown = false
+    var pairSheetHost: Host?
     @ObservationIgnored var menuRefreshTimer: Timer?
 
     var showStreamStats: Bool = false {

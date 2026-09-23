@@ -79,4 +79,15 @@ struct WiredBitrateTests {
         #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .wifi), route: .wifi) == 1)
         #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .tunnel), route: .tunnel) == 1)
     }
+
+    /// A reconnect rebuilds from the same ask a fresh start on this route sends.
+    @MainActor @Test func theReconnectAskIsTheStartsAsk() {
+        let model = AppModel()
+        let pc = Host(id: "pc-1", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
+                      apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
+        let start = model.nativeStreamConfig(for: pc)
+        let ask = model.routeAsk(for: pc)
+        #expect(ask == RouteAsk(kbps: start.bitrateKbps, boost: start.bitrateBoost))
+        #expect(ask.kbps == model.wireBitrateKbps(forFormats: model.offeredVideoFormats(for: pc)))
+    }
 }
