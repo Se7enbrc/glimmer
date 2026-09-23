@@ -191,6 +191,8 @@ public struct StreamStatsSnapshot: Sendable {
     /// Percentage of frames this window that were IDR keyframes. A nonzero value
     /// outside the very first frames is the recurring-IDR signature.
     public var idrFramePercent: Double?
+    /// Host frame cadence this window (telemetry only; see StatsCollector.HostCadence).
+    var hostCadence: StatsCollector.HostCadence?
 
     public init() {}
 

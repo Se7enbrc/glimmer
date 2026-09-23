@@ -168,6 +168,14 @@ extension TelemetryExporter {
             let approxPresents = max(rendered, 0)
             snap.presentOnTimeCount = UInt64((approxPresents * onTimePct / 100.0).rounded())
             snap.presentLateCount = UInt64((approxPresents * (100.0 - onTimePct) / 100.0).rounded())
+            if let hostPct = stats.hostCadence?.lateByHostPercent {
+                snap.presentLateHostCadenceCount = UInt64((approxPresents * hostPct / 100.0).rounded())
+            }
+        }
+        if let cadence = stats.hostCadence {
+            snap.hostFrameIntervalP50Ms = cadence.intervalP50Ms
+            snap.hostFrameIntervalP95Ms = cadence.intervalP95Ms
+            snap.hostUnevenPairs = cadence.unevenPairs
         }
     }
 

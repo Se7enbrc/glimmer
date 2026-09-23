@@ -178,17 +178,16 @@ extension FramePacer {
 
     // MARK: - Helpers
 
-    /// The delta between the realized inter-present interval and the stream's
-    /// ideal frame interval, in seconds. Read under the lock right after a
-    /// present updates `lastPresentMediaTime`. Positive = we presented late
-    /// vs the grid; near zero = on cadence.
-    func lastPresentInterPresentDelta() -> Double {
+    /// Realized inter-present interval minus the stream's frame interval (positive =
+    /// late vs the grid), plus that interval, in seconds. Read under the lock right
+    /// after a present updates `lastPresentMediaTime`.
+    func lastPresentInterPresentDelta() -> (error: Double, streamInterval: Double) {
         os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
         let now = lastPresentMediaTime
         defer { prevPresentMediaTimeForMetric = now }
-        guard prevPresentMediaTimeForMetric.isFinite, now.isFinite else { return 0 }
+        guard prevPresentMediaTimeForMetric.isFinite, now.isFinite else { return (0, streamFrameIntervalSeconds) }
         let interPresent = now - prevPresentMediaTimeForMetric
-        return interPresent - streamFrameIntervalSeconds
+        return (interPresent - streamFrameIntervalSeconds, streamFrameIntervalSeconds)
     }
 
     /// SKIP-ROBUST frame-interval estimator: the lower-quartile (p25) of the PTS

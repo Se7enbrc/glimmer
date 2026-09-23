@@ -60,7 +60,8 @@ extension VideoDecoder: VideoSink {
         // Stats: one decode-unit-in == one network-delivered frame;
         // fullLength is the on-the-wire byte count.
         let isIDR = (unit.frameType == StreamProtocol.FRAME_TYPE_IDR)
-        statsCollector.recordReceivedFrame(bytes: Int(unit.fullLength), isIDR: isIDR)
+        statsCollector.recordReceivedFrame(bytes: Int(unit.fullLength), isIDR: isIDR,
+                                           ptsUs: unit.presentationTimeUs)
         statsCollector.recordHostProcessingLatency(unit.frameHostProcessingLatency)
 
         var pictureData = Data()

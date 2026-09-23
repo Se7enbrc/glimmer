@@ -489,8 +489,9 @@ extension FramePacer {
         // measure present-vs-PTS as the delta between the realized inter-present
         // wall-clock and the stream's frame interval - a smooth stream lands
         // near zero; jitter shows as spread.
-        let presentDelta = lastPresentInterPresentDelta()
-        stats.recordPresent(cadenceErrorMs: presentDelta * 1000.0)
+        let cadence = lastPresentInterPresentDelta()
+        stats.recordPresent(cadenceErrorMs: cadence.error * 1000.0, hostPTSSeconds: entry.hostPTSSeconds,
+                            streamIntervalMs: cadence.streamInterval * 1000.0, refreshMs: vsyncInterval * 1000.0)
     }
 
     /// The two per-tick PRESENT-signal recordings, folded into one call so neither
