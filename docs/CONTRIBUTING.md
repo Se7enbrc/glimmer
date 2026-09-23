@@ -321,6 +321,11 @@ the comment at `StreamBridgeContext.eventContinuation` (in
     timings, codec format ints, error codes).
   - `privacy: .private` (the default) for anything PII-adjacent: host addresses,
     host names, error message strings, host versions.
+  - `Diag.*` takes the same `privacy:` argument as `Logger`, but defaults to
+    `.public`, so mark those values `.private` there too:
+    `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
+    Private values reach the Troubleshooting viewer, its export and the session
+    file; the system-log copy shows `<private>` in their place.
   - Never log:
     - Key characters from `keyDown` events (a later change fixed the regression
       where chars=... leaked at `.public`).

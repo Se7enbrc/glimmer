@@ -87,10 +87,11 @@ Each of these gets a pull request sent back.
   not `URL(string:)!` on a literal, which is still not allowed.
 - **Logging** uses `Logger` on subsystem `io.ugfugl.Glimmer`, never `print` (the
   CLI's own output excepted). Host addresses, names and error text stay
-  `.private`. Never log keystrokes, keys, PINs, certificates or the URL
-  parameters `NetworkClient.sensitiveQueryKeys` lists. Nothing per-frame at
-  `.info`. The root helper is its own process and logs on
-  `io.ugfugl.glimmer.helper`.
+  `.private`. `Diag` takes the same `privacy:` argument (public by default):
+  private values reach the viewer and the session file but not the system log.
+  Never log keystrokes, keys, PINs, certificates or the URL parameters
+  `NetworkClient.sensitiveQueryKeys` lists. Nothing per-frame at `.info`. The
+  root helper is its own process and logs on `io.ugfugl.glimmer.helper`.
 - **Tests.** New tests use Swift Testing (`@Test`, `#expect`). Pure logic gets a
   test; a bug fix gets a test that fails without it. The project does not use
   synchronized folders, so a new file must be added to `project.pbxproj` by
