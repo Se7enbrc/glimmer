@@ -1,10 +1,9 @@
 //
 //  AppModel+MenuBar.swift
 //
-//  What the menu bar item reads and the few actions only it needs: the icon
-//  state, the first row, the selected PC as the launcher reads it, the pads,
-//  the Connection Details snapshot (refreshed only while the menu is open),
-//  stop, overlay, pairing and the takeover question.
+//  What the menu bar reads and the few actions only it needs: icon state, the
+//  first row, the selected PC as the launcher reads it, the pads, Connection
+//  Details (refreshed while the menu is open), stop, overlay, pairing, takeover.
 //
 
 import AppKit
