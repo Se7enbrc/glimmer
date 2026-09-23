@@ -368,4 +368,10 @@ struct HostLiveStatus: Equatable {
     var capturedAt: Date
 
     static let stale: TimeInterval = 60
+
+    /// A sample of `hostID` young enough to act on; an unknown state never is.
+    static func isFresh(_ live: HostLiveStatus?, for hostID: String, at now: Date = Date()) -> Bool {
+        guard let live, live.hostID == hostID, live.state != .unknown else { return false }
+        return now.timeIntervalSince(live.capturedAt) <= stale
+    }
 }

@@ -48,7 +48,7 @@ struct StreamIntent: AppIntent {
 
     @Parameter(
         title: "App",
-        description: "An app on the PC, such as Desktop. Leave it empty to resume the running app or start the default one.")
+        description: "An app on the PC, such as Desktop. Leave it empty for the app Glimmer's Stream button shows.")
     var app: String?
 
     static var parameterSummary: some ParameterSummary {
@@ -69,7 +69,16 @@ struct StreamIntent: AppIntent {
             return .result()
         }
         if model.selectedHost?.id != host.id { model.selectHost(host) }
-        if let target { model.requestStream(app: target, on: host) } else { model.streamHeroApp() }
+        if let target {
+            model.requestStream(app: target, on: host)
+            return .result()
+        }
+        // The Stream button's app is the PC's running one only while a fresh sample
+        // names it; a cold launch or a PC switch has none yet.
+        if !HostLiveStatus.isFresh(model.hostLiveStatus, for: host.id) {
+            _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
+        }
+        model.streamHeroApp()
         return .result()
     }
 }
@@ -89,15 +98,13 @@ struct WakePCIntent: AppIntent {
         let model = try await AppModel.forIntent()
         let host = try model.pairedHost(pc)
         guard host.wakeOnLAN else { throw PCIntentError.wakeOff(host.displayName) }
-        switch await model.sendWakeAndWait(host, waitSeconds: AppModel.wakeBudgetSeconds) {
-        case .answered: return .result()
-        case .noMac: throw PCIntentError.noAddress(host.displayName)
-        case .couldNotSend: throw PCIntentError.notSent
-        case .sent, .noAnswer:
-            // Either one before the budget ran out means Shortcuts stopped the action.
+        let outcome = await model.sendWakeAndWait(host, waitSeconds: AppModel.wakeBudgetSeconds)
+        if let failure = PCIntentError(outcome, pc: host.displayName) {
+            // A wait cut short means Shortcuts stopped the action.
             try Task.checkCancellation()
-            throw PCIntentError.noAnswer(host.displayName)
+            throw failure
         }
+        return .result()
     }
 }
 
@@ -153,7 +160,7 @@ struct GlimmerShortcuts: AppShortcutsProvider {
     }
 }
 
-enum PCIntentError: Error, CustomLocalizedStringResourceConvertible {
+enum PCIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
     case notReady, notPaired, alreadyStreaming, notSent
     case noApp(String, pc: String)
     case wakeOff(String), noAddress(String), noAnswer(String), unreachable(String), failed(String)
@@ -162,15 +169,25 @@ enum PCIntentError: Error, CustomLocalizedStringResourceConvertible {
         switch self {
         case .notReady: "Glimmer is still starting. Try again in a moment."
         case .notPaired: "That PC isn't paired with Glimmer anymore."
-        case .alreadyStreaming: "Glimmer is already streaming. Stop Streaming, then try again."
-        case .notSent: "Glimmer couldn't send the wake packets. Check that this Mac is on the network."
+        case .alreadyStreaming: "\(CommandChannel.alreadyStreaming)"
+        case .notSent: "\(AppModel.WakeFailureReason.couldNotSend.line)"
         case let .noApp(app, pc): "\(pc) has no app named \(app)."
-        case .wakeOff(let pc): "Wake on LAN is off for \(pc)."
+        case .wakeOff(let pc): "Wake on LAN is off for \(pc). Turn it on from the PC's ⋯ menu in Glimmer."
         case .noAddress(let pc): "Glimmer doesn't have the MAC address of \(pc) yet. Select it in Glimmer once while it's on."
-        case .noAnswer(let pc):
-            "\(pc) didn't answer. Wake on LAN works on your home network; over Tailscale it can't reach the PC."
-        case .unreachable(let pc): "Couldn't reach \(pc)."
+        case .noAnswer(let pc): "No answer from \(pc). \(AppModel.wakeNoAnswerHint)"
+        case .unreachable(let pc): "\(GlimmerCLI.unreachableMessage(pc))"
         case .failed(let why): "\(why)"
+        }
+    }
+
+    /// Why Wake PC failed; nil when the PC answered. `sent` only comes back from
+    /// a wait that was stopped.
+    init?(_ outcome: WakeOutcome, pc: String) {
+        switch outcome {
+        case .answered: return nil
+        case .noMac: self = .noAddress(pc)
+        case .couldNotSend: self = .notSent
+        case .sent, .noAnswer: self = .noAnswer(pc)
         }
     }
 }

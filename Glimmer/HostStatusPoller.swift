@@ -1,11 +1,9 @@
 //
 //  HostStatusPoller.swift
 //
-//  Background periodic-polling Task for the host readiness chip. Pings the
-//  selected host's HTTP port for an RTT, then if reachable pulls /serverinfo
-//  to learn idle-vs-busy. Cancellation hooks live on the manager so lifecycle
-//  edges (host change, app activation, stream start/end) funnel through
-//  `restartHostStatusPolling()`. Originally inline in `AppModel.swift`.
+//  The readiness chip's background poll: a TCP probe of the selected PC's HTTP
+//  port for an RTT, then /serverinfo for idle or busy. Lifecycle edges (a PC
+//  change, activation, stream start and end) funnel through restartHostStatusPolling().
 //
 
 import AppKit
@@ -80,12 +78,7 @@ extension AppModel {
             // The bar protects a fresh last good status from a blip. With none
             // (launch, a PC switch) it would only delay the honest Asleep and the
             // wake controls behind it.
-            let live = self.hostLiveStatus
-            let fresh = live != nil
-                && live?.hostID == hostID
-                && live?.state != .unknown
-                && Date().timeIntervalSince(live?.capturedAt ?? .distantPast) <= HostLiveStatus.stale
-            return (self.hostUnreachableStreak, fresh)
+            return (self.hostUnreachableStreak, HostLiveStatus.isFresh(self.hostLiveStatus, for: hostID))
         }
         // A cold start's false Asleep is corrected by the next answered poll,
         // a far cheaper error than a minute of "Checking...".
