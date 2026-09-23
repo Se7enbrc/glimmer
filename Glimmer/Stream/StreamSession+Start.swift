@@ -246,8 +246,11 @@ extension StreamSession {
         let serverInfo = try await network.fetchServerInfo()
         ConnectTimingTelemetry.shared.recordLaunchLeg(
             serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
-        // swiftlint:disable:next line_length
-        log.info("fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) codecSupport=0x\(String(serverInfo.serverCodecSupport.rawValue, radix: 16))")
+        log.info("""
+            fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) \
+            currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) \
+            codecSupport=0x\(String(serverInfo.serverCodecSupport.rawValue, radix: 16))
+            """)
         if serverInfo.isRealGFE { throw StreamError.gameStreamHost }
         if serverInfo.pairStatus != .paired { throw NetworkClient.notPaired(pcName) }
         return serverInfo
@@ -353,8 +356,17 @@ extension StreamSession {
         let screen = NSScreen.main
         let displayMaxFps = screen?.maximumFramesPerSecond ?? -1
         let displayName = screen?.localizedName ?? "n/a"
-        // swiftlint:disable:next line_length
-        self.log.info("Stream config: \(cfgSnapshot.width, privacy: .public)x\(cfgSnapshot.height, privacy: .public)@\(cfgSnapshot.fps, privacy: .public) bitrate=\(cfgSnapshot.bitrate, privacy: .public) packetSize=\(cfgSnapshot.packetSize, privacy: .public) audio=\(cfgSnapshot.audioConfiguration, privacy: .public) videoFormats=0x\(String(cfgSnapshot.supportedVideoFormats, radix: 16), privacy: .public) refreshRateX100=\(cfgSnapshot.clientRefreshRateX100, privacy: .public) colorSpace=\(cfgSnapshot.colorSpace, privacy: .public) colorRange=\(cfgSnapshot.colorRange, privacy: .public) remote=\(cfgSnapshot.streamingRemotely, privacy: .public) display=\(displayName, privacy: .public) displayMaxFps=\(displayMaxFps, privacy: .public)")
+        self.log.info("""
+            Stream config: \
+            \(cfgSnapshot.width, privacy: .public)x\(cfgSnapshot.height, privacy: .public)@\(cfgSnapshot.fps, privacy: .public) \
+            bitrate=\(cfgSnapshot.bitrate, privacy: .public) packetSize=\(cfgSnapshot.packetSize, privacy: .public) \
+            audio=\(cfgSnapshot.audioConfiguration, privacy: .public) \
+            videoFormats=0x\(String(cfgSnapshot.supportedVideoFormats, radix: 16), privacy: .public) \
+            refreshRateX100=\(cfgSnapshot.clientRefreshRateX100, privacy: .public) \
+            colorSpace=\(cfgSnapshot.colorSpace, privacy: .public) colorRange=\(cfgSnapshot.colorRange, privacy: .public) \
+            remote=\(cfgSnapshot.streamingRemotely, privacy: .public) display=\(displayName, privacy: .public) \
+            displayMaxFps=\(displayMaxFps, privacy: .public)
+            """)
         Diag.notice("Stream config: \(cfgSnapshot.width)x\(cfgSnapshot.height)@\(cfgSnapshot.fps), "
             + "\(cfgSnapshot.bitrate / 1000) Mbps, display \(displayName)", "Stream")
     }
