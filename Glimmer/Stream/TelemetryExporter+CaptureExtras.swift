@@ -53,6 +53,10 @@ extension TelemetryExporter {
         // The adaptive playout target rides Extras (the AudioSnapshot type is
         // the snapshot's; this sidecar is where post-snapshot fields live).
         extras.audioPlayoutTargetMs = audioState?.playoutTargetMs
+        extras.audioCushionMaxMs = audioState?.cushionMaxMs
+        extras.audioUnderrunDeadairTotal = counters.audioUnderrunDeadairTotal.value
+        // Checked first so a session with the raw HID path off never builds its manager.
+        extras.dualSenseHidReportsPerSecond = DualSenseHID.isEnabled ? DualSenseHID.shared.reportsPerSecond : nil
         // Stream ROUTE (stream_link/stream_if): the lock-guarded cached probe
         // value - no syscalls on this tick (re-probes run on the probe queue).
         extras.streamRoute = route.current()
@@ -69,9 +73,9 @@ extension TelemetryExporter {
         if let prev = prevCaptureTime {
             let dt = Double(now.uptimeNanoseconds &- prev.uptimeNanoseconds) / 1_000_000_000.0
             if dt > 0.05 {
-                // Guard each delta against a reset/wrap: resetForNewSession zeroes
-                // the totals mid-run, so emit only across a monotonic window (skip
-                // + rebaseline below otherwise) - else &- renders a ~2^64 spike.
+                // Guard each delta against a counter reset/wrap: emit only across a
+                // monotonic window (skip + rebaseline below otherwise) - else &-
+                // renders a ~2^64 spike.
                 if overTargetTotal >= baselines.pacerOverTargetReleaseTotal {
                     extras.pacerOverTargetReleasesPerSecond =
                         Double(overTargetTotal &- baselines.pacerOverTargetReleaseTotal) / dt
@@ -216,6 +220,14 @@ extension TelemetrySnapshot {
         /// steered toward - fill vs target is the cushion judge (base 30 /
         /// cap 150 / ceiling 190). nil until the playout path stamps it.
         var audioPlayoutTargetMs: Double?
+        /// The cushion cap for the resolved link (`AudioState.cushionMaxMs`).
+        var audioCushionMaxMs: Double?
+        /// Under-runs after a gap longer than that cap: also in the under-run total,
+        /// but no cushion could have bridged them, so they never grow it.
+        var audioUnderrunDeadairTotal: UInt64 = 0
+        /// Raw DualSense input reports per second (fastest open pad), to compare with
+        /// the GameController pad cadence. nil while the raw HID path is off.
+        var dualSenseHidReportsPerSecond: Double?
         /// CROSS-STREAM A/V skew + its cushion-subtracted true clock skew +
         /// rebase count, derived ONCE per capture tick (`deriveSkewMs` is
         /// non-idempotent - it latches the epoch and reads its own clock), so the
@@ -298,6 +310,10 @@ extension TelemetryExporter {
         /// restart (the counters reset at their own loop-start edges).
         var videoPingsSentTotal: UInt64?
         var audioPingsSentTotal: UInt64?
+        /// Previous-tick system `udps_fullsock` (UInt32, wraps; nil until read).
+        var udpFullSockTotal: UInt32?
+        /// Previous-tick gyro/accel sample total, for input_motion_per_s.
+        var inputMotionTotal: UInt64 = 0
     }
     nonisolated(unsafe) static var captureBaselines = CaptureBaselines()
 }

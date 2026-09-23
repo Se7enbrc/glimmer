@@ -67,40 +67,45 @@ extension FrameTimingTracker {
         add("submit_to_output_ms", record.submitToOutput)
         add("output_to_present_ms", record.outputToPresent)
         add("end_to_end_ms", record.endToEnd)
-        // The two headline composite signals, per frame. input_to_photon is a
-        // lower-bound ESTIMATE (the host doesn't mark which frame reflects an
-        // input) - the key name keeps `_est` so a reader never mistakes it for a
-        // measured number.
+        // The two headline composite signals, per frame. input_to_photon is an
+        // ESTIMATE (the host doesn't mark which frame reflects an input); `_est`
+        // keeps a reader from mistaking it for a measured number.
         add("glass_to_glass_ms", record.glassToGlass)
         add("input_to_photon_est_ms", record.inputToPhoton)
         return "{" + fields.joined(separator: ",") + "}"
     }
 
-    /// Emit frames-file DROP STUBS (`event:"frame_drop"`) for frames the
-    /// in-flight map evicted: received + assembled but never presented - i.e.
-    /// dropped somewhere downstream. The stage the frame DID reach narrows the
-    /// drop site ("assembled" = died pre-decode, "submitted" = in decode,
-    /// "decoded" = died at the pacer - the late-drop class that makes judder).
-    /// Honesty notes baked into the format: (a) stubs surface ~maxInFlight
-    /// frames AFTER the drop (eviction lag, ~1.5s at 170fps) - `t_evict_ms` is
-    /// the eviction instant, NOT the drop instant; (b) DESIGNED drops while
-    /// suppressed/gated are skipped (no judder to attribute, and a hidden
-    /// window would otherwise spray ~200 stubs/s of noise - the suppressed/
-    /// gated counters already account those), with the state read at eviction
-    /// time so a drop racing a suppression edge can rarely be mis-skipped.
-    /// Called off the mapLock on the (gate-on-only) telemetry path.
+    /// Frames-file DROP STUBS (`event:"frame_drop"`) for frames evicted unpresented;
+    /// `stage` is the last stage reached and `t_evict_ms` the eviction instant,
+    /// ~maxInFlight frames after the drop. Called off the mapLock.
     func emitDropStubs(_ evicted: [(rtp: UInt32, timing: Timing)]) {
         let counters = TelemetryCounters.shared
-        guard !counters.presentSuppressed, !counters.decodeGated else { return }
-        let evictMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
-        for drop in evicted {
+        let lines = dropStubLines(
+            evicted, hiddenNow: counters.presentSuppressed || counters.decodeGated,
+            evictMs: Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0)
+        for line in lines { traceWriter.append(line) }
+    }
+
+    /// Stub lines minus DESIGNED drops (hidden window; the suppressed/gated counters
+    /// own those): everything while hidden now, and frames assembled while hidden,
+    /// since eviction trails a gate lift by ~1.5 s.
+    func dropStubLines(_ evicted: [(rtp: UInt32, timing: Timing)], hiddenNow: Bool, evictMs: Double) -> [String] {
+        guard !hiddenNow else { return [] }
+        return evicted.filter { !$0.timing.assembledHidden }.map { drop in
             let stage = drop.timing.outputNanos != 0 ? "decoded"
                 : drop.timing.submitNanos != 0 ? "submitted" : "assembled"
-            traceWriter.append("{\"session\":\"\(sessionId)\",\"event\":\"frame_drop\","
+            return "{\"session\":\"\(sessionId)\",\"event\":\"frame_drop\","
                 + "\"frame\":\(drop.timing.frameIndex),\"rtp\":\(drop.rtp),"
                 + "\"type\":\"\(drop.timing.isIDR ? "idr" : "p")\","
-                + "\"stage\":\"\(stage)\",\"t_evict_ms\":\(jsonNumber(evictMs))}")
+                + "\"stage\":\"\(stage)\",\"t_evict_ms\":\(jsonNumber(evictMs))}"
         }
+    }
+
+    /// The ⌃B bookmark as a trace row on the input rows' clock (`t_ms`), so the
+    /// input sent just before it is one search away.
+    func bookmarkLine(total: UInt64, uptimeNanos: UInt64) -> String {
+        "{\"session\":\"\(sessionId)\",\"event\":\"bookmark\",\"bookmark_total\":\(total),"
+            + "\"t_ms\":\(jsonNumber(Double(uptimeNanos) / 1_000_000.0))}"
     }
 
     /// Same integer/decimal discipline as TelemetryRenderer.jsonNumber so the

@@ -16,7 +16,7 @@ enum ChipPresentation: Equatable {
     case ready(rttMs: Int?)                     // green dot, "Ready" / "Ready · 12 ms"
     case streamingOurs                          // pulsing green, "Streaming" (our session)
     case connecting(phase: String)              // amber dot, current handshake phase
-    case streamingElsewhere(appName: String)    // blue dot, "Streaming Helldivers 2"
+    case streamingElsewhere(appName: String?)   // neutral dot, "Helldivers 2 running"
     case asleep                                 // dim gray dot, "Asleep"
     case certMismatch                           // amber dot, "Trust needed"
     case unknown                                // amber dot, "Checking..." (pre-first-poll)
@@ -25,18 +25,27 @@ enum ChipPresentation: Equatable {
     /// hero, and game names can be long; we cap at 22 chars.
     var label: String {
         switch self {
-        case .noPC: return "No PC"
-        case .ready(nil): return "Ready"
-        case .ready(let ms?): return "Ready · \(ms) ms"
-        case .streamingOurs: return "Streaming"
-        case .connecting(let phase):
-            // Friendly strings ("Connecting to Tower...") - pass through.
-            return Self.truncate(phase, to: 22)
-        case .streamingElsewhere(let name):
-            return "Streaming \(Self.truncate(name, to: 14))"
-        case .asleep: return "Asleep"
-        case .certMismatch: return "Trust needed"
-        case .unknown: return "Checking…"
+        case .connecting(let phase): Self.truncate(phase, to: 22)
+        case .streamingElsewhere(let name?): "\(Self.truncate(name, to: 14)) running"
+        default: fullLabel
+        }
+    }
+
+    /// The same words untruncated, where there's room (`glimmer list`).
+    var fullLabel: String {
+        switch self {
+        case .noPC: "No PC"
+        case .ready(nil): "Ready"
+        case .ready(let ms?): "Ready · \(ms) ms"
+        case .streamingOurs: "Streaming"
+        // Friendly strings ("Connecting to Tower...") - pass through.
+        case .connecting(let phase): phase
+        // "Streaming" implied someone else was connected; the host only
+        // knows an app is running, not who (if anyone) is watching it.
+        case .streamingElsewhere(let name): name.map { "\($0) running" } ?? "App running"
+        case .asleep: "Asleep"
+        case .certMismatch: "Trust needed"
+        case .unknown: "Checking…"
         }
     }
 
@@ -48,9 +57,11 @@ enum ChipPresentation: Equatable {
         case .ready(let ms?): return "PC ready, round trip \(ms) milliseconds"
         case .streamingOurs: return "Streaming"
         case .connecting(let phase): return phase
-        case .streamingElsewhere(let name): return "PC is streaming \(name)"
+        case .streamingElsewhere(let name): return "\(name ?? "An app") is running on this PC"
         case .asleep: return "PC is asleep or unreachable"
-        case .certMismatch: return "PC certificate changed, re-pair to trust it"
+        // Matches the visible label so Voice Control's "Click Trust needed"
+        // finds the button; the hint carries the re-pair action.
+        case .certMismatch: return "Trust needed"
         case .unknown: return "Checking PC status"
         }
     }
@@ -61,7 +72,8 @@ enum ChipPresentation: Equatable {
         case .ready: return Color.green
         case .streamingOurs: return Color.green
         case .connecting: return Color.orange
-        case .streamingElsewhere: return Color.blue
+        // Neutral, not blue: a running app doesn't mean anyone is connected.
+        case .streamingElsewhere: return Color.secondary
         case .asleep: return Color.secondary
         case .certMismatch: return Color.orange
         case .unknown: return Color.orange
@@ -75,6 +87,23 @@ enum ChipPresentation: Equatable {
         return false
     }
 
+    /// A PC's polled state. No sample yet, or one past the stale window (the
+    /// PC stopped answering a while back), reads as Checking.
+    init(live: HostLiveStatus?, now: Date = Date()) {
+        guard let live, now.timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale else {
+            self = .unknown
+            return
+        }
+        switch live.state {
+        case .unknown: self = .unknown
+        case .idle: self = .ready(rttMs: live.rttMs)
+        case .streamingApp(let name): self = .streamingElsewhere(appName: name)
+        case .streamingUnknownApp: self = .streamingElsewhere(appName: nil)
+        case .asleep: self = .asleep
+        case .certMismatch: self = .certMismatch
+        }
+    }
+
     private static func truncate(_ str: String, to max: Int) -> String {
         if str.count <= max { return str }
         let end = str.index(str.startIndex, offsetBy: max - 1)
@@ -85,10 +114,6 @@ enum ChipPresentation: Equatable {
 struct ReadinessChip: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Drives the re-pair sheet the certMismatch chip opens - re-pairing is the
-    /// Trust recovery (it re-pins the host's new cert). Pre-filled with the
-    /// host's address so the user lands on the PIN step, not the chooser.
-    @State private var showRePair = false
 
     /// Resolve the user-facing chip presentation. Priority order matters -
     /// our own session beats the polled host state (we'd rather show the live
@@ -107,20 +132,7 @@ struct ReadinessChip: View {
 
         // Polled live snapshot → chip state. The host-id guard in
         // `publishLiveStatus` already scopes it to the selected host.
-        guard let live = model.hostLiveStatus else { return .unknown }
-        // Aged-out samples (the host stopped answering /serverinfo a while
-        // back) shouldn't keep lying about a stream that ended hours ago.
-        if Date().timeIntervalSince(live.capturedAt) > HostLiveStatus.stale {
-            return .unknown
-        }
-        switch live.state {
-        case .unknown:                          return .unknown
-        case .idle:                             return .ready(rttMs: live.rttMs)
-        case .streamingApp(let name):           return .streamingElsewhere(appName: name)
-        case .streamingUnknownApp:              return .streamingElsewhere(appName: "an app")
-        case .asleep:                           return .asleep
-        case .certMismatch:                     return .certMismatch
-        }
+        return ChipPresentation(live: model.hostLiveStatus)
     }
 
     var body: some View {
@@ -130,38 +142,23 @@ struct ReadinessChip: View {
         // stacking independent blur passes into double-blur artefacts.
         GlassEffectContainer(spacing: 8) {
             HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(chip.dotColor)
-                        .frame(width: 7, height: 7)
-                        .symbolEffect(.pulse, options: .repeating, isActive: chip.pulsing && !reduceMotion)
-                    Text(chip.label)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .contentTransition(.opacity)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    // Quiet route glyph - bolt / Wi-Fi arcs - riding the
-                    // ALWAYS-ON HostRouteMonitor, never the gate-on probe.
-                    if case .ready = chip, let glyph = model.hostRoute.glyphSystemName {
-                        Image(systemName: glyph)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                Group {
+                    // certMismatch is the Trust affordance: a REAL Button, so
+                    // Tab and VoiceOver can reach it (an .onTapGesture alone
+                    // is invisible to both). Re-pairing re-pins the new cert.
+                    if chip == .certMismatch {
+                        Button { model.requestPairing(for: model.selectedHost) } label: { pill(for: chip) }
+                            .buttonStyle(.plain)
+                    } else {
+                        pill(for: chip)
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .glassEffect(.regular, in: .capsule)
-                // certMismatch chip is the Trust affordance: a click re-pairs
-                // (re-pinning the host's new cert). Inert for every other state.
-                .contentShape(Capsule())
-                .onTapGesture { if chip == .certMismatch { showRePair = true } }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilitySummary(for: chip))
                 .accessibilityAddTraits(chip == .certMismatch ? .isButton : [])
-                .accessibilityHint(chip == .certMismatch ? "Re-pair to trust the new certificate" : "")
+                .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
 
-                // HDR-active chip: only while a stream is confirmed PQ/HLG
+                // HDR-active chip: only while a stream is confirmed PQ (HDR10)
                 // end-to-end (the static SpecChipsRow tag is just the pref).
                 // Intentionally NOT glass - a vivid status badge should pop
                 // (Apple's HIG carves badges out of the glass-everything rule).
@@ -189,18 +186,33 @@ struct ReadinessChip: View {
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: presentation)
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.nativeHDRActive)
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.hostRoute.routeClass)
-        .sheet(isPresented: $showRePair) {
-            // Pre-fill the host's address so the re-pair lands straight on the
-            // PIN step (the initialAddress path that was previously dead).
-            PairSheet(initialAddress: rePairAddress).environment(model)
-        }
     }
 
-    /// Best-known address for the selected host, used to pre-fill the re-pair
-    /// sheet. Empty when nothing is selected (the sheet then opens the chooser).
-    private var rePairAddress: String {
-        guard let host = model.selectedHost else { return "" }
-        return host.localAddress ?? host.manualAddress ?? ""
+    /// The dot + label + route-glyph capsule, shared by the plain chip and
+    /// the certMismatch Button so both render identically.
+    private func pill(for chip: ChipPresentation) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(chip.dotColor)
+                .frame(width: 7, height: 7)
+                .symbolEffect(.pulse, options: .repeating, isActive: chip.pulsing && !reduceMotion)
+            Text(chip.label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
+                .contentTransition(.opacity)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            // Quiet route glyph - bolt / Wi-Fi arcs - riding the
+            // ALWAYS-ON HostRouteMonitor, never the gate-on probe.
+            if case .ready = chip, let glyph = model.hostRoute.glyphSystemName {
+                Image(systemName: glyph)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .glassEffect(.regular, in: .capsule)
     }
 
     /// Chip sentence + route flavour for VoiceOver ("Host ready, round trip

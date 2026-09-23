@@ -1,12 +1,9 @@
 //
 //  VideoDepacketizer+FrameHeader.swift
 //
-//  The NV frame-header parse (VideoDepacketizer.c:851-972): the frame-type byte
-//  that drives the IDR / RFI-recovery state, the Sunshine host-processing-latency
-//  field, the AV1 last-packet payload length, and the version + byte0 dependent
-//  header length the payload is skipped past. Split out of
-//  VideoDepacketizer.swift to keep each unit focused; see that file for the
-//  depacketizer's stored state.
+//  The NV frame-header parse (VideoDepacketizer.c:851-972): the frame type that drives IDR and RFI
+//  recovery, Sunshine's host-processing latency, the AV1 last-packet length and the header length
+//  to skip. Split out of VideoDepacketizer.swift, which holds the depacketizer's state.
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
@@ -39,9 +36,8 @@ extension VideoDepacketizer {
         case 4, 5:  // intra-refresh / P-frame with RFI
             // Host recovery frame after an RFI request: accept it by clearing
             // the RFI wait so it falls through the lastPacket gate (c:872-878).
+            // The receiver logs the episode it ends once the frame assembles.
             if waitingForRefInvalFrame {
-                Diag.notice("NativeVideo post-invalidation recovery frame \(frameIndex) "
-                    + "(\(typeByte == 5 ? "P" : "I")-frame)", Self.cat)
                 waitingForRefInvalFrame = false
                 waitingForNextSuccessfulFrame = false
                 // P2 IDR/RFI ROUND-TRIP: this recovery frame resolves an RFI
@@ -65,33 +61,7 @@ extension VideoDepacketizer {
             lastPacketPayloadLength = UInt16(payload[4]) | (UInt16(payload[5]) << 8)
         }
 
-        return frameHeaderSize(byte0: payload[0])
-    }
-
-    /// Version + byte0 dependent header length (c:914-965).
-    private func frameHeaderSize(byte0: UInt8) -> Int {
-        let quad = appVersionQuad
-        func atLeast(_ major: Int32, _ minor: Int32, _ patch: Int32) -> Bool {
-            if quad.count < 3 { return false }
-            if quad[0] != major { return quad[0] > major }
-            if quad[1] != minor { return quad[1] > minor }
-            return quad[2] >= patch
-        }
-
-        if atLeast(7, 1, 450) {
-            return byte0 == 0x01 ? 8 : 44
-        } else if atLeast(7, 1, 446) {
-            return byte0 == 0x01 ? 8 : 41
-        } else if atLeast(7, 1, 415) {
-            return byte0 == 0x01 ? 8 : 24
-        } else if atLeast(7, 1, 350) {
-            return 8
-        } else if atLeast(7, 1, 320) {
-            return 12
-        } else if atLeast(5, 0, 0) {
-            return 8
-        } else {
-            return 0
-        }
+        // Sunshine reports 7.1.431, the [7.1.415, 7.1.446) rung of c:914-965; the others were GameStream's.
+        return payload[0] == 0x01 ? 8 : 24
     }
 }

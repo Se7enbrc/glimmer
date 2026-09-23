@@ -37,7 +37,7 @@ extension TelemetryExporter {
             Double(now.uptimeNanoseconds &- connectInstant.uptimeNanoseconds) / 1_000_000_000.0
         // Final cumulative histograms (session-wide) for the percentiles. nil if
         // the latency rig never recorded a frame this session.
-        let histograms = FrameTimingTracker.shared?.histograms.snapshot()
+        let tracker = FrameTimingTracker.shared
         let report = SessionReport(
             sessionId: sessionId,
             client: TelemetryRenderer.clientNameRaw,
@@ -47,8 +47,13 @@ extension TelemetryExporter {
             generatedISO8601: isoFormatter.string(from: Date()),
             durationSeconds: durationSeconds,
             aggregate: sessionAggregate,
-            histograms: histograms,
-            counters: counters)
+            histograms: tracker?.histograms.snapshot(),
+            counters: counters,
+            sessionWideStages: tracker.map { [
+                ("input_deliver", $0.inputDeliverLatency.snapshotValue()),
+                ("input_queue_to_wire", $0.inputLocalLatency.snapshotValue()),
+                ("rfi_recovery", $0.rfiRecoveryMs.snapshotValue())
+            ] } ?? [])
         let json = report.renderJSON()
         let reportURL = ndjsonURL
             .deletingLastPathComponent()
@@ -59,29 +64,26 @@ extension TelemetryExporter {
             Diag.notice("Telemetry SESSION REPORT written → \(reportURL.lastPathComponent) "
                 + "(duration \(String(format: "%.1f", durationSeconds))s).", Self.logCategory)
         } catch {
-            log.error("Telemetry session report write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry session report write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 
     // MARK: - Bookmark ("that felt bad") - signal 4
 
-    /// Record a user bookmark: the client-only chord fired during the stream to
-    /// flag jank. Bumps the always-live `bookmark_total` counter (so a dashboard
-    /// `increase()` marks the beat), and writes an explicit EVENT line into the
-    /// NDJSON + the Diag log with the connect-relative time so a review jumps
-    /// straight to the moment. Safe to call from the main actor (the chord fires
-    /// on the input thread) - the file write hops onto `workQueue`, the same
-    /// queue the 1Hz capture uses, so NDJSON lines never interleave mid-write.
-    /// No-op-safe before the file is open (the line is simply dropped, the counter
-    /// still increments).
+    /// Record a ⌃B bookmark: bump `bookmark_total` and write a bookmark row to the
+    /// NDJSON (on `workQueue`, like the 1 Hz capture), the frame trace and the Diag
+    /// log. Before the NDJSON file opens, its row is dropped; the counter still counts.
     func recordBookmark() {
         counters.bookmarkTotal.increment()
         let now = DispatchTime.now()
         let sinceConnect =
             Double(now.uptimeNanoseconds &- connectInstant.uptimeNanoseconds) / 1_000_000_000.0
         let count = counters.bookmarkTotal.value
-        Diag.notice(String(format: "BOOKMARK #%llu at t+%.3fs - user flagged jank "
-            + "(\"that felt bad\")", count, sinceConnect), Self.logCategory)
+        Diag.notice("BOOKMARK #\(count) at t+\(String(format: "%.3f", sinceConnect))s - user flagged jank "
+            + "(\"that felt bad\")", Self.logCategory)
+        if let tracker = FrameTimingTracker.shared {
+            tracker.traceWriter.append(tracker.bookmarkLine(total: count, uptimeNanos: now.uptimeNanoseconds))
+        }
         workQueue.async { [weak self] in
             guard let self else { return }
             let iso = self.isoFormatter.string(from: Date())
@@ -95,7 +97,7 @@ extension TelemetryExporter {
         }
     }
 
-    // MARK: - Engine EVENT sink (audio_ttf / audio_pending)
+    // MARK: - Engine EVENT sink (audio_ttf / audio_pending / loss_episode / video_gap)
 
     /// Process-global handle for EVENT rows from engine components that have no
     /// Engine EVENT sink: installed by `start()`, cleared by `stop()`, read by
@@ -158,11 +160,23 @@ extension TelemetryExporter {
             preStartEvents.append(fields)
             return
         }
-        exporter.workQueue.async { [weak exporter] in
-            guard let exporter else { return }
-            let header = "\"ts\":\"\(exporter.isoFormatter.string(from: Date()))\","
-                + "\"session\":\"\(exporter.sessionId)\","
-            exporter.appendNDJSON("{" + header + fields.joined(separator: ",") + "}")
+        exporter.writeEvent(fields)
+    }
+
+    /// Mid-stream EVENT rows (loss episodes, gaps, key frames): built and written
+    /// only while an exporter is live, never buffered, so with telemetry off the
+    /// caller pays one lock and no formatting.
+    static func recordLiveEvent(_ fields: @autoclosure () -> [String]) {
+        guard let exporter = eventSinkBox.withLock({ $0 }) else { return }
+        exporter.writeEvent(fields())
+    }
+
+    private func writeEvent(_ fields: [String]) {
+        workQueue.async { [weak self] in
+            guard let self else { return }
+            let header = "\"ts\":\"\(self.isoFormatter.string(from: Date()))\","
+                + "\"session\":\"\(self.sessionId)\","
+            self.appendNDJSON("{" + header + fields.joined(separator: ",") + "}")
         }
     }
 
@@ -171,20 +185,15 @@ extension TelemetryExporter {
     /// Module-internal (not private) so `start()` in TelemetryExporter.swift
     /// still opens the file across the file split.
     func openNDJSONFile() {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+        let dir = Self.logsDirectory
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
-            log.error("Telemetry: could not create log dir: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry: could not create log dir: \(error.localizedDescription, privacy: .private)")
             return
         }
-        // C2: prune the Logs dir BEFORE creating this session's file (so the
-        // newest files - this session's siblings - always survive). A fresh trio
-        // of files was minted every session and never pruned; over months that
-        // dir grows without bound (the per-frame trace alone is ~1.5GB/6h before
-        // the rollover above caps it). Bounded by a total-byte budget + an age
-        // limit, newest-kept.
+        // C2: prune the Logs dir (age + byte budget) BEFORE this session's
+        // NDJSON and trace files exist, so the sweep can never pick them.
         Self.sweepLogsDirectory(dir, log: log)
         // ISO8601 with ':' is filename-legal on APFS; keep the full timestamp so
         // each session's file is unique and sorts chronologically.
@@ -196,7 +205,7 @@ extension TelemetryExporter {
             fileHandle = try FileHandle(forWritingTo: url)
             log.notice("Telemetry NDJSON → \(url.path, privacy: .public)")
         } catch {
-            log.error("Telemetry: could not open NDJSON file: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry: could not open NDJSON file: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -208,7 +217,7 @@ extension TelemetryExporter {
         } catch {
             // A write failure (disk full, file removed) shouldn't take down the
             // stream - drop the line and keep going.
-            log.error("Telemetry NDJSON write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry NDJSON write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

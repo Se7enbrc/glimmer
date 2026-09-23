@@ -42,7 +42,7 @@ final class AppModel {
 
     // Hosts
     var hosts: [Host] = []
-    var selectedHost: Host?
+    var selectedHost: Host? { didSet { selectionChanged(from: oldValue) } }
 
     // Stream lifecycle
     var isStreaming = false
@@ -106,10 +106,11 @@ final class AppModel {
     // number follows resolution and refresh (and, in a window, the capped
     // refresh) on its own. Nothing to persist and nothing to ask - the result
     // is visible in the next-stream summary. See QualityCalculator.
-    var customHDR: Bool = true {
+    /// HDR under every preset, on by default; off offers no 10-bit format (SDR).
+    var streamHDR: Bool = true {
         didSet {
-            UserDefaults.standard.set(customHDR, forKey: "customHDR")
-            if qualityPreset == .custom { persistQualitySettings() }
+            UserDefaults.standard.set(streamHDR, forKey: "streamHDR")
+            persistQualitySettings()
         }
     }
 
@@ -117,12 +118,10 @@ final class AppModel {
     var defaultLaunchApp: String = "Desktop" {
         didSet { UserDefaults.standard.set(defaultLaunchApp, forKey: "defaultLaunchApp") }
     }
+    /// Play the stream's sound on the PC instead of this Mac. Read at stream
+    /// start (localAudioPlayMode), so a change applies to the next stream.
     var muteMacWhileStreaming: Bool = false {
-        didSet {
-            UserDefaults.standard.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming")
-            // Mid-stream flips act immediately - doc on applyMutePreferenceMidStream().
-            applyMutePreferenceMidStream()
-        }
+        didSet { UserDefaults.standard.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming") }
     }
 
     /// Connection lifecycle published from the native engine. Drives the
@@ -136,28 +135,26 @@ final class AppModel {
     /// resign/become-key observers via callbacks on this manager.
     var nativeStreamBackgrounded: Bool = false
 
-    /// Bring the stream window back from the background. Called by the
-    /// launcher's "Back to stream" CTA when nativeStreamBackgrounded is true.
-    public func resumeStreamWindow() {
-        Task { [weak self] in
-            await self?.nativeSession?.resumeWindow()
-        }
-    }
     var nativeStreamError: String?
+
+    /// Coarse kind for the last connect failure, set alongside
+    /// `nativeStreamError` so the banner and menu bar can offer a
+    /// matching action instead of parsing the message text.
+    var nativeStreamErrorKind: StreamErrorKind = .other
+
+    enum StreamErrorKind {
+        case unreachable, pairing, other
+    }
 
     /// Effective HDR-active state from the native engine. True only when the
     /// host signalled HDR mode AND the bitstream is 10-bit AND the Metal
-    /// layer is fully configured for PQ/HLG EDR output. Drives the "HDR"
+    /// layer is fully configured for PQ (HDR10) EDR output. Drives the "HDR"
     /// chip in the stream UI.
     var nativeHDRActive: Bool = false
 
-    /// Brief "Stream ended" toast on the launcher. Flipped on whenever a
-    /// stream session ends cleanly (regardless of whether the user quit
-    /// via hotkey, the host disconnected, or an error occurred); the
-    /// ContentView toast auto-dismisses after ~2s by clearing this back
-    /// to false on its own timer. Lives here so any view in the launcher
-    /// can react to it - the stream window itself fades independently
-    /// (see StreamWindow.close()).
+    /// The launcher's brief "Stream ended" toast: set by the teardown for a quit, a
+    /// PC-side end or a failure, never a cancelled connect, and cleared by the
+    /// ContentView toast's own timer. The stream window fades on its own.
     var streamEndedToastVisible: Bool = false
 
     /// Receipt for the most recently ENDED session - nil when the last
@@ -167,10 +164,9 @@ final class AppModel {
     /// line. Persistence contract: AppModel+SessionReceipt.swift.
     var lastSessionReceipt: SessionReceipt?
 
-    /// Always-on route monitor for the SELECTED host (the readiness chip's
-    /// quiet bolt / Wi-Fi glyph). Deliberately independent of the gate-on
-    /// telemetry probe - see AppModel+HostRoute.swift. Re-pointed by
-    /// the launcher via `refreshHostRoute()` as the selection changes.
+    /// Always-on route monitor for the SELECTED host (the readiness chip's quiet bolt
+    /// or Wi-Fi glyph), independent of the gate-on telemetry probe. Re-pointed from
+    /// `selectedHost`'s didSet whenever the route address changes.
     let hostRoute = HostRouteMonitor()
 
     /// Latest reachability + activity snapshot for the selected host. Drives
@@ -188,15 +184,19 @@ final class AppModel {
     struct PendingTakeover: Equatable {
         let app: LibraryApp
         let host: Host
-        let occupantApp: String
+        /// nil when the PC runs an app it didn't name.
+        let occupantApp: String?
     }
 
-    // Menu bar: reconnect edge, the Stop row's latch, the overlay mirror and
-    // the Connection Details snapshot (see AppModel+MenuBar).
+    // Menu bar (see AppModel+MenuBar): reconnect edge, Stop latch, overlay mirror,
+    // Connection Details, the pads, and the launcher's pair sheet (a nil PC pairs a new one).
     var isReconnecting = false
     var menuStopInProgress = false
     var statsOverlayShown = false
     var menuDetails: StreamStatsSnapshot?
+    var menuBarControllers: [MenuBarController] = []
+    var pairSheetShown = false
+    var pairSheetHost: Host?
     @ObservationIgnored var menuRefreshTimer: Timer?
 
     var showStreamStats: Bool = false {
@@ -233,20 +233,6 @@ final class AppModel {
         didSet {
             let raw = statsOverlayCustomRows.map(\.rawValue)
             UserDefaults.standard.set(raw, forKey: "statsOverlayCustomRows")
-        }
-    }
-
-    /// The row set the overlay should actually render, resolved against
-    /// the current preset. Custom mode reaches into `statsOverlayCustomRows`;
-    /// the curated presets resolve to their static sets in
-    /// `StatsOverlayDefaults`. Computed property so the resolution is
-    /// always in sync with the preset - no caching, no invalidation.
-    var effectiveStatsRows: Set<StatsRow.Kind> {
-        switch statsOverlayPreset {
-        case .minimal:  return StatsOverlayDefaults.minimalRows
-        case .micro:    return StatsOverlayDefaults.microRows
-        case .extended: return StatsOverlayDefaults.extendedRows
-        case .custom:   return statsOverlayCustomRows
         }
     }
 
@@ -345,18 +331,12 @@ final class AppModel {
 
     /// User-recorded buttons backing the `.custom` quit chord (press the buttons,
     /// we store them - issue #9). Persisted as JSON.
-    var customControllerChord: Set<ControllerButton> = AppModel.loadCustomChord() {
+    var customControllerChord: Set<ControllerButton> = [] {
         didSet {
             if let data = try? JSONEncoder().encode(customControllerChord) {
                 UserDefaults.standard.set(data, forKey: "customControllerChord")
             }
         }
-    }
-
-    private static func loadCustomChord() -> Set<ControllerButton> {
-        guard let data = UserDefaults.standard.data(forKey: "customControllerChord"),
-              let set = try? JSONDecoder().decode(Set<ControllerButton>.self, from: data) else { return [] }
-        return set
     }
 
     /// Live "is any game controller connected" flag, driven by the
@@ -405,9 +385,9 @@ final class AppModel {
     /// is seen and the user hasn't decided yet. Transient.
     var showRawHIDPrompt = false
 
-    /// Name of a generic HID pad waiting for Input Monitoring, and the
-    /// launcher's offer for it. Transient (see AppModel+RawHID).
-    var hidPermissionPadName: String?
+    /// The generic HID pad waiting for Input Monitoring, and the launcher's
+    /// offer for it. Transient (see AppModel+RawHID).
+    var hidPermissionPad: HIDGamepadDevice?
     var showHIDPermissionPrompt = false
 
     /// Whether the user has answered the auto-offer (Enable or Cancel) - so we
@@ -423,14 +403,10 @@ final class AppModel {
 
     // Pairing
     var pairingAttempt: PairingAttempt?
-    var pairingInFlight: Bool { pairingAttempt != nil }
 
     /// Typed phase of the in-flight pairing handshake. Drives the PairSheet
-    /// banner colour, spinner, and result text. `pairingMessage` is the
-    /// String-typed read shim for UI code that hasn't migrated.
+    /// banner icon, spinner, and result text.
     var pairingPhase: PairingPhase = .idle
-
-    // `pairingMessage` (the String shim over `pairingPhase`) lives in AppModel+Pairing.swift.
 
     // Persisted stream config - held here so the UI's "Your next stream"
     // summary stays truthful without depending on moonlight-qt's UserDefaults
@@ -483,12 +459,9 @@ final class AppModel {
     /// resets it when re-arming for a (possibly different) host.
     @ObservationIgnored var hostUnreachableStreak = 0
 
-    /// Number of consecutive unreachable probes required before the chip
-    /// asserts `.asleep`. Sub-threshold misses publish NOTHING (the chip holds
-    /// its last-good status - see `publishUnreachable`), so this is purely the
-    /// confidence bar for declaring a host down: 3 consecutive 2 s misses
-    /// (~30 s) ride out Wi-Fi double-blips and a momentarily busy host without
-    /// a false "Asleep", while a genuinely-off box still resolves cleanly.
+    /// Consecutive missed probes before the chip shows Asleep while it holds a fresh
+    /// last good status (see `publishUnreachable`). Three ride out a Wi-Fi double blip
+    /// or a momentarily busy PC without a false Asleep.
     static let asleepProbeThreshold = 3
 
     /// Settle delay before the FIRST chip probe when the poller is re-armed
@@ -550,7 +523,7 @@ final class AppModel {
         customWidth = min(max(Self.persistedPositiveInt("customWidth") ?? customWidth, 640), 7680)
         customHeight = min(max(Self.persistedPositiveInt("customHeight") ?? customHeight, 480), 4320)
         customFPS = min(max(Self.persistedPositiveInt("customFPS") ?? customFPS, 30), 240)
-        customHDR = Self.persistedBool("customHDR") ?? customHDR
+        streamHDR = Self.persistedBool("streamHDR") ?? streamHDR
         captureSysKeys = Self.persistedBool("captureSysKeys") ?? captureSysKeys
         streamCoversNotch = Self.persistedBool("streamCoversNotch") ?? streamCoversNotch
         // Registered default (GlimmerApp) answers the absent-key case; an
@@ -580,19 +553,21 @@ final class AppModel {
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self) ?? quitHotkey
         statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self) ?? statsHotkey
         controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self) ?? controllerQuitChord
+        customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self) ?? customControllerChord
+        hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
-
-    // MARK: Mute/restore Mac audio
-
-    /// Pre-mute capture of the output device and its level. Non-nil doubles as
-    /// the did-mute LATCH: the stream-end restore keys off THIS, never the live
-    /// toggle - see AppModel+Audio.swift for the full contract.
-    @ObservationIgnored var prePausedMacOutput: MutedOutput?
 
     /// The launch the user last asked for, so Retry repeats exactly that.
     @ObservationIgnored var lastLaunchAttempt: (app: LibraryApp, host: Host)?
 
-    /// Wake on LAN in flight for this PC, and the PC whose last wake got no answer.
+    /// Wake on LAN in flight for this PC, and the PC whose last wake failed.
     var wakingHostID: String?
     var wakeFailedHostID: String?
+
+    /// Why the last wake attempt failed, alongside `wakeFailedHostID`.
+    var wakeFailureReason: WakeFailureReason?
+
+    enum WakeFailureReason {
+        case noAnswer, couldNotSend
+    }
 }

@@ -73,28 +73,42 @@ extension RtpAudioReceiver {
         emitAudioEvent(fields)
     }
 
-    /// Arm the one-shot silent-audio probe: if no audio RTP has arrived
-    /// `audioPendingProbeSeconds` after the receive path comes up, emit an
-    /// `audio_pending` event. Sessions have been abandoned by the user with
-    /// audio never arriving and NOTHING flagged the silence - this makes it
-    /// visible (with the ping count as evidence the keepalive loop is alive).
-    /// A detached utility-QoS one-shot: it cannot run on `recvQueue` (the
-    /// blocking receive loop occupies it for the session), so it reads the
-    /// cross-thread `firstRtpReceived` latch instead of `receivedDataFromPeer`.
-    func armAudioPendingProbe() {
+    /// Silent-audio re-check cadence after the first probe: a 30s notice (past a
+    /// normal ~21s cold host start), then every 10 min until audio arrives.
+    static let audioPendingRecheckSeconds = 30.0
+    static let audioPendingRepeatSeconds = 600.0
+
+    /// Seconds after receive start of the probe that follows one at `elapsed`.
+    static func nextAudioPendingProbeSeconds(after elapsed: Double) -> Double {
+        if elapsed < audioPendingProbeSeconds { return audioPendingProbeSeconds }
+        if elapsed < audioPendingRecheckSeconds { return audioPendingRecheckSeconds }
+        return elapsed + audioPendingRepeatSeconds
+    }
+
+    /// Silent-audio probe: a WARN + `audio_pending` event at 3s, then NOTICEs on
+    /// `nextAudioPendingProbeSeconds` until audio lands or the stream stops. Runs off
+    /// `recvQueue` (the receive loop owns it), so it reads the `firstRtpReceived` latch.
+    func armAudioPendingProbe(after elapsed: Double = 0) {
+        let due = Self.nextAudioPendingProbeSeconds(after: elapsed)
         DispatchQueue.global(qos: .utility).asyncAfter(
-            deadline: .now() + Self.audioPendingProbeSeconds
+            deadline: .now() + (due - elapsed)
         ) { [weak self] in
             guard let self, !self.interrupted.isSet, !self.firstRtpReceived.isSet else { return }
             let pings = self.pingsSent.load()
-            Diag.warn("NativeAudio no audio RTP \(Int(Self.audioPendingProbeSeconds))s after "
-                + "receive start (\(pings) pings sent - ping loop alive; host hasn't aimed audio "
-                + "at us yet; still retrying)", Self.cat)
-            self.emitAudioEvent([
-                "\"event\":\"audio_pending\"",
-                "\"after_ms\":\(Int(Self.audioPendingProbeSeconds * 1000))",
-                "\"pings\":\(pings)"
-            ])
+            if due == Self.audioPendingProbeSeconds {
+                Diag.warn("NativeAudio no audio RTP \(Int(due))s after "
+                    + "receive start (\(pings) pings sent - ping loop alive; host hasn't aimed audio "
+                    + "at us yet; still retrying)", Self.cat)
+                self.emitAudioEvent([
+                    "\"event\":\"audio_pending\"",
+                    "\"after_ms\":\(Int(due * 1000))",
+                    "\"pings\":\(pings)"
+                ])
+            } else {
+                Diag.notice("NativeAudio still no audio RTP \(Int(due))s after receive start "
+                    + "(\(pings) pings sent - the host still hasn't sent audio; still retrying)", Self.cat)
+            }
+            self.armAudioPendingProbe(after: due)
         }
     }
 
@@ -112,7 +126,7 @@ extension RtpAudioReceiver {
     /// the sink hops onto the exporter queue); called from the receive thread
     /// (audio_ttf) and the pending probe (audio_pending).
     private func emitAudioEvent(_ fields: [String]) {
-        Diag.notice("EVENT {" + fields.joined(separator: ",") + "}", Self.cat)
+        Diag.notice("EVENT {\(fields.joined(separator: ","))}", Self.cat)
         TelemetryExporter.recordEvent(fields)
     }
 }

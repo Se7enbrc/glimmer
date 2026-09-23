@@ -35,9 +35,9 @@ extension TelemetryRenderer {
         builder.emit("glimmer_handshake_rtsp_ms",
                      "RTSP/SDP handshake duration this session, ms (connect breakdown).",
                      handshake.rtspMs)
-        builder.emit("glimmer_handshake_pairing_ms",
-                     "Pairing/auth leg (RTSP-done → ENet-connect start) this session, ms.",
-                     handshake.pairingMs)
+        builder.emit("glimmer_handshake_control_setup_ms",
+                     "Control-channel setup (RTSP-done → ENet-connect start) this connect, ms.",
+                     handshake.controlSetupMs)
         builder.emit("glimmer_handshake_enet_connect_ms",
                      "ENet control-channel connect (CONNECT → START_A/B ACKed) this session, ms.",
                      handshake.enetConnectMs)
@@ -82,10 +82,10 @@ extension TelemetryRenderer {
     /// scrape).
     private static func promReconnectDisconnect(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         builder.emitCounter("glimmer_reconnect_total",
-                            "Reconnects this run (a connection re-established after a drop).",
+                            "Reconnects this session (a connection re-established after a drop).",
                             snap.reconnectTotal)
         builder.emitCounter("glimmer_wake_total",
-                            "Wakes from sleep this run while a stream was live.",
+                            "Wakes from sleep this session while a stream was live.",
                             snap.wakeTotal)
         builder.emitCounter("glimmer_route_change_total",
                             "Egress route/link-class changes this run (e.g. wake on a "

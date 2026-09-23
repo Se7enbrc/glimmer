@@ -2,15 +2,20 @@
 //  WakeOnLAN.swift
 //
 //  Wake-on-LAN the way Moonlight does it: a magic packet built from the MAC
-//  Sunshine reported, sent to the broadcast addresses of every interface and
-//  to the PC's known addresses on ports 9 and 47009. Plain UDP, no helper.
+//  Sunshine reported, sent on ports 9 and 47009 to every interface's broadcast
+//  and the PC's addresses, which also get Sunshine's ports. Plain UDP, no helper.
 //
 
 import Darwin
 import Foundation
 
 enum WakeOnLAN {
+    typealias Target = (host: String, ports: [UInt16])
+
     static let ports: [UInt16] = [9, 47009]
+    /// Sunshine's streaming ports, sent to the PC's own addresses only: a router
+    /// forwarding them carries the packet to a PC reached from outside the network.
+    static let sunshinePorts: [UInt16] = [47998, 47999, 48000, 48002, 48010]
     static let limitedBroadcast = "255.255.255.255"
 
     /// "aa:bb:cc:dd:ee:ff" from any separator or case; nil for junk or all zeros.
@@ -39,15 +44,15 @@ enum WakeOnLAN {
 
     /// Every distinct place worth sending to, in order: the limited broadcast,
     /// each interface's subnet broadcast, then the PC's own addresses.
-    static func targets(hostAddresses: [String?], broadcasts: [String]) -> [(host: String, port: UInt16)] {
+    static func targets(hostAddresses: [String?], broadcasts: [String]) -> [Target] {
         var seen: Set<String> = []
-        var hosts: [String] = []
-        for address in [limitedBroadcast] + broadcasts + hostAddresses.compactMap({ $0 }) {
-            let trimmed = address.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { continue }
-            hosts.append(trimmed)
+        func distinct(_ addresses: [String], ports: [UInt16]) -> [Target] {
+            addresses.map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && seen.insert($0).inserted }
+                .map { ($0, ports) }
         }
-        return hosts.flatMap { host in ports.map { (host, $0) } }
+        return distinct([limitedBroadcast] + broadcasts, ports: ports)
+            + distinct(hostAddresses.compactMap { $0 }, ports: ports + sunshinePorts)
     }
 
     /// IPv4 broadcast addresses of the Mac's live interfaces.
@@ -74,8 +79,8 @@ enum WakeOnLAN {
         return result
     }
 
-    /// Send the packet to every target; returns how many sends succeeded.
-    /// Hostnames resolve here, so callers run this off the main thread.
+    /// Send the packet to every target; returns how many sends succeeded. Each
+    /// address resolves once, here, so callers run this off the main thread.
     static func send(mac: String, hostAddresses: [String?]) -> Int {
         guard let packet = magicPacket(mac: mac) else { return 0 }
         let socketFD = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
@@ -85,16 +90,29 @@ enum WakeOnLAN {
         setsockopt(socketFD, SOL_SOCKET, SO_BROADCAST, &enable, socklen_t(MemoryLayout<Int32>.size))
         var sent = 0
         for target in targets(hostAddresses: hostAddresses, broadcasts: interfaceBroadcastAddresses()) {
-            var hints = addrinfo(ai_flags: 0, ai_family: AF_INET, ai_socktype: SOCK_DGRAM, ai_protocol: IPPROTO_UDP,
-                                 ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
-            var info: UnsafeMutablePointer<addrinfo>?
-            guard getaddrinfo(target.host, String(target.port), &hints, &info) == 0, let resolved = info else { continue }
-            defer { freeaddrinfo(info) }
-            let result = packet.withUnsafeBytes { buffer in
-                sendto(socketFD, buffer.baseAddress, buffer.count, 0, resolved.pointee.ai_addr, resolved.pointee.ai_addrlen)
+            guard var address = resolveIPv4(target.host) else { continue }
+            for port in target.ports {
+                address.sin_port = port.bigEndian
+                let result = withUnsafePointer(to: address) { pointer in
+                    pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                        packet.withUnsafeBytes { buffer in
+                            sendto(socketFD, buffer.baseAddress, buffer.count, 0, socketAddress,
+                                   socklen_t(MemoryLayout<sockaddr_in>.size))
+                        }
+                    }
+                }
+                if result == packet.count { sent += 1 }
             }
-            if result == packet.count { sent += 1 }
         }
         return sent
+    }
+
+    private static func resolveIPv4(_ host: String) -> sockaddr_in? {
+        var hints = addrinfo(ai_flags: 0, ai_family: AF_INET, ai_socktype: SOCK_DGRAM, ai_protocol: IPPROTO_UDP,
+                             ai_addrlen: 0, ai_canonname: nil, ai_addr: nil, ai_next: nil)
+        var info: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, nil, &hints, &info) == 0, let resolved = info else { return nil }
+        defer { freeaddrinfo(resolved) }
+        return resolved.pointee.ai_addr?.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
     }
 }

@@ -43,8 +43,19 @@ extension AppModel {
     var displayBitrateKbps: Int {
         _ = displayInfoRevision  // codec override writes UserDefaults; bump re-evaluates the chip
         guard let host = selectedHost else { return effectiveBitrateKbps }
-        let formats = HostCodecPreference.load(for: host.id).apply(to: .probedSupported)
-        return wireBitrateKbps(forFormats: formats)
+        return wireBitrateKbps(forFormats: offeredVideoFormats(for: host))
+    }
+
+    /// What this Mac offers the PC: the probed formats under the PC's codec
+    /// choice (right-click › Codec), less the 10-bit ones when HDR is off.
+    func offeredVideoFormats(for host: Host) -> VideoFormats {
+        Self.videoFormats(HostCodecPreference.load(for: host.id).apply(to: .probedSupported), hdr: streamHDR)
+    }
+
+    /// With no 10-bit format on offer the PC encodes SDR, and the launch
+    /// request leaves out hdrMode (sent only when one is offered).
+    nonisolated static func videoFormats(_ formats: VideoFormats, hdr: Bool) -> VideoFormats {
+        hdr ? formats : formats.subtracting(VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_MASK_10BIT))
     }
 
     /// The dial is sized for Wi-Fi. Wired end to end (the Mac's route says
@@ -62,31 +73,85 @@ extension AppModel {
         return value > 0 ? value : wifiBitrateMultiplier
     }
 
-    var wiredBitrateBoost: Double {
-        bitrateMode == .highestQuality && hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : 1
-    }
-
-    /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
-    /// negotiated codec's efficiency, then by the route. The spec UI and
-    /// `nativeStreamConfig` both read this so the shown bitrate can't drift
-    /// from what's sent. Custom skips the codec discount, as before.
+    /// The spec chip's bitrate: the dial scaled by codec and route through
+    /// `routeAsk`, the path the launch, the chip and reconnects share, so the
+    /// shown bitrate can't drift from what's sent.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
-        StreamPathMTU.wifiAskKbps(ask: routeAskKbps(forFormats: formats), phyRateMbps: hostRoute.wifiPhyRateMbps)
+        Self.routeAsk(bitrateDecision(forFormats: formats), route: hostRoute.routeClass).kbps
     }
 
     /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
     /// Bandwidth saver is the lighter ask from before the boosts existed.
-    func routeAskKbps(forFormats formats: VideoFormats) -> Int {
+    nonisolated static func routeAskKbps(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> Int {
+        let cap = decision.mode == .highestQuality ? routeBoost(route).capKbps : maxBitrateKbps
+        return wireBitrateKbps(dial: decision.dialKbps, codecMultiplier: decision.codecMultiplier,
+                               boost: decision.boost, capKbps: cap)
+    }
+
+    /// The one ask the launch, the spec chip and every reconnect use: after the
+    /// radio gate, with the wired boost the measured RTT may still withdraw.
+    nonisolated static func routeAsk(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> RouteAsk {
+        RouteAsk(kbps: StreamPathMTU.wifiAskKbps(ask: routeAskKbps(decision, route: route),
+                                                 phyRateMbps: decision.radioGatePhyMbps),
+                 boost: rttWithdrawableBoost(decision, route: route))
+    }
+
+    /// Every reconnect asks this: the launch's decision on the route the Mac is on
+    /// then. Preset, size and Bandwidth changes in Settings apply next stream.
+    func routeAskProvider(launch: BitrateDecision, hostID: String) -> @MainActor @Sendable () -> RouteAsk? {
+        { [weak self] in
+            guard let self else { return nil }
+            return Self.reconnectRouteAsk(launch, route: hostRoute.routeClass, phyRateMbps: hostRoute.wifiPhyRateMbps,
+                                          selectedHostID: selectedHost?.id, sessionHostID: hostID)
+        }
+    }
+
+    /// The route monitor follows the launcher's selection, so its reading is the
+    /// session's only while that PC is selected and resolved. nil keeps the ask.
+    nonisolated static func reconnectRouteAsk(
+        _ launch: BitrateDecision, route: HostRouteMonitor.RouteClass, phyRateMbps: Double?,
+        selectedHostID: String?, sessionHostID: String
+    ) -> RouteAsk? {
+        guard selectedHostID == sessionHostID, route != .unknown else { return nil }
+        return routeAsk(onRoute(launch, route: route, phyRateMbps: phyRateMbps), route: route)
+    }
+
+    /// `decision` with the route's part filled in: the boost (Highest quality
+    /// only) and the radio gate. Its dial, codec and mode stay as decided.
+    nonisolated static func onRoute(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass,
+                                    phyRateMbps: Double?) -> BitrateDecision {
+        var decision = decision
+        decision.boost = decision.mode == .highestQuality ? routeBoost(route).boost : 1
+        decision.radioGatePhyMbps = phyRateMbps
+        return decision
+    }
+
+    /// The inputs `routeAskKbps` multiplies, also recorded in the telemetry config event.
+    func bitrateDecision(forFormats formats: VideoFormats) -> BitrateDecision {
         var codec = Self.codecBudgetMultiplier(for: formats)
         if case .custom = qualityPreset { codec = 1 }
-        guard bitrateMode == .highestQuality else {
-            return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
-                                        boost: 1, capKbps: Self.maxBitrateKbps)
+        let settings = BitrateDecision(mode: bitrateMode, dialKbps: effectiveBitrateKbps, codecMultiplier: codec,
+                                       boost: 1, radioGatePhyMbps: nil)
+        return Self.onRoute(settings, route: hostRoute.routeClass, phyRateMbps: hostRoute.wifiPhyRateMbps)
+    }
+
+    /// The part of the decision's boost the connect-time RTT may withdraw: only
+    /// the wired one, since Wi-Fi has the radio gate instead.
+    nonisolated static func rttWithdrawableBoost(_ decision: BitrateDecision,
+                                                 route: HostRouteMonitor.RouteClass) -> Double {
+        route == .wired ? decision.boost : 1
+    }
+
+    /// Boost and cap per route. A tunnel, or a route not resolved yet, keeps the
+    /// unboosted ask: neither the radio gate nor the RTT withdrawal can trim it.
+    nonisolated static func routeBoost(
+        _ route: HostRouteMonitor.RouteClass, wifiBoost: Double = wifiBitrateBoost
+    ) -> (boost: Double, capKbps: Int) {
+        switch route {
+        case .wired: (wiredBitrateMultiplier, wiredBitrateCapKbps)
+        case .wifi: (wifiBoost, maxBitrateKbps)
+        case .tunnel, .unknown: (1, maxBitrateKbps)
         }
-        let wired = hostRoute.routeClass == .wired
-        return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
-                                    boost: wired ? Self.wiredBitrateMultiplier : Self.wifiBitrateBoost,
-                                    capKbps: wired ? Self.wiredBitrateCapKbps : Self.maxBitrateKbps)
     }
 
     /// Pure so the rule is testable: dial × codec × boost, clamped to the floor
@@ -118,7 +183,7 @@ extension AppModel {
 
     /// The app the host is running right now, when a fresh /serverinfo
     /// snapshot names one that is in the applist. Host truth is the one thing
-    /// allowed to override the Default action: the button then resumes it.
+    /// allowed to override the Default action: the button then restarts it.
     var resumableAppName: String? {
         guard let host = selectedHost, let live = hostLiveStatus,
               Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
@@ -134,52 +199,56 @@ extension AppModel {
         resumableAppName ?? defaultAppName
     }
 
-    /// Primary-button copy. Always "Stream <app>" - this button only shows on the
-    /// launcher (never mid-stream), so "Resume" read as confusing. The verb is the
-    /// same whether we resume the host's running session or launch fresh;
-    /// `streamHeroApp()` still picks /resume vs /launch under the hood.
+    /// Primary-button copy. Always "Stream <app>": every stream is a fresh
+    /// /launch, and an app already running on the PC is quit first
+    /// (`launchWithBusyRecovery`), so there is no resume to name.
     var heroActionLabel: String {
         "Stream \(heroTargetAppName)"
     }
 
+    /// The hero target as an app on the selected PC, falling back like the
+    /// Default action does. `glimmer stream <pc>` launches the same one.
+    var heroTargetApp: LibraryApp? {
+        guard let host = selectedHost else { return nil }
+        return host.apps.first { $0.name == heroTargetAppName }
+            ?? host.apps.first { $0.name == "Desktop" }
+            ?? host.apps.first
+    }
+
     /// Launch the hero target (the primary click / Return-key action).
     func streamHeroApp() {
-        guard let host = selectedHost else { return }
-        if let name = resumableAppName,
-           let app = host.apps.first(where: { $0.name == name }) {
-            requestStream(app: app, on: host)
-        } else {
-            streamDefaultApp()
-        }
+        guard let host = selectedHost, let app = heroTargetApp else { return }
+        requestStream(app: app, on: host)
     }
 
     /// Bridge our published quality settings into the engine's StreamConfig.
-    /// The codec set is the probed client capability capped by the host's
-    /// override (right-click → Codec; Automatic by default, which negotiates
-    /// AV1 → HEVC → H.264 against what the host can actually encode).
+    /// The codec set is `offeredVideoFormats(for:)`; Automatic negotiates
+    /// AV1 → HEVC → H.264 against what the host can actually encode.
     func nativeStreamConfig(for host: Host) -> StreamConfig {
         persistQualitySettings()
         var cfg = StreamConfig(width: effectiveWidth, height: effectiveHeight,
                                fps: effectiveFPS, bitrateKbps: effectiveBitrateKbps)
-        cfg.hdr = effectiveHDR
         cfg.captureSysKeys = captureSysKeys
+        cfg.playAudioOnHost = muteMacWhileStreaming
         // The notch choice only means something on a notched panel; elsewhere
         // the session always takes the borderless cover (see
         // effectiveStreamCoversNotch for the issue this closes).
         cfg.coversNotch = effectiveStreamCoversNotch
         cfg.displayMode = effectiveDisplayMode
-        let codecPref = HostCodecPreference.load(for: host.id)
-        cfg.videoFormats = codecPref.apply(to: .probedSupported)
+        cfg.videoFormats = offeredVideoFormats(for: host)
         // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
         // scaled by the negotiated codec's efficiency. The spec chip reads the same
         // path so what's shown matches what's sent.
-        let routeAsk = routeAskKbps(forFormats: cfg.videoFormats)
-        cfg.bitrateKbps = StreamPathMTU.wifiAskKbps(ask: routeAsk, phyRateMbps: hostRoute.wifiPhyRateMbps)
-        if cfg.bitrateKbps < routeAsk, let phy = hostRoute.wifiPhyRateMbps {
+        let decision = bitrateDecision(forFormats: cfg.videoFormats)
+        let ask = Self.routeAsk(decision, route: hostRoute.routeClass)
+        let ungated = Self.routeAskKbps(decision, route: hostRoute.routeClass)
+        if ask.kbps < ungated, let phy = decision.radioGatePhyMbps {
             Diag.notice("Wi-Fi link gate: the radio's PHY rate is \(Int(phy)) Mbps, asking for "
-                + "\(cfg.bitrateKbps / 1000) Mbps instead of \(routeAsk / 1000).", "Stream")
+                + "\(ask.kbps / 1000) Mbps instead of \(ungated / 1000).", "Stream")
         }
-        cfg.bitrateBoost = wiredBitrateBoost
+        cfg.bitrateDecision = decision
+        cfg.bitrateKbps = ask.kbps
+        cfg.bitrateBoost = ask.boost
         return cfg
     }
 
@@ -200,17 +269,15 @@ extension AppModel {
     /// in this app's lifetime. Internal so HostStatusPoller.swift can call it.
     func nativeServerInfo(for host: Host) -> ServerInfo {
         var info = ServerInfo(
-            address: host.localAddress ?? host.manualAddress ?? host.name,
+            address: Self.routeAddress(host),
             uniqueId: host.id,
             serverName: host.displayName
         )
-        // H1: the mode-0600 file store is the ONLY authoritative pin source.
-        // `host.serverCertPEM` lives in same-UID-writable UserDefaults
-        // (hosts.N.srvcert) - an attacker can swap it for a MITM cert via
-        // cfprefsd, so we treat it as an untrusted HINT, never a direct pin.
+        // The pin file our pairing flow writes is the only pin source. The
+        // legacy `host.serverCertPEM` copy (hosts.N.srvcert) is just a one-way
+        // migration hint, and a mismatch between the two forces a re-pair.
         info.serverCertPEM = authoritativePin(for: host)
         info.appVersion = host.appVersion
-        info.gfeVersion = host.gfeVersion
         info.pairStatus = .paired      // host is in our local list → already paired
         return info
     }
@@ -231,7 +298,7 @@ extension AppModel {
             if let hint, hint != filePin {
                 log.error(
                     """
-                    Pinned cert for host id=\(host.id, privacy: .public) DISAGREES with the \
+                    Pinned cert for host id=\(host.id, privacy: .private) DISAGREES with the \
                     UserDefaults hint - refusing to stream and forcing re-pair (possible MITM).
                     """
                 )
@@ -252,7 +319,7 @@ extension AppModel {
                 log.error(
                     """
                     Failed to migrate the UserDefaults cert hint into the file store for host \
-                    id=\(host.id, privacy: .public): \(error.localizedDescription, privacy: .public) - \
+                    id=\(host.id, privacy: .private): \(error.localizedDescription, privacy: .private) - \
                     forcing re-pair instead of pinning a writable value.
                     """
                 )
@@ -264,7 +331,7 @@ extension AppModel {
         // pairStatus gate handles it), not TOFU on a writable cert.
         log.error(
             """
-            No pinned cert for host id=\(host.id, privacy: .public) - forcing re-pair. \
+            No pinned cert for host id=\(host.id, privacy: .private) - forcing re-pair. \
             Check that host.id matches server.uniqueId (the host's `<uniqueid>` from /serverinfo).
             """
         )

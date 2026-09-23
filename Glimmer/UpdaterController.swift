@@ -17,6 +17,10 @@ final class UpdaterController {
     static let shared = UpdaterController()
 
     private let controller: SPUStandardUpdaterController
+    /// Retained here: Sparkle holds its user driver delegate weakly.
+    private let streamAwareAlerts = StreamAwareUpdateAlerts(
+        isStreaming: { AppDelegate.boundManager?.isStreaming ?? false },
+        showUpdate: { UpdaterController.shared.updater.checkForUpdates() })
 
     private init() {
         // Auto-update IS the release channel. No build-type gating needed:
@@ -25,7 +29,7 @@ final class UpdaterController {
         // release grabs it, and a dev build at/after the latest release stays
         // silent until the next one - exactly the desired behavior, for free.
         controller = SPUStandardUpdaterController(
-            startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+            startingUpdater: true, updaterDelegate: nil, userDriverDelegate: streamAwareAlerts)
         // PRESCRIPTIVE nag policy (2026-08-26). Previously nothing set a check
         // schedule: Sparkle's own opt-in prompt decided whether SCHEDULED
         // checks ever ran, and the only forced check fired on a user-initiated
@@ -52,6 +56,58 @@ final class UpdaterController {
     }
 
     var updater: SPUUpdater { controller.updater }
+}
+
+/// Holds a scheduled update alert while a stream is live, so a daily check can't
+/// pull focus from a full-screen game, then brings it forward once the stream
+/// ends. Outside a stream, and for user-initiated checks, Sparkle is unchanged.
+@MainActor
+final class StreamAwareUpdateAlerts: NSObject, @preconcurrency SPUStandardUserDriverDelegate {
+    private let isStreaming: @MainActor () -> Bool
+    private let showUpdate: @MainActor () -> Void
+    private(set) var isHoldingUpdate = false
+
+    init(isStreaming: @escaping @MainActor () -> Bool, showUpdate: @escaping @MainActor () -> Void) {
+        self.isStreaming = isStreaming
+        self.showUpdate = showUpdate
+    }
+
+    var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        !isStreaming()
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState
+    ) {
+        if !handleShowingUpdate { holdUntilStreamEnds() }
+    }
+
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        isHoldingUpdate = false
+    }
+
+    func holdUntilStreamEnds() {
+        Diag.info("update alert held until the stream ends", "Update")
+        isHoldingUpdate = true
+        showUpdateOnceStreamEnds()
+    }
+
+    private func showUpdateOnceStreamEnds() {
+        guard isHoldingUpdate else { return }
+        guard isStreaming() else {
+            isHoldingUpdate = false
+            showUpdate()
+            return
+        }
+        // onChange fires before the new value lands; re-read it on the next turn.
+        withObservationTracking { _ = isStreaming() } onChange: { [weak self] in
+            Task { @MainActor in self?.showUpdateOnceStreamEnds() }
+        }
+    }
 }
 
 /// Tracks Sparkle's KVO-observable `canCheckForUpdates` as Observation-tracked

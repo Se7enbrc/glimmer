@@ -35,8 +35,8 @@ import os
 public actor StreamSession {
     let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Session")
 
-    /// UserDefaults flag: has the one-time "press <chord> to leave" in-stream
-    /// toast been shown? Set true the first time it appears so it's truly once-ever.
+    /// UserDefaults key: the leave-hint text its show budget was counted
+    /// against. A different text (a rebound chord) starts the budget over.
     static let leaveHintShownKey = "glimmer.leaveHintShown"
 
     // Subsystems. VideoDecoder/StreamWindow/InputForwarder are MainActor-bound,
@@ -45,10 +45,6 @@ public actor StreamSession {
     let audioDecoder = AudioDecoder()
     var window: StreamWindow?
 
-    /// Bring the stream window back from the background. Used by the
-    /// launcher UI's "Back to stream" affordance when the user has
-    /// Cmd-Tabbed away (which orderOut'd the window) and now wants to
-    /// resume.
     /// The menu bar panel shows the pointer while it is open over a stream;
     /// the window's own re-key path hides it again.
     public func setCursorHidden(_ hidden: Bool) async {
@@ -58,11 +54,16 @@ public actor StreamSession {
 
     /// The menu bar row: into the mini player, or back out of it.
     public func toggleMiniPlayer() async {
+        guard !isTearingDown else { return }
         let win = self.window
         await MainActor.run { win?.toggleMiniPlayer() }
     }
 
+    /// Bring the stream window back from the background: the launcher's "Back
+    /// to stream" after the user Cmd-Tabbed away (which ordered the window out).
+    /// A stopping session has already closed it; the /cancel may still be running.
     public func resumeWindow() async {
+        guard !isTearingDown else { return }
         // Capture the StreamWindow reference on the actor first (it lives
         // here, isolated to us), then hop to the main actor to touch
         // AppKit. Reaching into `self.window` from inside MainActor.run
@@ -241,14 +242,18 @@ public actor StreamSession {
     static let recoverableTerminationCodes: Set<Int32> = [
         Int32(bitPattern: 0x80030023), Int32(bitPattern: 0x80030013)
     ]
-    /// Our OWN ENet dead-peer self-terminate (ackSilence cutoff → onTerminated(-1)).
-    /// Recoverable ONLY after live state (the radio-doze / link-blip case); a -1
-    /// before live is a failed connect and falls through to honest teardown.
+    /// Our OWN ENet dead-peer code (declarePeerDead): ACK silence, a failed control socket or receive,
+    /// or a host ENet DISCONNECT. Recoverable ONLY after live state (link loss or blip); a -1 before
+    /// live is a failed connect and falls through to honest teardown.
     static let deadPeerTerminationCode: Int32 = -1
     /// Bound the reconnect episode: at most this many attempts...
     static let reconnectAttemptCap = 5
-    /// ...and at most this long wall-clock before we give up and tear down.
+    /// ...and at most this much awake time before we give up and tear down. A
+    /// lid closed mid-episode doesn't spend it (see ReconnectBudget).
     static let reconnectWindowSeconds: TimeInterval = 30.0
+    /// How long a PC-sent terminate waits on /serverinfo to learn whether the PC
+    /// ended the session on purpose. No answer in time means reconnect.
+    static let hostEndProbeSeconds: TimeInterval = 1.5
 
     // MARK: - Launch deadline (M6)
 
@@ -269,7 +274,7 @@ public actor StreamSession {
     /// watchdog) and makes `handleHostTerminate` ignore re-entrant terminates
     /// fired by the dead/old backend mid-reconnect.
     var isReconnecting = false
-    /// Attempt counter + deadline for the current reconnect episode.
+    /// Attempt counter for the current reconnect episode.
     var reconnectAttempts = 0
     /// The inputs needed to rebuild the connection on a reconnect, captured at
     /// `start()`: the original server (for a fresh NetworkClient), the requested
@@ -277,6 +282,13 @@ public actor StreamSession {
     var reconnectServer: ServerInfo?
     var reconnectConfig: StreamConfig?
     var reconnectAppID: Int?
+    /// The ask for the route the Mac is on now, read by every reconnect so a
+    /// route change mid-session re-derives the bitrate. Nil keeps the start's.
+    var routeAskProvider: (@MainActor @Sendable () -> RouteAsk?)?
+
+    func setRouteAskProvider(_ provider: @escaping @MainActor @Sendable () -> RouteAsk?) {
+        routeAskProvider = provider
+    }
 
     // MARK: - Mid-session bitrate downshift (see BitrateDownshiftController)
 
@@ -410,6 +422,9 @@ public actor StreamSession {
     var isStreaming = false
     // Set before teardown suspends; overlapping callers await the same work.
     var stopInProgress = false
+    // The first stop's cause this session: a failed connect tells the user's
+    // stop from the PC's by it.
+    var stopCause: DisconnectReason?
     var teardown = SharedTeardown()
     var takeoverAuthorized = false
     var ownsHostSession = false

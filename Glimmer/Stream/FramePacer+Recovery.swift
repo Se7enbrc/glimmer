@@ -35,6 +35,9 @@ extension FramePacer {
         /// Frames currently waiting in the jitter buffer. A non-empty queue
         /// combined with a stale `secondsSinceLastRelease` is the wedge.
         let depth: Int
+        /// Seconds the queue has held frames without emptying, 0 when empty. A
+        /// wedge keeps it climbing; a burst after a network drought restarts it.
+        let secondsQueueNonEmpty: Double
         /// Whether the pacer is between start() and stop().
         let running: Bool
         /// Cumulative tick count since start() - the instrumentation derives a
@@ -223,17 +226,13 @@ extension FramePacer {
         installLink(on: view)
     }
 
-    /// Compact identity of the screen `view` is on: display ID | panel max |
-    /// backing scale. The three things whose change makes a rebind MATERIAL -
-    /// anything else arriving via screen-parameter notifications is VRR/HDR
-    /// housekeeping the bound link already follows. Falls back to "none" when
-    /// the view has no window/screen yet, which never equals a real signature,
-    /// so the degenerate case still rebinds (matching the old behavior).
+    /// Display ID | panel max | backing scale of `view`'s screen, the changes that make a rebind
+    /// material (other screen-parameter notices are VRR/HDR housekeeping the link follows).
+    /// "none" for a missing window, screen or display ID never matches, so that case rebinds.
     @MainActor
     static func screenSignature(for view: NSView) -> String {
         guard let screen = view.window?.screen else { return "none" }
-        let displayID = (screen.deviceDescription[
-            NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+        let displayID = screen.cgDirectDisplayID.map { String($0) } ?? "none"
         return "\(displayID)|\(screen.maximumFramesPerSecond)|\(screen.backingScaleFactor)"
     }
 
@@ -294,10 +293,12 @@ extension FramePacer {
         let events = serviceTickDeficitLocked(now: now)
         let sinceTick = liveness.lastTickHostTime.isFinite ? now - liveness.lastTickHostTime : .infinity
         let sinceRelease = liveness.lastReleaseHostTime.isFinite ? now - liveness.lastReleaseHostTime : .infinity
+        let nonEmptyFor = queue.isEmpty ? 0 : now - liveness.queueNonEmptySince
         let snapshot = LivenessSnapshot(
             secondsSinceLastTick: sinceTick,
             secondsSinceLastRelease: sinceRelease,
             depth: queue.count,
+            secondsQueueNonEmpty: nonEmptyFor,
             running: running,
             totalTicks: liveness.tickCount,
             totalReleases: liveness.releaseCount,
@@ -466,9 +467,12 @@ extension FramePacer {
         shouldLog: Bool, forcedSelfHeal: Bool, snapshot snap: StarvationSnapshot
     ) {
         if shouldLog {
-            log.warning(
-                // swiftlint:disable:next line_length
-                "FramePacer starved: \(snap.streak, privacy: .public) ticks with frames queued (depth=\(snap.depth, privacy: .public)) and nothing released - sinceLast=\(snap.sinceLastMs, privacy: .public)ms targetTimestamp=\(snap.targetTimestamp, privacy: .public) lastPresentMediaTime=\(snap.lastPresent, privacy: .public) streamInterval=\(snap.intervalMs, privacy: .public)ms")
+            log.warning("""
+                FramePacer starved: \(snap.streak, privacy: .public) ticks with frames queued \
+                (depth=\(snap.depth, privacy: .public)) and nothing released - sinceLast=\(snap.sinceLastMs, privacy: .public)ms \
+                targetTimestamp=\(snap.targetTimestamp, privacy: .public) \
+                lastPresentMediaTime=\(snap.lastPresent, privacy: .public) streamInterval=\(snap.intervalMs, privacy: .public)ms
+                """)
             OSSignposter.render.emitEvent(
                 "PacerStarved",
                 "depth=\(snap.depth, privacy: .public) sinceLastMs=\(snap.sinceLastMs, privacy: .public)")

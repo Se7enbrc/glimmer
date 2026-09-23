@@ -74,22 +74,10 @@ extension TelemetryCounters {
         return packetGapValue
     }
 
-    /// Live FEC-HEALTH gauge: the FecHeadroomController's RESPONSE (the reorder-
-    /// hold it is holding + both headroom axes) plus the per-frame parity headroom,
-    /// published once per ~2s receive-metrics window by the RTP path. READ-ONLY
-    /// observability - none of these values feed back into the FEC/reorder logic;
-    /// they let a degrading link be SEEN on the dashboard (the controller's
-    /// transitions were previously diag-log-only). Last-writer-wins behind one lock,
-    /// the same idiom as `packetGap`. nil before the first window.
+    /// Live FEC-HEALTH gauge: the host's FEC percentage and the per-frame parity
+    /// headroom, published once per ~2s receive window by the RTP path. Read-only
+    /// observability; last-writer-wins behind one lock. nil before the first window.
     struct FecHealthSnapshot: Sendable {
-        /// Live reorder-hold window the queue applies (ms): base 24, cap 48 - the
-        /// controller's combined response to jitter + loss.
-        var reorderHoldMs: Double
-        /// Jitter axis level (0 on a clean link). ooo/retransmit ride the separate
-        /// reorder axis; direct loss the loss axis - both fold into the live hold.
-        var headroomLevel: Int
-        /// Direct-loss axis level (0 on a clean link).
-        var lossLevel: Int
         /// Host-driven per-frame FEC percentage of the latest frame.
         var fecPercentage: Int
         /// Spare parity shards on the WORST FEC-RECOVERED frame this window (parity −
@@ -204,8 +192,8 @@ extension TelemetryCounters {
             FrameTimingTracker.shared?.armResumePresentTag()
         }
     }
-    /// Current present-suppression state. Read by the exporter on its 1Hz queue
-    /// (never the hot path).
+    /// Current present-suppression state. Read by the exporter on its 1Hz queue, and
+    /// once per assembled frame by the latency tracker (telemetry on only).
     var presentSuppressed: Bool {
         os_unfair_lock_lock(presentSuppressedLock); defer { os_unfair_lock_unlock(presentSuppressedLock) }
         return presentSuppressedValue
@@ -219,8 +207,8 @@ extension TelemetryCounters {
         decodeGatedValue = gated
         os_unfair_lock_unlock(decodeGatedLock)
     }
-    /// Current decode-gate state. Read by the exporter on its 1Hz queue (never
-    /// the hot path).
+    /// Current decode-gate state. Read by the exporter on its 1Hz queue, and once
+    /// per assembled frame by the latency tracker (telemetry on only).
     var decodeGated: Bool {
         os_unfair_lock_lock(decodeGatedLock); defer { os_unfair_lock_unlock(decodeGatedLock) }
         return decodeGatedValue

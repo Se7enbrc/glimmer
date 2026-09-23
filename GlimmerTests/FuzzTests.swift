@@ -119,7 +119,6 @@ struct FuzzTests {
         let format = hevc ? StreamProtocol.VIDEO_FORMAT_H265 : StreamProtocol.VIDEO_FORMAT_H264
         return VideoDepacketizer(delegate: FuzzNoopDelegate(),
                                  negotiatedVideoFormat: format,
-                                 appVersionQuad: [7, 1, 450, 0],
                                  colorSpace: 0)
     }
 
@@ -423,6 +422,60 @@ struct FuzzTests {
                 _ = try? crypto.open(mutated)
             }
         }
+    }
+
+    // ============================================================
+    // 6. HTTP control responses (ControlTransport): pre-pin, any LAN device on 47989 writes these.
+    // ============================================================
+
+    @Test func fuzzContentLengthHeader() throws {
+        var rng = SplitMix64(seed: 0xC047_E470_0000_0009)
+        let valid = Array("HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: 42".utf8)
+        for _ in 0..<kIterations {
+            _ = try? ControlTransport.contentLengthHeader(in: Data(rng.randomData(maxLen: 512)))
+            _ = try? ControlTransport.contentLengthHeader(in: Data(rng.mutate(valid)))
+        }
+        #expect(try ControlTransport.contentLengthHeader(in: Data(valid)) == 42)
+        // An empty value used to trap on the split; it and a negative are "no header".
+        #expect(try ControlTransport.contentLengthHeader(in: Data("HTTP/1.1 200 OK\r\nContent-Length:".utf8)) == nil)
+        #expect(try ControlTransport.contentLengthHeader(in: Data("HTTP/1.1 200 OK\r\nContent-Length: -5".utf8)) == nil)
+    }
+
+    @Test func controlReaderStopsAtContentLength() throws {
+        let (reader, writer) = try Self.socketPair(sending: "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc")
+        defer { close(reader); close(writer) }
+        let raw = try ControlTransport.readAll(
+            fd: reader, ssl: nil, lifetime: ControlTransport.RequestLifetime(timeout: 5))
+        #expect(String(bytes: raw, encoding: .utf8)?.hasSuffix("\r\n\r\nabc") == true)
+    }
+
+    @Test func controlReaderRefusesOversizedBody() throws {
+        let declared = ControlTransport.maxResponseBytes + 1
+        let (reader, writer) = try Self.socketPair(sending: "HTTP/1.1 200 OK\r\nContent-Length: \(declared)\r\n\r\n")
+        defer { close(reader); close(writer) }
+        #expect(throws: StreamError.self) {
+            try ControlTransport.readAll(fd: reader, ssl: nil, lifetime: ControlTransport.RequestLifetime(timeout: 5))
+        }
+    }
+
+    @Test func controlReaderStopsWhenCancelled() throws {
+        let (reader, writer) = try Self.socketPair(sending: "HTTP/1.1 200 OK\r\n")
+        defer { close(reader); close(writer) }
+        let lifetime = ControlTransport.RequestLifetime(timeout: 5)
+        lifetime.cancel()
+        #expect(throws: CancellationError.self) {
+            try ControlTransport.readAll(fd: reader, ssl: nil, lifetime: lifetime)
+        }
+    }
+
+    /// A connected local socket pair with `text` already written to the reader.
+    private static func socketPair(sending text: String) throws -> (reader: Int32, writer: Int32) {
+        var fds: [Int32] = [-1, -1]
+        try #require(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
+        let bytes = Array(text.utf8)
+        let sent = bytes.withUnsafeBytes { write(fds[1], $0.baseAddress, $0.count) }
+        try #require(sent == bytes.count)
+        return (fds[0], fds[1])
     }
 
     /// Inline AES-GCM 'H'-direction envelope builder (the byte layout open()

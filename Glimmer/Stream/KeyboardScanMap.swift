@@ -19,11 +19,30 @@
 
 import Carbon.HIToolbox
 
+/// One key as the host receives it: the Windows VK plus the keyboard-event
+/// flags. An integer literal is a plain VK with no flags.
+struct VKScanCode: Hashable {
+    /// SS_KBE_FLAG_NON_NORMALIZED: the VK is already in the PC's layout.
+    static let nonNormalized: Int8 = 0x01
+
+    let vk: Int16
+    var flags: Int8 = 0
+
+    /// The high bit asks the host to skip its layout-correction pass.
+    var wireCode: Int16 { Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)) }
+}
+
+extension VKScanCode: ExpressibleByIntegerLiteral {
+    init(integerLiteral vk: Int16) {
+        self.init(vk: vk)
+    }
+}
+
 // Flat positional map: Carbon kVK_* keyCode → Windows VK_* scancode. A data
 // table rather than a switch so the lookup is O(1) and reads as the pure
 // dispatch table it is (the switch form tripped cyclomatic-complexity /
 // function-length lints for what is, semantically, zero branching).
-private let carbonToVKScanCode: [Int: Int16] = [
+private let carbonToVKScanCode: [Int: VKScanCode] = [
     // Letters
     kVK_ANSI_A: 0x41,
     kVK_ANSI_B: 0x42,
@@ -77,9 +96,9 @@ private let carbonToVKScanCode: [Int: Int16] = [
     kVK_F10: 0x79,
     kVK_F11: 0x7A,
     kVK_F12: 0x7B,
-    kVK_F13: 0x7C,
-    kVK_F14: 0x7D,
-    kVK_F15: 0x7E,
+    kVK_F13: 0x2C,  // VK_SNAPSHOT: a PC keyboard's Print Screen reports F13
+    kVK_F14: 0x91,  // VK_SCROLL
+    kVK_F15: 0x13,  // VK_PAUSE
     kVK_F16: 0x7F,
     kVK_F17: 0x80,
     kVK_F18: 0x81,
@@ -101,7 +120,8 @@ private let carbonToVKScanCode: [Int: Int16] = [
     kVK_RightArrow: 0x27,    // VK_RIGHT
     kVK_DownArrow: 0x28,     // VK_DOWN
     kVK_UpArrow: 0x26,       // VK_UP
-    kVK_Help: 0x2F,          // VK_HELP
+    kVK_Help: 0x2D,          // VK_INSERT: a PC keyboard's Insert reports Help
+    kVK_ContextualMenu: 0x5D, // VK_APPS
 
     // Punctuation (US ANSI positional)
     kVK_ANSI_Semicolon: 0xBA,    // VK_OEM_1
@@ -137,6 +157,13 @@ private let carbonToVKScanCode: [Int: Int16] = [
     kVK_ANSI_KeypadEquals: 0xBB,
     kVK_ANSI_KeypadClear: 0x90,  // VK_NUMLOCK (best match - Mac's "Clear" is NumLock's position)
 
+    // JIS: ¥ and ろ have no US position, so they go in the PC's own layout
+    kVK_JIS_Yen: VKScanCode(vk: 0xDC, flags: VKScanCode.nonNormalized),        // VK_OEM_5
+    kVK_JIS_Underscore: VKScanCode(vk: 0xE2, flags: VKScanCode.nonNormalized), // VK_OEM_102
+    kVK_JIS_KeypadComma: 0x6C, // VK_SEPARATOR
+    kVK_JIS_Eisu: 0x1D,        // VK_NONCONVERT
+    kVK_JIS_Kana: 0x1C,        // VK_CONVERT
+
     // Misc
     kVK_CapsLock: 0x14,  // VK_CAPITAL
     kVK_Mute: 0xAD,
@@ -144,6 +171,16 @@ private let carbonToVKScanCode: [Int: Int16] = [
     kVK_VolumeDown: 0xAE
 ]
 
-func vkScanCode(forCarbonKeyCode kc: Int) -> Int16? {
-    carbonToVKScanCode[kc]
+/// On an ISO keyboard macOS reports the key left of 1 as Section and the key
+/// right of left Shift as Grave, the reverse of their ANSI positions. Swap them
+/// back, as SDL and moonlight do, so each lands on the PC key in its place.
+func vkScanCode(forCarbonKeyCode kc: Int,
+                isISOKeyboard: @autoclosure () -> Bool = isISOKeyboardLayout()) -> VKScanCode? {
+    let swapsISOKeys = (kc == kVK_ISO_Section || kc == kVK_ANSI_Grave) && isISOKeyboard()
+    return carbonToVKScanCode[swapsISOKeys ? kVK_ISO_Section + kVK_ANSI_Grave - kc : kc]
+}
+
+/// The physical layout of the keyboard macOS last saw typing.
+func isISOKeyboardLayout() -> Bool {
+    KBGetLayoutType(Int16(LMGetKbdType())) == PhysicalKeyboardLayoutType(kKeyboardISO)
 }

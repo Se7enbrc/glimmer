@@ -82,6 +82,9 @@ extension AudioDecoder {
     /// 90s covers the measured ramp with margin. Target ratchet + underrun
     /// counting stay live; only the floor EWMA waits.
     static let startupFloorGateNanos: UInt64 = 90_000_000_000
+    /// At most one under-run grow per this window (ns): a cascade of drains in
+    /// one episode is one piece of evidence, not ten.
+    static let cushionGrowMinIntervalNanos: UInt64 = 10_000_000_000
 
     // MARK: - P1 AUDIO meter (buffer fill / under-run / over-run / A/V drift)
 
@@ -273,24 +276,33 @@ extension AudioDecoder {
         var noticeTargetMs = 0.0
         var noticeSuppressed: UInt64 = 0
         var memoryWrite: CushionMemoryWrite?
+        var deadAirGapMs: Double?
         if isUnderrunEdge {
-            // ADAPTIVE cushion: a real drain is evidence this link needs more
-            // headroom - grow the target one step (capped), like the video pacer
-            // deepening its jitter buffer on measured starvation. Only on the edge,
-            // so a steady drained queue doesn't ratchet it up. The next re-prime
-            // builds the deeper cushion (clump or backfill).
-            let failedTargetMs = playoutTargetMs
-            if playoutTargetMs < effectiveCushionMaxMs {
-                playoutTargetMs = min(playoutTargetMs + Self.playoutCushionStepMs,
-                                      effectiveCushionMaxMs)
+            let now = DispatchTime.now().uptimeNanoseconds
+            // DEAD AIR: the arrival gap that ended with the newest packet outlasted
+            // the deepest cushion this link may hold, so this drain says nothing
+            // about depth - no grow, no floor learning.
+            let arrivalGapMs = Double(lastArrivalGapNanos.load()) / 1_000_000
+            if arrivalGapMs > effectiveCushionMaxMs {
+                deadAirGapMs = arrivalGapMs
+            } else {
+                // ADAPTIVE cushion: a real drain is evidence this link needs more
+                // headroom - grow the target one step (capped, rate-limited). The
+                // next re-prime builds the deeper cushion (clump or backfill).
+                let failedTargetMs = playoutTargetMs
+                if playoutTargetMs < effectiveCushionMaxMs,
+                   now &- lastCushionGrowNanos >= Self.cushionGrowMinIntervalNanos {
+                    playoutTargetMs = min(playoutTargetMs + Self.playoutCushionStepMs,
+                                          effectiveCushionMaxMs)
+                    lastCushionGrowNanos = now
+                }
+                // The level that just FAILED feeds the loss floor + per-host memory
+                // (the limit-cycle fix - see AudioDecoder+CushionMemory.swift).
+                memoryWrite = cushionNoteUnderrunLocked(now: now, failedTargetMs: failedTargetMs)
             }
             // Every under-run (capped or not) restarts the decay quiet window: depth
             // is held by recurring evidence, decayed only by its sustained absence.
-            quietSinceNanos = DispatchTime.now().uptimeNanoseconds
-            // The level that just FAILED feeds the loss floor + per-host memory
-            // (the limit-cycle fix - see AudioDecoder+CushionMemory.swift).
-            memoryWrite = cushionNoteUnderrunLocked(now: quietSinceNanos,
-                                                    failedTargetMs: failedTargetMs)
+            quietSinceNanos = now
             // Under-run NOTICE breadcrumb (rate-limited; counters stay exact): the
             // session log carried ZERO under-run lines, so a cascade's trigger
             // class (BT detach? hidden-window QoS?) was unattributable postmortem.
@@ -322,9 +334,10 @@ extension AudioDecoder {
         }
         if isUnderrunEdge {
             TelemetryCounters.shared.audioUnderrunTotal.increment()
+            if deadAirGapMs != nil { TelemetryCounters.shared.audioUnderrunDeadairTotal.increment() }
             if emitNotice {
                 emitUnderrunNotice(route: noticeRoute, targetMs: noticeTargetMs,
-                                   suppressed: noticeSuppressed)
+                                   suppressed: noticeSuppressed, deadAirGapMs: deadAirGapMs)
             }
         }
         // Rare learn/decay edges persist off the lock (UserDefaults + gauge).
@@ -336,11 +349,13 @@ extension AudioDecoder {
     /// + os_log, never an AV/CoreAudio call; this runs on the player's completion
     /// thread). The ordinal reads the just-incremented session counter so log
     /// lines and `audio_underrun_total` cross-reference 1:1.
-    private func emitUnderrunNotice(route: String, targetMs: Double, suppressed: UInt64) {
+    private func emitUnderrunNotice(route: String, targetMs: Double, suppressed: UInt64,
+                                    deadAirGapMs: Double?) {
         let ordinal = TelemetryCounters.shared.audioUnderrunTotal.value
         let backlog = suppressed > 0 ? " (+\(suppressed) since last line)" : ""
+        let deadAir = deadAirGapMs.map { " (dead air: \(Int($0.rounded()))ms arrival gap, cushion unchanged)" } ?? ""
         Diag.notice(
-            "audio under-run #\(ordinal)\(backlog) - playout drained to empty; route \(route), "
+            "audio under-run #\(ordinal)\(backlog) - playout drained to empty\(deadAir); route \(route, privacy: .private), "
             + "cushion target \(Int(targetMs))ms",
             "Stream")
     }
@@ -371,6 +386,7 @@ extension AudioDecoder {
         // target - without it a fill hugging a flat ceiling is indistinguishable
         // from the old disguised-permanent-give-up re-pin.
         let targetMs = playoutTargetMs
+        let cushionMaxMs = effectiveCushionMaxMs
         // Engage the drift resampler only in steady playout - the SAME gate the trim
         // uses (Meter trim path). During pre-roll / re-prime / drain the rebuild
         // machinery owns recovery and driveResampler slews the rate back to 1.0.
@@ -436,7 +452,8 @@ extension AudioDecoder {
                 resamplerPpm: appliedPpm,
                 // Engine-running mirror: 1 = AVAudioEngine up. Catches the post-
                 // reconnect "packets flow but playout dead" latch in one query.
-                engineRunning: engineUp))
+                engineRunning: engineUp,
+                cushionMaxMs: cushionMaxMs))
     }
 
     // MARK: - Playout-stall watchdog (detection + recovery)
@@ -493,5 +510,11 @@ extension AudioDecoder {
                 + "with the drain edge missing - forcing the re-arm (drift "
                 + "re-anchor + cushion rebuild)", "Stream.Audio")
         }
+    }
+
+    /// The receiver's inter-arrival gap that ended with its newest datagram, kept
+    /// for the next under-run edge's dead-air test. Receive thread: no AV calls.
+    public func noteArrivalGap(nanos: UInt64) {
+        lastArrivalGapNanos.store(nanos)
     }
 }

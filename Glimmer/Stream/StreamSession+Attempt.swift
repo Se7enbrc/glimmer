@@ -18,7 +18,7 @@ enum StreamAttempt {
     static func checkDeadline(_ deadline: Date?) throws {
         try Task.checkCancellation()
         if let deadline, Date() >= deadline {
-            throw StreamError.launchFailed("The host didn't respond in time.")
+            throw StreamError.hostTimedOut
         }
     }
 
@@ -42,7 +42,7 @@ enum StreamAttempt {
                 return
             }
             work.cancel()
-            await box.offer(.failure(StreamError.launchFailed("The host didn't respond in time.")))
+            await box.offer(.failure(StreamError.hostTimedOut))
         }
         let result = await withTaskCancellationHandler {
             await box.value

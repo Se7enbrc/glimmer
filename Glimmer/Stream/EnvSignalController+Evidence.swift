@@ -19,6 +19,7 @@
 //
 
 import Foundation
+import Synchronization
 
 extension EnvSignalController {
 
@@ -43,7 +44,7 @@ extension EnvSignalController {
             resetRuns()
             // Publish REST immediately (don't wait for the window close): a wired
             // route forced CLEAR, so the headroom decision must drop to 0 now -
-            // FEC 24ms base + pacer depth 1 = byte-identical to no-reconciler.
+            // pacer depth 1 = byte-identical to no-reconciler.
             publishRestDecision()
         }
 
@@ -97,9 +98,12 @@ extension EnvSignalController {
             window.retransmit &+= totals.retransmit &- prev.retransmit
         }
         prevGapTotals = totals
+        let datagramUs = RtpVideoQueue.lastDatagramUs.load(ordering: .relaxed)
+        if let prev = prevDatagramUs, datagramUs > prev { window.videoArrived = true }
+        prevDatagramUs = datagramUs
         // Recv-jitter is a LIVE gauge (last-writer-wins), not a monotonic total -
         // fold the worst (max) reading across the window's ticks, conservative
-        // toward detection. Sanitized like the FEC controller does.
+        // toward detection, sanitized to a finite non-negative value.
         let jitter = counters.recvJitterMs
         if jitter.isFinite, jitter >= 0 { window.maxJitterMs = max(window.maxJitterMs, jitter) }
         if let rssi = wifi?.rssiDbm, rssi < 0 {
@@ -112,10 +116,11 @@ extension EnvSignalController {
 
     /// Close one ~2s window: classify it (degraded / severe / quiet /
     /// neutral), advance the runs, and move the state one step when a run
-    /// satisfies the sustained contract. The classification mirrors
-    /// FecHeadroomController.observeWindow - escalate thresholds high, relax
-    /// thresholds lower, a neutral dead band that resets BOTH runs.
-    private func evaluateWindow(link: LinkClass) {
+    /// satisfies the sustained contract: escalate thresholds high, relax
+    /// thresholds lower, a neutral dead band that resets BOTH runs. A window
+    /// with no video carries no evidence and leaves everything untouched.
+    func evaluateWindow(link: LinkClass) {
+        guard window.videoArrived else { return }
         window.rssiP50 = rssiSessionP50()
         window.txP95 = txRateSessionP95()
         window.radioArmed = link == .wifi && (window.rssiP50 != nil || window.txP95 != nil)
@@ -133,11 +138,8 @@ extension EnvSignalController {
             }
         }
 
-        // Jitter/loss is now a first-class degradation input
-        // alongside co-gap + radio, using FecHeadroomController's already-tuned
-        // thresholds (window predicates above). The classifier captures the
-        // jitter racer, so the published headroom tracks it instead of two
-        // controllers each reading recvJitterMs independently.
+        // Jitter/loss is a first-class degradation input alongside co-gap +
+        // radio (the window predicates), so the published headroom tracks it.
         let degraded = window.coGap50 || radioDegraded || window.jitterDegraded
         let severe = window.coGap100 || (window.coGap50 && radioDegraded)
         // Quiet (the relax tier): no >50ms co-gap AND the radio above its
@@ -149,16 +151,19 @@ extension EnvSignalController {
         if degraded {
             degradedRun += 1
             runHadCoGap = runHadCoGap || window.coGap50 || window.coGap100
+            runHadRadioSag = runHadRadioSag || radioDegraded
             quietRun = 0
         } else if quiet {
             quietRun += 1
             degradedRun = 0
             runHadCoGap = false
+            runHadRadioSag = false
         } else {
             // Neutral: evidence must be CONSECUTIVE to count (the SUSTAINED
             // guarantee), and a not-yet-quiet window can't shorten the dwell.
             degradedRun = 0
             runHadCoGap = false
+            runHadRadioSag = false
             quietRun = 0
         }
         severeRun = severe ? severeRun + 1 : 0
@@ -170,21 +175,21 @@ extension EnvSignalController {
     // MARK: - RECONCILE: publish the shared jitter→headroom decision
 
     /// Close the window's RECONCILE phase: smooth this window's worst recv-jitter
-    /// (EWMA, weight `jitterBaseEwmaWeight` - the FEC controller's), map the
+    /// (EWMA, weight `jitterBaseEwmaWeight`), map the
     /// CURRENT link state + smoothed jitter to a desired `headroomLevel`, and
     /// publish both (plus a bumped `generation` on any change) behind `lock` -
-    /// the same lock-guarded pattern as `stateValue`/`streamLinkValue`. Both
-    /// actuators PULL this on their own ticks; the reconciler never calls into
+    /// the same lock-guarded pattern as `stateValue`/`streamLinkValue`.
+    /// Consumers PULL this on their own ticks; the reconciler never calls into
     /// them and holds only its own lock here.
     ///
     /// The desired level is forced to 0 (REST) whenever the link state is CLEAR
     /// (which a wired route pins), so a clean WIRED link publishes
-    /// `headroomLevel == 0` → FEC 24ms base + pacer depth 1 = byte-identical to
-    /// no-reconciler. Above CLEAR, the smoothed jitter maps through the same
-    /// dead-zone/ladder the FEC soft thresholds use, capped at `maxHeadroomLevel`.
+    /// `headroomLevel == 0` → pacer depth 1 = byte-identical to
+    /// no-reconciler. Above CLEAR, the smoothed jitter maps through the
+    /// dead-zone/ladder, capped at `maxHeadroomLevel`.
     private func reconcile() {
-        // EWMA the worst-jitter of this window (sanitized to the same domain the
-        // FEC controller smooths) so a single noisy window can't yank the base.
+        // EWMA the worst-jitter of this window (sanitized to a finite,
+        // non-negative value) so a single noisy window can't yank the level.
         let sample = window.maxJitterMs.isFinite ? max(0, window.maxJitterMs) : 0
         reconcileSmoothedJitterMs = reconcileSmoothedJitterMs <= 0
             ? sample
@@ -203,8 +208,7 @@ extension EnvSignalController {
 
     /// Map link state + smoothed jitter to the desired headroom level (REST=0 on
     /// CLEAR/wired). JITTER-ONLY on purpose: the FramePacer reads this as target
-    /// DEPTH, so ooo/retransmit drive the FEC reorder axis (which the pacer ignores)
-    /// instead - a deeper present buffer adds latency without aiding loss recovery.
+    /// DEPTH, and a deeper present buffer adds latency without aiding loss recovery.
     private func desiredHeadroomLevel(smoothedJitterMs: Double) -> Int {
         guard state != .clear else { return 0 }
         let overDeadZone = smoothedJitterMs - Self.headroomJitterDeadZoneMs
@@ -239,9 +243,11 @@ extension EnvSignalController {
         // ~10s - a sag with no delivery impact has to insist).
         let entryWindows = runHadCoGap ? Self.escalateWindows : Self.radioOnlyEscalateWindows
         if current == .clear, degradedRun >= entryWindows {
-            applyTransition(to: .caution, reason: runHadCoGap ? "sustained_co_gaps" : "sustained_radio_sag")
+            applyTransition(to: .caution, reason: Self.cautionReason(
+                coGap: runHadCoGap, radioSag: runHadRadioSag))
             degradedRun = 0
             runHadCoGap = false
+            runHadRadioSag = false
             return
         }
         if current == .caution, severeRun >= Self.escalateWindows {
@@ -254,6 +260,13 @@ extension EnvSignalController {
             applyTransition(to: next, reason: "quiet_dwell")
             quietRun = 0
         }
+    }
+
+    /// The CAUTION entry label, named for the strongest evidence the run held
+    /// (jitter/ooo/retransmit is the only other degraded input).
+    static func cautionReason(coGap: Bool, radioSag: Bool) -> String {
+        if coGap { return "sustained_co_gaps" }
+        return radioSag ? "sustained_radio_sag" : "sustained_jitter_retransmit"
     }
 
     /// Publish a state change: bump the counter, log the recoverable-state
@@ -343,6 +356,7 @@ extension EnvSignalController {
         txHistogram = [Int](repeating: 0, count: 241)
         txSampleCount = 0
         prevGapTotals = nil
+        prevDatagramUs = nil
         ticksInWindow = 0
         window = WindowEvidence()
         resetRuns()
@@ -352,9 +366,21 @@ extension EnvSignalController {
         publishRestDecision()
     }
 
+    /// Withdraw the published decision when the feed stops (exporter stop):
+    /// generation 0 is "never published", so every pacer goes back to deciding
+    /// from live jitter instead of freezing on this session's last level.
+    func endSession() {
+        lock.lock()
+        headroomLevelValue = 0
+        smoothedJitterMsValue = 0
+        decisionGeneration = 0
+        lock.unlock()
+    }
+
     private func resetRuns() {
         degradedRun = 0
         runHadCoGap = false
+        runHadRadioSag = false
         severeRun = 0
         quietRun = 0
         windowsSinceChange = Int.max

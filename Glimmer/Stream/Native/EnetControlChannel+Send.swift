@@ -49,7 +49,7 @@ extension EnetControlChannel {
                 channel: channel, label: "INPUT")
             return true
         } catch {
-            Diag.error("ENet input send failed (ch \(channel)): \(error)", Self.logCategory)
+            Diag.error("ENet input send failed (ch \(channel)): \(error, privacy: .private)", Self.logCategory)
             return false
         }
     }
@@ -69,7 +69,7 @@ extension EnetControlChannel {
                 channel: channel, label: "INPUT_UNREL")
             return true
         } catch {
-            Diag.error("ENet unreliable input send failed (ch \(channel)): \(error)",
+            Diag.error("ENet unreliable input send failed (ch \(channel)): \(error, privacy: .private)",
                        Self.logCategory)
             return false
         }
@@ -77,65 +77,73 @@ extension EnetControlChannel {
 
     // MARK: - Public client→host control (IDR / RFI / LTR)
 
-    /// Request an IDR frame - COALESCED. Mirrors LiRequestIdrFrame
-    /// (ControlStream.c:415-422): level-triggered, and a pending IDR supersedes
-    /// (flushes) any queued RFI since a full IDR recovers the whole span. This
-    /// only SETS state; the actual wire REQUEST_IDR is sent AT MOST ONCE per
-    /// control-loop drain (drainPendingRecoveryRequests), so the per-failed-frame
-    /// IDR storm collapses to one packet per loss event. Safe to call from any
-    /// thread (depacketizer/decoder/watchdog) - it just takes stateLock.
+    /// Request an IDR frame - COALESCED, like LiRequestIdrFrame (ControlStream.c:415-422):
+    /// flushes any queued RFI and wakes the control loop, which sends at most one
+    /// REQUEST_IDR per `recoveryMinSpacingMs`. Safe from any thread (takes stateLock).
     func requestIdrFrame() {
-        withState {
+        let wake = withState { () -> Bool in
+            let wasIdle = !idrPending
             idrPending = true
             // A full IDR makes any queued RFI redundant (LiRequestIdrFrame
             // freeBasicLbqList(referenceFrameControlQueue)).
             pendingRfi = nil
+            return wasIdle
         }
+        if wake { recoveryWake.signal() }
     }
 
-    /// Invalidate reference frames (RFI) - COALESCED. Mirrors
-    /// queueFrameInvalidationTuple (ControlStream.c:388-410): only SETS the
-    /// pending window; the wire RFI is sent at most once per control-loop drain.
-    /// If an IDR is already pending it supersedes the RFI (the IDR recovers the
-    /// whole span), so we don't queue one. Multiple RFIs between drains coalesce
-    /// to the widest window seen. Safe to call from any thread.
+    /// Invalidate reference frames (RFI) - COALESCED, like queueFrameInvalidationTuple
+    /// (ControlStream.c:388-410): sets or widens the pending window and wakes the loop;
+    /// a pending IDR already covers the span, so none is queued. Safe from any thread.
     func invalidateReferenceFrames(from firstFrame: Int, to lastFrame: Int) {
-        withState {
+        let wake = withState { () -> Bool in
             // An IDR already supersedes an RFI; don't bother queuing one.
-            guard !idrPending else { return }
+            guard !idrPending else { return false }
             if let existing = pendingRfi {
                 pendingRfi = (min(existing.from, firstFrame), max(existing.to, lastFrame))
-            } else {
-                pendingRfi = (firstFrame, lastFrame)
+                return false
             }
+            pendingRfi = (firstFrame, lastFrame)
+            return true
         }
+        if wake { recoveryWake.signal() }
     }
 
-    /// Drain the coalesced IDR/RFI requests onto the wire. Called once per
-    /// control-loop tick (controlLoopTick) on the loop's dedicated thread -
-    /// the single drain point that mirrors moonlight's requestIdrFrameFunc
-    /// (ControlStream.c:1624-1640). Sends AT MOST ONE REQUEST_IDR and AT MOST
-    /// ONE RFI per tick; an IDR supersedes a same-tick RFI. stateLock is taken
-    /// only to read+clear the flags, never across the (blocking) send.
-    func drainPendingRecoveryRequests() {
-        let (sendIdr, rfi): (Bool, (from: Int, to: Int)?) = withState {
-            let idr = idrPending
-            idrPending = false
-            // An IDR supersedes the RFI (redundant once we ask for a full IDR).
-            let window = idr ? nil : pendingRfi
-            pendingRfi = nil
-            return (idr, window)
+    /// Minimum spacing (ms) between wire IDRs, and between wire RFIs: the first
+    /// request of a loss event leaves at once, repeats keep the old 20ms tick's volume.
+    static let recoveryMinSpacingMs: UInt32 = 20
+
+    /// Drain coalesced IDR/RFI requests on the control loop's thread (moonlight's
+    /// requestIdrFrameFunc, ControlStream.c:1624-1640): at most one REQUEST_IDR or RFI,
+    /// each kind spaced `recoveryMinSpacingMs`. Returns how long the loop may wait.
+    func drainPendingRecoveryRequests() -> UInt32 {
+        let now = serviceTimeMs
+        let spacing = Self.recoveryMinSpacingMs
+        let sinceIdr = lastIdrSentMs.map { now &- $0 } ?? spacing
+        let sinceRfi = lastRfiSentMs.map { now &- $0 } ?? spacing
+        // No RFI is ever pending beside an IDR: requestIdrFrame flushes it.
+        let (sendIdr, rfi, wait): (Bool, (from: Int, to: Int)?, UInt32) = withState {
+            let idr = idrPending && sinceIdr >= spacing
+            if idr { idrPending = false }
+            let window = sinceRfi >= spacing ? pendingRfi : nil
+            if window != nil { pendingRfi = nil }
+            // A held request ends the wait the moment it comes due.
+            if idrPending { return (idr, window, spacing - sinceIdr) }
+            return (idr, window, pendingRfi == nil ? Self.controlTickMs : spacing - sinceRfi)
         }
         if sendIdr {
+            lastIdrSentMs = now
             sendIdrFrameNow()
         } else if let rfi {
+            lastRfiSentMs = now
             sendRfiNow(from: rfi.from, to: rfi.to)
         }
+        return wait
     }
 
     /// Send one REQUEST_IDR on the wire (gen7Enc: type 0x0302, payload {0,0},
     /// URGENT chan, RELIABLE). ControlStream.c:1521. Only reached from
-    /// `drainPendingRecoveryRequests`, so exactly one fires per loss event.
+    /// `drainPendingRecoveryRequests`, which spaces repeats `recoveryMinSpacingMs`.
     private func sendIdrFrameNow() {
         do {
             _ = try sendEncryptedControl(
@@ -145,7 +153,7 @@ extension EnetControlChannel {
             armIdrRoundTrip()
             Diag.notice("ENet IDR frame requested", Self.logCategory)
         } catch {
-            Diag.error("ENet IDR request failed: \(error)", Self.logCategory)
+            Diag.error("ENet IDR request failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 
@@ -171,7 +179,7 @@ extension EnetControlChannel {
             // rides `rfiTotal`; the round-trip pair is explicit-IDR-only now.
             Diag.notice("ENet RFI sent (\(firstFrame)..\(lastFrame))", Self.logCategory)
         } catch {
-            Diag.error("ENet RFI failed: \(error)", Self.logCategory)
+            Diag.error("ENet RFI failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 
@@ -199,7 +207,7 @@ extension EnetControlChannel {
                 type: CtrlV2.ltrFrameAck, payload: w.bytes,
                 channel: Enet.ctrlChannelUrgent, label: "LTR_ACK")
         } catch {
-            Diag.error("ENet LTR ack failed: \(error)", Self.logCategory)
+            Diag.error("ENet LTR ack failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 

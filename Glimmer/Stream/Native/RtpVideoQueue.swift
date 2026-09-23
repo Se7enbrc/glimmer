@@ -17,13 +17,14 @@
 //     streamPacketIndex(4 LE) frameIndex(4 LE) flags(1) extraFlags(1)
 //     multiFecFlags(1) multiFecBlocks(1) fecInfo(4 LE) = 16 bytes.
 //
-//  The FEC block operates over the WHOLE packet (RTP+NV+payload), zero-padded to
-//  receiveSize = packetSize + MAX_RTP_HEADER_SIZE(16). Recovered shards are
-//  complete RTP packets re-fed through queuePacket. Multi-FEC (host 7.1.431+):
+//  The FEC block operates over the WHOLE packet (RTP+NV+payload), zero-padded to the
+//  block's longest shard, at most packetSize + MAX_RTP_HEADER_SIZE(16). Recovered shards
+//  are complete RTP packets re-fed through queuePacket. Multi-FEC (host 7.1.431+):
 //  a frame can span up to 4 FEC blocks; only after the LAST block is the frame
 //  submitted.
 
 import Foundation
+import Synchronization
 
 final class RtpVideoQueue {
     // NOTE: many type members below are `internal` (no `private`) rather than
@@ -74,7 +75,6 @@ final class RtpVideoQueue {
 
     let depacketizer: VideoDepacketizer
     let packetSize: Int
-    let multiFecCapable: Bool
 
     /// Best-effort sink for per-frame FEC status (Sunshine SS_FRAME_FEC_PTYPE).
     /// Called from reportFinalFrameFecStatus() at the SAME three call sites as
@@ -139,49 +139,15 @@ final class RtpVideoQueue {
     /// Cooldown after which clean sequenced data clears `receivedOosData` (5 min,
     /// matching moonlight's SPECULATIVE_RFI_COOLDOWN_PERIOD_US).
     static let speculativeRfiCooldownUs: UInt64 = 300_000_000
-    /// Bounded cross-frame reorder window: how long (wall-clock from the current
-    /// frame's first receive) we hold an incomplete frame before declaring loss
-    /// when the next frame's first packet arrives. 24ms ≈ 2.7 frame intervals at
-    /// 114fps - widened from 12ms so the OBSERVED ~22ms cross-frame jitter spikes
-    /// (which exceeded the old 12ms window and generated false-loss RFI clusters,
-    /// rfi_total +20) no longer fall outside the window. Still well under the
-    /// worst-case 56ms jitter envelope, and the right-sized FramePacer absorbs the
-    /// added hold. Strictly gated behind `receivedOosData` (false on a clean
-    /// in-order link), so a non-reordering stream is byte-identical to before:
-    /// zero hold, zero added latency.
-    ///
-    /// This is the BASELINE (steady-state) value. PROACTIVE FEC headroom: on a
-    /// SUSTAINED degradation trend the `fecHeadroom` controller widens the live
-    /// window in bounded steps (up to 48ms) so the host's existing parity gets more
-    /// time to complete a marginal frame via FEC BEFORE it tips into unrecoverable -
-    /// then relaxes back to this baseline when the link clears. The live value is
-    /// read via `reorderWindowUs` below; this constant is the controller's floor.
-    /// (See FecHeadroomController.swift for the full safety contract.)
-    static let baseReorderWindowUs: UInt64 = 24_000
-    /// The LIVE reorder-hold window (µs): the proactive-FEC-headroom controller's
-    /// current value, which equals `baseReorderWindowUs` on a clean link and steps
-    /// up under a sustained degradation trend. Single-thread (receive thread), so a
-    /// plain computed read of the controller's level is race-free.
-    /// `internal`: read by the reorder-hold gate in RtpVideoQueue+AddPacket.swift.
-    var reorderWindowUs: UInt64 { fecHeadroom.holdWindowUs }
+    /// Cross-frame reorder hold, µs from the frame's first receive; covers the
+    /// observed ~22ms cross-frame jitter. Fixed: the hold is one datagram deep (the
+    /// next datagram for another frame replays it), so a wider window never runs.
+    static let reorderWindowUs: UInt64 = 24_000
 
-    /// PROACTIVE FEC headroom controller. Driven once per ~2s receive-metrics
-    /// window from maybeLogMetrics off the recv-jitter / out-of-order / ENet-
-    /// retransmit signals; widens/relaxes `reorderWindowUs` on a sustained trend.
-    /// Conservative + bounded + hysteretic by construction (see the type). Owned
-    /// here on the single receive thread, so it needs no lock.
-    var fecHeadroom = FecHeadroomController()
-    /// ENet reliable-retransmit total snapshotted at the last window flush, so the
-    /// controller sees the per-WINDOW delta (a trend signal) rather than the
-    /// session-monotonic total. The retransmit counter lives in TelemetryCounters
-    /// (it's incremented on the control thread); reading its value here once per
-    /// ~2s window is a single cheap lock far off the per-datagram path.
-    private var lastRetransmitTotalSnapshot: UInt64 = 0
-    /// Unrecoverable-frame total snapshotted at the last window flush, so the FEC
-    /// headroom controller's LOSS axis sees the per-WINDOW delta - the
-    /// reactive loss signal alongside this window's `fecRecoveredFramesInWindow`.
-    /// Same single-cheap-lock-per-2s-window cost as the retransmit snapshot above.
-    private var lastUnrecoverableTotalSnapshot: UInt64 = 0
+    /// Uptime µs of the newest video datagram on the live connection (0 = none
+    /// yet): the "reception alive" clock the decoder's receive-idle read and the
+    /// env-signal window use, so frames shredded before decode still count.
+    static let lastDatagramUs = Atomic<UInt64>(0)
     /// One-deep slot for the deferred next-frame datagram while we hold the
     /// current incomplete frame. At most ONE frame of cross-frame reordering is
     /// absorbed; a SECOND new frame forces immediate loss declaration.
@@ -302,10 +268,19 @@ final class RtpVideoQueue {
         25, 50, 75, 100, 150, 200, 300, 500, 750, 1_000, 1_500, 2_000, 3_000, 5_000, 10_000, 20_000
     ]
 
-    init(depacketizer: VideoDepacketizer, packetSize: Int, multiFecCapable: Bool) {
+    init(depacketizer: VideoDepacketizer, packetSize: Int) {
         self.depacketizer = depacketizer
         self.packetSize = packetSize
-        self.multiFecCapable = multiFecCapable
+        Self.lastDatagramUs.store(0, ordering: .relaxed)
+    }
+
+    /// Seconds since the last video datagram arrived; `.infinity` before the
+    /// first one on this connection. Any thread.
+    static func secondsSinceLastDatagram() -> Double {
+        let last = lastDatagramUs.load(ordering: .relaxed)
+        guard last > 0 else { return .infinity }
+        let nowUs = DispatchTime.now().uptimeNanoseconds / 1000
+        return Double(nowUs &- min(last, nowUs)) / 1_000_000
     }
 
     // MARK: - 16-bit wraparound (Limelight-internal.h)
@@ -336,7 +311,8 @@ final class RtpVideoQueue {
     /// plaintext). Returns whether the buffer was queued or rejected.
     @discardableResult
     func addRawDatagram(_ datagram: [UInt8], receiveTimeUs: UInt64) -> AddResult {
-        dispatchDatagram(datagram, receiveTimeUs: receiveTimeUs, isReplay: false)
+        Self.lastDatagramUs.store(receiveTimeUs, ordering: .relaxed)
+        return dispatchDatagram(datagram, receiveTimeUs: receiveTimeUs, isReplay: false)
     }
 
     /// Shared parse + dispatch. `isReplay` is true when re-driving a deferred
@@ -373,7 +349,7 @@ final class RtpVideoQueue {
         // If a previous datagram triggered a cross-frame reorder hold,
         // the current frame's reorder window may have elapsed before this
         // datagram arrived. Flush the deferred next-frame packet first if the
-        // window is up, so loss is declared no later than reorderWindowUs after
+        // window is up, so loss is declared no later than `reorderWindowUs` after
         // the current frame's first receive - bounding the worst-case hold.
         // (Skipped on a replay: the replay IS the flush, and the slot is already
         // cleared, so this would be a redundant no-op.)
@@ -466,80 +442,14 @@ final class RtpVideoQueue {
                 p50Us: gapQuantile(0.50), p95Us: gapQuantile(0.95), maxUs: gapMaxUs))
         }
 
-        // PROACTIVE FEC headroom: step the reorder-hold window on a SUSTAINED
-        // trend in the three receive-side health signals - the recv-jitter we just
-        // smoothed, this window's genuine reorders, and the per-WINDOW ENet
-        // reliable-retransmit delta. The retransmit counter is incremented on the
-        // control thread; we snapshot its monotonic total once per ~2s window here
-        // and hand the controller the delta so it sees a trend, not the lifetime
-        // total. Driving the controller from this ~2s window (NOT the per-datagram
-        // path) keeps the hot path untouched. Conservative + bounded + hysteretic
-        // (see FecHeadroomController) - and it changes only a LOCAL wait, sending
-        // nothing on the wire, so it can never worsen a marginal link. Done BEFORE
-        // the window accumulators reset below so `windowOutOfOrder` still holds this
-        // window's value.
-        let retransmitTotalNow = counters.enetRetransmitTotal.value
-        let retransmitDelta = retransmitTotalNow >= lastRetransmitTotalSnapshot
-            ? Int(retransmitTotalNow - lastRetransmitTotalSnapshot) : 0
-        lastRetransmitTotalSnapshot = retransmitTotalNow
-        // When the reconciler is enabled, CONSUME the unified
-        // jitter→headroom decision EnvSignalController publishes (one short
-        // controller-lock pull off this ~2s window - NEVER the per-datagram path)
-        // instead of self-deciding from raw jitter, so this controller and the
-        // FramePacer adaptive depth walk off ONE shared level. The HARD FLOORS are
-        // unchanged: the live `reorderWindowUs` still caps at `maxHoldUs` (48ms),
-        // and the queue's `isFecRecoveryStillPossible()` gate in the add path is a
-        // separate floor the reconciler can't reach. When the reconciler is off
-        // (the kill-switch A/B), the controller self-decides exactly as today.
-        let jitterChanged: Bool
-        if EnvSignalController.reconcilerEnabled {
-            let decision = EnvSignalController.shared.decision
-            jitterChanged = fecHeadroom.reconcile(headroomLevel: decision.headroomLevel,
-                                                  smoothedJitterMs: decision.smoothedJitterMs)
-        } else {
-            jitterChanged = fecHeadroom.observeWindow(recvJitterMs: jitterUs / 1000.0,
-                                                      outOfOrder: windowOutOfOrder,
-                                                      retransmits: retransmitDelta)
-        }
-        // LOSS AXIS: drive the SEPARATE loss accumulator off this window's
-        // direct loss evidence - frames the host's parity recovered
-        // (`fecRecoveredFramesInWindow`) and frames that went unrecoverable (a
-        // per-window delta off the monotonic total). Runs every window regardless
-        // of the reconciler (orthogonal to the jitter axis) and BEFORE the window
-        // accumulators reset below, so `fecRecoveredFramesInWindow` still holds
-        // this window's count. It widens the reorder-hold ONLY - never the pacer.
-        let unrecoverableTotalNow = counters.unrecoverableFrameTotal.value
-        let unrecoverableDelta = unrecoverableTotalNow >= lastUnrecoverableTotalSnapshot
-            ? Int(unrecoverableTotalNow - lastUnrecoverableTotalSnapshot) : 0
-        lastUnrecoverableTotalSnapshot = unrecoverableTotalNow
-        let lossChanged = fecHeadroom.observeLoss(fecRecovered: fecRecoveredFramesInWindow,
-                                                  unrecoverable: unrecoverableDelta)
-        // REORDER AXIS: ooo/retransmit widen the reorder-hold ONLY (never the pacer
-        // depth, which adds latency for no recovery gain), so the 3-signal contract
-        // holds even when the reconciler keeps headroomLevel jitter-only.
-        let reorderChanged = fecHeadroom.observeReorder(outOfOrder: windowOutOfOrder,
-                                                        retransmits: retransmitDelta)
-        if jitterChanged || lossChanged || reorderChanged {
-            Diag.notice("NativeVideo PROACTIVE FEC headroom: reorder-hold → "
-                + "\(reorderWindowUs / 1000)ms (jitter-lvl \(fecHeadroom.level) "
-                + "loss-lvl \(fecHeadroom.lossLevel) reorder-lvl \(fecHeadroom.reorderLevel)) "
-                + "[recv-jitter=\(String(format: "%.1f", jitterUs / 1000.0))ms "
-                + "ooo=\(windowOutOfOrder) retransmit=\(retransmitDelta) "
-                + "fec-recovered=\(fecRecoveredFramesInWindow) unrecoverable=\(unrecoverableDelta)]",
-                Self.cat)
-        }
-
-        // FEC HEALTH gauge (read-only, no feedback into FEC/reorder logic).
-        // `parityMargin` is this window's worst RECOVERED-frame headroom, or nil with
-        // no recovery - "full parity, nothing consumed" must not read as a near-miss.
+        // FEC HEALTH gauge (read-only). `parityMargin` is this window's worst
+        // RECOVERED-frame headroom, or nil with no recovery (nothing consumed is no
+        // near-miss).
         counters.setFecHealth(TelemetryCounters.FecHealthSnapshot(
-            reorderHoldMs: Double(reorderWindowUs) / 1000.0,
-            headroomLevel: fecHeadroom.level,
-            lossLevel: fecHeadroom.lossLevel,
             fecPercentage: fecPercentage,
             parityMargin: windowMinParityMargin == Int.max ? nil : windowMinParityMargin))
 
-        // Reorder-displacement gauge (session maxes + live hold) - same ~2s
+        // Reorder-displacement gauge (session maxes + the hold) - same ~2s
         // cadence, same read-only contract as the FEC health snapshot above.
         publishReorderDisplacementGauge()
 

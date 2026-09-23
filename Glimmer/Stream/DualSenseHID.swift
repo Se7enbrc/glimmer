@@ -52,6 +52,25 @@ struct DualSenseOutputState: Equatable, Sendable {
     var rightTrigger: [UInt8] = [UInt8](repeating: 0, count: 11)
 }
 
+/// Reports per second over the last full one-second window; nil until one
+/// completes. Measures the raw pad cadence next to GameController's.
+struct HIDReportRate: Equatable, Sendable {
+    private(set) var perSecond: Double?
+    private var windowStart: TimeInterval?
+    private var windowCount = 0
+
+    mutating func record(at time: TimeInterval) {
+        if let start = windowStart, time - start >= 1 {
+            perSecond = Double(windowCount) / (time - start)
+            windowStart = time
+            windowCount = 0
+        } else if windowStart == nil {
+            windowStart = time
+        }
+        windowCount += 1
+    }
+}
+
 final class DualSenseHID: @unchecked Sendable {
     static let shared = DualSenseHID()
 
@@ -97,6 +116,12 @@ final class DualSenseHID: @unchecked Sendable {
     var reportCount: Int {
         lock.lock(); defer { lock.unlock() }
         return reportCountLocked
+    }
+
+    /// The fastest open pad's raw report rate (see HIDReportRate), for telemetry.
+    var reportsPerSecond: Double? {
+        lock.lock(); defer { lock.unlock() }
+        return deviceStates.values.compactMap(\.reportRate.perSecond).max()
     }
 
     func state(for controllerID: ObjectIdentifier) -> DualSenseDeviceState? {
@@ -158,6 +183,14 @@ final class DualSenseHID: @unchecked Sendable {
         if shouldStop { running = false }
         lock.unlock()
         if shouldStop { stop() }
+    }
+
+    /// After an in-app grant: re-open a running reader so reports flow without
+    /// a relaunch (HIDGamepadManager.reopenAll's twin). Main thread only.
+    func reopen() {
+        guard isActive else { return }
+        stop()
+        start()
     }
 
     private func start() {
@@ -284,6 +317,7 @@ final class DualSenseHID: @unchecked Sendable {
         guard var state = deviceStates[device] else { lock.unlock(); return }
         let previous = state
         let pressed = state.apply(decoded)
+        state.reportRate.record(at: time)
         let changed = state.buttons != previous.buttons || state.battery != previous.battery
         deviceStates[device] = state
         reportCountLocked += 1

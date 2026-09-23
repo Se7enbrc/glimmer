@@ -111,7 +111,7 @@ extension RtpAudioReceiver {
         let droppedMs = startupDroppedPackets * audioPacketDuration
         let rate = arrivedMs / max(elapsedMs, 0.001)
         Diag.notice("NativeAudio METRIC startup-pacing=\(burst ? "burst" : "paced") "
-            + String(format: "rate=%.1fx", rate)
+            + "rate=\(String(format: "%.1f", rate))x"
             + " (\(String(format: "%.0f", arrivedMs))ms audio in "
             + "\(String(format: "%.0f", elapsedMs))ms)"
             + " dropped=\(droppedMs)ms"

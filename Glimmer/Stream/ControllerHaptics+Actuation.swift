@@ -194,7 +194,7 @@ extension ControllerHaptics {
             // Recoverable hiccup, not a fault: drop the channel so the next
             // nonzero event lazily rebuilds it. INFO on purpose - haptics
             // self-heal and a warning would cry wolf in the diagnostics ring.
-            Diag.info("controller \(slot) haptics update failed (\(error)) - rebuilding on next event",
+            Diag.info("controller \(slot) haptics update failed (\(error, privacy: .private)) - rebuilding on next event",
                       Self.logCategory)
             pad.engines[localityKey] = nil
             channel.engine.stop(completionHandler: nil)
@@ -300,7 +300,7 @@ extension ControllerHaptics {
             return HapticChannel(engine: engine, player: player)
         } catch {
             pad.nextEngineAttemptNanos = now + Self.engineRetryNanos
-            Diag.info("controller \(slot) haptic engine start failed (\(error)); retrying in ~1s",
+            Diag.info("controller \(slot) haptic engine start failed (\(error, privacy: .private)); retrying in ~1s",
                       Self.logCategory)
             engine.stop(completionHandler: nil)
             return nil

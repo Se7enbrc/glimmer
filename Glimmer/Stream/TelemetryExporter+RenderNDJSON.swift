@@ -87,7 +87,7 @@ extension TelemetryRenderer {
     private static func ndjsonSessionLifecycle(_ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot) {
         if let handshake = snap.handshake {
             builder.add("handshake_rtsp_ms", handshake.rtspMs)
-            builder.add("handshake_pairing_ms", handshake.pairingMs)
+            builder.add("handshake_control_setup_ms", handshake.controlSetupMs)
             builder.add("handshake_enet_connect_ms", handshake.enetConnectMs)
             builder.add("handshake_first_frame_ms", handshake.firstFrameMs)
             builder.add("handshake_total_ms", handshake.totalMs)
@@ -123,6 +123,7 @@ extension TelemetryRenderer {
         // Receive-start failures (H7): >0 with audio dark = video-only session.
         builder.addCount("audio_receive_failed_total", extras.audioReceiveFailedTotal)
         builder.add("audio_pkts_per_s", audio.packetsPerSecond)
+        builder.add("audio_gap_max_ms", audio.gapMaxMs)
         builder.add("audio_loss_rate", audio.lossRate)
         builder.add("audio_fec_recovery_rate", audio.fecRecoveryRate)
         builder.add("audio_engine_running", audio.engineRunning.map { $0 ? 1.0 : 0.0 })
@@ -130,9 +131,11 @@ extension TelemetryRenderer {
         builder.add("audio_resampler_ppm", audio.resamplerPpm)
         builder.add("audio_buffer_fill_min_ms", audio.bufferFillMinMs)
         // The adaptive target the fill is steered toward - fill vs target is
-        // the cushion judge (base 30 / cap 150 / ceiling 190).
+        // the cushion judge - and the link's cap on it.
         builder.add("audio_playout_target_ms", extras.audioPlayoutTargetMs)
+        builder.add("audio_cushion_max_ms", extras.audioCushionMaxMs)
         builder.addCount("audio_underrun_total", audio.underrunTotal)
+        builder.addCount("audio_underrun_deadair_total", extras.audioUnderrunDeadairTotal)
         builder.addCount("audio_overrun_total", audio.overrunTotal)
         // Designed playout-backlog trims (5ms chops), split out so the overrun
         // total above stays ceiling-backstop-only.
@@ -220,6 +223,12 @@ extension TelemetryRenderer {
         builder.add("present_cadence_err_ms", snap.presentCadenceErrorMs)
         builder.addCount("present_on_time", snap.presentOnTimeCount)
         builder.addCount("present_late", snap.presentLateCount)
+        // The host-caused share of present_late (network loss counts as host), and how
+        // unevenly the host delivers.
+        builder.addCount("present_late_host_cadence", snap.presentLateHostCadenceCount)
+        builder.add("host_frame_interval_p50_ms", snap.hostFrameIntervalP50Ms)
+        builder.add("host_frame_interval_p95_ms", snap.hostFrameIntervalP95Ms)
+        builder.addCount("host_uneven_pairs", snap.hostUnevenPairs)
         builder.add("host_encode_min_ms", snap.hostEncodeLatencyMinMs)
         builder.add("host_encode_avg_ms", snap.hostEncodeLatencyAvgMs)
         builder.add("host_encode_max_ms", snap.hostEncodeLatencyMaxMs)
@@ -230,13 +239,12 @@ extension TelemetryRenderer {
     ) {
         builder.add("recv_jitter_ms", snap.recvJitterMs)
         builder.add("fec_recovery_rate", snap.fecRecoveryRate)
-        builder.add("fec_reorder_hold_ms", snap.fecReorderHoldMs)
-        builder.add("fec_headroom_level", snap.fecHeadroomLevel.map(Double.init))
-        builder.add("fec_loss_level", snap.fecLossLevel.map(Double.init))
         builder.add("fec_percentage", snap.fecPercentage.map(Double.init))
         builder.add("fec_parity_margin", snap.fecParityMargin.map(Double.init))
         builder.add("reorder_disp_max_ms", snap.reorderDispMaxMs)
         builder.add("reorder_hold_exceeded", Double(snap.reorderHoldExceededTotal))
+        builder.addCount("reorder_hold_taken_total", snap.reorderHoldTakenTotal)
+        builder.addCount("reorder_hold_rescued_total", snap.reorderHoldRescuedTotal)
         builder.add("pkts_per_s", snap.packetsPerSecond)
         // FRACTIONAL ms (high-res local clock): emit the Double with decimals via
         // `add` (jsonNumber → %.3f) instead of truncating to Int, so a sub-ms RTT
@@ -300,6 +308,8 @@ extension TelemetryRenderer {
         builder.addCount("drops_decoder", snap.dropsDecoder)
         builder.addCount("drops_backpressure", snap.dropsBackpressure)
         builder.addCount("drops_presentation_late", snap.dropsPresentationLate)
+        // Frames lost while waiting for an IDR/RFI recovery frame (not in frame_loss_total).
+        builder.addCount("drops_recovery_wait_total", snap.dropsRecoveryWaitTotal)
         // Designed suppressed-mode drops + the 0/1 context gauge, split from
         // drops_presentation_late so that counter stays a genuine-lateness
         // signal while the window is backgrounded.
@@ -317,6 +327,8 @@ extension TelemetryRenderer {
     ) {
         builder.add("input_events_per_s", snap.inputEventsPerSecond)
         builder.add("input_flush_per_s", snap.inputFlushPerSecond)
+        builder.add("input_motion_per_s", snap.inputMotionPerSecond)
+        builder.add("dualsense_hid_reports_per_s", extras.dualSenseHidReportsPerSecond)
         builder.addCount("input_idle_to_active_total", snap.inputIdleToActiveTotal)
         builder.add("input_since_last_ms", snap.timeSinceLastInputMs)
         // Host rumble RECEIVED at dispatch (pre-guard) + the invalid-drop
@@ -390,44 +402,7 @@ extension TelemetryRenderer {
         builder.addCount("bookmark_total", snap.bookmarkTotal)
     }
 
-    /// LINK fields: the stream ROUTE pair first, then the Wi-Fi radio (signal
-    /// 3). Two truths, deliberately distinct keys:
-    ///   * stream_link / stream_if - the interface the stream's packets
-    ///     actually traverse (StreamRouteProbe). THE field that gates the
-    ///     env-signal layer; "wired" here with wifi_link:"wifi" below is the
-    ///     normal docked-laptop case, not a contradiction.
-    ///   * wifi_* - the ASSOCIATED RADIO's state, whether or not the stream
-    ///     rides it (a wired session still reads wifi_link:"wifi" on every
-    ///     row, truthfully - about the radio). Kept as-is for continuity.
-    /// Radio physics + ssid/band only when associated; addString skips nil.
-    private static func ndjsonLink(
-        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
-    ) {
-        if let routeSnapshot = extras.streamRoute {
-            builder.addString("stream_link", routeSnapshot.linkLabel)
-            builder.addString("stream_if", routeSnapshot.interfaceName)
-        }
-        // ENV-SIGNAL state + the conditional-keepalive judge fields -
-        // they ride the link section because the link IS their evidence.
-        // Transitions additionally get their own `event:"env_state"` row with
-        // the full evidence vector (see EnvSignalController).
-        builder.addInt("env_state", extras.envStateOrdinal)
-        builder.addString("env_state_label", extras.envStateLabel)
-        builder.addCount("env_state_changes_total", extras.envStateChangesTotal)
-        builder.add("keepalive_interval_ms", extras.keepaliveIntervalMs)
-        builder.addCount("pings_sent_video_total", extras.videoPingsSentTotal)
-        builder.addCount("pings_sent_audio_total", extras.audioPingsSentTotal)
-        builder.add("pings_video_per_s", extras.videoPingsPerSecond)
-        builder.add("pings_audio_per_s", extras.audioPingsPerSecond)
-        guard let wifi = snap.wifi else { return }
-        builder.addString("wifi_link", wifi.linkState.label)
-        builder.addInt("wifi_rssi_dbm", wifi.rssiDbm)
-        builder.add("wifi_tx_rate_mbps", wifi.txRateMbps)
-        builder.addInt("wifi_noise_dbm", wifi.noiseDbm)
-        builder.addString("wifi_ssid", wifi.ssid)
-        builder.addInt("wifi_channel", wifi.channel)
-        builder.addString("wifi_band", wifi.band)
-    }
+    // The LINK section (`ndjsonLink`) lives in TelemetryExporter+RenderNDJSONLink.swift.
 
     /// Per-stage latency NDJSON fields: p50/p95/p99 derived from the histogram
     /// buckets for a quick tail (the Prometheus side ships raw _bucket/_sum/_count
@@ -454,6 +429,9 @@ extension TelemetryRenderer {
         addStage("lat_end_to_end", histograms.endToEnd)
         addStage("glass_to_glass", histograms.glassToGlass)
         addStage("input_to_photon_est", histograms.inputToPhoton)
+        // The client input legs input_to_photon_est is built from.
+        if let stage = snap.inputDeliverLatency { addStage("lat_input_deliver", stage) }
+        if let stage = snap.inputLocalLatency { addStage("lat_input_queue_to_wire", stage) }
         // DECODE time split by frame type (signal: DECODE).
         addStage("decode_idr", histograms.decodeIDR)
         addStage("decode_p", histograms.decodeP)

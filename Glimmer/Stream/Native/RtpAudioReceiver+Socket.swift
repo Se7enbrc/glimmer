@@ -74,7 +74,7 @@ extension RtpAudioReceiver {
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
         fd = sock
-        Diag.info("NativeAudio UDP socket ready (unconnected, recvfrom-any) → \(host):\(audioPort)",
+        Diag.info("NativeAudio UDP socket ready (unconnected, recvfrom-any) → \(host, privacy: .private):\(audioPort)",
                   Self.cat)
     }
 }

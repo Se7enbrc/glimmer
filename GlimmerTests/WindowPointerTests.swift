@@ -339,21 +339,21 @@ struct WindowPointerTests {
 
     /// Three shows, then never again.
     @Test func theHintShowsThreeTimes() {
-        #expect(CaptureHintPolicy.maxShows == 3)
-        #expect(CaptureHintPolicy.shouldShow(count: 0))
-        #expect(CaptureHintPolicy.shouldShow(count: 1))
-        #expect(CaptureHintPolicy.shouldShow(count: 2))
-        #expect(!CaptureHintPolicy.shouldShow(count: 3))
-        #expect(!CaptureHintPolicy.shouldShow(count: 99))
+        #expect(HintBudget.maxShows == 3)
+        #expect(HintBudget.shouldShow(count: 0))
+        #expect(HintBudget.shouldShow(count: 1))
+        #expect(HintBudget.shouldShow(count: 2))
+        #expect(!HintBudget.shouldShow(count: 3))
+        #expect(!HintBudget.shouldShow(count: 99))
     }
 
     /// Walking the budget from a fresh install lands on exactly three shows.
     @Test func theBudgetIsSpentInThreeCaptures() {
         var count = 0
         var shows = 0
-        for _ in 0..<10 where CaptureHintPolicy.shouldShow(count: count) {
+        for _ in 0..<10 where HintBudget.shouldShow(count: count) {
             shows += 1
-            count = CaptureHintPolicy.nextCount(after: count)
+            count = HintBudget.nextCount(after: count)
         }
         #expect(shows == 3)
         #expect(count == 3)
@@ -362,8 +362,8 @@ struct WindowPointerTests {
     /// A corrupt or hand-edited negative default self-heals into the normal
     /// budget instead of showing forever.
     @Test func aNegativeCountSelfHeals() {
-        #expect(CaptureHintPolicy.shouldShow(count: -5))
-        #expect(CaptureHintPolicy.nextCount(after: -5) == 1)
-        #expect(CaptureHintPolicy.nextCount(after: 2) == 3)
+        #expect(HintBudget.shouldShow(count: -5))
+        #expect(HintBudget.nextCount(after: -5) == 1)
+        #expect(HintBudget.nextCount(after: 2) == 3)
     }
 }

@@ -4,14 +4,9 @@
 //  MID-SESSION BITRATE DOWNSHIFT: the only rate adaptation this protocol
 //  profile permits.
 //
-//  WHY A RECONNECT AND NOT A MESSAGE: bitrate is fixed for the life of a
-//  session. There is no client→host bitrate request wired for this Sunshine
-//  profile - FEC% is host-driven per frame, and the per-frame FEC-status
-//  feedback moonlight uses collides on the wire with IDX_SET_RGB_LED and is
-//  deliberately never sent (see FecHeadroomController). The rate is set once, in
-//  the SDP, at ANNOUNCE. So the ONLY way to change it is to build a new SDP -
-//  i.e. reconnect. That is not a workaround for a missing message; it is the
-//  mechanism the protocol actually offers.
+//  WHY A RECONNECT AND NOT A MESSAGE: the rate is set once, in the SDP at ANNOUNCE, and this profile
+//  has no client→host bitrate request (the FEC-status feedback collides with IDX_SET_RGB_LED and is
+//  never sent, see EnetControlChannel.queueFrameFecStatus). A new SDP, so a reconnect, is the mechanism.
 //
 //  THE HOLE THIS FILLS: the frame watchdog's HOLD-IF-ALIVE branch is correct for
 //  the case it was written for - the host paused its encoder (Windows sign-in →

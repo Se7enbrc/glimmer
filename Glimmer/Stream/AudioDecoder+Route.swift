@@ -19,9 +19,20 @@ extension AudioDecoder {
 
     // MARK: - Audio OUTPUT route (under-run attribution breadcrumbs)
 
+    /// One sample of the default output route: the breadcrumb label and the
+    /// device UID the resampler's skew memory is keyed by (local only, never logged).
+    struct AudioRoute {
+        let label: String
+        let uid: String?
+    }
+
+    /// Hex identity of this instance for the lifecycle lines, so a decoder
+    /// that outlives its session is traceable in the log.
+    var logID: String { String(UInt(bitPattern: ObjectIdentifier(self)), radix: 16) }
+
     /// Install the default-output-device listener + seed the route cache. Called
     /// once from `initDecoderCore` with `stateLock` held (after the engine is up);
-    /// idempotent via the block handle. WHY a listener instead of sampling at the
+    /// idempotent via the token. WHY a listener instead of sampling at the
     /// under-run: route reads are blocking HAL IPC - putting one on the completion
     /// thread (or the 200Hz decode path) would risk the very stalls the cushion
     /// absorbs. The listener pays that cost on its own utility queue, only when
@@ -29,31 +40,32 @@ extension AudioDecoder {
     /// route-CHANGE NOTICE it emits is itself the attribution breadcrumb the
     /// under-run cascades were missing (a BT detach lands here seconds before the
     /// drains it triggers).
-    func installAudioRouteListener() {
-        guard routeListenerBlock == nil else { return }
-        let route = Self.sampleAudioRoute()
+    func installAudioRouteListener(initial route: AudioRoute) {
+        guard routeListenerToken == nil else { return }
         audioMeterLock.lock()
-        audioRouteCache = route
+        audioRouteCache = route.label
         audioMeterLock.unlock()
         // First-sample NOTICE - a new sampler announces itself (success AND
         // failure shape) rather than going silently dark.
-        Diag.notice("audio output route: \(route)", "Stream")
+        Diag.notice("audio output route: \(route.label, privacy: .private)", "Stream")
         var addr = Self.defaultOutputDeviceAddress
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             guard let self else { return }
             let fresh = Self.sampleAudioRoute()
             self.audioMeterLock.lock()
             let previous = self.audioRouteCache
-            self.audioRouteCache = fresh
+            self.audioRouteCache = fresh.label
+            self.noteOutputDeviceLocked(uid: fresh.uid)
             self.audioMeterLock.unlock()
-            if fresh != previous {
-                Diag.notice("audio route changed: \(previous) → \(fresh)", "Stream")
+            if fresh.label != previous {
+                Diag.notice("audio route changed: \(previous, privacy: .private) → \(fresh.label, privacy: .private)", "Stream")
             }
         }
-        let status = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block)
-        if status == noErr {
-            routeListenerBlock = block
+        var status: OSStatus = noErr
+        routeListenerToken = gl_audio_listener_add(
+            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block, &status)
+        if routeListenerToken != nil {
+            Diag.notice("audio route listener installed (decoder \(logID))", "Stream")
         } else {
             Diag.notice(
                 "audio route listener install failed (OSStatus \(status)) - "
@@ -62,15 +74,16 @@ extension AudioDecoder {
         }
     }
 
-    /// Remove the route listener (the HAL requires the same address/queue/block
-    /// triple). Called from `shutdown()` with `stateLock` held; safe when the
-    /// install failed or never ran.
+    /// Remove the route listener with the exact block the HAL holds (the token).
+    /// Called from `shutdown()` with `stateLock` held; safe when the install
+    /// failed or never ran.
     func removeAudioRouteListener() {
-        guard let block = routeListenerBlock else { return }
-        routeListenerBlock = nil
+        guard let token = routeListenerToken else { return }
+        routeListenerToken = nil
         var addr = Self.defaultOutputDeviceAddress
-        AudioObjectRemovePropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block)
+        let status = gl_audio_listener_remove(
+            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, token)
+        Diag.notice("audio route listener removed (decoder \(logID), OSStatus \(status))", "Stream")
     }
 
     /// The HAL address of the system default OUTPUT device - AVAudioEngine's
@@ -82,33 +95,20 @@ extension AudioDecoder {
             mElement: kAudioObjectPropertyElementMain)
     }
 
-    /// One blocking sample of the current default-output route, rendered as
+    /// One blocking sample of the current default-output route, labeled
     /// "<device name> [<transport>]" (e.g. "MacBook Pro Speakers [builtin]").
     /// Same probe idiom as `AudioConfig.currentDefaultOutputChannelCount`.
     /// Returns "unknown" if the HAL won't answer - never throws. Call sites: init
     /// + the listener's utility queue only, never a hot path.
-    private static func sampleAudioRoute() -> String {
+    static func sampleAudioRoute() -> AudioRoute {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         var addr = defaultOutputDeviceAddress
         guard AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID) == noErr,
-            deviceID != 0 else { return "unknown" }
+            deviceID != 0 else { return AudioRoute(label: "unknown", uid: nil) }
 
-        var nameAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioObjectPropertyName,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        var nameRef: Unmanaged<CFString>?
-        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        let nameStatus = withUnsafeMutablePointer(to: &nameRef) {
-            AudioObjectGetPropertyData(deviceID, &nameAddr, 0, nil, &nameSize, $0)
-        }
-        var name = "unnamed"
-        if nameStatus == noErr, let cfName = nameRef?.takeRetainedValue() {
-            name = cfName as String
-        }
-
+        let name = stringProperty(kAudioObjectPropertyName, of: deviceID) ?? "unnamed"
         var transportAddr = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyTransportType,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -118,7 +118,24 @@ extension AudioDecoder {
         let transportStatus = AudioObjectGetPropertyData(
             deviceID, &transportAddr, 0, nil, &transportSize, &transport)
         let label = transportStatus == noErr ? Self.transportLabel(transport) : "?"
-        return "\(name) [\(label)]"
+        return AudioRoute(label: "\(name) [\(label)]",
+                          uid: stringProperty(kAudioDevicePropertyDeviceUID, of: deviceID))
+    }
+
+    /// A CFString device property (name, UID), or nil if the HAL won't answer.
+    private static func stringProperty(_ selector: AudioObjectPropertySelector,
+                                       of deviceID: AudioDeviceID) -> String? {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var ref: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        let status = withUnsafeMutablePointer(to: &ref) {
+            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, $0)
+        }
+        guard status == noErr, let value = ref?.takeRetainedValue() else { return nil }
+        return value as String
     }
 
     /// Short label for the HAL transport type - BT vs built-in vs USB is the

@@ -27,26 +27,25 @@ struct OpenWindowCapture: View {
 /// we control both sides of the launch.
 private let launchedAtLogin = ProcessInfo.processInfo.arguments.contains("--launched-at-login")
 
-@main
+/// The app itself; `GlimmerMain` starts it unless argv names a CLI command.
 struct GlimmerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model: AppModel
 
     init() {
-        // MUST precede AppModel(): its init reads ~20 UserDefaults keys,
-        // which the unsandbox-flip orphaned in the old container until this runs.
-        ContainerMigration.runIfNeeded()
-        // Also MUST precede AppModel(), for the same reason: a registered
-        // default only answers reads that come AFTER the registration, and
-        // AppModel's init (and its property initializers) read these keys
-        // immediately. This block used to live in
-        // applicationWillFinishLaunching, which runs after this initializer -
-        // so every key AppModel reads was already past its chance to see a
-        // registered default.
-        Self.registerDefaults()
+        Self.prepareDefaults()
         let mgr = AppModel()
         _model = State(wrappedValue: mgr)
         AppDelegate.boundManager = mgr
+    }
+
+    /// MUST precede AppModel(), here and in the CLI: its init reads defaults
+    /// the container migration may still have to move, and a registered
+    /// default only answers reads made after the registration.
+    @MainActor
+    static func prepareDefaults() {
+        ContainerMigration.runIfNeeded()
+        registerDefaults()
     }
 
     /// Defaults for prefs whose readers use bare `UserDefaults.bool(forKey:)`.
@@ -118,9 +117,6 @@ struct GlimmerApp: App {
                 // 584 here did. A floor equal to the content leaves nothing to
                 // drag.
                 .frame(minWidth: 680)
-                // Liquid Glass: on macOS 26 `.regularMaterial` resolves to
-                // the system material; future SDKs may expose a dedicated
-                // `.glassBackground` shape style for window containers.
                 .containerBackground(.regularMaterial, for: .window)
         }
         .windowStyle(.hiddenTitleBar)
@@ -187,6 +183,7 @@ struct GlimmerApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Hand-off slot set by `GlimmerApp.init` so AppDelegate can reach the
     /// manager before any SwiftUI view body runs.
@@ -202,10 +199,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
 
     /// NSWindow open/close observers wired in applicationWillFinishLaunching
-    /// to toggle `NSApp.activationPolicy` between `.regular` (Dock icon
-    /// visible) when the main window is open and `.accessory` (no Dock
-    /// icon) when only the menu bar is alive. Tracked so deinit can detach.
+    /// that keep `NSApp.activationPolicy` in step (see `activationPolicy`).
     private var windowVisibilityObservers: [NSObjectProtocol] = []
+
+    /// A Dock icon and Cmd-Tab entry while there's something to come back to:
+    /// the launcher, Settings or a stream. The menu bar panel and alerts don't
+    /// count, or the icon would flicker every time one opens.
+    nonisolated static func activationPolicy(
+        visibleWindowIDs: [String], streaming: Bool
+    ) -> NSApplication.ActivationPolicy {
+        let anchored = visibleWindowIDs.contains { $0 == "main" || $0 == "com_apple_SwiftUI_Settings_window" }
+        return streaming || anchored ? .regular : .accessory
+    }
+
+    func refreshActivationPolicy() {
+        let visible = NSApp.windows.filter(\.isVisible).compactMap { $0.identifier?.rawValue }
+        let policy = Self.activationPolicy(visibleWindowIDs: visible, streaming: model?.isStreaming == true)
+        if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Version + build + commit on the FIRST log line, so any pasted log
@@ -217,11 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Diag.notice("app launching - Glimmer \(version) (\(build)) commit \(BuildInfo.commit) "
             + "built \(BuildInfo.date) (launchedAtLogin=\(launchedAtLogin))", "Launch")
 
-        // Defaults registration deliberately does NOT happen here: it has to run
-        // before AppModel reads its keys, which is GlimmerApp.init() - one
-        // initializer earlier than this delegate callback. See
-        // `GlimmerApp.registerDefaults()`.
-        //
+        // Defaults are registered in GlimmerApp.init (`prepareDefaults()`), one
+        // initializer before this callback, because AppModel reads them on creation.
+
         // Crash recovery: if a prior session died mid-stream with the pointer
         // acceleration linearized, restore the user's saved value now (no-op in
         // the clean case). Runs before any window/stream can re-engage capture.
@@ -231,34 +240,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let mgr = Self.boundManager {
             self.model = mgr
             mgr.attach(appDelegate: self)
-            Task { await mgr.bootstrap() }
+            mgr.startBootstrap()
+            GlimmerShortcuts.trackPCs(of: mgr)
+            // A stream started from the menu bar needs the Dock icon; its end
+            // may leave nothing to come back to. The first value is launch state.
+            Task { [weak self] in
+                for await _ in Observations({ mgr.isStreaming }).dropFirst() {
+                    self?.refreshActivationPolicy()
+                }
+            }
         }
 
-        // Login-launched? Start as `.accessory` so the Dock icon never
-        // appears alongside an invisible window. didBecomeKey on a
-        // subsequent user-triggered window open flips us back to
-        // `.regular` via the recheck observer.
+        // Login-launched: start as `.accessory` so no Dock icon shows beside an
+        // invisible window; a window the user opens later flips it back (recheck below).
         if launchedAtLogin {
             NSApp.setActivationPolicy(.accessory)
             Diag.info("login launch → activation policy .accessory (menu-bar only)", "Launch")
         }
 
         let nc = NotificationCenter.default
-        // Re-evaluate activation policy on any becomeKey / willClose. We
-        // don't read `note.object` because Swift 6 strict concurrency
-        // refuses to send the non-Sendable Notification across the
-        // assumeIsolated boundary; instead we look up the main window's
-        // current visibility from NSApp.windows on each tick.
-        let recheck: @Sendable () -> Void = {
+        // Re-evaluate activation policy on any becomeKey / willClose, from
+        // NSApp.windows rather than `note.object` (not Sendable). willClose fires
+        // while the window is still listed, so look one runloop tick later.
+        let recheck: @Sendable () -> Void = { [weak self] in
             MainActor.assumeIsolated {
-                // willClose fires while the window is still in NSApp.windows,
-                // so defer one runloop tick to see the post-close state.
-                DispatchQueue.main.async {
-                    let mainOpen = NSApp.windows.contains {
-                        $0.identifier?.rawValue == "main" && $0.isVisible
-                    }
-                    NSApp.setActivationPolicy(mainOpen ? .regular : .accessory)
-                }
+                DispatchQueue.main.async { [weak self] in self?.refreshActivationPolicy() }
             }
         }
         windowVisibilityObservers.append(nc.addObserver(
@@ -272,14 +278,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     #if canImport(Sparkle)
-    /// Check for updates on every user-initiated open, in addition to Sparkle's
-    /// daily scheduled check - a cold start should surface a newer release right
-    /// away instead of waiting up to a day. `checkForUpdatesInBackground` is
-    /// silent unless an update is actually available. Skipped on login launches
-    /// (the user didn't open it; the daily scheduled check covers that session).
+    /// Check for updates on every open the user makes, on top of Sparkle's daily check,
+    /// so a cold start surfaces a newer release at once; silent unless there is one.
+    /// Skipped on login launches, which the daily check covers.
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !launchedAtLogin else { return }
-        UpdaterController.shared.updater.checkForUpdatesInBackground()
+        // Sparkle's own scheduled check may already be running; asking again
+        // then only logs a fault.
+        let updater = UpdaterController.shared.updater
+        if !updater.sessionInProgress { updater.checkForUpdatesInBackground() }
     }
     #endif
 

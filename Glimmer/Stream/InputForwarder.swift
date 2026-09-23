@@ -29,19 +29,9 @@
 //     at their physical keyboard). This is the same convention moonlight-qt
 //     uses in its Mac build.
 //
-//   * NKRO: every physical key-down or key-up emits one and only one
-//     `LiSendKeyboardEvent2` - there is NO "single key in flight" state, no
-//     per-event modifier reset, no "release before press" coalescing. macOS
-//     delivers each physical-key transition as its own NSEvent (AppKit does
-//     not collapse simultaneous presses), and the responder chain hands each
-//     to `keyDown(with:)`/`keyUp(with:)` independently. With four fingers on
-//     four keys we send four down events; lifting any one sends exactly one
-//     up event for that key. `raiseAllHeldInputs()` (keys + buttons +
-//     modifiers) fires only on focus loss and `detach()` (stream teardown),
-//     so state never resets mid-game while the window stays key.
-//     `heldModifierVKs` (one entry per modifier SIDE) is diffed in
-//     `flagsChanged` so we only emit modifier transitions, and releasing one
-//     of two held Shifts releases exactly that one on the host.
+//   * NKRO: each physical key transition sends exactly one event, with no coalescing; `raiseAllHeldInputs()`
+//     runs only on focus loss, a paste, `detach()` and a reconnect. `heldModifierVKs` (one entry per side) is
+//     diffed in `flagsChanged`, so releasing one of two held Shifts releases exactly that one on the PC.
 //
 //   * Mouse motion is *relative* via the SDL associate-false model
 //     (P0 mouse-snap fix). When relative aim is engaged we call
@@ -99,14 +89,6 @@
 //     CGEventTap (see TODO(eventtap) in installDiagnosticMonitors). Rate-
 //     limited to ~100 events/sec via a 1-second windowed sampler.
 //
-//   * macOS Accessibility Zoom keyboard shortcuts (⌥⌘8, ⌥⌘=, ⌥⌘-) are
-//     intercepted unconditionally in streamView(_:handleKeyDown:) - we
-//     return `true` so StreamInputView.keyDown skips its `super.keyDown`
-//     path (which doesn't get called in any code path; see the comment
-//     in StreamInputView.keyDown below) and the OS never sees the chord.
-//     These are pure-OS chords with no game meaning; the intercept is
-//     orthogonal to `captureSysKeys`.
-//
 //   * Gamepad arrival is announced via `LiSendControllerArrivalEvent`. Some
 //     host versions register a controller slot only after seeing this; without
 //     it `LiSendMultiControllerEvent` events appear to be silently dropped on
@@ -130,6 +112,9 @@ public final class InputForwarder {
     /// Called when the user presses the configured quit hotkey. The session
     /// owner wires this to stop streaming.
     public var onQuitHotkey: (@MainActor () -> Void)?
+    /// Leaving before the first connection is live cancels the connect, as the
+    /// launcher's Cancel does. Falls back to `onQuitHotkey` when unset.
+    public var onCancelConnect: (@MainActor () -> Void)?
 
     /// Provider for the quit hotkey. Called on every keyDown so changes the
     /// user makes in Settings while a stream is live take effect immediately
@@ -169,6 +154,9 @@ public final class InputForwarder {
     /// shape as the quit/stats chords. Only consulted while `isWindowMode` is
     /// on, where it TOGGLES capture.
     public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
+
+    /// Precise scroll slices summed into whole wheel notches (ScrollQuantizer.swift).
+    var scrollQuantizer = ScrollQuantizer()
 
     /// The mini player chord: a client-only toggle, never forwarded.
     public var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
@@ -269,9 +257,9 @@ public final class InputForwarder {
     ///     non-Cmd key that happens to be pressed while the user holds
     ///     Cmd doesn't reach the host with a phantom Win-key modifier.
     ///
-    /// When this is `true`, the InputForwarder is transparent - every Cmd
-    /// chord is forwarded as a Win-key chord - at the cost of macOS no
-    /// longer reacting to those combos until the stream ends. That's the
+    /// When this is `true` and the stream holds the pointer (`forwardsCommand`),
+    /// every Cmd chord is forwarded as a Win-key chord - at the cost of macOS no
+    /// longer reacting to those combos while the pointer is held. That's the
     /// mode power users on dedicated streaming hardware want.
     ///
     /// Note: the configured quit hotkey (see `quitHotkey`) is detected BEFORE
@@ -313,6 +301,10 @@ public final class InputForwarder {
     /// Bitmask of slots currently in use; bit N == 1 means slot N is occupied.
     /// Sent to the host as `activeGamepadMask` on every controller event.
     var gamepadMask: UInt16 = 0
+
+    /// What the PC may still hold in each slot. Only a stream start retires an entry,
+    /// since a removal sent into a link that is already dead never arrives.
+    var announcedControllers: [UInt8: ControllerArrival] = [:]
 
     /// Per-slot DualSense/DualShock touchpad finger tracking, so the touchpad
     /// surface can be forwarded as host touch events (down/move/up). Keyed by
@@ -507,35 +499,32 @@ public final class InputForwarder {
 
     // MARK: - Modifier mapping
 
-    /// Last-seen modifier mask, so we can diff against the previous flagsChanged
-    /// event and emit per-modifier down/up.
-    /// Win VK codes of the modifier sides the host currently believes are held.
+    /// Win VK codes of the modifier sides the host has been told are held.
     var heldModifierVKs: Set<Int16> = []
+    /// Set when the PC may not match `heldModifierVKs` (attach, raise-all). Only
+    /// then does a key-down resync: a tool-posted ⌃C carries ⌃ with no
+    /// flagsChanged, and syncing it would leave Ctrl held on the PC.
+    var modifiersNeedResync = true
+    /// The Mac's Caps Lock state last seen, so a toggle is sent exactly once.
     var lastCapsLock = false
 
-    /// Wire keycodes (0x8000|VK, exactly as sent) of non-modifier keys the host
-    /// currently holds DOWN, and the mouse buttons it holds pressed. NKRO
-    /// forwarding stays stateless per-event; these sets exist solely so a focus
-    /// loss / teardown can raise everything - when another app steals focus
-    /// mid-hold, the physical key-up is delivered to the thief, so without a
-    /// raise the host keeps a held W pressed and the game walks forever.
-    /// Main-thread only (all key/mouse handling is).
-    var heldKeys: Set<Int16> = []
+    /// Keys (exactly as sent, flags included) and mouse buttons the host holds
+    /// down, so focus loss, a reconnect or teardown can release them: the
+    /// physical release goes elsewhere, and a held W would walk forever.
+    var heldKeys: Set<VKScanCode> = []
     var heldMouseButtons: Set<Int32> = []
 
     /// Send key-up / button-release for everything we believe the host holds,
-    /// then clear the bookkeeping (modifiers included, via
-    /// releaseStuckModifiers). Called on the window-resign edge and detach().
-    /// A key still physically held on refocus stays released until re-pressed
-    /// - the predictable trade (matching upstream clients' raise-on-focus-loss).
+    /// then clear the bookkeeping (modifiers included). A key still physically
+    /// held stays released until re-pressed, as in upstream clients.
     func raiseAllHeldInputs(reason: String) {
         let keyCount = heldKeys.count
         let buttonCount = heldMouseButtons.count
         if isReady {
-            for code in heldKeys {
+            for key in heldKeys {
                 let rc = backend?.sendKeyboard(
-                    keyCode: code, action: Int8(StreamProtocol.KEY_ACTION_UP),
-                    modifiers: 0, flags: 0) ?? -2
+                    keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_UP),
+                    modifiers: 0, flags: key.flags) ?? -2
                 record("LiSendKeyboardEvent2(raise-all)", rc)
             }
             for button in heldMouseButtons {
@@ -543,47 +532,42 @@ public final class InputForwarder {
                     action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
                 record("LiSendMouseButtonEvent(raise-all)", rc)
             }
+            for vk in heldModifierVKs.sorted() {
+                let rc = backend?.sendKeyboard(
+                    keyCode: VKScanCode(vk: vk).wireCode,
+                    action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
+                record("LiSendKeyboardEvent2(modifier release)", rc)
+            }
             if keyCount + buttonCount > 0 {
                 Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
-                    + "mouse button(s) on \(reason) - the physical release would have "
-                    + "gone to the newly focused app", "Stream")
+                    + "mouse button(s) on \(reason)", "Stream")
             }
         }
         heldKeys.removeAll()
         heldMouseButtons.removeAll()
-        releaseStuckModifiers()
+        heldModifierVKs.removeAll()
+        modifiersNeedResync = true
     }
+
+    /// True from attach until the first connection goes live: Esc cancels the
+    /// connect then, and is game input from then on (reconnects included).
+    var initialConnectPending = false
+
+    /// Mac keyCodes with no PC mapping already logged this session.
+    var loggedUnmappedKeyCodes: Set<UInt16> = []
 
     func modifierByte(from flags: NSEvent.ModifierFlags) -> UInt8 {
         var b: Int32 = 0
         if flags.contains(.control) { b |= StreamProtocol.MODIFIER_CTRL }
         if flags.contains(.shift) { b |= StreamProtocol.MODIFIER_SHIFT }
         if flags.contains(.option) { b |= StreamProtocol.MODIFIER_ALT }
-        // Only fold Cmd into MODIFIER_META when sys-key capture is on. With
-        // capture off, the user expects Cmd to be a macOS-only key - sending
+        // Only fold Cmd into MODIFIER_META while ⌘ is forwarded. Otherwise
+        // the user expects Cmd to be a macOS-only key - sending
         // MODIFIER_META alongside an unrelated keypress would make the host
         // see e.g. "Win+T" for a stray ⌘-T the user pressed to open a tab in
         // a backgrounded mac app.
-        if flags.contains(.command), captureSysKeys { b |= StreamProtocol.MODIFIER_META }
+        if flags.contains(.command), forwardsCommand { b |= StreamProtocol.MODIFIER_META }
         return UInt8(truncatingIfNeeded: b)
-    }
-
-    /// Send key-up for any modifier our state thinks is currently down. Used
-    /// during detach so the host doesn't see a "ctrl is held forever" state.
-    ///
-    /// We deliberately omit the Cmd modifier when `captureSysKeys` is false:
-    /// the corresponding VK_LWIN/VK_RWIN down was never sent (we filter Cmd
-    /// out of `flagsChanged`), so sending a stray up here would be a
-    /// fabricated event the host would react to.
-    private func releaseStuckModifiers() {
-        guard isReady else { return }
-        for vk in heldModifierVKs.sorted() {
-            let rc = backend?.sendKeyboard(
-                keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
-                action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
-            record("LiSendKeyboardEvent2(modifier release)", rc)
-        }
-        heldModifierVKs = []
     }
 
     // Gamepad path (GameController framework integration, slot allocation,

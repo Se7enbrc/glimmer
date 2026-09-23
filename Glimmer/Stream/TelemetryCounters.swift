@@ -62,6 +62,9 @@ final class TelemetryCounters: @unchecked Sendable {
     let fecRecoveredFramesTotal = Counter()
     let inputEventsTotal = Counter()
     let inputBatchFlushTotal = Counter()
+    /// Gyro/accel samples handed to the batcher. Kept out of `inputEventsTotal`:
+    /// sensor noise never idles, so it would pin the input-idle state.
+    let inputMotionTotal = Counter()
     /// Input flush ticks that early-returned because the LOCAL outbound send count
     /// was over cap (the radio draining slowly) - one cause of the input p99 tail.
     let inputFlushSendBackloggedSkipTotal = Counter()
@@ -171,12 +174,11 @@ final class TelemetryCounters: @unchecked Sendable {
     //      below any hot-path budget; see TelemetrySessionEvents.swift. ----
     //
     /// RECONNECT count (signal: lifecycle): incremented each time a session
-    /// re-establishes its connection after a drop within the same run. The
-    /// climb-then-recover pattern that a single "connected" gauge can't show.
+    /// re-establishes its connection in place after a drop. Per session; an
+    /// in-place reconnect's own reset keeps it (`resetForReconnect`).
     let reconnectTotal = Counter()
-    /// WAKE count (signal: lifecycle): incremented each time the Mac wakes from
-    /// sleep while a stream is live. Run-global (NOT reset per session, like
-    /// `reconnectTotal`); a climb here that precedes a reconnect/disconnect marks
+    /// WAKE count (signal: lifecycle): the Mac woke from sleep while a stream was live.
+    /// Per session like `reconnectTotal`; a climb before a reconnect/disconnect marks
     /// the wake-on-different-AP stale-link case.
     let wakeTotal = Counter()
     /// ROUTE-CHANGE count (signal: lifecycle): incremented each time the stream's
@@ -242,12 +244,13 @@ final class TelemetryCounters: @unchecked Sendable {
     /// oscillation's visible half. not_due = staleFrameRepeatTotal − this.
     let staleEmptyQueueTotal = Counter()
 
-    /// REORDER-HOLD invariant violations (signal: NETWORK): a reordered packet
-    /// whose measured displacement exceeded the live reorder hold - it outlived
-    /// its release window and was promoted to pre-FEC loss. THE only reorder
-    /// signal worth alerting on (the raw ooo count is a physics floor on shared
-    /// spectrum; displacement < hold is the checked invariant).
+    /// REORDER-HOLD invariant violations (signal: NETWORK): a reordered packet that
+    /// outlived the hold and became pre-FEC loss. THE reorder signal worth alerting
+    /// on; the raw ooo count is a physics floor on shared spectrum.
     let reorderHoldExceededTotal = Counter()
+    /// Holds taken (a next-frame datagram deferred) and holds that rescued their frame.
+    let reorderHoldTakenTotal = Counter()
+    let reorderHoldRescuedTotal = Counter()
 
     /// PERCEIVED-GAP cause split (signal: PRESENT): the DROUGHT subset of
     /// `presentationGaps` - a present landed after a >100ms hold with frames
@@ -270,6 +273,11 @@ final class TelemetryCounters: @unchecked Sendable {
     /// increment is a session that would previously have stayed silent until
     /// reconnect.
     let audioStallRecoveryTotal = Counter()
+
+    /// AUDIO DEAD-AIR under-runs (signal: AUDIO) - drains after an arrival gap longer
+    /// than the cushion cap: counted in `audioUnderrunTotal` too, but they neither
+    /// grow the cushion nor teach its floor (no cushion could have bridged them).
+    let audioUnderrunDeadairTotal = Counter()
 
     /// OVER-TARGET force-release count (signal: PRESENT). Bumped on each pacer tick
     /// where the due gate would have latched not-due against a GENUINE drainable
@@ -328,6 +336,9 @@ final class TelemetryCounters: @unchecked Sendable {
     /// drops_suppressed flat - is distinguishable from a genuine decode wedge.
     /// VideoDecoder increments on its quiet-drop path; always-live integer add.
     let decodeGatedDropTotal = Counter()
+    /// Assembled frames the depacketizer discarded while waiting for an IDR or
+    /// RFI recovery frame (its recovery gate); no other drop counter sees them.
+    let recoveryWaitDropTotal = Counter()
 
     /// STREAM-DISCONTINUITY flushes: param-set rebuilds mid-stream that flush the
     /// renderer + clear the pacer queue (a real multi-frame skip). 0 on a healthy
@@ -496,9 +507,8 @@ final class TelemetryCounters: @unchecked Sendable {
     let decodeStateLock = os_unfair_lock_t.allocate(capacity: 1)
     var decodeStateValue: DecodeState?
 
-    // Live FEC-HEALTH gauge storage (reorder-hold + headroom axes + per-frame
-    // parity headroom); the `FecHealthSnapshot` value type + accessors live in
-    // TelemetryCounters+Gauges.swift. Module-internal so those accessors reach it.
+    // Live FEC-HEALTH gauge storage; `FecHealthSnapshot` + its accessors live in
+    // TelemetryCounters+Gauges.swift.
     let fecHealthLock = os_unfair_lock_t.allocate(capacity: 1)
     var fecHealthValue: FecHealthSnapshot?
     // Live REORDER-DISPLACEMENT gauge storage (session max ms/packets + the
@@ -556,11 +566,12 @@ final class TelemetryCounters: @unchecked Sendable {
     /// before a scrape sees it). Bumped once per session at GENUINE teardown
     /// (`noteTelemetryDisconnect`); survives `resetForNewSession`.
     let disconnectByReason = DisconnectReasonCounters()
-    /// AUDIO-TTF context: warm/cold host-bring-up classification + the
-    /// host-idle covariate. Self-locked, defined in
-    /// TelemetryCounters+AudioGauges.swift (the P2State idiom); its
-    /// last-stream-end stamp DELIBERATELY survives `resetForNewSession`.
+    /// AUDIO-TTF context: warm/cold host-bring-up classification + the host-idle
+    /// covariate. Self-locked (TelemetryCounters+AudioGauges.swift); its last-stream-end
+    /// stamp DELIBERATELY survives `resetForNewSession`.
     let audioTtf = AudioTtfContext()
+    /// `audio_gap_max_ms`; a reconnect keeps it, since the gap across the drop is real.
+    let audioArrivalGaps = AudioArrivalGaps()
     /// Per-TYPE ignored-control tallies (bounded). Self-locked, defined in
     /// TelemetryCounters+Gauges.swift - durable here (the teardown Diag NOTICE
     /// is lossy) so the session scorecard can render the per-type breakdown.

@@ -103,15 +103,14 @@ extension PairingClient {
 
     // MARK: Digest
 
-    static func digest(_ data: Data, sha256: Bool) throws -> Data {
-        let length = sha256 ? Int(SHA256_DIGEST_LENGTH) : Int(SHA_DIGEST_LENGTH)
-        let algo = sha256 ? "SHA256" : "SHA1"
-        var out = [UInt8](repeating: 0, count: length)
+    /// SHA-256, the only pairing hash Sunshine uses.
+    static func digest(_ data: Data) throws -> Data {
+        var out = [UInt8](repeating: 0, count: Int(SHA256_DIGEST_LENGTH))
 
         let ok = data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int32 in
             out.withUnsafeMutableBufferPointer { outBuf -> Int32 in
                 EVP_Q_digest(nil,
-                             algo, nil,
+                             "SHA256", nil,
                              raw.baseAddress, data.count,
                              outBuf.baseAddress, nil)
             }
@@ -282,6 +281,10 @@ extension PairingClient {
             code = Int(codeRaw) ?? -1
         }
         if code == 200 { return }
+        // Sunshine's session verdicts: 408 it expired, 409 this Mac's earlier request is
+        // still open, 503 too many are open. Each has its own words on the pair sheet.
+        if code == 408 { throw PairingFailure.timedOut }
+        if code == 409 || code == 503 { throw PairingFailure.busy }
 
         let message = root.attributes["status_message"] ?? ""
         throw StreamError.pairingFailed("host returned status \(code) \(message)")

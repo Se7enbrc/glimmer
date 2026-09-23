@@ -18,6 +18,8 @@ extension EnetControlChannel {
     /// ~30s of stacked silence; caps it well under the 30s outer net so a half-dead
     /// host fails fast. Each stage's timeout is clamped to the time remaining.
     static let handshakeDeadlineMs = 13_000
+    /// Poll interval of the VERIFY_CONNECT and START ACK waits.
+    static let handshakePollNanos: UInt64 = 2_000_000
 
     /// Open the UDP socket, run the CONNECT handshake to VERIFY_CONNECT + ACK,
     /// then send START_A and START_B reliably. Returns once both are ACKed
@@ -67,6 +69,18 @@ extension EnetControlChannel {
         stageDone("START_B")
     }
 
+    func enetCode(_ error: Error) -> Int32 {
+        if let enetError = error as? EnetError {
+            switch enetError {
+            case .connectTimeout: return -110 // ETIMEDOUT-ish
+            case .interrupted: return -4
+            case .disconnected: return -103
+            default: return -1
+            }
+        }
+        return -1
+    }
+
     // MARK: - UDP socket
 
     func openSocket() async throws {
@@ -76,6 +90,8 @@ extension EnetControlChannel {
         }
         let conn = NWConnection(host: host, port: nwPort, using: params)
         setConnection(conn) // locked write - see connLock
+        // An interrupt() that landed before the store above had nothing to cancel.
+        if interrupted.isSet { throw EnetError.interrupted }
 
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let resumed = ManagedAtomicFlag()
@@ -87,14 +103,21 @@ extension EnetControlChannel {
                 case .failed(let err):
                     if resumed.testAndSet() {
                         cont.resume(throwing: EnetError.socketFailure("\(err)"))
+                    } else if let self, !self.interrupted.isSet {
+                        // A connected UDP flow that fails (its interface went
+                        // away) never recovers: end the peer now, not at the 10s ACK cutoff.
+                        self.declarePeerDead(code: -1, reason: "ENet socket failed (\(err, privacy: .private)); peer is gone")
                     }
+                case .cancelled:
+                    // Only our own interrupt()/close() cancel; never a peer death.
+                    if resumed.testAndSet() { cont.resume(throwing: EnetError.interrupted) }
                 default:
                     break
                 }
             }
             conn.start(queue: queue)
         }
-        Diag.info("ENet UDP socket ready → \(host):\(port)", Self.logCategory)
+        Diag.info("ENet UDP socket ready → \(host, privacy: .private):\(port)", Self.logCategory)
     }
 
     // MARK: - CONNECT (host.c enet_host_connect)
@@ -206,7 +229,9 @@ extension EnetControlChannel {
                 throw EnetError.connectTimeout
             }
             checkRetransmit()
-            try await Task.sleep(nanoseconds: 20_000_000) // 20ms tick
+            // 2ms poll: VERIFY_CONNECT lands within an RTT, and a 20ms poll
+            // added ~17ms per stage. Retransmits are time-based, so unchanged.
+            try await Task.sleep(nanoseconds: Self.handshakePollNanos)
         }
     }
 
@@ -228,6 +253,10 @@ extension EnetControlChannel {
             Diag.error("ENet VERIFY_CONNECT truncated", Self.logCategory)
             return
         }
+        // ENet acts on VERIFY_CONNECT only while connecting; a late or forged one
+        // must not flip `disconnected` behind declarePeerDead's back. Checked after
+        // the body is read so the commands coalesced behind it still parse.
+        if withState({ connected }) { return }
 
         // Strict validation - any mismatch zombies the peer in the C code.
         if channelCount < 1 || channelCount > 255
@@ -306,7 +335,7 @@ extension EnetControlChannel {
                 throw EnetError.startFailed("\(label) not ACKed within \(timeoutMs)ms")
             }
             checkRetransmit()
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(nanoseconds: Self.handshakePollNanos)
         }
     }
 }

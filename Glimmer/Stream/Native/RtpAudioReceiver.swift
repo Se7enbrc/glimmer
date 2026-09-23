@@ -12,25 +12,13 @@
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  PING (AudioStream.c:38-65): send a 20-byte SS_PING
-//  { payload[16] + sequenceNumber (UInt32 BE) } - the fast-start burst first,
-//  then the CONDITIONAL steady cadence (EnvSignalController.steadyPingInterval
-//  - 75ms Wi-Fi-doze keepalive / 500ms relaxed; upstream pings a flat
-//  500ms) - payload =
-//  the 16 raw bytes from the SETUP-audio X-SS-Ping-Payload header. seq starts
-//  at 1, incremented BEFORE each send. If no payload captured (legacy GFE), send the 4-byte "PING"
-//  { 0x50,0x49,0x4E,0x47 }. The host won't reply to RTSP PLAY (GFE 3.22) and
-//  won't aim audio at us until it has received a ping - so ping + receive MUST
-//  share one socket.
+//  PING (AudioStream.c:38-65): a 20-byte SS_PING, SETUP-audio's 16-byte X-SS-Ping-Payload then a big-endian
+//  sequence number from 1: a fast-start burst, then EnvSignalController's steady cadence. Sunshine aims audio
+//  at the ping's source port only once it has one, so ping and receive MUST share one socket.
 //
-//  RECEIVE (AudioStream.c:239-383): drop runt packets (< 12 bytes); byteswap
-//  the RTP header BE→host; feed the queue; dispatch the queue result to the
-//  decoder. Where the C drops a fixed first-500ms of audio (GFE buffers samples
-//  before the client is ready), we run a backlog-aware startup gate instead -
-//  Sunshine paces audio live from seq ~0, so the fixed drop cost half a second
-//  of LIVE audio per session (see the gate state docs below). For our SDP
-//  (encEnabled=0) audio is PLAINTEXT - no AES-CBC decrypt. (Encryption support
-//  is deferred; see the host constraints.)
+//  RECEIVE (AudioStream.c:239-383): drop runts (< 12 bytes), byteswap the RTP header, feed the queue and
+//  decode, AES-CBC decrypting first when SS_ENC_AUDIO is on. A backlog-aware startup gate replaces the C's
+//  fixed 500ms drop, which cost live audio because Sunshine paces audio from seq ~0 (see the gate docs).
 //
 //  Teardown is bounded: recvfrom blocks with a 100ms SO_RCVTIMEO so the loop
 //  polls `interrupted` and exits within 100ms; stop() also close()s the fd, which
@@ -75,10 +63,14 @@ public protocol NativeAudioSink: AnyObject, Sendable {
     /// segment anchors don't survive the gap; the default does nothing. Called
     /// on the receive thread, so implementations must make NO AV calls.
     func notePacketFlowResumed(afterGapMs: Double)
+    /// The inter-arrival gap that ended with the newest datagram. Called per
+    /// datagram on the receive thread, so implementations must make NO AV calls.
+    func noteArrivalGap(nanos: UInt64)
 }
 
 public extension NativeAudioSink {
     func notePacketFlowResumed(afterGapMs: Double) {}
+    func noteArrivalGap(nanos: UInt64) {}
 }
 
 final class RtpAudioReceiver: @unchecked Sendable {
@@ -92,14 +84,16 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     let host: NWEndpoint.Host
     let audioPort: UInt16
-    let pingPayload: [UInt8]   // 16 bytes, or empty for legacy "PING"
+    let pingPayload: [UInt8]   // 16 bytes
     let audioPacketDuration: Int
     private let opusConfig: OpusConfig
     private let audioConfig: Int32
 
-    // Audio encryption (AES-128-CBC). For our connect-only SDP (encEnabled=0)
-    // this is false → plaintext. Support is wired but the live host is plaintext.
+    // Audio encryption (AES-128-CBC), on whenever the host offered SS_ENC_AUDIO.
     let audioEncryption: Bool
+    /// First-failure latch so a key mismatch logs once, not at packet rate.
+    /// recvQueue-confined.
+    var loggedDecryptFailure = false
     let aesKey: [UInt8]      // remoteInputAesKey (16 bytes)
     let avRiKeyId: UInt32    // BE32 of the first 4 bytes of remoteInputAesIv
 
@@ -284,24 +278,12 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// retrying regardless (it never gives up).
     static let audioPendingProbeSeconds = 3.0
 
-    /// - Parameters:
-    ///   - host: the host IP (from RTSP), IP literal expected.
-    ///   - audioPort: the negotiated SETUP-audio server port (fallback 48000).
-    ///   - pingPayload: 16 raw bytes from X-SS-Ping-Payload, or empty for legacy.
-    ///   - appVersionQuad: parsed host version [major, minor, patch, build].
-    ///   - audioPacketDuration: AudioPacketDuration in ms (5 default).
-    ///   - opusConfig: the negotiated OPUS_MULTISTREAM config (samplesPerFrame is
-    ///     expected to already be 48 * audioPacketDuration).
-    ///   - audioConfig: GFE/Sunshine channel-layout code (STREAM_CFG audio config).
-    ///   - audioEncryption: true iff the host negotiated AES-CBC audio (deferred;
-    ///     plaintext on the live host).
-    ///   - aesKey: remoteInputAesKey (16 bytes). Unused when not encrypting.
-    ///   - aesIvId: remoteInputAesIv (first 4 bytes seed the per-packet IV).
-    ///   - sink: the decode/playback sink.
+    /// `host` is an IP literal from RTSP, `audioPort` SETUP-audio's (fallback 48000), `pingPayload` X-SS-Ping-Payload's
+    /// 16 bytes; `opusConfig.samplesPerFrame` is 48 × `audioPacketDuration` ms. `aesKey` and
+    /// `aesIvId` (remoteInputAesKey/Iv, whose first 4 bytes seed the IV) are used only when `audioEncryption` is on.
     init(host: NWEndpoint.Host,
          audioPort: UInt16,
          pingPayload: [UInt8],
-         appVersionQuad: [Int32],
          audioPacketDuration: Int,
          opusConfig: OpusConfig,
          audioConfig: Int32,
@@ -330,24 +312,14 @@ final class RtpAudioReceiver: @unchecked Sendable {
         // docs; replaces the C's fixed 500ms drop, AudioStream.c:248).
         self.startupDecisionPackets =
             max(2, Self.startupDecisionWindowMs / self.audioPacketDuration)
-        self.queue = RtpAudioQueue(appVersionQuad: appVersionQuad,
-                                   audioPacketDuration: self.audioPacketDuration)
+        self.queue = RtpAudioQueue(audioPacketDuration: self.audioPacketDuration)
     }
 
     // MARK: - Lifecycle
 
-    /// FAST-START phase (mid-handshake): open the socket + start the burst-ping
-    /// loop. Mirrors moonlight's notifyAudioPortNegotiationComplete(), which opens
-    /// the audio socket and starts the ping thread the instant SETUP-audio is
-    /// parsed - BEFORE PLAY - because Sunshine won't aim audio at us (GFE 3.22
-    /// won't even reply to PLAY) until it has received a ping. Needs only
-    /// host/audioPort/pingPayload, all known at SETUP-audio time. Idempotent.
-    ///
-    /// We may receive audio before startReceive() opens the recv loop; that's
-    /// fine - the kernel buffers it in SO_RCVBUF, and when the recv loop drains
-    /// that buffer back-to-back the startup gate reads it as a BURST and drops
-    /// the stale excess (the fixed 500ms drop this replaced handled at most
-    /// 500ms of such backlog; the gate handles any depth).
+    /// FAST-START (at SETUP-audio, before PLAY): open the socket and start the burst ping, as moonlight's
+    /// notifyAudioPortNegotiationComplete() does, since Sunshine won't aim audio at us until it has one.
+    /// Audio that lands first waits in SO_RCVBUF, and the startup gate drops that stale burst. Idempotent.
     func startPing() throws {
         if pingStarted { return }
         try openSocket()
@@ -359,9 +331,8 @@ final class RtpAudioReceiver: @unchecked Sendable {
         // when telemetry is on.
         TelemetryCounters.shared.anchorAudioStreamStart()
         startPingLoop()
-        Diag.notice("NativeAudio ping started → \(host):\(audioPort) "
-            + "(\(pingPayload.isEmpty ? "legacy ping" : "16-byte ping"), "
-            + "burst \(Int(Self.burstIntervalSec * 1000))ms for "
+        Diag.notice("NativeAudio ping started → \(host, privacy: .private):\(audioPort) "
+            + "(burst \(Int(Self.burstIntervalSec * 1000))ms for "
             + "\(Int(Self.burstDurationSec))s → steady conditional "
             + "\(Int(Self.steadyIntervalSec * 1000))ms fast / "
             + "\(Int(UdpPinger.relaxedPingIntervalSeconds * 1000))ms relaxed)", Self.cat)
@@ -387,7 +358,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         receiveStarted = true
         startReceiveLoop()
         armAudioPendingProbe()
-        Diag.notice("NativeAudio receive started → \(host):\(audioPort) "
+        Diag.notice("NativeAudio receive started → \(host, privacy: .private):\(audioPort) "
             + "(packetDuration=\(audioPacketDuration)ms, "
             + "\(audioEncryption ? "AES-CBC" : "plaintext"))", Self.cat)
     }

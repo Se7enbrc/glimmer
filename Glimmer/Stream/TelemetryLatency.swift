@@ -112,6 +112,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// deliver→enqueue age `inputLocalLatency` can't see - it starts at enqueue).
     /// Same self-locked Stage; observed off the present path. Measurement only.
     let inputDeliverLatency = LatencyHistograms.Stage()
+    /// RFI loss episodes: first loss detected → the frame that ended it, once per
+    /// episode on the video receive thread (see VideoLossEpisode).
+    let rfiRecoveryMs = LatencyHistograms.Stage(bounds: LatencyHistograms.Stage.glassToGlassBoundsMs)
 
     /// PIPELINE CADENCE (clump forensics): inter-arrival between CONSECUTIVE
     /// frames at three boundaries - receive (last packet), assemble
@@ -147,11 +150,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     let cruiseGainMove = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
     let cruiseGainDrag = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
 
-    /// REORDER-DISPLACEMENT distributions: how late reordered packets arrive,
-    /// in ms and in sequence slots. Fed only on the rare out-of-order branch
-    /// (~46/session on the reference wifi night). Bounds concentrate where the
-    /// invariant lives: the reorder hold runs 24-48ms, Block-Ack releases land
-    /// single-digit ms. `_packets` bounds are counts, not ms.
+    /// REORDER-DISPLACEMENT: how late reordered packets arrive, in ms and sequence
+    /// slots (the rare out-of-order branch). Bounds cluster under the fixed 24ms hold
+    /// and single-digit-ms Block-Ack releases; `_packets` bounds are counts.
     static let reorderDispMsBounds: [Double] = [
         0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96
     ]
@@ -166,6 +167,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     private var lastReceiveNanos: UInt64 = 0
     private var lastAssembleNanos: UInt64 = 0
     private var lastOutputNanos: UInt64 = 0
+    /// The PC's frame interval (ms): the last stats window's host_frame_interval_p50,
+    /// published by the exporter so both series read one source. Guarded by `mapLock`.
+    private var hostFrameIntervalP50Ms = 0.0
     /// Cadence deltas above this are a content gap (idle desktop, scene load),
     /// not delivery cadence - skipped so they can't pollute the histogram sum.
     private static let cadenceGapCutoffNanos: UInt64 = 1_000_000_000
@@ -194,6 +198,9 @@ final class FrameTimingTracker: @unchecked Sendable {
         /// glass-to-glass omits the host-encode leg rather than guessing. Captured
         /// at assemble (it rides the DecodeUnit) so glass-to-glass is per-frame.
         let hostEncodeMs: Double
+        /// Assembled while the window was suppressed or decode-gated: any later
+        /// drop was designed, whatever the state when it is evicted.
+        var assembledHidden = false
         var submitNanos: UInt64 = 0
         var outputNanos: UInt64 = 0
     }
@@ -243,6 +250,12 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// observation (consume-once; see computeInputToPhoton in the Composites
     /// split). Module-internal + rides `warmupLock` so the split can reach both.
     var lastInputConsumedNanos: UInt64 = 0
+    /// Client-side legs (deliver + queue→wire, ms) of the latest flushed input;
+    /// rides `warmupLock` like the consume-once stamp it is read with.
+    var lastInputLegsMs = 0.0
+    func noteInputLegs(_ legsMs: Double) {
+        os_unfair_lock_lock(warmupLock); lastInputLegsMs = legsMs; os_unfair_lock_unlock(warmupLock)
+    }
     func armResumePresentTag() {
         os_unfair_lock_lock(warmupLock); resumePresentPending = true; os_unfair_lock_unlock(warmupLock)
     }
@@ -265,7 +278,8 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// but never presented (dropped at decode or pacing) can't leak.
     private static let maxInFlight = 256
 
-    private init(sessionId: String) {
+    /// Internal for tests; the engine only reaches a tracker through `shared`.
+    init(sessionId: String) {
         self.sessionId = sessionId
         mapLock.initialize(to: os_unfair_lock_s())
         warmupLock.initialize(to: os_unfair_lock_s())
@@ -286,12 +300,14 @@ final class FrameTimingTracker: @unchecked Sendable {
                          frameBytes: Int32 = 0, isIDR: Bool = false,
                          hostEncodeTenthsMs: UInt16 = 0) {
         guard rtpTimestamp != 0 else { return }
+        let counters = TelemetryCounters.shared
         let timing = Timing(frameIndex: frameIndex,
                             receiveNanos: receiveNanos,
                             assembleNanos: assembleNanos,
                             frameBytes: frameBytes,
                             isIDR: isIDR,
-                            hostEncodeMs: Double(hostEncodeTenthsMs) / 10.0)
+                            hostEncodeMs: Double(hostEncodeTenthsMs) / 10.0,
+                            assembledHidden: counters.presentSuppressed || counters.decodeGated)
         os_unfair_lock_lock(mapLock)
         // Cadence deltas for the receive + assemble boundaries (clump
         // forensics). Captured under the map lock we already hold; observed
@@ -323,6 +339,18 @@ final class FrameTimingTracker: @unchecked Sendable {
     private func observeCadence(_ stage: LatencyHistograms.Stage, prev: UInt64, now: UInt64) {
         guard prev > 0, now > prev, now &- prev < Self.cadenceGapCutoffNanos else { return }
         stage.observe(Double(now &- prev) / 1_000_000.0)
+    }
+
+    /// The PC's frame interval (ms) input-to-photon waits half of; 0 until the first window.
+    var hostFrameIntervalMs: Double {
+        get {
+            os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
+            return hostFrameIntervalP50Ms
+        }
+        set {
+            os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
+            hostFrameIntervalP50Ms = newValue
+        }
     }
 
     /// Stage t_submit. Called just before VTDecompressionSessionDecodeFrame
@@ -370,6 +398,7 @@ final class FrameTimingTracker: @unchecked Sendable {
         if let idx = insertionOrder.firstIndex(of: rtpTimestamp) {
             insertionOrder.remove(at: idx)
         }
+        let hostFrameIntervalMs = hostFrameIntervalP50Ms
         os_unfair_lock_unlock(mapLock)
 
         // Compute the five sub-stage deltas in ms. A stage timestamp of 0 means
@@ -417,14 +446,11 @@ final class FrameTimingTracker: @unchecked Sendable {
         let glassToGlass = computeGlassToGlass(hostEncodeMs: timing.hostEncodeMs, pipelineMs: endToEnd)
         if !warmingUp, let value = glassToGlass { histograms.glassToGlass.observe(value) }
 
-        // INPUT-TO-PHOTON estimate (signal 2): the felt input round trip,
-        // composed from the SAME legs as glass-to-glass for THIS input-carrying
-        // frame (host-encode + ~RTT/2 + pipeline), so it can't read below g2g.
-        // Still an estimate (the host doesn't mark which frame reflects an
-        // input); each input stamp records at most one observation (consume-once
-        // - see the Composites split), so an idle stream's static frames can't
-        // inflate it.
-        let inputToPhoton = computeInputToPhoton(presentNanos: presentNanos, glassToGlassMs: glassToGlass)
+        // INPUT-TO-PHOTON estimate (signal 2): client legs + uplink + the wait for
+        // the host's next frame + this frame's glass-to-glass, once per input
+        // stamp (see the Composites split).
+        let inputToPhoton = computeInputToPhoton(
+            presentNanos: presentNanos, glassToGlassMs: glassToGlass, hostFrameIntervalMs: hostFrameIntervalMs)
         if !warmingUp, let value = inputToPhoton { histograms.inputToPhoton.observe(value) }
 
         traceWriter.append(renderTraceLine(TraceRecord(

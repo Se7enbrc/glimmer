@@ -72,8 +72,8 @@ extension FramePacer {
     ///
     /// RECONCILER ON, *after it has published a decision*: the desired depth comes
     /// from the UNIFIED jitter→headroom decision EnvSignalController publishes - `targetDepth +
-    /// headroomLevel` - so the pacer and the FEC reorder-hold walk off ONE shared
-    /// level instead of each reading `recvJitterMs` independently. headroomLevel 0
+    /// headroomLevel` - so the pacer walks off the ONE shared level instead of
+    /// reading `recvJitterMs` on its own. headroomLevel 0
     /// (clear / jitter under the dead-zone) → depth 1 (REST), each level up → +1
     /// depth, capped at `maxTargetDepth`. Only the TARGET changes; the grow/decay
     /// rate-limiter and the depth-1 floor below are untouched (they are the
@@ -178,17 +178,16 @@ extension FramePacer {
 
     // MARK: - Helpers
 
-    /// The delta between the realized inter-present interval and the stream's
-    /// ideal frame interval, in seconds. Read under the lock right after a
-    /// present updates `lastPresentMediaTime`. Positive = we presented late
-    /// vs the grid; near zero = on cadence.
-    func lastPresentInterPresentDelta() -> Double {
+    /// Realized inter-present interval minus the stream's frame interval (positive =
+    /// late vs the grid), plus that interval, in seconds. Read under the lock right
+    /// after a present updates `lastPresentMediaTime`.
+    func lastPresentInterPresentDelta() -> (error: Double, streamInterval: Double) {
         os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
         let now = lastPresentMediaTime
         defer { prevPresentMediaTimeForMetric = now }
-        guard prevPresentMediaTimeForMetric.isFinite, now.isFinite else { return 0 }
+        guard prevPresentMediaTimeForMetric.isFinite, now.isFinite else { return (0, streamFrameIntervalSeconds) }
         let interPresent = now - prevPresentMediaTimeForMetric
-        return interPresent - streamFrameIntervalSeconds
+        return (interPresent - streamFrameIntervalSeconds, streamFrameIntervalSeconds)
     }
 
     /// SKIP-ROBUST frame-interval estimator: the lower-quartile (p25) of the PTS
@@ -225,13 +224,26 @@ extension FramePacer {
                 && now - liveness.lastGapRecoveryTime < FramePacer.postDrainLenientSeconds)
     }
 
+    /// Whether spare vsyncs can drain a post-gap catch-up: the learned stream
+    /// rate sits below `postGapDrainableRateRatio` of the NOMINAL panel rate
+    /// (link duration, so a realized-tick wobble can't flip it). Unknown panel → true.
+    static func postGapCatchUpDrains(
+        streamIntervalSeconds: Double, nominalVsyncSeconds: Double
+    ) -> Bool {
+        guard nominalVsyncSeconds.isFinite, nominalVsyncSeconds > 0 else { return true }
+        return nominalVsyncSeconds < streamIntervalSeconds * postGapDrainableRateRatio
+    }
+
     /// Trim the FIFO toward the drop ceiling, returning the stalest dropped buffers
-    /// and the gap-recovery flag. In gap-recovery the ceiling is the cap so the
-    /// bunched catch-up plays through; otherwise `effectiveTarget + 1`. Under `lock`.
+    /// and the gap-recovery flag. The cap while a drainable catch-up plays through
+    /// (see `postGapCatchUpDrains`), else `effectiveTarget + 1`. Under `lock`.
     func gapAwareTrimLocked(now: CFTimeInterval, effectiveTarget: Int)
         -> (trimmed: [CMSampleBuffer], inGapRecovery: Bool) {
         let inGapRecovery = inGapRecoveryLocked(now: now)
-        let dropTarget = inGapRecovery ? FramePacer.maxQueuedFrames
+        let lenient = inGapRecovery && Self.postGapCatchUpDrains(
+            streamIntervalSeconds: streamFrameIntervalSeconds,
+            nominalVsyncSeconds: refreshTelemetry.lastRefreshIntervalSeconds)
+        let dropTarget = lenient ? FramePacer.maxQueuedFrames
             : min(FramePacer.maxQueuedFrames, effectiveTarget + 1)
         var trimmed: [CMSampleBuffer] = []
         while queue.count > dropTarget { trimmed.append(queue.removeFirst().sampleBuffer) }

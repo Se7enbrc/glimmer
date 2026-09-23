@@ -13,6 +13,9 @@ let suppressor = AWDLSuppressor()
 suppressor.start()
 
 let listener = NSXPCListener(machServiceName: glimmerHelperMachServiceName)
+// The OS checks every peer's code signature before the delegate sees it, so
+// only our signed app can ever reach HelperService.
+listener.setConnectionCodeSigningRequirement(HelperService.designatedRequirement)
 let service = HelperService(suppressor: suppressor)
 listener.delegate = service
 listener.resume()

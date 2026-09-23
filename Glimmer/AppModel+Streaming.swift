@@ -1,12 +1,9 @@
 //
 //  AppModel+Streaming.swift
 //
-//  The streaming session lifecycle: the launch entry points (requestStream /
-//  takeover confirm / stream(app:on:)), the single teardown cleanup, the
-//  engine's StreamEvent handling, the connect cancel + connect-hold
-//  adjudication, and the stream-ended toast copy. Split out of AppModel.swift
-//  to keep each unit focused; the derived spec/hero-verb accessors and the
-//  Host → engine config bridge live in AppModel+Streaming+Config.swift.
+//  The stream session lifecycle: launch entry points, the one teardown, engine
+//  events and connect cancel. Config lives in AppModel+Streaming+Config.swift,
+//  failure copy in AppModel+StreamFailure.swift.
 //
 
 import Foundation
@@ -34,10 +31,12 @@ extension AppModel {
         stream(app: app, on: host)
     }
 
-    static func occupant(of state: HostLiveStatus.State) -> String? {
+    /// The app a launch would quit: nil when the PC is free, and `.some(nil)`
+    /// when it runs an app it didn't name.
+    static func occupant(of state: HostLiveStatus.State) -> String?? {
         switch state {
         case .streamingApp(let name): name
-        case .streamingUnknownApp: "another app"
+        case .streamingUnknownApp: .some(nil)
         default: nil
         }
     }
@@ -65,6 +64,9 @@ extension AppModel {
         streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
         nativeStreamError = nil
         nativeHDRActive = false
+        // Unmount a toast still in its hold from the last session, so the next
+        // stream end mounts a fresh one with a full hold.
+        streamEndedToastVisible = false
     }
 
     /// Retry repeats the last requested launch, not the hero target.
@@ -84,17 +86,12 @@ extension AppModel {
         // its launch surfaces while a session exists, but a double-click can
         // land before SwiftUI re-renders - this guard is the actual wall.
         guard !isStreaming else {
-            Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName)) - a session is already in flight", "Stream")
+            Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName, privacy: .private)) "
+                + "- a session is already in flight", "Stream")
             return
         }
-        Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
+        Diag.notice("Starting stream → \(host.displayName, privacy: .private) · \(app.name)", "Stream")
         armLaunchState(app: app, host: host)
-        // Re-arm the disconnect toast for back-to-back cycles: if the
-        // previous session's toast is still inside its 2-4 s hold, dropping
-        // the flag here unmounts it (cancelling its hold task) so the NEXT
-        // stream end mounts a fresh toast with a full hold, instead of the
-        // new toast inheriting the old one's residual timer.
-        streamEndedToastVisible = false
         // NB: the "last played" timestamp is intentionally NOT written here.
         // It records when the stream ENDED, not when it started - writing it
         // on start made the launcher's "last played N ago" label tick from
@@ -117,8 +114,6 @@ extension AppModel {
         hostStatusTask?.cancel()
         hostStatusTask = nil
 
-        // Synchronous (not a Task): a fire-and-forget restore from the prior session
-        // could otherwise land after this mute and un-mute the new stream.
         beforeStreamStart()
 
         var cfg = nativeStreamConfig(for: host)
@@ -150,6 +145,9 @@ extension AppModel {
             let session = StreamSession(backend: NativeBackend())
             await MainActor.run { self.nativeSession = session }
             await session.authorizeTakeover(takeoverAuthorized)
+            if let launch = cfg.bitrateDecision {
+                await session.setRouteAskProvider(routeAskProvider(launch: launch, hostID: host.id))
+            }
             var caughtError: Error?
             var takeover: TakeoverRequired?
             do {
@@ -193,12 +191,9 @@ extension AppModel {
                     customControllerChordProvider: { [weak self] in
                         self?.customControllerChord ?? []
                     },
-                    onBackgroundedChanged: { [weak self] backgrounded in
-                        self?.nativeStreamBackgrounded = backgrounded
-                    },
-                    onMiniPlayerChanged: { [weak self] mini in
-                        self?.isMiniPlayer = mini
-                    }
+                    onBackgroundedChanged: { [weak self] in self?.nativeStreamBackgrounded = $0 },
+                    onMiniPlayerChanged: { [weak self] in self?.isMiniPlayer = $0 },
+                    onCancelConnect: { [weak self] in self?.cancelConnect() }
                 )
                 for await event in events {
                     // Pass the SESSION's host, not selectedHost: ⌘1-⌘9 / the
@@ -218,7 +213,7 @@ extension AppModel {
             if takeover != nil { self.isStreaming = false }
             self.cleanupAfterStream(host: host, caughtError: caughtError)
             if let takeover {
-                let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name ?? "another app"
+                let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name
                 self.pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
                 self.presentTakeoverAlertIfNeeded()
             }
@@ -230,40 +225,19 @@ extension AppModel {
     /// stays one site - never duplicate any of this elsewhere (a second
     /// "cleanup" is how zombie state is made).
     private func cleanupAfterStream(host: Host, caughtError: Error?) {
-        if caughtError != nil, Self.connectCancelRequested {
-            // The user cancelled this connect from the capsule -
-            // start()'s throw is the teardown ARRIVING, not a failure
-            // to report. A red "couldn't reach" banner here would
-            // contradict a deliberate, successful cancel.
+        let cancelled = Self.connectWasCancelled(by: caughtError, cancelRequested: Self.connectCancelRequested)
+        if cancelled {
+            // start()'s throw is the user's stop arriving, not a failure to report.
             self.log.info("Connect cancelled by user - suppressing the failure banner")
             self.nativeStreamError = nil
         } else if let caughtError {
             let hostName = host.displayName
-            // One human sentence - never splice the raw NSError tail
-            // ("The request timed out", domain codes, ...) into the
-            // banner. The technical detail goes to the log; the user
-            // gets an actionable line. StreamError already carries
-            // user-facing copy and is handled on its own path.
+            // The raw NSError tail goes to the log and to Diag (the in-app viewer
+            // and pasted logs never see os.Logger); the banner gets one sentence.
             let localized = (caughtError as NSError).localizedDescription
-            self.log.error("Stream start failed for \(hostName, privacy: .public): \(localized, privacy: .public)")
-            // Diag too - the os.Logger line above never reaches the in-app
-            // log viewer or the Diag file, which made pre-flight failures
-            // (the only line naming the real cause) invisible in every
-            // pasted log. One line, ERROR level, same redaction rules.
-            Diag.error("Stream start failed for \(hostName): \(localized)", "Stream")
-            // HONEST banner: only show the "make sure it's awake" copy
-            // for a GENUINE reach failure (host off / not on the
-            // network). A pairing or launch failure means the host
-            // demonstrably answered - telling the user it's "asleep"
-            // there is a false negative that sends them chasing the
-            // wrong problem. Reserve the asleep guidance for the
-            // unreachable / never-established cases; surface the real
-            // cause otherwise. (This is the start()-throw path only:
-            // start() throwing means the connection never reached
-            // established and no frames ever decoded, so the
-            // reach-failure copy is correct there.)
-            self.nativeStreamError =
-                Self.connectFailureBanner(for: caughtError, hostName: hostName)
+            self.log.error("Stream start failed for \(hostName, privacy: .private): \(localized, privacy: .private)")
+            Diag.error("Stream start failed for \(hostName, privacy: .private): \(localized, privacy: .private)", "Stream")
+            self.showStreamFailure(Self.connectFailure(for: caughtError, hostName: hostName))
         }
         // M3: do NOT unconditionally clear nativeStreamError here. A host-side
         // "ended unexpectedly" terminate (code != 0) already set the banner on
@@ -311,20 +285,15 @@ extension AppModel {
                 Diag.info("Session receipt skipped - never went live or under the "
                     + "5-minute stash threshold", "Stream")
             }
-            self.streamEndedToastVisible = true
-            // Stamp "last played" with the stream-END time (now),
-            // not the start time. This is the value HostsStore reads
-            // back into `Host.lastConnected` for both the
-            // launcher's "last played N ago" label and most-recent-host
-            // ordering - writing it at end keeps this host most-recent
-            // while making the relative-time label read time-since-end.
-            // Always a past instant, so the relative-time label can
-            // never go stale/negative while the next stream is live.
-            // Shares the `wasStreaming` gate with the toast above: the
-            // connection-failure path stamps the attempt's end time too
-            // (matching the previous start-time write, which also fired
-            // on failures), and the label still reads correctly.
-            UserDefaults.standard.set(Date(), forKey: "glimmer.lastConnected.\(host.id)")
+            // A cancelled connect never streamed: no "Stream ended", and the PC
+            // keeps its place in the list (and its ⌘N shortcut).
+            if !cancelled {
+                self.streamEndedToastVisible = true
+                // "Last played" is the stream-END time, read back as `Host.lastConnected`
+                // for the "last played N ago" label and the PC order. A failed connect
+                // stamps its attempt too, by design.
+                UserDefaults.standard.set(Date(), forKey: "glimmer.lastConnected.\(host.id)")
+            }
         }
         // Re-arm the readiness-chip poller so it goes back to
         // "Ready · 12 ms" instead of holding its last value from
@@ -346,58 +315,6 @@ extension AppModel {
         afterStreamEnd()
     }
 
-    /// Map a start()-throw error to an honest user-facing banner. The
-    /// "asleep / make sure it's awake" copy is reserved for a GENUINE reach
-    /// failure (host off / not on the network / handshake never completed) -
-    /// it must never be shown for a pairing or launch failure, where the host
-    /// demonstrably answered. Static so it has no actor state and is trivially
-    /// unit-testable.
-    static func connectFailureBanner(for error: Error, hostName: String) -> String {
-        guard let streamError = error as? StreamError else {
-            // Any non-StreamError on the start path is unexpected - the control
-            // layer always throws StreamError - so treat it as a reach failure,
-            // by far the most likely cause.
-            return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
-        }
-        switch streamError {
-        case .hostUnreachable(let detail):
-            // The network layer crafts user-facing guidance for the cases it
-            // can prove (cert mismatch / not-paired disambiguation) - dropping
-            // that for generic "is it awake" copy buries the real fix.
-            // "Restart Sunshine" marks the wedged-HTTPS-listener verdict
-            // (NetworkClient.classifyPairedPathFailure): the box is awake, so
-            // the "is it awake" copy would send the user to the wrong fix.
-            if detail.contains("cert") || detail.contains("Restart Sunshine") {
-                return detail
-            }
-            return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
-        case .sessionFailed, .binaryNotFound, .truncatedRead:
-            // Genuinely never reached the host / handshake aborted before
-            // establishment (a truncated control read = the host dropped mid-
-            // response) → asleep guidance is honest.
-            return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
-        case .pairingFailed(let detail) where detail.contains("pair it again"):
-            // The paired-path classification (NetworkClient.
-            // classifyPairedPathFailure) - already the actionable, host-named
-            // sentence (401 or a TLS-level rejection of our client cert).
-            return detail
-        case .pairingFailed, .pairingRejected:
-            // The host answered but pairing failed - point the user at the
-            // real fix, not at the power switch.
-            return "Couldn't pair with \(hostName). Re-pair from Settings → PCs."
-        case .launchFailed:
-            return "\(hostName) answered but couldn't start the app. It may already be in use."
-        case .decoderFailed:
-            return "Couldn't start the video decoder for \(hostName)."
-        case .audioFailed:
-            // Audio is non-fatal to the visual stream, but if start() threw on
-            // it the session never came up - keep the message about the host.
-            return "Couldn't start audio for \(hostName)."
-        case .crypto:
-            return "A security error stopped the connection to \(hostName)."
-        }
-    }
-
     /// Handle one engine event for the session streaming `host`. The host is
     /// the SESSION's host captured at stream() entry - never `selectedHost`,
     /// which the ⌘1-⌘9 shortcuts and the toolbar pill can re-point mid-flight
@@ -409,12 +326,13 @@ extension AppModel {
         let connecting = "Connecting to \(host.displayName)…"
         switch event {
         case .stageStarting:
-            // Don't let a late stage event repaint "Connecting…" over the
-            // "Cancelling…" the user's cancel click just earned.
-            if !Self.connectCancelRequested { streamPhase = .connecting(stage: connecting) }
-        case .stageComplete:              break
-        case .stageFailed:
-            nativeStreamError = "Couldn't reach \(host.displayName)."
+            // Don't repaint "Connecting…" over the "Cancelling…" a cancel click
+            // earned, or over a reconnect's own "Reconnecting to <PC>…".
+            if !Self.connectCancelRequested, !isReconnecting { streamPhase = .connecting(stage: connecting) }
+        case .stageComplete, .stageFailed:
+            // A failed stage only reaches here from a reconnect attempt; the real
+            // failure arrives as start()'s throw or the give-up terminate.
+            break
         case .connectionEstablished:
             streamPhase = .streaming
             isReconnecting = false
@@ -429,7 +347,7 @@ extension AppModel {
             streamPhase = .idle
             nativeHDRActive = false
             if code != 0 {
-                nativeStreamError = "Stream to \(host.displayName) ended unexpectedly."
+                showStreamFailure((Self.streamEndedMessage(code: code, hostName: host.displayName), .other))
             }
         case .reconnecting:
             // The host closed a live session (it likely restarted across a
@@ -511,13 +429,9 @@ extension AppModel {
         Self.connectCapsuleShown = true
     }
 
-    /// Abort an in-flight connect - the connecting capsule's click action
-    /// (and its ⎋ shortcut). Routes through the SESSION's own teardown so
-    /// there is exactly ONE cleanup site: stop() interrupts the handshake,
-    /// start() returns or throws, and the single cleanup in stream()'s Task
-    /// drains state back to idle. We only repaint the visible stage here -
-    /// never isStreaming/streamPhase-to-idle directly - because faking the
-    /// end state from a second site is how zombie sessions are made.
+    /// Abort an in-flight connect (the capsule, its ⎋, or ⎋ in the stream window before it is
+    /// live) through the session's own stop(), so stream()'s Task stays the one cleanup site;
+    /// faking the end state here is how zombie sessions are made.
     func cancelConnect() {
         guard case .connecting = streamPhase, let session = nativeSession else { return }
         guard !Self.connectCancelRequested else { return }  // one stop() is plenty (it's idempotent anyway)

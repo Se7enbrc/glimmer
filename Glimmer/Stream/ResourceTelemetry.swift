@@ -231,6 +231,9 @@ enum ResourceTelemetry {
                 let trimmed = Array(nameBuffer.prefix(while: { $0 != 0 }))
                 name = String(validating: trimmed, as: UTF8.self) ?? ""
             }
+            // The main thread has no pthread name; label it so its cost (UI,
+            // GameController, motion timers) isn't folded into "unnamed".
+            if pthread_equal(pthread, pthread_main_thread_np()) != 0 { name = "main" }
             var qosClass = qos_class_t(rawValue: 0)
             var relativePriority: Int32 = 0
             if pthread_get_qos_class_np(pthread, &qosClass, &relativePriority) == 0 {
@@ -346,13 +349,12 @@ enum QoSAudit {
             }
         }
         if !confirmed.isEmpty {
-            Diag.notice("QoS audit OK - hot-path threads on P-core tier: "
-                + confirmed.joined(separator: ", ") + ". (Network.swift .utility queue is "
-                + "control-plane, correctly NOT hot-path.)", category)
+            Diag.notice("QoS audit OK - hot-path threads on P-core tier: \(confirmed.joined(separator: ", ")). "
+                + "(Network.swift .utility queue is control-plane, correctly NOT hot-path.)", category)
         }
         if !demotions.isEmpty {
             Diag.warn("QoS audit FLAG - thread(s) on a low QoS tier while drawing CPU: "
-                + demotions.joined(separator: ", ") + " - a hot path may have been demoted "
+                + "\(demotions.joined(separator: ", ")) - a hot path may have been demoted "
                 + "off the P-core tier.", category)
         }
         if !matchedHotPath {

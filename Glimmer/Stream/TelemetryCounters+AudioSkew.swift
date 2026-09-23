@@ -45,17 +45,9 @@ import os
 /// between the two clock families means even seconds of arrival clumping on
 /// a jittery link cannot mis-snap the estimate.
 ///
-/// EPOCH HONESTY: RTP timestamps carry no shared epoch (each stream starts at
-/// an arbitrary offset), so both sides are measured from a PAIR-ANCHOR latched
-/// at the first derive tick where both streams are flowing. The host-side
-/// video-vs-audio capture offset at the anchor instant (≈ the video pipeline
-/// e2e, single-digit ms) rides along as a constant bias - the trend and the
-/// steps are the signal, the absolute is approximate. The anchor pair drops
-/// whenever either stream goes stale (>2s - present-suppressed/AFK windows,
-/// session teardown) or the sanity bound trips (an RTP discontinuity), and
-/// re-latches at the next tick where both flow - counted in `rebaseTotal`, so a
-/// mid-session re-baseline is never a silent step. Never a permanent give-up:
-/// every dark state self-heals one tick after both streams resume.
+/// EPOCH HONESTY: RTP has no shared epoch, so both sides count from a pair anchor latched at the first
+/// CLEAN tick (notes fresh, audio playing, video out of recovery); the capture offset is a small bias.
+/// A stale side (>2s) or the sanity bound drops it, and the next clean tick re-latches (`rebaseTotal`).
 ///
 /// Self-locked (the `AudioTtfContext` idiom); the per-write cost is one clock
 /// read + an unfair lock + two stores at ≤240Hz video / 200Hz audio - the same
@@ -73,12 +65,15 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// but rejects the railed values a stale anchor produces - the old 1800ms was
     /// loose enough to pass a −1517ms artifact into the percentile buckets.
     static let sanityBoundMs: Double = 600
-    /// Signed bucket bounds (ms) for the session percentile accumulator -
-    /// resolution concentrated around the 0...150ms cushion range where the
-    /// lip-sync trade lives, with the ~125ms ITU annoyance threshold bracketed.
+    /// A pair anchor latches only from notes this fresh (audio packets land every
+    /// 5 ms, presents every few ms), so a stalled side can't set the epoch.
+    static let anchorFreshnessNanos: UInt64 = 100_000_000
+    /// Signed bucket bounds (ms) for the session percentiles: fine across the
+    /// 0...150ms cushion range (the ~125ms ITU threshold bracketed), ending at the
+    /// ±600ms sanity bound so no accepted av_skew lands past them.
     static let bucketBoundsMs: [Double] = [
-        -1000, -500, -250, -125, -90, -60, -40, -25, -10, 0,
-        10, 25, 40, 60, 75, 90, 110, 125, 150, 200, 300, 500, 1000
+        -500, -400, -250, -125, -90, -60, -40, -25, -10, 0,
+        10, 25, 40, 60, 75, 90, 110, 125, 150, 200, 300, 400, 500, 600
     ]
     /// Video RTP is a 90kHz capture clock (RTP standard for video).
     static let videoRtpTicksPerMs = 90.0
@@ -130,15 +125,13 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// Cushion-subtracted true clock skew (ms) from the most recent successful
     /// derive; nil when that derive produced no value (dark/stale/re-anchor/bound).
     private var lastTrueClockSkewMs: Double?
+    /// Frames the depacketizer's recovery gate has dropped (source + last read):
+    /// a count that moved since the last derive means video is recovering.
+    private let videoRecoveryDrops: @Sendable () -> UInt64
+    private var lastRecoveryDrops: UInt64 = 0
     // Session accumulator (scorecard percentiles): bucket counts + exact
-    // min/max/sum, plus an explicit OVERFLOW count for samples past the last
-    // bound so the quantile walk's rank space covers EVERY sample - the old
-    // fall-through made overflow samples invisible to `cumulative` while still
-    // counted in `rank`, which collapsed p50=p95=p99=max the moment a session
-    // had any overflow mass (a broken-units session read one value four ways).
-    // Reset per session via `resetForNewSession`.
+    // min/max/sum. Reset per session via `resetForNewSession`.
     private var bucketCounts = [UInt64](repeating: 0, count: bucketBoundsMs.count)
-    private var overflowCount: UInt64 = 0
     private var sampleCount: UInt64 = 0
     private var sampleSum: Double = 0
     private var sampleMin: Double = .infinity
@@ -147,7 +140,6 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     // A/V sync signal (av_skew_ms is dominated by the cushion). Same bucket set
     // and feeder cadence (the NDJSON tick); summarized alongside av_skew.
     private var clockBucketCounts = [UInt64](repeating: 0, count: bucketBoundsMs.count)
-    private var clockOverflowCount: UInt64 = 0
     private var clockSampleCount: UInt64 = 0
     private var clockSampleSum: Double = 0
     private var clockSampleMin: Double = .infinity
@@ -161,16 +153,20 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     private var skewEwmaMs: Double = 0
     private var skewEwmaSeeded = false
 
-    init() { lock.initialize(to: os_unfair_lock_s()) }
+    init(videoRecoveryDrops: @escaping @Sendable () -> UInt64 = {
+        TelemetryCounters.shared.recoveryWaitDropTotal.value
+    }) {
+        self.videoRecoveryDrops = videoRecoveryDrops
+        lock.initialize(to: os_unfair_lock_s())
+    }
     deinit { lock.deallocate() }
 
     /// VIDEO half: the RTP timestamp of the frame that just reached the
     /// renderer. Called from the present site (gate-on path only - the
     /// `FrameTimingTracker.shared` nil-check upstream keeps telemetry-off
     /// sessions zero-cost). 0 = untracked frame, ignored.
-    func noteVideoPresented(rtp: UInt32) {
+    func noteVideoPresented(rtp: UInt32, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         guard rtp != 0 else { return }
-        let now = DispatchTime.now().uptimeNanoseconds
         os_unfair_lock_lock(lock)
         videoLastRtp = rtp
         videoNoteNanos = now
@@ -182,8 +178,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// The first note also anchors the clock-family calibration baseline (one
     /// extra branch on the hot path; the calibration itself runs on the 1Hz
     /// cold derive, never here).
-    func noteAudioScheduled(rtp: UInt32) {
-        let now = DispatchTime.now().uptimeNanoseconds
+    func noteAudioScheduled(rtp: UInt32, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         os_unfair_lock_lock(lock)
         // RATE-ANCHOR FRESHNESS (stale-anchor audit, 2026-08-12): a pre-resolve
         // audio stall spanning the calibration window inflates elapsed-ms while
@@ -229,20 +224,36 @@ final class AudioVideoSkewStore: @unchecked Sendable {
     /// tick. `accumulate` feeds the session percentile accumulator - set it
     /// from exactly ONE caller cadence (the NDJSON tick) so the scorecard
     /// can't double-count; other readers (Prometheus) derive without feeding.
-    func deriveSkewMs(bufferFillMs: Double?, accumulate: Bool) -> Double? {
+    func deriveSkewMs(
+        bufferFillMs: Double?, accumulate: Bool, now: UInt64 = DispatchTime.now().uptimeNanoseconds
+    ) -> Double? {
         guard let fillMs = bufferFillMs else { return nil }
-        let now = DispatchTime.now().uptimeNanoseconds
+        let recoveryDrops = videoRecoveryDrops()
         os_unfair_lock_lock(lock)
         defer { os_unfair_lock_unlock(lock) }
+        let videoRecovering = recoveryDrops != lastRecoveryDrops
+        lastRecoveryDrops = recoveryDrops
+        // Saturating ages: a note stamped after `now` was read is fresh, not stale.
+        let videoAge = now > videoNoteNanos ? now - videoNoteNanos : 0
+        let audioAge = now > audioNoteNanos ? now - audioNoteNanos : 0
         guard videoNoteNanos != 0, audioNoteNanos != 0,
-              now &- videoNoteNanos <= Self.freshnessNanos,
-              now &- audioNoteNanos <= Self.freshnessNanos else {
+              videoAge <= Self.freshnessNanos, audioAge <= Self.freshnessNanos else {
             anchored = false
             lastTrueClockSkewMs = nil
             return nil
         }
         resolveAudioClockFamilyLocked(now: now)
+        // A drained buffer or a stalled audio note has no playhead to measure: no
+        // sample, and no epoch latched from it.
+        let audioPlaying = fillMs > 0 && audioAge <= Self.anchorFreshnessNanos
         if !anchored {
+            // Latch only a clean instant (fresh video, no backfill silence, no
+            // recovery drops since the last derive); otherwise retry next tick.
+            guard audioPlaying, videoAge <= Self.anchorFreshnessNanos,
+                  residentSilenceMs == 0, !videoRecovering else {
+                lastTrueClockSkewMs = nil
+                return nil
+            }
             anchored = true
             videoAnchorRtp = videoLastRtp
             audioAnchorRtp = audioLastRtp
@@ -250,6 +261,10 @@ final class AudioVideoSkewStore: @unchecked Sendable {
             everAnchored = true
             lastTrueClockSkewMs = nil
             return nil // the anchor tick defines the epoch, measures nothing
+        }
+        guard audioPlaying else {
+            lastTrueClockSkewMs = nil
+            return nil
         }
         // Wrap-safe modular distances on the two host capture clocks (90kHz
         // video / the calibrated audio clock - see AUDIO CLOCK UNITS on the
@@ -337,11 +352,7 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         sampleSum += skewMs
         if skewMs < sampleMin { sampleMin = skewMs }
         if skewMs > sampleMax { sampleMax = skewMs }
-        if let idx = Self.bucketBoundsMs.firstIndex(where: { skewMs <= $0 }) {
-            bucketCounts[idx] &+= 1
-        } else {
-            overflowCount &+= 1 // past the last bound; see the overflow doc
-        }
+        bucketCounts[Self.bucketIndex(skewMs)] &+= 1
         return true
     }
 
@@ -353,11 +364,13 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         clockSampleSum += skewMs
         if skewMs < clockSampleMin { clockSampleMin = skewMs }
         if skewMs > clockSampleMax { clockSampleMax = skewMs }
-        if let idx = Self.bucketBoundsMs.firstIndex(where: { skewMs <= $0 }) {
-            clockBucketCounts[idx] &+= 1
-        } else {
-            clockOverflowCount &+= 1
-        }
+        clockBucketCounts[Self.bucketIndex(skewMs)] &+= 1
+    }
+
+    /// The bucket a sample lands in; the top one also takes anything past it,
+    /// which the sanity bound already rules out.
+    private static func bucketIndex(_ skewMs: Double) -> Int {
+        bucketBoundsMs.firstIndex { skewMs <= $0 } ?? bucketBoundsMs.count - 1
     }
 
     /// Session percentile summary for the scorecard (nil before any sample).
@@ -377,15 +390,13 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         os_unfair_lock_lock(lock)
         defer { os_unfair_lock_unlock(lock) }
         guard sampleCount > 0 else { return nil }
+        func quantile(_ rank: Double) -> Double {
+            Self.quantile(rank, buckets: bucketCounts, minMs: sampleMin, maxMs: sampleMax)
+        }
         return Summary(samples: sampleCount,
                        minMs: sampleMin, maxMs: sampleMax,
                        avgMs: sampleSum / Double(sampleCount),
-                       p50Ms: quantileLocked(0.50, bucketCounts, overflowCount,
-                                             sampleCount, sampleMin, sampleMax),
-                       p95Ms: quantileLocked(0.95, bucketCounts, overflowCount,
-                                             sampleCount, sampleMin, sampleMax),
-                       p99Ms: quantileLocked(0.99, bucketCounts, overflowCount,
-                                             sampleCount, sampleMin, sampleMax),
+                       p50Ms: quantile(0.50), p95Ms: quantile(0.95), p99Ms: quantile(0.99),
                        rebases: rebases)
     }
 
@@ -397,53 +408,36 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         os_unfair_lock_lock(lock)
         defer { os_unfair_lock_unlock(lock) }
         guard clockSampleCount > 0 else { return nil }
+        func quantile(_ rank: Double) -> Double {
+            Self.quantile(rank, buckets: clockBucketCounts, minMs: clockSampleMin, maxMs: clockSampleMax)
+        }
         return Summary(samples: clockSampleCount,
                        minMs: clockSampleMin, maxMs: clockSampleMax,
                        avgMs: clockSampleSum / Double(clockSampleCount),
-                       p50Ms: quantileLocked(0.50, clockBucketCounts, clockOverflowCount,
-                                             clockSampleCount, clockSampleMin, clockSampleMax),
-                       p95Ms: quantileLocked(0.95, clockBucketCounts, clockOverflowCount,
-                                             clockSampleCount, clockSampleMin, clockSampleMax),
-                       p99Ms: quantileLocked(0.99, clockBucketCounts, clockOverflowCount,
-                                             clockSampleCount, clockSampleMin, clockSampleMax),
+                       p50Ms: quantile(0.50), p95Ms: quantile(0.95), p99Ms: quantile(0.99),
                        rebases: rebases)
     }
 
-    /// Bucket-interpolated quantile over a given accumulator. Lock already held;
-    /// `sampleCount > 0` guaranteed by the caller. Clamped to the exact min/max
-    /// so a single sample never reads as a bucket edge. The OVERFLOW tail is a
-    /// real bucket in the walk - [last bound, exact max] with `overflow` mass -
-    /// so a rank landing past the fixed bounds interpolates instead of pinning
-    /// every quantile to the max (the degenerate-quantile half of a past
-    /// av_skew break).
-    private func quantileLocked(_ quantile: Double, _ buckets: [UInt64],
-                                _ overflow: UInt64, _ count: UInt64,
-                                _ minMs: Double, _ maxMs: Double) -> Double {
-        let rank = quantile * Double(count)
+    /// Bucket-interpolated quantile, clamped to the exact min/max. Each bucket
+    /// spans its real extent (the lowest from the exact min, the highest to the
+    /// exact max), so a tail quantile no longer pins to the max.
+    static func quantile(_ quantile: Double, buckets: [UInt64], minMs: Double, maxMs: Double) -> Double {
+        let rank = quantile * Double(buckets.reduce(0, +))
         var cumulative: UInt64 = 0
         var lower = minMs
         for (idx, bucketCount) in buckets.enumerated() where bucketCount > 0 {
-            let upper = Self.bucketBoundsMs[idx]
+            let upper = bucketBoundsMs[idx]
             let next = cumulative &+ bucketCount
             if Double(next) >= rank {
                 let within = (rank - Double(cumulative)) / Double(bucketCount)
-                let base = max(lower, Self.lowerEdge(idx))
-                let estimate = base + (upper - base) * within
+                let base = idx > 0 ? max(lower, bucketBoundsMs[idx - 1]) : lower
+                let estimate = base + (min(upper, maxMs) - base) * within
                 return min(max(estimate, minMs), maxMs)
             }
             cumulative = next
             lower = upper
         }
-        if overflow > 0 {
-            let base = max(Self.bucketBoundsMs.last ?? minMs, minMs)
-            let within = (rank - Double(cumulative)) / Double(overflow)
-            let estimate = base + (maxMs - base) * within
-            return min(max(estimate, minMs), maxMs)
-        }
         return maxMs // floating-point edge backstop; the walk covers all mass
-    }
-    private static func lowerEdge(_ idx: Int) -> Double {
-        idx > 0 ? bucketBoundsMs[idx - 1] : -sanityBoundMs
     }
 
     /// Reset the accumulator + anchors for a fresh session. Called from the
@@ -464,14 +458,13 @@ final class AudioVideoSkewStore: @unchecked Sendable {
         audioRateResolved = false
         audioRatePendingFamily = nil
         lastTrueClockSkewMs = nil
+        lastRecoveryDrops = 0
         bucketCounts = [UInt64](repeating: 0, count: Self.bucketBoundsMs.count)
-        overflowCount = 0
         sampleCount = 0
         sampleSum = 0
         sampleMin = .infinity
         sampleMax = -.infinity
         clockBucketCounts = [UInt64](repeating: 0, count: Self.bucketBoundsMs.count)
-        clockOverflowCount = 0
         clockSampleCount = 0
         clockSampleSum = 0
         clockSampleMin = .infinity

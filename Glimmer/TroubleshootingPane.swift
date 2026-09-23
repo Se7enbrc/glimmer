@@ -40,7 +40,7 @@ struct RawHIDControl: View {
         if model.rawHIDControllerEnabled {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label(working ? "On" : "On - waiting for permission",
+                    Label(working ? "On" : "On, waiting for permission",
                           systemImage: working ? "checkmark.circle.fill" : "hourglass")
                         .foregroundStyle(working ? .green : .secondary)
                     Spacer()
@@ -51,9 +51,9 @@ struct RawHIDControl: View {
             .onAppear { working = currentlyWorking }
             .onReceive(poll) { _ in working = currentlyWorking }
         } else {
-            Button("Enable…") { showExplain = true }
-                .alert("Enable enhanced DualSense buttons?", isPresented: $showExplain) {
-                    Button("Enable") { enable() }
+            Button("Turn On…") { showExplain = true }
+                .alert("Turn on Extra DualSense buttons?", isPresented: $showExplain) {
+                    Button("Turn On") { enable() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
                     Text(AppModel.rawHIDExplanation)
@@ -70,9 +70,9 @@ struct RawHIDControl: View {
             Image(systemName: "gamecontroller")
                 .font(.title3).foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("One more step - turn on Input Monitoring").fontWeight(.medium)
-                Text("Flip **Glimmer** on under Input Monitoring, then **quit & reopen** "
-                    + "Glimmer - macOS only applies the change on relaunch.")
+                Text("Turn on Input Monitoring").fontWeight(.medium)
+                Text("Turn on Glimmer in System Settings › Privacy & Security › Input Monitoring, "
+                    + "then choose Quit & Reopen when macOS asks.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -104,8 +104,10 @@ struct RawHIDControl: View {
     static func registerAndOpen() {
         DispatchQueue.global(qos: .userInitiated).async {
             let granted = DualSenseHID.requestAccess()
-            guard !granted else { return } // granted → nothing to open
-            DispatchQueue.main.async { openInputMonitoring() }
+            // A grant re-opens a running reader; only the manual path needs a relaunch.
+            DispatchQueue.main.async {
+                if granted { DualSenseHID.shared.reopen() } else { openInputMonitoring() }
+            }
         }
     }
 

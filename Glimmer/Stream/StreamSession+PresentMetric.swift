@@ -58,9 +58,10 @@ extension StreamSession {
         let sincePresent = dec.secondsSinceLastPresentedFrame()
         guard let live = dec.pacingLiveness() else {
             // Direct-enqueue fallback path - report decode + present liveness.
-            self.log.notice(
-                // swiftlint:disable:next line_length
-                "PRESENT METRIC pacer=direct decodeIdle=\(decodeIdle * 1000, format: .fixed(precision: 1), privacy: .public)ms sincePresent=\(sincePresent * 1000, format: .fixed(precision: 1), privacy: .public)ms")
+            self.log.notice("""
+                PRESENT METRIC pacer=direct decodeIdle=\(decodeIdle * 1000, format: .fixed(precision: 1), privacy: .public)ms \
+                sincePresent=\(sincePresent * 1000, format: .fixed(precision: 1), privacy: .public)ms
+                """)
             return
         }
         let dt = max(0.001, now - self.prevMetricTime)
@@ -69,8 +70,14 @@ extension StreamSession {
         self.prevMetricTotalTicks = live.totalTicks
         self.prevMetricTotalReleases = live.totalReleases
         self.prevMetricTime = now
-        self.log.notice(
-            // swiftlint:disable:next line_length
-            "PRESENT METRIC ticks/s=\(ticksPerSec, format: .fixed(precision: 1), privacy: .public) presents/s=\(presentsPerSec, format: .fixed(precision: 1), privacy: .public) sinceTick=\(live.secondsSinceLastTick * 1000, format: .fixed(precision: 1), privacy: .public)ms sinceRelease=\(live.secondsSinceLastRelease * 1000, format: .fixed(precision: 1), privacy: .public)ms depth=\(live.depth, privacy: .public) targetDepth=\(live.adaptiveTargetDepth, privacy: .public) streamInterval=\(live.streamFrameIntervalSeconds * 1000, format: .fixed(precision: 2), privacy: .public)ms decodeIdle=\(decodeIdle * 1000, format: .fixed(precision: 1), privacy: .public)ms")
+        self.log.notice("""
+            PRESENT METRIC ticks/s=\(ticksPerSec, format: .fixed(precision: 1), privacy: .public) \
+            presents/s=\(presentsPerSec, format: .fixed(precision: 1), privacy: .public) \
+            sinceTick=\(live.secondsSinceLastTick * 1000, format: .fixed(precision: 1), privacy: .public)ms \
+            sinceRelease=\(live.secondsSinceLastRelease * 1000, format: .fixed(precision: 1), privacy: .public)ms \
+            depth=\(live.depth, privacy: .public) targetDepth=\(live.adaptiveTargetDepth, privacy: .public) \
+            streamInterval=\(live.streamFrameIntervalSeconds * 1000, format: .fixed(precision: 2), privacy: .public)ms \
+            decodeIdle=\(decodeIdle * 1000, format: .fixed(precision: 1), privacy: .public)ms
+            """)
     }
 }

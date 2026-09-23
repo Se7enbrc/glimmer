@@ -90,16 +90,9 @@ extension StreamSession {
         // reconnect - so a route that moved mid-session is re-judged, never
         // inherited from the original connect.
         isRemotePathSession = resolvedRemoteness == .remote
-        // ONE packet size, resolved here and used EVERYWHERE - the SDP we
-        // advertise, the receive buffer, and (load-bearing) the Reed-Solomon
-        // shard length the FEC reconstructor rebuilds recovered packets at
-        // (RtpVideoQueue+Reconstruct). Advertising one size while reconstructing
-        // at another rebuilds every FEC-recovered packet at the wrong length and
-        // feeds garbage to the decoder - visible as the purple/white HDR
-        // corruption, and ONLY on a lossy link, because a clean one never
-        // exercises FEC recovery. The receive buffer adds its own headroom on
-        // top (packetSize + 64, + MAX_RTP_HEADER_SIZE), so a smaller value is
-        // safe there; there is no case for keeping the two apart.
+        // One size for the SDP and the receiver, less the 32-byte header when video is encrypted
+        // (VideoDecryptor.packetSize). FEC rebuilds at each block's longest shard, capped at that
+        // size plus the RTP header, so a PC that sends shorter shards still recovers cleanly.
         let resolvedPacketSize = StreamPathMTU.advertisedPacketSize(
             configured: config.packetSize,
             isRemote: resolvedRemoteness == .remote,
@@ -122,7 +115,7 @@ extension StreamSession {
             clientRefreshRateX100: Int32(config.fps * 100),
             colorSpace: config.colorSpace.cValue,
             colorRange: config.colorRange.cValue,
-            encryptionFlags: config.encryption.encryptionFlags,
+            encryptionFlags: 0,
             remoteInputAesKey: [UInt8](launch.gcmKey),
             remoteInputAesIv: [UInt8](launch.gcmKeyId))
     }
@@ -144,8 +137,7 @@ extension StreamSession {
     ) async throws {
         let backendServer = BackendServerInfo(
             address: serverInfo.address,
-            appVersion: serverInfo.appVersion ?? "7.1.451.0",
-            gfeVersion: serverInfo.gfeVersion ?? "3.23.0.74",
+            appVersion: serverInfo.appVersion ?? "unknown",
             rtspSessionUrl: launch.sessionURL,
             // RAW SCM_* bitmask from /serverinfo - see the landmine note in
             // StreamProtocol.SCM_*.
@@ -160,7 +152,7 @@ extension StreamSession {
         connectFlowState = OSSignposter.network.beginInterval(
             "ConnectFlow",
             id: connectFlowSignpostID,
-            "host=\(serverInfo.address, privacy: .public)")
+            "host=\(serverInfo.address, privacy: .private)")
 
         // SESSION-SCOPED telemetry reset + P2 CONNECT-HANDSHAKE anchor HERE -
         // before startConnection runs the handshake whose stage edges fill the
@@ -224,9 +216,18 @@ extension StreamSession {
             // P2 DISCONNECT REASON: the connection never reached established -
             // latch connect-failed before the teardown so the cause is attributed
             // to the handshake, not the host terminate that may follow.
-            noteTelemetryDisconnect(.connectFailed)
-            await stop()
-            throw StreamError.sessionFailed(code)
+            let interruptedBy = stopCause
+            if !isTearingDown { noteTelemetryDisconnect(.connectFailed) }
+            await stop(cause: .connectFailed)
+            throw Self.connectLegError(error, stoppedBy: interruptedBy)
         }
+    }
+
+    /// What a failed initial connect reports: the user's stop (the quit chord,
+    /// the close button, Cancel) is a cancel, not a failure. Anything else, the
+    /// PC ending it included, keeps the engine's cause so the banner names the fix.
+    static func connectLegError(_ error: Error, stoppedBy cause: DisconnectReason?) -> Error {
+        if cause == .userStopped { return CancellationError() }
+        return error as? StreamError ?? .sessionFailed(-1)
     }
 }

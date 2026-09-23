@@ -42,7 +42,7 @@ extension AppModel {
         // 2560×1600). The honest answer is: send what the user is
         // actually running. If a stricter host rejects, that's a host-
         // side config nudge, not a client-side workaround.
-        if let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+        if let displayID = screen.cgDirectDisplayID {
             // Ask Core Graphics for ALL display modes, including the
             // duplicate-low-resolution ones macOS hides by default. We
             // need the full list because the panel-native mode isn't
@@ -285,38 +285,9 @@ extension AppModel {
     /// invalidating views when nothing changed.
     @discardableResult
     func persistQualitySettings() -> Bool {
-        let display = smartDefaultsForCurrentDisplay()
-
-        let width: Int, height: Int, fps: Int, bitrate: Int, hdr: Bool
-        switch qualityPreset {
-        case .matchDisplay:
-            width = display.width
-            height = display.height
-            fps = display.fps
-            bitrate = bitrateKbps(width: width, height: height, fps: fps, preset: .matchDisplay)
-            hdr = true
-        case .hidpi:
-            let hd = hidpiDefaultsForCurrentDisplay()
-            width = hd.width
-            height = hd.height
-            fps = hd.fps
-            bitrate = bitrateKbps(width: width, height: height, fps: fps, preset: .hidpi)
-            hdr = true
-        case .custom:
-            width = customWidth
-            height = customHeight
-            // Shown in a window, Custom's Hz is capped at the panel's current
-            // refresh (the request is what the host encodes; the window can't
-            // present more). Full screen keeps it verbatim, as before.
-            fps = streamDisplayMode == .window
-                ? StreamDisplayMode.windowedRefresh(customFPS: customFPS, displayMaxHz: display.fps)
-                : customFPS
-            // Derived, never asked: the measured-anchor recommendation for
-            // this mode. It reads `fps` (the capped value above), so a
-            // windowed 60 Hz stream does not carry a 120 Hz budget.
-            bitrate = recommendedBitrateMbps(width: width, height: height, fps: fps) * 1000
-            hdr = customHDR
-        }
+        let resolved = effectiveValuesForPreset(qualityPreset)
+        let edrHeadroom = NSScreen.main?.maximumPotentialExtendedDynamicRangeColorComponentValue
+        let hdr = Self.showsHDR(requested: streamHDR, edrHeadroom: edrHeadroom)
         // Idempotent writes: assign each @Observable property only when it
         // actually moves. A spurious didChangeScreenParameters notification (the
         // launcher gets these on EDR / brightness / refresh changes that don't
@@ -326,11 +297,16 @@ extension AppModel {
         // Writing an @Observable property always invalidates its readers, even
         // when the value is unchanged, so the guards are load-bearing.
         var changed = false
-        if effectiveWidth != width { effectiveWidth = width; changed = true }
-        if effectiveHeight != height { effectiveHeight = height; changed = true }
-        if effectiveFPS != fps { effectiveFPS = fps; changed = true }
-        if effectiveBitrateKbps != bitrate { effectiveBitrateKbps = bitrate; changed = true }
-        if effectiveHDR != hdr { effectiveHDR = hdr; changed = true }
+        if effectiveWidth != resolved.width { effectiveWidth = resolved.width; changed = true }
+        if effectiveHeight != resolved.height { effectiveHeight = resolved.height; changed = true }
+        if effectiveFPS != resolved.fps { effectiveFPS = resolved.fps; changed = true }
+        if effectiveBitrateKbps != resolved.bitrateKbps { effectiveBitrateKbps = resolved.bitrateKbps; changed = true }
+        if effectiveHDR != hdr {
+            effectiveHDR = hdr
+            changed = true
+            Diag.info("HDR tag \(hdr ? "shown" : "hidden"): HDR \(streamHDR ? "on" : "off"), "
+                + "display EDR headroom \(edrHeadroom.map { "\($0)" } ?? "unknown")", "Stream")
+        }
         // The preset itself is deliberately NOT written here. This function runs
         // on paths with no user intent behind them (launch bootstrap, every
         // display-parameter change), and writing the key from them re-stamped it
@@ -344,7 +320,7 @@ extension AppModel {
     ///
     /// Writes through the custom properties, so their didSets persist all
     /// three keys - only ever call this behind an explicit user action (the
-    /// Quality pane's "Use native resolution") or when Custom is already the
+    /// Quality pane's "Use Native Resolution") or when Custom is already the
     /// live preset. The bitrate needs no seeding: it is derived from the mode
     /// every time the effective config is computed (`recommendedBitrateMbps`).
     func snapCustomToDisplay() {
@@ -362,7 +338,8 @@ extension AppModel {
         let bitrateKbps: Int
     }
 
-    /// What (width, height, fps, bitrate) a preset would resolve to right now.
+    /// What (width, height, fps, bitrate) a preset resolves to right now: the
+    /// one resolver behind the effective config and the Custom prefill.
     func effectiveValuesForPreset(_ preset: QualityPreset) -> PresetSnapshot {
         let display = smartDefaultsForCurrentDisplay()
         switch preset {
@@ -374,9 +351,21 @@ extension AppModel {
             let kbps = bitrateKbps(width: hd.width, height: hd.height, fps: hd.fps, preset: .hidpi)
             return PresetSnapshot(width: hd.width, height: hd.height, fps: hd.fps, bitrateKbps: kbps)
         case .custom:
-            let kbps = recommendedBitrateMbps(width: customWidth, height: customHeight, fps: customFPS) * 1000
-            return PresetSnapshot(width: customWidth, height: customHeight, fps: customFPS, bitrateKbps: kbps)
+            // In a window the Hz is capped at the panel's refresh, and the
+            // derived bitrate reads that capped value, so a windowed 60 Hz
+            // stream does not carry a 120 Hz budget. Full screen is verbatim.
+            let fps = streamDisplayMode == .window
+                ? StreamDisplayMode.windowedRefresh(customFPS: customFPS, displayMaxHz: display.fps)
+                : customFPS
+            let kbps = recommendedBitrateMbps(width: customWidth, height: customHeight, fps: fps) * 1000
+            return PresetSnapshot(width: customWidth, height: customHeight, fps: fps, bitrateKbps: kbps)
         }
+    }
+
+    /// The spec surfaces promise HDR only when it is on and the display can
+    /// show it (potential EDR headroom above 1; nil means no screen).
+    nonisolated static func showsHDR(requested: Bool, edrHeadroom: CGFloat?) -> Bool {
+        requested && (edrHeadroom ?? 1) > 1
     }
 
     /// HiDPI preset target: the display's DEFAULT "looks like" logical

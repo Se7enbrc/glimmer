@@ -26,6 +26,27 @@ extension RtspClient {
         return msg
     }
 
+    /// The control ANNOUNCE and its SDP. RFI is advertised only when the PC offered it in DESCRIBE
+    /// and the decoder supports it for the negotiated codec.
+    func makeAnnounce(_ result: RtspHandshakeResult) -> RtspMessage {
+        let sdpPayload = SdpBuilder(
+            config: config,
+            videoPort: result.videoPort,
+            urlSafeAddr: urlSafeAddr,
+            addrFamilyToken: addrFamilyToken,
+            negotiatedVideoFormat: result.negotiatedVideoFormat,
+            encryptionFeaturesEnabled: result.encryptionFeaturesEnabled,
+            serverSupportsRfi: result.referenceFrameInvalidationSupported,
+            decoderRfiCapabilities: VideoDecoder.rfiCapabilities,
+            highQualityAudio: result.highQualityAudio).build()
+        var announce = makeRequest("ANNOUNCE", Self.controlStreamId)
+        announce.headers.append(("Session", sessionIdString))
+        announce.headers.append(("Content-type", "application/sdp"))
+        announce.headers.append(("Content-length", "\(sdpPayload.count)"))
+        announce.payload = sdpPayload
+        return announce
+    }
+
     func check(_ response: RtspMessage, step: String) throws {
         Diag.info("RTSP \(step) → \(response.statusCode)", Self.logCategory)
         if response.statusCode != 200 {
@@ -44,10 +65,8 @@ extension RtspClient {
         return UInt16(port)
     }
 
-    /// Capture X-SS-Ping-Payload from a SETUP response (RtspConnection.c:1269).
-    /// The header VALUE must be EXACTLY 16 chars and is memcpy'd verbatim as raw
-    /// bytes - NO hex/base64 decode. If absent or not 16 chars, returns empty
-    /// (→ legacy 4-byte "PING").
+    /// Capture X-SS-Ping-Payload from a SETUP response (RtspConnection.c:1269). The value must be EXACTLY
+    /// 16 chars and is memcpy'd verbatim as raw bytes, no hex/base64 decode; anything else returns empty.
     func parsePingPayload(_ response: RtspMessage) -> [UInt8] {
         guard let value = response.headerValue("X-SS-Ping-Payload") else { return [] }
         // Latin-1 maps each char to one byte, matching the C memcpy of raw chars.
@@ -130,17 +149,19 @@ extension RtspClient {
         // (0x02 = LI_FF_CONTROLLER_TOUCH_EVENTS).
         result.featureFlags =
             SdpScan.attributeUInt(sdp, "x-ss-general.featureFlags") ?? 0
+        let channels = Int(gl_channel_count_from_audio_configuration(config.audioConfiguration))
+        (result.opusConfig, result.highQualityAudio) = SdpScan.audioLayout(sdp, channelCount: channels)
     }
 
-    /// getAttributesList: control-V2 is enabled whenever supported (Sunshine).
-    /// Video/audio encryption stays off for connect-only (encryptionFlags=0).
-    func computeEncryptionEnabled(supported: UInt32) -> UInt32 {
-        let ssEncControlV2: UInt32 = 0x01
-        var enabled: UInt32 = 0
-        if supported & ssEncControlV2 != 0 {
-            enabled |= ssEncControlV2
-        }
-        return enabled
+    static let ssEncControlV2: UInt32 = 0x01
+    static let ssEncVideo: UInt32 = 0x02
+    static let ssEncAudio: UInt32 = 0x04
+
+    /// getAttributesList: control-V2 and audio encryption whenever the PC supports them (upstream's
+    /// default). Video only when the PC requests it (its mandatory mode): like upstream we don't
+    /// opt in, since decrypting costs CPU on every video packet.
+    static func computeEncryptionEnabled(supported: UInt32, requested: UInt32) -> UInt32 {
+        (supported & (ssEncControlV2 | ssEncAudio)) | (requested & ssEncVideo)
     }
 
     func codecName(_ format: Int32) -> String {

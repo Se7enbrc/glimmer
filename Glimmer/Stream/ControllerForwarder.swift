@@ -26,11 +26,16 @@ extension InputForwarder {
 
     // MARK: - Per-controller state
 
+    /// What an arrival tells the PC about a pad: LI_CTYPE_*, button flags, LI_CCAP_* bits.
+    struct ControllerArrival: Equatable {
+        let type: UInt8
+        let supportedButtons: UInt32
+        let caps: UInt16
+    }
+
     struct AttachedController {
         let slot: UInt8           // 0..15, used as `controllerNumber`
-        let kind: UInt8           // LI_CTYPE_*
-        let capabilities: UInt16  // LI_CCAP_* bitset
-        let supportedButtonFlags: UInt32
+        let arrival: ControllerArrival
         weak var controller: GCController?
         /// True if this is a DualSense and we `retain()`ed the raw-HID reader
         /// for it (so detach can `release()` it).
@@ -82,6 +87,7 @@ extension InputForwarder {
                             self.dualSenseRouting.unregister(slot: state.slot)
                             if state.retainedHID { DualSenseHID.shared.release() }
                             self.gamepadMask &= ~(UInt16(1) << state.slot)
+                            if self.isReady { self.sendControllerRemoval(slot: state.slot) }
                             // The pad object (and its motors) died with the
                             // deallocation - still release the haptics,
                             // motion and battery slots so a future attach
@@ -109,11 +115,9 @@ extension InputForwarder {
 
     func attach(gamepad: GCController) {
         dualSenseRouting.syncControllers()
-        // Allocate the lowest free slot 0..15. moonlight-common-c supports up
-        // to 16 controllers on Sunshine hosts, up to 4 on GFE. A 17th pad is
-        // REFUSED outright: falling back to slot 0 would silently double-map
-        // it (two handlers interleaving full states into one controllerNumber,
-        // plus a haptics register tearing down the legitimate pad's engines).
+        // Lowest free slot 0..15, Sunshine's 16-pad limit (MAX_GAMEPADS). A 17th pad is REFUSED: slot 0 would
+        // double-map it, two handlers interleaving full states into one controllerNumber and a haptics
+        // register tearing down the legitimate pad's engines.
         guard let slot = (0..<UInt8(16)).first(where: { (gamepadMask & (1 << $0)) == 0 }) else {
             Diag.notice("controller attach refused: all 16 slots occupied "
                 + "(\(gamepad.vendorName ?? "Unknown"))", "Controller")
@@ -132,13 +136,14 @@ extension InputForwarder {
         // Determine controller type from GameController metadata. macOS doesn't
         // expose a clean type enum, so we infer from product category strings.
         let kind = controllerType(for: gamepad)
-        var caps: UInt16 = UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS) | UInt16(StreamProtocol.LI_CCAP_RUMBLE)
-        // Trigger rumble is gated on the probed hardware (unlike body rumble,
-        // advertised unconditionally): advertising it for a pad without
-        // trigger localities would invite host traffic we can only drop.
-        if let localities = gamepad.haptics?.supportedLocalities,
-           localities.contains(.leftTrigger), localities.contains(.rightTrigger) {
-            caps |= UInt16(StreamProtocol.LI_CCAP_TRIGGER_RUMBLE)
+        var caps = UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS)
+        // ControllerHaptics plays rumble through `haptics` alone, so a pad without it
+        // gets none; trigger rumble also needs both trigger localities.
+        if let localities = gamepad.haptics?.supportedLocalities {
+            caps |= UInt16(StreamProtocol.LI_CCAP_RUMBLE)
+            if localities.contains(.leftTrigger), localities.contains(.rightTrigger) {
+                caps |= UInt16(StreamProtocol.LI_CCAP_TRIGGER_RUMBLE)
+            }
         }
         // Motion caps come from the sampler's per-sensor probe (accel/gyro
         // gated separately), which also maps the slot for the host's 0x5501
@@ -160,11 +165,6 @@ extension InputForwarder {
             caps |= UInt16(StreamProtocol.LI_CCAP_TOUCHPAD)
         }
 
-        // Build supportedButtonFlags by checking which inputs the controller
-        // actually exposes. This is the same logic moonlight-qt uses to give
-        // the host a hint about what kind of virtual controller to emulate.
-        let buttons = supportedButtonMask(for: gamepad)
-
         // Create/Share (`buttonOptions`) is bound to a macOS system gesture -
         // measured on macOS 26 for the DualSense (isBoundToSystemGesture == true;
         // the WWDC21 contract is double-press = screenshot, long-press = start or
@@ -174,12 +174,17 @@ extension InputForwarder {
         // reached us through GameController AND asked macOS to start a screen
         // recording. A streaming client has exactly one consumer for that button,
         // the host, so disable the gesture: the press is delivered immediately and
-        // macOS stays out of it. Home (PS) stays bound on purpose - the Game
-        // Overlay is a feature users expect from it and no chord depends on it.
+        // macOS stays out of it.
         if let create = gamepad.extendedGamepad?.buttonOptions, create.isBoundToSystemGesture {
             create.preferredSystemGestureState = .disabled
             Diag.info("controller \(slot): Create/Share was bound to a macOS system gesture - "
                 + "disabled so the press reaches the stream", "Controller")
+        }
+        // Home (PS): macOS 27 honors this only when the user picks Defer to app in
+        // System Settings › Game Controllers, so the default Game Overlay stays and
+        // Defer sends Guide to the PC.
+        if #available(macOS 27, *) {
+            gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
         }
 
         // DualSense + the user opted in: start the raw-HID side-channel so the
@@ -192,8 +197,9 @@ extension InputForwarder {
         // centre buttons, so a quit chord that needs them silently never fires
         // (the diagnosed regression - invisible because the open state only logged
         // at INFO). Surface it once, plainly, so the fix is obvious.
-        if isDualSense, !useHID, quitChordNeedsRawHIDCenterButtons(),
-           !Self.warnedQuitChordNeedsRawHID {
+        if isDualSense, !useHID, !Self.warnedQuitChordNeedsRawHID,
+           Self.needsRawHIDCenterButtons(chord: controllerQuitChordProvider(),
+                                         custom: customControllerChordProvider()) {
             Self.warnedQuitChordNeedsRawHID = true
             Diag.notice("Quit chord needs DualSense centre buttons (Create/Mute) that require "
                 + "raw-HID, but raw-HID controller support is OFF - the chord will NOT fire on "
@@ -210,19 +216,20 @@ extension InputForwarder {
             DualSenseHID.shared.retain()
         }
 
+        // Build supportedButtonFlags by checking which inputs the controller
+        // actually exposes. This is the same logic moonlight-qt uses to give
+        // the host a hint about what kind of virtual controller to emulate.
+        let buttons = supportedButtonMask(for: gamepad, forwardsMute: useHID)
+
         let state = AttachedController(
-            slot: slot, kind: kind, capabilities: caps,
-            supportedButtonFlags: buttons, controller: gamepad,
-            retainedHID: useHID
+            slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
+            controller: gamepad, retainedHID: useHID
         )
         attachedControllers[ObjectIdentifier(gamepad)] = state
         dualSenseRouting.register(slot: slot, controller: ObjectIdentifier(gamepad))
 
-        // Make this slot addressable by inbound host rumble (control 0x010b):
-        // we advertise LI_CCAP_RUMBLE unconditionally above, so the actuator
-        // must be able to resolve every slot we hand out. Unconditional on
-        // purpose - ControllerHaptics degrades quietly if the pad turns out to
-        // expose no haptics, and registration alone never spins a motor.
+        // Make the slot addressable by the PC's rumble and light bar events. Registration
+        // alone never spins a motor, and a pad without haptics simply drops rumble.
         ControllerHaptics.shared.register(slot: slot, controller: gamepad)
 
         // Controller metadata is non-sensitive; build the detail once and log
@@ -251,7 +258,7 @@ extension InputForwarder {
         // If the stream is already up, announce arrival immediately;
         // otherwise it'll go out when `setReady(true)` is called.
         if isReady {
-            sendArrival(state)
+            sendArrival(slot: slot, state.arrival)
         }
     }
 
@@ -292,15 +299,7 @@ extension InputForwarder {
             + "last_input_age_ms=\(inputAge) last_rumble_age_ms=\(rumbleAge) "
             + "rumble_events_total=\(counters.rumbleEventTotal.value)", "Controller")
 
-        if isReady {
-            // Empty event with the slot bit cleared signals removal to the host.
-            let rc = backend?.sendMultiController(
-                num: Int16(state.slot), mask: Int16(bitPattern: gamepadMask), buttons: 0,
-                analog: GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-                                      leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
-            ) ?? -2
-            record("LiSendMultiControllerEvent(detach)", rc)
-        }
+        if isReady { sendControllerRemoval(slot: state.slot) }
     }
 
     /// Session-teardown twin of `detach(gamepad:)`, called from
@@ -338,27 +337,59 @@ extension InputForwarder {
         attachedControllers.removeAll()
         touchpadStates.removeAll()
         gamepadMask = 0
+        announcedControllers.removeAll()
     }
 
-    func sendArrival(_ state: AttachedController) {
+    func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
         let rc = backend?.sendControllerArrival(
-            num: state.slot,
-            mask: gamepadMask,
-            type: state.kind,
-            supportedButtons: UInt32(state.supportedButtonFlags),
-            caps: state.capabilities
+            num: slot, mask: gamepadMask, type: arrival.type,
+            supportedButtons: arrival.supportedButtons, caps: arrival.caps
         ) ?? -2
         record("LiSendControllerArrivalEvent", rc)
-        // Durable per-session witness of WHAT we told the host and whether the
-        // enqueue took (record() above logs failures to os_log only, and only
-        // once per code). Arrivals replay once per pad per stream - bounded.
-        Diag.info("controller \(state.slot) arrival sent: "
-            + "caps=0x\(String(state.capabilities, radix: 16)) rc=\(rc)", "Controller")
-        // Battery baseline rides right behind the arrival: the host learns
-        // the pad exists, then what its battery holds (change reports follow
-        // on the monitor's poll). Also (re)arms the uplink per session, since
-        // setReady(true) replays arrivals at every stream start.
-        ControllerBattery.shared.announce(slot: state.slot, backend: backend)
+        announcedControllers[slot] = arrival
+        // Durable per-session witness of what the PC was told; record() only
+        // reaches os_log. Arrivals replay once per pad per stream, so bounded.
+        Diag.info("controller \(slot) arrival sent: "
+            + "caps=0x\(String(arrival.caps, radix: 16)) rc=\(rc)", "Controller")
+        // The battery baseline rides right behind the arrival, which also
+        // re-arms the uplink at every stream start.
+        ControllerBattery.shared.announce(slot: slot, backend: backend)
+    }
+
+    /// An empty event with the slot's bit cleared, which Sunshine takes as the pad leaving.
+    func sendControllerRemoval(slot: UInt8) {
+        let rc = backend?.sendMultiController(
+            num: Int16(slot), mask: Int16(bitPattern: gamepadMask & ~(UInt16(1) << slot)), buttons: 0,
+            analog: GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
+                                  leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        ) ?? -2
+        record("LiSendMultiControllerEvent(removal)", rc)
+    }
+
+    /// Every stream start: retire each slot the PC may still hold whose pad left or changed,
+    /// then replay each arrival and re-push held state, which the arrival's fallback event zeroed.
+    /// Removals go first so the first arrival's flush carries them ahead of any new pad.
+    func announceControllers() {
+        var current: [UInt8: ControllerArrival] = [:]
+        for state in attachedControllers.values { current[state.slot] = state.arrival }
+        for state in attachedHIDControllers.values { current[state.slot] = state.arrival }
+        for slot in Self.staleControllerSlots(announced: announcedControllers, current: current) {
+            sendControllerRemoval(slot: slot)
+            announcedControllers[slot] = nil
+        }
+        for state in attachedControllers.values { sendArrival(slot: state.slot, state.arrival) }
+        for state in attachedHIDControllers.values {
+            sendArrival(slot: state.slot, state.arrival)
+            pushHID(state.device)
+        }
+        resyncControllers()
+    }
+
+    /// Announced slots whose pad is gone or no longer matches. Sunshine keeps a paired
+    /// client's pads across a reconnect and ignores an arrival for a slot it holds.
+    static func staleControllerSlots(announced: [UInt8: ControllerArrival],
+                                     current: [UInt8: ControllerArrival]) -> [UInt8] {
+        announced.filter { current[$0.key] != $0.value }.keys.sorted()
     }
 
     // MARK: - GCController -> moonlight type/flag derivation
@@ -383,7 +414,8 @@ extension InputForwarder {
         }
     }
 
-    func supportedButtonMask(for gamepad: GCController) -> UInt32 {
+    /// `forwardsMute`: a DualSense whose raw-HID reader is live, so its Mute reaches the PC.
+    func supportedButtonMask(for gamepad: GCController, forwardsMute: Bool) -> UInt32 {
         guard let ex = gamepad.extendedGamepad else { return 0 }
         var b: Int32 = 0
         // Always-present face/shoulder/dpad/menu on extended gamepads.
@@ -396,13 +428,9 @@ extension InputForwarder {
         if ex.buttonOptions != nil { b |= StreamProtocol.BACK_FLAG }
         if ex.buttonHome    != nil { b |= StreamProtocol.SPECIAL_FLAG }
         if touchpadElements(of: ex) != nil { b |= StreamProtocol.TOUCHPAD_FLAG }
-        // Xbox Series Share/Capture button. GameController surfaces it as
-        // `GCXboxGamepad.buttonShare` (macOS 12+); GCExtendedGamepad has no
-        // equivalent, so it's a downcast probe like the touchpad above. The
-        // DualSense Mute already rides MISC_FLAG via the raw-HID path, and
-        // moonlight-qt maps Xbox Share to the same misc/touchpad-button slot -
-        // a spare host button no other pad button claims.
-        if xboxShareButton(of: ex) != nil { b |= StreamProtocol.MISC_FLAG }
+        // Xbox Share (a GCXboxGamepad probe) and DualSense Mute both ride MISC_FLAG,
+        // the spare button moonlight-qt maps Share to (see pressedButtonFlags).
+        if xboxShareButton(of: ex) != nil || forwardsMute { b |= StreamProtocol.MISC_FLAG }
         return UInt32(bitPattern: b)
     }
 

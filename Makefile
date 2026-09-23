@@ -89,7 +89,7 @@ TAP_REPO        ?= Se7enbrc/homebrew-glimmer
 export RELEASES_REPO TAP_REPO
 # Which release `make brew-bump` points the cask at - the one being built by default.
 VERSION         ?= $(MARKETING_VERSION)
-SPARKLE_VERSION ?= 2.9.3
+SPARKLE_VERSION ?= 2.10.0
 export SPARKLE_VERSION
 
 # --- Privileged AWDL network helper (root LaunchDaemon) ---------------------
@@ -142,6 +142,7 @@ release:
 # Glimmer scheme's BuildAction builds ONLY the app, so `make app`/`make dist`
 # are unaffected; only `xcodebuild test` pulls in the GlimmerTests target.
 test:
+	@scripts/generate-build-info.sh
 	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) OPENSSL_PREFIX=$(OPENSSL_PREFIX) OPUS_PREFIX=$(OPUS_PREFIX) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'

@@ -1,8 +1,8 @@
 //
 //  WiredBitrateTests.swift
 //
-//  The wire bitrate rule: codec discount, the wired boost and its cap, the
-//  floor, and the connect-time withdrawal when the RTT says Wi-Fi.
+//  The wire bitrate rule: codec discount, the boost and cap each route class
+//  gets, the floor, and the connect-time withdrawal when the RTT says Wi-Fi.
 //
 
 import Testing
@@ -20,6 +20,30 @@ struct WiredBitrateTests {
         #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8,
                                          boost: AppModel.wiredBitrateMultiplier,
                                          capKbps: AppModel.wiredBitrateCapKbps) == 361_600)
+    }
+
+    private func highestQualityAsk(_ route: HostRouteMonitor.RouteClass) -> Int {
+        let pick = AppModel.routeBoost(route, wifiBoost: AppModel.wifiBitrateMultiplier)
+        return AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8, boost: pick.boost, capKbps: pick.capKbps)
+    }
+
+    @Test func wiredRouteDoublesUnderTheHigherCap() {
+        #expect(highestQualityAsk(.wired) == 361_600)
+        #expect(AppModel.routeBoost(.wired).capKbps == 500_000)
+    }
+
+    @Test func wiFiRouteTakesHalfAsMuchAgainUnderTheFormulaCap() {
+        #expect(highestQualityAsk(.wifi) == 271_200)
+        #expect(AppModel.routeBoost(.wifi).capKbps == 300_000)
+    }
+
+    @Test func tunnelRouteKeepsTheUnboostedAsk() {
+        // A VPN has no radio gate and no RTT withdrawal to trim a boost.
+        #expect(highestQualityAsk(.tunnel) == 180_800)
+    }
+
+    @Test func unresolvedRouteKeepsTheUnboostedAsk() {
+        #expect(highestQualityAsk(.unknown) == 180_800)
     }
 
     @Test func capAndFloorStillApply() {
@@ -40,5 +64,79 @@ struct WiredBitrateTests {
         #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: nil) == 361_600)
         #expect(StreamPathMTU.wiredAskKbps(capped: 361_600, boost: 2, steadyRttMs: 4.2) == 180_800)
         #expect(StreamPathMTU.wiredAskKbps(capped: 180_800, boost: 1, steadyRttMs: 4.2) == 180_800)
+    }
+
+    /// The RTT may only take back the boost the decision actually applied, and
+    /// only on a wired route: Wi-Fi's boost answers to the radio gate.
+    @Test func theWithdrawableBoostComesFromTheDecision() {
+        func decision(_ mode: BitrateMode, _ route: HostRouteMonitor.RouteClass) -> BitrateDecision {
+            BitrateDecision(mode: mode, dialKbps: 226_000, codecMultiplier: 0.8,
+                            boost: mode == .highestQuality ? AppModel.routeBoost(route).boost : 1,
+                            radioGatePhyMbps: nil)
+        }
+        #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .wired), route: .wired) == 2)
+        #expect(AppModel.rttWithdrawableBoost(decision(.bandwidthSaver, .wired), route: .wired) == 1)
+        #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .wifi), route: .wifi) == 1)
+        #expect(AppModel.rttWithdrawableBoost(decision(.highestQuality, .tunnel), route: .tunnel) == 1)
+    }
+
+    /// A reconnect rebuilds from the same ask a fresh start on this route sends.
+    @MainActor @Test func theReconnectAskIsTheStartsAsk() throws {
+        let model = AppModel()
+        let pc = Host(id: "pc-1", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
+                      apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+        let start = model.nativeStreamConfig(for: pc)
+        let decision = try #require(start.bitrateDecision)
+        let ask = AppModel.routeAsk(decision, route: model.hostRoute.routeClass)
+        #expect(ask == RouteAsk(kbps: start.bitrateKbps, boost: start.bitrateBoost))
+        #expect(ask.kbps == model.wireBitrateKbps(forFormats: model.offeredVideoFormats(for: pc)))
+    }
+
+    /// A reconnect asks the route it finds: Wi-Fi through the radio gate with no
+    /// boost to withdraw, wired under its own cap with the boost the RTT may take back.
+    @Test func aReconnectAsksTheRouteItFinds() {
+        func decision(_ mode: BitrateMode, boost: Double, phy: Double?) -> BitrateDecision {
+            BitrateDecision(mode: mode, dialKbps: 226_000, codecMultiplier: 0.8, boost: boost, radioGatePhyMbps: phy)
+        }
+        let wired = decision(.highestQuality, boost: AppModel.wiredBitrateMultiplier, phy: nil)
+        #expect(AppModel.routeAsk(wired, route: .wired) == RouteAsk(kbps: 361_600, boost: 2))
+        let wifi = decision(.highestQuality, boost: AppModel.wifiBitrateMultiplier, phy: 600)
+        #expect(AppModel.routeAsk(wifi, route: .wifi) == RouteAsk(kbps: 210_000, boost: 1))
+        #expect(AppModel.routeAsk(decision(.bandwidthSaver, boost: 1, phy: nil), route: .wired)
+            == RouteAsk(kbps: 180_800, boost: 1))
+    }
+
+    /// The route monitor follows the launcher's selection: another PC selected, or
+    /// a route not resolved yet, keeps the current ask instead of an unboosted one.
+    @Test func aReconnectKeepsItsAskUnlessTheRouteIsTheSessionPCs() {
+        let wired = BitrateDecision(mode: .highestQuality, dialKbps: 226_000, codecMultiplier: 0.8,
+                                    boost: AppModel.wiredBitrateMultiplier, radioGatePhyMbps: nil)
+        func ask(_ route: HostRouteMonitor.RouteClass, selected: String?) -> RouteAsk? {
+            AppModel.reconnectRouteAsk(wired, route: route, phyRateMbps: nil,
+                                       selectedHostID: selected, sessionHostID: "pc-a")
+        }
+        #expect(ask(.wired, selected: "pc-a") == RouteAsk(kbps: 361_600, boost: 2))
+        #expect(ask(.unknown, selected: "pc-a") == nil)
+        #expect(ask(.tunnel, selected: "pc-b") == nil)
+        #expect(ask(.wired, selected: nil) == nil)
+    }
+
+    /// Settings changed mid-stream apply next stream: a reconnect keeps the launch's
+    /// dial, codec and mode, and takes only the boost, cap and radio gate of its route.
+    @Test func aReconnectMovesOnlyTheRoutePartOfTheLaunchAsk() {
+        // Launched on Wi-Fi under Highest quality; Settings now say something else.
+        let launch = BitrateDecision(mode: .highestQuality, dialKbps: 226_000, codecMultiplier: 0.8,
+                                     boost: AppModel.wifiBitrateMultiplier, radioGatePhyMbps: 1152)
+        func ask(_ decision: BitrateDecision, _ route: HostRouteMonitor.RouteClass, phy: Double? = nil) -> RouteAsk? {
+            AppModel.reconnectRouteAsk(decision, route: route, phyRateMbps: phy,
+                                       selectedHostID: "pc-a", sessionHostID: "pc-a")
+        }
+        #expect(ask(launch, .wired) == RouteAsk(kbps: 361_600, boost: 2))
+        #expect(ask(launch, .tunnel) == RouteAsk(kbps: 180_800, boost: 1))
+        #expect(ask(launch, .wifi, phy: 144) == RouteAsk(kbps: 50_400, boost: 1))
+        // A Bandwidth saver launch stays unboosted on any route.
+        var saver = launch
+        saver.mode = .bandwidthSaver
+        #expect(ask(saver, .wired) == RouteAsk(kbps: 180_800, boost: 1))
     }
 }

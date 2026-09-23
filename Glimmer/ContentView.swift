@@ -3,26 +3,43 @@ import AppKit
 
 // MARK: - Main Window
 
+/// The takeover question, in the launcher's dialog and the menu bar's alert.
+/// App names show exactly as typed ("iRacing"); nil is an app the PC didn't name.
+enum TakeoverDialogCopy {
+    static func title(occupantApp: String?, hostName: String) -> String {
+        "\(occupantApp ?? "Another app") is running on \(hostName)."
+    }
+
+    static let message = "It will quit and your stream will start."
+}
+
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
+    /// Lifted out of EmptyPairingState so the sheet survives the swap to
+    /// ConnectSurface the instant pairing fills `model.hosts` - the sheet used
+    /// to hang off the empty state itself and vanish mid-handshake success.
+    @State private var showPair = false
 
     var body: some View {
         @Bindable var model = model
         return Group {
             if model.hosts.isEmpty {
-                EmptyPairingState()
+                EmptyPairingState(showPair: $showPair)
             } else {
                 ConnectSurface()
             }
         }
+        .sheet(isPresented: $showPair) {
+            PairSheet().environment(model)
+        }
         // One-time proactive offer when a DualSense is connected (see
         // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
-        .alert("Enable enhanced DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
-            Button("Enable") { model.enableRawHIDFromPrompt() }
+        .alert("Turn on Extra DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
+            Button("Turn On") { model.enableRawHIDFromPrompt() }
             // "Not Now" just dismisses - no permanent flag - so a future
             // DualSense connect offers again. Only "Don't Ask Again" answers
             // for good (matches AWDLEnablePrompt's Not Now / Don't ask again
@@ -32,11 +49,12 @@ struct MainWindow: View {
         } message: {
             Text(AppModel.rawHIDExplanation)
         }
-        // Same explanation for a pad macOS doesn't recognise (generic HID).
+        // Same explanation and answers for a pad macOS doesn't recognise (generic HID).
         .alert("Use \(model.hidPermissionPadName ?? "this controller") with Glimmer?",
                isPresented: $model.showHIDPermissionPrompt) {
             Button("Continue") { model.continueHIDPermission() }
             Button("Not Now", role: .cancel) { model.dismissHIDPermission() }
+            Button("Don't Ask Again") { model.declineHIDPermission() }
         } message: {
             Text(AppModel.hidPermissionExplanation)
         }
@@ -45,6 +63,11 @@ struct MainWindow: View {
         // rawHID prompt is up; "Don't ask again" inside silences it for good.
         .sheet(isPresented: $showAWDLPrompt) {
             AWDLEnablePrompt(manager: AWDLHelperManager.shared)
+        }
+        // Pair a PC… from the menu bar, and Pair Again… from the menu bar, the
+        // Stream button, the banner and the Trust needed chip land here.
+        .sheet(isPresented: $model.pairSheetShown) {
+            PairSheet(repairing: model.pairSheetHost).environment(model)
         }
         .task {
             guard !awdlPromptChecked else { return }
@@ -72,10 +95,13 @@ struct MainWindow: View {
             StreamEndedToast()
                 .padding(.top, 16)
         }
-        // Takeover confirmation: launching over a host that's already streaming
-        // someone else's session boots them out, so confirm before we /launch.
+        // Takeover confirmation: launching while an app is already running on
+        // the PC quits it (unsaved progress included), so confirm first. The
+        // title carries the specifics; the message states the consequence.
         .confirmationDialog(
-            "Take over the stream?",
+            model.pendingTakeover.map {
+                TakeoverDialogCopy.title(occupantApp: $0.occupantApp, hostName: $0.host.displayName)
+            } ?? "",
             isPresented: Binding(
                 get: { model.pendingTakeover != nil },
                 set: { if !$0 { model.pendingTakeover = nil } }
@@ -83,24 +109,16 @@ struct MainWindow: View {
             titleVisibility: .visible,
             presenting: model.pendingTakeover
         ) { _ in
-            Button("Take over", role: .destructive) { model.confirmPendingTakeover() }
+            Button("Quit and Stream", role: .destructive) { model.confirmPendingTakeover() }
             Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
-        } message: { pending in
-            Text("\(pending.host.displayName) is already streaming \(pending.occupantApp). Starting your stream will end that session.")
+        } message: { _ in
+            Text(TakeoverDialogCopy.message)
         }
         .background {
             // ⌘1-⌘9 host switching (multi-PC households only) - invisible,
             // window-scoped. See HostSwitchShortcuts for why hidden buttons
             // beat toolbar-menu shortcuts or app-level .commands here.
             HostSwitchShortcuts()
-        }
-        // Unpairing the LAST PC swaps ConnectSurface out for the empty state,
-        // which merely CANCELS its route-monitor task - cancellation never
-        // runs monitor(nil), leaving the parked UDP socket watching the
-        // forgotten host's route until quit. Key on emptiness; release it
-        // (selectedHost is nil here → monitor(address: nil), the teardown).
-        .task(id: model.hosts.isEmpty) {
-            if model.hosts.isEmpty { model.refreshHostRoute() }
         }
         .toolbar {
             // Single navigation pill merging the host dropdown with the
@@ -153,13 +171,9 @@ private struct ConnectSurface: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// True while we're between "user pressed Stream" and "stream window
-    /// fades in" - the RAW connecting edge. `streamPhase == .connecting` is
-    /// the whole condition (`isStreaming` must NOT be a guard - it flips at
-    /// stream() ENTRY as the in-flight flag, and guarding on it made the
-    /// connecting UI unreachable dead code: a stuck connect showed nothing).
-    /// Suppressed while the stream window is just hiding in the background -
-    /// the StreamButton's "Back to stream" role owns that affordance.
+    /// The raw connecting edge: `streamPhase` alone, since `isStreaming` flips at
+    /// stream() entry and would hide a stuck connect. Off while the stream window
+    /// only hides in the background, where Back to Stream takes over.
     private var isConnecting: Bool {
         guard case .connecting = model.streamPhase else { return false }
         guard !model.nativeStreamBackgrounded else { return false }
@@ -266,13 +280,6 @@ private struct ConnectSurface: View {
                 model.noteConnectCapsuleShown()
             }
         }
-        // Keep the route glyph pointed at the selected host's CURRENT
-        // address - keyed on the resolved address, NOT selectedHost?.id:
-        // re-pairing after a DHCP move rewrites the address under the SAME
-        // uuid, so an id-keyed task never re-fired (glyph watched a dead IP).
-        .task(id: model.selectedHostRouteAddress) {
-            model.refreshHostRoute()
-        }
     }
 }
 
@@ -317,66 +324,6 @@ private struct ContextFooter: View {
     }
 }
 
-/// Tip-style banner above the hero card. Shows for stream errors. Stays out
-/// of the way otherwise.
-private struct ConnectBanner: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        Group {
-            // The "stream is in the background" affordance lives on the
-            // StreamButton itself ("Back to stream" role), so the banner only
-            // handles the load-bearing recovery case: stream errors.
-            if let err = model.nativeStreamError, !err.isEmpty {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.red)
-                    Text(err)
-                        .textSelection(.enabled)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Retry") {
-                        model.nativeStreamError = nil
-                        model.retryLastLaunch()
-                    }
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
-                    .disabled(model.selectedHost == nil || model.isStreaming)
-                    // Retry is disabled with no host selected or mid-stream, so
-                    // without this the banner could otherwise become permanent.
-                    Button {
-                        model.nativeStreamError = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Dismiss error")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                // Liquid Glass floating-panel chrome with the red stroke on
-                // top - the stroke is the load-bearing severity affordance.
-                .glassEffect(
-                    .regular.tint(Color.red.opacity(0.12)),
-                    in: .rect(cornerRadius: 12)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.red, lineWidth: 1)
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.nativeStreamError)
-    }
-}
-
 /// Combined toolbar pill - host dropdown left, Settings gear right, grouped
 /// via `ControlGroup`, which picks up the macOS 26 Liquid Glass toolbar
 /// material and renders one segmented pill with a hairline divider.
@@ -386,18 +333,23 @@ private struct HostAndSettingsPill: View {
 
     var body: some View {
         ControlGroup {
+            // macOS 27 hides a plain systemImage Label inside a menu item, so
+            // a hand-rolled checkmark no longer marks the selection. An
+            // inline Picker gets the native selection checkmark for free.
             Menu {
-                ForEach(model.hosts) { host in
-                    Button {
+                Picker("PC", selection: Binding(
+                    get: { model.selectedHost?.id },
+                    set: { id in
+                        guard let id, let host = model.hosts.first(where: { $0.id == id }) else { return }
                         model.selectHost(host)
-                    } label: {
-                        if host.id == model.selectedHost?.id {
-                            Label(host.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(host.displayName)
-                        }
+                    }
+                )) {
+                    ForEach(model.hosts) { host in
+                        Text(host.displayName).tag(Optional(host.id))
                     }
                 }
+                .pickerStyle(.inline)
+                .labelsHidden()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "display")
@@ -470,6 +422,11 @@ private struct HostHero: View {
                         )
                 }
                 .shadow(color: .black.opacity(0.22), radius: 22, x: 0, y: 10)
+
+            // Top-leading readiness chip: reachability, activity, and the
+            // re-pair affordance for a changed host certificate.
+            ReadinessChip()
+                .padding(14)
 
             // Centered content
             VStack(spacing: 12) {

@@ -1,15 +1,9 @@
 //
 //  LogStore.swift
 //
-//  In-app ring buffer for a Sunshine-style troubleshooting log.
-//
-//  Why not just read os_log? `OSLogStore(scope: .currentProcessIdentifier)` is
-//  not reliably readable on this platform - the Troubleshooting log viewer came
-//  up empty even though os_log was emitting.
-//  So the canonical troubleshooting record is THIS in-memory ring buffer, which
-//  the viewer reads directly. Every entry is ALSO mirrored to os_log (.public -
-//  callers pass already-redacted strings, same discipline as the rest of the
-//  app) so Console.app and `log stream` keep working for live debugging.
+//  The troubleshooting log: a ring buffer the viewer reads (OSLogStore can't read
+//  this process back reliably), mirrored to os_log and the session file. Private
+//  values reach the viewer and the file; the os_log copy shows "<private>".
 //
 
 import Foundation
@@ -71,7 +65,8 @@ final class LogStore: @unchecked Sendable {
 
     private init() { buffer.reserveCapacity(capacity) }
 
-    func log(_ level: LogLevel, _ message: String, category: String) {
+    func log(_ level: LogLevel, _ diag: DiagMessage, category: String) {
+        let message = diag.text
         lock.lock()
         let id = nextID
         nextID &+= 1
@@ -79,15 +74,16 @@ final class LogStore: @unchecked Sendable {
         if buffer.count > capacity { buffer.removeFirst(buffer.count - capacity) }
         lock.unlock()
 
-        // Mirror to os_log so Console / `log stream` still see everything live.
-        // Messages are already redacted by the caller, so .public is correct.
+        // Private values are already "<private>" here, so .public keeps the
+        // wording greppable in Console and `log show`.
         let logger = Logger(subsystem: "io.ugfugl.Glimmer", category: category)
+        let redacted = diag.systemLogText
         switch level {
-        case .debug: logger.debug("\(message, privacy: .public)")
-        case .info: logger.info("\(message, privacy: .public)")
-        case .notice: logger.notice("\(message, privacy: .public)")
-        case .warning: logger.warning("\(message, privacy: .public)")
-        case .error: logger.error("\(message, privacy: .public)")
+        case .debug: logger.debug("\(redacted, privacy: .public)")
+        case .info: logger.info("\(redacted, privacy: .public)")
+        case .notice: logger.notice("\(redacted, privacy: .public)")
+        case .warning: logger.warning("\(redacted, privacy: .public)")
+        case .error: logger.error("\(redacted, privacy: .public)")
         }
 
         // Third sink (gate-checked, default OFF): when telemetry/debug is enabled
@@ -115,53 +111,91 @@ final class LogStore: @unchecked Sendable {
     }
 }
 
-/// Terse façade for call sites. `Diag.info("stream connected", "Stream")`.
+/// Terse façade: `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
+/// Interpolations take Logger's `privacy:` argument and default to public; a
+/// private value reaches the viewer and the session file, never the system log.
 enum Diag {
-    static func debug(_ message: String, _ category: String) { LogStore.shared.log(.debug, message, category: category) }
-    static func info(_ message: String, _ category: String) { LogStore.shared.log(.info, message, category: category) }
-    static func notice(_ message: String, _ category: String) { LogStore.shared.log(.notice, message, category: category) }
-    static func warn(_ message: String, _ category: String) { LogStore.shared.log(.warning, message, category: category) }
-    static func error(_ message: String, _ category: String) { LogStore.shared.log(.error, message, category: category) }
+    static func debug(_ message: DiagMessage, _ category: String) { LogStore.shared.log(.debug, message, category: category) }
+    static func info(_ message: DiagMessage, _ category: String) { LogStore.shared.log(.info, message, category: category) }
+    static func notice(_ message: DiagMessage, _ category: String) { LogStore.shared.log(.notice, message, category: category) }
+    static func warn(_ message: DiagMessage, _ category: String) { LogStore.shared.log(.warning, message, category: category) }
+    static func error(_ message: DiagMessage, _ category: String) { LogStore.shared.log(.error, message, category: category) }
+}
+
+/// Logger's spelling, so a Diag line reads like the `log` line beside it.
+enum DiagPrivacy: Sendable {
+    case `public`, `private`
+}
+
+/// One Diag line in two renderings: `text` for the viewer, export and session
+/// file, `systemLogText` for os_log. The redacted copy is built only once a
+/// private value appears.
+struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
+    let text: String
+    private let redacted: String?
+
+    var systemLogText: String { redacted ?? text }
+
+    init(stringLiteral value: String) {
+        text = value
+        redacted = nil
+    }
+
+    init(stringInterpolation: StringInterpolation) {
+        text = stringInterpolation.text
+        redacted = stringInterpolation.redacted
+    }
+
+    private init(text: String, redacted: String?) {
+        self.text = text
+        self.redacted = redacted
+    }
+
+    /// Long lines wrap with `+`; each piece keeps its own private values.
+    static func + (lhs: DiagMessage, rhs: DiagMessage) -> DiagMessage {
+        let redacted = lhs.redacted == nil && rhs.redacted == nil ? nil : lhs.systemLogText + rhs.systemLogText
+        return DiagMessage(text: lhs.text + rhs.text, redacted: redacted)
+    }
+
+    struct StringInterpolation: StringInterpolationProtocol {
+        fileprivate var text = ""
+        fileprivate var redacted: String?
+
+        init(literalCapacity: Int, interpolationCount: Int) {
+            text.reserveCapacity(literalCapacity + interpolationCount * 8)
+        }
+
+        mutating func appendLiteral(_ literal: String) {
+            text += literal
+            redacted? += literal
+        }
+
+        mutating func appendInterpolation<Value>(_ value: Value, privacy: DiagPrivacy = .public) {
+            let rendered = String(describing: value)
+            switch privacy {
+            case .public:
+                redacted? += rendered
+            case .private:
+                if redacted == nil { redacted = text }
+                redacted? += "<private>"
+            }
+            text += rendered
+        }
+
+        /// A nested line keeps its own private values instead of rendering as a struct dump.
+        mutating func appendInterpolation(_ message: DiagMessage) {
+            if redacted == nil, message.redacted != nil { redacted = text }
+            redacted? += message.systemLogText
+            text += message.text
+        }
+    }
 }
 
 // MARK: - Per-session file sink (gate-checked, buffered, off the hot path)
 
-/// Buffered background file sink that mirrors the Diag/os_log stream to a
-/// per-session text file when telemetry/debug is enabled. This is the THIRD sink
-/// on `LogStore.log` (after the in-memory ring buffer and os_log): it persists the
-/// rich runtime log to `~/Library/Logs/Glimmer/glimmer-<ISO8601>.log` - the SAME
-/// directory the telemetry NDJSON writer uses, so a log shipper can mount one
-/// folder and tail both `*.log` and `*.ndjson`.
-///
-/// GATING + HOT-PATH SAFETY (load-bearing - same contract as the telemetry rig):
-///   * `SessionLogFileSink.shared` is nil unless the telemetry/debug gate is on
-///     and a session installed it. Every `LogStore.log` call pays a single
-///     nil-optional load when off - NO file, NO lock, NO allocation.
-///   * LEVEL THRESHOLD (log diet): the file mirrors INFO+ by default. Testing
-///     measured 30-105k lines/hr in this file - 76% of one wireless run's log
-///     was a single per-ACK DEBUG pattern - burying the real signal
-///     (underrun edges, env transitions, breadcrumbs) that postmortems grep
-///     for. The RING BUFFER and os_log still carry EVERY level (live debugging
-///     loses nothing); only the durable per-session file is dieted. DEBUG
-///     opt-in via the Diagnostics-pane defaults key `diagFileLogDebug`,
-///     resolved ONCE at install - the TelemetryGate read-at-session-start
-///     discipline, so a mid-session flip can't tear one file's level.
-///   * When ON, the producing thread only formats one line and pushes it into an
-///     in-memory buffer under a short `os_unfair_lock`. NEVER an I/O on the
-///     producing thread: a ~250ms background timer drains the buffer to disk in
-///     one write, and the sink never fsyncs. A slow disk can only grow the
-///     (bounded) buffer, never stall a logging hot path.
-///   * The buffer is bounded; on overflow the OLDEST pending lines are dropped
-///     (and the drop is noted once), so a wedged disk can never grow it unbounded.
-///   * Torn down with the session (`stop()` flushes + closes), so the file is
-///     complete and the gate returns to zero-cost.
-///
-/// SECRET-FREE by inheritance: callers already redact before calling Diag (the
-/// same `.public` discipline the os_log mirror relies on), so the file carries
-/// only what is already safe to print.
-///
-/// `@unchecked Sendable`: the pending buffer is `os_unfair_lock`-guarded; the file
-/// handle + flush timer are confined to `flushQueue`.
+/// While a telemetry session runs, mirrors Diag's full text (INFO+, DEBUG with
+/// `diagFileLogDebug`) to Logs/Glimmer. `@unchecked Sendable`: the lock guards
+/// `pending`; the file and timer live on `flushQueue`, so loggers never touch disk.
 final class SessionLogFileSink: @unchecked Sendable {
 
     /// Gate-checked singleton, non-nil only while a telemetry/debug session has it
@@ -217,9 +251,9 @@ final class SessionLogFileSink: @unchecked Sendable {
     private var pending: [String] = []
     private var droppedOverflow = false
 
-    /// Minimum level mirrored to the FILE (see the LEVEL THRESHOLD note in the
-    /// type doc). Immutable after init so the producing-thread check is a plain
-    /// load + compare - no lock, no defaults read on the logging path.
+    /// INFO+ by default: a per-ACK DEBUG line once made up most of a session file.
+    /// The ring buffer and os_log keep every level. Immutable, so the check is a
+    /// plain compare on the logging path.
     private let minimumLevel: LogLevel
 
     private let lineFormatter: DateFormatter = {
@@ -243,12 +277,11 @@ final class SessionLogFileSink: @unchecked Sendable {
     private func open() {
         flushQueue.async { [weak self] in
             guard let self else { return }
-            let dir = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+            let dir = TelemetryExporter.logsDirectory
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             } catch {
-                self.log.error("Diag file sink: could not create log dir: \(error.localizedDescription, privacy: .public)")
+                self.log.error("Diag file sink: could not create log dir: \(error.localizedDescription, privacy: .private)")
                 return
             }
             // ISO8601 with ':' is filename-legal on APFS; same stamp shape as the
@@ -263,7 +296,7 @@ final class SessionLogFileSink: @unchecked Sendable {
                 self.fileHandle = try FileHandle(forWritingTo: url)
                 self.log.notice("Diag file sink → \(url.path, privacy: .public)")
             } catch {
-                self.log.error("Diag file sink: could not open file: \(error.localizedDescription, privacy: .public)")
+                self.log.error("Diag file sink: could not open file: \(error.localizedDescription, privacy: .private)")
                 return
             }
             let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
@@ -326,7 +359,7 @@ final class SessionLogFileSink: @unchecked Sendable {
         do {
             try fileHandle.write(contentsOf: data)
         } catch {
-            log.error("Diag file sink write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Diag file sink write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

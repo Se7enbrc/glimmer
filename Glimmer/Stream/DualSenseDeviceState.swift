@@ -11,6 +11,7 @@ struct DualSenseDeviceState: Equatable, Sendable {
     var buttons = DualSenseExtraButtons()
     var battery: DualSenseBattery?
     var reportCount = 0
+    var reportRate = HIDReportRate()
     var faceButtons: Set<DualSenseFaceButton> = []
 
     mutating func apply(_ report: DualSenseDecodedReport) -> Set<DualSenseFaceButton> {

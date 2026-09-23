@@ -70,6 +70,12 @@ static inline int gl_recvmsg_x_batch(int fd, uint8_t * _Nonnull storage, int str
     return n;
 }
 
+// MARK: - Main-thread identity
+// libpthread exports this (CoreFoundation uses it) but the public SDK header
+// doesn't declare it. ResourceTelemetry uses it to label the main thread.
+#include <pthread.h>
+extern pthread_t _Nonnull pthread_main_thread_np(void);
+
 // MARK: - Audio-configuration bit helpers
 // The GameStream/Sunshine audio configuration is a packed int (channelMask <<
 // 16 | channelCount << 8 | 0xCA). These mirror the function-style macros the
@@ -194,6 +200,29 @@ static inline BOOL gl_objc_try(void (NS_NOESCAPE ^ _Nonnull block)(void)) {
         NSLog(@"gl_objc_try caught %@: %@", exception.name, exception.reason);
         return NO;
     }
+}
+
+// MARK: - CoreAudio property listener with a stable block identity
+// Swift bridges a closure to a NEW block on every call, so a Swift-side remove
+// never matches the added block (yet returns noErr) and the listener leaks.
+// Copy once here; the returned block is the token the remove must be given.
+#import <CoreAudio/CoreAudio.h>
+static inline id _Nullable gl_audio_listener_add(AudioObjectID object,
+                                                 const AudioObjectPropertyAddress * _Nonnull address,
+                                                 dispatch_queue_t _Nullable queue,
+                                                 AudioObjectPropertyListenerBlock _Nonnull block,
+                                                 OSStatus * _Nonnull status) {
+    AudioObjectPropertyListenerBlock held = [block copy];
+    *status = AudioObjectAddPropertyListenerBlock(object, address, queue, held);
+    return *status == noErr ? held : nil;
+}
+
+static inline OSStatus gl_audio_listener_remove(AudioObjectID object,
+                                                const AudioObjectPropertyAddress * _Nonnull address,
+                                                dispatch_queue_t _Nullable queue,
+                                                id _Nonnull token) {
+    return AudioObjectRemovePropertyListenerBlock(object, address, queue,
+                                                  (AudioObjectPropertyListenerBlock)token);
 }
 #endif
 

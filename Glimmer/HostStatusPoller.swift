@@ -1,11 +1,9 @@
 //
 //  HostStatusPoller.swift
 //
-//  Background periodic-polling Task for the host readiness chip. Pings the
-//  selected host's HTTP port for an RTT, then if reachable pulls /serverinfo
-//  to learn idle-vs-busy. Cancellation hooks live on the manager so lifecycle
-//  edges (host change, app activation, stream start/end) funnel through
-//  `restartHostStatusPolling()`. Originally inline in `AppModel.swift`.
+//  The readiness chip's background poll: a TCP probe of the selected PC's HTTP
+//  port for an RTT, then /serverinfo for idle or busy. Lifecycle edges (a PC
+//  change, activation, stream start and end) funnel through restartHostStatusPolling().
 //
 
 import AppKit
@@ -13,33 +11,9 @@ import Foundation
 
 extension AppModel {
 
-    /// Cancel any in-flight chip poller and spin up a fresh one for the
-    /// currently selected host. Single source of truth for the chip's
-    /// background work - `selectHost`, `bootstrap`, `appDidBecomeActive`,
-    /// and the stream-end cleanup all funnel through here.
-    ///
-    /// The poll loop fires:
-    ///   * Once immediately (so the chip transitions from "Ready" → "Ready ·
-    ///     12 ms" within ~one RTT of host selection, not 10s later)
-    ///   * Then every `hostStatusPollSeconds` while we're not streaming AND a
-    ///     host is still selected.
-    ///
-    /// It is NOT gated on the app being frontmost. Moonlight polls its host
-    /// grid continuously while on the launcher regardless of window focus, and
-    /// so do we: the chip is just as visible when Glimmer's window sits behind
-    /// another app, and the old `NSApp.isActive` gate left it stranded on
-    /// "Checking..." the moment the user clicked away (the resign-active handler
-    /// cancelled the loop, then the last sample aged past `HostLiveStatus.stale`
-    /// and the chip reverted). A TCP probe + one `/serverinfo` every 10s is
-    /// negligible chatter - the cost the gate saved was never worth a chip that
-    /// lies whenever Glimmer isn't frontmost. We still pause for the cases that
-    /// genuinely warrant it: an active stream (the engine owns RTT), no host
-    /// selected, and system sleep (a poll caught mid-exchange by the nap wedges
-    /// Sunshine's HTTPS thread - see AppModel+Lifecycle).
-    ///
-    /// We deliberately don't fan out across multiple hosts - only the
-    /// selected one is on screen. Background hosts get a stale chip; no
-    /// problem, the moment the user switches to them this method re-fires.
+    /// Restart the selected PC's chip poller: one probe now, then every 10 s while the
+    /// launcher window is open (frontmost or not, since the chip shows either way) and
+    /// every 20 s while it's closed. Only the selected PC is polled.
     func restartHostStatusPolling(afterStream: Bool = false) {
         hostStatusTask?.cancel()
         hostStatusTask = nil
@@ -55,8 +29,8 @@ extension AppModel {
         guard let host = selectedHost else { return }
 
         // Fresh poll loop → fresh unreachable streak. A miss accrued against
-        // the previous host (or before a stream) must not count toward the
-        // two-strikes `.asleep` threshold for this loop.
+        // the previous host (or before a stream) must not count toward
+        // `asleepProbeThreshold` for this loop.
         hostUnreachableStreak = 0
 
         let task = Task { [weak self] in
@@ -65,70 +39,49 @@ extension AppModel {
             // task's results land into `hostLiveStatus` only if its id still
             // matches `selectedHost` at the moment of publication.
             let pollHostID = host.id
-            // Re-armed right after a stream ended: wait out the host's
-            // `/cancel`-induced HTTP blip before the FIRST probe so we don't
-            // race it and publish a false `.asleep` on a host that was
-            // streaming moments ago. Sliced so cancellation (host switch /
-            // stream restart) stays responsive.
+            // Right after a stream, wait out the host's `/cancel` HTTP blip before
+            // the first probe so it can't publish a false Asleep. Sleep throws on cancel.
             if afterStream {
-                let settleMs = UInt64(Self.postStreamPollSettle * 1000)
-                let sliceMs: UInt64 = 250
-                let slices = Int(settleMs / sliceMs)
-                for _ in 0..<slices {
-                    if Task.isCancelled { return }
-                    try? await Task.sleep(nanoseconds: sliceMs * 1_000_000)
-                }
+                do { try await Task.sleep(for: .seconds(Self.postStreamPollSettle)) } catch { return }
             }
+            var appListFor: Int?
             while !Task.isCancelled {
-                await self?.pollHostStatusOnce(for: pollHostID)
-                // Sleep in small slices so cancellation is responsive - a
-                // single 10s sleep would block stream-start by up to that
-                // long before the cancel propagates.
-                let interval = Self.hostStatusPollSeconds
-                let sliceMs: UInt64 = 250
-                let slices = Int(interval * 1000) / Int(sliceMs)
-                for _ in 0..<slices {
-                    if Task.isCancelled { return }
-                    try? await Task.sleep(nanoseconds: sliceMs * 1_000_000)
-                }
+                appListFor = await self?.pollHostStatusOnce(for: pollHostID, appListFor: appListFor) ?? appListFor
+                let open = self?.mainWindowVisible == true
+                let interval = open ? Self.hostStatusPollSeconds : Self.idleHostStatusPollSeconds
+                do { try await Task.sleep(for: .seconds(interval), tolerance: .seconds(2)) } catch { return }
             }
         }
         hostStatusTask = task
     }
 
-    /// Publish the chip state for a TCP-unreachable probe, with hysteresis so a
-    /// transient miss can't flap the chip. A single timed-out 2 s probe is NOT
-    /// proof of anything - Wi-Fi blips, a momentarily busy host, or the
-    /// post-stream `/cancel` HTTP blip drop one probe on a perfectly awake box.
-    /// So a sub-threshold miss publishes NOTHING: the chip HOLDS its last-good
-    /// status ("Ready · 12 ms") instead of blanking to "Checking...", and the
-    /// next poll (~10 s) either refreshes it or accrues another strike. Only
-    /// once `asleepProbeThreshold` CONSECUTIVE probes have missed do we assert
-    /// `.asleep`. (If polling were to stop entirely, the chip's own
-    /// `HostLiveStatus.stale` age-out still falls back to "Checking..." - the
-    /// honest "we genuinely don't know anymore" path.)
+    /// Poll interval while the launcher is closed. Two held misses (interval, 2 s
+    /// tolerance and 2 s probe each) stay inside `HostLiveStatus.stale`, so the
+    /// last good status is still fresh and the third strike decides Asleep.
+    static let idleHostStatusPollSeconds: TimeInterval = 20
+
+    /// /applist is fetched on a poll loop's first answer (once per selection or
+    /// activation), then only for a running app the list lacks, once per app id,
+    /// so an app hidden on this Mac can't cause a fetch every poll.
+    nonisolated static func needsAppList(runningID: Int, known: Set<Int>, fetchedFor: Int?) -> Bool {
+        guard let fetchedFor else { return true }
+        return runningID != 0 && runningID != fetchedFor && !known.contains(runningID)
+    }
+
+    /// A missed probe, with hysteresis so a Wi-Fi blip or the post-stream `/cancel` blip
+    /// can't flap the chip: below `asleepProbeThreshold` misses in a row it holds a fresh
+    /// last good status and publishes nothing. With none to hold, one miss shows Asleep.
     func publishUnreachable(hostID: String, expectedHostID: String) async {
         let (streak, hasFreshLastGood): (Int, Bool) = await MainActor.run { [weak self] in
             guard let self else { return (0, false) }
             self.hostUnreachableStreak += 1
-            // Is there a FRESH last-good status this miss would be protecting?
-            // The 3-strike bar exists so a transient blip can't slander a host
-            // that was answering moments ago (the post-/cancel window). With
-            // nothing published yet (app launch / host switch: the chip is
-            // stuck on "Checking..."), that protection protects nothing - it
-            // just delays the honest Asleep (and the wake controls behind it)
-            // by ~30-40s.
-            let live = self.hostLiveStatus
-            let fresh = live != nil
-                && live?.hostID == hostID
-                && live?.state != .unknown
-                && Date().timeIntervalSince(live?.capturedAt ?? .distantPast) <= HostLiveStatus.stale
-            return (self.hostUnreachableStreak, fresh)
+            // The bar protects a fresh last good status from a blip. With none
+            // (launch, a PC switch) it would only delay the honest Asleep and the
+            // wake controls behind it.
+            return (self.hostUnreachableStreak, HostLiveStatus.isFresh(self.hostLiveStatus, for: hostID))
         }
-        // Steady state: hold last-good until confirmed unreachable - no flap.
-        // Cold start (no fresh last-good): ONE 2s miss publishes Asleep now;
-        // if the host was merely blipping, the next probe (≤10s) corrects to
-        // Ready - a far cheaper error than 40s of "Checking...".
+        // A cold start's false Asleep is corrected by the next answered poll,
+        // a far cheaper error than a minute of "Checking...".
         guard streak >= (hasFreshLastGood ? Self.asleepProbeThreshold : 1) else { return }
         await publishLiveStatus(HostLiveStatus(
             hostID: hostID,
@@ -139,13 +92,10 @@ extension AppModel {
         ), expectedHostID: expectedHostID)
     }
 
-    /// Single poll cycle: TCP-probe the host for an RTT, then if reachable
-    /// pull /serverinfo to learn idle-vs-busy. Publishes a `HostLiveStatus`
-    /// for the UI to consume - but only if `expectedHostID` still matches
-    /// the currently-selected host (the user might've switched PCs while
-    /// the network call was in flight; we don't want late results painting
-    /// the wrong machine's status onto the chip).
-    func pollHostStatusOnce(for expectedHostID: String) async {
+    /// One poll: TCP-probe for an RTT, then /serverinfo for idle or busy, published only
+    /// while `expectedHostID` is still selected so a late answer can't paint another PC.
+    /// Takes and returns the loop's `needsAppList` bookkeeping.
+    func pollHostStatusOnce(for expectedHostID: String, appListFor: Int?) async -> Int? {
         // Snapshot the host on MainActor so we can hand its address etc.
         // off to the background work without crossing the actor boundary
         // with a non-Sendable type.
@@ -155,7 +105,7 @@ extension AppModel {
             let info = self.nativeServerInfo(for: host)
             return (host.id, info.address, info)
         }
-        guard let snap = snapshot else { return }
+        guard let snap = snapshot else { return appListFor }
 
         // Step 1: TCP probe to host's HTTP port. This is the cheapest signal
         // we have for "is the box answering on the network" - if this fails
@@ -167,17 +117,26 @@ extension AppModel {
             timeoutMs: 2_000
         )
 
-        if Task.isCancelled { return }
+        if Task.isCancelled { return appListFor }
 
         switch probe {
         case .unreachable:
+            let wasAsleep = hostLiveStatus?.hostID == snap.id && hostLiveStatus?.state == .asleep
             await publishUnreachable(hostID: snap.id, expectedHostID: expectedHostID)
-            return
+            if !wasAsleep, hostLiveStatus?.hostID == snap.id, hostLiveStatus?.state == .asleep,
+               let host = selectedHost {
+                searchForMovedHost(host)
+            }
+            return appListFor
 
         case .reachable(let rttMs):
             // Host answered → clear the unreachable streak so a later transient
-            // miss starts counting from zero again.
-            await MainActor.run { [weak self] in self?.hostUnreachableStreak = 0 }
+            // miss starts counting from zero again, and any stale wake failure.
+            hostUnreachableStreak = 0
+            if wakeFailedHostID == snap.id {
+                wakeFailedHostID = nil
+                wakeFailureReason = nil
+            }
             // Step 2: now that we know the host is up, ask /serverinfo who
             // it is and whether it's busy. We do this on a fresh
             // NetworkClient per poll - the client is cheap to construct and
@@ -186,43 +145,16 @@ extension AppModel {
             do {
                 let info = try await client.fetchServerInfo()
                 await client.shutdown()
-                if Task.isCancelled { return }
-
-                let appNamesByID: [Int: String] = await MainActor.run { [weak self] in
-                    guard let self,
-                          let host = self.selectedHost,
-                          host.id == expectedHostID else { return [:] }
-                    // MAC backfill (the Luna power gate's Glimmer half): every
-                    // successful /serverinfo refreshes the stored MAC - the
-                    // only time it's learnable is while the host is online.
-                    self.updateHostMac(hostID: expectedHostID, mac: info.macAddress)
-                    return Dictionary(uniqueKeysWithValues: host.apps.map { ($0.id, $0.name) })
-                }
-
-                let state: HostLiveStatus.State
-                if info.currentGameID == 0 {
-                    state = .idle
-                } else if let name = appNamesByID[info.currentGameID] {
-                    state = .streamingApp(name: name)
-                } else {
-                    state = .streamingUnknownApp(id: info.currentGameID)
-                }
-                await publishLiveStatus(HostLiveStatus(
-                    hostID: snap.id,
-                    state: state,
-                    rttMs: rttMs,
-                    sunshineVersion: info.appVersion,
-                    capturedAt: Date()
-                ), expectedHostID: expectedHostID)
+                if Task.isCancelled { return appListFor }
+                return await publishAnswer(info, rttMs: rttMs, hostID: snap.id, appListFor: appListFor)
             } catch let err as StreamError {
                 await client.shutdown()
-                if Task.isCancelled { return }
+                if Task.isCancelled { return appListFor }
                 // TLS pin mismatch is its own UX: the chip renders certMismatch
                 // as an amber "Trust needed" tap-to-re-pair, not "Asleep" - the
                 // host is reachable, only the trust relationship broke.
                 let state: HostLiveStatus.State
-                if case .hostUnreachable(let detail) = err,
-                   detail.lowercased().contains("cert") || detail.lowercased().contains("mitm") {
+                if case .hostCertChanged = err {
                     state = .certMismatch
                 } else {
                     // /serverinfo failed for some other reason (timeout, 5xx)
@@ -240,7 +172,7 @@ extension AppModel {
                 ), expectedHostID: expectedHostID)
             } catch {
                 await client.shutdown()
-                if Task.isCancelled { return }
+                if Task.isCancelled { return appListFor }
                 // Same forgiving stance as above for non-StreamError throws
                 // (URL session timeouts, DNS races, etc.).
                 await publishLiveStatus(HostLiveStatus(
@@ -251,6 +183,41 @@ extension AppModel {
                     capturedAt: Date()
                 ), expectedHostID: expectedHostID)
             }
+            return appListFor
+        }
+    }
+
+    /// A /serverinfo answer: backfill the MAC (only learnable while the PC is on),
+    /// refresh the app list when `needsAppList` says so, then publish idle or the
+    /// running app by name.
+    private func publishAnswer(_ info: ServerInfo, rttMs: Int, hostID: String, appListFor: Int?) async -> Int? {
+        guard let host = selectedHost, host.id == hostID else { return appListFor }
+        updateHostMac(hostID: hostID, mac: info.macAddress)
+        var fetchedFor = appListFor
+        let running = info.currentGameID
+        if Self.needsAppList(runningID: running, known: Set(host.apps.map(\.id)), fetchedFor: appListFor) {
+            fetchedFor = running
+            await refreshAppList(for: host)
+            if Task.isCancelled { return fetchedFor }
+        }
+        let name = (selectedHost?.apps ?? host.apps).first { $0.id == running }?.name
+        let state: HostLiveStatus.State = running == 0 ? .idle
+            : name.map { .streamingApp(name: $0) } ?? .streamingUnknownApp(id: running)
+        await publishLiveStatus(HostLiveStatus(
+            hostID: hostID,
+            state: state,
+            rttMs: rttMs,
+            sunshineVersion: info.appVersion,
+            capturedAt: Date()
+        ), expectedHostID: hostID)
+        return fetchedFor
+    }
+
+    /// The first Asleep for a PC may really be a DHCP move: look for it by mDNS for
+    /// 10 s, once, outside the poll loop so a restart can't cut the search short.
+    private func searchForMovedHost(_ host: Host) {
+        Task {
+            if await healAddress(of: host, within: 10) { restartHostStatusPolling() }
         }
     }
 

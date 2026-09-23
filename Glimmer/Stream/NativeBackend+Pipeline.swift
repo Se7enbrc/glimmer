@@ -29,13 +29,13 @@ extension NativeBackend {
         // keeps DNS off the socket-setup paths, and fails a bad name in one
         // place with an error that says so.
         guard let host = UdpPinger.resolveHost(server.address) else {
-            Diag.error("native backend: could not resolve host \"\(server.address)\" "
+            Diag.error("native backend: could not resolve host \"\(server.address, privacy: .private)\" "
                 + "- check the name resolves (DNS/mDNS) from this Mac", Self.logCategory)
             throw EnetError.socketFailure(
                 "could not resolve host \"\(server.address)\"")
         }
         if case .name = NWEndpoint.Host(server.address) {
-            Diag.notice("native backend: resolved \"\(server.address)\" → \(host) "
+            Diag.notice("native backend: resolved \"\(server.address, privacy: .private)\" → \(host, privacy: .private) "
                 + "(one resolve for all channels)", Self.logCategory)
         }
 
@@ -57,14 +57,6 @@ extension NativeBackend {
             try await performControlStage(handshake: handshake, config: config,
                                           host: host, events: events)
 
-            // The audio PING already started mid-handshake; now (post-handshake)
-            // bring up the audio RECEIVE side: init the decoder + start the recv
-            // loop on the SAME unconnected socket. If the early ping path didn't run
-            // (no audio sink), startAudioReceive() still opens the ping so the
-            // combined A/V session stays alive (Sunshine withholds video RTP until
-            // it has seen the audio ping too).
-            startAudioReceive(handshake: handshake, config: config, server: server, host: host)
-
             // --- Connected. Bring up native video receive + keepalive loop. ---
             // Flip inputReady here (the InputStream.c `initialized` analogue): the
             // control stream is now up, so send* can seal + send input packets.
@@ -80,8 +72,12 @@ extension NativeBackend {
             Diag.notice("native backend: CONNECTED (RTSP + ENet control + START_A/B complete). "
                 + "Native input uplink ready. Starting native video receive.", Self.logCategory)
 
-            try await startVideoStage(handshake: handshake, config: config,
-                                      server: server, host: host, events: events)
+            try await startVideoStage(handshake: handshake, config: config, host: host, events: events)
+
+            // Audio receive after the video ping (moonlight's control, video,
+            // audio order): the host answers that ping with its first frame, so
+            // the 35-130 ms decoder and engine bring-up no longer delays it.
+            startAudioReceive(handshake: handshake, config: config, server: server, host: host)
         } catch {
             // Any failure after the audio ping may have started must not leak the
             // ping thread/socket (and recv loop, if it reached startAudioReceive).
@@ -112,7 +108,7 @@ extension NativeBackend {
     /// long-lived loops so `run()` can return "connected".
     func startVideoStage(
         handshake: RtspHandshakeResult, config: BackendStreamConfig,
-        server: BackendServerInfo, host: NWEndpoint.Host, events: NativeConnectionEvents
+        host: NWEndpoint.Host, events: NativeConnectionEvents
     ) async throws {
         events.stageStarting("video stream initialization")
 
@@ -160,20 +156,17 @@ extension NativeBackend {
         }
         sink.start()
 
-        let appVersionQuad = Self.versionQuad(server.appVersion)
-        let multiFecCapable = Self.appVersionAtLeast(appVersionQuad, 7, 1, 431)
-
         let receiver = VideoRtpReceiver(
             host: host,
             videoPort: handshake.videoPort,
             pingPayload: handshake.videoPingPayload,
-            packetSize: Int(config.packetSize),
+            packetSize: VideoDecryptor.packetSize(
+                Int(config.packetSize), encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled),
             bitrateKbps: Int(config.bitrate),
             negotiatedVideoFormat: videoFormat,
             encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled,
-            appVersionQuad: appVersionQuad,
+            aesKey: config.remoteInputAesKey,
             colorSpace: config.colorSpace,
-            multiFecCapable: multiFecCapable,
             sink: sink,
             requestIdr: { [weak enet] in enet?.requestIdrFrame() },
             invalidateReferenceFrames: { [weak enet] from, to in
@@ -187,21 +180,15 @@ extension NativeBackend {
         do {
             try await receiver.start()
         } catch {
-            Diag.error("native backend: video receiver start failed: \(error)", Self.logCategory)
+            Diag.error("native backend: video receiver start failed: \(error, privacy: .private)", Self.logCategory)
             events.stageFailed("video stream initialization", code: -1)
             throw StreamError.sessionFailed(-1)
         }
         events.stageComplete("video stream initialization")
 
-        // Kick off the persistent ENet control loop (keepalives) on a DEDICATED
-        // elevated-QoS Thread - NOT the Swift cooperative pool. The loop that must
-        // emit ACKs/keepalives to keep the host's ENet peer alive cannot be allowed
-        // to starve behind high-QoS main-thread controller input (the cooperative
-        // pool is capped at ~CPU-count threads and these Tasks ran at default QoS).
-        // This is moonlight's dedicated LossStats/ControlRecv pthread guarantee; the
-        // loop's tick is a blocking Thread.sleep (runControlLoopSync) so it never
-        // depends on pool availability. The Thread holds no strong ref to self and
-        // exits when the channel is interrupted/disconnected.
+        // The ENet control loop gets a DEDICATED userInteractive Thread, not the pool:
+        // its tick is a blocking semaphore wait (runControlLoopSync) that an IDR/RFI
+        // request ends early. No strong ref to self; exits on interrupt or disconnect.
         let controlThread = Thread { [weak enet] in
             enet?.runControlLoopSync()
         }
@@ -278,42 +265,26 @@ extension NativeBackend {
         }
     }
 
-    /// FAST-START (mid-handshake, at SETUP-audio): construct the RtpAudioReceiver
-    /// and start ONLY the burst-ping side (socket open + ping thread) so the host
-    /// has our ping - and our return UDP port - in hand by PLAY. This is the
-    /// ordering fix for the ~2min audio-cold-start: moonlight opens the audio
-    /// socket + starts the ping thread the instant SETUP-audio is parsed
-    /// (notifyAudioPortNegotiationComplete), because Sunshine won't aim audio at us
-    /// (and GFE 3.22 won't even reply to PLAY) until it has received a ping.
-    ///
-    /// Only audioPort + pingPayload are negotiated; opus/packetDuration use the
-    /// fixed defaults (they're never mutated by later handshake steps) and
-    /// audioEncryption is structurally false for our connect-only SDP
-    /// (computeEncryptionEnabled never enables SS_ENC_AUDIO). The recv side +
-    /// decoder init happen later in startAudioReceive() on the SAME receiver.
-    ///
-    /// Best-effort: a ping failure logs but does NOT abort the handshake (audio is
-    /// non-fatal). The receiver is stored so a later-stage failure tears it down
-    /// (run()'s catch → tearDownAudio).
+    /// FAST-START at SETUP-audio, like moonlight's notifyAudioPortNegotiationComplete: build the receiver and
+    /// start only its ping, so Sunshine has our ping and return port by PLAY. Best-effort (audio is non-fatal);
+    /// startAudioReceive() later brings up the SAME receiver's recv side, and run()'s catch tears it down.
     func startAudioPing(
-        audioPort: UInt16, pingPayload: [UInt8],
-        config: BackendStreamConfig, server: BackendServerInfo, host: NWEndpoint.Host
+        audioPort: UInt16, pingPayload: [UInt8], audioEncryption: Bool, opusConfig: OpusConfig,
+        config: BackendStreamConfig, host: NWEndpoint.Host
     ) {
         guard let sink = withState({ audioSink }) else {
             Diag.error("native backend: no audio sink injected; audio receive disabled",
                        Self.logCategory)
             return
         }
-        let appVersionQuad = Self.versionQuad(server.appVersion)
         let receiver = RtpAudioReceiver(
             host: host,
             audioPort: audioPort,
             pingPayload: pingPayload,
-            appVersionQuad: appVersionQuad,
             audioPacketDuration: 5,                 // SDP x-nv-aqos.packetDuration default
-            opusConfig: RtspHandshakeResult.defaultOpusConfig,
+            opusConfig: opusConfig,
             audioConfig: config.audioConfiguration,
-            audioEncryption: false,                 // plaintext on the connect-only SDP
+            audioEncryption: audioEncryption,
             aesKey: config.remoteInputAesKey,
             aesIvId: config.remoteInputAesIv,
             sink: sink)
@@ -321,7 +292,7 @@ extension NativeBackend {
         do {
             try receiver.startPing()
         } catch {
-            Diag.error("native backend: audio ping start failed: \(error)", Self.logCategory)
+            Diag.error("native backend: audio ping start failed: \(error, privacy: .private)", Self.logCategory)
             withState { audioReceiver = nil }
         }
     }
@@ -343,7 +314,7 @@ extension NativeBackend {
         do {
             try receiver.startReceive()
         } catch {
-            Diag.error("native backend: audio receive start failed: \(error)", Self.logCategory)
+            Diag.error("native backend: audio receive start failed: \(error, privacy: .private)", Self.logCategory)
             // Keep the ping alive (it keeps the A/V session up); only receive failed.
             // H7: surface the video-only state instead of swallowing it - a
             // queryable counter + a non-fatal event (the visual stream is fine).
@@ -353,15 +324,6 @@ extension NativeBackend {
         }
     }
 
-    /// APP_VERSION_AT_LEAST helper for the quad.
-    static func appVersionAtLeast(_ quad: [Int32], _ major: Int32, _ minor: Int32,
-                                  _ patch: Int32) -> Bool {
-        guard quad.count >= 3 else { return false }
-        if quad[0] != major { return quad[0] > major }
-        if quad[1] != minor { return quad[1] > minor }
-        return quad[2] >= patch
-    }
-
     /// Name resolution + the RTSP/SDP handshake stages.
     func performRtspStage(
         server: BackendServerInfo, config: BackendStreamConfig,
@@ -369,7 +331,6 @@ extension NativeBackend {
     ) async throws -> RtspHandshakeResult {
         // --- Stage: name resolution ---
         events.stageStarting("name resolution")
-        let appVersionQuad = Self.versionQuad(server.appVersion)
         let rtspPort = Self.rtspPort(from: server.rtspSessionUrl)
         // Network.framework resolves the host lazily on connect; we surface the
         // address family from the URL/raw address for the SDP o= line.
@@ -378,8 +339,8 @@ extension NativeBackend {
         let rtspTargetUrl = server.rtspSessionUrl.isEmpty
             ? "rtsp://\(urlAddr):\(rtspPort)"
             : server.rtspSessionUrl
-        Diag.info("name resolution: host=\(server.address) rtspPort=\(rtspPort) "
-            + "appVer=\(server.appVersion) quad=\(appVersionQuad)", Self.logCategory)
+        Diag.info("name resolution: host=\(server.address, privacy: .private) rtspPort=\(rtspPort) "
+            + "appVer=\(server.appVersion, privacy: .private)", Self.logCategory)
         events.stageComplete("name resolution")
 
         if checkInterrupted() {
@@ -396,16 +357,15 @@ extension NativeBackend {
             urlAddr: urlAddr,
             urlSafeAddr: urlSafeAddr,
             addrFamilyToken: familyToken,
-            rtspClientVersion: Self.rtspClientVersion(quad: appVersionQuad),
             config: config,
-            serverCodecModeRaw: server.serverCodecModeRaw,
-            appVersionQuad: appVersionQuad)
+            serverCodecModeRaw: server.serverCodecModeRaw)
         // Fast-start audio: the instant the handshake parses SETUP-audio (BEFORE
         // PLAY), open the audio socket + start the burst ping so the host has our
         // ping by PLAY. moonlight's notifyAudioPortNegotiationComplete() ordering.
-        rtsp.onAudioPortNegotiated = { [weak self] audioPort, pingPayload in
+        rtsp.onAudioPortNegotiated = { [weak self] audioPort, pingPayload, audioEncryption, opus in
             self?.startAudioPing(audioPort: audioPort, pingPayload: pingPayload,
-                                 config: config, server: server, host: host)
+                                 audioEncryption: audioEncryption, opusConfig: opus,
+                                 config: config, host: host)
         }
         withState { rtspClient = rtsp }
 
@@ -413,8 +373,8 @@ extension NativeBackend {
         do {
             handshake = try await rtsp.performHandshake()
         } catch {
-            Diag.error("native backend: RTSP handshake failed: \(error)", Self.logCategory)
-            events.stageFailed("RTSP handshake", code: rtspCode(error))
+            Diag.error("native backend: RTSP handshake failed: \(error, privacy: .private)", Self.logCategory)
+            events.stageFailed("RTSP handshake", code: Self.rtspCode(error))
             throw error
         }
         events.stageComplete("RTSP handshake")
@@ -433,8 +393,7 @@ extension NativeBackend {
     ) async throws {
         // Control-V2 must be negotiated for the encrypted START packets; if the
         // host didn't enable it, fail cleanly rather than send plaintext garbage.
-        let ssEncControlV2: UInt32 = 0x01
-        guard handshake.encryptionFeaturesEnabled & ssEncControlV2 != 0 else {
+        guard handshake.encryptionFeaturesEnabled & RtspClient.ssEncControlV2 != 0 else {
             Diag.error("native backend: control-V2 not negotiated "
                 + "(encEnabled=\(handshake.encryptionFeaturesEnabled)); "
                 + "native control stream requires it", Self.logCategory)
@@ -446,7 +405,7 @@ extension NativeBackend {
         do {
             crypto = try ControlCrypto(rikey: config.remoteInputAesKey)
         } catch {
-            Diag.error("native backend: control crypto init failed: \(error)", Self.logCategory)
+            Diag.error("native backend: control crypto init failed: \(error, privacy: .private)", Self.logCategory)
             events.stageFailed("control stream initialization", code: -1)
             throw StreamError.crypto("\(error)")
         }
@@ -464,8 +423,12 @@ extension NativeBackend {
                 stageDone: { name in events.stageComplete(name) },
                 stageFailed: { name, code in events.stageFailed(name, code: code) })
         } catch {
-            Diag.error("native backend: control stream failed: \(error)", Self.logCategory)
-            // establishAndStart already fired the specific stageFailed.
+            Diag.error("native backend: control stream failed: \(error, privacy: .private)", Self.logCategory)
+            // establishAndStart already fired the specific stageFailed. No
+            // VERIFY_CONNECT means the control port's UDP never got through.
+            if case EnetError.connectTimeout = error {
+                throw StreamError.streamPortsBlocked(proto: "UDP", port: handshake.controlPort)
+            }
             throw error
         }
     }

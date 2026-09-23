@@ -1,11 +1,9 @@
 //
 //  VideoDepacketizer.swift
 //
-//  The Swift-native depacketizer: turns the in-order, FEC-reconstructed RTP
-//  video packets that RtpVideoQueue produces into complete access units
-//  (DecodeUnit value types) and hands them to the injected VideoSink. Ports
-//  VideoDepacketizer.c (processRtpPayload + reassembleFrame), scoped to the AV1
-//  path our live host negotiates (AV1, encEnabled=0).
+//  The Swift-native depacketizer: turns RtpVideoQueue's in-order, FEC-reconstructed RTP packets into
+//  complete access units (DecodeUnit) for the injected VideoSink. Ports VideoDepacketizer.c
+//  (processRtpPayload + reassembleFrame), scoped to the plaintext AV1 path our live host negotiates.
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
@@ -20,8 +18,8 @@
 //   - On the LAST packet of a frame, the payload MUST be truncated to
 //     (lastPacketPayloadLength - frameHeaderSize) - AV1 is intolerant of the
 //     FEC trailing-zero padding that H.264/HEVC Annex-B tolerates (c:1030-1041).
-//   - Frame-header length is version + byte0 dependent (c:914-965). For our
-//     target (>= 7.1.450): data[0]==0x01 ⇒ 8 bytes, data[0]==0x81 ⇒ 44 bytes.
+//   - Frame-header length follows data[0] at Sunshine's version, 7.1.431 (c:914-965):
+//     0x01 ⇒ 8 bytes, anything else ⇒ 24.
 //
 //  H.264/HEVC (Annex-B) SPECIFICS (c:974-1025 + the slow-path NAL routing):
 //   - The accumulated AU is an Annex-B elementary stream. FEC trailing-zero
@@ -74,7 +72,6 @@ final class VideoDepacketizer {
 
     private weak var delegate: VideoDepacketizerDelegate?
     private let negotiatedVideoFormat: Int32
-    let appVersionQuad: [Int32]
     private let colorSpace: Int32
 
     // The 16-byte NV header is stripped by RtpVideoQueue before handing us the
@@ -128,11 +125,9 @@ final class VideoDepacketizer {
     private var loggedFirstFrame = false
     private var loggedFirstIdr = false
 
-    init(delegate: VideoDepacketizerDelegate, negotiatedVideoFormat: Int32,
-         appVersionQuad: [Int32], colorSpace: Int32) {
+    init(delegate: VideoDepacketizerDelegate, negotiatedVideoFormat: Int32, colorSpace: Int32) {
         self.delegate = delegate
         self.negotiatedVideoFormat = negotiatedVideoFormat
-        self.appVersionQuad = appVersionQuad
         self.colorSpace = colorSpace
     }
 
@@ -278,7 +273,8 @@ final class VideoDepacketizer {
     private func beginFrame(pkt: CompletedPacket, frameIndex: UInt32) {
         // Make sure this is the next consecutive frame (c:805-826).
         if Self.isBefore32(nextFrameNumber, frameIndex) {
-            Diag.warn("NativeVideo network dropped frames \(nextFrameNumber)..\(frameIndex - 1)", Self.cat)
+            // Wrapping: a host-driven index can cross 0 while nextFrameNumber is high.
+            Diag.warn("NativeVideo network dropped frames \(nextFrameNumber)..\(frameIndex &- 1)", Self.cat)
             nextFrameNumber = frameIndex
             // C:821 - wait for the next complete frame before re-requesting
             // recovery (network-recovery approximation).
@@ -315,6 +311,7 @@ final class VideoDepacketizer {
         // THROUGH this gate and reaches reassembleFrame. Anything else while
         // we're still waiting is dropped (and an IDR/RFI re-requested).
         if waitingForIdrFrame || waitingForRefInvalFrame {
+            TelemetryCounters.shared.recoveryWaitDropTotal.increment()
             if waitingForIdrFrame {
                 // c:1080-1088 - only re-request after the first clean frame
                 // post-loss, to avoid IDR-spamming an unstable network.

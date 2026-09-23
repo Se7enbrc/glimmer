@@ -1,39 +1,17 @@
 //
 //  StreamCrypto.swift
 //
-//  AES-128-GCM sealing/unsealing for the Swift-native streaming engine. Source:
-//  ControlStream.c:548-660 (encrypt/decrypt) + RtspConnection.c:93-244 (rtspenc
-//  framing).
+//  AES-128-GCM for the native engine, keyed by the launch's rikey: the control-V2 envelope
+//  (ControlStream.c) and video the PC requires encrypted (VideoStream.c). Encrypted RTSP, which
+//  /launch asks for with corever=1, is sealed in RtspClient.swift with the same cipher.
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  Two distinct framings live here:
+//  CONTROL-V2 wire: [u16 0x0001 LE][u16 length LE][u32 seq LE][16-byte tag][ciphertext of the
+//  inner V2 header + payload]. IV: seq LE in [0..3], then the originator ('C' or 'H') and 'C'.
 //
-//   1. CONTROL-V2 (Gen7 encrypted ENet control stream). Wire layout:
-//        [u16 encryptedHeaderType = 0x0001 LE]
-//        [u16 length              LE]   // = sizeof(seq) + 16(tag) + V2hdr + payload
-//        [u32 seq                 LE]
-//        [16-byte AES-GCM tag]          // tag BEFORE ciphertext (non-default!)
-//        [ciphertext]                   // of (V2 inner header + payload)
-//      The plaintext is the inner V2 header (u16 type LE + u16 payloadLength LE)
-//      followed by the payload. IV is 12 bytes: seq as LE u32 in iv[0..3], then
-//      iv[10]='C', iv[11]='C' for client->host (encrypt); iv[10]='H' on decrypt
-//      (host->client). No AAD. Key = the 16-byte rikey (remoteInputAesKey).
-//
-//   2. ENCRYPTED-RTSP (rtspenc://). 24-byte header then ciphertext:
-//        [u32 typeAndLength BE = 0x80000000 | plaintextLen]
-//        [u32 sequenceNumber BE]
-//        [16-byte tag]
-//        [ciphertext]
-//      IV is 12 bytes LE: iv[0..3]=seq (LE), iv[10]='C', iv[11]='R' (client->
-//      host); 'H','R' host->client. For THIS increment the RTSP path detects
-//      rtspenc:// and fails the stage cleanly rather than risk a GCM nonce bug
-//      (Sunshine-over-TCP uses plaintext rtsp:// in the common case).
-//
-//  CryptoKit's `SealedBox.combined` emits tag AFTER ciphertext; both wire
-//  formats above put the tag BEFORE the ciphertext. We therefore ALWAYS
-//  assemble/parse the bytes manually using `.ciphertext` and `.tag` separately
-//  and never touch `.combined`.
+//  The control tag sits BEFORE the ciphertext, the reverse of CryptoKit's `.combined`, so those
+//  bytes are always assembled from `.ciphertext` and `.tag` and never from `.combined`.
 
 import Foundation
 import CryptoKit
@@ -160,5 +138,65 @@ struct ControlCrypto {
         } catch {
             throw StreamCryptoError.authFailed
         }
+    }
+}
+
+/// Opens Sunshine's encrypted video (VideoStream.c): ENC_VIDEO_HEADER, then the whole RTP packet
+/// sealed with AES-128-GCM. One OpenSSL context per session, reused on the receive thread, so a
+/// packet costs no allocation beyond the plaintext array the RTP queue keeps anyway.
+final class VideoDecryptor {
+    /// sizeof(ENC_VIDEO_HEADER): iv[12], frameNumber (u32 LE), tag[16].
+    static let headerSize = 32
+    private let ctx: OpaquePointer
+    private var loggedFailure = false
+
+    init?(key: [UInt8]) {
+        guard key.count == 16, let ctx = EVP_CIPHER_CTX_new() else { return nil }
+        self.ctx = ctx
+        guard EVP_DecryptInit_ex(ctx, EVP_aes_128_gcm(), nil, key, nil) == 1 else { return nil }
+    }
+
+    deinit { EVP_CIPHER_CTX_free(ctx) }
+
+    /// The x-nv-video[0].packetSize to advertise: encrypted video fits ENC_VIDEO_HEADER inside the
+    /// configured size, as SdpGenerator.c does, so the datagram on the wire stays the same length.
+    static func packetSize(_ configured: Int, encryptionFeaturesEnabled: UInt32) -> Int {
+        encryptionFeaturesEnabled & RtspClient.ssEncVideo != 0 ? configured - headerSize : configured
+    }
+
+    /// The RTP packet inside `datagram`, or nil for a runt, a shard of a frame the queue has already
+    /// passed (skipped before decrypting, as upstream does), or a packet that fails authentication.
+    func open(_ datagram: UnsafeRawBufferPointer, currentFrame: UInt32) -> [UInt8]? {
+        let length = datagram.count - Self.headerSize
+        guard length >= RtpVideoQueue.FIXED_RTP_HEADER_SIZE,
+              let header = datagram.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        let frameNumber = UInt32(littleEndian: datagram.loadUnaligned(fromByteOffset: 12, as: UInt32.self))
+        if frameNumber != 0 && frameNumber < currentFrame { return nil }
+        var opened = false
+        let packet = [UInt8](unsafeUninitializedCapacity: length) { out, count in
+            opened = decrypt(header, length: length, into: out)
+            count = opened ? length : 0
+        }
+        guard opened else {
+            if !loggedFailure {
+                loggedFailure = true
+                Diag.warn("NativeVideo dropping video packets that fail decryption, first sighting "
+                    + "(frame \(frameNumber))", RtpVideoQueue.cat)
+            }
+            return nil
+        }
+        return packet
+    }
+
+    /// PltDecryptMessage's OpenSSL path: new IV on the reused context, then the tag checked at final.
+    private func decrypt(_ header: UnsafePointer<UInt8>, length: Int,
+                         into out: UnsafeMutableBufferPointer<UInt8>) -> Bool {
+        guard let plain = out.baseAddress else { return false }
+        var moved: Int32 = 0
+        var finalMoved: Int32 = 0
+        return EVP_DecryptInit_ex(ctx, nil, nil, nil, header) == 1
+            && EVP_DecryptUpdate(ctx, plain, &moved, header + Self.headerSize, Int32(length)) == 1
+            && EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, UnsafeMutableRawPointer(mutating: header + 16)) == 1
+            && EVP_DecryptFinal_ex(ctx, plain, &finalMoved) == 1
     }
 }

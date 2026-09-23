@@ -18,7 +18,6 @@
 
 import Foundation
 import AVFoundation
-import CoreAudio
 import os
 public final class AudioDecoder: @unchecked Sendable {
     // The opus + AVAudioEngine CORE state. Non-private (default internal): the
@@ -36,6 +35,9 @@ public final class AudioDecoder: @unchecked Sendable {
     /// is `@unchecked Sendable` on the strength of this lock.
     let stateLock = NSLock()
     var isShutdown = false
+    /// True while the PC plays this stream's sound: the Mac's main mixer sits at 0
+    /// and the engine keeps running. Guarded by `stateLock`; see `setOutputMuted`.
+    var outputMuted = false
 
     var decoder: OpaquePointer?                    // OpusMSDecoder*
     let engine = AVAudioEngine()
@@ -151,12 +153,21 @@ public final class AudioDecoder: @unchecked Sendable {
     static let resamplerIntegralHoldFactor = 0.97
     /// True once the loop has run at least one ENGAGED tick this session. The
     /// disengage hold-bleed applies only after this: a pre-roll must not bleed
-    /// a persisted per-host skew seed before the loop ever engages with it.
+    /// a persisted per-device skew seed before the loop ever engages with it.
     var resamplerEverEngaged = false
-    /// Skew-save throttle state (audioMeterLock): the last opportunistic
-    /// per-host persist, so a stable integral writes at most ~1/min.
+    /// Skew-save window state (audioMeterLock): the last window close and the
+    /// last value written, so the memory writes at most ~1/min.
     var lastResamplerSkewSaveNanos: UInt64 = 0
     var lastSavedResamplerSkewPpm: Double = .nan
+    /// Skew memory key ("host|device UID", "" = don't persist) and the save
+    /// window's mean accumulator over quiet ticks. Guarded by `audioMeterLock`.
+    var resamplerSkewMemoryKey = ""
+    var resamplerQuietIntegralSumPpm: Double = 0
+    var resamplerQuietTicks = 0
+    /// Last cushion target the PI loop steered to and when it moved: a setpoint
+    /// move holds integration (it isn't skew). Guarded by `audioMeterLock`.
+    var resamplerSetpointMs: Double = 0
+    var resamplerSetpointMovedNanos: UInt64 = 0
     /// SHALLOW-RELEASE gate: the |integral ppm| ceiling under which the resampler is
     /// deemed to be CARRYING the skew (not railing), so the wired cushion may converge.
     /// Real host skews seen ~450ppm; above ~500 the loop is at/near its rail and the
@@ -210,8 +221,9 @@ public final class AudioDecoder: @unchecked Sendable {
     // within the non-critical audio budget and under the over-run ceiling (cap+40ms),
     // so audio cannot drift seconds behind. The cushion
     // ADAPTS like the video pacer's jitter buffer: it starts at the base target and
-    // grows one step per measured under-run (a full drain), so a link whose delivery
-    // gaps outpace the base cushion deepens itself instead of glitching repeatedly.
+    // grows one step per measured under-run (a full drain; at most one per 10s, none
+    // after a gap longer than the cap), so a link whose delivery gaps outpace the
+    // base cushion deepens itself instead of glitching repeatedly.
     // It only grows on real evidence (an under-run), never blanket-deep - and it
     // DECAYS one step per sustained under-run-free window, so depth is a temporary,
     // evidence-keyed state that recovers toward the base, never a permanent pin.
@@ -271,8 +283,8 @@ public final class AudioDecoder: @unchecked Sendable {
     // memory in AudioDecoder+Resampler.swift.)
     /// Current adaptive cushion target (ms). Starts at the per-host SEEDED value
     /// (last session's learning; base when none) and grows by `playoutCushionStepMs`
-    /// (capped at `effectiveCushionMaxMs`) on each under-run. Exported as the
-    /// `audio_playout_target_ms` gauge (rides the published `AudioState`): fill vs
+    /// (capped at `effectiveCushionMaxMs`) on under-runs that aren't dead air.
+    /// Exported as the `audio_playout_target_ms` gauge (rides the published `AudioState`): fill vs
     /// target is the cushion judge - base 30 / cap 150 wired or 300 tunnel /
     /// ceiling cap+40 - legible only against the target it steers toward.
     var playoutTargetMs: Double = AudioDecoder.playoutCushionBaseMs
@@ -332,6 +344,12 @@ public final class AudioDecoder: @unchecked Sendable {
     /// 10ms step back down requires its own full quiet window. Guarded by
     /// `audioMeterLock`.
     var quietSinceNanos: UInt64 = 0
+    /// `DispatchTime` ns of the last under-run grow (rate limit). Guarded by
+    /// `audioMeterLock`.
+    var lastCushionGrowNanos: UInt64 = 0
+    /// The receiver's inter-arrival gap that ended with its newest datagram - the
+    /// dead-air test at an under-run edge (`noteArrivalGap`).
+    let lastArrivalGapNanos = AtomicUInt64()
 
     // MARK: - P1 AUDIO playout-stall watchdog (the 2026-08-12 overnight wedge)
     //
@@ -409,12 +427,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `audioMeterLock`.
     var lastUnderrunNoticeNanos: UInt64 = 0
     var underrunNoticesSuppressed: UInt64 = 0
-    /// Default-output-device listener block (held so `shutdown()` can remove it -
-    /// the HAL requires the same address/queue/block triple) and the utility
-    /// queue it fires on. Lifecycle-guarded by `stateLock` (installed at init,
-    /// removed at shutdown); the block body touches only `audioMeterLock` state
-    /// and Diag, so it can never contend the decode/teardown path.
-    var routeListenerBlock: AudioObjectPropertyListenerBlock?
+    /// Default-output-device listener token (the exact block the HAL holds, which
+    /// `shutdown()` must hand back) and its utility queue. Token guarded by
+    /// `stateLock`; the block touches only `audioMeterLock` state and Diag.
+    var routeListenerToken: Any?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
     /// Bounded retry counter for an engine restart that threw because the new
     /// output device wasn't ready that instant (route handoff). stateLock-guarded.
@@ -461,4 +477,9 @@ public final class AudioDecoder: @unchecked Sendable {
     var pendingFecGap = false
 
     public init() {}
+
+    // Lifecycle canary: every session's decoder should log this after it ends.
+    deinit {
+        Diag.notice("audio decoder \(logID) released", "Stream.Audio")
+    }
 }

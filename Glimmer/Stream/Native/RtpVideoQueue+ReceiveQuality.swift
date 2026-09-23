@@ -10,15 +10,9 @@
 //  (extensions can't hold stored state) and are flushed into the always-live
 //  TelemetryCounters in maybeLogMetrics; see RtpVideoQueue.swift for those fields.
 //
-//  HOT-PATH SAFETY: these run on the single receive thread per non-replay
-//  datagram, off the receiveTimeUs the jitter path already reads - pure integer
-//  compares + a histogram bump, no lock, no alloc, no extra clock read. The one
-//  exception is deliberate: the 20/50/100ms GAP-EVENT counters in observeGap pay
-//  a locked add, but only on a >20ms inter-arrival gap - i.e. only after the
-//  path just sat idle for 20ms+, where a sub-µs add is noise. The always-live
-//  counters they feed are only ever READ by the exporter when telemetry is
-//  opt-in ON (default OFF), so a normal stream pays only the integer work and
-//  nothing reads the result.
+//  HOT-PATH SAFETY: per datagram on the receive thread, off the jitter path's receiveTimeUs: integer
+//  compares and a histogram bump, no lock, alloc or clock read. Only a >20ms gap pays a locked add
+//  (>100ms also hands a running exporter a `video_gap` row); nothing reads them with telemetry off.
 //
 
 import Foundation
@@ -38,7 +32,12 @@ extension RtpVideoQueue {
     func accumulateReceiveQuality(seq: UInt16, receiveTimeUs: UInt64) {
         // Inter-packet gap (µs) - the microburst detector. First packet seeds it.
         if haveLastArrival, receiveTimeUs >= lastArrivalUs {
-            observeGap(Double(receiveTimeUs &- lastArrivalUs))
+            let gapUs = receiveTimeUs &- lastArrivalUs
+            observeGap(Double(gapUs))
+            if haveSeqBaseline, gapUs > Self.gapEventThresholdUs {
+                TelemetryExporter.recordLiveEvent(Self.gapEventFields(
+                    gapUs: gapUs, atUs: receiveTimeUs, lastSeq: seqHighestSeen, nextSeq: seq))
+            }
         }
         lastArrivalUs = receiveTimeUs
         haveLastArrival = true
@@ -105,6 +104,22 @@ extension RtpVideoQueue {
                 rememberSeq(seq)
             }
         }
+    }
+
+    /// A video arrival gap past this (µs) gets its own `video_gap` event, so a host
+    /// stall, a link blackout and wire loss each have a row to join by t_ns.
+    static let gapEventThresholdUs: UInt64 = 100_000
+
+    /// The `video_gap` row: the gap, the arrival that ended it (monotonic ns) and
+    /// the RTP sequence numbers either side.
+    static func gapEventFields(gapUs: UInt64, atUs: UInt64, lastSeq: UInt16, nextSeq: UInt16) -> [String] {
+        [
+            "\"event\":\"video_gap\"",
+            "\"t_ns\":\(atUs &* 1_000)",
+            "\"gap_ms\":" + TelemetryRenderer.jsonNumber(Double(gapUs) / 1_000),
+            "\"last_seq\":\(lastSeq)",
+            "\"next_seq\":\(nextSeq)"
+        ]
     }
 
     /// Apply any parked cross-window reorder credit against this window's pre-FEC

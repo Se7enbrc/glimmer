@@ -8,11 +8,9 @@
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  TARGET PROFILE: Sunshine hosts reporting appVersion 7.1.450.0 →
-//  AppVersionQuad = [7,1,450,0]. q[2]=450 >= 404 ⇒ useEnet=FALSE ⇒ RTSP runs
-//  over plain TCP; APP_VERSION_AT_LEAST(7,1,431) is TRUE (single PLAY "/",
-//  control stream id "streamid=control/13/0"). We only build the TCP + 7.1.431+
-//  branches.
+//  TARGET PROFILE: Sunshine reports app version 7.1.431, so only that branch of the C is built: RTSP
+//  over plain TCP, one PLAY "/", control stream "streamid=control/13/0" and RTSP client version 14.
+//  GameStream PCs are refused before a stream starts.
 //
 //  WIRE FORMAT (exact bytes - off-by-one here = silent host rejection):
 //   Request line:  "<COMMAND> <target> RTSP/1.0\r\n"
@@ -153,20 +151,65 @@ enum SdpScan {
     }
 }
 
+// MARK: - Audio layout (DESCRIBE surround-params)
+
+extension SdpScan {
+    /// parseOpusConfigurations (RtspConnection.c): the Opus layout to decode and whether to ask for the high tier.
+    /// Stereo is the same in both tiers; surround takes high only when the PC lists a layout for it.
+    static func audioLayout(_ sdp: String, channelCount: Int) -> (opus: OpusConfig, highQuality: Bool) {
+        guard let fixed = fixedSurroundLayout(channelCount) else {
+            return (RtspHandshakeResult.defaultOpusConfig, true)
+        }
+        let tiers = surroundParams(sdp, channelCount: channelCount)
+        if tiers.count == 2 { return (tiers[1], true) }
+        guard var normal = tiers.first else { return (fixed, false) }
+        // GFE listed the normal tier's LFE last (FL FR C RL RR SL SR LFE) and Sunshine pre-rotates its line to
+        // match (rtsp.cpp), so this undo stays even with GameStream refused: move LFE back behind C.
+        let map = normal.mapping
+        normal.mapping = Array(map[..<3]) + [map[map.count - 1]] + Array(map[3..<(map.count - 1)])
+        return (normal, false)
+    }
+
+    /// Each "a=fmtp:97 surround-params=<channels><streams><coupled><mapping>" line for this channel count,
+    /// normal tier first. The scan stops at a malformed one, as the C parser does.
+    private static func surroundParams(_ sdp: String, channelCount: Int) -> [OpusConfig] {
+        let prefix = "a=fmtp:97 surround-params=\(channelCount)"
+        var tiers: [OpusConfig] = []
+        var rest = sdp[...]
+        while tiers.count < 2, let hit = rest.range(of: prefix) {
+            rest = rest[hit.upperBound...]
+            let digits = rest.utf8.prefix(channelCount + 2).map { Int($0) - Int(UInt8(ascii: "0")) }
+            guard digits.count == channelCount + 2, digits.allSatisfy({ (0...9).contains($0) }) else { break }
+            tiers.append(opusLayout(channelCount, streams: digits[0], coupled: digits[1],
+                                    mapping: digits.dropFirst(2).map { UInt8($0) }))
+        }
+        return tiers
+    }
+
+    /// The fixed surround layouts, kept for a PC whose DESCRIBE lists none. Nil for stereo.
+    private static func fixedSurroundLayout(_ channelCount: Int) -> OpusConfig? {
+        switch channelCount {
+        case 6: return opusLayout(6, streams: 4, coupled: 2, mapping: [0, 4, 1, 5, 2, 3])
+        case 8: return opusLayout(8, streams: 5, coupled: 3, mapping: [0, 6, 1, 7, 2, 3, 4, 5])
+        default: return nil
+        }
+    }
+
+    private static func opusLayout(_ channelCount: Int, streams: Int, coupled: Int, mapping: [UInt8]) -> OpusConfig {
+        var opus = RtspHandshakeResult.defaultOpusConfig
+        opus.channelCount = Int32(channelCount)
+        opus.streams = Int32(streams)
+        opus.coupledStreams = Int32(coupled)
+        opus.mapping = mapping
+        return opus
+    }
+}
+
 // MARK: - SDP builder (ANNOUNCE payload)
 
-/// Builds the SDP blob for the control ANNOUNCE, faithful to
-/// getSdpPayloadForStreamConfig (header + ordered attributes + tail).
-///
-/// Reference-frame invalidation (RFI) is advertised when BOTH the host
-/// supports it (DESCRIBE SDP `x-nv-video[0].refPicInvalidation`) AND our
-/// decoder supports it for the negotiated codec (the sink's CAPABILITY_*
-/// bits) - see `referenceFrameInvalidationActive`. That gate drives
-/// maxNumReferenceFrames (0 = host may keep older good refs for an RFI
-/// recovery; 1 = single ref ⇒ every loss recovery is a full IDR). YUV444 and
-/// the codec block follow the negotiated format; video/audio encryption stays
-/// disabled (encryptionFlags=0) - only control-V2 may auto-enable, which is
-/// the CONTROL stream's concern.
+/// The control ANNOUNCE's SDP, faithful to moonlight's getSdpPayloadForStreamConfig. RFI is advertised only when
+/// the host and our decoder both support it (`referenceFrameInvalidationActive`); the codec block follows the
+/// negotiated format, and the encryption bits are the ones `computeEncryptionEnabled` settled on.
 struct SdpBuilder {
     let config: BackendStreamConfig
     let videoPort: UInt16
@@ -174,15 +217,11 @@ struct SdpBuilder {
     let urlSafeAddr: String
     /// "IPv4" or "IPv6" token for the o= line.
     let addrFamilyToken: String
-    /// rtspClientVersion (= 14 for q[0]==7), used in the o= line.
-    let rtspClientVersion: Int
     /// NegotiatedVideoFormat from DESCRIBE (VIDEO_FORMAT_*). Drives the codec
     /// attribute block.
     let negotiatedVideoFormat: Int32
-    /// EncryptionFeaturesEnabled (control-V2 only for connect-only).
+    /// EncryptionFeaturesEnabled (control-V2 and audio when the PC supports them, video when it requires it).
     let encryptionFeaturesEnabled: UInt32
-    /// 7.1.446+ DRC gate uses these.
-    let appVersionQuad: [Int32]
     /// Host RFI support, parsed from the DESCRIBE SDP
     /// (`x-nv-video[0].refPicInvalidation` ⇒ ReferenceFrameInvalidationSupported).
     /// Defaulted false so a host that never offered RFI degrades to full-IDR
@@ -192,6 +231,9 @@ struct SdpBuilder {
     /// CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC/HEVC/AV1). Matched against
     /// the negotiated codec in `referenceFrameInvalidationActive`.
     var decoderRfiCapabilities: Int32 = 0
+    /// Ask for the high Opus tier (`SdpScan.audioLayout`): always for stereo, for surround only when the PC
+    /// lists a high-tier layout, since that is the layout the decoder is built from.
+    var highQualityAudio = true
 
     private static let ML_FF_FEC_STATUS: UInt32 = 0x01
     private static let ML_FF_SESSION_ID_V1: UInt32 = 0x04
@@ -204,6 +246,10 @@ struct SdpBuilder {
     private var audioChannelCount: Int { Int((config.audioConfiguration >> 8) & 0xFF) }
     /// CHANNEL_MASK_FROM_AUDIO_CONFIGURATION(x) = (x >> 16) & 0xFFFF
     private var audioChannelMask: Int { Int((config.audioConfiguration >> 16) & 0xFFFF) }
+    /// The configured packet size, less ENC_VIDEO_HEADER when video is encrypted.
+    private var videoPacketSize: Int {
+        VideoDecryptor.packetSize(Int(config.packetSize), encryptionFeaturesEnabled: encryptionFeaturesEnabled)
+    }
 
     /// Port of moonlight-common-c's isReferenceFrameInvalidationSupportedByDecoder
     /// (Misc.c): RFI is decoder-supported iff the negotiated codec FAMILY pairs
@@ -248,25 +294,9 @@ struct SdpBuilder {
         attrs.append(("x-nv-video[0].clientViewportWd", "\(config.width)"))
         attrs.append(("x-nv-video[0].clientViewportHt", "\(config.height)"))
         attrs.append(("x-nv-video[0].maxFPS", "\(config.fps)"))
-        // REMOTE MTU clamp (moonlight-common-c's STREAM_CFG_AUTO Internet cap,
-        // which this port had only documented, never applied): on a remote
-        // session cap the advertised video packetSize to 1024 so a full RTP
-        // packet fits inside common VPN path MTUs (WireGuard/Tailscale
-        // ~1280-1420) after UDP/IP + tunnel encapsulation. A LAN-tuned 1392 +
-        // headers can exceed the tunnel MTU and force IP fragmentation (or a
-        // black-holed packet on a DF-set path). The clamp lets PMTU-friendly
-        // sizing happen without IP_DONTFRAG (which would hard-fail oversized
-        // packets instead of letting them fragment). LAN sessions keep the
-        // full configured size.
-        //
-        // The clamp is APPLIED UPSTREAM now, in StreamSession.makeBackendConfig,
-        // so `config.packetSize` is already the resolved value and this line
-        // simply echoes it. That is deliberate and load-bearing: the same number
-        // has to reach the host, the receive buffer, AND the Reed-Solomon shard
-        // length the FEC reconstructor rebuilds recovered packets at. Advertising
-        // one size while reconstructing at another corrupts every FEC-recovered
-        // frame (see makeBackendConfig).
-        attrs.append(("x-nv-video[0].packetSize", "\(config.packetSize)"))
+        // Resolved once upstream (StreamSession.makeBackendConfig, remote MTU clamp included) so the
+        // PC, the receive buffer and FEC agree; encrypted video fits its header inside it.
+        attrs.append(("x-nv-video[0].packetSize", "\(videoPacketSize)"))
         attrs.append(("x-nv-video[0].rateControlMode", "4"))
         attrs.append(("x-nv-video[0].timeoutLengthMs", "7000"))
         // framesWithInvalidRefThreshold "0" is the moonlight-common-c default,
@@ -343,12 +373,7 @@ struct SdpBuilder {
         attrs.append(("x-nv-general.useReliableUdp", "13"))
         attrs.append(("x-nv-vqos[0].fec.minRequiredFecPackets", "2"))
         attrs.append(("x-nv-vqos[0].bllFec.enable", "0"))
-        if appVersionAtLeast(7, 1, 446) && (config.width < 720 || config.height < 540) {
-            attrs.append(("x-nv-vqos[0].drc.enable", "1"))
-            attrs.append(("x-nv-vqos[0].drc.tableType", "2"))
-        } else {
-            attrs.append(("x-nv-vqos[0].drc.enable", "0"))
-        }
+        attrs.append(("x-nv-vqos[0].drc.enable", "0"))
         attrs.append(("x-nv-general.enableRecoveryMode", "0"))
 
         // --- back in getAttributesList (q[0]>=4) ---
@@ -386,11 +411,9 @@ struct SdpBuilder {
         attrs.append(("x-nv-audio.surround.channelMask", "\(audioChannelMask)"))
         attrs.append(("x-nv-audio.surround.enable", audioChannelCount > 2 ? "1" : "0"))
 
-        // q[0]>=7 audio quality + packet duration. AudioQuality "1" requests
-        // Sunshine's HIGH opus tier (~256 kbps stereo) instead of "0" (~96 kbps) -
-        // there's no bandwidth reason to ship low-bitrate audio, and the link-aware
-        // cushion already absorbs the slightly larger packets on a bad link.
-        attrs.append(("x-nv-audio.surround.AudioQuality", "1"))
+        // q[0]>=7 audio quality + packet duration. The high tier costs little bandwidth
+        // and the link-aware cushion absorbs its larger packets.
+        attrs.append(("x-nv-audio.surround.AudioQuality", highQualityAudio ? "1" : "0"))
         attrs.append(("x-nv-aqos.packetDuration", "5"))
 
         // q[0]>=7 csc mode = (colorSpace<<1)|colorRange.
@@ -400,7 +423,7 @@ struct SdpBuilder {
         // --- assemble: header + attrs + tail ---
         var sdp = ""
         sdp += "v=0\r\n"
-        sdp += "o=android 0 \(rtspClientVersion) IN \(addrFamilyToken) \(urlSafeAddr)\r\n"
+        sdp += "o=android 0 \(RtspClient.clientVersion) IN \(addrFamilyToken) \(urlSafeAddr)\r\n"
         sdp += "s=NVIDIA Streaming Client\r\n"
         for (name, value) in attrs {
             // "a=<name>:<value> \r\n" - trailing SPACE before CRLF is real.
@@ -411,12 +434,5 @@ struct SdpBuilder {
         sdp += "m=video \(videoPort)  \r\n"
 
         return Data(sdp.utf8)
-    }
-
-    private func appVersionAtLeast(_ major: Int32, _ minor: Int32, _ patch: Int32) -> Bool {
-        guard appVersionQuad.count >= 3 else { return false }
-        if appVersionQuad[0] != major { return appVersionQuad[0] > major }
-        if appVersionQuad[1] != minor { return appVersionQuad[1] > minor }
-        return appVersionQuad[2] >= patch
     }
 }

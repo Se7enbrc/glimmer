@@ -86,6 +86,7 @@ private enum InputMagic {
     static let ssControllerTouch: UInt32 = 0x5500_0005   // SS_CONTROLLER_TOUCH_MAGIC
     static let ssControllerMotion: UInt32 = 0x5500_0006  // SS_CONTROLLER_MOTION_MAGIC
     static let ssControllerBattery: UInt32 = 0x5500_0007 // SS_CONTROLLER_BATTERY_MAGIC
+    static let utf8Text: UInt32 = 0x0000_0017         // UTF8_TEXT_EVENT_MAGIC
 }
 
 private enum MultiControllerConst {
@@ -103,12 +104,9 @@ private enum ControllerCap {
 
 // MARK: - InputEncoder
 
-/// Stateless builders, one per input message. Each returns the plaintext
-/// NV_INPUT_HEADER + typed body ready to be sealed by the control channel.
-///
-/// Mirrors the C exactly, with GFE-only behaviour omitted: this targets
-/// Sunshine (IS_SUNSHINE == true), where keyboard modifier fix-ups are skipped
-/// and the Sunshine extension fields are always populated.
+/// Stateless builders, one per input message, each returning the plaintext NV_INPUT_HEADER + body the control
+/// channel seals. They mirror the C with IS_SUNSHINE true, since a GameStream PC is refused before a stream
+/// starts: GameStream's keyboard modifier fix-ups are skipped and the Sunshine extension fields always filled.
 enum InputEncoder {
 
     // MARK: Header helper
@@ -200,8 +198,8 @@ enum InputEncoder {
 
     // MARK: 6. Horizontal scroll - LiSendHighResHScrollEvent (10 bytes)
 
-    /// SS_HSCROLL_PACKET: header + short scrollAmount BE. Sunshine-only on the
-    /// wire (the !IS_SUNSHINE → LI_ERR_UNSUPPORTED guard is enforced by the caller).
+    /// SS_HSCROLL_PACKET: header + short scrollAmount BE. Sunshine-only on the wire, which is the only
+    /// kind of PC a stream reaches, so the C's !IS_SUNSHINE → LI_ERR_UNSUPPORTED guard has no case here.
     static func hscroll(_ amount: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.ssHscroll, bodyLength: 6) // 10 - 4
@@ -334,5 +332,38 @@ enum InputEncoder {
         w.u8(0) // zero[1]
         assert(w.bytes.count == 12, "SS_CONTROLLER_BATTERY_PACKET must be 12 bytes, got \(w.bytes.count)")
         return w.bytes
+    }
+
+    // MARK: 12. UTF-8 text - LiSendUtf8TextEvent (8 + up to 32 bytes)
+
+    /// UTF8_TEXT_EVENT_MAX_COUNT: the most text bytes one packet may carry.
+    static let utf8TextMaxBytes = 32
+
+    /// NV_UNICODE_PACKET: header (size = magic + text length) + the UTF-8
+    /// bytes, unterminated. The host decodes each packet on its own, so the
+    /// text must be whole code points.
+    static func utf8Text(_ text: [UInt8]) -> [UInt8] {
+        assert(text.count <= utf8TextMaxBytes, "NV_UNICODE_PACKET carries at most 32 text bytes, got \(text.count)")
+        var w = InputWriter()
+        writeHeader(into: &w, magicLE: InputMagic.utf8Text, bodyLength: UInt32(4 + text.count))
+        w.bytes += text
+        return w.bytes
+    }
+
+    /// The text as packets of whole code points, as many as fit in each.
+    /// moonlight sends one code point a packet; packing sends fewer.
+    static func utf8TextPackets(_ text: String) -> [[UInt8]] {
+        var packets: [[UInt8]] = []
+        var chunk: [UInt8] = []
+        for scalar in text.unicodeScalars {
+            let bytes = Array(String(scalar).utf8)
+            if chunk.count + bytes.count > utf8TextMaxBytes {
+                packets.append(utf8Text(chunk))
+                chunk.removeAll(keepingCapacity: true)
+            }
+            chunk += bytes
+        }
+        if !chunk.isEmpty { packets.append(utf8Text(chunk)) }
+        return packets
     }
 }

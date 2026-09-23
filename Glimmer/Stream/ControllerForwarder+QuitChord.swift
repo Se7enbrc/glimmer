@@ -4,7 +4,7 @@
 //  Controller-side quit-chord matching, the hold-to-quit dwell, and the
 //  shared held-buttons reader. Topic split from ControllerForwarder.swift
 //  (file-length budget): the chord predicate, the dwell that makes the
-//  "Hold to leave the stream" label honest, and the button-set helper are one
+//  "Hold to stop streaming" label honest, and the button-set helper are one
 //  self-contained unit consumed by pushControllerState
 //  (ControllerForwarder.swift) and the Settings capture sheet. Internal (not
 //  private) is the split's access cost - the InputForwarder stored-property
@@ -84,20 +84,16 @@ extension InputForwarder {
     /// One-time guard for the raw-HID-needed warning below.
     nonisolated(unsafe) static var warnedQuitChordNeedsRawHID = false
 
-    /// True iff the configured quit chord depends on a DualSense centre button
-    /// GameController DROPS (Create / Mute) - so it cannot fire on a DualSense
-    /// without the raw-HID reader. Options has a `buttonMenu` fallback and PS a
-    /// `buttonHome` one (both GameController-native), and every other chord button
-    /// is GameController-native too - only Create (`buttonOptions`, bound to a
-    /// macOS system gesture that withholds it) and Mute (no GC element at all)
-    /// are raw-HID-only. Used to surface the silent "quit chord never fires on
-    /// DualSense because raw-HID is off" failure.
-    func quitChordNeedsRawHIDCenterButtons() -> Bool {
-        switch controllerQuitChordProvider() {
+    /// True iff `chord` needs a DualSense centre button GameController drops
+    /// (Create or Mute), so it can't fire without the raw-HID reader. Static so
+    /// Settings can warn with the same rule the forwarder logs.
+    nonisolated static func needsRawHIDCenterButtons(chord: ControllerQuitChord,
+                                                     custom: Set<ControllerButton>) -> Bool {
+        switch chord {
         case .startSelectL1R1:
             return true   // "select" maps to Create, which GameController drops on DualSense
         case .custom:
-            return !customControllerChordProvider().isDisjoint(with: [.create, .mute])
+            return !custom.isDisjoint(with: [.create, .mute])
         case .none, .l1r1, .l1r1l2r2, .l3r3:
             return false
         }
@@ -120,7 +116,7 @@ extension InputForwarder {
     // MARK: - Hold-to-quit dwell
 
     /// How long the chord must stay FULLY held before the stream ends. The
-    /// Settings picker is labeled "Hold to leave the stream" and its footnote
+    /// Settings picker is labeled "Hold to stop streaming" and its footnote
     /// says "Hold these buttons simultaneously..." - the mechanism has to honour
     /// that promise. Without a dwell the chord fired on the FIRST coincident
     /// frame, so with the .l1r1 option any in-game moment where both

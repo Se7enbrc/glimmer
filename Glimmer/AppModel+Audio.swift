@@ -1,10 +1,8 @@
 //
 //  AppModel+Audio.swift
 //
-//  "Mute the Mac while streaming" - captures the default output device and its
-//  virtual main volume on stream start, drops it to zero, and restores that
-//  same device on stop (or at the next launch, if the session died muted).
-//  CoreAudio rather than an osascript shell-out.
+//  Builds before 2026.9.7 muted by zeroing the system volume. A Mac that crashed
+//  mid-stream on one gets its level back at the next launch. Delete next release.
 //
 
 import AudioToolbox
@@ -20,58 +18,14 @@ struct MutedOutput: Codable, Equatable {
 extension AppModel {
     nonisolated static let mutePendingRestoreKey = "muteMacPendingRestore"
 
-    // `prePausedMacOutput` non-nil is the did-mute LATCH: set exactly when we
-    // drop the volume, cleared exactly when we put it back, so mute/restore
-    // stay symmetric no matter what the live Settings flag does in between.
-    func muteMac() {
-        guard let device = Self.defaultOutputDeviceID() else { return }
-        // Capture once: while a mute is latched the current level is our 0.
-        if prePausedMacOutput == nil, let uid = Self.deviceUID(device) {
-            let output = MutedOutput(uid: uid, volume: Self.volume(of: device))
-            prePausedMacOutput = output
-            Self.recordPendingRestore(output)
-        }
-        Self.setVolume(0, of: device)
-    }
-
-    /// No-op when nothing is latched, so callers may invoke unconditionally.
-    func restoreMac() {
-        if let output = prePausedMacOutput { Self.restore(output) }
-        prePausedMacOutput = nil
-    }
-
-    /// Live-apply for the "Silence this Mac while streaming" toggle, called
-    /// from its didSet. Settings is reachable mid-stream (⌘, on the
-    /// backgrounded launcher) and the label is present-tense, so a flip acts
-    /// NOW while a stream is live: ON → mute, OFF → restore. Outside a
-    /// stream there is nothing to apply. The stream-end restore keys off the
-    /// did-mute latch, NOT this flag, so a mid-stream flip can never strand
-    /// the Mac at volume 0 the way the old flag-gated restore did.
-    func applyMutePreferenceMidStream() {
-        guard isStreaming else { return }
-        if muteMacWhileStreaming {
-            muteMac()
-        } else {
-            restoreMac()
-        }
-    }
-
-    /// Launch-time recovery for a session that died while muted.
-    static func restoreOrphanedMute() {
-        guard let output = pendingRestore() else { return }
-        restore(output)
+    /// Launch-time recovery for a session that died while muted. The record
+    /// is consumed either way, so a vanished device can't retry forever.
+    nonisolated static func restoreOrphanedMute(in defaults: UserDefaults = .standard) {
+        guard let output = pendingRestore(in: defaults) else { return }
+        defaults.removeObject(forKey: mutePendingRestoreKey)
+        guard let device = deviceID(forUID: output.uid) else { return }
+        setVolume(output.volume, of: device)
         Diag.notice("Audio: restored the output muted by a session that ended early", "Launch")
-    }
-
-    /// Put the level back on the device that was muted, wherever the default
-    /// output moved meanwhile. The record clears with the restore.
-    private static func restore(_ output: MutedOutput) {
-        if let device = deviceID(forUID: output.uid) { setVolume(output.volume, of: device) }
-        UserDefaults.standard.removeObject(forKey: mutePendingRestoreKey)
-    }
-
-    nonisolated static func recordPendingRestore(_ output: MutedOutput, in defaults: UserDefaults = .standard) {
-        defaults.set(try? JSONEncoder().encode(output), forKey: mutePendingRestoreKey)
     }
 
     nonisolated static func pendingRestore(in defaults: UserDefaults = .standard) -> MutedOutput? {
@@ -81,31 +35,7 @@ extension AppModel {
 
     // MARK: CoreAudio
 
-    private static func defaultOutputDeviceID() -> AudioObjectID? {
-        var deviceID = AudioObjectID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        let st = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID)
-        guard st == noErr, deviceID != AudioObjectID(kAudioObjectUnknown) else { return nil }
-        return deviceID
-    }
-
-    private static func deviceUID(_ device: AudioObjectID) -> String? {
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceUID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        var uid: Unmanaged<CFString>?
-        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &uid) == noErr else { return nil }
-        return uid?.takeRetainedValue() as String?
-    }
-
-    private static func deviceID(forUID uid: String) -> AudioObjectID? {
+    private nonisolated static func deviceID(forUID uid: String) -> AudioObjectID? {
         var addr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -123,24 +53,11 @@ extension AppModel {
 
     // The "virtual main volume" property models the single user-facing output
     // level even on devices whose hardware exposes only per-channel volume.
-    private static func virtualMainVolumeAddress() -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(
+    private nonisolated static func setVolume(_ volume: Float, of device: AudioObjectID) {
+        var addr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
             mScope: kAudioObjectPropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain)
-    }
-
-    private static func volume(of device: AudioObjectID) -> Float {
-        var addr = virtualMainVolumeAddress()
-        guard AudioObjectHasProperty(device, &addr) else { return 0 }
-        var volume = Float32(0)
-        var size = UInt32(MemoryLayout<Float32>.size)
-        guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &volume) == noErr else { return 0 }
-        return Float(volume)
-    }
-
-    private static func setVolume(_ volume: Float, of device: AudioObjectID) {
-        var addr = virtualMainVolumeAddress()
         guard AudioObjectHasProperty(device, &addr) else { return }
         var settable: DarwinBoolean = false
         guard AudioObjectIsPropertySettable(device, &addr, &settable) == noErr, settable.boolValue else { return }

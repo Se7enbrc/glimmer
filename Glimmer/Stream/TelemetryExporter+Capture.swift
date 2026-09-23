@@ -168,6 +168,15 @@ extension TelemetryExporter {
             let approxPresents = max(rendered, 0)
             snap.presentOnTimeCount = UInt64((approxPresents * onTimePct / 100.0).rounded())
             snap.presentLateCount = UInt64((approxPresents * (100.0 - onTimePct) / 100.0).rounded())
+            if let hostPct = stats.hostCadence?.lateByHostPercent {
+                snap.presentLateHostCadenceCount = UInt64((approxPresents * hostPct / 100.0).rounded())
+            }
+        }
+        if let cadence = stats.hostCadence {
+            snap.hostFrameIntervalP50Ms = cadence.intervalP50Ms
+            snap.hostFrameIntervalP95Ms = cadence.intervalP95Ms
+            snap.hostUnevenPairs = cadence.unevenPairs
+            FrameTimingTracker.shared?.hostFrameIntervalMs = cadence.intervalP50Ms
         }
     }
 
@@ -190,6 +199,7 @@ extension TelemetryExporter {
         snap.dropsBackpressure = source.backpressureDrops()
         snap.dropsPresentationLate = source.presentationLateDrops()
         snap.presentationGaps = source.presentationGaps()
+        snap.dropsRecoveryWaitTotal = counters.recoveryWaitDropTotal.value
     }
 
     /// Fill the process-level sample (CPU / threads), the P1 RESOURCE view, and
@@ -334,9 +344,6 @@ extension TelemetryExporter {
             snap.packetGapMaxUs = gap.maxUs
         }
         if let fec = counters.fecHealth {
-            snap.fecReorderHoldMs = fec.reorderHoldMs
-            snap.fecHeadroomLevel = fec.headroomLevel
-            snap.fecLossLevel = fec.lossLevel
             snap.fecPercentage = fec.fecPercentage
             snap.fecParityMargin = fec.parityMargin
         }
@@ -344,12 +351,21 @@ extension TelemetryExporter {
             snap.awdlSuppressing = awdl.suppressing
             snap.awdlReSuppressTotal = awdl.reSuppressTotal
         }
+        // Datagrams the kernel dropped at a full UDP receive buffer this tick (any
+        // socket): nonzero during a Wi-Fi blackout means SO_RCVBUF, not the air.
+        let fullSock = Self.udpFullSockTotal()
+        if let fullSock, let prev = Self.captureBaselines.udpFullSockTotal {
+            snap.udpFullSockDelta = UInt64(fullSock &- prev)
+        }
+        Self.captureBaselines.udpFullSockTotal = fullSock
         if let reorder = counters.reorderDisplacement {
             snap.reorderDispMaxMs = reorder.maxMs
             snap.reorderDispMaxPackets = reorder.maxPackets
             snap.reorderDispHoldMs = reorder.holdMs
         }
         snap.reorderHoldExceededTotal = counters.reorderHoldExceededTotal.value
+        snap.reorderHoldTakenTotal = counters.reorderHoldTakenTotal.value
+        snap.reorderHoldRescuedTotal = counters.reorderHoldRescuedTotal.value
         snap.reorderDisplacementMsHist = FrameTimingTracker.shared?.reorderDisplacementMs.snapshotValue()
         snap.reorderDisplacementPacketsHist = FrameTimingTracker.shared?.reorderDisplacementPackets.snapshotValue()
         // Refresh the live RTT gauge the per-frame glass-to-glass computation
@@ -377,6 +393,7 @@ extension TelemetryExporter {
         let fecRecoveredTotal = counters.fecRecoveredFramesTotal.value
         let inputEventsTotal = counters.inputEventsTotal.value
         let inputFlushTotal = counters.inputBatchFlushTotal.value
+        let inputMotionTotal = counters.inputMotionTotal.value
         let preFecLostTotal = counters.videoPacketsLostPreFecTotal.value
         let outOfOrderTotal = counters.videoPacketsOutOfOrderTotal.value
         let duplicateTotal = counters.videoPacketsDuplicateTotal.value
@@ -395,14 +412,18 @@ extension TelemetryExporter {
                         Double(now.uptimeNanoseconds &- foldedAt.uptimeNanoseconds) / 1_000_000_000.0
                     if foldDt > 0.05 { snap.packetsPerSecond = Double(packetsDelta) / foldDt }
                 }
-                // Guard each delta against a reset/wrap: resetForNewSession zeroes
-                // the totals mid-run, so emit only across a monotonic window (the
-                // prev rebaselines below regardless) - else &- renders a 2^64 spike.
+                // Guard each delta against a counter reset/wrap: emit only across a
+                // monotonic window (the prev rebaselines below regardless) - else &-
+                // renders a 2^64 spike.
                 if inputEventsTotal >= prevInputEventsTotal {
                     snap.inputEventsPerSecond = Double(inputEventsTotal &- prevInputEventsTotal) / dt
                 }
                 if inputFlushTotal >= prevInputFlushTotal {
                     snap.inputFlushPerSecond = Double(inputFlushTotal &- prevInputFlushTotal) / dt
+                }
+                let prevMotion = Self.captureBaselines.inputMotionTotal
+                if inputMotionTotal >= prevMotion {
+                    snap.inputMotionPerSecond = Double(inputMotionTotal &- prevMotion) / dt
                 }
                 // P1 PRESENT stale-frame repeats/sec (the invisible-stutter rate).
                 if staleRepeatTotal >= prevStaleFrameRepeatTotal {
@@ -437,10 +458,20 @@ extension TelemetryExporter {
         prevFecRecoveredTotal = fecRecoveredTotal
         prevInputEventsTotal = inputEventsTotal
         prevInputFlushTotal = inputFlushTotal
+        Self.captureBaselines.inputMotionTotal = inputMotionTotal
         prevPreFecLostTotal = preFecLostTotal
         prevOutOfOrderTotal = outOfOrderTotal
         prevDuplicateTotal = duplicateTotal
         prevStaleFrameRepeatTotal = staleRepeatTotal
+    }
+
+    /// System-wide `udps_fullsock` from net.inet.udp.stats: datagrams not delivered
+    /// because the socket's receive buffer was full. nil if the sysctl fails.
+    static func udpFullSockTotal() -> UInt32? {
+        var stats = udpstat()
+        var size = MemoryLayout<udpstat>.size
+        guard sysctlbyname("net.inet.udp.stats", &stats, &size, nil, 0) == 0 else { return nil }
+        return stats.udps_fullsock
     }
 
     /// Derive the P1 per-second receive-quality RATES from this tick's monotonic

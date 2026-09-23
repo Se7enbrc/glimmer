@@ -240,6 +240,9 @@ extension StreamWindow {
             NSApp.presentationOptions = saved
             previousPresentationOptions = nil
         }
+        // A Cmd-Tab away belonged to the cover, and the observer that would clear
+        // it is gone: left set, the return from the mini player skips the backstop.
+        userBackgrounded = false
         displayMode = .window
         streamDelegate.displayMode = .window
         streamDelegate.coversNotch = false

@@ -93,6 +93,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
+import Synchronization
 import VideoToolbox
 import os
 @MainActor
@@ -210,12 +211,9 @@ public final class VideoDecoder {
 
     let log: Logger
 
-    /// Negotiated bitrate (kbps) surfaced in the overlay; see setNegotiatedBitrateKbps.
-    /// `nonisolated(unsafe)` - written ONCE at session start (setNegotiatedBitrateKbps,
-    /// from StreamSession.start, on the main actor) and read-only thereafter, so the
-    /// nonisolated `telemetryStatsSnapshot()` can surface it for the goodput-vs-ceiling
-    /// signal. Same single-writer-then-trust discipline as `streamFps` above.
-    nonisolated(unsafe) var negotiatedBitrateKbps: Int = 0
+    /// Negotiated bitrate (kbps) for the overlay and the telemetry goodput ceiling.
+    /// Atomic: set at start and again after every reconnect, read from any thread.
+    nonisolated let negotiatedBitrateKbps = Atomic<Int>(0)
     /// Live audio-config display label surfaced in the overlay; see setActiveAudioConfigLabel.
     var activeAudioConfigLabel: String?
     /// Per-frame stats counters. Touched from the moonlight receive thread, the VT
@@ -422,13 +420,9 @@ public final class VideoDecoder {
     // decode hitting headroom, OS-side compositor falling behind),
     // `isReadyForMoreMediaData` flips to false; we drop the frame to keep
     // wall-clock latency bounded. We still COUNT this (the renderer's own
-    // queue overflowing is a real signal) but no longer drive the IDR request
-    // off it - a single late vsync can flip isReadyForMoreMediaData for one
-    // frame, and asking for an IDR on transient jitter just compounds lag. We
-    // still COUNT backpressure drops for the overlay, but no longer request an
-    // IDR off the transient renderer-not-ready flag - a presentation-timing
-    // drop of an already-decoded frame never needs a keyframe (the reference
-    // chain is intact). IDR/RFI is reserved for genuine decode/reference breaks.
+    // queue overflowing is a real signal) but never request an IDR off it - a
+    // presentation-timing drop of an already-decoded frame never needs a
+    // keyframe (the reference chain is intact).
     nonisolated(unsafe) var consecutiveBackpressureDrops: Int = 0
 
     /// Consecutive decode-backlog overflows - how long the backlog has sat in
@@ -548,16 +542,24 @@ public final class VideoDecoder {
     nonisolated(unsafe) var _decodeGated = false
 
     /// One-shot "the next fed frame must be an IDR" latch, armed at the
-    /// gate-ON edge and resolved at the submit boundary after gate-off.
-    /// VideoToolbox's reference chain goes stale the moment the gate starts
-    /// dropping AUs, so feeding any P-frame after the gap would macroblock.
+    /// gate-ON edge and by a VideoToolbox decode failure, resolved at the
+    /// submit boundary. Either way the reference chain is broken, so feeding
+    /// any P-frame would macroblock.
     /// `decodeGateDisposition` either clears it on a genuine IDR (feed it -
     /// the resync IDR won the race) or converts it into DR_NEED_IDR exactly
     /// once, handing the wait to the depacketizer's EXISTING wait-for-IDR
     /// recovery gate (`requestDecoderRefresh` - the same reference-
     /// invalidation flush the sustained-backlog-stall path reuses). Guarded
     /// by `presentSuppressedLock`.
-    nonisolated(unsafe) var _awaitingPostGateIdr = false
+    nonisolated(unsafe) var _awaitingResyncIdr = false
+    /// Bumped each time an IDR is fed; every frame carries the value it was fed
+    /// under, so a VT error from a frame an IDR has since superseded can't re-arm
+    /// the resync. Guarded by `presentSuppressedLock`.
+    nonisolated(unsafe) var _idrEpoch: UInt = 0
+    /// True when VT's latest verdict was a failure (error status, no image, or an
+    /// inline reject): the evidence the stall escalation needs to replace a dead
+    /// session at any backlog. Guarded by `inFlightDecodeLock`.
+    nonisolated(unsafe) var lastVtDecodeFailed = false
 
     /// Monotonic stamp (uptime nanos) of the last gate-OFF edge; nil until a
     /// gate has ever lifted. The frame watchdog floors its decode-idle clock

@@ -43,6 +43,15 @@ struct TelemetrySnapshot: Sendable {
     /// Excludes structural stale fills, so it reads smoothness independent of
     /// content-fps vs refresh - the clean judder signal.
     var presentOnTimePercent: Double?
+    /// Late presents the host's own timing explains, never the first after a client
+    /// drop; present_late minus this is the client's share. Frames lost on the network,
+    /// before reaching the Mac, still count on the host side.
+    var presentLateHostCadenceCount: UInt64?
+    /// Host frame interval percentiles (received PTS deltas, ms) and adjacent
+    /// deltas at least 2.5× apart this window: how evenly the game delivers frames.
+    var hostFrameIntervalP50Ms: Double?
+    var hostFrameIntervalP95Ms: Double?
+    var hostUnevenPairs: UInt64?
 
     // P1 DECODE/VT state + counters.
     /// VTDecompressionSession (re)creates this session (monotonic). The first
@@ -97,6 +106,10 @@ struct TelemetrySnapshot: Sendable {
     var reorderDispMaxPackets: Int?
     var reorderDispHoldMs: Double?
     var reorderHoldExceededTotal: UInt64 = 0
+    /// Reorder holds taken (a next-frame datagram deferred) and holds whose
+    /// frame completed before the deferred packet replayed.
+    var reorderHoldTakenTotal: UInt64 = 0
+    var reorderHoldRescuedTotal: UInt64 = 0
     var reorderDisplacementMsHist: LatencyHistogramSnapshot.Stage?
     var reorderDisplacementPacketsHist: LatencyHistogramSnapshot.Stage?
     /// Power state (1Hz): governor-throttle correlation labels. `onBattery` =
@@ -172,16 +185,8 @@ struct TelemetrySnapshot: Sendable {
     var packetGapP95Us: Double?
     var packetGapMaxUs: Double?
 
-    // network - FEC health (the FecHeadroomController response + per-frame parity
-    // headroom). READ-ONLY observability: surfaces a degrading link's reorder-hold
-    // escalation and how close frames ran to unrecoverable. nil until the first ~2s
-    // receive window flushes.
-    /// Live reorder-hold window (ms): base 24, cap 48.
-    var fecReorderHoldMs: Double?
-    /// Jitter / out-of-order / retransmit headroom level (0 = clean).
-    var fecHeadroomLevel: Int?
-    /// Direct-loss headroom level (0 = clean).
-    var fecLossLevel: Int?
+    // network - FEC health: how close frames ran to unrecoverable. nil until the
+    // first ~2s receive window flushes.
     /// Host per-frame FEC percentage (latest frame).
     var fecPercentage: Int?
     /// Spare parity shards on the worst frame this window (parity − deficit).
@@ -191,6 +196,9 @@ struct TelemetrySnapshot: Sendable {
     // macOS re-raised it (the contention the helper fights). nil = helper off.
     var awdlSuppressing: Bool?
     var awdlReSuppressTotal: UInt64?
+    /// System-wide datagrams dropped at a full UDP receive buffer since the last
+    /// tick. nil on the first tick or if the sysctl fails.
+    var udpFullSockDelta: UInt64?
 
     // ENet reliable-stream health
     var enetSentReliable: Int?
@@ -215,10 +223,14 @@ struct TelemetrySnapshot: Sendable {
     var dropsBackpressure: UInt64?
     var dropsPresentationLate: UInt64?
     var presentationGaps: UInt64?
+    /// Frames discarded at the depacketizer's recovery gate (waiting for IDR/RFI).
+    var dropsRecoveryWaitTotal: UInt64 = 0
 
     // input
     var inputEventsPerSecond: Double?
     var inputFlushPerSecond: Double?
+    /// Gyro/accel samples per second; not input events (see inputMotionTotal).
+    var inputMotionPerSecond: Double?
     /// Idle→active input edge count (monotonic). A short-window `increase()` of
     /// this marks the exact "resumed controlling after idle" beat so the latency
     /// transient is auto-correlatable instead of hand-reconstructed.
@@ -340,9 +352,9 @@ struct TelemetrySnapshot: Sendable {
     /// explicit NDJSON EVENT line exactly once (see the exporter). nil before any
     /// stage has fired.
     var handshake: HandshakeBreakdown?
-    /// Reconnect count this run (monotonic) - a second-or-later established edge.
+    /// Reconnect count this session - connections re-established in place after a drop.
     var reconnectTotal: UInt64 = 0
-    /// Wake-from-sleep count this run (monotonic) - wakes while a stream was live.
+    /// Wake-from-sleep count this session - wakes while a stream was live.
     var wakeTotal: UInt64 = 0
     /// Route/link-class change count this run (monotonic) - the egress-route flip
     /// (e.g. wake on a different AP) the NDJSON route_change event already marks.
@@ -380,8 +392,11 @@ struct AudioSnapshot: Sendable {
     var packetsLostTotal: UInt64 = 0
     /// Audio packets recovered by Reed-Solomon FEC this session (monotonic).
     var fecRecoveredTotal: UInt64 = 0
-    /// Audio packets accepted per second this window (derived from the delta).
+    /// Audio packets accepted per second this window (derived from the delta);
+    /// 0 once no receive fold has landed for `audioFoldSilenceSeconds`.
     var packetsPerSecond: Double?
+    /// Longest audio inter-arrival gap this tick (ms), counting one still open.
+    var gapMaxMs: Double?
     /// Unrecovered audio-loss rate this window (lost / expected), 0...1.
     var lossRate: Double?
     /// Audio FEC-recovery rate this window (recovered / (recovered + accepted)),
@@ -474,4 +489,7 @@ struct TelemetrySource: Sendable {
     /// is never read as a fullscreen one. Defaulted so callers that predate
     /// the mode keep compiling.
     var displayMode: String = StreamDisplayMode.defaultMode.rawValue
+    /// The negotiated stream shape and codec and the bitrate decision, for the
+    /// same config event. nil where no session built it.
+    var stream: StreamTelemetryConfig?
 }

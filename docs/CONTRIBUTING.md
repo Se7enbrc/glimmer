@@ -12,7 +12,7 @@ Required:
 Brew prerequisites:
 
 ```bash
-brew install openssl@3 opus swiftlint trufflehog
+brew install openssl@3 opus swiftlint trufflehog pre-commit
 ```
 
 `openssl@3` and `opus` are the Swift streaming engine's two link-time
@@ -53,21 +53,33 @@ re-prompts).
 The canonical xcodebuild invocation (what `make app` runs) is:
 
 ```bash
+scripts/generate-build-info.sh
 xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
     -xcconfig Glimmer/StreamLib.xcconfig \
     OPENSSL_PREFIX=$(brew --prefix openssl@3) \
     OPUS_PREFIX=$(brew --prefix opus) \
+    CODE_SIGNING_ALLOWED=NO \
     -derivedDataPath ./build -destination 'platform=macOS' build
 ```
+
+The script writes `Glimmer/BuildInfo.generated.swift`, the commit and build date
+that telemetry stamps on every session. The project compiles that file but it is
+not checked in, so a fresh clone fails with a missing input file until the
+script has run once. `CODE_SIGNING_ALLOWED=NO` leaves signing to the Makefile's
+`sign` target; without it, Xcode's Automatic signing asks for the keychain once
+per nested bundle.
 
 For an inner-loop edit cycle, either use `make dev` (unit tests, then the
 notarized Release build, installed and relaunched - same signing path as
 `make install`), or work in Xcode against `Glimmer.xcodeproj`:
 
-1. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
+1. Run `scripts/generate-build-info.sh` once so
+   `Glimmer/BuildInfo.generated.swift` exists (`make app` and `make test` run it
+   for you).
+2. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
    Scheme → Run → Info). It supplies the OpenSSL/Opus search paths and the
-   version from `Glimmer/Version.xcconfig`; nothing needs prebuilding.
-2. Build and run.
+   version from `Glimmer/Version.xcconfig`.
+3. Build and run.
 
 Useful log tails:
 
@@ -179,14 +191,17 @@ before/after screenshot at the smallest and largest window the change allows.
 
 ## Lint
 
-`swiftlint` runs as a pre-commit hook over `Glimmer/` only; `scripts/` is
-build-time tooling and is not held to the product lint bar. The baseline is
-intentionally non-strict: warnings are surfaced for review but only errors block
-the commit. Thresholds worth knowing from `.swiftlint.yml`:
+`swiftlint` runs as a pre-commit hook over `Glimmer/`, `GlimmerTests/`,
+`helper/` and `LoginHelper/`; `scripts/` is build-time tooling and is not held
+to the product lint bar. The commit hook blocks only on errors, but
+`make verify` lints with `--strict`, where any warning fails, and the release
+build runs it. Treat a warning as a failure. Thresholds worth knowing from
+`.swiftlint.yml`:
 
-- `force_unwrapping`, `force_cast`, `force_try` - warning only.
-- File length and type body warn at 600, function body at 80. The errors sit at
-  1500 / 1500 / 250, well above the current largest case.
+- `force_unwrapping`, `force_cast`, `force_try` - warnings, so strict fails
+  them.
+- File length and type body warn at 600, function body at 80, and strict holds
+  every file to that.
 - `line_length` warns at 140, errors at 280, ignoring URLs and comments.
 
 The pre-commit wrapper runs `swiftlint --fix` first; if it modifies any staged
@@ -202,7 +217,7 @@ Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 
 ## Style
 
-- 2-space indent, opening brace on the same line, trailing newline. Match
+- 4-space indent, opening brace on the same line, trailing newline. Match
   neighbouring files.
 - File / type names match the load-bearing type they contain
   (`VideoDecoder.swift` → `class VideoDecoder`). Extensions split out by feature
@@ -210,11 +225,11 @@ Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 - Protocol constants mirror their upstream C names verbatim
   (`COLORSPACE_REC_2020`, `DR_NEED_IDR`) so a reader can grep the spec.
   `identifier_name.allowed_symbols: ["_"]` exists for exactly that.
-- Comments earn their keep: short for obvious code, expansive when documenting a
-  non-obvious decision. The HDR pipeline comments in `VideoDecoder.swift` and
-  the bridge-lifetime comment in `StreamSession.swift` are the bar - if a future
-  maintainer would have to dig through an upstream PR thread to understand why a
-  line exists, the comment goes in the source.
+- Comments in new and changed code earn their keep and stay at three lines or
+  fewer, doc comments and file headers included: what the code is for and the
+  one-line why. If a future maintainer would have to dig through an upstream PR
+  thread to understand a line, the why goes in the source; the full story goes
+  in the commit message.
 - No emoji in source files.
 
 ## Concurrency
@@ -306,6 +321,11 @@ the comment at `StreamBridgeContext.eventContinuation` (in
     timings, codec format ints, error codes).
   - `privacy: .private` (the default) for anything PII-adjacent: host addresses,
     host names, error message strings, host versions.
+  - `Diag.*` takes the same `privacy:` argument as `Logger`, but defaults to
+    `.public`, so mark those values `.private` there too:
+    `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
+    Private values reach the Troubleshooting viewer, its export and the session
+    file; the system-log copy shows `<private>` in their place.
   - Never log:
     - Key characters from `keyDown` events (a later change fixed the regression
       where chars=... leaked at `.public`).
@@ -335,13 +355,15 @@ there. Common prefixes:
 - `security` - anything in the threat-model surface
 - `build` - Xcode / Makefile / scripts
 - `chore` - repo hygiene
-- `docs(area)` - these files
+- `docs` or `docs(area)` - these files
 
 Subject line: imperative mood, lowercase after the prefix, no trailing period.
 Body wrapped at ~72 columns when one's needed.
 
-**No `Co-Authored-By` trailer.** Hard rule of repo policy, and the same goes for
-any "Generated with Claude" attribution. No emoji in commit messages either.
+**No attribution to tools or agents.** No `Co-Authored-By` trailer, no session
+trailers or links, no "Generated with" line, no model or tool names: not in
+commits, pull request titles or bodies, the changelog, or code comments. Hard
+rule of repo policy. No emoji in commit messages either.
 
 ## The bar
 

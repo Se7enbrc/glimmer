@@ -38,11 +38,16 @@ extension StreamSession {
     ///   default silently attributing a dropped consumer to the user.
     func stop(cause: DisconnectReason) async {
         guard isStreaming || stopInProgress else { return }
+        if stopCause == nil { stopCause = cause }
         stopInProgress = true
         isStreaming = false
         launchTask?.cancel()
         await teardown.run { await self.performStop(cause: cause) }
     }
+
+    /// The stop's /cancel deadline: a LAN round trip with margin, and short
+    /// enough that a dead link doesn't keep the launcher waiting.
+    static let stopCancelSeconds: TimeInterval = 2
 
     private func performStop(cause: DisconnectReason) async {
         // Remove the sleep/wake observers + cancel any in-flight wake probe FIRST,
@@ -89,26 +94,9 @@ extension StreamSession {
             connectFlowState = nil
         }
 
-        // Teardown order - load-bearing.
-        //
-        // The bridge holds *weak* references to every subsystem, so a
-        // callback fired against a freed weak ref no-ops; ordering is
-        // about "well-behaved" rather than UAF safety. We still drain the
-        // backend's receive threads before dropping the AVAudio engine and the
-        // AVSampleBufferDisplayLayer:
-        //
-        //   1. backend.stopConnection() - synchronous; blocks until the
-        //      receive/decode/control threads have exited. After this
-        //      returns no further callbacks can fire.
-        //   2. network.cancel() - tell the host the session is over so
-        //      the next /launch isn't blocked by an orphan session
-        //      record.
-        //   3. MainActor teardowns: input.detach(), videoDecoder.teardown(),
-        //      window.close().
-        //   4. audioDecoder.shutdown().
-        //   5. Bridge release: Unmanaged.fromOpaque(...).release(). After
-        //      everything above so a late callback (impossible after step
-        //      1, cheap insurance) can't dereference a freed bridge.
+        // Teardown order: stop the backend (drains its threads), take down what
+        // the user sees, shut audio, /cancel, then release the bridge. Its refs
+        // are weak, so the order is about being well-behaved, not UAF safety.
 
         // 0. Stop the stats-overlay timer FIRST and hide the overlay layer
         //    so it doesn't linger visually while teardown runs (without
@@ -121,6 +109,7 @@ extension StreamSession {
         // concurrency rejects `self.window` from a non-actor closure even
         // when the closure hops to MainActor.
         let winForOverlay = self.window
+        let inp = input
         await MainActor.run {
             self.statsOverlayTimer?.invalidate()
             self.statsOverlayTimer = nil
@@ -131,6 +120,10 @@ extension StreamSession {
             self.presentMetricTimer?.invalidate()
             self.presentMetricTimer = nil
             winForOverlay?.statsOverlay.setVisible(false)
+            // Key-ups go out while the uplink is still live; once not ready, a
+            // quit chord's late modifier releases send nothing into a closed link.
+            inp?.raiseAllHeldInputs(reason: "stream teardown")
+            inp?.setReady(false)
         }
 
         // 1. Tell the backend to bring down the connection. Synchronous;
@@ -139,24 +132,9 @@ extension StreamSession {
         //    its own state internally).
         backend.stopConnection()
 
-        // 2. Tell the host the session is over so the next /launch isn't
-        //    blocked by an orphan session record. Best-effort; the host can
-        //    be unreachable here if the network just dropped.
-        if let net = network {
-            await net.setRequestDeadline(nil)
-            if ownsHostSession { try? await net.cancel() }
-            // shutdown() is a no-op now (the control channel is per-request) -
-            // kept for symmetry with the rest of the teardown.
-            await net.shutdown()
-        }
-        ownsHostSession = false
-        hostSessionClientID = nil
-        network = nil
-
-        // 3. MainActor-bound teardowns. Capture references first so we don't
-        //    hold the actor across the hop.
+        // 2. Close the window and release input now, so a dead link can't hold a
+        //    frozen full-screen frame and a hidden pointer while /cancel waits.
         let dec = videoDecoder
-        let inp = input
         let win = window
         await MainActor.run {
             inp?.detach()
@@ -167,11 +145,23 @@ extension StreamSession {
             win?.close()
         }
 
-        // 4. Shut down audio after the connection is down so we don't
-        //    race a final decodeAndPlaySample callback against the engine
-        //    being torn down. (Strictly, step 1 already drained the audio
-        //    worker thread; this is the AVAudioEngine teardown.)
+        // 3. The AVAudioEngine teardown. Step 1 already drained the audio
+        //    receive thread, so no final sample can race it.
         audioDecoder.shutdown()
+
+        // 4. Tell the host the session is over so the next /launch isn't blocked
+        //    by an orphan session. Awaited, so it can't race that /launch, and
+        //    bounded, so an unreachable host costs `stopCancelSeconds` at most.
+        if let net = network {
+            await net.setRequestDeadline(Date().addingTimeInterval(Self.stopCancelSeconds))
+            if ownsHostSession { try? await net.cancel() }
+            // shutdown() is a no-op now (the control channel is per-request) -
+            // kept for symmetry with the rest of the teardown.
+            await net.shutdown()
+        }
+        ownsHostSession = false
+        hostSessionClientID = nil
+        network = nil
 
         // 5. Release the bridge. The bridge held weak refs to everything so
         //    nil'ing our own field doesn't drop the retain - the
@@ -226,7 +216,7 @@ extension StreamSession {
             }
             return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
         } catch let first as StreamError {
-            log.error("primary launch path failed: \(String(describing: first), privacy: .public)")
+            log.error("primary launch path failed: \(String(describing: first), privacy: .private)")
             try checkAttempt(deadline: deadline)
             let fresh = try await network.fetchServerInfo()
             try checkAttempt(deadline: deadline)

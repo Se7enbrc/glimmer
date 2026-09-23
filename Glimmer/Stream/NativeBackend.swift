@@ -148,8 +148,8 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         config: BackendStreamConfig,
         completion: @escaping @Sendable (Error?) -> Void
     ) {
-        Diag.notice("native backend: starting connection to \(server.address)", Self.logCategory)
-        log.notice("NativeBackend.startConnection → \(server.address, privacy: .public)")
+        Diag.notice("native backend: starting connection to \(server.address, privacy: .private)", Self.logCategory)
+        log.notice("NativeBackend.startConnection → \(server.address, privacy: .private)")
         let resultBox = ErrorBox()
         let timedOutBox = AtomicCounter()
         let bridgeThread = Thread { [weak self, server, config] in
@@ -175,7 +175,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
                 completion(StreamError.sessionFailed(-1))
                 return
             }
-            completion(resultBox.get().map { self?.mapToStreamError($0) ?? .sessionFailed(-1) })
+            completion(resultBox.get().map { Self.mapToStreamError($0) })
         }
         bridgeThread.qualityOfService = .userInitiated
         bridgeThread.name = "Glimmer.nativeConnect"
@@ -190,23 +190,21 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         func get() -> Error? { lock.lock(); defer { lock.unlock() }; return value }
     }
 
-    private func mapToStreamError(_ error: Error) -> StreamError {
+    static func mapToStreamError(_ error: Error) -> StreamError {
         if let streamError = error as? StreamError { return streamError }
-        if let rtsp = error as? RtspError, case .nonOK(_, let code) = rtsp {
-            return StreamError.sessionFailed(Int32(code))
-        }
-        return StreamError.sessionFailed(-1)
+        if case .connectTimeout(let port) = error as? RtspError { return .streamPortsBlocked(proto: "TCP", port: port) }
+        return .sessionFailed(rtspCode(error))
     }
 
     func checkInterrupted() -> Bool {
         withState { interrupted }
     }
 
-    func rtspCode(_ error: Error) -> Int32 {
-        if let rtsp = error as? RtspError, case .nonOK(_, let code) = rtsp {
-            return Int32(code)
+    static func rtspCode(_ error: Error) -> Int32 {
+        switch error as? RtspError {
+        case .nonOK(_, let code): return Int32(code)
+        default: return -1
         }
-        return -1
     }
 
     public func stopConnection() {
@@ -222,6 +220,8 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         rtspClient = nil
         videoReceiver = nil
         audioReceiver = nil
+        // A backend that outlives its session must not keep the decoder's engine alive.
+        audioSink = nil
         inputBatcher = nil
         inputReady = false
         stateLock.unlock()

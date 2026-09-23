@@ -8,8 +8,8 @@
 //  the rest of the rig (see TelemetryCounters.swift for the gate/safety contract):
 //
 //    * CONNECT-HANDSHAKE breakdown - per-stage timing of the connect sequence
-//      (RTSP → pairing/auth → ENet connect → first video frame), captured once
-//      per session from the stage events the engine already fires, emitted to the
+//      (RTSP → control setup → ENet connect → first video frame), captured once
+//      per connect from the stage events the engine already fires, emitted to the
 //      Prometheus body + the NDJSON (as an event line) + the session report.
 //    * RECONNECT count + disconnect REASON - a monotonic reconnect counter and
 //      the last terminate reason as an enum ordinal, captured at the
@@ -262,10 +262,9 @@ final class InputDeliverStamp: @unchecked Sendable {
 struct HandshakeBreakdown: Sendable {
     /// RTSP/SDP handshake duration (name-resolution start → RTSP-handshake done).
     var rtspMs: Double?
-    /// Pairing/auth leg (control-crypto + control-V2 negotiation) - the gap from
-    /// RTSP-done to ENet-connect start, which is where the per-session AES/auth
-    /// material is set up before the control socket opens.
-    var pairingMs: Double?
+    /// Control-channel setup: RTSP done → ENet connect start, where the control
+    /// crypto and V2 negotiation run. Not pairing, which happened long before.
+    var controlSetupMs: Double?
     /// ENet control-channel connect (ENET_CONNECT → START_A → START_B ACKed).
     var enetConnectMs: Double?
     /// Time from connection-established to the FIRST decoded video frame - the
@@ -291,6 +290,14 @@ struct HandshakeBreakdown: Sendable {
     /// True once the first decoded frame landed (so the exporter emits the
     /// one-shot breakdown exactly once, not every tick).
     var complete: Bool = false
+}
+
+/// What a session's FIRST connect measured, kept when an in-place reconnect
+/// re-anchors the timeline so the receipt reports that connect, not a blend.
+struct FirstConnect: Sendable {
+    var handshake: HandshakeBreakdown
+    var audioTtfMs: Double?
+    var audioTtf: AudioTtfContext.Record?
 }
 
 // MARK: - IDR/RFI round-trip snapshot
@@ -357,6 +364,8 @@ extension TelemetryCounters {
         /// timer (we measure to the next IDR either way).
         private var idrRequestPendingNanos: UInt64 = 0
         private var idrLastRoundTripMs: Double = 0
+        /// Set at the first in-place reconnect; nil while the first connect is live.
+        private var firstConnectValue: FirstConnect?
 
         func anchorConnectStart(_ now: UInt64) {
             os_unfair_lock_lock(lock)
@@ -382,8 +391,8 @@ extension TelemetryCounters {
             os_unfair_lock_lock(lock); if enetStartNanos == 0 { enetStartNanos = now }; os_unfair_lock_unlock(lock)
         }
         /// Anchor the handshake's `establishedNanos` leg (first edge only). The
-        /// reconnect signal is NOT derived here - reconnectInPlace re-runs p2.reset()
-        /// before the fresh edge, so it's counted at the recovery site instead.
+        /// reconnect signal is NOT derived here - reconnectInPlace re-anchors the
+        /// timeline before the fresh edge, so it's counted at the recovery site instead.
         func markEstablished() {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             if establishedNanos == 0 { establishedNanos = TelemetryCounters.monotonicNowNanos() }
@@ -392,25 +401,47 @@ extension TelemetryCounters {
             os_unfair_lock_lock(lock); if firstFrameNanos == 0 { firstFrameNanos = now }; os_unfair_lock_unlock(lock)
         }
 
-        /// Assemble the handshake breakdown from whatever stages have fired. Each
-        /// leg is emitted only when both its endpoints exist (so an aborted-early
+        /// Assemble the CURRENT connect's breakdown from whatever stages have fired.
+        /// Each leg is emitted only when both its endpoints exist (so an aborted-early
         /// connect omits the legs it never reached rather than reporting 0).
         func handshakeBreakdown() -> HandshakeBreakdown {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            return breakdownLocked()
+        }
+
+        private func breakdownLocked() -> HandshakeBreakdown {
             var out = HandshakeBreakdown()
             out.rtspMs = msBetween(rtspStartNanos, rtspDoneNanos)
-            out.pairingMs = msBetween(rtspDoneNanos, enetStartNanos)
+            out.controlSetupMs = msBetween(rtspDoneNanos, enetStartNanos)
             out.enetConnectMs = msBetween(enetStartNanos, establishedNanos)
             out.firstFrameMs = msBetween(establishedNanos, firstFrameNanos)
             out.totalMs = msBetween(connectStartNanos, firstFrameNanos)
-            // TRUE click-to-pixels + the isolated launch leg, from the wall-clock
-            // click latch (anchored before connect-start, so it sees the legs
-            // totalMs can't). Self-locked; read here off the P2 lock.
-            out.clickToFirstFrameMs = ConnectTimingTelemetry.shared.clickToFirstFrameMs
-            out.launchPathMs = ConnectTimingTelemetry.shared.launchPathMs
-            ConnectTimingTelemetry.shared.applyLaunchLegs(to: &out)
+            // The click latch belongs to the first connect: a reconnect's legs
+            // never borrow the original click-to-pixels span.
+            if firstConnectValue == nil {
+                out.clickToFirstFrameMs = ConnectTimingTelemetry.shared.clickToFirstFrameMs
+                out.launchPathMs = ConnectTimingTelemetry.shared.launchPathMs
+                ConnectTimingTelemetry.shared.applyLaunchLegs(to: &out)
+            }
             out.complete = firstFrameNanos != 0
             return out
+        }
+
+        /// In-place reconnect: keep the first connect's breakdown and audio TTF
+        /// (a later attempt keeps that stash), then start this connect's timeline.
+        func anchorReconnect(_ now: UInt64, audioTtfMs: Double?, audioTtf: AudioTtfContext.Record?) {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            let first = firstConnectValue
+                ?? FirstConnect(handshake: breakdownLocked(), audioTtfMs: audioTtfMs, audioTtf: audioTtf)
+            resetLocked()
+            firstConnectValue = first
+            connectStartNanos = now
+        }
+
+        /// The session's first connect, or nil when no in-place reconnect happened.
+        var firstConnect: FirstConnect? {
+            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
+            return firstConnectValue
         }
 
         /// Latch the per-session disconnect-reason ordinal (the FIRST concrete
@@ -461,11 +492,16 @@ extension TelemetryCounters {
 
         func reset() {
             os_unfair_lock_lock(lock)
+            resetLocked()
+            firstConnectValue = nil
+            os_unfair_lock_unlock(lock)
+        }
+
+        private func resetLocked() {
             connectStartNanos = 0; rtspStartNanos = 0; rtspDoneNanos = 0
             enetStartNanos = 0; establishedNanos = 0; firstFrameNanos = 0
             disconnectReasonValue = .none; globalReasonCounted = false
             idrRequestPendingNanos = 0; idrLastRoundTripMs = 0
-            os_unfair_lock_unlock(lock)
         }
 
         /// Delta (ms) between two monotonic ns stamps, or nil if either is unset

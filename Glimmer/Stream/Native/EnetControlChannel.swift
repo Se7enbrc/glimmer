@@ -186,20 +186,17 @@ final class EnetControlChannel: @unchecked Sendable {
     var negotiatedChannelCount: UInt32 = Enet.ctrlChannelCount
 
     // MARK: - IDR / RFI request coalescing (ControlStream.c idrFrameRequiredEvent)
-    //
-    // moonlight funnels EVERY LiRequestIdrFrame() into a level-triggered event
-    // (idrFrameRequiredEvent) drained by ONE dedicated thread (requestIdrFrameFunc,
-    // ControlStream.c:1624-1640): N sets between two drains collapse into ONE wire
-    // REQUEST_IDR, and a pending IDR flushes any queued RFIs (LiRequestIdrFrame
-    // ControlStream.c:415-422 → freeBasicLbqList(referenceFrameControlQueue)).
-    // Without this, every failed frame fires its own reliable wire IDR - the
-    // 890,891,892... "decoder requested IDR" storm that amplifies loss.
-    //
-    // Glimmer's drain point is the existing 20ms control-loop tick (controlLoopTick
-    // → drainPendingRecoveryRequests). `requestIdrFrame()` and
-    // `invalidateReferenceFrames(from:to:)` now only SET state here; the tick
-    // sends AT MOST ONE REQUEST_IDR (and at most one RFI) per loss event. All
-    // guarded by stateLock via withState.
+    // Like moonlight's requestIdrFrameFunc (ControlStream.c:1624-1640), requests only set state here and
+    // wake the control loop, whose drain turns a per-failed-frame storm into one wire REQUEST_IDR or RFI.
+
+    /// Wakes the control loop the moment a request goes idle→pending, so an
+    /// IDR/RFI leaves now instead of on the next 20ms tick. Edge-signaled only,
+    /// so its count never builds up past a couple of spare wakes.
+    let recoveryWake = DispatchSemaphore(value: 0)
+    /// serviceTimeMs of the last wire IDR and RFI; repeats of each keep the old
+    /// tick's spacing. Control-loop thread only.
+    var lastIdrSentMs: UInt32?
+    var lastRfiSentMs: UInt32?
 
     /// Level-triggered "an IDR is needed" flag (mirrors PltSetEvent on
     /// idrFrameRequiredEvent). Multiple requests between drains collapse to one
@@ -388,8 +385,9 @@ final class EnetControlChannel: @unchecked Sendable {
     let stateLock = NSLock()
     let interrupted = ManagedAtomicFlag()
 
-    /// Fired when the host sends a TERMINATION (0x0109). Wired by NativeBackend
-    /// to connectionTerminated + teardown.
+    /// Fired once when the peer dies (declarePeerDead): host TERMINATION or
+    /// DISCONNECT, ACK silence, or a failed socket. Wired by NativeBackend to
+    /// connectionTerminated + teardown.
     var onTerminated: ((Int32) -> Void)?
     /// Fired (on CHANGE only) when the host signals HDR mode (0x010e).
     var onHdrMode: ((Bool) -> Void)?
@@ -452,6 +450,9 @@ final class EnetControlChannel: @unchecked Sendable {
     /// ~90s of coverage; any future undispatched type could flood identically.
     /// The totals are surfaced once at teardown by logIgnoredControlTotals().
     var ignoredControlCounts: [UInt16: UInt64] = [:]
+    /// Inbound control payloads that failed authentication (lock-guarded): the
+    /// first is logged, the total once at teardown, so a spoofed flood can't fill the log.
+    var rejectedInboundControl: UInt64 = 0
 
     /// Most recent HDR mastering metadata the host announced, if any.
     func hdrMetadata() -> HdrMetadata? { withState { lastHdrMetadata } }
@@ -511,10 +512,15 @@ final class EnetControlChannel: @unchecked Sendable {
     /// under stateLock, so the interrupt() + close() teardown pair logs at most
     /// once (whichever runs first with a non-empty map wins).
     func logIgnoredControlTotals() {
-        let counts = withState { () -> [UInt16: UInt64] in
-            let taken = ignoredControlCounts
+        let (counts, rejected) = withState { () -> ([UInt16: UInt64], UInt64) in
+            let taken = (ignoredControlCounts, rejectedInboundControl)
             ignoredControlCounts = [:]
+            rejectedInboundControl = 0
             return taken
+        }
+        if rejected > 0 {
+            Diag.notice("ENet rejected \(rejected) unauthenticated inbound control payload(s) this session",
+                        Self.logCategory)
         }
         guard !counts.isEmpty else { return }
         let summary = counts.sorted { $0.key < $1.key }
@@ -563,18 +569,6 @@ final class EnetControlChannel: @unchecked Sendable {
     /// FEC status sink; must NEVER block the calling video thread.
     func queueFrameFecStatus(_ status: FrameFecStatus) {
         _ = status
-    }
-
-    func enetCode(_ error: Error) -> Int32 {
-        if let enetError = error as? EnetError {
-            switch enetError {
-            case .connectTimeout: return -110 // ETIMEDOUT-ish
-            case .interrupted: return -4
-            case .disconnected: return -103
-            default: return -1
-            }
-        }
-        return -1
     }
 }
 

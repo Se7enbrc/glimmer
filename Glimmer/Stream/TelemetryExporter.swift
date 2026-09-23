@@ -252,6 +252,9 @@ final class TelemetryExporter: @unchecked Sendable {
             // crash, see IOReportSampler.swift), so without this its first
             // "delta" would span the gap since the previous session's last tick.
             self.ioReport?.beginSession()
+            // NDJSON first: its budget sweep must run before the trace writer
+            // creates this session's segment, or the sweep could delete it.
+            self.openNDJSONFile()
             // Per-frame latency tracker + its batched trace writer. Installs the
             // gate-checked `FrameTimingTracker.shared` the hot-path stage call
             // sites read; when the gate is off (default) nothing is installed and
@@ -259,7 +262,6 @@ final class TelemetryExporter: @unchecked Sendable {
             // the exporter's lifecycle, session id, and ISO stamp.
             FrameTimingTracker.startIfEnabled(
                 sessionId: self.sessionId, isoStamp: self.isoFormatter.string(from: Date()))
-            self.openNDJSONFile()
             // One-shot CONFIG/DIAL breadcrumb first, so every session file is
             // self-describing from line 1 (see writeConfigEvent).
             self.writeConfigEvent()
@@ -310,6 +312,9 @@ final class TelemetryExporter: @unchecked Sendable {
             Self.eventSinkBox.withLock { $0 = nil }
             self.captureTimer?.cancel()
             self.captureTimer = nil
+            // The feed just stopped: withdraw the published decision so pacers
+            // go back to live jitter instead of this session's last level.
+            EnvSignalController.shared.endSession()
             self.listener?.cancel()
             self.listener = nil
             // Sweep still-open /metrics connections (silent/half-open peers
@@ -336,24 +341,32 @@ final class TelemetryExporter: @unchecked Sendable {
 
     // MARK: - C2 Logs-directory sweep
 
-    /// Total-byte budget for `~/Library/Logs/Glimmer` after a sweep. Once the
-    /// dir exceeds this, the OLDEST Glimmer log files are pruned (newest kept)
-    /// until it fits. 300MB holds many sessions of NDJSON + the size-capped
-    /// per-frame trace tails while bounding unbounded growth.
-    private static let logsByteBudget: UInt64 = 300 * 1024 * 1024
-    /// Age limit (seconds): a Glimmer log file older than this is pruned
-    /// regardless of the byte budget. 14 days.
+    /// Byte budget for the per-frame traces + 1Hz NDJSON in Logs/Glimmer,
+    /// enforced at each diagnostics session start (before its files exist, so
+    /// the session being recorded may exceed it).
+    static let logsByteBudget: UInt64 = 300 * 1024 * 1024
+    /// Age limit (seconds): any Glimmer log file older than this is pruned,
+    /// Diag logs and receipts included. 14 days.
     private static let logsMaxAgeSeconds: TimeInterval = 14 * 24 * 3600
 
-    /// Prune the Glimmer Logs dir to the age limit + the byte budget, newest
-    /// kept. Touches ONLY our own log files (`telemetry-*` / `glimmer-*` - the
-    /// NDJSON, per-frame trace, session report, and Diag log families) so it can
-    /// never remove anything else in the dir. Best-effort: any error per file is
-    /// swallowed (a failed prune must never break telemetry bring-up). On the
-    /// exporter's `workQueue` (called once at session start) - never a hot path.
-    static func sweepLogsDirectory(_ dir: URL, log: Logger) {
+    /// `~/Library/Logs/Glimmer`: the Diag logs, telemetry rows, frame traces and receipts.
+    static let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+
+    /// Age-only sweep at app launch, whatever the diagnostics setting, so the
+    /// 14-day rule runs even when no diagnostics session ever starts again.
+    static func sweepLogsAtLaunch() {
+        let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
+        Task.detached(priority: .utility) {
+            sweepLogsDirectory(logsDirectory, log: log, enforceBudget: false)
+        }
+    }
+
+    /// Prune the Glimmer Logs dir: age for every family, then (if `enforceBudget`) bytes over
+    /// traces + 1Hz NDJSON, the latest session last. Diag logs + receipts only ever age out.
+    static func sweepLogsDirectory(_ dir: URL, log: Logger, enforceBudget: Bool = true) {
         let fm = FileManager.default
-        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+        let keys: [URLResourceKey] = [.creationDateKey, .contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
         guard let entries = try? fm.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return }
         // Our own log families only - never delete a foreign file.
@@ -361,12 +374,13 @@ final class TelemetryExporter: @unchecked Sendable {
             let name = url.lastPathComponent
             return name.hasPrefix("telemetry-") || name.hasPrefix("glimmer-")
         }
-        struct Entry { let url: URL; let modified: Date; let size: UInt64 }
+        struct Entry { let url: URL; let created: Date; let modified: Date; let size: UInt64 }
         var files: [Entry] = []
         for url in ours {
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
                   values.isRegularFile == true else { continue }
             files.append(Entry(url: url,
+                               created: values.creationDate ?? .distantPast,
                                modified: values.contentModificationDate ?? .distantPast,
                                size: UInt64(values.fileSize ?? 0)))
         }
@@ -381,10 +395,26 @@ final class TelemetryExporter: @unchecked Sendable {
                 survivors.append(entry)
             }
         }
-        // (2) BYTE-BUDGET prune: oldest-first until under budget.
-        var total = survivors.reduce(UInt64(0)) { $0 &+ $1.size }
-        if total > logsByteBudget {
-            for entry in survivors.sorted(by: { $0.modified < $1.modified }) {
+        // (2) BYTE-BUDGET prune over the bulky families, latest session last. Within
+        // each group: rollover segments, then base segments, then 1Hz, oldest-first.
+        let bulky = survivors.filter {
+            let name = $0.url.lastPathComponent
+            return !name.hasPrefix("glimmer-") && !name.hasPrefix("telemetry-session-")
+        }
+        let family = { (entry: Entry) -> Int in
+            let name = entry.url.lastPathComponent
+            guard name.hasPrefix("telemetry-frames-") else { return 2 }
+            return name.contains("Z-") ? 0 : 1
+        }
+        // The latest session is whatever was created at or after its 1Hz file,
+        // which `start()` creates before the trace.
+        let latestStart = bulky.filter { family($0) == 2 }.map(\.created).max() ?? .distantFuture
+        let rank = { (entry: Entry) in
+            (entry.created >= latestStart ? 1 : 0, family(entry), entry.modified)
+        }
+        var total = bulky.reduce(UInt64(0)) { $0 &+ $1.size }
+        if enforceBudget && total > logsByteBudget {
+            for entry in bulky.sorted(by: { rank($0) < rank($1) }) {
                 guard total > logsByteBudget else { break }
                 if (try? fm.removeItem(at: entry.url)) != nil {
                     total &-= entry.size
@@ -423,15 +453,19 @@ final class TelemetryExporter: @unchecked Sendable {
                 case .failed(let error):
                     // Busy port (or any bind failure): log + skip. The NDJSON
                     // sink still runs; the stream is never affected.
-                    // swiftlint:disable:next line_length
-                    self.log.error("Telemetry HTTP listener failed (port \(Self.port) busy?): \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues")
+                    self.log.error("""
+                        Telemetry HTTP listener failed (port \(Self.port) busy?): \
+                        \(error.localizedDescription, privacy: .private) - skipping HTTP, NDJSON continues
+                        """)
                     Diag.warn("Telemetry HTTP endpoint unavailable (port \(Self.port) likely busy); "
                         + "NDJSON log continues.", Self.logCategory)
                     self.listener?.cancel()
                     self.listener = nil
                 case .ready:
-                    // swiftlint:disable:next line_length
-                    self.log.notice("Telemetry HTTP ready on \(self.lanBindEnabled ? "0.0.0.0" : "127.0.0.1", privacy: .public):\(Self.port)")
+                    self.log.notice("""
+                        Telemetry HTTP ready on \
+                        \(self.lanBindEnabled ? "0.0.0.0" : "127.0.0.1", privacy: .public):\(Self.port)
+                        """)
                 default:
                     break
                 }
@@ -442,8 +476,10 @@ final class TelemetryExporter: @unchecked Sendable {
             newListener.start(queue: workQueue)
             listener = newListener
         } catch {
-            // swiftlint:disable:next line_length
-            log.error("Telemetry: NWListener init failed: \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues")
+            log.error("""
+                Telemetry: NWListener init failed: \
+                \(error.localizedDescription, privacy: .private) - skipping HTTP, NDJSON continues
+                """)
         }
     }
 

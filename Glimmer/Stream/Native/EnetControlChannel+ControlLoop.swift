@@ -17,6 +17,25 @@ extension EnetControlChannel {
     struct ControlLoopState {
         var lastPeriodicPingMs: UInt32 = 0
         var lastHealthSnapshotMs: UInt32 = 0
+        /// How long the loop may wait for a recovery wake before the next tick.
+        var nextWaitMs = EnetControlChannel.controlTickMs
+    }
+
+    /// The control loop's idle tick; a recovery request wakes it sooner.
+    static let controlTickMs: UInt32 = 20
+
+    /// Latch the peer dead exactly once, whichever path sees it first (socket
+    /// failure, ACK silence, host DISCONNECT or TERMINATION): logs `reason` and
+    /// fires onTerminated(code). Later reports of the same death are no-ops.
+    func declarePeerDead(code: Int32, reason: DiagMessage) {
+        let first = withState { () -> Bool in
+            let wasAlive = !disconnected
+            disconnected = true
+            return wasAlive
+        }
+        guard first else { return }
+        Diag.error(reason, Self.logCategory)
+        onTerminated?(code)
     }
 
     /// One tick's reliable-command health, read under a SINGLE stateLock
@@ -102,12 +121,9 @@ extension EnetControlChannel {
         }
 
         if health.unackedCount > 0 && health.sinceLastAck >= Self.ackSilenceDeadMs {
-            Diag.error("ENet peer silent: no ACK in \(health.sinceLastAck)ms with "
+            declarePeerDead(code: -1, reason: "ENet peer silent: no ACK in \(health.sinceLastAck)ms with "
                 + "\(health.unackedCount) reliable command(s) outstanding "
-                + "(oldest \(health.oldestUnackedMs)ms) - host silently reset peer; terminating",
-                Self.logCategory)
-            withState { disconnected = true }
-            onTerminated?(-1)
+                + "(oldest \(health.oldestUnackedMs)ms) - host silently reset peer; terminating")
             return false
         }
 
@@ -124,12 +140,10 @@ extension EnetControlChannel {
             sendEnetPing()
         }
 
-        // Drain coalesced IDR/RFI requests: at most ONE REQUEST_IDR (and one
-        // RFI) per tick, no matter how many failed frames asked for one since
-        // the last drain. This is moonlight's requestIdrFrameFunc dedicated-drain
-        // (ControlStream.c:1624-1640) collapsed onto the 20ms control tick - it
-        // turns the per-failed-frame IDR storm into one request per loss event.
-        drainPendingRecoveryRequests()
+        // Drain coalesced IDR/RFI requests (moonlight's requestIdrFrameFunc): a request
+        // wakes the loop and leaves at once, and repeats of each kind stay 20 ms apart,
+        // so a per-failed-frame IDR storm sends no more than the old tick did.
+        state.nextWaitMs = drainPendingRecoveryRequests()
 
         // Reliable retransmits (covers both ping types + IDR/RFI/LTR).
         checkRetransmit()
@@ -151,27 +165,14 @@ extension EnetControlChannel {
         return true
     }
 
-    /// The persistent control loop NativeBackend runs after establishAndStart()
-    /// returns "connected". Sustains the session by emitting BOTH keepalives:
-    ///   (A) the app-level periodic ping (encrypted 0x0200) every 100ms - the
-    ///       Sunshine stream keepalive that keeps video flowing; and
-    ///   (B) the transport-level ENet PING (0x85, ch 0xFF) every 500ms of no
-    ///       send - keeps the host's ENet peer from timing out.
-    /// It also drives checkRetransmit() so reliable sends (including the pings)
-    /// get ACKed/resent. Inbound datagrams continue to be handled by the
-    /// existing receive loop (onDatagram). Bounded 20ms tick; cancellable via
-    /// interrupt().
-    ///
-    /// SYNCHRONOUS variant - run on a DEDICATED Thread (qos .userInteractive) by
-    /// NativeBackend, NOT on the Swift cooperative pool. The 20ms tick is a
-    /// blocking Thread.sleep so the loop that must emit ACKs/keepalives cannot be
-    /// de-prioritized or starved behind high-QoS main-thread input - the moonlight
-    /// LossStats + ControlRecv dedicated-thread guarantee.
+    /// The persistent post-connect loop, on NativeBackend's DEDICATED Thread (not the pool):
+    /// ticks controlLoopTick, then blocks on `recoveryWake` (an IDR/RFI request ends the wait
+    /// early), so keepalives and ACKs never starve behind main-thread input. Ends on interrupt().
     func runControlLoopSync() {
         var state = startControlLoop()
         while !interrupted.isSet {
             if !controlLoopTick(&state) { break }
-            Thread.sleep(forTimeInterval: 0.020) // 20ms tick (blocking)
+            _ = recoveryWake.wait(timeout: .now() + .milliseconds(Int(state.nextWaitMs)))
         }
         Diag.notice("ENet control loop stopped", Self.logCategory)
     }
@@ -187,7 +188,7 @@ extension EnetControlChannel {
                 type: CtrlV2.periodicPing, payload: payload,
                 channel: Enet.ctrlChannelGeneric, label: "PERIODIC_PING")
         } catch {
-            Diag.error("ENet periodic ping failed: \(error)", Self.logCategory)
+            Diag.error("ENet periodic ping failed: \(error, privacy: .private)", Self.logCategory)
         }
     }
 

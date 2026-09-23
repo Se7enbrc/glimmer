@@ -75,16 +75,6 @@ final class StatsCollector: @unchecked Sendable {
     // (`now - windowStart >= minWindowSeconds`), so the reported FPS is the
     // average over the last ~1s sampling window even when the overlay reads at
     // 4 Hz - same shape as moonlight-qt's `STATS_INTERVAL` accumulators.
-    /// Wall-clock of the last frame the native backend's receive thread
-    /// handed us. Reception != decode: a host sending packets we can't
-    /// decode (corrupted bitstream, missing IDR, AV1-on-no-AV1-hardware)
-    /// is invisible to a reception-gated watchdog, so StreamSession's
-    /// watchdog gates on `lastDecodedFrameTime`. This field lives on so
-    /// the watchdog can distinguish "host silent" (no reception either)
-    /// from "host sending but we can't decode" (reception fine, decode
-    /// silent) and pick the right recovery (teardown vs. IDR-request).
-    /// 0 means we haven't received our first frame yet.
-    var lastReceivedFrameTime: CFAbsoluteTime = 0
     /// Wall-clock of the last frame VT successfully produced a CVPixelBuffer
     /// for. Set from the VT output callback on the success path.
     /// 0 means we haven't decoded our first frame yet.
@@ -133,8 +123,34 @@ final class StatsCollector: @unchecked Sendable {
         var avgFrameBytes: Double?
         var maxFrameBytes: Int?
         var idrFramePercent: Double?
+        var hostCadence: HostCadence?
     }
     var windowCache: WindowCache?
+
+    /// One window's host frame cadence (telemetry only): received frames' PTS-delta
+    /// percentiles, adjacent deltas at least `hostUnevenRatio` apart, and the share
+    /// of presents that were late because of the host's own timing.
+    struct HostCadence: Sendable {
+        var intervalP50Ms: Double
+        var intervalP95Ms: Double
+        var unevenPairs: UInt64
+        var lateByHostPercent: Double?
+    }
+    /// A single skipped frame doubles one delta (2×); game-side bunching such as
+    /// 5 ms then 28 ms is far past this.
+    static let hostUnevenRatio = 2.5
+    /// Host-cadence window state, under `lock`: last received PTS and delta, the
+    /// window's deltas (capped) and uneven pairs, last presented PTS, host-late count.
+    var lastReceivedPtsUs: UInt64 = 0
+    var lastHostDeltaMs = 0.0
+    var windowHostDeltasMs: [Double] = []
+    static let hostDeltaWindowCap = 1_024
+    var windowHostUnevenPairs: UInt64 = 0
+    var lastPresentedPtsSeconds = Double.nan
+    var hostTimedLatePresents: UInt64 = 0
+    /// A client-side drop (pacer, renderer, decoder) since the last present: that
+    /// present's PTS delta spans the skipped frame, so it is never charged to the host.
+    var clientSkipSinceLastPresent = false
 
     // Total-frame counters since reset(), retained so the "frames dropped by
     // decoder" percentage is over the whole stream, not just the current
@@ -255,7 +271,6 @@ final class StatsCollector: @unchecked Sendable {
         decoderDroppedFrames = 0
         renderedFrames = 0
         receivedBytes = 0
-        lastReceivedFrameTime = 0
         lastDecodedFrameTime = 0
         lastPresentTime = 0
         windowStart = CACurrentMediaTime()
@@ -285,6 +300,9 @@ final class StatsCollector: @unchecked Sendable {
         framesWithHostProcessingLatency = 0
         windowFrameBytesSum = 0; windowFrameCount = 0
         windowMaxFrameBytes = 0; windowIdrFrameCount = 0
+        lastReceivedPtsUs = 0; lastHostDeltaMs = 0
+        windowHostDeltasMs.removeAll(keepingCapacity: true); windowHostUnevenPairs = 0
+        lastPresentedPtsSeconds = .nan; hostTimedLatePresents = 0; clientSkipSinceLastPresent = false
         os_unfair_lock_unlock(&lock)
         for state in leftover {
             OSSignposter.decode.endInterval(
@@ -341,6 +359,7 @@ final class StatsCollector: @unchecked Sendable {
             snap.avgFrameBytes = cache.avgFrameBytes
             snap.maxFrameBytes = cache.maxFrameBytes
             snap.idrFramePercent = cache.idrFramePercent
+            snap.hostCadence = cache.hostCadence
         }
 
         // ---- LIVE gauges - recomputed every call regardless of the window ----
@@ -403,6 +422,7 @@ final class StatsCollector: @unchecked Sendable {
             cache.maxFrameBytes = windowMaxFrameBytes
             cache.idrFramePercent = Double(windowIdrFrameCount) / Double(windowFrameCount) * 100.0
         }
+        cache.hostCadence = hostCadenceLocked()
         windowCache = cache
 
         // Slide the window start forward + reset window-scoped accumulators.
@@ -425,5 +445,23 @@ final class StatsCollector: @unchecked Sendable {
         presentCadenceSamples = 0
         presentCadenceErrorMsMax = 0
         maxPacingDepth = 0
+        windowHostDeltasMs.removeAll(keepingCapacity: true)
+        windowHostUnevenPairs = 0
+        hostTimedLatePresents = 0
+    }
+
+    /// This window's host cadence, nil before any received PTS delta. MUST be
+    /// called with `lock` held, before the window accumulators reset.
+    private func hostCadenceLocked() -> HostCadence? {
+        guard !windowHostDeltasMs.isEmpty else { return nil }
+        let sorted = windowHostDeltasMs.sorted()
+        func quantile(_ fraction: Double) -> Double {
+            sorted[min(sorted.count - 1, Int(Double(sorted.count) * fraction))]
+        }
+        let presents = onTimePresents + latePresents
+        return HostCadence(
+            intervalP50Ms: quantile(0.50), intervalP95Ms: quantile(0.95),
+            unevenPairs: windowHostUnevenPairs,
+            lateByHostPercent: presents > 0 ? Double(hostTimedLatePresents) / Double(presents) * 100.0 : nil)
     }
 }

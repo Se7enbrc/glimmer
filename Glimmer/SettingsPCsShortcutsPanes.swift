@@ -1,16 +1,11 @@
 //
 //  SettingsPCsShortcutsPanes.swift
 //
-//  The PCs and Shortcuts settings panes (+ PC tile and hotkey row/badge
-//  helpers), split out of SettingsView.swift. Internal so SettingsRoot can
-//  compose them across files. (About lives in AboutPane.swift.)
+//  The PCs and Input settings panes (+ the PC tile), split out of
+//  SettingsView.swift. Internal so SettingsRoot can compose them across files.
+//  The shortcut and chord recorders live in SettingsShortcutRecorders.swift.
 //
 
-import AppKit
-import GameController
-import os
-import ServiceManagement
-import Combine
 import SwiftUI
 
 // MARK: - PCs
@@ -51,19 +46,13 @@ struct PCsPane: View {
                     }
                 }
 
-                HStack(spacing: 10) {
-                    Button {
-                        initialPairAddress = ""
-                        showPairSheet = true
-                    } label: {
-                        Label("Pair a PC", systemImage: "plus.circle.fill")
-                    }
-                    .buttonStyle(StreamButtonStyle())
-                    Button("Refresh paired PCs") {
-                        model.loadHosts()
-                    }
-                    .buttonStyle(.glass)
+                Button {
+                    initialPairAddress = ""
+                    showPairSheet = true
+                } label: {
+                    Label("Pair a PC…", systemImage: "plus.circle.fill")
                 }
+                .buttonStyle(StreamButtonStyle())
                 .padding(.top, 4)
             }
             .padding(20)
@@ -96,13 +85,22 @@ struct PCTile: View {
                 Button {
                     model.selectHost(host)
                 } label: {
-                    Image(systemName: host.id == model.selectedHost?.id ? "star.fill" : "star")
+                    Image(systemName: isDefault ? "star.fill" : "star")
                         .symbolRenderingMode(.hierarchical)
                         .contentTransition(.symbolEffect(.replace))
-                        .foregroundStyle(host.id == model.selectedHost?.id ? Color.yellow : .secondary)
+                        .foregroundStyle(isDefault ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Make default")
+                .help(isDefault ? "The default PC" : "Make this the default PC")
+                .accessibilityLabel("Default PC")
+                .accessibilityAddTraits(isDefault ? .isSelected : [])
+                // The right-click menu's items, visible so per-PC settings are
+                // discoverable without knowing to right-click.
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
+                    .hostMenuButton(host)
+                    .help("Settings and actions for this PC")
+                    .accessibilityLabel("Actions for \(host.displayName)")
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -152,16 +150,18 @@ struct PCTile: View {
             // white stroke.
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(
-                    host.id == model.selectedHost?.id
+                    isDefault
                         ? Color.accentColor.opacity(0.85)
                         : Color.clear,
                     lineWidth: 2
                 )
         }
-        // Shared right-click affordance (Rename / Codec / Unpair).
-        // Right-click is the canonical path; same menu on the launcher hero.
+        // Shared right-click menu, the same items as the visible button above
+        // and the launcher hero's menu.
         .hostContextMenu(host)
     }
+
+    private var isDefault: Bool { host.id == model.selectedHost?.id }
 
     private var monogram: String {
         let name = host.displayName
@@ -193,45 +193,71 @@ struct ShortcutsPane: View {
     // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
     @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
+    /// The chosen chord can't fire on a DualSense until the raw-HID reader is on.
+    private var chordNeedsExtraButtons: Bool {
+        !model.rawHIDControllerEnabled
+            && InputForwarder.needsRawHIDCenterButtons(chord: model.controllerQuitChord,
+                                                       custom: model.customControllerChord)
+    }
+
     var body: some View {
         // @Bindable shim - surfaces $model.x bindings from an @Observable
         // environment value (the macro replaces ObservableObject; @Environment
         // alone exposes the value but not per-property Bindings).
         @Bindable var model = model
+        // Row names double as the "Already used for" names, so a recording
+        // can't copy another shortcut or a fixed one.
+        let stop = "Stop Streaming", stats = "Show or Hide Stream Stats"
+        let pointer = "Capture or Release the Pointer", mini = "Mini Player", paste = "Paste as Text"
+        let taken: [(name: String, chord: HotkeyChord)] = [
+            (stop, model.quitHotkey), (stats, model.statsHotkey),
+            (pointer, model.releasePointerHotkey), (mini, model.miniPlayerHotkey),
+            ("Bookmark a Rough Moment", .defaultBookmark), (paste, PasteText.chord)
+        ]
         Form {
             Section("In-stream shortcuts") {
-                HotkeyRow(label: "Leave the stream", hotkey: $model.quitHotkey)
-                Text("Press this combo at any time during a stream to return to Glimmer.")
+                HotkeyRow(label: stop, hotkey: $model.quitHotkey, taken: taken)
+                Text("Ends the stream and brings you back to Glimmer.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                HotkeyRow(label: "Show or hide stream stats", hotkey: $model.statsHotkey)
+                HotkeyRow(label: stats, hotkey: $model.statsHotkey, taken: taken)
                 // Session-scoped on purpose: the hotkey flips the overlay
                 // only for the current stream. The next stream starts from
-                // the stats-overlay toggle in Quality.
-                Text("Flips the overlay on or off for the current stream only - the next stream starts from your Quality preference.")
+                // the stream stats toggle in Quality.
+                Text("Shows or hides stream stats for this stream only. The next stream follows "
+                    + "Settings › Quality.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                HotkeyRow(label: "Capture or release the pointer", hotkey: $model.releasePointerHotkey)
+                HotkeyRow(label: pointer, hotkey: $model.releasePointerHotkey, taken: taken)
                 // Window mode only: in full screen the pointer is hidden for
                 // the whole session and there is nothing to toggle, so the
-                // chord reaches the host there like any other key.
-                Text("When the stream is shown in a window the game takes your mouse while the pointer is "
-                    + "over it - hold Esc or switch apps to get it back, and this combo does either without "
-                    + "moving the mouse. In full screen this combo goes to the game.")
+                // chord reaches the PC there like any other key.
+                Text("In a window, the game takes your mouse while the pointer is over the picture. Hold Esc "
+                    + "or switch apps to get it back, or press this shortcut to take it or give it back "
+                    + "without moving the mouse. In full screen this shortcut goes to the game.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                HotkeyRow(label: "Mini player", hotkey: $model.miniPlayerHotkey)
+                HotkeyRow(label: mini, hotkey: $model.miniPlayerHotkey, taken: taken)
                 Text("Shrinks the stream to a small window that floats over your other apps, and brings it "
                     + "back. Click the mini player to play; hold Esc to get the pointer back.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                HStack {
+                    Text(paste)
+                    Spacer()
+                    StaticChordBadge(chord: PasteText.chord)
+                }
+                Text("Types this Mac's clipboard into the PC as text, whatever the PC's keyboard layout. "
+                    + "⌘V does the same while ⌘ stays with this Mac.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
-            Section("Controller quit") {
+            Section("Stop streaming with a controller") {
                 // Hold-to-quit chord on the gamepad. Fires the same path as
                 // the keyboard quit hotkey above - useful for couch
                 // streaming where the keyboard isn't reachable.
-                Picker("Hold to leave the stream", selection: $model.controllerQuitChord) {
+                Picker("Hold to stop streaming", selection: $model.controllerQuitChord) {
                     ForEach(ControllerQuitChord.allCases, id: \.self) { chord in
                         Text(chord.displayName).tag(chord)
                     }
@@ -246,25 +272,33 @@ struct ShortcutsPane: View {
                         Button("Record…") { showChordCapture = true }
                     }
                 }
-                Text("Hold these buttons together on the gamepad for a moment to quit the stream. "
+                // RawHIDControl while off is its "Turn On…" button and explainer.
+                if chordNeedsExtraButtons {
+                    HStack(spacing: 8) {
+                        Label("On a DualSense this needs Extra DualSense buttons.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(.orange)
+                        Spacer()
+                        RawHIDControl()
+                    }
+                }
+                Text("Hold these buttons together on the controller for a moment to stop streaming. "
                     + "L3 + R3 by default; the keyboard shortcut above always works too.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
-            // Raw-HID DualSense reader - co-located here (was in Troubleshooting)
-            // so all raw input lives in one place. Shown when a pad is connected
-            // or the feature is already on (its off-switch must not vanish with
-            // the pad). RawHIDControl is defined in TroubleshootingPane.swift.
-            if model.controllerConnected || model.rawHIDControllerEnabled {
+            // Raw-HID DualSense reader. Shown when a pad is connected or the
+            // feature is on (its off-switch must not vanish with the pad), but
+            // not while the chord warning above already offers Turn On.
+            if model.rawHIDControllerEnabled || (model.controllerConnected && !chordNeedsExtraButtons) {
                 Section {
                     RawHIDControl()
                 } header: {
                     Text("Extra DualSense buttons")
                 } footer: {
-                    Text("Reads controller buttons macOS hides - on a DualSense, "
-                        + "the Options, Create/Share, and Mute buttons - for the "
-                        + "Moonlight-style exit chord and to forward them to the host. "
+                    Text("Reads the DualSense buttons macOS hides (Options, Create and Mute), so they "
+                        + "reach the PC and a controller chord can use them. "
                         + "Off by default; needs Input Monitoring.")
                 }
             }
@@ -272,9 +306,10 @@ struct ShortcutsPane: View {
             Section("macOS keys") {
                 Toggle(isOn: $model.captureSysKeys) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Use ⌘ shortcuts inside the game (this Mac stops answering them)")
+                        Text("Send ⌘ to the PC as the Windows key")
                             .fontWeight(.medium)
-                        Text("Forwards ⌘-Tab, ⌘-Space, etc. to your gaming PC. Off by default so macOS keeps owning these combos.")
+                        Text("Includes ⌘-Tab and ⌘-Space while the game has the pointer. When you take "
+                            + "the pointer back, ⌘ and its shortcuts belong to this Mac again.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -282,7 +317,7 @@ struct ShortcutsPane: View {
                 // Help the curious: the change only applies to the next
                 // session, since the InputForwarder snapshots this flag at
                 // attach time.
-                Text("Takes effect on the next stream. Your quit shortcut still works either way.")
+                Text("Takes effect on the next stream. Your Stop Streaming shortcut works either way.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -296,8 +331,8 @@ struct ShortcutsPane: View {
                 .help("Linear scaling keeps your Tracking Speed and drops the acceleration curve while "
                     + "the stream is focused; Mouse acceleration leaves the Mac's pointer untouched.")
                 Text("Linear scaling means only the game's own sensitivity shapes your aim, at the "
-                    + "speed you are used to. Your setting is restored the instant you leave the "
-                    + "stream. Mice only; the trackpad is untouched.")
+                    + "speed you are used to. Your setting comes back the moment you stop "
+                    + "streaming. Mice only; the trackpad is untouched.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -306,249 +341,6 @@ struct ShortcutsPane: View {
         .sheet(isPresented: $showChordCapture) {
             ChordCaptureSheet().environment(model)
         }
-    }
-}
-
-// MARK: - Controller chord capture (#9)
-
-/// Records a custom controller exit chord by reading live held buttons. The
-/// user holds the combo and releases; the set held just before release becomes
-/// the chord. Reuses the input-test ControllerMonitor (to engage GameController
-/// value updates) + the DualSense raw-HID reader for the center buttons.
-private struct ChordCaptureSheet: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-    @State private var current: Set<ControllerButton> = []
-    /// Sticky union of every button held during this recording - so releasing
-    /// the combo one button at a time still captures the whole chord.
-    @State private var accumulated: Set<ControllerButton> = []
-    @State private var captured: Set<ControllerButton> = []
-    @State private var recording = true
-    @State private var hidRetained = false
-    // Drives poll(): capture reads pad state, so a live stream keeps its handlers.
-    private let tick = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Record exit chord").font(.headline)
-
-            if recording {
-                Text("Hold all the buttons for your chord at once, then **release** to capture.")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Text(accumulated.isEmpty ? "Waiting for input…" : ControllerButton.describe(accumulated))
-                    .font(.title3.monospaced())
-                    .foregroundStyle(accumulated.isEmpty ? Color.secondary : Color.accentColor)
-                    .frame(minHeight: 28)
-            } else {
-                Text("Captured chord").font(.callout).foregroundStyle(.secondary)
-                Text(ControllerButton.describe(captured))
-                    .font(.title2.weight(.semibold)).foregroundStyle(.tint)
-                Button("Record again") { startRecording() }
-                    .buttonStyle(.bordered)
-            }
-
-            if DualSenseHID.isEnabled == false {
-                Text("Tip: turn on Extra DualSense buttons (Settings → Input) to record "
-                    + "the Options / Create / Mute buttons.")
-                    .font(.caption2).foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-            }
-
-            HStack {
-                Button("Cancel") { dismiss() }
-                Spacer()
-                Button("Save") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(captured.isEmpty)
-            }
-        }
-        .padding(24)
-        .frame(width: 380)
-        .onAppear { engage() }
-        .onDisappear { disengage() }
-        .onReceive(tick) { _ in poll() }
-    }
-
-    /// Poll-driven capture (the 30 Hz tick plus sticky accumulation), so the
-    /// sheet never takes the single-slot input handlers a live stream owns.
-    private func engage() {
-        HIDGamepadManager.shared.retain()
-        GCController.shouldMonitorBackgroundEvents = true
-        GCController.startWirelessControllerDiscovery {}
-        if DualSenseHID.isEnabled {
-            DualSenseHID.shared.retain()
-            hidRetained = true
-        }
-    }
-
-    private func disengage() {
-        HIDGamepadManager.shared.release()
-        GCController.stopWirelessControllerDiscovery()
-        if hidRetained {
-            DualSenseHID.shared.release()
-            hidRetained = false
-        }
-    }
-
-    private func startRecording() {
-        captured = []; accumulated = []; current = []; recording = true
-    }
-
-    private func poll() {
-        guard recording else { return }
-        var held: Set<ControllerButton> = []
-        for pad in GCController.controllers().compactMap(\.extendedGamepad) {
-            held.formUnion(heldControllerButtons(pad: pad))
-        }
-        for pad in HIDGamepadManager.shared.devices.values {
-            let state = pad.state
-            held.formUnion(heldControllerButtons(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
-                                                 rightTrigger: state.analog.rightTrigger))
-        }
-        current = held
-        if !held.isEmpty {
-            // Sticky: remember every button touched during the hold, so a
-            // staggered release still yields the full chord.
-            accumulated.formUnion(held)
-        } else if !accumulated.isEmpty {
-            // Fully released after a held combo → that's the chord.
-            captured = accumulated
-            recording = false
-        }
-    }
-
-    private func save() {
-        model.customControllerChord = captured
-        model.controllerQuitChord = .custom
-        dismiss()
-    }
-}
-
-struct HotkeyRow: View {
-    let label: String
-    @Binding var hotkey: HotkeyChord
-
-    var body: some View {
-        HStack {
-            Text(label)
-            Spacer()
-            HotkeyBadge(hotkey: $hotkey)
-        }
-    }
-}
-
-struct HotkeyBadge: View {
-    @Binding var hotkey: HotkeyChord
-    @State private var isCapturing = false
-    @State private var livePreview = ""
-    @State private var monitor: Any?
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Button {
-                if isCapturing { stop() } else { start() }
-            } label: {
-                Text(displayText)
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .frame(minWidth: 120, minHeight: 22)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    // Capture state tints the glass with the accent color so it
-                    // reads as "live", otherwise it's a neutral glass capsule.
-                    .glassEffect(
-                        isCapturing
-                            ? .regular.interactive().tint(Color.accentColor.opacity(0.22))
-                            : .regular.interactive(),
-                        in: .capsule
-                    )
-                    .overlay(
-                        Capsule().stroke(
-                            isCapturing ? Color.accentColor : Color.clear,
-                            lineWidth: 2
-                        )
-                    )
-                    .foregroundStyle(isCapturing ? Color.accentColor : .primary)
-            }
-            .buttonStyle(.plain)
-
-            // Esc-to-cancel hint shown only during capture. Mirrors macOS's
-            // own keyboard-shortcut capture UI (System Settings ▸
-            // Keyboard ▸ Keyboard Shortcuts).
-            if isCapturing {
-                Text("Press Esc to cancel")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
-            }
-        }
-        .onDisappear { stop() }
-        .animation(.snappy(duration: 0.2), value: isCapturing)
-    }
-
-    private var displayText: String {
-        if isCapturing {
-            return livePreview.isEmpty ? "Press keys…" : livePreview
-        }
-        return hotkey.displayString
-    }
-
-    private func start() {
-        isCapturing = true
-        livePreview = ""
-        // Local event monitor catches keys regardless of first-responder state.
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
-            handle(event)
-            return nil  // swallow so Cmd+Q etc. don't activate menu items
-        }
-    }
-
-    private func stop() {
-        isCapturing = false
-        livePreview = ""
-        if let activeMonitor = monitor {
-            NSEvent.removeMonitor(activeMonitor)
-            monitor = nil
-        }
-    }
-
-    private func handle(_ event: NSEvent) {
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        // Update live modifier preview on flagsChanged
-        if event.type == .flagsChanged {
-            var parts: [String] = []
-            if mods.contains(.control) { parts.append("⌃") }
-            if mods.contains(.option) { parts.append("⌥") }
-            if mods.contains(.shift) { parts.append("⇧") }
-            if mods.contains(.command) { parts.append("⌘") }
-            livePreview = parts.isEmpty ? "" : parts.joined() + "…"
-            return
-        }
-
-        // keyDown: commit the chord if it's a letter or number
-        // ESC = cancel
-        if event.keyCode == 53 {
-            stop()
-            return
-        }
-
-        guard let chars = event.charactersIgnoringModifiers,
-              chars.count == 1,
-              let char = chars.first,
-              char.isLetter || char.isNumber else {
-            return
-        }
-        let hk = HotkeyChord(
-            ctrl: mods.contains(.control),
-            alt: mods.contains(.option),
-            shift: mods.contains(.shift),
-            cmd: mods.contains(.command),
-            keyChar: String(char).lowercased()
-        )
-        guard hk.ctrl || hk.alt || hk.shift || hk.cmd else { return }
-        hotkey = hk
-        stop()
     }
 }
 

@@ -18,8 +18,15 @@ extension EnetControlChannel {
             if let data, !data.isEmpty {
                 self.onDatagram([UInt8](data))
             }
-            if err == nil && !self.interrupted.isSet {
-                self.startReceiveLoop()
+            guard !self.interrupted.isSet else { return }
+            guard let err else { self.startReceiveLoop(); return }
+            switch conn.state {
+            case .ready:
+                self.startReceiveLoop() // transient (an ICMP refusal): keep listening
+            case .failed:
+                self.declarePeerDead(code: -1, reason: "ENet receive failed (\(err, privacy: .private)) on a failed socket")
+            default:
+                break // the state handler re-arms this loop on the next .ready
             }
         }
     }
@@ -92,8 +99,9 @@ extension EnetControlChannel {
         case Enet.cmdAcknowledge:
             handleAcknowledge(ackChannelID: channelID, &reader)
         case Enet.cmdDisconnect:
-            stateLock.lock(); disconnected = true; stateLock.unlock()
-            Diag.error("ENet received DISCONNECT during/after handshake", Self.logCategory)
+            // -1 like moonlight's unexpected-disconnect terminate; after a
+            // TERMINATION this is a no-op (the peer is already dead).
+            declarePeerDead(code: -1, reason: "ENet received DISCONNECT during/after handshake")
             return false
         case Enet.cmdPing:
             // PING has no body; ACK if requested.
@@ -133,8 +141,11 @@ extension EnetControlChannel {
                 }
                 return true
             }
-            lastDispatchedInboundRelSeq[channelID] = relSeq
-            handleInboundControl(inner)
+            // Advance only past an authenticated payload: one forged packet at
+            // last + 0x7FFF would otherwise mark the next 32k genuine ones stale.
+            if handleInboundControl(inner) {
+                lastDispatchedInboundRelSeq[channelID] = relSeq
+            }
         default:
             // Remaining commands carry a body we don't act on but MUST consume
             // exactly so multi-command datagrams stay in sync - a RELIABLE
@@ -222,32 +233,24 @@ extension EnetControlChannel {
     // EnetControlChannel+ControlMessages.swift, split out to keep this file
     // under the length limit.
 
-    /// Decrypt + dispatch one inbound host control payload (the inner bytes of a
-    /// SEND_RELIABLE). Every host control message on the encrypted stream is the
-    /// envelope type 0x0001 → crypto.open() yields [type LE][len LE][payload].
-    /// Dispatch on the inner type: TERMINATION → onTerminated; HDR → onHdrMode
-    /// (transition-gated); RUMBLE → onRumble; TRIGGER RUMBLE → onRumbleTriggers;
-    /// RGB LED → onSetRgbLed; MOTION ENABLE → onSetMotionEvent; unknown →
-    /// count + once-per-type log + continue (NOT bail). Mirrors
-    /// controlReceiveThreadFunc.
-    func handleInboundControl(_ bytes: [UInt8]) {
-        guard bytes.count >= 2 else { return }
+    /// Decrypt and dispatch one SEND_RELIABLE control payload (envelope 0x0001, [type LE][len LE][payload]),
+    /// mirroring controlReceiveThreadFunc: TERMINATION goes through declarePeerDead, the rest to their
+    /// callbacks, unknown types are counted. Returns whether the payload authenticated.
+    func handleInboundControl(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count >= 2 else { return rejectInboundControl("runt, \(bytes.count) bytes") }
         let envelopeType = UInt16(bytes[0]) | (UInt16(bytes[1]) << 8)
         guard envelopeType == 0x0001 else {
-            Diag.info("ENet inbound non-encrypted control type 0x\(String(envelopeType, radix: 16)); ignoring",
-                      Self.logCategory)
-            return
+            return rejectInboundControl("non-encrypted type 0x\(String(envelopeType, radix: 16))")
         }
 
         let inner: [UInt8]
         do {
             inner = try crypto.open(bytes)
         } catch {
-            Diag.error("ENet failed to decrypt inbound control: \(error)", Self.logCategory)
-            return
+            return rejectInboundControl("decrypt failed: \(error, privacy: .private)")
         }
         // inner = [type LE][payloadLength LE][payload]
-        guard inner.count >= 4 else { return }
+        guard inner.count >= 4 else { return true }
         let innerType = UInt16(inner[0]) | (UInt16(inner[1]) << 8)
         let payloadLen = Int(inner[2]) | (Int(inner[3]) << 8)
         let payload = (inner.count >= 4 + payloadLen) ? Array(inner[4..<(4 + payloadLen)]) : Array(inner[4...])
@@ -255,10 +258,8 @@ extension EnetControlChannel {
         switch innerType {
         case CtrlV2.termination:
             let code = parseTerminationCode(payload)
-            Diag.error("ENet TERMINATION received (code 0x\(String(UInt32(bitPattern: code), radix: 16)))",
-                       Self.logCategory)
-            withState { disconnected = true }
-            onTerminated?(code)
+            declarePeerDead(code: code, reason: "ENet TERMINATION received "
+                + "(code 0x\(String(UInt32(bitPattern: code), radix: 16)))")
         case CtrlV2.hdrInfo:
             handleHdrInfo(payload)
         case CtrlV2.rumbleData:
@@ -307,6 +308,22 @@ extension EnetControlChannel {
                     + "ignoring + suppressing further occurrences of this type", Self.logCategory)
             }
         }
+        return true
+    }
+
+    /// Count an inbound control payload that failed authentication; only the
+    /// first per session is logged, the total rides logIgnoredControlTotals.
+    /// Always returns false, so callers can `return` it.
+    private func rejectInboundControl(_ why: DiagMessage) -> Bool {
+        let first = withState { () -> Bool in
+            rejectedInboundControl += 1
+            return rejectedInboundControl == 1
+        }
+        if first {
+            Diag.error("ENet rejected inbound control (\(why)); counting further rejections quietly",
+                       Self.logCategory)
+        }
+        return false
     }
 
     /// Parse a TERMINATION payload (ControlStream.c:1305-1342). Extended form

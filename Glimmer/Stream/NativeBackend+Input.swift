@@ -41,7 +41,7 @@ extension NativeBackend {
     //
     // Each method builds the plaintext NV_INPUT_HEADER+body with InputEncoder
     // (pure bytes) and seals/sends it over the encrypted control stream on the
-    // input class's channel (keyboard 0x02, mouse/scroll/hscroll 0x03, gamepad
+    // input class's channel (keyboard 0x02, mouse/scroll/hscroll 0x03, text 0x06, gamepad
     // 0x10 + num%16). Return contract matches LiSend*: -2 when the input stream
     // isn't ready (mirrors InputStream.c's `initialized` guard), 0 on a queued
     // send, -1 on a seal/send failure. InputForwarder.record() tolerates -2.
@@ -95,9 +95,8 @@ extension NativeBackend {
     }
 
     public func sendHScroll(_ amount: Int16) -> Int32 {
-        // hscroll rides the mouse channel (CTRL_CHANNEL_MOUSE, InputStream.c).
-        // Sunshine-only on the wire, but the !IS_SUNSHINE → LI_ERR_UNSUPPORTED
-        // guard is moot here (we only ever target Sunshine).
+        // hscroll rides the mouse channel (CTRL_CHANNEL_MOUSE, InputStream.c). It is Sunshine-only,
+        // and a GameStream PC is refused before a stream starts, so the C's !IS_SUNSHINE guard is moot.
         dispatchInput(InputEncoder.hscroll(amount), channel: Enet.ctrlChannelMouse)
     }
 
@@ -144,6 +143,17 @@ extension NativeBackend {
                                          touchpadIndex: touchpadIndex, pointerId: pointerId,
                                          x: x, y: y, pressure: pressure),
             channel: gamepadChannel(Int(num)))
+    }
+
+    /// = LiSendUtf8TextEvent: whole code points, packed to the host's limit, on
+    /// CTRL_CHANNEL_UTF8. Each packet flushes pending merged input first, so the
+    /// text lands after everything already sent.
+    public func sendUtf8Text(_ text: String) -> Int32 {
+        guard let batcher = readyBatcher() else { return Self.inputNotReady }
+        for packet in InputEncoder.utf8TextPackets(text) {
+            _ = batcher.passThrough(packet, channel: Enet.ctrlChannelUtf8)
+        }
+        return 0
     }
 
     /// CTRL_CHANNEL_GAMEPAD_BASE + (controllerNumber % MAX_GAMEPADS).

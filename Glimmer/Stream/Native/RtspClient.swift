@@ -1,11 +1,9 @@
 //
 //  RtspClient.swift
 //
-//  RTSP/SDP handshake over plain TCP for the Swift-native streaming engine.
-//  Source: RtspConnection.c (performRtspHandshake + transactRtspMessageTcp).
-//  Targets Sunshine 7.1.450 (AppVersionQuad [7,1,450,0]): useEnet=FALSE ⇒ RTSP
-//  over plain TCP, and APP_VERSION_AT_LEAST(7,1,431) ⇒ single PLAY "/" + control
-//  stream id "streamid=control/13/0".
+//  RTSP/SDP handshake for the Swift-native streaming engine, from RtspConnection.c (performRtspHandshake +
+//  transactRtspMessageTcp) at Sunshine's app version 7.1.431: plain TCP, one PLAY "/" and control stream
+//  "streamid=control/13/0".
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
@@ -42,32 +40,25 @@ struct RtspHandshakeResult {
     /// Sunshine x-ss-general.featureFlags from the DESCRIBE SDP (RtspConnection.c:1145).
     /// 0 if absent. Bit 0x02 = LI_FF_CONTROLLER_TOUCH_EVENTS gates controllerTouch.
     var featureFlags: UInt32 = 0
-    /// 16 raw bytes from SETUP-video X-SS-Ping-Payload. Empty → legacy 4-byte
-    /// ("PING") video ping. Captured verbatim (NOT hex/base64-decoded), and only
-    /// if the header value is exactly 16 chars (else the host ignores it).
+    /// 16 raw bytes from SETUP-video X-SS-Ping-Payload, captured verbatim (not hex-decoded) and only when the
+    /// value is exactly 16 chars. Sunshine always sends one; without it no ping of ours would match.
     var videoPingPayload: [UInt8] = []
     /// Same for SETUP-audio - the 16-byte ping the RtpAudioReceiver sends.
     var audioPingPayload: [UInt8] = []
-    /// The OPUS_MULTISTREAM config seed. Stereo default (sampleRate 48000,
-    /// channelCount 2, streams 1, coupledStreams 1, mapping [0,1],
-    /// samplesPerFrame 240). The RTSP SETUP-audio response carries NO explicit
-    /// per-channel opus stream layout, so for surround the decoder derives the
-    /// real {streams, coupledStreams, mapping} from the negotiated channel count
-    /// (the host encodes from the same table) - see
-    /// `AudioDecoder.opusMultistreamConfig(forChannels:)`. This seed supplies
-    /// sampleRate + samplesPerFrame for every tier.
+    /// The Opus layout the decoder is built from, read from DESCRIBE's surround-params (`SdpScan.audioLayout`).
     var opusConfig: OpusConfig = RtspHandshakeResult.defaultOpusConfig
+    /// Whether ANNOUNCE asks for the high tier that `opusConfig` describes.
+    var highQualityAudio = true
 
-    /// Stereo default OPUS_MULTISTREAM config - the single source the struct
-    /// default and the fast-start audio ping (constructed mid-handshake, before
-    /// opus is otherwise referenced) both use.
+    /// Stereo Opus layout: the handshake default and the base every
+    /// `SdpScan.audioLayout` result is built from.
     static let defaultOpusConfig = OpusConfig(
         sampleRate: 48000, channelCount: 2, streams: 1, coupledStreams: 1,
         samplesPerFrame: 240, mapping: [0, 1])
     /// AudioPacketDuration in ms (5 default; SDP sends x-nv-aqos.packetDuration 5).
     var audioPacketDuration: Int = 5
-    /// True iff the host negotiated AES-CBC audio (SS_ENC_AUDIO). Plaintext on
-    /// the live host (encEnabled=0) - deferred encrypted path.
+    /// True iff we enabled AES-CBC audio (SS_ENC_AUDIO), which we do whenever
+    /// the host supports it.
     var audioEncryption: Bool = false
 }
 
@@ -77,8 +68,8 @@ enum RtspError: Error, CustomStringConvertible {
     case transportFailure(String)
     case badResponse(String)
     case nonOK(step: String, code: Int)
-    case encryptedRtspUnsupported
     case noSdp
+    case responseTooLarge(Int)
 
     var description: String {
         switch self {
@@ -87,9 +78,8 @@ enum RtspError: Error, CustomStringConvertible {
         case .transportFailure(let reason): return "RTSP transport failure: \(reason)"
         case .badResponse(let reason): return "RTSP bad response: \(reason)"
         case .nonOK(let step, let code): return "RTSP \(step) returned \(code)"
-        case .encryptedRtspUnsupported:
-            return "rtspenc:// (encrypted RTSP) not yet supported by the native backend"
         case .noSdp: return "RTSP DESCRIBE returned no SDP payload"
+        case .responseTooLarge(let bytes): return "RTSP response passed \(bytes) bytes"
         }
     }
 }
@@ -105,10 +95,8 @@ final class RtspClient: @unchecked Sendable {
     let urlAddr: String
     let urlSafeAddr: String
     let addrFamilyToken: String
-    let rtspClientVersion: Int
     let config: BackendStreamConfig
     let serverCodecModeRaw: Int32
-    let appVersionQuad: [Int32]
 
     /// Global CSeq counter, starts at 1, increments per request.
     var currentSeqNumber = 1
@@ -120,13 +108,12 @@ final class RtspClient: @unchecked Sendable {
     /// Outbound GCM sequence number (pre-incremented per sealed message from 1).
     var encryptionSeq: UInt32 = 0
 
-    /// Invoked the instant SETUP-audio is parsed (audioPort + audioPingPayload
-    /// known), BEFORE SETUP video / ANNOUNCE / PLAY. The pipeline uses this to
-    /// open the audio socket + start the burst ping mid-handshake, mirroring
-    /// moonlight's notifyAudioPortNegotiationComplete() - Sunshine won't aim audio
-    /// at us (and GFE 3.22 won't even reply to PLAY) until it has seen a ping.
-    /// Synchronous so the ping is provably running before the handshake proceeds.
-    var onAudioPortNegotiated: ((_ audioPort: UInt16, _ pingPayload: [UInt8]) -> Void)?
+    /// Fired synchronously once SETUP-audio is parsed (encryption settled at DESCRIBE), before SETUP video,
+    /// ANNOUNCE and PLAY, so the audio ping is running first: moonlight's notifyAudioPortNegotiationComplete(),
+    /// since Sunshine won't aim audio at us until it has seen a ping.
+    var onAudioPortNegotiated: ((
+        _ audioPort: UInt16, _ pingPayload: [UInt8], _ audioEncryption: Bool, _ opus: OpusConfig
+    ) -> Void)?
 
     /// Cancellation flag flipped by the orchestrator on interrupt.
     let interrupted = ManagedAtomicFlag()
@@ -142,6 +129,10 @@ final class RtspClient: @unchecked Sendable {
     }
 
     static let controlStreamId = "streamid=control/13/0"
+    /// rtspClientVersion for app version 7, the one Sunshine reports (RtspConnection.c).
+    static let clientVersion = 14
+    /// SDP responses are a few KiB; anything past this is a hostile or broken peer.
+    static let maxResponseBytes = 256 * 1024
 
     init(
         host: NWEndpoint.Host,
@@ -150,10 +141,8 @@ final class RtspClient: @unchecked Sendable {
         urlAddr: String,
         urlSafeAddr: String,
         addrFamilyToken: String,
-        rtspClientVersion: Int,
         config: BackendStreamConfig,
-        serverCodecModeRaw: Int32,
-        appVersionQuad: [Int32]
+        serverCodecModeRaw: Int32
     ) {
         self.host = host
         self.rtspPort = rtspPort
@@ -162,10 +151,8 @@ final class RtspClient: @unchecked Sendable {
         self.urlAddr = urlAddr
         self.urlSafeAddr = urlSafeAddr
         self.addrFamilyToken = addrFamilyToken
-        self.rtspClientVersion = rtspClientVersion
         self.config = config
         self.serverCodecModeRaw = serverCodecModeRaw
-        self.appVersionQuad = appVersionQuad
     }
 
     func interrupt() {
@@ -180,7 +167,7 @@ final class RtspClient: @unchecked Sendable {
         var msg = RtspMessage(command: command, target: target)
         msg.headers.append(("CSeq", "\(currentSeqNumber)"))
         currentSeqNumber += 1
-        msg.headers.append(("X-GS-ClientVersion", "\(rtspClientVersion)"))
+        msg.headers.append(("X-GS-ClientVersion", "\(Self.clientVersion)"))
         // The C code adds Host on the !useEnet (TCP) path with value = urlAddr.
         msg.headers.append(("Host", urlAddr))
         return msg
@@ -279,15 +266,19 @@ final class RtspClient: @unchecked Sendable {
                 return try await oneShot(bytes)
             } catch let rtspError as RtspError {
                 // Connection-refused-style failures get retried until the
-                // deadline; everything else propagates.
-                if case .transportFailure = rtspError, Date() < deadline {
-                    attempt += 1
-                    Diag.info("RTSP TCP connect not ready (attempt \(attempt)); retry in 500ms",
-                              Self.logCategory)
-                    try await Self.sleep(ms: 500)
-                    continue
+                // deadline, then name the port that never took us; everything
+                // else propagates.
+                if interrupted.isSet { throw RtspError.interrupted }
+                guard case .transportFailure = rtspError else { throw rtspError }
+                guard Date() < deadline else {
+                    Diag.error("RTSP port \(rtspPort) still failing after \(attempt) retries: \(rtspError, privacy: .private)",
+                               Self.logCategory)
+                    throw RtspError.connectTimeout(rtspPort)
                 }
-                throw rtspError
+                attempt += 1
+                Diag.info("RTSP TCP connect not ready (attempt \(attempt)); retry in 500ms",
+                          Self.logCategory)
+                try await Self.sleep(ms: 500)
             }
         }
     }
@@ -303,29 +294,17 @@ final class RtspClient: @unchecked Sendable {
         let connection = NWConnection(host: host, port: nwPort, using: params)
         setActiveConnection(connection)
         defer { setActiveConnection(nil) }
+        // An interrupt() that landed before the store above had nothing to cancel.
+        if interrupted.isSet { throw RtspError.interrupted }
         let queue = DispatchQueue(label: "io.ugfugl.Glimmer.rtsp")
 
         // 1) Wait for the connection to become ready (or fail).
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let resumed = ManagedAtomicFlag()
             connection.stateUpdateHandler = { state in
-                switch state {
-                case .ready:
-                    if resumed.testAndSet() { cont.resume() }
-                case .failed(let err):
-                    if resumed.testAndSet() {
-                        cont.resume(throwing: RtspError.transportFailure("\(err)"))
-                    }
-                case .waiting(let err):
-                    // .waiting on UDP/TCP usually means the endpoint isn't
-                    // accepting yet (connection refused). Treat as retryable.
-                    if resumed.testAndSet() {
-                        connection.cancel()
-                        cont.resume(throwing: RtspError.transportFailure("waiting: \(err)"))
-                    }
-                default:
-                    break
-                }
+                guard let verdict = Self.connectVerdict(state), resumed.testAndSet() else { return }
+                if case .waiting = state { connection.cancel() }
+                cont.resume(with: verdict)
             }
             connection.start(queue: queue)
         }
@@ -346,10 +325,27 @@ final class RtspClient: @unchecked Sendable {
         while true {
             let (chunk, isComplete) = try await receiveChunk(connection)
             if let chunk { accumulated.append(chunk) }
+            guard accumulated.count <= Self.maxResponseBytes else {
+                connection.cancel()
+                throw RtspError.responseTooLarge(accumulated.count)
+            }
             if isComplete { break }
         }
         connection.cancel()
         return accumulated
+    }
+
+    /// How the connect wait ends for one state change; nil keeps waiting.
+    /// `.waiting` usually means the port isn't accepting yet (retryable), and
+    /// `.cancelled` before ready can only be interrupt().
+    static func connectVerdict(_ state: NWConnection.State) -> Result<Void, RtspError>? {
+        switch state {
+        case .ready: return .success(())
+        case .failed(let err): return .failure(.transportFailure("\(err)"))
+        case .waiting(let err): return .failure(.transportFailure("waiting: \(err)"))
+        case .cancelled: return .failure(.interrupted)
+        default: return nil
+        }
     }
 
     func receiveChunk(_ connection: NWConnection) async throws -> (Data?, Bool) {
@@ -384,12 +380,12 @@ final class RtspClient: @unchecked Sendable {
             referenceFrameInvalidationSupported: false)
 
         // 1) OPTIONS
-        Diag.info("RTSP OPTIONS \(rtspTargetUrl)", Self.logCategory)
+        Diag.info("RTSP OPTIONS \(rtspTargetUrl, privacy: .private)", Self.logCategory)
         let optionsResp = try await transact(makeRequest("OPTIONS", rtspTargetUrl))
         try check(optionsResp, step: "OPTIONS")
 
         // 2) DESCRIBE → parse SDP.
-        Diag.info("RTSP DESCRIBE \(rtspTargetUrl)", Self.logCategory)
+        Diag.info("RTSP DESCRIBE \(rtspTargetUrl, privacy: .private)", Self.logCategory)
         var describe = makeRequest("DESCRIBE", rtspTargetUrl)
         describe.headers.append(("Accept", "application/sdp"))
         describe.headers.append(("If-Modified-Since", "Thu, 01 Jan 1970 00:00:00 GMT"))
@@ -401,43 +397,24 @@ final class RtspClient: @unchecked Sendable {
             throw RtspError.noSdp
         }
         negotiate(sdp: sdp, into: &result)
+        result.encryptionFeaturesEnabled = Self.computeEncryptionEnabled(
+            supported: result.encryptionFeaturesSupported,
+            requested: SdpScan.attributeUInt(sdp, "x-ss-general.encryptionRequested") ?? 0)
+        result.audioEncryption = result.encryptionFeaturesEnabled & Self.ssEncAudio != 0
         Diag.info("RTSP negotiated codec=\(codecName(result.negotiatedVideoFormat)) "
             + "encSupported=\(result.encryptionFeaturesSupported) "
             + "encEnabled=\(result.encryptionFeaturesEnabled) "
-            + "RFI=\(result.referenceFrameInvalidationSupported)", Self.logCategory)
+            + "RFI=\(result.referenceFrameInvalidationSupported) "
+            + "opus=\(result.opusConfig.streams)/\(result.opusConfig.coupledStreams)/\(result.opusConfig.mapping) "
+            + "high=\(result.highQualityAudio)", Self.logCategory)
 
         // 3-5) SETUP audio / video / control.
         try await performSetupRounds(into: &result)
 
         // 6) ANNOUNCE (control stream id) with the SDP payload.
-        result.encryptionFeaturesEnabled = computeEncryptionEnabled(
-            supported: result.encryptionFeaturesSupported)
-        // Audio is AES-CBC only if SS_ENC_AUDIO (0x04) was negotiated; our
-        // connect-only SDP never enables it, so this stays false (plaintext).
-        let ssEncAudio: UInt32 = 0x04
-        result.audioEncryption = result.encryptionFeaturesEnabled & ssEncAudio != 0
-        let sdpBuilder = SdpBuilder(
-            config: config,
-            videoPort: result.videoPort,
-            urlSafeAddr: urlSafeAddr,
-            addrFamilyToken: addrFamilyToken,
-            rtspClientVersion: rtspClientVersion,
-            negotiatedVideoFormat: result.negotiatedVideoFormat,
-            encryptionFeaturesEnabled: result.encryptionFeaturesEnabled,
-            appVersionQuad: appVersionQuad,
-            // RFI is advertised (maxNumReferenceFrames=0) only when the host
-            // offered it (DESCRIBE SDP) AND our decoder supports it for the
-            // negotiated codec - the VideoSink's RFI capability bits.
-            serverSupportsRfi: result.referenceFrameInvalidationSupported,
-            decoderRfiCapabilities: VideoDecoder.rfiCapabilities)
-        let sdpPayload = sdpBuilder.build()
-        Diag.info("RTSP ANNOUNCE \(Self.controlStreamId) (SDP \(sdpPayload.count) bytes)",
+        let announce = makeAnnounce(result)
+        Diag.info("RTSP ANNOUNCE \(Self.controlStreamId) (SDP \(announce.payload?.count ?? 0) bytes)",
                   Self.logCategory)
-        var announce = makeRequest("ANNOUNCE", Self.controlStreamId)
-        announce.headers.append(("Session", sessionIdString))
-        announce.headers.append(("Content-type", "application/sdp"))
-        announce.headers.append(("Content-length", "\(sdpPayload.count)"))
-        announce.payload = sdpPayload
         let announceResp = try await transact(announce)
         try check(announceResp, step: "ANNOUNCE")
 
@@ -471,7 +448,8 @@ final class RtspClient: @unchecked Sendable {
         // notifyAudioPortNegotiationComplete() at exactly this point
         // (RtspConnection.c:1212). The callback is best-effort: a ping failure
         // must not abort the handshake (audio is non-fatal); the pipeline logs it.
-        onAudioPortNegotiated?(result.audioPort, result.audioPingPayload)
+        onAudioPortNegotiated?(result.audioPort, result.audioPingPayload, result.audioEncryption,
+                               result.opusConfig)
 
         try captureSession(from: audioResp, step: "SETUP audio")
         result.sessionId = sessionIdString
@@ -483,7 +461,7 @@ final class RtspClient: @unchecked Sendable {
         result.videoPort = parsePort(videoResp) ?? 47998
         result.videoPingPayload = parsePingPayload(videoResp)
         Diag.info("RTSP video ping payload: "
-            + (result.videoPingPayload.isEmpty ? "absent (legacy PING)" : "captured 16 bytes"),
+            + (result.videoPingPayload.isEmpty ? "absent" : "captured 16 bytes"),
             Self.logCategory)
 
         // 5) SETUP control (carries X-SS-Connect-Data + control port).

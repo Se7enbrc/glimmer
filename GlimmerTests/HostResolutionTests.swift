@@ -83,41 +83,116 @@ final class PairedPathFailureClassificationTests: XCTestCase {
     }
 
     func testRefusedSecurePortIsNotAPairingProblem() {
-        guard case .hostUnreachable(let text) = classify("connect to tower:47984 failed or timed out") else {
-            return XCTFail("expected hostUnreachable")
+        guard case .sunshineNeedsRestart(let text) = classify("connect to tower:47984 failed or timed out") else {
+            return XCTFail("expected sunshineNeedsRestart")
         }
         XCTAssertTrue(text.contains("Restart Sunshine"))
         XCTAssertTrue(text.contains("47984"))
-        XCTAssertFalse(text.lowercased().contains("pair it again"))
+        XCTAssertFalse(text.contains("Pair Again…"))
     }
 
     func test401IsUnpaired() {
         guard case .pairingFailed(let text) = classify("Host requires pairing (401)") else {
             return XCTFail("expected pairingFailed")
         }
-        XCTAssertTrue(text.contains("pair it again"))
+        XCTAssertTrue(text.contains("Pair Again…"))
         XCTAssertTrue(text.hasPrefix("tower"))
+        // Sunshine answers a switched-off client with the same 401 as a forgotten one.
+        XCTAssertTrue(text.contains("switched off on Sunshine's Troubleshooting page"))
     }
 
     func testHandshakeRejectionIsUnpaired() {
         guard case .pairingFailed(let text) = classify("TLS handshake to tower:47984 failed (SSL_connect)") else {
             return XCTFail("expected pairingFailed")
         }
-        XCTAssertTrue(text.contains("pair it again"))
+        XCTAssertTrue(text.contains("Pair Again…"))
     }
 
-    func testHostCertChangePointsAtTrustChip() {
-        guard case .hostUnreachable(let text) = classify("pinned host cert mismatch") else {
-            return XCTFail("expected hostUnreachable")
+    /// The poller's "Trust needed" state and the stream banner both match this
+    /// case, not its words, so a PC named "Concert" can't trip either.
+    func testHostCertChangePointsAtPairAgain() {
+        guard case .hostCertChanged(let text) = classify("pinned host cert mismatch") else {
+            return XCTFail("expected hostCertChanged")
         }
-        XCTAssertTrue(text.contains("Trust needed"))
+        XCTAssertTrue(text.contains("Pair Again…"))
+        let stuck = NetworkClient.classifyPairedPathFailure("connect to x:47984 failed", hostName: "Concert")
+        XCTAssertEqual(AppModel.connectFailure(for: stuck, hostName: "Concert").kind, .other)
+    }
+
+    func testNoCopyUsesASpacedDashOrTheTransportDetail() {
+        for detail in ["connect to x:47984 failed", "Host requires pairing", "TLS handshake failed",
+                       "pinned host cert mismatch", "something else"] {
+            XCTAssertFalse("\(classify(detail))".contains(" - "), detail)
+        }
+        XCTAssertFalse("\(classify("empty HTTP response"))".contains("HTTP response"))
     }
 
     func testEmptyHostNameFallsBackToThePC() {
-        guard case .hostUnreachable(let text) = NetworkClient.classifyPairedPathFailure(
+        guard case .sunshineNeedsRestart(let text) = NetworkClient.classifyPairedPathFailure(
             "connect to x:47984 failed or timed out", hostName: "") else {
-            return XCTFail("expected hostUnreachable")
+            return XCTFail("expected sunshineNeedsRestart")
         }
         XCTAssertTrue(text.hasPrefix("The PC"))
+    }
+
+    /// A changed certificate is classified without the plain-port probe, so a
+    /// blocked 47989 can't turn it into "make sure it's awake".
+    func testCertChangeIsRecognizedWithoutTheProbe() {
+        XCTAssertTrue(NetworkClient.isCertChange("pinned host cert mismatch"))
+        XCTAssertTrue(NetworkClient.isCertChange("host presented no certificate"))
+        XCTAssertFalse(NetworkClient.isCertChange("connect to x:47984 failed or timed out"))
+        XCTAssertFalse(NetworkClient.isCertChange("TLS handshake failed"))
+    }
+}
+
+/// The launcher banner keeps the network layer's Pair Again… sentences as
+/// they are, and any other pairing failure points at the same command.
+@MainActor
+struct PairingFailureBannerTests {
+
+    @Test func theBannerNamesPairAgain() {
+        let verdict = NetworkClient.classifyPairedPathFailure("Host requires pairing (401)", hostName: "Den PC")
+        let kept = AppModel.connectFailure(for: verdict, hostName: "Den PC").message
+        #expect(kept.hasPrefix("Den PC no longer recognizes this Mac, or this Mac is switched off"))
+        let noPin = AppModel.connectFailure(for: NetworkClient.notPaired("Den PC"), hostName: "Den PC").message
+        #expect(noPin == "Den PC isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
+        let rejected = AppModel.connectFailure(for: StreamError.pairingRejected, hostName: "Den PC").message
+        #expect(rejected.hasPrefix("Couldn't pair with Den PC.") && rejected.contains("Pair Again…"))
+    }
+}
+
+// MARK: - Addresses the pair sheet accepts and discovery saves
+
+struct PCAddressTests {
+
+    /// The likeliest paste is Sunshine's own web UI URL; it comes down to the address.
+    @Test func pastedURLsAndPortsReduceToTheAddress() {
+        #expect(AppModel.normalizedPCAddress("https://192.168.1.10:47990/pin") == "192.168.1.10")
+        #expect(AppModel.normalizedPCAddress("  tower.local:47989 \n") == "tower.local")
+        #expect(AppModel.normalizedPCAddress("[2001:db8::5]:47989") == "2001:db8::5")
+        #expect(AppModel.normalizedPCAddress("2001:db8::5") == "2001:db8::5")
+    }
+
+    @Test func undialableEntriesAreRejected() {
+        #expect(AppModel.normalizedPCAddress("") == nil)
+        #expect(AppModel.normalizedPCAddress("my gaming pc") == nil)
+        #expect(AppModel.normalizedPCAddress("-tower") == nil)
+        // A zone names a Mac interface; it breaks the moment the Mac changes network.
+        #expect(AppModel.normalizedPCAddress("fe80::1%en0") == nil)
+    }
+
+    @Test func discoveryNeverSavesAZoneScopedAddress() {
+        #expect(HostDiscovery.canonicalHost("192.0.2.10%en0", ipv6: false) == "192.0.2.10")
+        #expect(HostDiscovery.canonicalHost("2001:db8::5%en0", ipv6: true) == "2001:db8::5")
+        #expect(HostDiscovery.canonicalHost("fe80::1%en0", ipv6: true) == nil)
+    }
+
+    /// A refused Local Network permission must read as "denied", not "no PCs".
+    @Test func deniedLocalNetworkIsRecognized() {
+        let denied = NWError.dns(DNSServiceErrorType(kDNSServiceErr_PolicyDenied))
+        #expect(HostDiscovery.isPolicyDenied(.waiting(denied)))
+        #expect(HostDiscovery.isPolicyDenied(.failed(denied)))
+        #expect(!HostDiscovery.isPolicyDenied(.ready))
+        #expect(!HostDiscovery.isPolicyDenied(.waiting(.posix(.ENETDOWN))))
     }
 }

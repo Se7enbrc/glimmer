@@ -80,6 +80,10 @@ extension FramePacer {
         /// renderer (`willPresent` returned true). If this stops advancing while
         /// the queue is non-empty, the present path is wedged.
         var lastReleaseHostTime: CFTimeInterval = .nan
+        /// `CFAbsoluteTimeGetCurrent()` when a submit last found the queue empty.
+        /// Only submit refills it and trims/evictions never empty it, so while the
+        /// queue holds frames this is when it last went from empty to non-empty.
+        var queueNonEmptySince: CFTimeInterval = .nan
         /// Count of consecutive ticks where the queue was non-empty but nothing was
         /// released (the wedge signature: `due` latched false). Reset on any
         /// release. Used to log the diagnostic once it crosses a threshold.
@@ -198,6 +202,9 @@ extension FramePacer {
         /// SAME buffer the layer is already displaying, so no extra surface is
         /// retained from VT's pool. Cleared on stop().
         var lastPresentedSampleBuffer: CMSampleBuffer?
+        /// Panel vsync (`link.timestamp + link.duration`) the last tick-released
+        /// frame scans out on; an off-tick beat before it would present twice.
+        var tickScanoutMediaTime: CFTimeInterval = .nan
         /// WARM HANDOVER: true while a re-enabled pacer keeps presenting DIRECT
         /// (submit bypasses the queue) until the rebuilt link proves a healthy
         /// realized tick rate - the cold cutover onto an un-primed link queued

@@ -263,7 +263,10 @@ extension FramePacer {
 
     /// Decide-and-release on the dedicated serial queue. Releases at most one
     /// frame per tick (one present per vsync), after trimming sustained lag.
-    func releaseDueFrame(targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval) {
+    /// `tickScanout` is the panel vsync a tick's release lands on (NaN off-tick).
+    func releaseDueFrame(
+        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, tickScanout: CFTimeInterval
+    ) {
         var toPresent: Entry?
         var trimmed: [CMSampleBuffer] = []
         var sampledDepth = 0
@@ -315,11 +318,9 @@ extension FramePacer {
         // the adaptive target: the wifi jitter buffer still fills and holds as
         // designed; only latency ABOVE the (correct, possibly grown) target sheds.
         let effectiveTarget = decayTargetLocked()
-        // POST-GAP LENIENCY: in gap-recovery the trim ceiling rises to the cap so the
-        // bunched catch-up plays THROUGH (drained 1/vsync) instead of trim-to-newest -
-        // the discard that cost ~20% of frames on a gappy link; otherwise it stays at
-        // `effectiveTarget + 1`. Gated on a real empty-tick streak so ordinary motion-
-        // bunches still trim tight. Zero standing latency. See `gapAwareTrimLocked`.
+        // POST-GAP LENIENCY: after a real empty-tick streak the ceiling rises to the
+        // cap so the catch-up plays through instead of trimming (~20% discard on a
+        // gappy link), but only when fps < refresh leaves vsyncs to drain it.
         let nowTime = CFAbsoluteTimeGetCurrent()
         let (gapTrimmed, inGapRecovery) = gapAwareTrimLocked(
             now: nowTime, effectiveTarget: effectiveTarget)
@@ -344,6 +345,7 @@ extension FramePacer {
         if !inGapRecovery,
            let backoff = takeBackoffNewestLocked(targetTimestamp: targetTimestamp) {
             sampledDepth = 0
+            tickDeficit.tickScanoutMediaTime = tickScanout
             os_unfair_lock_unlock(&lock)
             presentBackoffAndYield(backoff)
             // Yield: do NOT fall through to the due gate / starvation failsafe.
@@ -371,6 +373,7 @@ extension FramePacer {
             targetTimestamp: targetTimestamp, vsyncInterval: vsyncInterval,
             effectiveTarget: effectiveTarget)
         toPresent = gate.toPresent
+        if toPresent != nil { tickDeficit.tickScanoutMediaTime = tickScanout }
         let heldForGrowth = gate.heldForGrowth
 
         // Gap-recovery edge: a frame presenting right after an empty-tick streak
@@ -489,8 +492,9 @@ extension FramePacer {
         // measure present-vs-PTS as the delta between the realized inter-present
         // wall-clock and the stream's frame interval - a smooth stream lands
         // near zero; jitter shows as spread.
-        let presentDelta = lastPresentInterPresentDelta()
-        stats.recordPresent(cadenceErrorMs: presentDelta * 1000.0)
+        let cadence = lastPresentInterPresentDelta()
+        stats.recordPresent(cadenceErrorMs: cadence.error * 1000.0, hostPTSSeconds: entry.hostPTSSeconds,
+                            streamIntervalMs: cadence.streamInterval * 1000.0, refreshMs: vsyncInterval * 1000.0)
     }
 
     /// The two per-tick PRESENT-signal recordings, folded into one call so neither

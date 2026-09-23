@@ -1,17 +1,11 @@
 //
 //  StreamCryptoTests.swift
 //
-//  Coverage for ControlCrypto (StreamCrypto.swift): the AES-128-GCM control-V2
-//  sealing/unsealing. Tests pin the on-the-wire envelope shape, the
-//  cross-direction round-trip (seal is client->host with IV byte 'C'; open is
-//  host->client with IV byte 'H'), tamper-rejection, and the IV-distinctness
-//  property that keeps client and host streams from colliding on the same key.
+//  StreamCrypto.swift: the control-V2 envelope's shape, both directions, tamper rejection and the
+//  'C'/'H' IV split, and VideoDecryptor against Sunshine's ENC_VIDEO_HEADER sealing.
 //
-//  Note: open(seal(p)) does NOT round-trip directly - they're deliberately
-//  opposite directions ('C' vs 'H' originator byte). To exercise `open` we
-//  craft a host-direction envelope with CryptoKit using the matching IV; to
-//  exercise `seal` we decrypt its output with CryptoKit using the 'C' IV. Both
-//  mirror the exact framing the production code documents.
+//  open(seal(p)) never round-trips: the two run opposite directions, so each side is checked
+//  against CryptoKit with the matching IV, the framing the production code documents.
 //
 
 import Foundation
@@ -38,8 +32,8 @@ struct StreamCryptoTests {
 
     // Build a full host->client ('H') on-the-wire envelope around an inner V2
     // plaintext, the same byte layout `seal` produces but in the opposite
-    // direction, so `open` accepts it.
-    private static func sealHostDirection(
+    // direction, so `open` accepts it. Shared with EnetControlChannelTests.
+    static func sealHostDirection(
         type: UInt16, payload: [UInt8], seq: UInt32, key: [UInt8]
     ) throws -> [UInt8] {
         var plaintext = [UInt8]()
@@ -232,6 +226,68 @@ struct StreamCryptoTests {
         let box = try AES.GCM.seal(plaintext, using: SymmetricKey(data: key), nonce: nonce)
         #expect(Data(box.ciphertext) == expectedCT)
         #expect(Data(box.tag) == expectedTag)
+    }
+
+    // MARK: - Encrypted video (SS_ENC_VIDEO)
+
+    /// Sunshine's sealing: ENC_VIDEO_HEADER { iv = counter LE, zeros, 'V'; frameNumber LE; tag },
+    /// then the whole RTP packet as ciphertext.
+    private static func hostSealVideo(_ packet: [UInt8], frame: UInt32, counter: UInt64) throws -> [UInt8] {
+        let iv = withUnsafeBytes(of: counter.littleEndian, Array.init) + [0, 0, 0, 0x56]
+        let box = try AES.GCM.seal(packet, using: SymmetricKey(data: key16), nonce: AES.GCM.Nonce(data: iv))
+        return iv + withUnsafeBytes(of: frame.littleEndian, Array.init) + [UInt8](box.tag) + [UInt8](box.ciphertext)
+    }
+
+    /// One FEC block's worth: packetSize 1392 less the header, plus the 16-byte RTP header room.
+    private static let rtpPacket = (0..<1376).map { UInt8(truncatingIfNeeded: $0 &* 31) }
+
+    private static func open(_ datagram: [UInt8], currentFrame: UInt32 = 1,
+                             with decryptor: VideoDecryptor) -> [UInt8]? {
+        datagram.withUnsafeBytes { decryptor.open($0, currentFrame: currentFrame) }
+    }
+
+    @Test func encryptedVideoOpensToTheRtpPacket() throws {
+        let decryptor = try #require(VideoDecryptor(key: Self.key16))
+        let datagram = try Self.hostSealVideo(Self.rtpPacket, frame: 9, counter: 0x0102_0304_0506)
+        #expect(datagram.count == 1392 + 16)  // the same wire size as the plaintext stream
+        #expect(Self.open(datagram, currentFrame: 9, with: decryptor) == Self.rtpPacket)
+    }
+
+    @Test func videoFrameNumberIsLittleEndianAndPassedFramesAreSkipped() throws {
+        let decryptor = try #require(VideoDecryptor(key: Self.key16))
+        let frame: UInt32 = 0x0102_0304
+        let datagram = try Self.hostSealVideo(Self.rtpPacket, frame: frame, counter: 1)
+        #expect(Self.open(datagram, currentFrame: frame + 1, with: decryptor) == nil)
+        #expect(Self.open(datagram, currentFrame: frame, with: decryptor) == Self.rtpPacket)
+        // Zero means the PC didn't number it, so it is never skipped.
+        let unnumbered = try Self.hostSealVideo(Self.rtpPacket, frame: 0, counter: 2)
+        #expect(Self.open(unnumbered, currentFrame: frame, with: decryptor) == Self.rtpPacket)
+    }
+
+    @Test func tamperedVideoIsDroppedAndTheNextPacketStillOpens() throws {
+        let decryptor = try #require(VideoDecryptor(key: Self.key16))
+        let good = try Self.hostSealVideo(Self.rtpPacket, frame: 3, counter: 7)
+        for index in [0, 16, good.count - 1] {  // IV, tag, ciphertext
+            var bad = good
+            bad[index] ^= 0x01
+            #expect(Self.open(bad, with: decryptor) == nil)
+        }
+        #expect(Self.open(good, with: decryptor) == Self.rtpPacket)
+    }
+
+    @Test func videoRuntsAndBadKeysAreRefused() throws {
+        let decryptor = try #require(VideoDecryptor(key: Self.key16))
+        let smallest = [UInt8](repeating: 0x80, count: RtpVideoQueue.FIXED_RTP_HEADER_SIZE)
+        let fits = try Self.hostSealVideo(smallest, frame: 1, counter: 1)
+        let runt = try Self.hostSealVideo(Array(smallest.dropLast()), frame: 1, counter: 2)
+        #expect(Self.open(fits, with: decryptor) == smallest)
+        #expect(Self.open(runt, with: decryptor) == nil)
+        #expect(VideoDecryptor(key: [UInt8](repeating: 0, count: 15)) == nil)
+    }
+
+    @Test func encryptedVideoAdvertisesRoomForItsHeader() {
+        #expect(VideoDecryptor.packetSize(1392, encryptionFeaturesEnabled: 7) == 1360)
+        #expect(VideoDecryptor.packetSize(1392, encryptionFeaturesEnabled: 5) == 1392)
     }
 }
 

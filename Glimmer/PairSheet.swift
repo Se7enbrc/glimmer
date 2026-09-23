@@ -18,6 +18,8 @@ struct PairSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var hostnameOrIP: String
+    /// The name discovery listed the PC under; nil for a typed address.
+    @State private var pcName: String?
     @State private var pin: String = ""
     /// nil = still choosing a host; non-nil = a host was picked/entered and we
     /// move to the PIN/handshake step.
@@ -28,12 +30,17 @@ struct PairSheet: View {
     @State private var pairingTask: Task<Void, Never>?
     private var paired: Bool { pairedHost != nil }
 
-    /// Optional pre-fill, used by the "re-pair" recovery path so the user
-    /// doesn't retype the host's address - that path jumps straight to the PIN
-    /// step. The normal "Pair a new PC" entry starts on the discovery chooser.
-    init(initialAddress: String = "") {
-        _hostnameOrIP = State(initialValue: initialAddress)
-        _chosen = State(initialValue: !initialAddress.isEmpty)
+    /// Pair Again… for this PC until Back returns to the chooser; nil pairs a new one.
+    @State private var rePairName: String?
+
+    /// A typed address or a PC to pair again jumps straight to the PIN step,
+    /// dialling what a stream dials; with neither the sheet starts on the chooser.
+    init(initialAddress: String = "", repairing host: Host? = nil) {
+        let address = host.map(AppModel.routeAddress) ?? initialAddress
+        _hostnameOrIP = State(initialValue: address)
+        _pcName = State(initialValue: host?.displayName)
+        _chosen = State(initialValue: !address.isEmpty)
+        _rePairName = State(initialValue: host?.displayName)
     }
 
     /// The host we're pairing with, whitespace-trimmed. Empty means the user
@@ -42,17 +49,26 @@ struct PairSheet: View {
         hostnameOrIP.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// What the sheet calls the PC: its discovered name, else the address typed.
+    private var pcLabel: String { pcName ?? trimmedHost }
+
+    private var pairingFailed: Bool {
+        if case .failure = model.pairingPhase { return true }
+        return false
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Text(titleText)
+            Text(Self.title(paired: paired, chosen: chosen, rePairName: rePairName))
                 .font(.title2.bold())
                 .contentTransition(.opacity)
 
             if paired {
                 successBody
             } else if !chosen {
-                HostChooser(selected: { addr in
+                HostChooser(selected: { addr, name in
                     hostnameOrIP = addr
+                    pcName = name
                     chosen = true
                 })
             } else {
@@ -69,9 +85,10 @@ struct PairSheet: View {
         .onDisappear { cancelPairing() }
     }
 
-    private var titleText: String {
+    static func title(paired: Bool, chosen: Bool, rePairName: String?) -> String {
         if paired { return "Paired" }
-        return chosen ? "Pair a new PC" : "Choose a PC"
+        guard chosen else { return "Choose a PC" }
+        return rePairName.map { "Pair \($0) again" } ?? "Pair a new PC"
     }
 
     @ViewBuilder private var successBody: some View {
@@ -80,7 +97,7 @@ struct PairSheet: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.green)
                 .symbolEffect(.bounce, value: paired)
-            Text("\(trimmedHost) is ready to stream.")
+            Text("\(pairedHost?.displayName ?? pcLabel) is ready to stream.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -92,7 +109,7 @@ struct PairSheet: View {
         // the freshly-paired host so the launcher lands on it.
         .task(id: paired) {
             guard paired else { return }
-            // No auto-dismiss: the success screen shows Done / "Stream now" buttons,
+            // No auto-dismiss: the success screen shows Done / "Stream Now" buttons,
             // and a 900ms auto-close made them unclickable. The user dismisses it.
             selectPairedHost()
         }
@@ -100,7 +117,7 @@ struct PairSheet: View {
 
     @ViewBuilder private var pinBody: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("On \(hostnameOrIP), enter this code")
+            Text("On \(pcLabel), enter this code")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
             PINTiles(pin: pin)
@@ -110,27 +127,42 @@ struct PairSheet: View {
                     // must be open on the host for the typed PIN to land.
                     startPairing()
                 }
-            Text("Open your PC's pairing page and type these four digits.")
+            Text("On your PC, open Sunshine's web page and choose PIN, then type this code.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            // A headless PC has no screen to type on; its page opens here too.
+            Button("Open Sunshine on This Mac") { model.openSunshinePINPage(forHost: trimmedHost) }
+                .buttonStyle(.link)
+                .font(.footnote)
+            Text("Sunshine uses its own certificate, so your browser asks you to confirm before opening it.")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
 
-        if let msg = model.pairingMessage, !paired {
+        if let status = statusText, !paired {
             HStack(spacing: 8) {
-                if model.pairingInFlight {
-                    ProgressView().controlSize(.small)
-                } else if msg.lowercased().contains("fail")
-                            || msg.lowercased().contains("couldn't")
-                            || msg.lowercased().contains("invalid") {
+                if pairingFailed {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.orange)
+                } else {
+                    ProgressView().controlSize(.small)
                 }
-                Text(msg).font(.callout)
+                Text(status).font(.callout)
                 Spacer()
             }
             .padding(12)
             .glassEffect(.regular, in: .rect(cornerRadius: 10))
+        }
+    }
+
+    private var statusText: String? {
+        switch model.pairingPhase {
+        case .idle, .success: return nil
+        case .connecting: return "Connecting to \(pcLabel)…"
+        case .awaitingPin: return "Waiting for the code on \(pcLabel)…"
+        case .failure(let failure): return failure.message(pc: pcLabel)
         }
     }
 
@@ -140,7 +172,7 @@ struct PairSheet: View {
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Stream now") {
+                Button("Stream Now") {
                     selectPairedHost()
                     model.streamDefaultApp()
                     dismiss()
@@ -150,18 +182,26 @@ struct PairSheet: View {
             } else if !chosen {
                 Spacer()
                 Button("Cancel") { cancelPairing(); dismiss() }
+                    .keyboardShortcut(.cancelAction)
             } else {
                 Spacer()
                 Button("Back") {
                     cancelPairing()
                     chosen = false
+                    rePairName = nil
                     pin = ""
                 }
                 Button("Cancel") { cancelPairing(); dismiss() }
-                // Manual retry - pairing normally auto-starts with the code.
-                Button("Retry") { startPairing() }
+                    .keyboardShortcut(.cancelAction)
+                // Pairing starts with the code; a retry gets a fresh one.
+                if pairingFailed {
+                    Button("Try Again") {
+                        pin = model.generatePairingPIN()
+                        startPairing()
+                    }
                     .buttonStyle(StreamButtonStyle())
-                    .disabled(model.pairingInFlight)
+                    .keyboardShortcut(.defaultAction)
+                }
             }
         }
     }
@@ -194,17 +234,26 @@ struct PairSheet: View {
 // MARK: - Discover-first host chooser
 
 /// Live mDNS list of PCs on the network + a manual-address fallback. Picking a
-/// row (or submitting the manual field) hands the resolved address back via
-/// `selected`, which advances the sheet to the PIN step.
+/// row (or submitting the manual field) hands the address, and the name when
+/// discovery knew one, back via `selected`, which advances to the PIN step.
 private struct HostChooser: View {
-    let selected: (String) -> Void
+    let selected: (_ address: String, _ name: String?) -> Void
     @State private var found: [HostDiscovery.Discovered] = []
+    /// macOS refused Glimmer Local Network access, so nothing can be found.
+    @State private var denied = false
     @State private var manual: String = ""
     @State private var showManual = false
     /// Flips ~7s into an empty discovery (Bonjour can be blocked on locked-down
     /// or guest networks). Swaps the spinner copy and auto-reveals the manual
     /// field so the user isn't stranded on a permanent "Looking for PCs...".
     @State private var discoveryStalled = false
+
+    private static let localNetworkSettings =
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
+    private static let hostSetupGuide =
+        URL(string: "https://github.com/Se7enbrc/glimmer/blob/main/docs/HOST_SETUP.md")
+
+    private var manualAddress: String? { AppModel.normalizedPCAddress(manual) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -220,9 +269,11 @@ private struct HostChooser: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // Spinner only while still actively looking. The stalled nudge is
-            // hoisted out so it survives the auto-reveal of the manual field.
-            if found.isEmpty && !showManual && !discoveryStalled {
+            if denied {
+                deniedNotice
+            } else if found.isEmpty && !showManual && !discoveryStalled {
+                // Spinner only while still actively looking. The stalled nudge is
+                // hoisted out so it survives the auto-reveal of the manual field.
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
                     Text("Looking for PCs on your network…")
@@ -230,25 +281,15 @@ private struct HostChooser: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 8)
-            }
-
-            if found.isEmpty && discoveryStalled {
-                HStack(spacing: 10) {
-                    Image(systemName: "wifi.exclamationmark")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.orange)
-                    Text("No PCs found yet - enter the address below.")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 8)
+            } else if found.isEmpty && discoveryStalled {
+                stalledNotice
             }
 
             if !found.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(found) { host in
                         Button {
-                            selected(host.host)
+                            selected(host.host, host.displayName)
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "desktopcomputer")
@@ -283,7 +324,12 @@ private struct HostChooser: View {
                             .onSubmit { submitManual() }
                         Button("Continue") { submitManual() }
                             .buttonStyle(StreamButtonStyle())
-                            .disabled(manual.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .disabled(manualAddress == nil)
+                    }
+                    if manualAddress == nil, !manual.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text(PairingFailure.addressHint)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
             } else {
@@ -302,8 +348,9 @@ private struct HostChooser: View {
             // is an actor; start() is actor-isolated so we await it, then
             // consume the AsyncStream it returns.
             let stream = await HostDiscovery.shared.start()
-            for await hosts in stream {
-                found = hosts
+            for await update in stream {
+                found = update.hosts
+                denied = update.denied
             }
             await HostDiscovery.shared.stop()
         }
@@ -318,10 +365,41 @@ private struct HostChooser: View {
         }
     }
 
+    private var deniedNotice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Glimmer isn't allowed to find devices on your network.", systemImage: "hand.raised.fill")
+                .foregroundStyle(.secondary)
+            if let url = Self.localNetworkSettings {
+                Link("Open Local Network Settings", destination: url)
+                    .font(.callout)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+    }
+
+    private var stalledNotice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "wifi.exclamationmark")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.orange)
+                Text("No PCs found yet. Enter the address below.")
+                    .foregroundStyle(.secondary)
+            }
+            // The usual cause: Sunshine isn't installed or running on the PC yet.
+            if let url = Self.hostSetupGuide {
+                Link("Set Up Your PC", destination: url)
+                    .font(.footnote)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+    }
+
     private func submitManual() {
-        let addr = manual.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return }
-        selected(addr)
+        guard let addr = manualAddress else { return }
+        selected(addr, nil)
     }
 }
 

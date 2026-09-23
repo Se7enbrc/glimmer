@@ -445,6 +445,7 @@ extension FramePacer {
         tickDeficit.deficitRepaints = 0
         tickDeficit.lastRepaintHostTime = .nan
         tickDeficit.lastPresentedSampleBuffer = nil
+        tickDeficit.tickScanoutMediaTime = .nan
         tickDeficit.warmingUp = false
         tickDeficit.warmHealthyWindowStreak = 0
         tickDeficit.floorViolationSince = .nan

@@ -22,15 +22,8 @@ struct Host: Identifiable, Hashable {
     let lastConnected: Date?
     let serverCertPEM: String?    // pinned from moonlight-qt's hosts.N.srvcert (migration)
     let appVersion: String?
-    let gfeVersion: String?
 
-    // Future: populate from /serverinfo's `<mac>` field when present.
-    // Sunshine exposes the host's primary NIC MAC; GFE 3.x exposes it
-    // as `<mac>` too. Wiring this through HostsStore + the discovery /
-    // serverinfo paths is out of scope for the UX polish pass - the
-    // field is here so the ConnectBanner's "Wake on LAN" affordance
-    // can ship conditional today and light up automatically when the
-    // backend populates this.
+    /// The PC's MAC from /serverinfo's `<mac>`, for Wake on LAN.
     let macAddress: String?
 
     /// Per-PC "Wake on LAN": on by default; only matters when a MAC is known.
@@ -48,6 +41,14 @@ struct Host: Identifiable, Hashable {
         // "Last opened 2 Hours Ago". Producing it lowercase at the source
         // keeps every call site consistent.
         return "last played \(formatter.localizedString(for: last, relativeTo: .now))"
+    }
+
+    /// The app a spoken or typed name means: an exact match first, then one
+    /// that differs only in case, accents or surrounding spaces.
+    func app(named name: String) -> LibraryApp? {
+        let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return apps.first { $0.name == wanted }
+            ?? apps.first { $0.name.compare(wanted, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
     }
 }
 
@@ -81,7 +82,7 @@ enum QualityPreset: String, CaseIterable, Identifiable {
     // Retina scale at a quarter of the pixels - plus Custom.
     case matchDisplay  // panel-native pixel grid + host-native fps (sharpest)
     case hidpi         // default "looks like" scale (native ÷ 2), 2x-crisp, ~¼ the bitrate
-    case custom        // user-defined width/height/fps/bitrate
+    case custom        // user-defined width/height/fps
 
     var id: String { rawValue }
 
@@ -134,8 +135,8 @@ enum QualityPreset: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .matchDisplay: return "Every pixel of this Mac's panel (sharpest; wants a solid network)"
-        case .hidpi: return "This Mac's default Retina scale - a touch softer, far less bandwidth"
-        case .custom: return "Pick your own resolution, refresh, and bitrate"
+        case .hidpi: return "This Mac's default Retina scale (a touch softer, far less bandwidth)"
+        case .custom: return "Pick your own resolution and refresh rate"
         }
     }
 }
@@ -172,7 +173,7 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
     ///   * It carries no `.command` modifier, so it's intercepted BEFORE the
     ///     sys-keys-capture gate in InputForwarder - which means it fires
     ///     whether or not the user has enabled the ⌘-forwarding toggle in
-    ///     Shortcuts ("Use ⌘ shortcuts inside the game"). A Cmd-bearing
+    ///     Input ("Send ⌘ to the PC as the Windows key"). A Cmd-bearing
     ///     default would silently fail when capture was off.
     ///   * No Shift, to dodge the common Win+Shift+S screenshot binding on
     ///     the host side that some users have muscle memory for.
@@ -374,4 +375,10 @@ struct HostLiveStatus: Equatable {
     var capturedAt: Date
 
     static let stale: TimeInterval = 60
+
+    /// A sample of `hostID` young enough to act on; an unknown state never is.
+    static func isFresh(_ live: HostLiveStatus?, for hostID: String, at now: Date = Date()) -> Bool {
+        guard let live, live.hostID == hostID, live.state != .unknown else { return false }
+        return now.timeIntervalSince(live.capturedAt) <= stale
+    }
 }

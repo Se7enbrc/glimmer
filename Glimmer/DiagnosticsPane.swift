@@ -29,14 +29,6 @@ struct DiagnosticsPane: View {
     /// the telemetry gate.
     @AppStorage("diagFileLogDebug") private var fileLogDebug = false
 
-    /// `~/Library/Logs/Glimmer` - the SAME directory the telemetry NDJSON writer
-    /// and the per-session Diag log sink use (see TelemetryExporter.openNDJSONFile
-    /// + LogStore). Resolved live so it shows the real per-user path.
-    private var telemetryLogDir: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
-    }
-
     var body: some View {
         // @Bindable shim - surfaces $model.x bindings from the @Observable
         // environment value (matches the other Settings panes).
@@ -54,8 +46,8 @@ struct DiagnosticsPane: View {
             } footer: {
                 Text("Reads the controller directly through macOS. If a signal "
                     + "lights up here but not in a stream, the issue is in how "
-                    + "the stream forwards it - try this view right after a "
-                    + "Cmd-Tab to confirm input is still live.")
+                    + "the stream forwards it. Try this view right after a "
+                    + "⌘-Tab to confirm input is still live.")
             }
 
             Section {
@@ -107,15 +99,15 @@ struct DiagnosticsPane: View {
 
                 Section {
                     HStack {
-                        Text("Bookmark a rough moment")
+                        Text("Bookmark a Rough Moment")
                         Spacer()
                         StaticChordBadge(chord: .defaultBookmark)
                     }
                     Text("Press \(HotkeyChord.defaultBookmark.displayString) during a "
                         + "stream when it \u{201C}feels bad\u{201D} to drop a "
-                        + "timestamped marker into the telemetry. Client-only - never "
-                        + "sent to the host - and intercepted only while telemetry is "
-                        + "on; otherwise the keystroke passes straight through.")
+                        + "timestamped marker into the telemetry. The marker stays on "
+                        + "this Mac, and the shortcut is only caught while telemetry is "
+                        + "on; otherwise it goes to the PC like any other key.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } header: {
@@ -151,11 +143,11 @@ struct DiagnosticsPane: View {
     /// Show the path with a leading `~` instead of the absolute home so it reads
     /// cleanly and matches how the doc comments refer to it.
     private var abbreviatedLogPath: String {
-        (telemetryLogDir.path as NSString).abbreviatingWithTildeInPath
+        (TelemetryExporter.logsDirectory.path as NSString).abbreviatingWithTildeInPath
     }
 
     private func revealLogDir() {
-        let dir = telemetryLogDir
+        let dir = TelemetryExporter.logsDirectory
         // Create it if it doesn't exist yet (telemetry may never have run) so
         // the reveal lands somewhere instead of silently no-opping.
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -166,7 +158,7 @@ struct DiagnosticsPane: View {
 /// Read-only chord badge for non-configurable shortcuts (the bookmark chord is
 /// fixed). Mirrors the look of the interactive `HotkeyBadge` capsule without the
 /// capture machinery, so it reads as the same family of UI.
-private struct StaticChordBadge: View {
+struct StaticChordBadge: View {
     let chord: HotkeyChord
 
     var body: some View {

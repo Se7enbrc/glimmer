@@ -25,7 +25,7 @@ final class WiFiRoamWatch: NSObject, CWEventDelegate, @unchecked Sendable {
             try client.startMonitoringEvent(with: .linkDidChange)
             active = true
         } catch {
-            Diag.info("Wi-Fi roam watch unavailable: \(error.localizedDescription)", "Stream")
+            Diag.info("Wi-Fi roam watch unavailable: \(error.localizedDescription, privacy: .private)", "Stream")
         }
     }
 

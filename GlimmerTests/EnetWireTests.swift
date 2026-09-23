@@ -159,6 +159,7 @@ struct EnetWireTests {
         #expect(Enet.effectiveChannel(Enet.ctrlChannelMouse, negotiatedCount: 48) == Enet.ctrlChannelMouse)
         #expect(Enet.effectiveChannel(Enet.ctrlChannelGamepadBase + 3, negotiatedCount: 48) == Enet.ctrlChannelGamepadBase + 3)
         #expect(Enet.effectiveChannel(Enet.ctrlChannelSensorBase + 15, negotiatedCount: 48) == Enet.ctrlChannelSensorBase + 15)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelUtf8, negotiatedCount: 48) == Enet.ctrlChannelUtf8)
     }
 
     /// A peer that granted fewer channels gets those sends on the generic
@@ -169,5 +170,7 @@ struct EnetWireTests {
         #expect(Enet.effectiveChannel(Enet.ctrlChannelGamepadBase, negotiatedCount: 16) == Enet.ctrlChannelGeneric)
         #expect(Enet.effectiveChannel(Enet.ctrlChannelGamepadBase, negotiatedCount: 17) == Enet.ctrlChannelGamepadBase)
         #expect(Enet.effectiveChannel(Enet.ctrlChannelKeyboard, negotiatedCount: 1) == Enet.ctrlChannelGeneric)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelUtf8, negotiatedCount: 6) == Enet.ctrlChannelGeneric)
+        #expect(Enet.effectiveChannel(Enet.ctrlChannelUtf8, negotiatedCount: 7) == Enet.ctrlChannelUtf8)
     }
 }

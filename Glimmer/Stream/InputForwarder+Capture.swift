@@ -53,26 +53,9 @@ extension InputForwarder {
     //     resign-key / teardown so Cmd-Tab and stream-end always restore a
     //     normal, OS-controlled pointer.
     //
-    // Gesture suppression (unchanged, still needed under associate-false):
-    //   * Trackpad gesture family (pinch/.magnify, smart-zoom/.smartMagnify,
-    //     three-finger-swipe/.swipe, .rotate): the NSEvent local monitor below
-    //     consumes them for our key stream window. Sufficient on its own -
-    //     these dispatch through AppKit, so returning nil stops the default
-    //     zoom/swipe handlers.
-    //   * macOS Accessibility "Smart Zoom" keyboard chords (⌥⌘8/=/-): swallowed
-    //     in streamView(_:handleKeyDown:) (InputForwarder+StreamView.swift).
-    //   * Hot corners (Mission Control etc.): under associate-false the OS does
-    //     not move the cursor, so it can never reach a corner - the warp's old
-    //     job is gone entirely (warpCursorIfNearEdge deleted).
-    //   * Ctrl+scroll Accessibility Zoom: this is interlocked at the
-    //     WindowServer/SkyLight layer BELOW NSEvent dispatch, so neither the
-    //     monitor above nor the chord swallow can cancel it. With the cursor
-    //     associate-false the scroll still reaches us as a relative event; the
-    //     documented non-freezing replacement remains the kCGAnnotatedSession-
-    //     EventTap escalation scoped in the diagnostic-tap comment below (a
-    //     session-scoped CGEventTap consuming control+scrollWheel for our PID,
-    //     needs Accessibility permission). Not installed yet - gated behind the
-    //     diagnostic.
+    // Gesture suppression: the local monitor below eats pinch, smart zoom, swipe and rotate; the cursor can't reach a
+    // hot corner under associate-false; Zoom's ⌥⌘8/=/- reach the PC only while ⌘ shortcuts go to the game. Ctrl+scroll
+    // Zoom is interlocked below NSEvent and needs the session event tap the diagnostic-tap comment scopes (not installed).
 
     func installFocusObservers(for window: NSWindow) {
         // Tear down any prior observers so re-entry is safe.
@@ -141,7 +124,9 @@ extension InputForwarder {
     /// and we don't use it. Resets the sub-pixel residual so the first post-focus
     /// mouseMoved doesn't carry stale fractional pixels. Re-entrant.
     func enterCapturedMode() {
-        guard !isMouseCaptured else { return }
+        // A window still passing clicks through (waiting for its first frame)
+        // cannot hold the pointer either; the fade-in engages it.
+        guard !isMouseCaptured, window?.ignoresMouseEvents != true else { return }
         mouseResidualX = 0
         mouseResidualY = 0
         // Reset the Cruise inter-batch clock AND the windowed-velocity accums
@@ -180,6 +165,7 @@ extension InputForwarder {
             }
         }
         isMouseCaptured = true
+        if captureSysKeys { GlobalHotKeys.setDisabled(true) }
         log.info("""
             Mouse capture: relative aim engaged (associate-false; coalescing off; \
             cursor disassociated, visibility owned by StreamWindow)
@@ -198,9 +184,11 @@ extension InputForwarder {
     func exitCapturedMode() {
         guard isMouseCaptured else { return }
         isMouseCaptured = false
+        releaseCommandSides()
         // Re-associate: hand cursor control back to the OS so the pointer tracks
         // the device again wherever the user goes after leaving the stream.
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+        GlobalHotKeys.setDisabled(false)
         // Restore the system's prior mouse-coalescing setting (the `true` that
         // pairs with the `false` from enterCapturedMode) so we don't leak our
         // override into other apps after the stream ends. Clear the saved value
@@ -310,8 +298,8 @@ extension InputForwarder {
         // with it. The body of `logDiagnosticEvent` below enforces this;
         // do not add an accessor that's documented as "returns valid
         // values only for events of type X" without gating on the type.
+        // No key events: with a known layout, key codes are the typed text.
         let mask: NSEvent.EventTypeMask = [
-            .keyDown, .keyUp, .flagsChanged,
             .leftMouseDown, .leftMouseUp,
             .rightMouseDown, .rightMouseUp,
             .otherMouseDown, .otherMouseUp,
@@ -372,11 +360,6 @@ extension InputForwarder {
             subtype = -1
         }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
-        // keyCode is safe for keyDown/keyUp/flagsChanged. For everything
-        // else NSEvent guarantees keyCode reads (it returns the value of
-        // the underlying CGEvent's keycode field or 0).
-        let kc = (type == .keyDown || type == .keyUp || type == .flagsChanged)
-            ? Int(event.keyCode) : -1
         // For scrollWheel events specifically, also log the magnitude so we
         // can tell real-user scroll input from micro-deltas (free-spin
         // wheels, tilt-wheel side-clicks, the host's own scroll-injection).
@@ -407,8 +390,11 @@ extension InputForwarder {
             let stateID = cg.getIntegerValueField(.eventSourceStateID)
             srcID = "pid=\(pid)/state=\(stateID)"
         }
-        // swiftlint:disable:next line_length
-        log.info("DiagEvent t=\(now, privacy: .public) type=\(typeRaw, privacy: .public)(\(typeName, privacy: .public)) subtype=\(subtype, privacy: .public) mods=0x\(String(mods, radix: 16), privacy: .public) kc=\(kc, privacy: .public) dx=\(scrollX, privacy: .public) dy=\(scrollY, privacy: .public) src=\(srcID, privacy: .public)")
+        log.info("""
+            DiagEvent t=\(now, privacy: .public) type=\(typeRaw, privacy: .public)(\(typeName, privacy: .public)) \
+            subtype=\(subtype, privacy: .public) mods=0x\(String(mods, radix: 16), privacy: .public) \
+            dx=\(scrollX, privacy: .public) dy=\(scrollY, privacy: .public) src=\(srcID, privacy: .public)
+            """)
     }
 
     /// Stable human-readable names for every NSEvent type we might log.

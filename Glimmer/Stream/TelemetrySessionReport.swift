@@ -47,6 +47,9 @@ struct SessionReport {
     let aggregate: SessionAggregate
     let histograms: LatencyHistogramSnapshot?
     let counters: TelemetryCounters
+    /// Stages kept outside the per-tick snapshot (input legs, RFI recovery), so
+    /// they have no active-seconds form and ride `latency_raw` only.
+    var sessionWideStages: [(String, LatencyHistogramSnapshot.Stage)] = []
 
     /// Render the report as a single pretty-ish JSON object (hand-built so field
     /// order is stable + readable, and nil fields are simply omitted - same
@@ -70,7 +73,7 @@ struct SessionReport {
         top.append("\"peak_pacing_depth\":\(aggregate.peakPacingDepth)")
         top.append("\"latency_basis\":\"\(aggregate.activeLatency != nil ? "active_seconds" : "all_session")\"")
         top.append("\"latency\":\(latencyObject(aggregate.activeLatency ?? histograms))")
-        top.append("\"latency_raw\":\(latencyObject(histograms))")
+        top.append("\"latency_raw\":\(latencyObject(histograms, extra: sessionWideStages))")
         top.append("\"events\":\(eventsObject())")
         // REORDER-DISPLACEMENT invariant: how late reorders arrived vs the hold
         // that must outlast them. hold_exceeded > 0 is the only alertable value;
@@ -141,8 +144,11 @@ struct SessionReport {
     /// `latency_basis`; falls back to cumulative for a session too short to
     /// have any active seconds) and with the FINAL cumulative histograms for
     /// `latency_raw`. The headline glass-to-glass + the input-to-photon
-    /// estimate sit alongside the sub-stages.
-    private func latencyObject(_ histograms: LatencyHistogramSnapshot?) -> String {
+    /// estimate sit alongside the sub-stages; `extra` appends standalone stages.
+    private func latencyObject(
+        _ histograms: LatencyHistogramSnapshot?,
+        extra: [(String, LatencyHistogramSnapshot.Stage)] = []
+    ) -> String {
         guard let histograms else { return "{}" }
         func stage(_ name: String, _ stage: LatencyHistogramSnapshot.Stage) -> String? {
             guard stage.hasObservations else { return nil }
@@ -172,7 +178,7 @@ struct SessionReport {
             stage("decode_p", histograms.decodeP),
             // IDR/RFI round-trip (signal: IDR-RTT).
             stage("idr_round_trip", histograms.idrRoundTrip)
-        ].compactMap { $0 }
+        ].compactMap { $0 } + extra.compactMap { stage($0.0, $0.1) }
         return "{" + entries.joined(separator: ",") + "}"
     }
 
@@ -202,22 +208,31 @@ struct SessionReport {
         return "{" + parts.joined(separator: ",") + "}"
     }
 
-    /// P2 CONNECT-HANDSHAKE breakdown - per-stage cold-open timing (ms). Read off
-    /// the always-live `p2` state captured during the handshake. nil legs omitted.
+    /// P2 CONNECT-HANDSHAKE breakdown - the session's FIRST connect, per-stage
+    /// (ms); after an in-place reconnect the latest connect's legs ride
+    /// `reconnect_last`. nil legs omitted.
     private func handshakeObject() -> String {
-        let breakdown = counters.p2.handshakeBreakdown()
+        let current = counters.p2.handshakeBreakdown()
+        guard let first = counters.p2.firstConnect else {
+            return "{" + handshakeLegs(current).joined(separator: ",") + "}"
+        }
+        let last = "\"reconnect_last\":{" + handshakeLegs(current).joined(separator: ",") + "}"
+        return "{" + (handshakeLegs(first.handshake) + [last]).joined(separator: ",") + "}"
+    }
+
+    private func handshakeLegs(_ breakdown: HandshakeBreakdown) -> [String] {
         var parts: [String] = []
         func add(_ key: String, _ value: Double?) {
             if let value, value.isFinite { parts.append("\"\(key)\":\(num(value))") }
         }
         add("rtsp_ms", breakdown.rtspMs)
-        add("pairing_ms", breakdown.pairingMs)
+        add("control_setup_ms", breakdown.controlSetupMs)
         add("enet_connect_ms", breakdown.enetConnectMs)
         add("first_frame_ms", breakdown.firstFrameMs)
         add("total_ms", breakdown.totalMs)
         add("click_to_first_frame_ms", breakdown.clickToFirstFrameMs)
         add("launch_path_ms", breakdown.launchPathMs)
-        return "{" + parts.joined(separator: ",") + "}"
+        return parts
     }
 
     /// P2 lifecycle summary - the disconnect reason (ordinal + label), the
@@ -239,16 +254,19 @@ struct SessionReport {
         return "{" + parts.joined(separator: ",") + "}"
     }
 
-    /// AUDIO-TTF scorecard line: the one-shot time-to-first-decoded-audio plus
-    /// the warm/cold host-bring-up classification (keyed on ping→first-RTP vs
-    /// `AudioTtfContext.warmPingToRtpThresholdMs`), the host-idle covariate
-    /// behind it, and the startup-pacing verdict. Read off the always-live TTF
-    /// context the audio receive path latched; empty object when audio never
-    /// arrived (absent fields, never a fake 0).
+    /// AUDIO-TTF line: time to first audio, warm/cold class, host idle and startup
+    /// verdict: the first connect's, or the latest's if the first heard none. A
+    /// session that heard none says `never` with the audio ping count.
     private func audioTtfObject() -> String {
+        let first = counters.p2.firstConnect.flatMap { $0.audioTtfMs != nil ? $0 : nil }
+        let ttfMs = first?.audioTtfMs ?? counters.audioFirstPacketMs
+        let latched = first.map(\.audioTtf) ?? counters.audioTtf.latched
+        if ttfMs == nil, counters.audioPacketsTotal.value == 0 {
+            return "{\"never\":true,\"pings\":\(EnvSignalController.shared.audioPingsSentTotal.value)}"
+        }
         var parts: [String] = []
-        if let ttf = counters.audioFirstPacketMs { parts.append("\"ttf_ms\":\(num(ttf))") }
-        if let record = counters.audioTtf.latched {
+        if let ttfMs { parts.append("\"ttf_ms\":\(num(ttfMs))") }
+        if let record = latched {
             parts.append("\"ttf_class\":\"\(record.ttfClass)\"")
             if let ping = record.pingToRtpMs { parts.append("\"ping_to_rtp_ms\":\(num(ping))") }
             if let idle = record.hostIdleSeconds { parts.append("\"host_idle_s\":\(num(idle))") }
@@ -381,6 +399,7 @@ struct SessionReport {
             ("audio_fec_recovered", counters.audioFecRecoveredTotal.value),
             ("audio_fec_mismatch", counters.audioFecMismatchTotal.value),
             ("audio_underrun", counters.audioUnderrunTotal.value),
+            ("audio_underrun_deadair", counters.audioUnderrunDeadairTotal.value),
             ("audio_overrun", counters.audioOverrunTotal.value),
             ("audio_trim", counters.audioTrimTotal.value),
             ("audio_receive_failed", counters.audioReceiveFailedTotal.value),

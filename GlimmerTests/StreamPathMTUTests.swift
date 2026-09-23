@@ -1,16 +1,8 @@
 //
 //  StreamPathMTUTests.swift
 //
-//  Coverage for the connect-time path clamp that decides the video packet size
-//  we ADVERTISE to the host. The regression under test: `StreamConfig.remoteness`
-//  defaults to `.auto` (STREAM_CFG_AUTO = 2), so SdpBuilder's `== 1` remote check
-//  never fired and every session - including one routed over a 1280-MTU
-//  Tailscale/WireGuard tunnel - advertised the 1392-byte LAN packet size, which
-//  IP-fragments on that path and multiplies pre-FEC loss.
-//
-//  The syscall probe itself (connect/getsockname/getifaddrs) is not unit-tested -
-//  it depends on the machine's live route table. The DECISION functions it feeds
-//  are pure, and those are what this file pins.
+//  Pins the connect-time path decisions (packet-size clamp, bitrate gates, the
+//  reconnect ask). The syscall probe runs only against loopback here.
 //
 
 import Foundation
@@ -109,9 +101,7 @@ struct StreamPathMTUTests {
             remoteInputAesIv: [UInt8](repeating: 0, count: 16))
         let builder = SdpBuilder(
             config: config, videoPort: 47998, urlSafeAddr: "10.0.0.5",
-            addrFamilyToken: "IPv4", rtspClientVersion: 14,
-            negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0,
-            appVersionQuad: [7, 1, 450, 0])
+            addrFamilyToken: "IPv4", negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0)
         return String(data: builder.build(), encoding: .utf8) ?? ""
     }
 
@@ -140,21 +130,9 @@ struct StreamPathMTUTests {
         #expect(text.contains("x-nv-video[0].packetSize:1024"))
     }
 
-    /// REGRESSION (shipped in 2026.7.8-rc1, purple/white HDR corruption).
-    ///
-    /// `packetSize` is not merely a buffer bound - it is the Reed-Solomon SHARD
-    /// LENGTH the FEC reconstructor rebuilds recovered packets at
-    /// (`RtpVideoQueue+Reconstruct`: `receiveSize = packetSize + MAX_RTP_HEADER_SIZE`
-    /// and `length: packetSize + dataOffset`). rc1 advertised a clamped 1024 to
-    /// the host while leaving the client reconstructing at 1392, so every
-    /// FEC-recovered packet was rebuilt at the wrong length and fed garbage to
-    /// VideoToolbox - 883 corruption events in 196s on a lossy tunnel, and zero
-    /// on the previous build. A clean link never shows it, because it never
-    /// exercises FEC recovery.
-    ///
-    /// The invariant: ONE resolved size reaches the SDP, the receive buffer, and
-    /// the FEC math. `BackendStreamConfig.packetSize` IS that value, and the SDP
-    /// echoes it rather than re-deriving its own.
+    /// The SDP echoes the stored size that also bounds the receive buffer and the FEC
+    /// shard length. 2026.7.8-rc1 advertised 1024 while rebuilding FEC shards at 1392
+    /// and corrupted every recovered frame on a lossy link.
     @Test func advertisedSizeIsExactlyTheStoredSizeUsedForFecReconstruction() {
         for size: Int32 in [512, 872, 1024, 1392] {
             let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, packetSize: size)
@@ -176,9 +154,7 @@ struct StreamPathMTUTests {
             remoteInputAesIv: [UInt8](repeating: 0, count: 16))
         let builder = SdpBuilder(
             config: config, videoPort: 47998, urlSafeAddr: "10.0.0.5",
-            addrFamilyToken: "IPv4", rtspClientVersion: 14,
-            negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0,
-            appVersionQuad: [7, 1, 450, 0])
+            addrFamilyToken: "IPv4", negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0)
         let text = String(data: builder.build(), encoding: .utf8) ?? ""
         func value(_ key: String) -> Int {
             guard let r = text.range(of: "\(key):") else { return -1 }
@@ -381,4 +357,151 @@ struct StreamPathMTUTests {
         let path = StreamPathProbe(interfaceName: "utun6", mtu: 1280, isTunnel: true, rtt: stats)
         #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 42_000)
     }
+
+    // MARK: - Reconnect ask (the route may have moved since the start)
+
+    /// Undocked mid-stream: the reconnect asks what Wi-Fi carries, with no wired
+    /// boost left for the RTT to withdraw.
+    @Test func reconnectTakesTheCurrentRoutesAsk() {
+        let ask = StreamPathMTU.reconnectAsk(
+            current: RouteAsk(kbps: 361_600, boost: 2), route: RouteAsk(kbps: 271_000, boost: 1),
+            downshifted: false)
+        #expect(ask == RouteAsk(kbps: 271_000, boost: 1))
+    }
+
+    @Test func reconnectWithoutARouteKeepsTheStartsAsk() {
+        let start = RouteAsk(kbps: 361_600, boost: 2)
+        #expect(StreamPathMTU.reconnectAsk(current: start, route: nil, downshifted: false) == start)
+    }
+
+    /// A wired, boosted start downshifted from 240 to 144 Mbps on a 15 ms path
+    /// (remote, but short of the 20 ms distance trim): the reconnect withdraws to 72.
+    @Test func downshiftKeepsItsBoostForTheWiredWithdrawal() {
+        let downshifted = RouteAsk(kbps: 144_000, boost: 2)
+        let ask = StreamPathMTU.reconnectAsk(current: downshifted, route: nil, downshifted: true)
+        #expect(ask == downshifted)
+        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 15) == 72_000)
+    }
+
+    /// Downshifted to a wired 300 at boost 2 (150 once withdrawn). A Wi-Fi route
+    /// of 271 caps it whether or not the RTT withdraws the boost; a roomier wired
+    /// route changes nothing.
+    @Test func roomierRouteNeverRaisesADownshiftedAsk() {
+        let downshifted = RouteAsk(kbps: 300_000, boost: 2)
+        let wifi = StreamPathMTU.reconnectAsk(
+            current: downshifted, route: RouteAsk(kbps: 271_000, boost: 1), downshifted: true)
+        #expect(StreamPathMTU.wiredAskKbps(capped: wifi.kbps, boost: wifi.boost, steadyRttMs: 1) == 271_000)
+        #expect(StreamPathMTU.wiredAskKbps(capped: wifi.kbps, boost: wifi.boost, steadyRttMs: 5) == 150_000)
+        #expect(StreamPathMTU.reconnectAsk(
+            current: downshifted, route: RouteAsk(kbps: 500_000, boost: 2), downshifted: true) == downshifted)
+    }
+
+    /// A Wi-Fi downshift to 260 docked onto a wired 500 at boost 2: 260 on a LAN,
+    /// 250 once a remote path withdraws the boost, never the dock's 500.
+    @Test func boostedRouteNeverRaisesAnUnboostedDownshift() {
+        let ask = StreamPathMTU.reconnectAsk(
+            current: RouteAsk(kbps: 260_000, boost: 1), route: RouteAsk(kbps: 500_000, boost: 2),
+            downshifted: true)
+        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 1) == 260_000)
+        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 5) == 250_000)
+    }
+
+    @Test func tighterRouteStillLowersADownshiftedAsk() {
+        let route = RouteAsk(kbps: 120_000, boost: 1)
+        #expect(StreamPathMTU.reconnectAsk(
+            current: RouteAsk(kbps: 300_000, boost: 2), route: route, downshifted: true) == route)
+    }
+
+    // MARK: - RTT sampling against a loopback port
+
+    /// One LAN handshake used to end the burst, so a single sample decided the
+    /// wired withdrawal. Every sample is taken now.
+    @Test func reconnectBurstTakesEverySampleOnALan() throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let probe = StreamPathMTU.probe(host: "127.0.0.1", rttPort: port.port)
+        #expect(probe.rtt?.count == 3)
+    }
+
+    @Test func fullWindowReleasesLaunchWithoutWaitingOutTheCap() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        let start = ContinuousClock.now
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
+        #expect(ContinuousClock.now - start < .seconds(5))
+        sampler.markLaunch()
+        #expect(sampler.usesPreLaunchWindow)
+        #expect((sampler.harvest()?.count ?? 0) >= RttSampler.minPreLaunchSamples)
+    }
+
+    @Test func unreachablePortWaitsOnlyToTheCap() async throws {
+        let port = try #require(LoopbackPort(listening: false))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        let start = ContinuousClock.now
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 150)
+        let waited = ContinuousClock.now - start
+        #expect(waited >= .milliseconds(100) && waited < .seconds(5))
+        #expect(sampler.harvest() == nil)
+    }
+
+    /// A PC that refuses every handshake used to keep the loop sampling for the
+    /// life of the process. Out of attempts, it stops and lets launch go.
+    @Test func refusedPortStopsAfterItsAttempts() async throws {
+        let port = try #require(LoopbackPort(listening: false))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 2)
+        let start = ContinuousClock.now
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000)
+        #expect(ContinuousClock.now - start < .seconds(5))
+        #expect(sampler.harvest() == nil)
+    }
+
+    @Test func harvestReleasesAWaitingLaunch() async throws {
+        let port = try #require(LoopbackPort(listening: false))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        let start = ContinuousClock.now
+        let waiting = Task { await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000) }
+        try await Task.sleep(for: .milliseconds(50))
+        _ = sampler.harvest()
+        await waiting.value
+        #expect(ContinuousClock.now - start < .seconds(5))
+    }
+
+    /// Every exit from the connect path harvests, so the harvest must end the
+    /// loop; otherwise a failed connect keeps probing the PC.
+    @Test func harvestStopsTheSampler() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
+        let first = sampler.harvest()?.count ?? 0
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(first > 0)
+        // Only a probe already in flight at the harvest can still land.
+        #expect((sampler.harvest()?.count ?? 0) <= first + 1)
+    }
+}
+
+/// A loopback TCP port for the RTT probes. Listening, the kernel completes each
+/// handshake from the backlog with nothing accepting; bound only, it refuses.
+private final class LoopbackPort {
+    let fd: Int32
+    let port: UInt16
+
+    init?(listening: Bool) {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return nil }
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, len) == 0 && getsockname(fd, $0, &len) == 0
+            }
+        }
+        guard bound, !listening || listen(fd, 128) == 0 else { close(fd); return nil }
+        self.fd = fd
+        self.port = UInt16(bigEndian: addr.sin_port)
+    }
+
+    deinit { close(fd) }
 }

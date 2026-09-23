@@ -43,35 +43,38 @@ extension StreamSession {
         let customControllerChordProvider: @MainActor () -> Set<ControllerButton>
         let onBackgroundedChanged: (@MainActor (Bool) -> Void)?
         let onMiniPlayerChanged: (@MainActor (Bool) -> Void)?
+        let onCancelConnect: (@MainActor () -> Void)?
     }
 
-    /// Build the one-time leave-hint string: the keyboard hotkey, plus the
-    /// controller chord when one is set AND a controller is connected. Omits the
-    /// controller clause when its chord depends on a DualSense center button
-    /// macOS drops with raw-HID off - advertising a chord that can't fire is worse
-    /// than silence.
+    /// Build the leave-hint string: the keyboard hotkey, plus the controller chord
+    /// when one is set and a controller is connected, unless that chord needs a
+    /// DualSense center button macOS drops with raw-HID off (it couldn't fire).
     static func leaveHintText(
         hotkey: HotkeyChord, chord: ControllerQuitChord,
         customChord: Set<ControllerButton>
     ) -> String {
         let base = "Press \(hotkey.displayString)"
         guard chord != .none, !GCController.controllers().isEmpty else {
-            return "\(base) to leave the stream"
+            return "\(base) to stop streaming"
         }
         // Honesty: a Create/Mute-based chord can't fire on a DualSense without
         // the raw-HID reader; drop the clause rather than promise it.
-        let needsRawHID: Bool
-        switch chord {
-        case .startSelectL1R1: needsRawHID = true
-        case .custom: needsRawHID = !customChord.isDisjoint(with: [.create, .mute])
-        case .none, .l1r1, .l1r1l2r2, .l3r3: needsRawHID = false
-        }
-        if needsRawHID && !DualSenseHID.isEnabled {
-            return "\(base) to leave the stream"
+        if InputForwarder.needsRawHIDCenterButtons(chord: chord, custom: customChord) && !DualSenseHID.isEnabled {
+            return "\(base) to stop streaming"
         }
         let chordText = chord == .custom
             ? ControllerButton.describe(customChord) : chord.displayName
-        return "\(base) (or hold \(chordText) on the controller) to leave"
+        return "\(base) (or hold \(chordText) on the controller) to stop streaming"
+    }
+
+    /// Spend one leave-hint show for `text`. A rebound hotkey or chord changes
+    /// the text, and a new chord is a new lesson, so its budget starts over.
+    static func claimLeaveHintShow(_ text: String, defaults: UserDefaults = .standard) -> Bool {
+        if defaults.string(forKey: leaveHintShownKey) != text {
+            defaults.set(text, forKey: leaveHintShownKey)
+            defaults.removeObject(forKey: HintBudget.leaveStream.defaultsKey)
+        }
+        return HintBudget.leaveStream.claimShow(in: defaults)
     }
 
     /// Stand up the window + decoder + input on the main actor and return them.
@@ -118,6 +121,7 @@ extension StreamSession {
         inp.miniPlayerHotkeyProvider = options.miniPlayerHotkeyProvider
         inp.controllerQuitChordProvider = options.controllerQuitChordProvider
         inp.customControllerChordProvider = options.customControllerChordProvider
+        inp.onCancelConnect = options.onCancelConnect
         dec.statsOverlayEnabled = initialStatsOverlay
         dec.setNegotiatedBitrateKbps(options.negotiatedBitrateKbps)
         dec.setActiveAudioConfigLabel(config.audio.displayLabel)
@@ -141,21 +145,20 @@ extension StreamSession {
         let hotkeyProvider = options.quitHotkeyProvider
         let chordProvider = options.controllerQuitChordProvider
         let customChordProvider = options.customControllerChordProvider
+        let leaveHint: @MainActor () -> String = {
+            Self.leaveHintText(
+                hotkey: hotkeyProvider(), chord: chordProvider(), customChord: customChordProvider())
+        }
+        // A hold or reconnect that outstays its welcome says how to leave.
+        win.reconnectBanner.lingerHint = leaveHint
         dec.onFirstDecodedFrame = { [weak win] in
             win?.fadeInOnFirstFrame()
-            // One-time discoverability toast: Esc is a game input and the menu
-            // bar is hidden, so the quit chord is otherwise undiscoverable. Show
-            // it once ever, on the first stream, with the LIVE chord string(s).
-            // Show once per UNIQUE chord config: keying on the hint TEXT (not a
-            // one-time bool) re-surfaces it after the user rebinds the hotkey/chord,
-            // since Esc is game input and the menu bar is hidden (no rediscovery).
-            guard let win else { return }
-            let text = Self.leaveHintText(
-                hotkey: hotkeyProvider(),
-                chord: chordProvider(),
-                customChord: customChordProvider())
-            guard UserDefaults.standard.string(forKey: Self.leaveHintShownKey) != text else { return }
-            UserDefaults.standard.set(text, forKey: Self.leaveHintShownKey)
+            // Discoverability toast: Esc is a game input and the menu bar is
+            // hidden, so the quit chord is otherwise undiscoverable. Skipped
+            // while ordered out, so a show nobody sees doesn't spend the budget.
+            guard let win, win.window.isVisible else { return }
+            let text = leaveHint()
+            guard Self.claimLeaveHintShow(text) else { return }
             win.leaveHintBanner.setText(text)
             win.leaveHintBanner.setVisible(true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak win] in

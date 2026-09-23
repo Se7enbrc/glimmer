@@ -50,12 +50,15 @@ extension StreamSession {
         controllerQuitChordProvider: @escaping @MainActor () -> ControllerQuitChord = { .none },
         customControllerChordProvider: @escaping @MainActor () -> Set<ControllerButton> = { [] },
         onBackgroundedChanged: (@MainActor (Bool) -> Void)? = nil,
-        onMiniPlayerChanged: (@MainActor (Bool) -> Void)? = nil
+        onMiniPlayerChanged: (@MainActor (Bool) -> Void)? = nil,
+        // Esc or the quit chord before the stream is live: the caller's cancel.
+        onCancelConnect: (@MainActor () -> Void)? = nil
     ) async throws -> AsyncStream<StreamEvent> {
         guard !isStreaming, !stopInProgress else {
             throw StreamError.sessionFailed(-1)
         }
         teardown = SharedTeardown()
+        stopCause = nil
         ownsHostSession = false
         isStreaming = true
 
@@ -65,6 +68,7 @@ extension StreamSession {
         self.reconnectServer = server
         self.reconnectConfig = config
         self.reconnectAppID = appID
+        audioDecoder.setOutputMuted(config.playAudioOnHost)
 
         // Keep the Mac (and its display) awake AND opt OUT of App Nap for the
         // whole session. Begun here so a slow handshake can't let the machine
@@ -99,7 +103,9 @@ extension StreamSession {
         // bands on the samples taken before /launch: once the game starts and
         // the display switches, handshakes read 3-7x the path's true RTT.
         let rttSampler = RttSampler(host: server.address, port: UInt16(server.httpsPort))
-        let serverInfo = try await fetchAndVerifyServerInfo(network: network)
+        // A throw below must still stop its loop, or it keeps probing the PC.
+        defer { _ = rttSampler.harvest() }
+        let serverInfo = try await fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
         try checkAttempt()
         await rttSampler.awaitPreLaunchWindow()
         try checkAttempt()
@@ -143,7 +149,8 @@ extension StreamSession {
             controllerQuitChordProvider: controllerQuitChordProvider,
             customControllerChordProvider: customControllerChordProvider,
             onBackgroundedChanged: onBackgroundedChanged,
-            onMiniPlayerChanged: onMiniPlayerChanged))
+            onMiniPlayerChanged: onMiniPlayerChanged,
+            onCancelConnect: onCancelConnect))
 
         // --- 4a) Build + publish the session bridge (see publishBridge): weak
         // refs to every subsystem + self so a torn-down subsystem just makes its
@@ -230,21 +237,22 @@ extension StreamSession {
             reason: "Glimmer is streaming")
     }
 
-    /// Step 1 of start(): fetch /serverinfo, stamp its launch sub-leg, log the
-    /// one-line handshake diagnostic, and refuse an unpaired host. A throw here
-    /// unwinds through start()'s power-assertion + orphaned-network defers
-    /// exactly as it did inline.
-    private func fetchAndVerifyServerInfo(network: NetworkClient) async throws -> ServerInfo {
+    /// Step 1 of start(): fetch /serverinfo, stamp its launch sub-leg, log the handshake line, and
+    /// refuse a GameStream or unpaired PC, named as the user knows it. A throw unwinds through
+    /// start()'s power-assertion and orphaned-network defers.
+    private func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
         let serverinfoStart = Date()
         let serverInfo = try await network.fetchServerInfo()
         ConnectTimingTelemetry.shared.recordLaunchLeg(
             serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
-        // swiftlint:disable:next line_length
-        log.info("fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) codecSupport=0x\(String(serverInfo.serverCodecSupport.rawValue, radix: 16))")
-        if serverInfo.pairStatus != .paired {
-            throw StreamError.pairingFailed("Host is not paired. Use the pair sheet first.")
-        }
+        log.info("""
+            fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) \
+            currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) \
+            codecSupport=0x\(String(serverInfo.serverCodecSupport.rawValue, radix: 16))
+            """)
+        if serverInfo.isRealGFE { throw StreamError.gameStreamHost }
+        if serverInfo.pairStatus != .paired { throw NetworkClient.notPaired(pcName) }
         return serverInfo
     }
 
@@ -348,10 +356,19 @@ extension StreamSession {
         let screen = NSScreen.main
         let displayMaxFps = screen?.maximumFramesPerSecond ?? -1
         let displayName = screen?.localizedName ?? "n/a"
-        // swiftlint:disable:next line_length
-        self.log.info("Stream config: \(cfgSnapshot.width, privacy: .public)x\(cfgSnapshot.height, privacy: .public)@\(cfgSnapshot.fps, privacy: .public) bitrate=\(cfgSnapshot.bitrate, privacy: .public) packetSize=\(cfgSnapshot.packetSize, privacy: .public) audio=\(cfgSnapshot.audioConfiguration, privacy: .public) videoFormats=0x\(String(cfgSnapshot.supportedVideoFormats, radix: 16), privacy: .public) refreshRateX100=\(cfgSnapshot.clientRefreshRateX100, privacy: .public) colorSpace=\(cfgSnapshot.colorSpace, privacy: .public) colorRange=\(cfgSnapshot.colorRange, privacy: .public) encryption=0x\(String(cfgSnapshot.encryptionFlags, radix: 16), privacy: .public) remote=\(cfgSnapshot.streamingRemotely, privacy: .public) display=\(displayName, privacy: .public) displayMaxFps=\(displayMaxFps, privacy: .public)")
+        self.log.info("""
+            Stream config: \
+            \(cfgSnapshot.width, privacy: .public)x\(cfgSnapshot.height, privacy: .public)@\(cfgSnapshot.fps, privacy: .public) \
+            bitrate=\(cfgSnapshot.bitrate, privacy: .public) packetSize=\(cfgSnapshot.packetSize, privacy: .public) \
+            audio=\(cfgSnapshot.audioConfiguration, privacy: .public) \
+            videoFormats=0x\(String(cfgSnapshot.supportedVideoFormats, radix: 16), privacy: .public) \
+            refreshRateX100=\(cfgSnapshot.clientRefreshRateX100, privacy: .public) \
+            colorSpace=\(cfgSnapshot.colorSpace, privacy: .public) colorRange=\(cfgSnapshot.colorRange, privacy: .public) \
+            remote=\(cfgSnapshot.streamingRemotely, privacy: .public) display=\(displayName, privacy: .private) \
+            displayMaxFps=\(displayMaxFps, privacy: .public)
+            """)
         Diag.notice("Stream config: \(cfgSnapshot.width)x\(cfgSnapshot.height)@\(cfgSnapshot.fps), "
-            + "\(cfgSnapshot.bitrate / 1000) Mbps, display \(displayName)", "Stream")
+            + "\(cfgSnapshot.bitrate / 1000) Mbps, display \(displayName, privacy: .private)", "Stream")
     }
 
     /// Arm the post-connection timers: the 2 Hz stats-overlay updater, the

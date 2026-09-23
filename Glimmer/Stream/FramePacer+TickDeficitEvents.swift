@@ -92,9 +92,10 @@ extension FramePacer {
     }
 
     private func logDeficitEngaged(ticksPerS: Double, expectedHz: Double, depth: Int) {
-        log.warning(
-            // swiftlint:disable:next line_length
-            "FramePacer tick-deficit degraded mode ENGAGED - measured ticks \(ticksPerS, privacy: .public)/s vs expected \(expectedHz, privacy: .public)Hz, depth=\(depth, privacy: .public); releasing off-tick at stream cadence")
+        log.warning("""
+            FramePacer tick-deficit degraded mode ENGAGED - measured ticks \(ticksPerS, privacy: .public)/s vs expected \
+            \(expectedHz, privacy: .public)Hz, depth=\(depth, privacy: .public); releasing off-tick at stream cadence
+            """)
         Diag.notice(
             "FramePacer tick-deficit degraded mode ENGAGED - measured ticks "
             + "\(String(format: "%.1f", ticksPerS))/s vs expected "
@@ -110,9 +111,11 @@ extension FramePacer {
         reason: String, duration: Double, releases: UInt64,
         repaints: UInt64, ticksPerS: Double
     ) {
-        log.notice(
-            // swiftlint:disable:next line_length
-            "FramePacer tick-deficit degraded mode DISENGAGED (\(reason, privacy: .public)) after \(duration * 1000, privacy: .public)ms - released \(releases, privacy: .public) frames off-tick, \(repaints, privacy: .public) governor repaints, ticks now \(ticksPerS, privacy: .public)/s")
+        log.notice("""
+            FramePacer tick-deficit degraded mode DISENGAGED (\(reason, privacy: .public)) after \
+            \(duration * 1000, privacy: .public)ms - released \(releases, privacy: .public) frames off-tick, \
+            \(repaints, privacy: .public) governor repaints, ticks now \(ticksPerS, privacy: .public)/s
+            """)
         Diag.info(
             "FramePacer tick-deficit degraded mode DISENGAGED (\(reason)) after "
             + "\(String(format: "%.0f", duration * 1000))ms - released \(releases) "
@@ -124,9 +127,10 @@ extension FramePacer {
     }
 
     private func logFloorViolation(ticksPerS: Double, floorHz: Double) {
-        log.notice(
-            // swiftlint:disable:next line_length
-            "FramePacer FLOOR VIOLATION - realized ticks \(ticksPerS, privacy: .public)/s below the pinned \(floorHz, privacy: .public)Hz preferredFrameRateRange floor for >1s (frame-rate governor overriding the advisory floor)")
+        log.notice("""
+            FramePacer FLOOR VIOLATION - realized ticks \(ticksPerS, privacy: .public)/s below the pinned \
+            \(floorHz, privacy: .public)Hz preferredFrameRateRange floor for >1s (frame-rate governor overriding the advisory floor)
+            """)
         Diag.notice(
             "FramePacer FLOOR VIOLATION - realized ticks "
             + "\(String(format: "%.1f", ticksPerS))/s below the pinned "
@@ -139,9 +143,10 @@ extension FramePacer {
     }
 
     private func logFloorAssistEngaged(ticksPerS: Double, floorHz: Double, depth: Int) {
-        log.notice(
-            // swiftlint:disable:next line_length
-            "FramePacer floor-violation ASSIST engaged - ticks \(ticksPerS, privacy: .public)/s vs \(floorHz, privacy: .public)Hz floor, depth=\(depth, privacy: .public); off-tick timer filling missed beats")
+        log.notice("""
+            FramePacer floor-violation ASSIST engaged - ticks \(ticksPerS, privacy: .public)/s vs \
+            \(floorHz, privacy: .public)Hz floor, depth=\(depth, privacy: .public); off-tick timer filling missed beats
+            """)
         Diag.notice(
             "FramePacer floor-violation ASSIST engaged - ticks "
             + "\(String(format: "%.1f", ticksPerS))/s vs "

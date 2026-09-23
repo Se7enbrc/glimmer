@@ -206,6 +206,9 @@ final class IOReportSampler: @unchecked Sendable {
     /// Monotonic timestamp of the previous energy sample - energy-to-watts
     /// needs the window's actual wall time, not the nominal 1s cadence.
     private var previousEnergyTickNs: UInt64?
+    /// The last energy window saw matched rails but none advanced, so the
+    /// baseline was held: the rail set is live, the reading just pending.
+    private var energyWindowFlat = false
 
     /// First-sample outcome NOTICE state (the sensor-honesty contract: every
     /// sampler logs its first success OR failure once). Tick 1 is the designed
@@ -334,6 +337,7 @@ final class IOReportSampler: @unchecked Sendable {
         previousEnergySample = nil
         previousGpuSample = nil
         previousEnergyTickNs = nil
+        energyWindowFlat = false
         sampleTicks = 0
         firstSampleOutcomeLogged = false
         lastClusterFailure = "no sample attempted"
@@ -366,7 +370,7 @@ final class IOReportSampler: @unchecked Sendable {
             firstSampleOutcomeLogged = true
             Diag.notice("IOReport sampler LIVE - clusters E:\(snapshot.eClusterCount)"
                 + "/P:\(snapshot.pClusterCount), package power "
-                + "\(snapshot.packagePowerW != nil ? "yes" : "NO"), GPU residency "
+                + "\(snapshot.packagePowerW != nil || energyWindowFlat ? "yes" : "NO"), GPU residency "
                 + "\(snapshot.gpuResidencyPercent != nil ? "yes" : "NO").",
                 TelemetryExporter.logCategory)
         }
@@ -407,9 +411,13 @@ final class IOReportSampler: @unchecked Sendable {
             return nil
         }
         let nowNs = DispatchTime.now().uptimeNanoseconds
+        var advanceBaseline = true
         defer {
-            previousEnergySample = raw
-            previousEnergyTickNs = nowNs
+            energyWindowFlat = !advanceBaseline
+            if advanceBaseline {
+                previousEnergySample = raw
+                previousEnergyTickNs = nowNs
+            }
         }
         guard let previous = previousEnergySample, let previousNs = previousEnergyTickNs,
               nowNs > previousNs,
@@ -440,6 +448,9 @@ final class IOReportSampler: @unchecked Sendable {
                 }
             }
         }
+        // Every rail flat: the counters haven't published since the baseline.
+        // Keep it, so the next reading spans the whole interval instead of 0 W.
+        if matchedAny && watts == 0 { advanceBaseline = false; return nil }
         return matchedAny ? watts : nil
     }
 

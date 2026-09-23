@@ -17,12 +17,14 @@ import os
 
 extension StatsCollector {
 
-    func recordReceivedFrame(bytes: Int, isIDR: Bool = false) {
+    /// `ptsUs` is the frame's host presentation time (0 = unknown), feeding the
+    /// window's host cadence.
+    func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0) {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         receivedFrames &+= 1
         totalReceived &+= 1
-        lastReceivedFrameTime = CACurrentMediaTime()
+        foldHostDeltaLocked(ptsUs: ptsUs)
         if bytes > 0 {
             receivedBytes &+= UInt64(bytes)
             // Telemetry frame-size + type window accumulators - cheap integer adds
@@ -41,15 +43,6 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         lastDecodedFrameTime = CACurrentMediaTime()
-    }
-
-    /// Seconds since the last frame was received from the network, or
-    /// `Double.infinity` if we've never received one.
-    func secondsSinceLastReceivedFrame() -> Double {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
-        guard lastReceivedFrameTime > 0 else { return .infinity }
-        return CACurrentMediaTime() - lastReceivedFrameTime
     }
 
     /// Seconds since VT successfully decoded a frame, or `Double.infinity`
@@ -153,6 +146,7 @@ extension StatsCollector {
         if dropped {
             decoderDroppedFrames &+= 1
             totalDecoderDropped &+= 1
+            clientSkipSinceLastPresent = true
         } else {
             decodedFrames &+= 1
         }
@@ -230,6 +224,7 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         rendererBackpressureDrops &+= 1
+        clientSkipSinceLastPresent = true
     }
 
     /// Total renderer-backpressure drops since reset(). Used by stream-
@@ -270,6 +265,7 @@ extension StatsCollector {
         defer { os_unfair_lock_unlock(&lock) }
         decoderDroppedFrames &+= 1
         totalDecoderDropped &+= 1
+        clientSkipSinceLastPresent = true
     }
 
     // MARK: - Frame-pacer smoothness
@@ -285,6 +281,7 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         presentationLateDrops &+= 1
+        clientSkipSinceLastPresent = true
     }
 
     /// Total presentation-late drops since reset(). Surfaced in the overlay's
@@ -324,13 +321,17 @@ extension StatsCollector {
         if depth > maxPacingDepth { maxPacingDepth = depth }
     }
 
-    /// Record one present's cadence error (present-vs-PTS grid delta, ms).
-    /// `cadenceErrorMs` may be negative (presented early); we bucket on its
-    /// magnitude. Called from FramePacer on the pacing queue once per released
-    /// frame.
-    func recordPresent(cadenceErrorMs: Double) {
+    /// Record one present's cadence error (present-vs-PTS grid delta, ms; bucketed
+    /// on magnitude). The frame's host PTS, the stream interval and the refresh
+    /// interval let a late present be charged to the host's own timing.
+    func recordPresent(cadenceErrorMs: Double, hostPTSSeconds: Double = .nan,
+                       streamIntervalMs: Double = 0, refreshMs: Double = 0) {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
+        let hostDeltaMs = (hostPTSSeconds - lastPresentedPtsSeconds) * 1000.0
+        if hostPTSSeconds.isFinite { lastPresentedPtsSeconds = hostPTSSeconds }
+        let afterClientSkip = clientSkipSinceLastPresent
+        clientSkipSinceLastPresent = false
         let magnitude = abs(cadenceErrorMs)
         presentCadenceErrorMsSum += magnitude
         presentCadenceSamples &+= 1
@@ -339,6 +340,38 @@ extension StatsCollector {
             onTimePresents &+= 1
         } else {
             latePresents &+= 1
+            if !afterClientSkip, Self.hostTimingExplainsLate(
+                hostDeltaMs: hostDeltaMs, streamIntervalMs: streamIntervalMs, refreshMs: refreshMs) {
+                hostTimedLatePresents &+= 1
+            }
         }
+    }
+
+    /// Whether the host's timing alone makes a present late: even the best present
+    /// it allowed (its frame delta, but no sooner than one refresh) misses the
+    /// stream interval by more than the cadence tolerance.
+    static func hostTimingExplainsLate(hostDeltaMs: Double, streamIntervalMs: Double,
+                                       refreshMs: Double) -> Bool {
+        guard hostDeltaMs > 0, hostDeltaMs < 1_000, streamIntervalMs > 0 else { return false }
+        return abs(max(hostDeltaMs, refreshMs) - streamIntervalMs) > presentCadenceToleranceMs
+    }
+
+    /// Fold one received frame's host PTS into the window's host cadence. Zero, a
+    /// backward step or a gap of 1 s or more breaks the chain instead of counting.
+    /// MUST be called with `lock` held.
+    func foldHostDeltaLocked(ptsUs: UInt64) {
+        defer { lastReceivedPtsUs = ptsUs }
+        guard lastReceivedPtsUs > 0, ptsUs > lastReceivedPtsUs,
+              ptsUs - lastReceivedPtsUs < 1_000_000 else {
+            lastHostDeltaMs = 0
+            return
+        }
+        let deltaMs = Double(ptsUs - lastReceivedPtsUs) / 1000.0
+        if windowHostDeltasMs.count < Self.hostDeltaWindowCap { windowHostDeltasMs.append(deltaMs) }
+        if lastHostDeltaMs > 0,
+           max(deltaMs, lastHostDeltaMs) >= Self.hostUnevenRatio * min(deltaMs, lastHostDeltaMs) {
+            windowHostUnevenPairs &+= 1
+        }
+        lastHostDeltaMs = deltaMs
     }
 }

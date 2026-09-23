@@ -107,6 +107,8 @@ final class InputBatcher: @unchecked Sendable {
         /// Oldest-unflushed stamp - set on the clean→dirty edge, kept on
         /// supersession, reset at flush. See relMouseStamp.
         var stamp = DispatchTime.now()
+        /// Deliver→enqueue leg (ms) of that oldest state; 0 when not measured.
+        var deliverMs = 0.0
     }
     private var controllers = [ControllerSlot](repeating: ControllerSlot(),
                                                count: Enet.maxGamepads)
@@ -121,9 +123,14 @@ final class InputBatcher: @unchecked Sendable {
         var dirty = false
         /// Oldest-unflushed stamp (set on clean→dirty, reset at flush).
         var stamp = DispatchTime.now()
+        /// Uptime of this sensor's last input_motion trace line (0 = never).
+        var lastTraceNanos: UInt64 = 0
     }
     /// MAX_MOTION_EVENTS (InputStream.c) - accel + gyro.
     private static let motionTypeCount = 2
+    /// input_motion trace lines per (slot, sensor) are capped at 20 Hz: at the
+    /// host's sensor rate they filled a third of the frame trace.
+    static let motionTraceIntervalNanos: UInt64 = 50_000_000
     private var motionStates = [MotionSlot](repeating: MotionSlot(),
                                             count: Enet.maxGamepads * motionTypeCount)
     /// Dirty-slot count, so the 1ms flush pays ONE integer compare - not a
@@ -212,15 +219,16 @@ final class InputBatcher: @unchecked Sendable {
             if self.controllers[slot].dirty,
                self.controllers[slot].buttons != safeButtons {
                 // Button-flag change ends the batch: emit the pending slot first.
-                self.flushController(slot)
+                self.flushController(slot, tracker: FrameTimingTracker.shared)
             }
-            // Stamp the oldest unflushed state per slot (clean→dirty edge); a
-            // superseding update in the same batch keeps the older stamp.
+            // Stamp the oldest unflushed state per slot (clean→dirty edge) with its
+            // deliver leg; a superseding update in the same batch keeps both.
             let stampNow = DispatchTime.now()
-            if !self.controllers[slot].dirty { self.controllers[slot].stamp = stampNow }
-            // Observe the pre-hop deliver→enqueue leg (handler entry → here). Take
-            // is a no-op (returns 0) off the GameController path; measurement only.
-            self.observeInputDeliverAge(slot: slot, enqueued: stampNow)
+            let deliverMs = self.observeInputDeliverAge(slot: slot, enqueued: stampNow)
+            if !self.controllers[slot].dirty {
+                self.controllers[slot].stamp = stampNow
+                self.controllers[slot].deliverMs = deliverMs
+            }
             self.controllers[slot].num = num
             self.controllers[slot].mask = mask
             self.controllers[slot].buttons = safeButtons
@@ -260,6 +268,7 @@ final class InputBatcher: @unchecked Sendable {
         guard typeIndex >= 0, typeIndex < Self.motionTypeCount else {
             return InputBatcherResult.sendFailed
         }
+        TelemetryCounters.shared.inputMotionTotal.increment()
         queue.async { [weak self] in
             guard let self else { return }
             let idx = (Int(num) % Enet.maxGamepads) * Self.motionTypeCount + typeIndex
@@ -411,7 +420,7 @@ final class InputBatcher: @unchecked Sendable {
                     channel: Enet.ctrlChannelMouse)
             }
             relMouseDirty = false
-            observeInputAge(from: relMouseStamp, to: drainNow, tracker: latencyTracker)
+            observeInputAge(from: relMouseStamp, to: drainNow, tracker: latencyTracker, deliverMs: 0)
         }
 
         // (2) Absolute mouse: latest-only.
@@ -422,12 +431,12 @@ final class InputBatcher: @unchecked Sendable {
                                            refW: absMouseRefW, refH: absMouseRefH),
                 channel: Enet.ctrlChannelMouse)
             absMouseDirty = false
-            observeInputAge(from: absMouseStamp, to: drainNow, tracker: latencyTracker)
+            observeInputAge(from: absMouseStamp, to: drainNow, tracker: latencyTracker, deliverMs: 0)
         }
 
         // (3) Controllers: latest state per dirty slot.
         for slot in controllers.indices where controllers[slot].dirty {
-            flushController(slot)
+            flushController(slot, tracker: latencyTracker)
         }
 
         // (4) Motion: latest sample per dirty (slot, sensor) - moonlight's
@@ -452,28 +461,50 @@ final class InputBatcher: @unchecked Sendable {
                 // else → UNRELIABLE.
                 let isGyroNull = motionType == UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
                     && s.x == 0 && s.y == 0 && s.z == 0
-                trace(latencyTracker, "\"event\":\"input_motion\",\"slot\":\(slot),\"type\":\(motionType),"
-                    + "\"x\":\(s.x),\"y\":\(s.y),\"z\":\(s.z)")
+                traceMotion(idx, isGyroNull: isGyroNull, tracker: latencyTracker, now: drainNow)
                 if isGyroNull {
                     _ = enet.sendInputPacket(plaintext, channel: channel)
                 } else {
                     _ = enet.sendInputPacketUnreliable(plaintext, channel: channel)
                 }
-                observeInputAge(from: motionStates[idx].stamp, to: drainNow, tracker: latencyTracker)
+                // Motion is not user input: its age feeds the histogram but never
+                // stands in for the last input's legs (deliverMs nil).
+                observeInputAge(from: motionStates[idx].stamp, to: drainNow, tracker: latencyTracker,
+                                deliverMs: nil)
                 motionStates[idx].dirty = false
             }
             motionDirtyCount = 0
         }
     }
 
-    /// Observe one merged slot's queue→wire age into the input-local-latency
-    /// histogram. No-op when telemetry is off (`drainNow`/`tracker` nil). Both
-    /// clocks are the local monotonic DispatchTime - no host/present clock.
+    /// Observe one merged slot's queue→wire age (no-op with telemetry off). With a
+    /// `deliverMs`, deliver + queue also become the latest input's client legs for
+    /// the input-to-photon estimate; motion passes nil.
     private func observeInputAge(from stamp: DispatchTime, to drainNow: DispatchTime?,
-                                 tracker: FrameTimingTracker?) {
+                                 tracker: FrameTimingTracker?, deliverMs: Double?) {
         guard let drainNow, let tracker, drainNow >= stamp else { return }
         let ageMs = Double(drainNow.uptimeNanoseconds &- stamp.uptimeNanoseconds) / 1_000_000.0
         tracker.inputLocalLatency.observe(ageMs)
+        if let deliverMs { tracker.noteInputLegs(deliverMs + ageMs) }
+    }
+
+    /// Trace motion slot `idx` (slot * motionTypeCount + sensor) if it is due; no-op
+    /// with telemetry off. MUST be called on `queue`.
+    private func traceMotion(_ idx: Int, isGyroNull: Bool, tracker: FrameTimingTracker?, now: DispatchTime?) {
+        guard let tracker, let now,
+              Self.motionTraceDue(lastNanos: motionStates[idx].lastTraceNanos,
+                                  nowNanos: now.uptimeNanoseconds, isGyroNull: isGyroNull) else { return }
+        motionStates[idx].lastTraceNanos = now.uptimeNanoseconds
+        let sample = motionStates[idx]
+        trace(tracker, "\"event\":\"input_motion\",\"slot\":\(idx / Self.motionTypeCount),"
+            + "\"type\":\(idx % Self.motionTypeCount + 1),\"x\":\(tracker.jsonNumber(Double(sample.x))),"
+            + "\"y\":\(tracker.jsonNumber(Double(sample.y))),\"z\":\(tracker.jsonNumber(Double(sample.z)))")
+    }
+
+    /// Whether this sensor's sample gets an input_motion trace line: at most one
+    /// per `motionTraceIntervalNanos`, but always the gyro null that stops sensors.
+    static func motionTraceDue(lastNanos: UInt64, nowNanos: UInt64, isGyroNull: Bool) -> Bool {
+        isGyroNull || nowNanos &- lastNanos >= motionTraceIntervalNanos
     }
 
     /// Count a backpressure flush-skip, split by which signal fired (both when
@@ -487,44 +518,43 @@ final class InputBatcher: @unchecked Sendable {
         }
     }
 
-    /// Observe one slot's deliver→enqueue age (controller handler entry → this
-    /// enqueue) into the deliver histogram. ALWAYS takes the per-slot handler
-    /// stamp (clears it even when telemetry's off, so it can't go stale); a no-op
-    /// (0) off the GameController path. Observes only when the tracker exists.
-    private func observeInputDeliverAge(slot: Int, enqueued: DispatchTime) {
+    /// Observe one slot's deliver→enqueue age (controller handler entry → here) and
+    /// return it, 0 when unmeasured. Always takes the handler stamp so it can't go
+    /// stale with telemetry off; off the GameController path the take returns 0.
+    private func observeInputDeliverAge(slot: Int, enqueued: DispatchTime) -> Double {
         let entry = InputDeliverStamp.shared.take(slot: slot)
         guard let tracker = FrameTimingTracker.shared,
-              entry != 0, enqueued.uptimeNanoseconds >= entry else { return }
-        tracker.inputDeliverLatency.observe(
-            Double(enqueued.uptimeNanoseconds &- entry) / 1_000_000.0)
+              entry != 0, enqueued.uptimeNanoseconds >= entry else { return 0 }
+        let deliverMs = Double(enqueued.uptimeNanoseconds &- entry) / 1_000_000.0
+        tracker.inputDeliverLatency.observe(deliverMs)
+        return deliverMs
     }
 
-    /// Send the latest pending multiController for `slot` and clear its dirty
-    /// flag. MUST be called on `queue`. Drain point for both the timer flush and
-    /// the button-change flush, so it resolves its own queue→wire age stamp.
-    /// One trace line per merged input the wire actually carried, on the
-    /// per-frame trace's clock. Off with telemetry: the tracker is nil then.
-    private func trace(_ tracker: FrameTimingTracker?, _ fields: String) {
+    /// One trace line per merged input the wire carried, on the per-frame trace's
+    /// clock. `fields` is only built when telemetry is on (the tracker is nil off).
+    private func trace(_ tracker: FrameTimingTracker?, _ fields: @autoclosure () -> String) {
         guard let tracker else { return }
         let nowMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
         tracker.traceWriter.append(
-            "{\"session\":\"\(tracker.sessionId)\",\(fields),\"t_ms\":\(tracker.jsonNumber(nowMs))}")
+            "{\"session\":\"\(tracker.sessionId)\",\(fields()),\"t_ms\":\(tracker.jsonNumber(nowMs))}")
     }
 
-    private func flushController(_ slot: Int) {
+    /// Send the latest pending multiController for `slot` and clear its dirty flag.
+    /// MUST be called on `queue`: the drain point for both the timer flush and the
+    /// button-change flush, so it resolves its own queue→wire age.
+    private func flushController(_ slot: Int, tracker: FrameTimingTracker?) {
         guard let enet else { return }
         let pending = controllers[slot]
         let analog = pending.analog
-        trace(FrameTimingTracker.shared, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
+        trace(tracker, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
             + "\"lx\":\(analog.leftStickX),\"ly\":\(analog.leftStickY),\"rx\":\(analog.rightStickX),"
             + "\"ry\":\(analog.rightStickY),\"lt\":\(analog.leftTrigger),\"rt\":\(analog.rightTrigger)")
         _ = enet.sendInputPacket(
             InputEncoder.multiController(num: pending.num, mask: pending.mask,
                                         buttons: pending.buttons, analog: pending.analog),
             channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot))
-        let tracker = FrameTimingTracker.shared
-        observeInputAge(from: pending.stamp,
-                        to: tracker != nil ? DispatchTime.now() : nil, tracker: tracker)
+        observeInputAge(from: pending.stamp, to: tracker != nil ? DispatchTime.now() : nil,
+                        tracker: tracker, deliverMs: pending.deliverMs)
         controllers[slot].dirty = false
     }
 }

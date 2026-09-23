@@ -48,6 +48,8 @@ Top-level pieces:
 | `AudioDecoder`        | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/AudioDecoder.swift`                     |
 | `InputForwarder`      | `@MainActor final class`                                   | `Glimmer/Stream/InputForwarder.swift`                   |
 | `ControllerForwarder` | `@MainActor` extension on InputForwarder                   | `Glimmer/Stream/ControllerForwarder.swift`              |
+| `HIDGamepadManager`   | `@MainActor final class` (singleton)                       | `Glimmer/Stream/HIDGamepad/`                            |
+| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)           | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)      |
 | `StreamWindow`        | `@MainActor final class`                                   | `Glimmer/Stream/StreamWindow.swift`                     |
 | `StatsCollector`      | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StatsCollector.swift`                   |
 | Telemetry (opt-in)    | exporter + counters                                        | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
@@ -55,6 +57,28 @@ Top-level pieces:
 > The control/HTTP path runs over `ControlTransport` (`ControlTransport.swift`):
 > a hand-rolled OpenSSL + POSIX-socket mutual-TLS client, deliberately **not**
 > `URLSession` - this keeps the (sleep-locking) keychain out of the path.
+
+**Command line.** The same binary is the `glimmer` command. `GlimmerMain`
+(`Glimmer/CLI/`) is the entry point: run as `glimmer` (the cask's link), or with
+a bare word or `-h`/`--help` as the first argument, it runs `GlimmerCLI`;
+anything else (no arguments, `--launched-at-login`, `-psn_*`, `-NS*`, Xcode and
+test arguments) starts the app. Login, Launch Services, Sparkle and test
+launches depend on that, so any new launch argument the app takes must start
+with a dash. Verbs run headless through the app's own `AppModel`, pairing and
+`NetworkClient` code. `glimmer stream` opens the app if needed and hands it the
+launch over distributed notifications (`CommandChannel`,
+`AppModel+Commands.swift`), so no stream ever runs in the terminal's process;
+`glimmer quit` ends the app's own stream from that PC the same way. Run through
+a symlink, the binary re-execs through its real path so `Bundle.main` and the
+defaults domain resolve.
+
+**Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares three App
+Intents: Stream from PC, Wake PC and Quit App on PC, with the paired PCs as a
+`PCEntity` query. They run inside the app, once `AppModel.forIntent()` has
+loaded the PCs, and call the launcher's own entry points (`requestStream`,
+`sendWakeAndWait`, `quitRunningApp`), so they share its rules and its wording.
+`GlimmerShortcuts` refreshes the PC names Siri knows whenever one is paired,
+renamed or removed.
 
 ## The `StreamingBackend` boundary
 
@@ -100,9 +124,12 @@ Components:
   (+`+AddPacket`, `+Reconstruct`, `+ReceiveQuality`, `+ReorderStats`) which
   reorders, FEC-recovers, and assembles packets → `VideoDepacketizer` which
   emits `DecodeUnit`s to the `VideoSink` (the `VideoDecoder`).
-  `ReedSolomon.swift` is the GF(256) erasure decoder (see CREDITS.md).
-  `FecHeadroomController` adaptively deepens receive headroom under sustained
-  loss with a bounded, recovering control loop.
+  `ReedSolomon.swift` is the GF(256) erasure decoder (see CREDITS.md). Once a
+  link has shown reordering, the queue may hold back one datagram of the next
+  frame while the current frame is incomplete and FEC can still recover it, and
+  only within 24 ms of that frame's first packet. It is replayed as soon as the
+  frame completes, a datagram for another frame arrives, or the 24 ms window
+  runs out, so the hold is one datagram deep and adds no buffer depth.
 - **Audio receive** - `RtpAudioReceiver` (+`+Socket`, `+Decrypt`, `+Ping`,
   `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`) /
   `AudioFecDecoder` → Opus decode in `AudioDecoder` (AVAudioEngine playout with
@@ -315,27 +342,58 @@ AZERTY → QWERTY; we want the user's physical key position to win). Every
 physical key-down / key-up emits one keyboard event - no per-event modifier
 reset, no "release before press" coalescing. NKRO works because AppKit delivers
 each transition as its own `NSEvent` and the responder chain hands each to
-`keyDown(with:)` / `keyUp(with:)` independently. Stuck modifiers are released
-only in `detach()`.
+`keyDown(with:)` / `keyUp(with:)` independently. Held keys, mouse buttons and
+modifiers are released on focus loss, a paste, a reconnect and `detach()`.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and
 `.command` `flagsChanged` events so ⌘-Tab, ⌘-Space, ⌘-Q stay local-Mac chords.
 `captureSysKeys = true` forwards everything as a Win-key chord. The configured
 quit / stats hotkeys are detected before the captureSysKeys gate so a
-Cmd-bearing quit chord (default ⌃⌘Q) keeps working in either mode.
+Cmd-bearing custom quit chord keeps working in either mode.
 
 **Controller.** GameController framework. `GCControllerDidConnect` /
 `Disconnect` are observed; per-controller state is kept in
 `attachedControllers: [ObjectIdentifier: AttachedController]`. Slot assignment
 is a 16-bit `gamepadMask` - bit N == 1 means slot N is in use. Arrival is
 announced via `sendControllerArrival` with probed capabilities (some Sunshine
-builds silently drop multi-controller events without it). State updates go
-through `sendMultiController`. Host-driven feedback comes back through
-`ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`), motion-sensor
-enable (`0x5501` - answered with `sendControllerMotion` samples), and RGB
-lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`, and
+builds silently drop multi-controller events without it). Sunshine keeps a
+paired client's virtual pads across a reconnect and ignores an arrival for a
+slot it holds, so the forwarder remembers each slot's last arrival
+(`announcedControllers`) and, when input is ready again, removes every slot
+whose pad left or changed before it replays the arrivals. An entry is cleared
+only there, since a removal sent into a link that has already died is lost.
+State updates go through `sendMultiController`. Host-driven feedback comes back
+through `ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`),
+motion-sensor enable (`0x5501` - answered with `sendControllerMotion` samples),
+and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`, and
 `ControllerBattery` own the actuator/sampler sides.
+
+**Raw-HID gamepads.** Pads GameController doesn't own reach the host through
+`HIDGamepadManager` (`Glimmer/Stream/HIDGamepad/`). It enumerates joysticks,
+gamepads and multi-axis controllers with `IOHIDManager` and skips any device
+GameController owns: `GCController.supportsHIDDevice` on macOS 27, a
+platform-vendor and product-name check before that, and a recheck whenever a
+GameController pad connects. The hidden `hidGamepadClaimAll` default takes those
+pads too, for testing (see [PROFILING.md](PROFILING.md)). Each pad is mapped
+from the macOS section of SDL's GameControllerDB (`GameControllerDB+Data.swift`,
+generated by `scripts/gen-gamecontrollerdb.py`), with a heuristic layout as the
+fallback; a keyboard's gamepad interface with no known mapping is ignored. The
+forwarder gives each pad a free bit in the same `gamepadMask`
+(`ControllerForwarder+HID.swift`), and the manager keeps its own slot map so
+host rumble reaches the right pad through ForceFeedback, never one that took the
+slot after the host sent it. Input Monitoring is asked for only once such a pad
+is present, never at stream start.
+
+**DualSense side channel.** GameController never delivers a DualSense's Options,
+Create or mute buttons. With raw input on (`rawHIDControllerEnabled`, Settings ›
+Input), `DualSenseHID` opens the pad non-exclusively next to gamecontrollerd,
+which keeps sticks, face buttons, triggers, touchpad, rumble and light. It reads
+those buttons and the battery from the input report, and writes the host's
+adaptive-trigger effects in one merged output report that re-emits rumble and
+light bar with them. `DualSenseRouting` pairs each raw device with its
+`GCController` by matching face-button presses (`DualSenseBinder`), so with two
+DualSenses each keeps its own buttons and feedback.
 
 **Gesture suppression.** An `NSEvent.addLocalMonitorForEvents` for the narrow
 mask `[.magnify, .smartMagnify, .swipe, .rotate]` swallows that gesture family
@@ -343,9 +401,7 @@ while the stream window is key. The broader gesture/pressure types (`.gesture` /
 `.beginGesture` / `.endGesture` / `.pressure`) are deliberately EXCLUDED: they
 carry the trackpad pan/scroll the OS synthesizes `mouseMoved` from, so
 swallowing them would kill cursor + scroll on trackpad-only Macs. Scroll wheel
-is NOT swallowed - scrolls forward as host scroll events. macOS Accessibility
-Zoom chords (⌥⌘8 / ⌥⌘= / ⌥⌘-) are intercepted unconditionally so they never
-reach the OS while a stream is up.
+is NOT swallowed - scrolls forward as host scroll events.
 
 **Input gating.** The engine refuses input until the control channel is up: the
 backend's `send*` methods return -2 before then (mirroring upstream
@@ -405,7 +461,7 @@ thought it was).
 the cursor is unhidden. The stream session keeps running - the decode pipeline
 and display layer are independent of window visibility (with presentation
 suppressed and decode gated while hidden; see Video pipeline). On the launcher
-side, the `Back to stream` affordance calls `StreamSession.resumeWindow()` to
+side, the `Back to Stream` affordance calls `StreamSession.resumeWindow()` to
 bring it back. We deliberately do NOT auto-reorder-front on
 `NSApp.didBecomeActive` - that fired on every app activation (clicking the
 launcher, Dock-clicking) and yanked the user back into the stream whenever they
@@ -476,11 +532,11 @@ pins to the CDHash, every rebuild trips a "Glimmer wants to use its key" prompt.
 Files don't have that problem. Mode 0600 + atomic writes + stat-after-chmod
 verification (some FUSE / NFS backends silently ignore the chmod).
 
-`Pairing.swift`: the GameStream PIN handshake, five HTTP rounds plus a final
+`Pairing.swift`: the GameStream PIN handshake, four HTTP rounds plus a final
 HTTPS liveness check. AES-128-ECB on raw 16-byte buffers (no padding - the
-protocol pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]` (or SHA-1
-for pre-Gen-7 GFE, which we detect from `appversion` but don't expect to
-encounter on Sunshine). RSA signatures using the long-lived client cert prove
+protocol pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]`, with
+SHA-256 for the challenge hashes too; a GameStream PC is refused before the
+handshake starts. RSA signatures using the long-lived client cert prove
 possession of the private key.
 
 Critically: the host cert is pinned (`NetworkClient.setPinnedHostCert`) ONLY

@@ -191,6 +191,8 @@ public struct StreamStatsSnapshot: Sendable {
     /// Percentage of frames this window that were IDR keyframes. A nonzero value
     /// outside the very first frames is the recurring-IDR signature.
     public var idrFramePercent: Double?
+    /// Host frame cadence this window (telemetry only; see StatsCollector.HostCadence).
+    var hostCadence: StatsCollector.HostCadence?
 
     public init() {}
 
@@ -281,7 +283,7 @@ public struct StreamStatsSnapshot: Sendable {
             // .hostFps and any future frame-rate kind: host has no health
             // source (we report the configured rate as a proxy), so .neutral.
             return StatsRow(
-                kind: .hostFps, label: "Host",
+                kind: .hostFps, label: "PC",
                 value: formatFps(hostFps),
                 symbolName: "desktopcomputer",
                 health: .neutral, section: .frameRates)
@@ -347,10 +349,10 @@ public struct StreamStatsSnapshot: Sendable {
             // time (Sunshine `frameHostProcessingLatency`), e.g. ~60ms with a
             // two-pass AV1 encode at high fps. It is server-side and must never
             // be read as our client/pipeline latency (the separate "Latency"
-            // row is RTT; our pipeline e2e is ~6ms). Labelling it "Host encode"
+            // row is RTT; our pipeline e2e is ~6ms). Labelling it "PC encode"
             // removes the misread that the engine regressed.
             return StatsRow(
-                kind: .hostProcessing, label: "Host encode",
+                kind: .hostProcessing, label: "PC encode",
                 value: formatHostProcessingLatency(),
                 symbolName: "cpu.fill",
                 health: .neutral, section: .pipeline)

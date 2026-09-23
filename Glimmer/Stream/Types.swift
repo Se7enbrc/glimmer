@@ -42,6 +42,8 @@ public struct StreamConfig: Sendable {
     /// The wired boost folded into `bitrateKbps` (1 = none), so the connect-time
     /// gate can withdraw it when the measured path says a Wi-Fi hop is present.
     public var bitrateBoost: Double = 1
+    /// How `bitrateKbps` was chosen, for the telemetry config event only.
+    public var bitrateDecision: BitrateDecision?
     public var remoteness: Remoteness = .auto
     /// Default to whatever the system default-output device can render
     /// natively (stereo / 5.1 / 7.1). The host will downmix if it doesn't
@@ -57,17 +59,8 @@ public struct StreamConfig: Sendable {
     /// can decode," so the host's RTSP codec negotiation never picks a
     /// format we'd have to reject in `handleSetup`.
     public var videoFormats: VideoFormats = .probedSupported
-    public var hdr: Bool = true
     public var colorSpace: ColorSpace = .rec2020
     public var colorRange: ColorRange = .full
-    /// Default to full-stream encryption (video + audio). Older
-    /// Sunshine/GFE builds defaulted clients to audio-only because
-    /// video-encryption added measurable CPU load on then-current
-    /// hardware; modern hosts have plenty of headroom, and streaming over
-    /// an untrusted LAN (coffee-shop / shared-house WiFi / corp-guest
-    /// VLAN) is exactly the case "audio-only" fails. Users can downgrade
-    /// in Settings → Streaming → Encryption if they need to.
-    public var encryption: EncryptionPreference = .all
 
     /// When true, system-level keyboard combos that use the macOS Cmd key
     /// (⌘-Tab, ⌘-Space, ⌘-Q, ⌘-`, ⌘-H, ⌘-M, ...) are forwarded to the host as
@@ -101,12 +94,27 @@ public struct StreamConfig: Sendable {
     /// screen (a borderless cover has no title bar).
     public var windowTitle: String = ""
 
+    /// Moonlight's "play audio on host PC": the PC keeps its own sound and
+    /// this Mac silences the stream (not the system volume).
+    public var playAudioOnHost: Bool = false
+
     public init(width: Int, height: Int, fps: Int, bitrateKbps: Int) {
         self.width = width
         self.height = height
         self.fps = fps
         self.bitrateKbps = bitrateKbps
     }
+}
+
+/// The inputs of the launcher's bitrate ask: Settings › Quality › Bandwidth, the
+/// quality dial, the multipliers applied to it, and the Wi-Fi PHY rate that capped it.
+public struct BitrateDecision: Sendable {
+    public var mode: BitrateMode
+    public var dialKbps: Int
+    public var codecMultiplier: Double
+    public var boost: Double
+    /// The median Wi-Fi PHY rate the ask was capped against; nil off Wi-Fi.
+    public var radioGatePhyMbps: Double?
 }
 
 public enum Remoteness: Sendable {
@@ -300,10 +308,11 @@ public struct VideoFormats: OptionSet, Sendable {
         let av1M10 = out.contains(.av1Main10)
         let av1444 = out.contains(.av1High10_444)
         let raw = String(out.rawValue, radix: 16)
-        log.info(
-            // swiftlint:disable:next line_length
-            "VT capability probe: H264=\(h264, privacy: .public) HEVC=\(hevc, privacy: .public) HEVCMain10=\(hevcM10, privacy: .public) HEVC444=\(hevc444, privacy: .public) AV1=\(av1, privacy: .public) AV1Main10=\(av1M10, privacy: .public) AV1_444=\(av1444, privacy: .public) raw=0x\(raw, privacy: .public)"
-        )
+        log.info("""
+            VT capability probe: H264=\(h264, privacy: .public) HEVC=\(hevc, privacy: .public) \
+            HEVCMain10=\(hevcM10, privacy: .public) HEVC444=\(hevc444, privacy: .public) AV1=\(av1, privacy: .public) \
+            AV1Main10=\(av1M10, privacy: .public) AV1_444=\(av1444, privacy: .public) raw=0x\(raw, privacy: .public)
+            """)
         return out
     }
 
@@ -362,18 +371,6 @@ public enum ColorRange: Sendable {
     }
 }
 
-public enum EncryptionPreference: Sendable {
-    case none, audioOnly, all
-
-    var encryptionFlags: Int32 {
-        switch self {
-        case .none:      return StreamProtocol.ENCFLG_NONE
-        case .audioOnly: return StreamProtocol.ENCFLG_AUDIO
-        case .all:       return StreamProtocol.ENCFLG_ALL
-        }
-    }
-}
-
 // MARK: - Server info
 
 /// Everything we need to know about the remote host to start a session.
@@ -382,36 +379,16 @@ public struct ServerInfo: Sendable {
     public var address: String                  // hostname or IP, no port
     public var httpPort: Int = 47989
     public var httpsPort: Int = 47984
-    /// Host's public cert, PEM-encoded. Sources, in order of trust:
-    ///   1. The pairing handshake (`Pairing.swift`, `plaincert` blob,
-    ///      authenticated by RSA-verifying the host's signature over our
-    ///      challenge). This is the only path that produces a *pinned*
-    ///      cert.
-    ///   2. The persisted pin from a prior pairing
-    ///      (`glimmer.pinnedCert.<uniqueId>` in UserDefaults), seeded in
-    ///      via `AppModel.nativeServerInfo`. Same trust level as
-    ///      (1) because that's how it landed in storage.
-    ///   3. A `<PlainCert>` value picked up during an unpaired
-    ///      /serverinfo call. INFORMATIONAL ONLY - not bound as a pin.
-    ///      Suitable for UI display ("here's the host's fingerprint -
-    ///      compare to the one on your host machine") but never trusted
-    ///      to authenticate a subsequent TLS handshake. See C2 in the
-    ///      security audit.
+    /// Host's cert (PEM), which is the TLS pin. Set only by the RSA-verified PIN
+    /// handshake or from `PinnedCertStore` via `AppModel.nativeServerInfo`;
+    /// /serverinfo never sets it (C2), so nil means not paired.
     public var serverCertPEM: String?
     public var uniqueId: String                 // GUID identifying this host
     public var serverName: String               // friendly name from /serverinfo
     public var pairStatus: PairStatus = .unpaired
     public var appVersion: String?              // GFE/Sunshine version string
-    public var gfeVersion: String?
-    /// True only for genuine NVIDIA GameStream hosts. Sunshine also populates
-    /// `GfeVersion` in its `/serverinfo` response for compatibility, so a
-    /// non-empty `gfeVersion` does NOT prove real GFE. moonlight-qt
-    /// distinguishes by looking at `<state>` for the substring "MJOLNIR"
-    /// (NVIDIA's internal codename) - Sunshine's `<state>` is
-    /// "SUNSHINE_SERVER_FREE" / "_BUSY" instead. This field gates the
-    /// GFE-only `fps>60 → fps=0` workaround in the launch query; applying
-    /// that workaround to Sunshine makes Sunshine fall back to safe SDR
-    /// defaults including 8-bit codecs, killing HDR negotiation.
+    /// True only for NVIDIA GameStream, whose `<state>` holds "MJOLNIR" (moonlight-qt's test); Sunshine sends
+    /// `GfeVersion` too, so that proves nothing. Pairing and stream start refuse such a PC.
     public var isRealGFE: Bool = false
     public var maxLumaPixelsHEVC: Int = 0       // HEVC capability hint
     public var serverCodecSupport: VideoFormats = []  // server-supported formats (decoded into our VIDEO_FORMAT_* bitmask for our own use)
@@ -427,10 +404,9 @@ public struct ServerInfo: Sendable {
     public var serverCodecModeRaw: Int = 0
     public var isBusy = false
     public var currentGameID: Int = 0           // 0 = host is idle; otherwise the app ID that's streaming
-    /// Host's primary-NIC MAC from /serverinfo's `<mac>` (stock Moonlight uses
-    /// the same field for WoL). Only learnable while the host is ONLINE; some
-    /// Sunshine NIC configs report a zeroed MAC - consumers must treat
-    /// `00:00:00:00:00:00` as absent (the Luna power gate fails closed on it).
+    /// Host's primary-NIC MAC from /serverinfo's `<mac>`, as stock Moonlight uses for WoL.
+    /// Only learnable while the host is ONLINE; some Sunshine NIC configs report a zeroed
+    /// MAC, which `WakeOnLAN.normalizeMac` treats as absent (Wake on LAN fails closed on it).
     public var macAddress: String?
 
     public init(address: String, uniqueId: String, serverName: String) {
@@ -477,7 +453,7 @@ public enum StreamEvent: Sendable {
     case hdrModeChanged(Bool)
     /// Raised by the video decoder when the effective HDR-active state
     /// changes: host enabled HDR AND we have a 10-bit stream AND the Metal
-    /// layer is configured for PQ/HLG with EDR. This is the "show the HDR
+    /// layer is configured for PQ (HDR10) with EDR. This is the "show the HDR
     /// chip" signal.
     case hdrActive(Bool)
     /// Audio receive-start failed (H7): the session came up VIDEO-ONLY (the ping
@@ -508,6 +484,21 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     /// timeout or transport error mid-body), distinct from a clean EOF. Surfaced
     /// instead of letting a half-read body reach the XML parser as "Malformed XML".
     case truncatedRead(String)
+    /// The PC answered /launch, but a stream port never took the connection:
+    /// almost always its firewall. Carries the port to allow.
+    case streamPortsBlocked(proto: String, port: UInt16)
+    /// The PC didn't finish launching the app before the launch deadline.
+    case hostTimedOut
+    /// The PC answered with an error status; carries Sunshine's own message.
+    case hostRefused(message: String, code: Int)
+    /// The PC is up, but its certificate isn't the one pinned at pairing.
+    /// Carries the sentence that names the fix (NetworkClient.classifyPairedPathFailure).
+    case hostCertChanged(String)
+    /// The PC answers on its plain port only: Sunshine's secure listener needs a
+    /// restart. Carries the sentence that names the fix.
+    case sunshineNeedsRestart(String)
+    /// The PC runs NVIDIA GameStream, not Sunshine. Refused before anything is launched.
+    case gameStreamHost
 
     public var description: String {
         switch self {
@@ -519,13 +510,18 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         // its signature failed verification (the MITM-detected branch
         // also throws .pairingRejected). The internal log distinguishes;
         // the surface does not.
-        case .pairingRejected: return "Pairing failed - try again."
+        case .pairingRejected: return "Pairing failed. Try again."
         case .launchFailed(let reason): return "Couldn't launch app: \(reason)"
         case .sessionFailed(let code): return "Streaming session ended (code \(code))."
         case .decoderFailed(let reason): return "Video decoder failed: \(reason)"
         case .audioFailed(let reason): return "Audio failed: \(reason)"
         case .crypto(let reason): return "Cryptography error: \(reason)"
         case .truncatedRead(let reason): return "Control connection ended early: \(reason)"
+        case .streamPortsBlocked(let proto, let port): return "The stream couldn't get through on \(proto) \(port)."
+        case .hostTimedOut: return "The PC didn't respond in time."
+        case .hostRefused(let message, let code): return "\(message) (code \(code))"
+        case .hostCertChanged(let sentence), .sunshineNeedsRestart(let sentence): return sentence
+        case .gameStreamHost: return AppModel.needsSunshineMessage("the PC")
         }
     }
 

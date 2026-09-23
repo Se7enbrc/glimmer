@@ -13,19 +13,39 @@ import Foundation
 // MARK: - PairingPhase
 
 /// Lifecycle of an in-flight pairing handshake with a Sunshine/GFE host.
-/// Drives the PairSheet's spinner, PIN field, and result banner.
-///
-/// Each non-`idle` case carries the localized status text we display while
-/// in that phase - old call sites read this through the `pairingMessage`
-/// computed shim on `AppModel` (kept for back-compat during the
-/// gradual UI migration). New call sites should switch on the phase
-/// directly.
+/// Drives the PairSheet's spinner and result banner; the view words each case.
 enum PairingPhase: Equatable {
     case idle
-    case awaitingPin(String)
-    case verifying(String)
-    case success(String)
-    case failure(String)
+    case connecting     // reaching the PC's /serverinfo
+    case awaitingPin    // handshake open, waiting for the code on the PC
+    case success
+    case failure(PairingFailure)
+}
+
+/// Why a pairing attempt ended. A wrong PIN and a bad host signature share
+/// `.rejected` and its wording; `.busy` is Sunshine holding another open request.
+enum PairingFailure: Error, Equatable {
+    case invalidAddress
+    case unreachable
+    case gameStream
+    case timedOut
+    case busy
+    case rejected
+
+    static let addressHint = "Enter a PC name like tower.local or an IP address like 192.168.1.10."
+
+    func message(pc: String) -> String {
+        switch self {
+        case .invalidAddress: return Self.addressHint
+        case .unreachable: return AppModel.unreachableMessage(pc)
+        case .gameStream: return AppModel.needsSunshineMessage(pc)
+        case .timedOut: return "The code wasn't entered on \(pc) in time. Choose Try Again to get a new code."
+        case .busy:
+            return "\(pc) is busy with another pairing request. "
+                + "Cancel it on Sunshine's PIN page or wait a few minutes, then choose Try Again."
+        case .rejected: return "\(pc) didn't accept the pairing. Choose Try Again to get a new code."
+        }
+    }
 }
 
 // MARK: - StreamPhase

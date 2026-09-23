@@ -185,21 +185,13 @@ extension RtpAudioReceiver {
         }
     }
 
-    /// Per-socket GAP-EVENT accumulation - the AUDIO leg of the 20/50/100ms
-    /// family (cumulative: a 100ms gap counts in all three). The video socket
-    /// already tracked inter-arrival gaps; this completes the trio so "all
-    /// sockets gapped together" (NIC doze) vs "one path stalled" is a single
-    /// NDJSON-row query instead of a three-source manual cross-correlation.
-    /// Cost per datagram (~200/s at 5ms packets): one monotonic clock read +
-    /// one compare - far below the 5ms audio budget (the ~1s metrics fold pays
-    /// its own read; merging the two would mean restructuring its call
-    /// signature for a ~40ns saving). The counters' locked add fires only on a
-    /// >20ms gap, i.e. only after the socket just sat idle that long.
-    /// recvQueue-confined; always-live, read only when telemetry is on.
+    /// The AUDIO leg of the cumulative 20/50/100ms gap counters, so a NIC doze vs one stalled path is
+    /// one NDJSON query. Per datagram: a clock read, a compare and the sink's gap store; the locked add
+    /// fires only after a >20ms idle. recvQueue-confined; read only with telemetry on.
     private func noteAudioArrivalGap() {
         let now = DispatchTime.now().uptimeNanoseconds
-        if lastDatagramArrivalNanos != 0 {
-            let gap = now &- lastDatagramArrivalNanos
+        let gap: UInt64? = lastDatagramArrivalNanos != 0 ? now &- lastDatagramArrivalNanos : nil
+        if let gap {
             if gap > 20_000_000 {
                 let counters = TelemetryCounters.shared
                 counters.audioGapOver20msTotal.increment()
@@ -216,7 +208,11 @@ extension RtpAudioReceiver {
             if gap >= Self.flowResumeGapNanos {
                 sink?.notePacketFlowResumed(afterGapMs: Double(gap) / 1_000_000)
             }
+            // The decoder's dead-air test: an under-run after a gap no cushion
+            // could bridge must not deepen the cushion.
+            sink?.noteArrivalGap(nanos: gap)
         }
         lastDatagramArrivalNanos = now
+        TelemetryCounters.shared.audioArrivalGaps.noteArrival(at: now, gapNanos: gap)
     }
 }

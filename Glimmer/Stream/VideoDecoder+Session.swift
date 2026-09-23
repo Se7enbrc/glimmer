@@ -145,9 +145,9 @@ extension VideoDecoder {
     // MARK: - VT output callback → AVSampleBufferDisplayLayer enqueue
 
     nonisolated static let decompressionOutputCallback:
-        VTDecompressionOutputCallback = { decompressionOutputRefCon, _, status, infoFlags, imageBuffer, presentationTimeStamp, _ in
-            guard let decompressionOutputRefCon else { return }
-            let decoder = Unmanaged<VideoDecoder>.fromOpaque(decompressionOutputRefCon)
+        VTDecompressionOutputCallback = { outputRefCon, frameRefCon, status, infoFlags, imageBuffer, presentationTimeStamp, _ in
+            guard let outputRefCon else { return }
+            let decoder = Unmanaged<VideoDecoder>.fromOpaque(outputRefCon)
                 .takeUnretainedValue()
 
             // Retire one in-flight decode: VT delivers exactly one output
@@ -157,7 +157,13 @@ extension VideoDecoder {
             // would never drain and we'd wedge at `maxInFlightDecodes`,
             // permanently dropping + requesting IDRs. Done first, before any
             // early return below, so every callback path retires its slot.
-            decoder.releaseInFlightDecode()
+            let failed = status != noErr || imageBuffer == nil
+            decoder.releaseInFlightDecode(vtFailed: failed)
+            // A frame VT failed leaves every later P-frame referencing a hole:
+            // resync to the next IDR (a no-op if an IDR has been fed since).
+            if failed {
+                decoder.noteVtDecodeFailure(epoch: UInt(bitPattern: frameRefCon), status: status)
+            }
 
             // Stats: every output callback completes one submit, even when
             // VT reports the frame as dropped (status != noErr or the

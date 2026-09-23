@@ -215,10 +215,6 @@ public actor IdentityManager {
     /// stream click. Idempotent.
     public func preflight() async {
         cleanupOrphanLoginKeychainEntries()
-        // Remove the now-orphaned "Glimmer Client Identity" item that pre-OpenSSL
-        // builds imported into the login keychain - the control channel no longer
-        // uses a SecIdentity, so nothing of ours should linger there.
-        deleteLabelledIdentity()
         // Nothing here touches moonlight-qt: preflight only cleans up stores
         // Glimmer itself wrote. The qt plist is a copy-from source, never a
         // thing we edit - see the moonlight-qt section in Identity+Loading.
@@ -230,7 +226,7 @@ public actor IdentityManager {
     /// so it runs at most once per install. Bump `currentCleanupVersion` when
     /// new orphans need sweeping.
     private static let cleanupVersionKey = "glimmer.identityCleanupVersion"
-    private static let currentCleanupVersion = 2
+    private static let currentCleanupVersion = 3
 
     private func cleanupOrphanLoginKeychainEntries() {
         let defaults = UserDefaults.standard
@@ -238,25 +234,10 @@ public actor IdentityManager {
             return
         }
 
-        // Sweep 1: leftovers from earlier builds that imported unlabelled into
-        // the user's login keychain. NOTE: do NOT include "Glimmer Client
-        // Identity" here - that's our current SecIdentity item, and the
-        // per-preflight re-import in `buildOrLoadIdentity` manages its
-        // lifecycle.
-        let names = ["Imported Private Key"]
-        for name in names {
-            for cls in [kSecClassIdentity, kSecClassKey, kSecClassCertificate] {
-                let query: [String: Any] = [
-                    kSecClass as String: cls,
-                    kSecAttrLabel as String: name,
-                    kSecMatchLimit as String: kSecMatchLimitAll
-                ]
-                let status = SecItemDelete(query as CFDictionary)
-                if status == errSecSuccess {
-                    log.info("Cleaned up orphan login-keychain entry: \(name)")
-                }
-            }
-        }
+        // Sweep 1: the "Glimmer Client Identity" item pre-OpenSSL builds
+        // imported into the login keychain. Only labels Glimmer itself wrote
+        // are swept, never a generic one another app's import could carry.
+        deleteLabelledIdentity()
 
         // Sweep 2: the three generic-password items the prior build
         // wrote into the login keychain at service

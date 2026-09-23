@@ -41,22 +41,18 @@ final class FrameTraceWriter: @unchecked Sendable {
     /// losing the stalest is the right tradeoff) and is logged once.
     private static let maxPendingLines = 10_000
 
-    /// SIZE-CAPPED ROLLOVER (C2): the per-frame trace writes ~275B/presented
-    /// frame unconditionally - ~1.5GB/6h unbounded. Past this many bytes the
-    /// current file is closed and a fresh `-<n>` segment opens; only the last
-    /// `maxTraceFiles` segments of THIS session are kept (older ones pruned). The
-    /// steady-state signal still lives in the 1Hz NDJSON sink, so a bounded tail
-    /// of the per-frame detail is the right tradeoff. 96MB × 4 ≈ 384MB ceiling.
+    /// SIZE-CAPPED ROLLOVER (C2): past `maxFileBytes` a fresh `-<n>` segment opens; a session keeps
+    /// its first (connect, first IDR, pacer lock-in) plus the newest `maxTraceFiles - 1` (≈384MB).
+    /// The next connect's byte sweep trims this session last, oldest `-<n>` first.
     private static let maxFileBytes: UInt64 = 96 * 1024 * 1024
-    private static let maxTraceFiles = 4
+    static let maxTraceFiles = 4
 
     private let flushQueue = DispatchQueue(label: "io.ugfugl.Glimmer.telemetry.frames", qos: .utility)
     private var fileHandle: FileHandle?
     private var flushTimer: DispatchSourceTimer?
-    /// Rollover state (flushQueue-confined): the Logs dir + this session's ISO
-    /// stamp (so segments share a prefix), the running byte count of the current
-    /// segment, the next segment index, and the segment files written this session
-    /// (oldest-first, for the keep-last-K prune).
+    /// Rollover state (flushQueue-confined): the Logs dir, this session's ISO stamp (the segments'
+    /// shared prefix), the current segment's byte count, the next segment index, and this session's
+    /// segment files oldest-first (for `trimSegments`).
     private var logDir: URL?
     private var isoStamp = ""
     private var bytesWritten: UInt64 = 0
@@ -78,12 +74,11 @@ final class FrameTraceWriter: @unchecked Sendable {
     func start(isoStamp: String) {
         flushQueue.async { [weak self] in
             guard let self else { return }
-            let dir = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+            let dir = TelemetryExporter.logsDirectory
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             } catch {
-                self.log.error("Telemetry frames: could not create log dir: \(error.localizedDescription, privacy: .public)")
+                self.log.error("Telemetry frames: could not create log dir: \(error.localizedDescription, privacy: .private)")
                 return
             }
             self.logDir = dir
@@ -99,9 +94,8 @@ final class FrameTraceWriter: @unchecked Sendable {
     }
 
     /// Open the next trace SEGMENT (`telemetry-frames-<iso>.ndjson` for the first,
-    /// `-<n>.ndjson` after a rollover), reset the byte count, and prune so only
-    /// the last `maxTraceFiles` segments of this session survive. flushQueue-only.
-    /// Returns false (and logs) if the file can't be opened.
+    /// `-<n>.ndjson` after a rollover), reset the byte count, and `trimSegments`.
+    /// flushQueue-only. Returns false (and logs) if the file can't be opened.
     private func openSegment() -> Bool {
         guard let dir = logDir else { return false }
         let suffix = rolloverIndex == 0 ? "" : "-\(rolloverIndex)"
@@ -110,19 +104,25 @@ final class FrameTraceWriter: @unchecked Sendable {
         do {
             fileHandle = try FileHandle(forWritingTo: url)
         } catch {
-            log.error("Telemetry frames: could not open file: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry frames: could not open file: \(error.localizedDescription, privacy: .private)")
             return false
         }
         log.notice("Telemetry per-frame trace → \(url.path, privacy: .public)")
         bytesWritten = 0
         rolloverIndex += 1
         segmentURLs.append(url)
-        // Keep only the last K segments of THIS session - drop the oldest.
-        while segmentURLs.count > Self.maxTraceFiles {
-            let stale = segmentURLs.removeFirst()
+        for stale in Self.trimSegments(&segmentURLs) {
             try? FileManager.default.removeItem(at: stale)
         }
         return true
+    }
+
+    /// Trim this session's segments (oldest-first) to `maxTraceFiles`, keeping
+    /// the first and the newest. Returns the segments to delete.
+    static func trimSegments(_ segments: inout [URL]) -> [URL] {
+        var stale: [URL] = []
+        while segments.count > maxTraceFiles { stale.append(segments.remove(at: 1)) }
+        return stale
     }
 
     /// Close the current segment and open the next - the size-cap rollover.
@@ -179,13 +179,12 @@ final class FrameTraceWriter: @unchecked Sendable {
         do {
             try fileHandle.write(contentsOf: data)
             bytesWritten &+= UInt64(data.count)
-            // Past the size cap: close + reopen a fresh segment, pruning so only
-            // the last K survive. One rollover per drain (the batch is at most one
-            // flush interval's frames, far below the cap), so the file can never
-            // overshoot by more than a single batch.
+            // Past the size cap: open a fresh segment (see `trimSegments`). One
+            // rollover per drain, and a batch is one flush interval's frames, so
+            // a segment never overshoots the cap by more than a single batch.
             if bytesWritten >= Self.maxFileBytes { rollover() }
         } catch {
-            log.error("Telemetry per-frame trace write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry per-frame trace write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

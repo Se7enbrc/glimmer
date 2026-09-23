@@ -29,6 +29,12 @@ extension NetworkClient {
                              timeout: timeout)
     }
 
+    /// A PC this Mac holds no pin for, in the sentence the banner shows as is.
+    static func notPaired(_ pcName: String) -> StreamError {
+        let name = pcName.isEmpty ? "The PC" : pcName
+        return .pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
+    }
+
     /// Workhorse. Builds the URL, attaches our uniqueid + a per-request UUID
     /// (matches GFE's expectation that every request has a unique nonce),
     /// optionally appends an unescaped query tail (for the backend's launch
@@ -40,12 +46,12 @@ extension NetworkClient {
                     usePaired: Bool,
                     timeout: TimeInterval) async throws -> XMLNode {
 
+        // SECURITY: TLS without a pin would hand /launch's input key to any
+        // certificate. The pin only comes from a finished PIN handshake.
+        if usePaired && server.serverCertPEM == nil { throw Self.notPaired(server.serverName) }
         try await ensureIdentityLoaded()
         try StreamAttempt.checkDeadline(requestDeadline)
 
-        // GFE keys per-session state on `uniqueid`, so GFE gets moonlight-qt's
-        // shared constant (any client can quit any session); Sunshine gets this
-        // install's own id. See `wireUniqueID(forRealGFE:)`.
         let port = usePaired ? server.httpsPort : server.httpPort
 
         // Build the request-URI (path + query). URLComponents does the percent-
@@ -53,7 +59,7 @@ extension NetworkClient {
         var components = URLComponents()
         components.path = "/" + path
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "uniqueid", value: wireUniqueID(forRealGFE: server.isRealGFE)),
+            URLQueryItem(name: "uniqueid", value: clientUniqueID ?? Self.wireUniqueID),
             URLQueryItem(name: "uuid", value: Self.requestNonce())
         ]
         for (key, value) in query.sorted(by: { $0.key < $1.key }) {
@@ -86,12 +92,17 @@ extension NetworkClient {
             clientKeyPEM: usePaired ? clientKeyPEM : nil,
             pinnedCertPEM: usePaired ? server.serverCertPEM : nil)
         let requestTarget = target
-        let resp = try await StreamAttempt.run(until: deadline) {
-            try await ControlTransport.get(
-                host: address, port: port, target: requestTarget,
-                userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
-                tls: usePaired, credential: credential,
-                timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+        let resp: ControlTransport.Response
+        do {
+            resp = try await StreamAttempt.run(until: deadline) {
+                try await ControlTransport.get(
+                    host: address, port: port, target: requestTarget,
+                    userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
+                    tls: usePaired, credential: credential,
+                    timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+            }
+        } catch {
+            throw Self.requestError(error, requestDeadline: requestDeadline)
         }
         try StreamAttempt.checkDeadline(requestDeadline)
 
@@ -105,6 +116,13 @@ extension NetworkClient {
         } catch {
             throw StreamError.launchFailed("Malformed XML on /\(path): \(error)")
         }
+    }
+
+    /// Without a request deadline (only /launch and a reconnect set one), a
+    /// timeout is this request's own: the PC never answered, whichever timer fired.
+    static func requestError(_ error: Error, requestDeadline: Date?) -> Error {
+        guard requestDeadline == nil, case StreamError.hostTimedOut = error else { return error }
+        return StreamError.hostUnreachable("Control request timed out.")
     }
 
     // MARK: - Status check
@@ -132,7 +150,7 @@ extension NetworkClient {
         if code == 401 {
             throw StreamError.hostUnreachable("Host requires pairing (\(message))")
         }
-        throw StreamError.launchFailed("\(message) (code \(code))")
+        throw StreamError.hostRefused(message: message, code: code)
     }
 
     // MARK: - Codec mode decoding
@@ -159,23 +177,17 @@ extension NetworkClient {
     public static let controlTimeout: TimeInterval = 5
     static let launchTimeout: TimeInterval = 20
     static let resumeTimeout: TimeInterval = 20
-    /// Pairing requests block on host-side state that's gated on a HUMAN typing
-    /// the PIN into the host's pairing page - so the snappy 5s control timeout
-    /// is far too short (the request fires the moment the code is shown, then
-    /// waits for the user to read + type it). Moonlight uses a similarly long
-    /// pairing window. 60s is comfortably human-scale.
+    /// The pairing rounds after the PIN is in. They answer quickly, but a slow
+    /// host still gets more slack than the 5 s control timeout.
     static let pairTimeout: TimeInterval = 60
+    /// getservercert waits while a person finds Sunshine's web page, gets past
+    /// its certificate warning and types the PIN. Moonlight never times it out;
+    /// ours is finite so a vanished PC can't hang a task behind a closed sheet.
+    static let pinEntryTimeout: TimeInterval = 300
 
-    /// The literal `uniqueid` value sent to GFE hosts. Must match moonlight-qt
-    /// exactly - see comment in `rawRequest`.
+    /// moonlight-qt's shared `uniqueid`, only a fallback: `ensureIdentityLoaded` sets this
+    /// install's own id before every request.
     static let wireUniqueID = "0123456789ABCDEF"
-
-    /// GFE keeps the shared constant (cross-client quit); Sunshine never keys
-    /// authorization on it and its PIN page lists clients, so each install
-    /// identifies itself. Falls back to the constant until the identity loads.
-    func wireUniqueID(forRealGFE isRealGFE: Bool) -> String {
-        isRealGFE ? Self.wireUniqueID : (clientUniqueID ?? Self.wireUniqueID)
-    }
 
     /// What the host's pairing page shows for this Mac: its computer name, or
     /// "Glimmer" when that is unavailable. Replaces Moonlight's legacy "roth".

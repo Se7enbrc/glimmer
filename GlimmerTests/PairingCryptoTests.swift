@@ -1,17 +1,9 @@
 //
 //  PairingCryptoTests.swift
 //
-//  Coverage for the OpenSSL-backed pairing/identity crypto. These run because
-//  the test bundle is hosted by the Glimmer app (TEST_HOST), which links
-//  -lssl -lcrypto, so the OpenSSL primitives resolve at runtime.
-//
-//   - IdentityManager.aesKey(forPIN:salt:): first 16 bytes of
-//     SHA-256(salt || pin.utf8). Cross-checked here against CryptoKit's SHA256.
-//   - PairingClient.aesEcbEncrypt/Decrypt: AES-128-ECB round-trip (no padding).
-//   - PairingClient.digest: SHA-256 / SHA-1 known-answer.
-//   - PairingClient.signMessage / verifySignature: RSA sign->verify round-trip,
-//     using a throwaway keypair+cert generated IN-TEST via the app's own
-//     generateKeyPairAndCert() - no committed PEM fixture.
+//  The OpenSSL-backed pairing crypto, which resolves because the TEST_HOST app links -lssl -lcrypto: the PIN
+//  key (checked against CryptoKit), AES-128-ECB round trips, the SHA-256 digest, and RSA sign/verify on a
+//  keypair generated in-test by generateKeyPairAndCert(), so no PEM fixture is committed.
 //
 
 import Foundation
@@ -112,7 +104,7 @@ struct PairingCryptoTests {
 
     @Test func digestSha256KnownAnswer() throws {
         // SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
-        let out = try PairingClient.digest(Data("abc".utf8), sha256: true)
+        let out = try PairingClient.digest(Data("abc".utf8))
         #expect(out.count == 32)
         let expected = Data(SHA256.hash(data: Data("abc".utf8)))
         #expect(out == expected)
@@ -120,18 +112,16 @@ struct PairingCryptoTests {
             == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
-    @Test func digestSha1KnownAnswer() throws {
-        // SHA-1("abc") = a9993e364706816aba3e25717850c26c9cd0d89d
-        let out = try PairingClient.digest(Data("abc".utf8), sha256: false)
-        #expect(out.count == 20)
-        #expect(out.map { String(format: "%02x", $0) }.joined()
-            == "a9993e364706816aba3e25717850c26c9cd0d89d")
-    }
-
     @Test func digestCrossChecksCryptoKitOnRandomInput() throws {
         let data = Data((0..<137).map { UInt8(($0 * 31 + 7) & 0xFF) })
-        let out = try PairingClient.digest(data, sha256: true)
+        let out = try PairingClient.digest(data)
         #expect(out == Data(SHA256.hash(data: data)))
+    }
+
+    /// The step-4 proof goes straight from SHA-256 into AES-ECB: two whole blocks, nothing to pad.
+    @Test func proofHashFillsTwoAesBlocks() throws {
+        let hash = try PairingClient.digest(Data("challenge".utf8))
+        #expect(try PairingClient.aesEcbEncrypt(hash, key: Data(repeating: 7, count: 16)).count == 32)
     }
 
     // MARK: - RSA sign / verify round-trip (in-test keypair, no fixture)
@@ -193,5 +183,101 @@ struct PairingCryptoTests {
         #expect(s1 == s2)
         // RSA-2048 self-signed: the cert signature BIT STRING is 256 bytes.
         #expect(s1.count == 256)
+    }
+
+    // MARK: - First contact can't pair or pin (SECURITY C2)
+
+    private static let spoofedServerInfo = Data("""
+        <root status_code="200"><hostname>TOWER</hostname><uniqueid>host-1</uniqueid>
+        <PairStatus>1</PairStatus><PlainCert>-----BEGIN CERTIFICATE-----AAAA</PlainCert></root>
+        """.utf8)
+
+    /// Any LAN device answering port 47989 writes this XML. A saved PC's info
+    /// starts `.paired`, so the reply must knock it back, not confirm it.
+    @Test func plainHTTPServerInfoNeitherPairsNorPins() async throws {
+        var seed = ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER")
+        seed.pairStatus = .paired
+        let client = NetworkClient(server: seed)
+        await client.hydrateServerInfo(from: try XMLTreeBuilder.parse(data: Self.spoofedServerInfo),
+                                       fetchedOverPaired: false)
+        #expect(await client.server.pairStatus == .unpaired)
+        #expect(await client.pinnedServerCertPEM() == nil)
+    }
+
+    /// Over pinned mutual TLS the handshake itself is the proof, whatever the body says.
+    @Test func pinnedHTTPSServerInfoIsPaired() async throws {
+        let client = NetworkClient(server: ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER"))
+        let xml = try XMLTreeBuilder.parse(data: Data(#"<root status_code="200"><PairStatus>0</PairStatus></root>"#.utf8))
+        await client.hydrateServerInfo(from: xml, fetchedOverPaired: true)
+        #expect(await client.server.pairStatus == .paired)
+    }
+
+    /// GameStream is told apart by its `<state>`, not by `GfeVersion`, which Sunshine sends too.
+    @Test func gameStreamIsToldApartByItsState() async throws {
+        func isGameStream(_ body: String) async throws -> Bool {
+            let client = NetworkClient(server: ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER"))
+            let xml = try XMLTreeBuilder.parse(data: Data("<root status_code=\"200\">\(body)</root>".utf8))
+            await client.hydrateServerInfo(from: xml, fetchedOverPaired: false)
+            return await client.server.isRealGFE
+        }
+        #expect(try await isGameStream("<state>MJOLNIR_STATE_SERVER_AVAILABLE</state>"))
+        #expect(try await isGameStream("<GfeVersion>3.23.0.74</GfeVersion><state>SUNSHINE_SERVER_FREE</state>") == false)
+    }
+
+    /// TLS with no pin would send /launch's input key to any certificate, so it
+    /// is refused up front, before any connection is attempted.
+    @Test func httpsWithoutAPinIsRefused() async {
+        let client = NetworkClient(server: ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER"))
+        let error = await #expect(throws: StreamError.self) {
+            _ = try await client.request(path: "applist", query: [:], usePaired: true)
+        }
+        guard case .pairingFailed = error else {
+            Issue.record("expected pairingFailed, got \(String(describing: error))")
+            return
+        }
+    }
+
+    // MARK: - PIN entry timeout
+
+    @Test func getservercertDyingAtItsDeadlineIsATimeout() {
+        let deadline = Date()
+        let late = PairingClient.pinEntryError(
+            StreamError.hostTimedOut, deadline: deadline, now: deadline)
+        #expect(late as? PairingFailure == .timedOut)
+        // A refusal a minute in is the host, not the person, and keeps its cause.
+        let early = PairingClient.pinEntryError(
+            StreamError.hostUnreachable("refused"), deadline: deadline, now: deadline.addingTimeInterval(-60))
+        #expect(early is StreamError)
+        // Closing the sheet is never reported as a timeout.
+        let cancelled = PairingClient.pinEntryError(CancellationError(), deadline: deadline, now: deadline)
+        #expect(cancelled is CancellationError)
+    }
+
+    /// Sunshine's own session verdicts keep their meaning; any other status is a refusal.
+    @Test func pairStatusCodesKeepSunshinesMeaning() throws {
+        func verdict(_ code: Int) throws -> Error? {
+            let xml = try XMLTreeBuilder.parse(data: Data("<root status_code=\"\(code)\"><paired>0</paired></root>".utf8))
+            do { try PairingClient.verifyResponseStatus(xml) } catch { return error }
+            return nil
+        }
+        #expect(try verdict(200) == nil)
+        #expect(try verdict(408) as? PairingFailure == .timedOut)
+        #expect(try verdict(409) as? PairingFailure == .busy)
+        #expect(try verdict(503) as? PairingFailure == .busy)
+        #expect(try verdict(400) is StreamError)
+        // A PC that expired the request mid-wait reads as a timeout, not a refusal.
+        let expired = PairingClient.pinEntryError(PairingFailure.timedOut, deadline: Date().addingTimeInterval(60))
+        #expect(expired as? PairingFailure == .timedOut)
+    }
+
+    /// The sheet words every outcome from this: each names the PC, and a timeout
+    /// reads differently from a refusal so nobody retypes a code that was right.
+    @Test func pairingFailureMessagesNameThePC() {
+        for failure in [PairingFailure.unreachable, .gameStream, .timedOut, .busy, .rejected] {
+            #expect(failure.message(pc: "TOWER").contains("TOWER"))
+            #expect(!failure.message(pc: "TOWER").contains(" - "))
+        }
+        #expect(PairingFailure.timedOut.message(pc: "TOWER") != PairingFailure.rejected.message(pc: "TOWER"))
+        #expect(PairingFailure.invalidAddress.message(pc: "TOWER") == PairingFailure.addressHint)
     }
 }

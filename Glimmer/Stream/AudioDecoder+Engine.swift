@@ -44,16 +44,18 @@ extension AudioDecoder {
         // + route latch); seeding the target from per-host memory makes the cold
         // pre-roll build last session's learned depth, not re-pay 5-8 startup blips.
         let seed = Self.loadCushionSeed()
-        // Per-host skew seed: start the resampler's integral at the persisted
-        // converged clock offset so the session begins pre-corrected instead of
-        // re-drifting into the first minutes' underruns (the ratchet feed).
-        let skewSeedPpm = Self.loadResamplerSkewSeed(host: seed.host)
+        // Per-host+device skew seed: start the resampler's integral at the persisted
+        // offset between the PC's clock and THIS output device's clock, so the
+        // session begins pre-corrected instead of re-drifting into underruns.
+        let route = Self.sampleAudioRoute()
+        let skewKey = Self.resamplerSkewKey(host: seed.host, deviceUID: route.uid)
+        let skewSeedPpm = Self.loadResamplerSkewSeed(key: skewKey)
         if skewSeedPpm != 0 {
             Diag.notice("audio resampler skew seed: \(Int(skewSeedPpm.rounded()))ppm "
-                + "from per-host memory - starts pre-converged", "Stream.Audio")
+                + "from per-device memory - starts pre-converged", "Stream.Audio")
         }
         resetPlayoutStateForSession(seed: seed, sampleRate: sampleRate,
-                                    skewSeedPpm: skewSeedPpm)
+                                    skewSeedPpm: skewSeedPpm, skewKey: skewKey)
         announceCushionSeed(seed)
         // A/V-skew session edge: the skew store's pair-anchor + accumulator
         // reset here (one audio init per session IS the pair's session edge).
@@ -117,7 +119,7 @@ extension AudioDecoder {
         // Seed + track the audio OUTPUT route for the under-run breadcrumbs.
         // Installed only after the engine is up, so a failed init never leaves a
         // listener behind; `shutdown()` removes it.
-        installAudioRouteListener()
+        installAudioRouteListener(initial: route)
         // H3: recover playout across a mid-stream output-device/format change
         // (BT/AirPods connect-disconnect, HDMI/DP unplug, USB-DAC removal, OS
         // sample-rate change), which STOPS the engine's outputNode. Installed
@@ -132,8 +134,9 @@ extension AudioDecoder {
     /// held; this takes `audioMeterLock` for the duration of the reset (never the
     /// other way round).
     private func resetPlayoutStateForSession(seed: CushionSeed, sampleRate: Int32,
-                                             skewSeedPpm: Double) {
+                                             skewSeedPpm: Double, skewKey: String) {
         let seedNowNanos = DispatchTime.now().uptimeNanoseconds
+        lastArrivalGapNanos.store(0)
         // AV call BEFORE the meter lock (leaf-lock discipline, audit remainder
         // 2026-08-26): varispeed.rate is an AVAudio node property - writing it
         // under audioMeterLock inverted the documented ordering that keeps node
@@ -147,6 +150,9 @@ extension AudioDecoder {
         resamplerIntegralPpm = skewSeedPpm; resamplerEpsPpm = 0
         resamplerEverEngaged = false
         lastResamplerSkewSaveNanos = 0; lastSavedResamplerSkewPpm = .nan
+        resamplerSkewMemoryKey = skewKey
+        resamplerQuietIntegralSumPpm = 0; resamplerQuietTicks = 0
+        resamplerSetpointMs = 0; resamplerSetpointMovedNanos = 0
         playoutStarted = false; playoutDrained = false; meterShutdown = false
         // FIX: clear the teardown latch on RE-init. A reconnect's stopConnection →
         // shutdown() set `isShutdown = true` and nothing reset it, so post-reconnect
@@ -179,6 +185,7 @@ extension AudioDecoder {
         pendingResolveTopUp = false; floorLearnGateUntilNanos = 0
         nearMissLatched = false
         quietSinceNanos = seedNowNanos
+        lastCushionGrowNanos = 0
         floorQuietSinceNanos = seedNowNanos
         rebuildIsReprime = false
         lastUnderrunNoticeNanos = 0; underrunNoticesSuppressed = 0
@@ -206,22 +213,47 @@ extension AudioDecoder {
         // ε factor on the frames→ms convert is ppm-negligible).
         engine.connect(playerNode, to: varispeed, format: fmt)
         engine.connect(varispeed, to: engine.mainMixerNode, format: fmt)
-        do {
-            // Start the engine but DO NOT `play()` the player node yet. Playback is
-            // deferred until a `playoutTargetMs` cushion of decoded audio is queued
-            // (the pre-roll in `meterRegisterScheduleOrOverrun` / `maybePrime`),
-            // so the player starts with headroom instead of on the under-run floor.
-            // The node is scheduled-into while paused; `play()` then drains the
-            // already-queued cushion gapless.
-            // Only start when not already running (idempotent across a reconnect
-            // re-init that left the engine up).
-            if !engine.isRunning { try engine.start() }
-        } catch {
-            log.error("AVAudioEngine.start: \(error.localizedDescription)")
-            Diag.error("audio engine start FAILED: \(error.localizedDescription)", "Stream.Audio")
+        // Start the engine but don't `play()` yet: playback waits for a cushion of
+        // queued audio (the pre-roll in `maybePrime`), so it starts with headroom.
+        // Only start when not already running (a reconnect re-init can leave it up).
+        if engine.isRunning {
+            applyOutputMute()
+        } else if let failure = startEngineSafely() {
+            log.error("AVAudioEngine.start: \(failure)")
+            Diag.error("audio engine start FAILED: \(failure, privacy: .private)", "Stream.Audio")
             return false
         }
         return true
+    }
+
+    /// `engine.start()` under the ObjC exception shim: some states (an incomplete
+    /// graph, a device mid-teardown) RAISE instead of throwing. Returns nil once
+    /// running (stream mute re-applied), else what failed. Caller holds `stateLock`.
+    func startEngineSafely() -> String? {
+        var startError: Error?
+        let noRaise = gl_objc_try {
+            do { try self.engine.start() } catch { startError = error }
+        }
+        if let startError { return startError.localizedDescription }
+        guard noRaise else { return "NSException" }
+        applyOutputMute()
+        return nil
+    }
+
+    /// Silence (or restore) only this stream at the engine's main mixer; other
+    /// apps and the system volume are untouched. Caller holds `stateLock`.
+    func applyOutputMute() {
+        engine.mainMixerNode.outputVolume = outputMuted ? 0 : 1
+    }
+
+    /// Mute this stream on the Mac while the PC plays its sound. The engine keeps
+    /// running, so the audio path and its telemetry are identical either way.
+    /// Safe before audio starts: the value is applied when the engine comes up.
+    public func setOutputMuted(_ muted: Bool) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        outputMuted = muted
+        if inputFormat != nil { applyOutputMute() }
     }
 
     private func layoutTag(forChannels channels: Int) -> AudioChannelLayoutTag {
@@ -325,13 +357,13 @@ extension AudioDecoder {
     private func retryEngineStart(attempt: Int) {
         stateLock.lock(); defer { stateLock.unlock() }
         guard !isShutdown, !engine.isRunning, inputFormat != nil else { return }
-        do {
-            try engine.start()
+        if let failure = startEngineSafely() {
+            Diag.error("audio engine restart retry \(attempt) failed: \(failure, privacy: .private)", "Stream.Audio")
+            lastOutputFormat = nil
+            scheduleEngineRestartRetry()
+        } else {
             engineRestartRetries = 0
             Diag.notice("audio engine restart retry \(attempt) succeeded", "Stream.Audio")
-        } catch {
-            Diag.error("audio engine restart retry \(attempt) failed: \(error.localizedDescription)", "Stream.Audio")
-            scheduleEngineRestartRetry()
         }
     }
 
@@ -363,18 +395,12 @@ extension AudioDecoder {
     /// against `shutdown()`), never inside `audioMeterLock`.
     func startPlayoutAtPrimeEdge() -> Bool {
         if !engine.isRunning {
-            // The start itself goes under the shim too: `engine.start()`
-            // reports missing-hardware failures as a thrown NSError, but some
-            // states (an incomplete graph, a device mid-teardown) RAISE an
-            // NSException instead - the test suite's empty-graph decoder
-            // proved that path aborts without the guard.
-            var startError: Error?
-            let noRaise = gl_objc_try {
-                do { try self.engine.start() } catch { startError = error }
-            }
-            guard noRaise, startError == nil, engine.isRunning else {
+            // Guarded start: the test suite's empty-graph decoder proved an
+            // unguarded start() raises and aborts here.
+            let failure = startEngineSafely()
+            guard failure == nil, engine.isRunning else {
                 Diag.error("audio engine start at prime edge FAILED "
-                    + "(\(startError.map { $0.localizedDescription } ?? "NSException")) "
+                    + "(\(failure ?? "engine not running", privacy: .private)) "
                     + "- staying un-primed, retry armed", "Stream.Audio")
                 scheduleEngineRestartRetry()
                 return false
@@ -405,16 +431,15 @@ extension AudioDecoder {
         Diag.error("audio playout STALLED: scheduled audio unconsumed ≥3s with "
             + "every arrival dropped at the backlog gates (output device "
             + "slept/vanished?) - rebuilding: node stop → engine ensure-running "
-            + "→ re-prime; route \(audioRouteCache)", "Stream.Audio")
+            + "→ re-prime; route \(audioRouteCache, privacy: .private)", "Stream.Audio")
         playerNode.stop()
         if !engine.isRunning {
-            do {
-                try engine.start()
-                engineRestartRetries = 0
-            } catch {
-                Diag.error("audio engine restart in stall recovery FAILED: "
-                    + "\(error.localizedDescription)", "Stream.Audio")
+            if let failure = startEngineSafely() {
+                Diag.error("audio engine restart in stall recovery FAILED: \(failure, privacy: .private)", "Stream.Audio")
+                lastOutputFormat = nil
                 scheduleEngineRestartRetry()
+            } else {
+                engineRestartRetries = 0
             }
         }
         let nowRunning = engine.isRunning
@@ -461,18 +486,27 @@ extension AudioDecoder {
             meterRecovering = true
             audioMeterLock.unlock()
             playerNode.stop()
-            engine.connect(varispeed, to: engine.mainMixerNode, format: fmt)
-        }
-        if !engine.isRunning {
-            do {
-                try engine.start()
-                engineRestartRetries = 0
-            } catch {
-                Diag.error("audio engine restart after config change FAILED: "
-                    + "\(error.localizedDescription)", "Stream.Audio")
-                scheduleEngineRestartRetry()
+            // A device mid-transition can RAISE here; a nil baseline makes the next
+            // change notification read "moved" and reconnect.
+            let connected = gl_objc_try {
+                self.engine.connect(self.varispeed, to: self.engine.mainMixerNode, format: fmt)
+            }
+            if !connected {
+                Diag.error("audio graph reconnect after config change raised (device "
+                    + "mid-transition?) - reconnecting on the next change", "Stream.Audio")
+                lastOutputFormat = nil
             }
         }
+        if !engine.isRunning {
+            if let failure = startEngineSafely() {
+                Diag.error("audio engine restart after config change FAILED: \(failure, privacy: .private)", "Stream.Audio")
+                lastOutputFormat = nil
+                scheduleEngineRestartRetry()
+            } else {
+                engineRestartRetries = 0
+            }
+        }
+        applyOutputMute()
         // H4: re-sample the engine-running gauge here (the same hop), and RE-ARM
         // the pre-roll so the cushion rebuilds from the restart rather than the
         // player resuming on the under-run floor. A plain Bool + state-machine

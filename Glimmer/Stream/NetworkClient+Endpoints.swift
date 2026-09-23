@@ -57,7 +57,12 @@ extension NetworkClient {
                 fetchedOverPaired = true
             } catch let err as StreamError {
                 if case .hostUnreachable(let detail) = err {
-                    log.error("HTTPS to pinned host failed (\(detail, privacy: .public)) - refusing HTTP fallback to preserve cert pin")
+                    log.error("HTTPS to pinned host failed (\(detail, privacy: .private)) - refusing HTTP fallback to preserve cert pin")
+                    // A different certificate proves 47984 answered, so the PC is up
+                    // whatever the plain port says; don't let a blocked 47989 hide it.
+                    if Self.isCertChange(detail) {
+                        throw Self.classifyPairedPathFailure(detail, hostName: server.serverName)
+                    }
                     // Disambiguate before blaming the network: a READ-ONLY
                     // plain-HTTP probe (the pin is NEVER rebound from it -
                     // the C2 contract above stands). It answers exactly one
@@ -77,7 +82,7 @@ extension NetworkClient {
                                                          usePaired: false,
                                                          timeout: 3),
                        (try? Self.verifyStatus(probe)) != nil {
-                        throw Self.classifyPairedPathFailure(detail, hostName: server.address)
+                        throw Self.classifyPairedPathFailure(detail, hostName: server.serverName)
                     }
                     throw StreamError.hostUnreachable(detail)
                 }
@@ -103,44 +108,38 @@ extension NetworkClient {
         return server
     }
 
-    /// Turn a paired-path (HTTPS) failure into the user-facing verdict, once
-    /// the plain-HTTP probe has proven the host is up. The `detail` strings
-    /// are ControlTransport's own (stable, ours), so matching on them is a
-    /// contract, not a heuristic:
-    ///   * "connect to ..." - TCP to 47984 refused or timed out while 47989
-    ///     answers: Sunshine's HTTPS listener is wedged (seen 2026-09-02 with
-    ///     zombie connections pinning its accept loop). Host-side; only a
-    ///     Sunshine restart clears it. NOT a pairing problem.
-    ///   * "Host requires pairing" - the host answered 401 over mutual TLS:
-    ///     it genuinely no longer knows this client.
-    ///   * "TLS handshake ..." - Sunshine rejects unknown client certs at the
-    ///     handshake, so this is the other face of "not paired".
-    ///   * "pinned host cert mismatch" / "host presented no certificate" -
-    ///     the HOST's cert changed: the trust chip, not the pair sheet.
-    ///   * anything else - honest generic: up on plain HTTP, broken on HTTPS.
+    /// Map a paired-path (HTTPS) failure, once plain HTTP proved the host up, by ControlTransport's `detail`:
+    /// "connect to" = the 47984 listener wedged (restart it); 401 = the PC forgot or switched off this Mac; "TLS
+    /// handshake" = it forgot this Mac; cert mismatch or none = its cert changed. Pairing again fixes the last three.
     static func classifyPairedPathFailure(_ detail: String, hostName: String) -> StreamError {
         let name = hostName.isEmpty ? "The PC" : hostName
         if detail.hasPrefix("connect to") {
-            return .hostUnreachable(
-                "\(name) is awake, but Sunshine's secure port (47984) is refusing connections - "
+            return .sunshineNeedsRestart(
+                "\(name) is awake, but Sunshine's secure port (47984) is refusing connections because "
                 + "its HTTPS listener is stuck. Restart Sunshine on the PC; quitting Glimmer will not help."
             )
         }
         if detail.contains("Host requires pairing") {
-            return .pairingFailed("\(name) no longer recognizes this Mac - pair it again from Settings → PCs.")
+            return .pairingFailed("\(name) no longer recognizes this Mac, or this Mac is switched off on "
+                + "Sunshine's Troubleshooting page. Choose Pair Again… from the PC's ⋯ menu.")
         }
         if detail.hasPrefix("TLS handshake") {
-            return .pairingFailed("\(name) rejected this Mac's certificate - pair it again from Settings → PCs.")
+            return .pairingFailed("\(name) rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu.")
         }
-        if detail.contains("cert mismatch") || detail.contains("no certificate") {
-            return .hostUnreachable(
-                "This PC's certificate changed. Click its amber \"Trust needed\" chip "
-                + "in the main window to trust it and pair again."
+        if isCertChange(detail) {
+            return .hostCertChanged(
+                "\(name)'s certificate changed. To trust it, choose Pair Again… from the PC's ⋯ menu."
             )
         }
-        return .hostUnreachable(
-            "\(name) answers on its plain port but not its secure one (\(detail)). Restart Sunshine on the PC."
+        // The detail is in the log line above the call; the sentence stays plain.
+        return .sunshineNeedsRestart(
+            "\(name) answers on its plain port but not its secure one. Restart Sunshine on the PC."
         )
+    }
+
+    /// ControlTransport's detail for a pinned PC presenting a different certificate, or none.
+    static func isCertChange(_ detail: String) -> Bool {
+        detail.contains("cert mismatch") || detail.contains("no certificate")
     }
 
     /// Populate `server` from the /serverinfo XML, split out of
@@ -148,7 +147,7 @@ extension NetworkClient {
     /// Sunshine returns the same shape as GFE 3.x for compatibility, with one
     /// or two extras. Each field falls through to its existing value when the
     /// host omits the tag, so partial responses still hydrate cleanly.
-    private func hydrateServerInfo(from xml: XMLNode, fetchedOverPaired: Bool) {
+    func hydrateServerInfo(from xml: XMLNode, fetchedOverPaired: Bool) {
         if let name = xml.string(forChild: "hostname"), !name.isEmpty {
             server.serverName = name
         }
@@ -165,33 +164,24 @@ extension NetworkClient {
         if let appVer = xml.string(forChild: "appversion") {
             server.appVersion = appVer
         }
-        if let gfeVer = xml.string(forChild: "GfeVersion") {
-            server.gfeVersion = gfeVer
-        }
-        // Host primary-NIC MAC (WoL / Luna power gate). Falls through when
+        // Host primary-NIC MAC (Wake on LAN). Falls through when
         // omitted; a zeroed value is stored as-is and rejected downstream.
         if let mac = xml.string(forChild: "mac"), !mac.isEmpty {
             server.macAddress = mac
         }
         // Distinguish real GFE from Sunshine-pretending-to-be-GFE by the
         // `<state>` field. NVIDIA's state strings contain "MJOLNIR"; Sunshine
-        // uses "SUNSHINE_SERVER_*". Used to gate the fps>60 launch-URL quirk.
+        // uses "SUNSHINE_SERVER_*". Pairing and stream start refuse real GFE.
         if let state = xml.string(forChild: "state") {
             server.isRealGFE = state.contains("MJOLNIR")
         }
         if let port = xml.int(forChild: "HttpsPort"), port > 0 {
             server.httpsPort = port
         }
-        if let pairFlag = xml.int(forChild: "PairStatus") {
-            server.pairStatus = (pairFlag == 1) ? .paired : .unpaired
-        }
-        // Successful mutual-TLS handshake is itself proof of pairing - the host
-        // wouldn't have accepted our client cert if our identity weren't in
-        // its allowlist. Some Sunshine builds omit <PairStatus> from the HTTPS
-        // response (or return 0 even when paired); don't be fooled.
-        if fetchedOverPaired {
-            server.pairStatus = .paired
-        }
+        // Only a pinned mutual-TLS round proves pairing. <PairStatus> is ignored:
+        // over plain HTTP anyone on the LAN can write it (Sunshine always sends
+        // 0 there), and some Sunshine builds omit it or send 0 over HTTPS.
+        server.pairStatus = fetchedOverPaired ? .paired : .unpaired
         if let maxLuma = xml.int(forChild: "MaxLumaPixelsHEVC") {
             server.maxLumaPixelsHEVC = maxLuma
         }
@@ -205,27 +195,9 @@ extension NetworkClient {
         if let active = xml.int(forChild: "currentgame") {
             server.currentGameID = active
         }
-        // Sunshine exposes the host certificate inline so a fresh client can
-        // surface the cert hash to the user before pairing. GFE doesn't
-        // include it; in that case the cert only becomes visible during
-        // the pairing handshake (via /pair's plaincert blob).
-        //
-        // SECURITY (C2): we DO NOT auto-bind a pin here on a previously
-        // unpinned host. That used to be the path a same-LAN attacker
-        // could ride to silently pin their own cert as the host's. The
-        // real pin gets set by Pairing.swift's `runPairingFlow` once the
-        // user has typed a PIN that the *real* host can prove it knows -
-        // the host's plaincert at that point is authenticated by the RSA
-        // signature step. Only THEN is the cert worth pinning.
-        //
-        // We still expose the host cert opportunistically on ServerInfo so
-        // a future "show fingerprint to user" UI has something to render -
-        // but it does not become a pin until pairing succeeds.
-        if server.serverCertPEM == nil {
-            if let pemFromXML = xml.string(forChild: "PlainCert"), !pemFromXML.isEmpty {
-                server.serverCertPEM = pemFromXML
-            }
-        }
+        // SECURITY (C2): <PlainCert> is never read. `serverCertPEM` IS the pin,
+        // so copying an unauthenticated cert into it pinned whoever answered.
+        // Only Pairing.swift's RSA-verified handshake sets the pin.
     }
 
     // MARK: - Endpoint: /applist
@@ -279,9 +251,8 @@ extension NetworkClient {
         let riKeyHex = riKey.map { String(format: "%02x", $0) }.joined()
         let riKeyID = Self.bigEndianInt32(from: riKeyIV)
 
-        // HDR signaling - only attach the static-metadata bag if the client
-        // actually intends to negotiate a 10-bit format. Without this, GFE
-        // 3.22+ will refuse to enable HDR even on a 10-bit-capable host.
+        // HDR signaling rides only when a 10-bit format can be negotiated: Sunshine turns HDR on from
+        // hdrMode=1. The clientHdrCap* keys are moonlight-qt's, sent unchanged.
         let supports10bit = !config.videoFormats
             .isDisjoint(with: [.hevcMain10, .av1Main10])
         let hdrParams = supports10bit
@@ -290,29 +261,7 @@ extension NetworkClient {
               + "&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0"
             : ""
 
-        // GFE >60fps SOPS quirk: feeding real GFE a value >60 makes it pick
-        // 720p60 instead of the resolution we asked for. Sunshine, which
-        // pretends to be GFE in /serverinfo for compatibility, does NOT have
-        // this bug - and crucially, sending fps=0 to Sunshine makes it
-        // misinterpret the request and fall back to safe SDR 8-bit defaults,
-        // which silently kills HDR negotiation. Gate the workaround on the
-        // MJOLNIR-detected `isRealGFE` flag instead of any-non-empty
-        // gfeVersion.
-        let fpsField = (server.isRealGFE && config.fps > 60) ? 0 : config.fps
-
-        var query: [String: String] = [
-            "mode": "\(config.width)x\(config.height)x\(fpsField)",
-            "additionalStates": "1",
-            "sops": "1",
-            "rikey": riKeyHex,
-            "rikeyid": "\(riKeyID)",
-            "localAudioPlayMode": "0",
-            "surroundAudioInfo": "\(gl_surround_audio_info_from_audio_configuration(config.audio.cValue))",
-            "remoteControllersBitmap": "0",
-            "gcmap": "0",
-            "gcpersist": "0"
-        ]
-        if let appID { query["appid"] = "\(appID)" }
+        let query = Self.launchQuery(config: config, riKeyHex: riKeyHex, riKeyID: riKeyID, appID: appID)
         // Append HDR params as an ordered tail blob so we keep the exact key
         // order the host expects. Building it through the dictionary would lose
         // that ordering.
@@ -386,6 +335,29 @@ extension NetworkClient {
         return LaunchResponse(sessionURL: sessionURL,
                               gcmKey: gcmKey,
                               gcmKeyId: gcmKeyId)
+    }
+
+    /// The keyed part of the /launch and /resume query (HDR rides separately,
+    /// as an ordered tail). Static so the wire values are checkable offline.
+    static func launchQuery(config: StreamConfig, riKeyHex: String, riKeyID: Int32, appID: Int?) -> [String: String] {
+        var query: [String: String] = [
+            "mode": "\(config.width)x\(config.height)x\(config.fps)",
+            "additionalStates": "1",
+            "sops": "1",
+            "rikey": riKeyHex,
+            "rikeyid": "\(riKeyID)",
+            // 1 = the PC keeps playing its own sound (Moonlight's "play audio on host").
+            "localAudioPlayMode": config.playAudioOnHost ? "1" : "0",
+            "surroundAudioInfo": "\(gl_surround_audio_info_from_audio_configuration(config.audio.cValue))",
+            "remoteControllersBitmap": "0",
+            "gcmap": "0",
+            "gcpersist": "0",
+            // Encrypted RTSP (rtspenc://), as moonlight's LiGetLaunchUrlQueryParameters asks.
+            // A GameStream PC is refused before /launch, so only Sunshine sees it.
+            "corever": "1"
+        ]
+        if let appID { query["appid"] = "\(appID)" }
+        return query
     }
 
     // MARK: - Endpoint: /cancel

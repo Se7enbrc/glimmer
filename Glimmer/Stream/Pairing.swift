@@ -1,20 +1,9 @@
 //
 //  Pairing.swift
 //
-//  PIN-based pairing handshake with a GameStream host (GFE or Sunshine).
-//
-//  Ported from moonlight-qt's app/backend/nvpairingmanager.{cpp,h} (GPLv3; see
-//  CREDITS.md). The protocol is a five-round-trip dance over plain HTTP plus a
-//  final HTTPS liveness check; each round mixes AES-128-ECB symmetric crypto
-//  (keyed off the PIN the user types into the host UI) with RSA signatures over our
-//  long-lived client cert. If any step deviates by a single byte the host
-//  silently rejects us, so the comments below are unusually thorough -
-//  this is the kind of code where "it didn't work" debug sessions are
-//  measured in hours.
-//
-//  All hex on the wire is uppercase. All AES operations use 16-byte blocks
-//  with padding explicitly disabled - moonlight's protocol is raw ECB on
-//  pre-sized buffers, not the higher-level CBC/CTR shapes you'd expect.
+//  PIN pairing with a GameStream host, ported from moonlight-qt's nvpairingmanager (GPLv3; see CREDITS.md):
+//  four plain-HTTP rounds of raw AES-128-ECB (PIN-keyed, 16-byte blocks, no padding) and RSA signatures over
+//  our client cert, then an HTTPS pairchallenge. Wire hex is lowercase; one wrong byte and the host rejects us.
 //
 
 import Foundation
@@ -39,27 +28,14 @@ public actor PairingClient {
     // MARK: Public API
 
     /// Walk the full PIN handshake. On success the returned `ServerInfo` has
-    /// `pairStatus = .paired` and `serverCertPEM` populated with the host's
-    /// pinned certificate. On failure we always send `/unpair` to the host
-    /// before throwing - leaving a half-paired state on the host side trips
-    /// "Already pairing" errors on retry.
+    /// `pairStatus = .paired` and `serverCertPEM` holding the host's pinned certificate.
     public func pair(pin: String) async throws -> ServerInfo {
-        do {
-            return try await runPairingFlow(pin: pin)
-        } catch {
-            // Best-effort cleanup. Swallow any error from unpair - we're
-            // already in the failure path and the original error is what
-            // the caller cares about.
-            await sendUnpair()
-            throw error
-        }
+        try await runPairingFlow(pin: pin)
     }
 
     // MARK: - Pairing flow
-    //
-    // The flow has five HTTP rounds plus a final HTTPS challenge. Each round
-    // is a one-shot GET with all parameters in the query string; there's no
-    // session state on the host side beyond what we tell it on each call.
+    // Four HTTP rounds plus a final HTTPS challenge, each a one-shot GET. Sunshine keeps one session per
+    // client id until it completes, fails or expires; there is no /unpair to end it early.
 
     private func runPairingFlow(pin: String) async throws -> ServerInfo {
 
@@ -73,7 +49,7 @@ public actor PairingClient {
         let pairingIntervalState = OSSignposter.pairing.beginInterval(
             "PairingFlow",
             id: pairingSignpostID,
-            "host=\(self.server.address, privacy: .public)")
+            "host=\(self.server.address, privacy: .private)")
 
         // Outcome is appended to the interval close. Default = "failed" so a
         // thrown error from anywhere below still closes the interval cleanly.
@@ -85,19 +61,6 @@ public actor PairingClient {
                 pairingIntervalState,
                 "outcome=\(pairingOutcome, privacy: .public)")
         }
-
-        // ---------------------------------------------------------------
-        // Step 0: figure out which hash algorithm to use.
-        //
-        // Gen 7+ (GFE 3.x and all Sunshine builds) uses SHA-256 with a
-        // 32-byte hash. Older GFE used SHA-1 + 20 bytes. We sniff the major
-        // version from server.appVersion ("7.1.431.0" -> 7). If we don't have
-        // a version string yet, assume modern - Sunshine never advertises a
-        // version field shape consistent with old GFE.
-        // ---------------------------------------------------------------
-        let useSha256 = parseMajorVersion(server.appVersion) >= 7 || server.appVersion == nil
-        let hashLength = useSha256 ? 32 : 20
-        log.info("Starting pair with hashLength=\(hashLength, privacy: .public)")
 
         // ---------------------------------------------------------------
         // Step 1: getservercert
@@ -148,29 +111,17 @@ public actor PairingClient {
             failureMessage: "clientchallenge: host returned paired!=1 (likely wrong PIN entry mode)"
         )
 
-        // ---------------------------------------------------------------
-        // Step 4: serverchallengeresp
-        //
-        // Decrypt the host's response (size depends on the hash algo: hash
-        // length + 16-byte server challenge + cert sig). Then construct OUR
-        // proof:
-        //   hash( hostServerChallenge || ourCertSig || clientSecret )
-        // and send it back encrypted. The host uses this to prove WE know
-        // the PIN.
-        // ---------------------------------------------------------------
-        let parsed = try parseServerChallenge(
-            challengeResp: challengeResp,
-            aesKey: aesKey,
-            hashLength: hashLength
-        )
+        // Step 4: serverchallengeresp. The reply decrypts to the host's SHA-256 hash and a 16-byte
+        // challenge; we answer with hash(hostServerChallenge || ourCertSig || clientSecret), encrypted,
+        // which proves to the host that we know the PIN.
+        let parsed = try parseServerChallenge(challengeResp: challengeResp, aesKey: aesKey)
 
         let clientSecret = try Self.randomBytes(16)
         let encryptedHash = try buildEncryptedProofHash(
             hostServerChallenge: parsed.hostServerChallenge,
             clientSecret: clientSecret,
             clientCertPEM: clientCertPEM,
-            aesKey: aesKey,
-            useSha256: useSha256
+            aesKey: aesKey
         )
 
         let serverChallengeRespXml = try await pairRound(
@@ -201,8 +152,7 @@ public actor PairingClient {
             serverChallengeRespXml: serverChallengeRespXml,
             randomChallenge: randomChallenge,
             serverCertPEM: serverCertPEM,
-            serverResponseHash: parsed.serverResponseHash,
-            useSha256: useSha256
+            serverResponseHash: parsed.serverResponseHash
         )
 
         // ---------------------------------------------------------------
@@ -248,40 +198,12 @@ public actor PairingClient {
         server.serverCertPEM = serverCertPEM
         server.pairStatus = .paired
 
-        // ---------------------------------------------------------------
-        // PERSISTED PIN COMMIT - SECURITY-CRITICAL LATE COMMIT.
-        // SECURITY: this block MUST stay at the very bottom of the
-        // pair flow, AFTER step 7 (HTTPS pairchallenge) has returned a
-        // paired=1 over a TLS handshake gated by the in-memory pin set
-        // at step 5. Moving this block earlier in the flow re-introduces
-        // a window where a mid-handshake hijacker can get pinned: an
-        // attacker who survives the symmetric crypto rounds but loses
-        // step 6 / step 7 must NOT leave a persisted pin behind.
-        // Do not refactor this block above the step 7
-        // `verifyResponseStatus` / `paired=="1"` checks - if you're
-        // considering moving it, you're reopening exactly the bug this
-        // comment is here to prevent.
-        // ---------------------------------------------------------------
-        //
-        // Keyed by the host's UUID so a fresh process launch can re-load
-        // the pin without re-pairing. The host UUID (not the user's) is
-        // the right key because moonlight-qt identifies hosts by
-        // uniqueId - this aligns with how the rest of Glimmer looks up
-        // paired hosts. We store the PEM (not the raw SecCertificate)
-        // for forward-compat: PEM survives keychain wipes, OS
-        // migrations, and Time Machine restores in a way that
-        // SecCertificate refs do not. The cert is public information so
-        // the same-UID-readable concern from H1 doesn't apply here.
-        //
-        // If the host's cert ever rotates (Sunshine reinstall, OS reset)
-        // the user lands on the `NetworkClient.fetchServerInfo` pin-mismatch
-        // error which directs them to Settings → PCs → ... → "Trust new cert
-        // and re-pair". That action wipes the pin and reopens the
-        // PairSheet - the next successful run through this function
-        // overwrites the persisted PEM with the new one.
+        // SECURITY: persist the pin (public PEM, keyed by host uniqueId) only here, AFTER step 7's pinned
+        // pairchallenge returned paired=1; earlier lets a hijacker who fails step 6/7 leave a pin behind.
+        // A rotated host cert hits fetchServerInfo's pin-mismatch error; the next pairing overwrites it.
         persistPinnedCert(serverCertPEM: serverCertPEM)
 
-        log.info("Pairing succeeded for \(self.server.address, privacy: .public)")
+        log.info("Pairing succeeded for \(self.server.address, privacy: .private)")
         pairingOutcome = "success"
         return server
     }
@@ -295,22 +217,29 @@ public actor PairingClient {
         clientCertBytes: Data,
         signpostID: OSSignpostID
     ) async throws -> String {
-        let getCertResp = try await pairRound(
-            stepLabel: "getservercert",
-            signpostID: signpostID,
-            query: [
-                "phrase": "getservercert",
-                "salt": salt.hex(),
-                "clientcert": clientCertBytes.hex()
-            ],
-            usePaired: false,
-            failureMessage: "getservercert: host did not return paired=1"
-        )
+        // The host holds this reply until someone types the PIN on the PC.
+        let deadline = Date().addingTimeInterval(NetworkClient.pinEntryTimeout)
+        let getCertResp: XMLNode
+        do {
+            getCertResp = try await pairRound(
+                stepLabel: "getservercert",
+                signpostID: signpostID,
+                query: [
+                    "phrase": "getservercert",
+                    "salt": salt.hex(),
+                    "clientcert": clientCertBytes.hex()
+                ],
+                usePaired: false,
+                timeout: NetworkClient.pinEntryTimeout,
+                failureMessage: "getservercert: host did not return paired=1"
+            )
+        } catch {
+            throw Self.pinEntryError(error, deadline: deadline)
+        }
         guard let plainCertHex = Self.xmlString(getCertResp, tag: "plaincert"),
               !plainCertHex.isEmpty,
               let serverCertBytes = Data(hex: plainCertHex) else {
             // Empty plaincert means the host is mid-pair with someone else.
-            // Mirror moonlight's behaviour - kick its state machine and bail.
             throw StreamError.pairingFailed(
                 "getservercert: plaincert missing (host is likely already pairing with another client)")
         }
@@ -322,13 +251,20 @@ public actor PairingClient {
         return serverCertPEM
     }
 
+    /// A getservercert round that dies at its deadline means nobody typed the
+    /// PIN in time. Report that, not the transport's own timeout wording; a
+    /// cancel or an earlier failure passes through unchanged.
+    static func pinEntryError(_ error: Error, deadline: Date, now: Date = Date()) -> Error {
+        guard !(error is CancellationError), now.timeIntervalSince(deadline) > -1 else { return error }
+        return PairingFailure.timedOut
+    }
+
     /// Decode + decrypt the host's step-3 challenge response, split out of
     /// `runPairingFlow`. Returns the host's own hash (held for the
     /// PIN-correctness check after step 5) and the host's 16-byte challenge.
     private func parseServerChallenge(
         challengeResp: XMLNode,
-        aesKey: Data,
-        hashLength: Int
+        aesKey: Data
     ) throws -> (serverResponseHash: Data, hostServerChallenge: Data) {
         guard let challengeRespHex = Self.xmlString(challengeResp, tag: "challengeresponse"),
               let challengeRespBytes = Data(hex: challengeRespHex) else {
@@ -336,8 +272,9 @@ public actor PairingClient {
         }
         let challengeRespPlain = try Self.aesEcbDecrypt(challengeRespBytes, key: aesKey)
 
-        // First `hashLength` bytes are the host's own hash; we hold onto it
+        // The first 32 bytes are the host's own SHA-256; we hold onto it
         // for the PIN-correctness check after step 5.
+        let hashLength = Int(SHA256_DIGEST_LENGTH)
         guard challengeRespPlain.count >= hashLength + 16 else {
             throw StreamError.pairingFailed(
                 "clientchallenge: decrypted response too short (\(challengeRespPlain.count) bytes)")
@@ -359,6 +296,7 @@ public actor PairingClient {
         signpostID: OSSignpostID,
         query: [String: String],
         usePaired: Bool,
+        timeout: TimeInterval = NetworkClient.pairTimeout,
         failureMessage: String
     ) async throws -> XMLNode {
         OSSignposter.pairing.emitEvent(
@@ -371,7 +309,7 @@ public actor PairingClient {
             path: "pair",
             query: fullQuery,
             usePaired: usePaired,
-            timeout: NetworkClient.pairTimeout
+            timeout: timeout
         )
         try Self.verifyResponseStatus(response)
         guard Self.xmlString(response, tag: "paired") == "1" else {
@@ -418,16 +356,13 @@ public actor PairingClient {
         )
     }
 
-    /// Build our step-4 (serverchallengeresp) proof, split out of
-    /// `runPairingFlow`: hash(hostServerChallenge || ourCertSig || clientSecret),
-    /// zero-padded to a 32-byte AES block multiple, then AES-ECB-encrypted with
-    /// the PIN-derived key. The host uses this to prove WE know the PIN.
+    /// Build our step-4 (serverchallengeresp) proof: SHA-256(hostServerChallenge || ourCertSig || clientSecret),
+    /// two AES blocks, AES-ECB-encrypted with the PIN-derived key. The host uses it to prove WE know the PIN.
     private func buildEncryptedProofHash(
         hostServerChallenge: Data,
         clientSecret: Data,
         clientCertPEM: String,
-        aesKey: Data,
-        useSha256: Bool
+        aesKey: Data
     ) throws -> Data {
         let ourCertSig = try Self.signatureFromPemCert(clientCertPEM)
 
@@ -437,16 +372,7 @@ public actor PairingClient {
         challengeRespPayload.append(ourCertSig)
         challengeRespPayload.append(clientSecret)
 
-        let challengeRespHash = try Self.digest(challengeRespPayload, sha256: useSha256)
-
-        // Pad the hash up to 32 bytes so AES sees an even block multiple.
-        // moonlight does the same `resize(32)` after hashing - the extra
-        // zero bytes are part of the protocol, not just an alignment quirk.
-        var paddedHash = challengeRespHash
-        if paddedHash.count < 32 {
-            paddedHash.append(Data(repeating: 0, count: 32 - paddedHash.count))
-        }
-        return try Self.aesEcbEncrypt(paddedHash, key: aesKey)
+        return try Self.aesEcbEncrypt(Self.digest(challengeRespPayload), key: aesKey)
     }
 
     /// Step 5 host-proof verification, split out of `runPairingFlow`.
@@ -464,8 +390,7 @@ public actor PairingClient {
         serverChallengeRespXml: XMLNode,
         randomChallenge: Data,
         serverCertPEM: String,
-        serverResponseHash: Data,
-        useSha256: Bool
+        serverResponseHash: Data
     ) throws {
         // Step 5 payload: the host's random 16-byte serverSecret followed by an
         // RSA signature over (serverSecret || serverCert) using its private key.
@@ -500,7 +425,7 @@ public actor PairingClient {
         expectedResponse.append(randomChallenge)
         expectedResponse.append(try Self.signatureFromPemCert(serverCertPEM))
         expectedResponse.append(contentsOf: serverSecret)
-        let expectedResponseHash = try Self.digest(expectedResponse, sha256: useSha256)
+        let expectedResponseHash = try Self.digest(expectedResponse)
 
         guard expectedResponseHash == Data(serverResponseHash) else {
             // Wrong PIN - same external surface as the MITM branch so an
@@ -530,15 +455,12 @@ public actor PairingClient {
             log.error("No host uniqueId on ServerInfo at pairing-success - cannot persist pin; cert will need re-pairing on next launch")
             return
         }
-        // SECURITY: persist into the file-backed
-        // PinnedCertStore. Atomic mode-0600 write; the same-UID-
-        // process write surface that UserDefaults exposed (cfprefsd
-        // is shared) goes away because the file is in our
-        // Application Support container with owner-only perms.
+        // Atomic mode-0600 write into PinnedCertStore. That keeps other users
+        // out; a same-UID process can still rewrite it (see SECURITY.md).
         do {
             try PinnedCertStore.store(pem: serverCertPEM,
                                       forHostID: self.server.uniqueId)
-            log.info("Persisted pinned host cert (file-store) for host id=\(self.server.uniqueId, privacy: .public)")
+            log.info("Persisted pinned host cert (file-store) for host id=\(self.server.uniqueId, privacy: .private)")
         } catch {
             // Storage failure should not abort a successful pair -
             // the cert is still good for THIS process (it's in
@@ -547,32 +469,10 @@ public actor PairingClient {
             // doesn't go silent.
             log.error(
                 """
-                Failed to persist pinned host cert for \(self.server.uniqueId, privacy: .public): \
-                \(String(describing: error), privacy: .public)
+                Failed to persist pinned host cert for \(self.server.uniqueId, privacy: .private): \
+                \(String(describing: error), privacy: .private)
                 """
             )
         }
-    }
-
-    // MARK: - Unpair (failure cleanup)
-
-    private func sendUnpair() async {
-        do {
-            _ = try await network.request(
-                path: "unpair",
-                query: [:],
-                usePaired: false
-            )
-        } catch {
-            log.warning("unpair call failed: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    // MARK: - Version parsing
-
-    private nonisolated func parseMajorVersion(_ version: String?) -> Int {
-        guard let version else { return 7 }
-        let head = version.split(separator: ".").first ?? ""
-        return Int(head) ?? 7
     }
 }

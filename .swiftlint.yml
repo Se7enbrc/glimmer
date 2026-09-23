@@ -53,8 +53,8 @@ opt_in_rules:
   - fatal_error_message
   - force_unwrapping # warning only, see below
 
-# Line length: matches what the codebase actually uses. Some os_log format
-# strings exceed 220 cols and can't reasonably be split - keep error generous.
+# Line length: `--strict` fails anything past 140, and long log lines wrap
+# instead of disabling the rule. The error level only matters without it.
 line_length:
   warning: 140
   error: 280

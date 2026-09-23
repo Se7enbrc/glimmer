@@ -2,26 +2,49 @@
 //  SettingsGeneralStreamingPanes+LoginItem.swift
 //
 //  `LoginItemManager` - the SMAppService login-item lifecycle behind the
-//  General pane's two launch toggles, plus the launch-time reconcile
-//  AppModel+Lifecycle calls. Split out of SettingsGeneralStreamingPanes.swift
-//  to keep that file under the length limit: this is registration plumbing, not
-//  a pane, and it has a caller outside Settings.
+//  General pane's two launch toggles, and the reconcile that launch and the
+//  General pane run. Registration plumbing, not a pane, so it lives apart.
 //
 
 import Foundation
 import ServiceManagement
 
-/// Owns the SMAppService login-item lifecycle, shared by the General toggles
-/// and the launch-time reconcile. Registration is keyed by the user's saved
-/// intent (UserDefaults `launchAtLogin` / `launchMinimized`):
-///   * minimized → register the HELPER (relaunches the main app suppressed)
-///   * not minimized → register the main app (normal open at login)
+/// Registration follows the saved intent (`launchAtLogin` / `launchMinimized`):
+/// minimized registers the HELPER, which relaunches the main app suppressed;
+/// otherwise the main app itself opens at login.
 enum LoginItemManager {
     static let helperBundleID = "io.ugfugl.Glimmer.LoginHelper"
+    /// The app build (path + CFBundleVersion) the last successful register ran from.
+    private static let registeredBuildKey = "loginItemRegisteredBuild"
+
+    /// What reconcile does about the saved "Open at login" intent.
+    enum Reconcile: Equatable {
+        case keep, reregister, userRemoved
+    }
 
     /// The service that backs the user's current intent.
     private static func activeService(minimized: Bool) -> SMAppService {
         minimized ? SMAppService.loginItem(identifier: helperBundleID) : SMAppService.mainApp
+    }
+
+    /// This copy of the app, as far as a login-item registration cares.
+    private static func currentBuild() -> String {
+        "\(Bundle.main.bundlePath)#\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "")"
+    }
+
+    /// Gone from Login Items while the app wasn't moved or updated means the
+    /// user removed it; after a move or update (or with no record, from builds
+    /// that kept none) it's an invalidated registration to heal.
+    static func reconcileAction(status: SMAppService.Status, registeredBuild: String?,
+                                currentBuild: String) -> Reconcile {
+        switch status {
+        case .enabled, .requiresApproval:
+            return .keep
+        case .notRegistered, .notFound:
+            return registeredBuild == currentBuild ? .userRemoved : .reregister
+        @unknown default:
+            return .reregister
+        }
     }
 
     /// Apply the desired state, returning the resulting status so the caller can
@@ -36,6 +59,7 @@ enum LoginItemManager {
             guard launchAtLogin else {
                 if helper.status == .enabled { try helper.unregister() }
                 if mainApp.status == .enabled { try mainApp.unregister() }
+                UserDefaults.standard.removeObject(forKey: registeredBuildKey)
                 Diag.info("login item disabled", "LoginItem")
                 return .notRegistered
             }
@@ -43,35 +67,48 @@ enum LoginItemManager {
                 if mainApp.status == .enabled { try mainApp.unregister() }
                 try helper.register()
                 Diag.notice("login item registered (helper) → \(statusLabel(helper.status))", "LoginItem")
-                return helper.status
             } else {
                 if helper.status == .enabled { try helper.unregister() }
                 try mainApp.register()
                 Diag.notice("login item registered (main app) → \(statusLabel(mainApp.status))", "LoginItem")
-                return mainApp.status
             }
+            UserDefaults.standard.set(currentBuild(), forKey: registeredBuildKey)
+            return activeService(minimized: minimized).status
         } catch {
-            Diag.error("login item registration FAILED: \(error.localizedDescription)", "LoginItem")
+            Diag.error("login item registration FAILED: \(error.localizedDescription, privacy: .private)", "LoginItem")
             return .notFound
         }
     }
 
-    /// Re-assert the saved intent at launch so a registration invalidated by an
-    /// app update / move self-heals - the root cause of "doesn't start after
-    /// reboot". Runs only when the user wants launch-at-login, and only
-    /// re-registers when the actual status has drifted from enabled.
-    static func reconcile() {
-        guard UserDefaults.standard.bool(forKey: "launchAtLogin") else { return }
-        let minimized = UserDefaults.standard.bool(forKey: "launchMinimized")
+    /// Square the saved intent with macOS: an update or move self-heals (the
+    /// "doesn't start after reboot" fix), a removal turns the toggle off.
+    /// Returns the login item's status, nil when Open at login is off.
+    @discardableResult
+    static func reconcile() -> SMAppService.Status? {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "launchAtLogin") else { return nil }
+        let minimized = defaults.bool(forKey: "launchMinimized")
         let status = activeService(minimized: minimized).status
-        switch status {
-        case .enabled:
-            Diag.info("login item enabled (\(minimized ? "helper" : "main app"))", "LoginItem")
-        case .requiresApproval:
-            Diag.notice("login item needs approval in System Settings ▸ General ▸ Login Items", "LoginItem")
-        default:
+        switch reconcileAction(status: status, registeredBuild: defaults.string(forKey: registeredBuildKey),
+                               currentBuild: currentBuild()) {
+        case .keep:
+            // A live registration belongs to this build, including one made
+            // before builds kept a record, so a later removal is recognized.
+            defaults.set(currentBuild(), forKey: registeredBuildKey)
+            if status == .requiresApproval {
+                Diag.notice("login item needs approval in System Settings › General › Login Items", "LoginItem")
+            } else {
+                Diag.info("login item enabled (\(minimized ? "helper" : "main app"))", "LoginItem")
+            }
+            return status
+        case .reregister:
             Diag.notice("login item drifted (\(statusLabel(status))) - re-registering", "LoginItem")
-            apply(launchAtLogin: true, minimized: minimized)
+            return apply(launchAtLogin: true, minimized: minimized)
+        case .userRemoved:
+            Diag.notice("login item removed in System Settings - Open at login is off", "LoginItem")
+            defaults.set(false, forKey: "launchAtLogin")
+            defaults.removeObject(forKey: registeredBuildKey)
+            return nil
         }
     }
 

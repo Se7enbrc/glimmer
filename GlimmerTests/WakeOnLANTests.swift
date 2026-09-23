@@ -2,10 +2,13 @@
 //  WakeOnLANTests.swift
 //
 //  The wake packet and where it goes: MAC normalisation (zeroed or malformed
-//  fails closed), the 102-byte magic packet, and the target list.
+//  fails closed), the 102-byte magic packet, the target list, what a wake that
+//  sent nothing reports, and when a PC that woke gets a notification instead.
 //
 
+import Foundation
 import Testing
+import UserNotifications
 @testable import Glimmer
 
 struct WakeOnLANTests {
@@ -37,12 +40,51 @@ struct WakeOnLANTests {
         #expect(WakeOnLAN.magicPacket(mac: "00:00:00:00:00:00") == nil)
     }
 
-    @Test func targetsCoverBroadcastsThenTheHostOnBothPorts() {
+    @Test func targetsCoverBroadcastsThenThePCWithSunshinesPortsToo() {
         let targets = WakeOnLAN.targets(
             hostAddresses: ["192.168.1.50", nil, " tower.local ", "192.168.1.50"],
             broadcasts: ["192.168.1.255", "255.255.255.255"])
-        #expect(targets.map(\.host) == ["255.255.255.255", "255.255.255.255", "192.168.1.255", "192.168.1.255",
-                                        "192.168.1.50", "192.168.1.50", "tower.local", "tower.local"])
-        #expect(Set(targets.map(\.port)) == [9, 47009])
+        #expect(targets.map(\.host) == ["255.255.255.255", "192.168.1.255", "192.168.1.50", "tower.local"])
+        #expect(targets[0].ports == [9, 47009])
+        #expect(targets[1].ports == [9, 47009])
+        for target in targets.dropFirst(2) {
+            #expect(target.ports == [9, 47009, 47998, 47999, 48000, 48002, 48010])
+        }
+    }
+
+    @Test func aPCAddressThatIsABroadcastGetsOnlyTheWakePorts() {
+        let targets = WakeOnLAN.targets(hostAddresses: ["255.255.255.255"], broadcasts: [])
+        #expect(targets.count == 1)
+        #expect(targets[0].ports == [9, 47009])
+    }
+
+    private func tower(mac: String) -> Glimmer.Host {
+        Glimmer.Host(id: "tower", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
+                     apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: mac)
+    }
+
+    @MainActor @Test func aWakeThatSendsNothingStopsAtOnce() async {
+        let started = Date()
+        let outcome = await AppModel().sendWakeAndWait(tower(mac: "aa:bb:cc:dd:ee:ff"), waitSeconds: 90) { _, _ in 0 }
+        #expect(outcome == .couldNotSend)
+        #expect(outcome.failureReason == .couldNotSend)
+        #expect(Date().timeIntervalSince(started) < 5)
+    }
+
+    @MainActor @Test func aPCWithoutAMacIsNotWoken() async {
+        let outcome = await AppModel().sendWakeAndWait(tower(mac: "00:00:00:00:00:00"), waitSeconds: nil) { _, _ in 1 }
+        #expect(outcome == .noMac)
+        #expect(outcome.failureReason == nil)
+    }
+
+    /// Declined, not yet answered or set to None: the notice would never show, so
+    /// Wake and Connect opens the stream as it did before notifications.
+    @Test func aWakeFromAnotherAppNotifiesOnlyWhenTheNoticeCanShow() {
+        #expect(WakeNotifier.shows(.authorized, style: .banner))
+        #expect(WakeNotifier.shows(.authorized, style: .alert))
+        #expect(!WakeNotifier.shows(.authorized, style: .none))
+        #expect(!WakeNotifier.shows(.provisional, style: .banner))
+        #expect(!WakeNotifier.shows(.denied, style: .banner))
+        #expect(!WakeNotifier.shows(.notDetermined, style: .banner))
     }
 }

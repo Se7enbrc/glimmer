@@ -24,33 +24,42 @@ is sized to that.
 
 **In scope:**
 
-- **Same-LAN passive observer** - packet sniffer on the LAN. The control channel
-  runs mutual TLS post-pairing; the video / audio / input streams are
-  AES-128-GCM encrypted end-to-end under `EncryptionPreference.all`, which is
-  the default (see `Glimmer/Stream/Types.swift`).
+- **Same-LAN passive observer** - packet sniffer on the LAN. The HTTP control
+  requests run mutual TLS once paired. In the stream itself, the ENet control
+  channel, which also carries keyboard, mouse and controller input, is
+  AES-128-GCM encrypted, and audio is AES-128-CBC encrypted whenever the PC
+  offers it (Sunshine always does). Video travels unencrypted unless the PC is
+  set to require encryption, and then it is AES-128-GCM too.
 - **Same-LAN active MITM** - an attacker who can intercept or redirect traffic
   between the Mac and the host. Defended by RSA-validated pairing handshake +
   post-pairing cert pinning (see Pairing + Pinning sections below). Pre-pairing
   first contact is HTTP, which is acceptable because there's nothing to MITM yet
   - the pin is established by an out-of-band PIN the user types into the host's
     UI, which is what authenticates the cert we then pin.
-- **Same-UID malware on the Mac** - partially defended. Glimmer is unsandboxed
-  (see Runtime hardening below for why), so the identity and pinned-cert files
-  live in the home directory at mode 0600 / parent dir 0700 rather than inside a
-  sandbox container. Another app under the same UID cannot read them by default
-  POSIX permissions, but the container boundary is gone; a TCC-allowlisted
-  attacker with Full Disk Access still wins, as it did before - that's an
-  OS-level boundary, not a Glimmer-specific defence.
+- **Same-UID malware on the Mac** - not defended. Glimmer is unsandboxed (see
+  Runtime hardening below for why), so the identity and pinned-cert files live
+  in the home directory at mode 0600 / parent dir 0700 rather than inside a
+  sandbox container. Mode 0600 keeps other users on the Mac out, but any process
+  running as you can read the client key, impersonate this Mac to every paired
+  PC, and rewrite the pinned host certificates. This is an accepted risk that
+  moonlight-qt shares.
+- **Local control surface** - the running app takes `glimmer` requests over
+  distributed notifications (`CommandChannel`, `AppModel+Commands.swift`), with
+  no authentication. Any process running as you can post one: start a stream
+  from a paired PC, end Glimmer's own stream, or post `stream` with takeover
+  set, which quits the app running on the PC without asking. There is no URL
+  scheme, so a web page can't reach it. This falls under the same-UID risk
+  above.
 - **Hostile host** - a host that has somehow been compromised cannot escalate
   beyond producing bad video / audio / input echoes. The pinned-cert pairing
   limits a hostile host to one the user has explicitly trusted out-of-band.
 - **Untrusted stream input - the in-tree Swift transport parsers.** The
   streaming engine is pure Swift (`Glimmer/Stream/Native/`): RTSP/SDP response
   parsing, the ENet-subset control channel, RTP video/audio depacketization,
-  Reed-Solomon FEC reassembly, and AES-GCM decrypt all parse bytes that arrive
-  over UDP/TCP from the network. Memory-safety bugs, parser confusion, and
-  malformed-packet crashes in these parsers are **in scope and ours** - report
-  them here, not upstream.
+  Reed-Solomon FEC reassembly, and the AES-GCM control and AES-CBC audio
+  decrypts all parse bytes that arrive over UDP/TCP from the network.
+  Memory-safety bugs, parser confusion, and malformed-packet crashes in these
+  parsers are **in scope and ours** - report them here, not upstream.
 
 **Out of scope:**
 
@@ -105,9 +114,10 @@ keychain once builds became Developer ID signed, and stayed on files:
   `~/Library/Preferences`, no keychain at all. Glimmer's mode-0600 home files
   are already stricter: only the owning UID can read them, and 0600 beats 0644.
 
-The one residual exposure is a Full-Disk-Access same-UID process reading the
-key. That is a narrow OS-level threat, and one the reference implementation
-doesn't address either.
+The residual exposure is any process running as the same user: 0600 does not
+stop it from copying the key or rewriting a pin. Only a sandbox or the
+data-protection keychain would, and both are ruled out above. The reference
+implementation has the same exposure.
 
 **One-shot moonlight-qt migration.** On first launch, Glimmer reads the
 `com.moonlight-stream.Moonlight` preference domain. If a moonlight-qt install
@@ -122,16 +132,16 @@ run. See `Identity+Loading.swift` and `HostsStore.swift`.
 ## Pairing
 
 The GameStream PIN handshake. Protocol-fixed by GameStream / Sunshine; we don't
-get to pick the primitives. Five HTTP rounds plus a final HTTPS liveness check
-(`Glimmer/Stream/Pairing.swift`).
+get to pick the primitives. Four HTTP rounds plus a final HTTPS `pairchallenge`
+liveness check (`Glimmer/Stream/Pairing.swift`).
 
 **Primitives:**
 
 - AES-128-ECB on raw 16-byte buffers, no padding (the protocol pre-sizes
   everything to 16-byte multiples).
-- Key derivation: `SHA-256(salt || PIN)[0..16]` for Gen 7+ (modern GFE and all
-  Sunshine). SHA-1 for pre-Gen-7 GFE; sniffed from `appversion`. We don't expect
-  to encounter SHA-1 on Sunshine.
+- Key derivation: `SHA-256(salt || PIN)[0..16]`, and SHA-256 for the challenge
+  hashes, as every Sunshine build uses. A GameStream PC is refused before the
+  handshake starts.
 - RSA-2048 signatures using the long-lived client cert / host cert for the MITM
   check and the PIN-correctness check.
 
@@ -150,33 +160,40 @@ the one our PIN would have produced - see step 4 in `runPairingFlow`).
    typed out-of-band.
 
 Only then does `NetworkClient.setPinnedHostCert` get called. This is **not**
-trust-on-first-use: `NetworkClient.fetchServerInfo` will NOT auto-pin on first
-contact. The previous "auto-pin on first /serverinfo" behaviour was the
-canonical same-LAN-attacker-rides-an-induced-TLS-error gap; closed in the same
-refactor that moved the pin into the pairing flow (search for `SECURITY (C2)` in
+trust-on-first-use: first contact never pins. `NetworkClient.fetchServerInfo`
+ignores the `<PlainCert>` and `<PairStatus>` a plain-HTTP `/serverinfo` returns,
+so a device answering port 47989 can neither plant a pin nor skip the PIN, and
+every pairing runs the full handshake. `NetworkClient` also refuses any HTTPS
+request that has no pin to check (search for `SECURITY (C2)` in
 `NetworkClient+Endpoints.swift`).
 
 **Failure path.** Any deviation throws `StreamError.pairingFailed` with a
 specific message at `.private` log privacy. The caller sees a uniform "pairing
 failed" - the specific cause (wrong PIN, MITM detected, host mid-pair with
-someone else) is recoverable from logs under our subsystem, not from the UI. We
-send `/unpair` after a failure to clear the host's "Already pairing" state for
-retry.
+someone else) is recoverable from logs under our subsystem, not from the UI. The
+causes the UI does name reveal nothing about the handshake: a PIN nobody entered
+in time (our five-minute wait, or Sunshine's status 408), and a PC busy with
+another open pairing request (409 or 503). Sunshine has no `/unpair` route, so
+an open request ends only when it completes, fails or expires.
 
 ## Pinning
 
-Host certs are pinned **after** successful pairing. The pin lives in a mode-0600
-file at `~/Library/Application Support/Glimmer/PinnedHosts/<hostID>.pem`, where
-`hostID` is the host's UUID (or its hostname, when that is all we have) with
-anything outside `[A-Za-z0-9-_.]` replaced by `_`. `PinnedCertStore`
-(`Types+Cert.swift`) owns it, at parent-directory mode 0700.
+Host certs are pinned **after** successful pairing. The pin lives in a file at
+`~/Library/Application Support/Glimmer/PinnedHosts/<hostID>.pem`, where `hostID`
+is the host's UUID (or its hostname, when that is all we have) with anything
+outside `[A-Za-z0-9-_.]` replaced by `_`. `PinnedCertStore` (`Types+Cert.swift`)
+owns it.
 
-The pins moved out of `UserDefaults` because `cfprefsd` is shared across
-same-UID processes: any other process running as the user could rewrite a pin
-through the preferences daemon. They are stored as PEM rather than a raw
-`SecCertificate`, because PEM survives keychain wipes, OS migrations, and Time
-Machine restores in a way the `SecCertificate` ref does not. The cert is public
-information; the threat mode-0600 addresses is _write_, not _read_.
+That file is the only pin source because our pairing flow is what writes it,
+after the RSA-verified handshake, not because of its file mode: mode 0600 keeps
+other users out, but any process running as the same user can write it, just as
+it can rewrite `UserDefaults`. The copy older builds kept in `UserDefaults`
+(`hosts.N.srvcert`) is only a one-way migration hint, and if the two ever
+disagree the connection is refused and the PC must be paired again. Pins are
+stored as PEM rather than a raw `SecCertificate`, because PEM survives keychain
+wipes, OS migrations, and Time Machine restores in a way the `SecCertificate`
+ref does not. The cert is public information, so a pin needs integrity, not
+secrecy.
 
 **Once pinned, ANY mismatch fails the connection.** Enforcement lives in
 `ControlTransport.swift`: `performBlocking` runs a post-handshake exact-DER pin
@@ -200,7 +217,7 @@ the cert cannot also produce the PIN.
 
 ## Transport
 
-- **Pre-pairing:** plain HTTP on **47989** for `/serverinfo` and the five
+- **Pre-pairing:** plain HTTP on **47989** for `/serverinfo` and the four HTTP
   pairing rounds. There's no TLS to validate yet; the out-of-band PIN
   authenticates the cert we then pin.
 - **Post-pairing:** HTTPS on **47984** for `/serverinfo`, `/launch`, `/cancel`,
@@ -209,12 +226,12 @@ the cert cannot also produce the PIN.
   pinned host cert authenticates the host to us. The system trust store is NOT
   consulted; the pinned PEM is the entire trust anchor.
 - **Stream:** the Swift-native engine's RTP video/audio + ENet-subset control
-  channels (`Glimmer/Stream/Native/`). AES-128-GCM, key derived from the launch
-  response's `rikey` (or `gcmkey` on Sunshine). `EncryptionPreference.all` is
-  the default - encrypts video, audio, and input. `.audioOnly` encrypts audio +
-  input but leaves video plaintext (saves bandwidth on slower CPUs at the cost
-  of clear-text frame data on the wire); `.none` is exposed for diagnostics, not
-  recommended.
+  channels (`Glimmer/Stream/Native/`). Both ciphers use the per-session key
+  exchanged over mutual TLS at `/launch`. The RTSP handshake is AES-128-GCM
+  (`/launch` asks for `rtspenc://`), as is the control channel, input included.
+  RTP audio is AES-128-CBC whenever the PC offers it, which Sunshine always
+  does. RTP video is plaintext unless the PC requires encryption (Sunshine's
+  mandatory mode), and then it is AES-128-GCM.
 
 ## Runtime hardening
 
@@ -253,10 +270,10 @@ malicious host. With the sandbox gone, that is addressed by hardening the
 parsers directly instead:
 
 - **Fuzz the host-reachable parsers** - a deterministic swift-testing suite
-  (`GlimmerTests/FuzzTests.swift`) hammers Annex-B / RTP / FEC / RTSP / ENet /
-  AES-GCM with random + mutated-valid input, asserting they reject rather than
-  trap. It found and fixed an out-of-bounds read in the Reed-Solomon FEC
-  decoders (a shard shorter than the block size).
+  (`GlimmerTests/FuzzTests.swift`) hammers Annex-B / FEC / RTSP / SDP / ENet /
+  AES-GCM / HTTP control headers with random + mutated-valid input, asserting
+  they reject rather than trap. It found and fixed an out-of-bounds read in the
+  Reed-Solomon FEC decoders (a shard shorter than the block size).
 - **Hardened Runtime library validation is ON for Release.** The embedded
   OpenSSL/Opus dylibs are re-signed under the team id at build time, so the
   Release entitlements drop `disable-library-validation`. Adhoc / Debug builds
@@ -293,10 +310,10 @@ their session use the host PC's recording tools, not the Mac's.
   into the unified log. We log `keyCode` (positional, non-PII) and the modifier
   mask only.
 - **URLs containing `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`,
-  `uniqueid`.** `NetworkClient.sensitiveQueryKeys` (`Network.swift`) is the key
-  set; the launch-URL redaction that consumes it lives in
-  `NetworkClient+Endpoints.swift`, and `dumpXMLRedacted` covers the response
-  bodies.
+  `uniqueid`, and the `sessionUrl0` tag.** `NetworkClient.sensitiveQueryKeys`
+  (`Network.swift`) is the key set; the launch-URL redaction that consumes it
+  lives in `NetworkClient+Endpoints.swift`, and `dumpXMLRedacted` covers the
+  response bodies, where `sessionUrl0` carries the PC's address and port.
 - **Cert PEMs / fingerprints at `.public`.** `ControlTransport` logs a
   pin-mismatch event but not the fingerprints - a hostile log scraper could
   otherwise read the pinned cert via `log show`.
@@ -309,7 +326,11 @@ their session use the host PC's recording tools, not the Mac's.
 - Network errors with sanitized URLs (rikey/gcmkey stripped).
 - VT decode errors and codec configuration ints (`videoFormat=0x...`, `bytes=N`,
   `idr=true/false`).
-- Host addresses at `.private` privacy (default).
+- `Diag` lines, which take Logger's `privacy:` argument (`LogStore.swift`).
+  Private values (PC names and addresses, uniqueids, error text) reach the
+  Troubleshooting viewer, its export and the session file, and show as
+  `<private>` in the unified log. Keys, PINs and certificates stay out of the
+  message entirely.
 - Pin-mismatch events (no fingerprints).
 - Pairing-step transitions (no payload data).
 

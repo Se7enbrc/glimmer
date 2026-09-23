@@ -21,14 +21,9 @@
 //  + opus payload) or a size-0 placeholder (PLC marker) for an unrecovered gap
 //  when the block is played out with discontinuities.
 //
-//  COMPATIBILITY: FEC requires APP_VERSION_AT_LEAST(7,1,415). For older hosts,
-//  or hosts that violate the FEC-block alignment invariant (non-4-aligned base
-//  seq), `incompatibleServer` is set and ALL data packets are passed straight
-//  through (HANDLE_NOW), FEC packets dropped. A block-SIZE mismatch is NOT a
-//  one-strike kill: a single mismatched block is dropped (counted + warned
-//  once) and only a sustained streak - every contact mismatching - flips
-//  `incompatibleServer`, loudly. Every flip logs what was disabled and why;
-//  the old silent first-contact flip killed audio FEC for an entire session.
+//  COMPATIBILITY: FEC starts on (Sunshine's 7.1.431 clears the C's 7.1.415 gate). A block-alignment break
+//  (non-4-aligned base seq) or a streak of block-size mismatches sets `incompatibleServer` and logs why:
+//  data then passes straight through (HANDLE_NOW) and FEC is dropped. One mismatched block is only dropped.
 //
 //  THREADING: single-receive-thread access (RtpAudioReceiver's serial queue), so
 //  this class needs no internal locking - exactly like the C single receive
@@ -191,32 +186,12 @@ final class RtpAudioQueue {
 
     let fec = AudioFecDecoder()
 
-    /// - Parameters:
-    ///   - appVersionQuad: parsed host version [major, minor, patch, build].
-    ///   - audioPacketDuration: AudioPacketDuration in ms (5 default).
-    init(appVersionQuad: [Int32], audioPacketDuration: Int) {
+    /// `audioPacketDuration` is AudioPacketDuration in ms (5 by default).
+    init(audioPacketDuration: Int) {
         self.audioPacketDuration = audioPacketDuration
-
-        // FEC requires GFE 3.19+ / APP_VERSION_AT_LEAST(7,1,415). For older hosts,
-        // disable FEC and pass audio straight through (RtpAudioQueue.c:40-44).
-        if !Self.appVersionAtLeast(appVersionQuad, 7, 1, 415) {
-            incompatibleServer = true
-        }
     }
 
-    // MARK: - Version + 16-bit wraparound helpers (Limelight-internal.h)
-
-    private static func appVersionAtLeast(_ quad: [Int32],
-                                          _ major: Int32, _ minor: Int32, _ patch: Int32) -> Bool {
-        // Compares the first three components lexicographically. A negative 4th
-        // component (Sunshine) does not affect this gate.
-        let q0 = quad.isEmpty ? 0 : quad[0]
-        let q1 = quad.count > 1 ? quad[1] : 0
-        let q2 = quad.count > 2 ? quad[2] : 0
-        if q0 != major { return q0 > major }
-        if q1 != minor { return q1 > minor }
-        return q2 >= patch
-    }
+    // MARK: - 16-bit wraparound helpers (Limelight-internal.h)
 
     /// Wrap-safe 16-bit "is x before y" (isBefore16, Limelight-internal.h:76).
     @inline(__always) static func isBefore16(_ x: UInt16, _ y: UInt16) -> Bool {
