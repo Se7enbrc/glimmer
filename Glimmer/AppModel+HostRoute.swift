@@ -24,8 +24,8 @@ import SwiftUI
 import Observation
 
 /// Live wired/Wi-Fi classification of the kernel route toward one host.
-/// Owned by `AppModel` (see `hostRoute`), re-pointed by the launcher
-/// via `refreshHostRoute()` whenever the selected host changes.
+/// Owned by `AppModel` (see `hostRoute`), re-pointed via `refreshHostRoute()`
+/// whenever the selected host's address changes.
 @MainActor
 @Observable
 final class HostRouteMonitor {
@@ -160,16 +160,16 @@ extension AppModel {
     /// never re-fires and the glyph keeps classifying the route to the dead
     /// IP until a host switch or relaunch.
     var selectedHostRouteAddress: String? {
-        selectedHost.map { $0.localAddress ?? $0.manualAddress ?? $0.name }
+        selectedHost.map(Self.routeAddress)
     }
 
-    /// Re-point the readiness chip's route monitor at the currently selected
-    /// host (nil selection tears the parked socket down - see the launcher's
-    /// empty-hosts task in MainWindow, which relies on that to release the
-    /// socket when the last PC is unpaired). Driven by the launcher
-    /// (`.task(id: selectedHostRouteAddress)`) so it follows host switches
-    /// AND same-host address changes without the manager needing its own
-    /// observer.
+    static func routeAddress(_ host: Host) -> String {
+        host.localAddress ?? host.manualAddress ?? host.name
+    }
+
+    /// Re-point the route monitor at the selected PC; a nil selection tears the
+    /// parked socket down. `selectionChanged(from:)` calls this on every address
+    /// change, so it runs with the launcher closed too.
     func refreshHostRoute() {
         hostRoute.monitor(address: selectedHostRouteAddress)
     }

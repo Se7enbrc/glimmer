@@ -313,16 +313,21 @@ extension AppModel {
     }
 
     func selectHost(_ host: Host) {
-        selectedHost = host
-        UserDefaults.standard.set(host.id, forKey: "glimmer.selectedHostID")
-        // Wipe the cached chip status so the UI doesn't briefly show the
-        // previous host's "Streaming X" tag during the first poll for the
-        // newly-selected machine. Then kick a fresh poll.
-        hostLiveStatus = nil
-        // Clear any stale stream error so a prior host's red banner doesn't linger
-        // and name the wrong machine after switching hosts.
+        // A prior PC's red banner would name the wrong machine after a switch.
         nativeStreamError = nil
-        restartHostStatusPolling()
+        UserDefaults.standard.set(host.id, forKey: "glimmer.selectedHostID")
+        selectedHost = host
+    }
+
+    /// Every write to `selectedHost` lands here. A different PC (a switch, an unpair,
+    /// the launch-time load) gets a fresh chip and poll; the route monitor moves
+    /// only on a real address change, since monitor() drops the PHY samples.
+    func selectionChanged(from old: Host?) {
+        if old?.id != selectedHost?.id {
+            hostLiveStatus = nil
+            restartHostStatusPolling()
+        }
+        if old.map(Self.routeAddress) != selectedHostRouteAddress { refreshHostRoute() }
     }
 
     // MARK: - Unpair / cert recovery

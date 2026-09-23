@@ -42,7 +42,7 @@ final class AppModel {
 
     // Hosts
     var hosts: [Host] = []
-    var selectedHost: Host?
+    var selectedHost: Host? { didSet { selectionChanged(from: oldValue) } }
 
     // Stream lifecycle
     var isStreaming = false
@@ -170,8 +170,8 @@ final class AppModel {
 
     /// Always-on route monitor for the SELECTED host (the readiness chip's
     /// quiet bolt / Wi-Fi glyph). Deliberately independent of the gate-on
-    /// telemetry probe - see AppModel+HostRoute.swift. Re-pointed by
-    /// the launcher via `refreshHostRoute()` as the selection changes.
+    /// telemetry probe - see AppModel+HostRoute.swift. Re-pointed from
+    /// `selectedHost`'s didSet whenever the route address changes.
     let hostRoute = HostRouteMonitor()
 
     /// Latest reachability + activity snapshot for the selected host. Drives

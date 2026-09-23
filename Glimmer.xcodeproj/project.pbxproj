@@ -308,6 +308,7 @@
 		DEC0DE202609221900000004 /* AudioVideoSkewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */; };
 		DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */; };
 		DEC0DE202609221900000010 /* VideoRecoveryEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */; };
+		DEC0DE202609230200000001 /* HostsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609230200000002 /* HostsStoreTests.swift */; };
 		DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */; };
 		DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000DA /* WiredBitrateTests.swift */; };
 		DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */; };
@@ -691,6 +692,7 @@
 		DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioVideoSkewTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryConfigRowTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRecoveryEventTests.swift; sourceTree = "<group>"; };
+		DEC0DE202609230200000002 /* HostsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostsStoreTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MiniPlayerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000DA /* WiredBitrateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WiredBitrateTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollQuantizerTests.swift"; sourceTree = "<group>"; };
@@ -1115,6 +1117,7 @@
 				DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */,
 				DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */,
 				DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */,
+				DEC0DE202609230200000002 /* HostsStoreTests.swift */,
 				DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */,
 				DEC0DE2026092000000000DA /* WiredBitrateTests.swift */,
 				DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */,
@@ -1582,6 +1585,7 @@
 				DEC0DE202609221900000004 /* AudioVideoSkewTests.swift in Sources */,
 				DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */,
 				DEC0DE202609221900000010 /* VideoRecoveryEventTests.swift in Sources */,
+				DEC0DE202609230200000001 /* HostsStoreTests.swift in Sources */,
 				DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */,
 				DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */,
 				DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */,
