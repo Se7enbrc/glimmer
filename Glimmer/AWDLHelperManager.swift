@@ -124,6 +124,12 @@ final class AWDLHelperManager: ObservableObject {
         case requiresApproval       // registered; user must toggle it on in System Settings
         case enabled                // installed + approved + ready
         case unavailable(String)    // SMAppService error / daemon not found in the bundle
+
+        /// The case stays public; `.unavailable` can carry SMAppService error text.
+        var diagDescription: DiagMessage {
+            guard case .unavailable(let why) = self else { return "\(self)" }
+            return "unavailable(\"\(why, privacy: .private)\")"
+        }
     }
 
     @Published private(set) var state: State = .notRegistered
@@ -308,7 +314,7 @@ final class AWDLHelperManager: ObservableObject {
         case .notRegistered, .unavailable:
             log.notice("""
                 AWDL daemon registration drifted after an update \
-                (\(String(describing: self.state), privacy: .public)) - self-healing
+                (\(self.state.diagDescription.systemLogText, privacy: .public)) - self-healing
                 """)
             enable()
         }
@@ -331,7 +337,7 @@ final class AWDLHelperManager: ObservableObject {
         // actually parks awdl0 instead of no-op'ing on stale state.
         refresh()
         guard isEnabled else {
-            Diag.notice("AWDL helper NOT engaged - state \(String(describing: state)); awdl0 left to macOS", "Stream")
+            Diag.notice("AWDL helper NOT engaged - state \(state.diagDescription); awdl0 left to macOS", "Stream")
             return
         }
         Diag.notice("AWDL helper engaged - parking awdl0 for the stream", "Stream")
