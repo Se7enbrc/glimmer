@@ -101,10 +101,10 @@ struct AboutPane: View {
                 }
             }
             Section("Projects we like") {
-                Text("Built for Sunshine, the open-source game-streaming software that runs "
-                    + "on the PC. Glimmer speaks the Moonlight protocol, which carries NVIDIA GameStream "
-                    + "forward, and the transport is ported from moonlight-common-c, "
-                    + "with respect. Full credits in CREDITS.md.")
+                Text("Built for Sunshine, the open-source app that streams games from "
+                    + "your PC. Glimmer speaks the Moonlight protocol, which carries "
+                    + "NVIDIA GameStream forward, and the transport is ported from "
+                    + "moonlight-common-c, with respect. Full credits in CREDITS.md.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if let url = URL(string: AboutLink.sunshine) {
