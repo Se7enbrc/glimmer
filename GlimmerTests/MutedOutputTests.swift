@@ -46,8 +46,7 @@ struct MutedOutputTests {
     @Test func playAudioOnHostReachesTheLaunchQuery() {
         var config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)
         func mode() -> String? {
-            NetworkClient.launchQuery(config: config, isRealGFE: false,
-                                      riKeyHex: "00", riKeyID: 0, appID: 1)["localAudioPlayMode"]
+            NetworkClient.launchQuery(config: config, riKeyHex: "00", riKeyID: 0, appID: 1)["localAudioPlayMode"]
         }
         #expect(mode() == "0")
         config.playAudioOnHost = true

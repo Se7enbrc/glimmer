@@ -265,8 +265,7 @@ extension NetworkClient {
               + "&clientHdrCapDisplayData=0x0x0x0x0x0x0x0x0x0x0"
             : ""
 
-        let query = Self.launchQuery(config: config, isRealGFE: server.isRealGFE,
-                                     riKeyHex: riKeyHex, riKeyID: riKeyID, appID: appID)
+        let query = Self.launchQuery(config: config, riKeyHex: riKeyHex, riKeyID: riKeyID, appID: appID)
         // Append HDR params as an ordered tail blob so we keep the exact key
         // order the host expects. Building it through the dictionary would lose
         // that ordering.
@@ -344,15 +343,9 @@ extension NetworkClient {
 
     /// The keyed part of the /launch and /resume query (HDR rides separately,
     /// as an ordered tail). Static so the wire values are checkable offline.
-    static func launchQuery(config: StreamConfig, isRealGFE: Bool,
-                            riKeyHex: String, riKeyID: Int32, appID: Int?) -> [String: String] {
-        // Real GFE given fps > 60 picks 720p60, so it gets 0. Sunshine needs the
-        // real rate: fps=0 drops it to SDR 8-bit and kills HDR. Gated on the
-        // MJOLNIR-detected `isRealGFE`, not gfeVersion (Sunshine sends one too).
-        let fpsField = (isRealGFE && config.fps > 60) ? 0 : config.fps
-
+    static func launchQuery(config: StreamConfig, riKeyHex: String, riKeyID: Int32, appID: Int?) -> [String: String] {
         var query: [String: String] = [
-            "mode": "\(config.width)x\(config.height)x\(fpsField)",
+            "mode": "\(config.width)x\(config.height)x\(config.fps)",
             "additionalStates": "1",
             "sops": "1",
             "rikey": riKeyHex,
