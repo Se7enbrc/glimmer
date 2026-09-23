@@ -49,14 +49,23 @@ extension TelemetryCounters {
         pacerTickRealtimeLock.deallocate(); reorderDispLock.deallocate()
     }
 
-    /// Reset everything. Called at a session's first CONNECT-START edge
-    /// (`StreamSession.anchorTelemetryConnectStart`) - BEFORE the receivers spin
-    /// up, NOT at exporter start - so a warm host's mid-handshake one-shot
-    /// latches (audio TTF/first-packet) can never race the reset and serve a
-    /// prior session's values (the chimeric audio_ttf). (Prometheus counters are
-    /// nominally never reset, but a per-session diagnostic view wants per-session
-    /// totals - a scrape across a session boundary just sees a counter reset,
-    /// which Prometheus handles.)
+    /// Reset and anchor the P2 handshake timeline at a CONNECT-START edge, before any
+    /// receiver can latch a one-shot. A session's first connect resets everything; an
+    /// in-place reconnect keeps the totals, the first handshake and its audio TTF.
+    func anchorConnectStart(now: UInt64, reconnecting: Bool) {
+        if reconnecting {
+            p2.anchorReconnect(now, audioTtfMs: audioFirstPacketMs, audioTtf: audioTtf.latched)
+            resetForReconnect()
+        } else {
+            resetForNewSession()
+            p2.reset()
+            p2.anchorConnectStart(now)
+        }
+    }
+
+    /// Reset everything at a session's first connect (`anchorConnectStart`), not at
+    /// exporter start, so a warm host's one-shot latches can't serve a prior session's
+    /// values. A Prometheus scrape across the boundary just sees a counter reset.
     func resetForNewSession() {
         for counter in [rfiTotal, idrRequestedTotal, backlogOverflowTotal,
                         presentStallTotal, frameLossTotal, unrecoverableFrameTotal,
@@ -95,11 +104,8 @@ extension TelemetryCounters {
             counter.reset()
         }
         resetForReconnect()
-        // NOTE: `p2` (the handshake timeline + disconnect reason + IDR round-trip
-        // state) is DELIBERATELY NOT reset here: `anchorTelemetryConnectStart`
-        // resets it itself, in the right order (reset → anchor), and keeping it
-        // out of this method preserves that single-owner discipline (this method
-        // and the p2 anchor are called back-to-back at the same connect edge).
+        // `p2` (handshake timeline, disconnect reason, IDR round trip) is NOT reset
+        // here: `anchorConnectStart` resets then anchors it at the same edge.
         setVtSessionCreateMs(0)
         // Cruise max-gain resets to the unboosted floor (1.0), not 0.
         os_unfair_lock_lock(cruiseMaxGainLock); cruiseMaxGainValue = 1.0; os_unfair_lock_unlock(cruiseMaxGainLock)
@@ -125,7 +131,7 @@ extension TelemetryCounters {
 
     /// In-place reconnect, a new connection inside the same session: clear the
     /// one-shot audio latches and the per-connection link gauges, keep every total
-    /// so the receipt covers the whole run.
+    /// so the receipt covers the whole session.
     func resetForReconnect() {
         setRecvJitterMs(0)
         setRttMs(0)

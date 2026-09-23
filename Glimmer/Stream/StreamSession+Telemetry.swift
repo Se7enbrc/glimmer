@@ -76,18 +76,11 @@ extension StreamSession {
     /// edge, before any receiver can latch a one-shot. A session's first connect
     /// resets everything; an in-place reconnect keeps the totals and first handshake.
     func anchorTelemetryConnectStart(hostAddress: String) {
-        let counters = TelemetryCounters.shared
-        let now = TelemetryCounters.monotonicNowNanos()
-        if isReconnecting {
-            counters.p2.anchorReconnect(
-                now, audioTtfMs: counters.audioFirstPacketMs, audioTtf: counters.audioTtf.latched)
-            counters.resetForReconnect()
-        } else {
-            counters.resetForNewSession()
+        TelemetryCounters.shared.anchorConnectStart(
+            now: TelemetryCounters.monotonicNowNanos(), reconnecting: isReconnecting)
+        if !isReconnecting {
             // A reconnect keeps it: the audio gap across the drop is real.
             AudioArrivalGaps.shared.reset()
-            counters.p2.reset()
-            counters.p2.anchorConnectStart(now)
             // Isolates the launch-path leg (click → connect-start); no-op without a click.
             ConnectTimingTelemetry.shared.markConnectStart()
         }

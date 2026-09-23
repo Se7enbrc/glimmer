@@ -38,18 +38,14 @@ struct SessionReceiptTests {
 
     @Test func aReconnectKeepsTheSessionTotalsAndTheFirstHandshake() throws {
         let counters = TelemetryCounters()
-        counters.resetForNewSession()
-        counters.p2.reset()
-        let firstStart = TelemetryCounters.monotonicNowNanos() - 5_000 * Self.msNanos
-        counters.p2.anchorConnectStart(firstStart)
+        counters.anchorConnectStart(now: TelemetryCounters.monotonicNowNanos() - 5_000 * Self.msNanos,
+                                    reconnecting: false)
         connect(counters, agoMs: 5_000, rtspMs: 200)
         counters.decodeGatedDropTotal.increment(by: 165)
         counters.rfiTotal.increment(by: 4)
 
         // The drop, then the in-place reconnect's own connect.
-        counters.p2.anchorReconnect(TelemetryCounters.monotonicNowNanos(),
-                                    audioTtfMs: nil, audioTtf: nil)
-        counters.resetForReconnect()
+        counters.anchorConnectStart(now: TelemetryCounters.monotonicNowNanos(), reconnecting: true)
         connect(counters, agoMs: 1_000, rtspMs: 150)
         counters.reconnectTotal.increment()
 
@@ -72,26 +68,24 @@ struct SessionReceiptTests {
         let counters = TelemetryCounters()
         counters.reconnectTotal.increment(by: 2)
         counters.wakeTotal.increment()
-        counters.resetForReconnect()
+        let now = TelemetryCounters.monotonicNowNanos()
+        counters.anchorConnectStart(now: now, reconnecting: true)
         #expect(counters.reconnectTotal.value == 2)
-        counters.resetForNewSession()
+        counters.anchorConnectStart(now: now, reconnecting: false)
         #expect(counters.reconnectTotal.value == 0)
         #expect(counters.wakeTotal.value == 0)
     }
 
     @Test func audioTimeToFirstPacketComesFromTheFirstConnect() throws {
         let counters = TelemetryCounters()
-        counters.resetForNewSession()
-        counters.p2.reset()
-        counters.p2.anchorConnectStart(TelemetryCounters.monotonicNowNanos() - 3_000 * Self.msNanos)
+        counters.anchorConnectStart(now: TelemetryCounters.monotonicNowNanos() - 3_000 * Self.msNanos,
+                                    reconnecting: false)
         counters.recordAudioFirstPacket()
         counters.audioPacketsTotal.increment(by: 200)
         let firstTtf = try #require(counters.audioFirstPacketMs)
 
-        counters.p2.anchorReconnect(TelemetryCounters.monotonicNowNanos() - 500 * Self.msNanos,
-                                    audioTtfMs: counters.audioFirstPacketMs,
-                                    audioTtf: counters.audioTtf.latched)
-        counters.resetForReconnect()
+        counters.anchorConnectStart(now: TelemetryCounters.monotonicNowNanos() - 500 * Self.msNanos,
+                                    reconnecting: true)
         counters.recordAudioFirstPacket()
 
         let ttf = try #require(try receipt(counters)["audio_ttf"] as? [String: Any])
