@@ -247,12 +247,12 @@ extension StreamSession {
         if !neverDecodedFirstFrame,
            let health = backend.enetHealth(),
            health.sinceLastAckMs < StreamSession.enetAliveHoldThresholdMs {
-            // Hold banner over the frozen frame: "Holding..." since the control
-            // link is alive (only video paused) - "Reconnecting..." is reserved
-            // for the real reconnect episode. Hidden by clearDecodeOnlyStallLatch.
+            // Hold banner over the frozen frame: the control link is alive and
+            // only video paused ("Reconnecting…" is the real reconnect episode).
+            // Hidden by clearDecodeOnlyStallLatch.
             let winForHold = window
             await MainActor.run {
-                winForHold?.reconnectBanner.setText("Holding…")
+                winForHold?.reconnectBanner.setText("Waiting for video…")
                 winForHold?.reconnectBanner.setVisible(true)
             }
             if !didLogWatchdogHold {

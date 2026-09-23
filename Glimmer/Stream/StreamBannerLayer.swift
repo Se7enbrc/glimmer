@@ -3,11 +3,12 @@
 //
 //  A CALayer text pill floating over the video (sibling to StatsOverlayLayer)
 //  for transient signals the user must see while the launcher is occluded:
-//  reconnect/hold, network-health, and the one-time leave-hint toast. Separate
+//  reconnect/hold, network-health, and the leave-hint toast. Separate
 //  from the stats panel because these fire on engine edges and must show
 //  regardless of the stats-HUD toggle.
 //
 
+import Accessibility
 import AppKit
 import QuartzCore
 
@@ -30,6 +31,18 @@ public final class StreamBannerLayer {
     /// (e.g. network + leave-hint, both bottomCenter) can stack without overlap.
     private let inset: CGFloat
     private var visible = false
+    private var baseText = ""
+    /// True once the pill has stayed up `lingerDelay` and earned `lingerHint`.
+    private var lingered = false
+    /// Bumped on every show and hide so a stale linger timer can't fire.
+    private var showGeneration: UInt64 = 0
+
+    /// Appended after the pill has been up `lingerDelay` seconds, so a stuck
+    /// stream says how to leave it. Nil for pills that never linger.
+    var lingerHint: (@MainActor () -> String)?
+    var lingerDelay: TimeInterval = 5
+    /// VoiceOver can't focus a CALayer, so shown and changed text is announced.
+    var announce: @MainActor (String) -> Void = { AccessibilityNotification.Announcement($0).post() }
 
     public init(anchor: StreamBannerAnchor, accent: CGColor, inset: CGFloat = 28) {
         self.anchor = anchor
@@ -54,6 +67,7 @@ public final class StreamBannerLayer {
         let text = CATextLayer()
         text.contentsScale = bg.contentsScale
         text.isWrapped = false
+        text.truncationMode = .end
         text.alignmentMode = .left
         text.foregroundColor = CGColor(red: 1, green: 1, blue: 1, alpha: 0.95)
         text.font = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -74,15 +88,26 @@ public final class StreamBannerLayer {
     /// Set the pill's text and re-flow. No-op if unchanged so a per-tick caller
     /// doesn't re-flow layout every frame.
     public func setText(_ string: String) {
-        if (textLayer.string as? String) == string { return }
-        textLayer.string = string
-        if let host = layer.superlayer { layoutInHost(host) }
+        if string == baseText { return }
+        baseText = string
+        render()
     }
+
+    /// The text the pill shows right now, linger hint included.
+    var displayedText: String { (textLayer.string as? String) ?? "" }
 
     /// Fade the pill in (true) or out (false) over 200ms.
     public func setVisible(_ show: Bool) {
         if show == visible { return }
         visible = show
+        showGeneration &+= 1
+        if show {
+            // A fresh show starts without the hint and re-flows against the
+            // host's current size (the window may have resized while hidden).
+            lingered = false
+            render()
+            scheduleLinger()
+        }
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.2)
         if show {
@@ -100,6 +125,26 @@ public final class StreamBannerLayer {
         CATransaction.commit()
     }
 
+    /// Push the text (plus the linger hint once earned) into the layer,
+    /// re-flow, and announce it while the pill is up.
+    private func render() {
+        var shown = baseText
+        if lingered, let hint = lingerHint?() { shown += " · \(hint)" }
+        textLayer.string = shown
+        if let host = layer.superlayer { layoutInHost(host) }
+        if visible { announce(shown) }
+    }
+
+    private func scheduleLinger() {
+        guard lingerHint != nil else { return }
+        let generation = showGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + lingerDelay) { [weak self] in
+            guard let self, self.visible, self.showGeneration == generation else { return }
+            self.lingered = true
+            self.render()
+        }
+    }
+
     /// Sustained-degradation gate for the network pill: an ASYMMETRIC leaky
     /// integrator over the caller's ticks (the 4Hz overlay timer). Attack +1.0,
     /// decay −0.7 over a 0..16 band so a borderline link needs a degraded fraction
@@ -112,7 +157,9 @@ public final class StreamBannerLayer {
         else if degradeLevel <= 3 { setVisible(false) }             // self-drains in ~2.5s
     }
 
-    /// Position the pill against the host's bounds, sizing width to the text.
+    /// Position the pill against the host's bounds, sizing width to the text
+    /// but never wider than the host less a 16pt margin each side (the text
+    /// truncates with an ellipsis in a narrow mini player).
     public func layoutInHost(_ host: CALayer) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -125,10 +172,10 @@ public final class StreamBannerLayer {
         let font = NSFont.systemFont(ofSize: 13, weight: .medium)
         let str = (textLayer.string as? String) ?? ""
         let textW = (str as NSString).size(withAttributes: [.font: font]).width
-        let width = padH + dotW + dotGap + ceil(textW) + padH
-
         let hostW = host.bounds.width
         let hostH = host.bounds.height
+        let chrome = padH + dotW + dotGap + padH
+        let width = min(chrome + ceil(textW), max(chrome, hostW - 32))
         let x = (hostW - width) / 2
         let y: CGFloat
         switch anchor {
@@ -143,6 +190,6 @@ public final class StreamBannerLayer {
             x: padH, y: (height - dotW) / 2, width: dotW, height: dotW)
         textLayer.frame = CGRect(
             x: padH + dotW + dotGap, y: (height - 16) / 2 - 1,
-            width: ceil(textW) + 2, height: 16)
+            width: width - chrome + 2, height: 16)
     }
 }

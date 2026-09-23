@@ -20,15 +20,16 @@ import AppKit
 
 // MARK: - Hint budget
 
-/// How many times the capture hint is worth showing. Pure so the rule is
-/// testable without UserDefaults, and separate from the storage so the caller
-/// owns the read/write.
-enum CaptureHintPolicy {
-    /// UserDefaults key holding the number of window captures that have shown
-    /// the hint. An Int (not a Bool) because the hint earns a few repeats:
-    /// once is easy to miss when a game grabs your attention the instant the
-    /// pointer is captured.
-    static let defaultsKey = "windowCaptureHintCount"
+/// How many times a teaching hint is worth showing, persisted per hint. The
+/// count rule is pure so it is testable without UserDefaults.
+struct HintBudget {
+    /// UserDefaults key holding how many times this hint has shown. An Int
+    /// (not a Bool) because a hint earns a few repeats: once is easy to miss
+    /// when a game grabs your attention the instant it appears.
+    let defaultsKey: String
+
+    static let windowCapture = HintBudget(defaultsKey: "windowCaptureHintCount")
+    static let leaveStream = HintBudget(defaultsKey: "glimmer.leaveHintCount")
 
     /// After this many, the user knows. Teaching aids that never stop are
     /// nagging.
@@ -40,24 +41,25 @@ enum CaptureHintPolicy {
     /// edited or corrupt default) up to zero first, so a nonsense count
     /// self-heals into the normal budget instead of showing forever.
     static func nextCount(after count: Int) -> Int { max(count, 0) + 1 }
+
+    /// Spend one show from the persisted count; false once the budget is gone.
+    func claimShow(in defaults: UserDefaults = .standard) -> Bool {
+        let count = defaults.integer(forKey: defaultsKey)
+        guard Self.shouldShow(count: count) else { return false }
+        defaults.set(Self.nextCount(after: count), forKey: defaultsKey)
+        return true
+    }
 }
 
 // MARK: - StreamWindow
 
 extension StreamWindow {
 
-    /// The first few captures explain the way out. Uses the same pill the
-    /// one-time leave hint uses, so the two teaching toasts look like one
-    /// idea, and stacks above it so they can never overlap.
-    ///
-    /// The budget is persisted, not session-scoped: the lesson only needs
-    /// teaching once per person, not once per launch.
+    /// The first few captures explain the way out, in the leave hint's pill and
+    /// stacked above it. The budget is persisted: the lesson needs teaching
+    /// once per person, not once per launch.
     func showCaptureHintIfBudgetAllows() {
-        let defaults = UserDefaults.standard
-        let count = defaults.integer(forKey: CaptureHintPolicy.defaultsKey)
-        guard CaptureHintPolicy.shouldShow(count: count) else { return }
-        defaults.set(CaptureHintPolicy.nextCount(after: count), forKey: CaptureHintPolicy.defaultsKey)
-
+        guard HintBudget.windowCapture.claimShow() else { return }
         captureHintBanner.setText("Hold Esc to free the pointer")
         captureHintBanner.setVisible(true)
         // ~4s all in: 0.2s fade in, 3.6s legible, 0.2s fade out. The

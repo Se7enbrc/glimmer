@@ -35,8 +35,8 @@ import os
 public actor StreamSession {
     let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Session")
 
-    /// UserDefaults flag: has the one-time "press <chord> to leave" in-stream
-    /// toast been shown? Set true the first time it appears so it's truly once-ever.
+    /// UserDefaults key: the leave-hint text its show budget was counted
+    /// against. A different text (a rebound chord) starts the budget over.
     static let leaveHintShownKey = "glimmer.leaveHintShown"
 
     // Subsystems. VideoDecoder/StreamWindow/InputForwarder are MainActor-bound,
