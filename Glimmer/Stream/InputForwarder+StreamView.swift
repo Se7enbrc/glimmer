@@ -451,18 +451,19 @@ extension InputForwarder: StreamInputViewDelegate {
         // wire can't carry them; the next event in a momentum tail carries
         // fresh magnitude, so nothing accumulates wrongly).
         //
-        // Whole notches only: a MagSpeed wheel or a trackpad arrives as 40-100
-        // unit slices, and a game dividing by WHEEL_DELTA (120) reads those as
-        // zero. The quantizer banks the slices and releases full notches.
-        let lineScale = event.hasPreciseScrollingDeltas ? 0.1 : 1.0
+        // Whole notches for precise devices: a trackpad arrives as 40-100 unit
+        // slices, which a game dividing by WHEEL_DELTA (120) reads as zero. A
+        // mouse wheel's units go out unchanged, as moonlight sends them.
+        let precise = event.hasPreciseScrollingDeltas
+        let lineScale = precise ? 0.1 : 1.0
         let y = Int((Double(event.scrollingDeltaY) * lineScale * 120).rounded())
-        let sendY = Int16(clamping: scrollQuantizer.consumeVertical(y))
+        let sendY = Int16(clamping: scrollQuantizer.consumeVertical(y, precise: precise))
         if sendY != 0 {
             let rc = backend?.sendScroll(sendY) ?? -2
             record("LiSendHighResScrollEvent", rc)
         }
         let x = Int((Double(event.scrollingDeltaX) * lineScale * 120).rounded())
-        let sendX = Int16(clamping: scrollQuantizer.consumeHorizontal(x))
+        let sendX = Int16(clamping: scrollQuantizer.consumeHorizontal(x, precise: precise))
         if sendX != 0 {
             let rc = backend?.sendHScroll(sendX) ?? -2
             record("LiSendHighResHScrollEvent", rc)
@@ -472,7 +473,7 @@ extension InputForwarder: StreamInputViewDelegate {
             let nowMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
             tracker.traceWriter.append(
                 "{\"session\":\"\(tracker.sessionId)\",\"event\":\"input_scroll\","
-                + "\"precise\":\(event.hasPreciseScrollingDeltas),"
+                + "\"precise\":\(precise),"
                 + "\"dy\":\(tracker.jsonNumber(Double(event.scrollingDeltaY))),\"dx\":\(tracker.jsonNumber(Double(event.scrollingDeltaX))),"
                 + "\"units_y\":\(y),\"sent_y\":\(sendY),\"sent_x\":\(sendX),"
                 + "\"phase\":\(event.phase.rawValue),\"momentum\":\(event.momentumPhase.rawValue),"
