@@ -303,7 +303,7 @@ extension NetworkClient {
         // hard-coded set of sensitive tags. The remaining tag names + values
         // are still useful for diagnosing the "HDR field went missing" case
         // the original log shape existed to catch.
-        log.info("\(verb, privacy: .public) response XML (sensitive fields redacted): \(Self.dumpXMLRedacted(xml), privacy: .private)")
+        log.info("\(verb, privacy: .public) response XML (sensitive fields redacted): \(Self.dumpXMLRedacted(xml), privacy: .public)")
 
         guard let sessionURL = xml.string(forChild: "sessionUrl0"),
               !sessionURL.isEmpty else {
@@ -312,7 +312,7 @@ extension NetworkClient {
             // Use the redacted variant so we don't accidentally log gcmkey /
             // gcmkeyid even when the response is otherwise broken.
             let dump = Self.dumpXMLRedacted(xml)
-            log.error("Launch response missing sessionUrl0. Top-level children: \(dump, privacy: .private)")
+            log.error("Launch response missing sessionUrl0. Top-level children: \(dump, privacy: .public)")
             throw StreamError.launchFailed("Host did not return an RTSP session URL")
         }
 

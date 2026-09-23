@@ -1,8 +1,8 @@
 //
 //  LogPrivacyTests.swift
 //
-//  Diag's two renderings: the full line for the viewer and session file, and the
-//  redacted line LogStore hands os_log.
+//  Diag's two renderings (the full line for the viewer and session file, the
+//  redacted line LogStore hands os_log) and the launch-response XML redactor.
 //
 
 import Foundation
@@ -71,5 +71,18 @@ struct DiagMessageTests {
         let marker = UUID().uuidString
         Diag.info("\(marker) at \("192.0.2.10", privacy: .private)", "Tests")
         #expect(LogStore.shared.snapshot().contains { $0.message == "\(marker) at 192.0.2.10" })
+    }
+}
+
+struct LaunchResponseRedactionTests {
+
+    @Test func sessionURLIsRedactedButItsTagSurvives() throws {
+        let body = "<root status_code=\"200\"><sessionUrl0>rtsp://192.0.2.10:48010</sessionUrl0>"
+            + "<gcmkey>00112233</gcmkey><gamesession>1</gamesession></root>"
+        let dump = NetworkClient.dumpXMLRedacted(try XMLTreeBuilder.parse(data: Data(body.utf8)))
+        #expect(dump.contains("<sessionUrl0=<redacted>>"))
+        #expect(dump.contains("<gcmkey=<redacted>>"))
+        #expect(dump.contains("<gamesession=1>"))
+        #expect(!dump.contains("192.0.2.10"))
     }
 }

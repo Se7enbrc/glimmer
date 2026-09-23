@@ -364,10 +364,11 @@ public actor NetworkClient {
     // These names are matched case-insensitively against query parameter
     // names AND XML tag names (the host echoes some of them back).
 
-    /// Lowercased query/tag names whose values must be redacted before
-    /// logging. Used by the query-dump in `runLaunchLike` and `dumpXMLRedacted`.
+    /// Lowercased query/tag names whose values `runLaunchLike`'s query dump and
+    /// `dumpXMLRedacted` redact. `sessionurl0` is the PC's rtsp://address:port,
+    /// echoed by /launch and /resume.
     static let sensitiveQueryKeys: Set<String> = [
-        "rikey", "rikeyid", "gcmkey", "gcmkeyid", "uuid", "uniqueid"
+        "rikey", "rikeyid", "gcmkey", "gcmkeyid", "uuid", "uniqueid", "sessionurl0"
     ]
 
     /// Same shape as `dumpXML`, but every child whose tag name matches
