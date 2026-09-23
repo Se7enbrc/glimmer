@@ -156,8 +156,9 @@ extension VideoDecoder {
     /// `decodeGateDisposition(isIDR:)`; consumed at the very top of
     /// `decodeAssembledFrame` before any slot reservation or VT work.
     enum DecodeGateDisposition {
-        /// Normal path - feed the frame to the decode pipeline.
-        case feed
+        /// Normal path - feed the frame, tagged with the IDR epoch it was fed
+        /// under (see `_idrEpoch`).
+        case feed(epoch: UInt)
         /// Gated: drop the AU quietly - no IDR, no slot, no log line. Counted
         /// in `decodeGatedDropTotal` (its OWN counter: `suppressedDropTotal`
         /// means displaced PRESENT frames, not ungated decodes) because
@@ -166,12 +167,13 @@ extension VideoDecoder {
         /// while hidden. The `decode_gated` gauge + the Diag NOTICE on the
         /// gate edges carry the STATE; the counter carries the volume.
         case dropQuietly
-        /// First post-gate frame is NOT an IDR: return DR_NEED_IDR so the
+        /// The resync latch is armed (post-gate, or after a VT decode failure)
+        /// and this frame is NOT an IDR: return DR_NEED_IDR so the
         /// receive thread drives the depacketizer's existing wait-for-IDR
         /// recovery gate (`requestDecoderRefresh` - wait + coalesced IDR
         /// request), exactly the reference-invalidation flush the sustained
         /// backlog stall reuses. Feeding this P-frame would macroblock: its
-        /// references were dropped, undecoded, during the gate.
+        /// references were dropped or failed to decode.
         case resyncToIdr
     }
 
@@ -179,7 +181,7 @@ extension VideoDecoder {
     /// backend's receive thread (the same thread that owns the depacketizer,
     /// which is what makes the `.resyncToIdr` → `requestDecoderRefresh`
     /// handoff race-free: the depacketizer enters wait-for-IDR before it can
-    /// process another packet). The one-shot post-gate latch is cleared on
+    /// process another packet). The one-shot resync latch is cleared on
     /// BOTH non-gated outcomes - on `.feed`-of-an-IDR because the reference
     /// chain is reset by the keyframe itself, and on `.resyncToIdr` because
     /// the wait now lives in the depacketizer, which stops emitting non-IDR
@@ -196,13 +198,26 @@ extension VideoDecoder {
             TelemetryCounters.shared.decodeGatedDropTotal.increment()
             return .dropQuietly
         }
-        if _awaitingPostGateIdr {
-            _awaitingPostGateIdr = false
-            presentSuppressedLock.unlock()
-            return isIDR ? .feed : .resyncToIdr
+        defer { presentSuppressedLock.unlock() }
+        if isIDR {
+            _idrEpoch &+= 1
+            _awaitingResyncIdr = false
+        } else if _awaitingResyncIdr {
+            _awaitingResyncIdr = false
+            return .resyncToIdr
         }
-        presentSuppressedLock.unlock()
-        return .feed
+        return .feed(epoch: _idrEpoch)
+    }
+
+    /// Arm the one-shot resync after VideoToolbox failed a frame fed under
+    /// `epoch`. A stale failure (an IDR fed since) is ignored: that keyframe
+    /// already reset the chain. Returns true when this call armed the latch.
+    @discardableResult
+    nonisolated func armResyncAfterDecodeError(epoch: UInt) -> Bool {
+        presentSuppressedLock.lock(); defer { presentSuppressedLock.unlock() }
+        guard epoch == _idrEpoch, !_awaitingResyncIdr else { return false }
+        _awaitingResyncIdr = true
+        return true
     }
 
     /// Lock-guarded read of the gate flag for the frame watchdog (gated =
@@ -272,7 +287,7 @@ extension VideoDecoder {
         let engage = isStreaming && _presentSuppressed && !_decodeGated
         if engage {
             _decodeGated = true
-            _awaitingPostGateIdr = true
+            _awaitingResyncIdr = true
         }
         presentSuppressedLock.unlock()
         guard engage else { return }
@@ -288,7 +303,7 @@ extension VideoDecoder {
 
     /// Gate-OFF edge: UNCONDITIONAL on resume (never a permanent give-up).
     /// Stamps the lift instant for the frame watchdog's idle floor and leaves
-    /// `_awaitingPostGateIdr` armed - the submit boundary, not this edge,
+    /// `_awaitingResyncIdr` armed - the submit boundary, not this edge,
     /// decides whether the first post-gate frame feeds (it's the resync IDR)
     /// or flushes the depacketizer to wait-for-IDR. Returns whether a gate was
     /// actually engaged, so the exit edge can route the single refocus IDR to
@@ -326,7 +341,7 @@ extension VideoDecoder {
     /// the gate here unblocks the watchdog; stamping the lift instant re-arms
     /// its idle floor from THIS edge, so teardown lands on the normal post-gate
     /// envelope (hard trip ≤ frameWatchdogTimeout) - no refocus required, and no
-    /// premature trip off the stale gated-span idle. `_awaitingPostGateIdr` is
+    /// premature trip off the stale gated-span idle. `_awaitingResyncIdr` is
     /// dropped too: no post-gate frame can arrive on a stopped connection.
     /// Callable from any thread (the backend's stop path) - all lock-guarded.
     nonisolated func clearDecodeGateForConnectionStop() {
@@ -336,7 +351,7 @@ extension VideoDecoder {
             _decodeGated = false
             _decodeGateLiftedAtNanos = DispatchTime.now().uptimeNanoseconds
         }
-        _awaitingPostGateIdr = false
+        _awaitingResyncIdr = false
         presentSuppressedLock.unlock()
         guard wasGated else { return }
         log.notice("Decode gate cleared on connection stop - frame watchdog owns teardown from here")
@@ -344,6 +359,16 @@ extension VideoDecoder {
         Diag.notice("decode gate cleared on connection stop - teardown watchdog unblocked", "Stream")
         // Gauge mirror of the clear edge (the liftDecodeGate discipline).
         TelemetryCounters.shared.setDecodeGated(false)
+    }
+
+    /// Connect edge (`handleStart`, which a reconnect runs too). A window still
+    /// hidden gets back what the connect-edge resets and the stop-edge gate clear
+    /// took: the suppressed gauge, gap-judging exclusion and the gate timer.
+    nonisolated func reapplySuppressionAtConnect() {
+        guard presentSuppressed else { return }
+        TelemetryCounters.shared.setPresentSuppressed(true)
+        statsCollector.setGapJudgingExcluded(true)
+        Task { @MainActor [weak self] in self?.armDecodeGateTimer() }
     }
 
     // MARK: - Proactive layer-stall observers

@@ -481,8 +481,9 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         }
         let result = sink.submitDecodeUnit(unit)
         if result == StreamProtocol.DR_NEED_IDR {
-            // Two producers share this return (VideoDecoder+Decode.swift
-            // decodeAssembledFrame): a GENUINE sustained backlog stall
+            // Three producers share this return (VideoDecoder+Decode.swift
+            // decodeAssembledFrame): a VideoToolbox decode failure (resync
+            // latch), a GENUINE sustained backlog stall
             // (reserveDecodeSlot - transient VPN bursts are absorbed by the
             // deeper in-flight bound and only a backlog that stays full while VT
             // produces no output reaches here), and the hidden-window decode
@@ -499,10 +500,10 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                 Diag.info("NativeVideo dropping pre-IDR frames until resync IDR "
                     + "(expected after decode gate; frame \(unit.frameNumber))", Self.cat)
             } else {
-                Diag.warn("NativeVideo decoder backlog stall (frame \(unit.frameNumber)) "
-                    + "- flushing to next IDR", Self.cat)
+                Diag.warn("NativeVideo decoder needs a keyframe (frame \(unit.frameNumber); "
+                    + "backlog stall or decode error) - flushing to next IDR", Self.cat)
             }
-            // Either cause needs the same recovery. moonlight's matching
+            // Every cause needs the same recovery. moonlight's matching
             // overflow path (VideoDepacketizer.c:513-532) does NOT just request
             // a wire IDR - it flushes-to-IDR: waitingForIdrFrame +
             // dropFrameState + drop everything until the next real IDR. Driving

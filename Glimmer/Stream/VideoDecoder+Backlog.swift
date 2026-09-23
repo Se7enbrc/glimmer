@@ -58,6 +58,8 @@ extension VideoDecoder {
     ///   * VT has produced NO output for the stall window (genuine VT stall) OR
     ///     backlog ≥ `maxInFlightDecodeCeiling` (memory/latency ceiling even with
     ///     absorption) → `.dropAndFlush`.
+    ///   * an IDR after `decodeStallEscalateSeconds` of VT darkness, with a full
+    ///     backlog or VT's last verdict a failure → `.reservedForStallRecreate`.
     /// The VT-output clock (`secondsSinceLastDecodedFrame`) is the principled
     /// gate: it cleanly separates "transient burst VT is working through" from
     /// "VT genuinely stopped." `consecutiveBacklogOverflow` is tracked only for
@@ -70,28 +72,49 @@ extension VideoDecoder {
     /// the count is read/written from both the receive thread (reserve) and the
     /// decode queue / VT output-callback thread (release).
     nonisolated func reserveDecodeSlot(isIDR: Bool) -> DecodeSlotDecision {
+        // The VT-draining signal: it advances on every decoded output, so a
+        // small value means VT is retiring frames. Floored at the gate-lift
+        // edge so a long hidden span never reads as a wedge.
+        let vtDark = min(secondsSinceLastDecodedFrame(), secondsSinceDecodeGateLifted())
         inFlightDecodeLock.lock()
         let backlog = inFlightDecodes
+        let overBound = backlog >= maxInFlightDecodes
+
+        // STALL ESCALATION (see `.reservedForStallRecreate`): an IDR after VT has
+        // produced nothing for the escalation window, with a full backlog or VT's
+        // own failure verdict (a dead session frees every slot), recreates it.
+        if isIDR, overBound || lastVtDecodeFailed,
+           vtDark >= VideoDecoder.decodeStallEscalateSeconds {
+            inFlightDecodes = 1
+            consecutiveBacklogOverflow = 0
+            lastVtDecodeFailed = false
+            inFlightDecodeLock.unlock()
+            log.error(
+                // swiftlint:disable:next line_length
+                "Decode stall ESCALATION (\(backlog) in flight, VT dark \(String(format: "%.1f", vtDark))s) - abandoning wedged session, forcing recreate with this IDR")
+            Diag.error("Video decode produced nothing for \(String(format: "%.1f", vtDark))s "
+                + "(\(backlog) frames in flight) - rebuilding the decode session in "
+                + "place with the arriving IDR", "Stream")
+            OSSignposter.decode.emitEvent(
+                "DecodeStallRecreate", "backlog=\(backlog, privacy: .public)")
+            return .reservedForStallRecreate
+        }
 
         // Common case: under the nominal bound. Reserve and clear any streak.
-        if backlog < maxInFlightDecodes {
+        if !overBound {
             inFlightDecodes += 1
             consecutiveBacklogOverflow = 0
             inFlightDecodeLock.unlock()
             return .reserved
         }
 
-        // At/over the nominal bound - a burst is building. Decide absorb vs
-        // flush. `secondsSinceLastDecodedFrame()` is the VT-draining signal: it
-        // advances on every VT output callback, so a small value means VT is
-        // actively retiring frames (a transient burst it will drain), while a
-        // value past the stall window means VT has genuinely stopped producing.
-        let vtDark = secondsSinceLastDecodedFrame()
+        // At/over the nominal bound - a burst is building. Absorb it while VT
+        // is draining and we're under the hard ceiling; otherwise VT has
+        // genuinely stopped producing.
         let vtDraining = vtDark < VideoDecoder.decodeStallWindowSeconds
         let underCeiling = backlog < maxInFlightDecodeCeiling
         consecutiveBacklogOverflow += 1
 
-        // Absorb the burst while VT is draining and we're under the hard ceiling.
         if vtDraining, underCeiling {
             inFlightDecodes += 1
             let depth = inFlightDecodes
@@ -99,31 +122,6 @@ extension VideoDecoder {
             OSSignposter.decode.emitEvent(
                 "BacklogBurstAbsorbed", "depth=\(depth, privacy: .public)")
             return .reserved
-        }
-
-        // STALL ESCALATION - see `DecodeSlotDecision.reservedForStallRecreate`.
-        // An IDR during a stall SUSTAINED past the escalation window is the
-        // cure, not another casualty: abandon the wedged session's slots (the
-        // `handleCleanup` reset discipline; `releaseInFlightDecode` floors at
-        // 0, so a late callback from the doomed session cannot underflow -
-        // worst case it eats this IDR's slot early, briefly loosening a
-        // protective bound) and reserve this frame to drive a FORCED session
-        // recreate. The window is well past `decodeStallWindowSeconds`, so a
-        // burst VT is merely slow to drain never triggers a recreate - only a
-        // VT that has produced nothing across many IDR round-trips.
-        if isIDR, vtDark >= VideoDecoder.decodeStallEscalateSeconds {
-            inFlightDecodes = 1
-            consecutiveBacklogOverflow = 0
-            inFlightDecodeLock.unlock()
-            log.error(
-                // swiftlint:disable:next line_length
-                "Decode stall ESCALATION (\(backlog) in flight, VT dark \(String(format: "%.1f", vtDark))s) - abandoning wedged session, forcing recreate with this IDR")
-            Diag.error("Video decode stalled \(String(format: "%.1f", vtDark))s with "
-                + "\(backlog) frames wedged in VT - rebuilding the decode session in "
-                + "place with the arriving IDR", "Stream")
-            OSSignposter.decode.emitEvent(
-                "DecodeStallRecreate", "backlog=\(backlog, privacy: .public)")
-            return .reservedForStallRecreate
         }
 
         // Genuine sustained stall (VT not draining, or hit the ceiling). Drop +
@@ -140,15 +138,24 @@ extension VideoDecoder {
         return .dropAndFlush
     }
 
-    /// Decrement the in-flight-decode backlog counter by one. Called exactly
-    /// once per reserved frame: from the VT output callback when VT retires an
-    /// accepted frame, or from an abandon path when the frame never reaches (or
-    /// is rejected by) VT. Lock-guarded because the increment happens on the
-    /// receive thread / decode queue while the success-path decrement happens on
-    /// VT's internal output-callback thread.
-    nonisolated func releaseInFlightDecode() {
+    /// Retire one reserved frame (VT output callback or an abandon path), flooring
+    /// at 0 so a late callback from a session the escalation abandoned can't
+    /// underflow. `vtFailed` records VT's verdict when this retire carries one.
+    nonisolated func releaseInFlightDecode(vtFailed: Bool? = nil) {
         inFlightDecodeLock.lock()
         if inFlightDecodes > 0 { inFlightDecodes -= 1 }
+        if let vtFailed { lastVtDecodeFailed = vtFailed }
         inFlightDecodeLock.unlock()
+    }
+
+    /// VT failed a frame fed under `epoch` (callback error, no image, or an
+    /// inline reject): arm the resync so the next non-IDR frame flushes the
+    /// depacketizer to wait-for-IDR. Moot once stopped (teardown flushes VT).
+    nonisolated func noteVtDecodeFailure(epoch: UInt, status: OSStatus) {
+        guard isStreaming, armResyncAfterDecodeError(epoch: epoch) else { return }
+        log.error("VideoToolbox decode failed (status \(status)) - resyncing to the next IDR")
+        Diag.warn("Video decode failed (VideoToolbox status \(status)) - resyncing to the next keyframe",
+                  "Stream")
+        OSSignposter.decode.emitEvent("IDRRequested", "trigger=vt_decode_failed")
     }
 }

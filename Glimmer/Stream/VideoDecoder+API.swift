@@ -12,6 +12,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
+import Synchronization
 import VideoToolbox
 import os
 
@@ -41,8 +42,9 @@ extension VideoDecoder {
         if streamFps > 0 {
             snap.hostFps = Double(streamFps)
         }
-        if negotiatedBitrateKbps > 0 {
-            snap.negotiatedBitrateMbps = Double(negotiatedBitrateKbps) / 1000.0
+        let kbps = negotiatedBitrateKbps.load(ordering: .relaxed)
+        if kbps > 0 {
+            snap.negotiatedBitrateMbps = Double(kbps) / 1000.0
         }
         // Renderer drops are tracked but not zeroed inside the snapshot's
         // sliding window (drops are session-cumulative, not per-tick); read
@@ -71,12 +73,11 @@ extension VideoDecoder {
         return snap
     }
 
-    /// Stash the negotiated bitrate so `statsSnapshot()` can surface it
-    /// alongside the measured bitrate. Called by `StreamSession.start` right
-    /// after it builds the `STREAM_CONFIGURATION`. Optional - if the caller
-    /// never sets it, the overlay just shows the measured value.
-    public func setNegotiatedBitrateKbps(_ kbps: Int) {
-        negotiatedBitrateKbps = kbps
+    /// Stash the negotiated bitrate for the overlay and telemetry. Set by
+    /// `StreamSession.start`; nonisolated so a renegotiating reconnect can update
+    /// it from any thread. Unset, the overlay shows only the measured value.
+    public nonisolated func setNegotiatedBitrateKbps(_ kbps: Int) {
+        negotiatedBitrateKbps.store(kbps, ordering: .relaxed)
     }
 
     /// Stash the live audio-config label so `statsSnapshot()` can surface
@@ -153,12 +154,10 @@ extension VideoDecoder {
     public nonisolated func telemetryStatsSnapshot() -> StreamStatsSnapshot {
         var snap = statsCollector.snapshot()
         // Surface the negotiated bitrate ceiling so the exporter can publish the
-        // goodput-vs-ceiling (P1) signal. The MainActor `statsSnapshot()` augments
-        // this for the overlay; the telemetry path is nonisolated, so we read the
-        // session-constant slot directly (set once at session start, then read-only
-        // - `nonisolated(unsafe)` for exactly this cross-thread read).
-        if negotiatedBitrateKbps > 0 {
-            snap.negotiatedBitrateMbps = Double(negotiatedBitrateKbps) / 1000.0
+        // goodput-vs-ceiling (P1) signal; the atomic makes this off-main read safe.
+        let kbps = negotiatedBitrateKbps.load(ordering: .relaxed)
+        if kbps > 0 {
+            snap.negotiatedBitrateMbps = Double(kbps) / 1000.0
         }
         return snap
     }
@@ -236,7 +235,7 @@ extension VideoDecoder {
         cancelDecodeGateTimer()
         presentSuppressedLock.lock()
         _decodeGated = false
-        _awaitingPostGateIdr = false
+        _awaitingResyncIdr = false
         presentSuppressedLock.unlock()
 
         // Stop the frame pacer FIRST: invalidate its CADisplayLink and drain

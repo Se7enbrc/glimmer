@@ -79,6 +79,7 @@ extension VideoDecoder {
         Task { @MainActor [weak self] in
             self?.configureLayerColorspace()
         }
+        reapplySuppressionAtConnect()
     }
 
     nonisolated func handleStop() {
@@ -112,6 +113,7 @@ extension VideoDecoder {
             // holding - which invalidate above just discarded.
             self.inFlightDecodeLock.lock()
             self.inFlightDecodes = 0
+            self.lastVtDecodeFailed = false
             self.inFlightDecodeLock.unlock()
         }
     }
@@ -132,6 +134,9 @@ extension VideoDecoder {
         let isIDR: Bool
         let rtpTimestamp: UInt32
         let totalLength: Int32
+        /// IDR epoch the frame was fed under; rides VT's frame refcon so a
+        /// failure can be judged stale or current (`armResyncAfterDecodeError`).
+        let epoch: UInt
         /// Stall-escalation verdict (see `reserveDecodeSlot`): the wedged VT
         /// session must be REPLACED with this IDR, bypassing the byte-equal
         /// param-set shortcut - a recovery IDR carries the SAME SPS/PPS, so
@@ -163,21 +168,15 @@ extension VideoDecoder {
     ///
     /// RETURN VALUE - with the decode now async, the synchronous return can no
     /// longer reflect VT decode success (that's known only later, in the output
-    /// callback). It returns DR_OK in the steady path. The need-IDR signal is
-    /// routed ASYNCHRONOUSLY instead, via `backend?.requestIdrFrame()`, from
-    /// every failure site that can no longer be reported through the return:
+    /// callback). It returns DR_OK in the steady path. DR_NEED_IDR (the
+    /// depacketizer's flush-to-IDR) comes from three places:
     ///   * decode-backlog SUSTAINED stall (transient bursts are absorbed; only a
     ///     genuine stall drops the new frame - see `reserveDecodeSlot`),
-    ///   * parameter-set rebuild / session-create failure,
-    ///   * sample-buffer build failure,
-    ///   * inline VTDecompressionSessionDecodeFrame rejection.
-    /// `backend?.requestIdrFrame()` is the same thread-safe IDR route the VT
-    /// output callback / renderer-failed path already use; it pushes onto the
-    /// control channel's own mutex-guarded queue, so calling it off the decode
-    /// queue is safe and never blocks the receive thread. The one exception we
-    /// keep synchronous is the backlog-stall drop itself: we additionally return
-    /// DR_NEED_IDR so the depacketizer drops its NAL state for the discarded
-    /// frame immediately, mirroring moonlight's drop-on-overflow.
+    ///   * the post-gate resync (`.resyncToIdr`),
+    ///   * a VT decode failure - the output callback or an inline reject arms
+    ///     the resync latch, and the NEXT frame returns DR_NEED_IDR.
+    /// Parameter-set rebuild / session-create and sample-build failures still
+    /// request a bare IDR via the thread-safe `backend?.requestIdrFrame()`.
     nonisolated func decodeAssembledFrame(
         pictureData: Data, newSps: Data?, newPps: Data?, newVps: Data?,
         isIDR: Bool, rtpTimestamp: UInt32, totalLength: Int32
@@ -200,9 +199,10 @@ extension VideoDecoder {
         // coalesced by the control channel with the resume edge's resync), so
         // no reference-broken P-frame can reach VT. A first post-gate frame
         // that already IS the resync IDR feeds straight through.
+        let epoch: UInt
         switch decodeGateDisposition(isIDR: isIDR) {
-        case .feed:
-            break
+        case .feed(let fedEpoch):
+            epoch = fedEpoch
         case .dropQuietly:
             return StreamProtocol.DR_OK
         case .resyncToIdr:
@@ -286,7 +286,7 @@ extension VideoDecoder {
         let pending = PendingDecode(
             pictureData: pictureData, newSps: newSps, newPps: newPps, newVps: newVps,
             needsParamRebuild: needsParamRebuild, isIDR: isIDR,
-            rtpTimestamp: rtpTimestamp, totalLength: totalLength,
+            rtpTimestamp: rtpTimestamp, totalLength: totalLength, epoch: epoch,
             forceSessionRecreate: forceSessionRecreate)
 
         decodeQueue.async { [self] in
@@ -373,10 +373,7 @@ extension VideoDecoder {
             return
         }
 
-        submitSampleToVT(
-            session: session, sample: sample,
-            isIDR: pending.isIDR, totalLength: pending.totalLength,
-            rtpTimestamp: pending.rtpTimestamp)
+        submitSampleToVT(session: session, sample: sample, pending: pending)
     }
 
     /// Apply newly-arrived parameter sets and (re)build the format description +
@@ -466,12 +463,14 @@ extension VideoDecoder {
     /// Submit one ready sample to VideoToolbox for ASYNCHRONOUS decode and book
     /// the per-frame `DecodeFrame` signpost interval. Runs on the decode queue.
     /// On an inline VT rejection the output callback will NOT fire, so this
-    /// releases the in-flight slot, closes the abandoned interval, and requests
-    /// an IDR. On success the slot is released later by the output callback.
+    /// releases the in-flight slot, closes the abandoned interval, and arms the
+    /// resync. On success the slot is released later by the output callback.
     private nonisolated func submitSampleToVT(
-        session: VTDecompressionSession, sample: CMSampleBuffer, isIDR: Bool, totalLength: Int32,
-        rtpTimestamp: UInt32
+        session: VTDecompressionSession, sample: CMSampleBuffer, pending: PendingDecode
     ) {
+        let isIDR = pending.isIDR
+        let totalLength = pending.totalLength
+        let rtpTimestamp = pending.rtpTimestamp
         // VT will hand the produced CVPixelBuffer to
         // `decompressionOutputCallback` (on a VT-internal thread).
         // _EnableAsynchronousDecompression lets VT pipeline frames
@@ -516,19 +515,19 @@ extension VideoDecoder {
             session,
             sampleBuffer: sample,
             flags: flags,
-            frameRefcon: nil,
+            frameRefcon: UnsafeMutableRawPointer(bitPattern: pending.epoch),
             infoFlagsOut: &infoFlagsOut)
 
         if decodeStatus != noErr {
             log.error("VTDecompressionSessionDecodeFrame failed: \(decodeStatus)")
             // -8969 (badDataErr) and -12909 (kVTVideoDecoderBadDataErr) mean the
-            // bitstream is hosed; request a new IDR. The output callback will
+            // bitstream is hosed. The output callback will
             // NOT fire for a synchronously-rejected submit, so release the
             // in-flight slot here and pop our pending submit timestamp so the
             // FIFO stays aligned with the output callback's pops. Credit a
             // decoder-side discard too - VT rejected the frame inline, so it
             // never reaches recordDecodeComplete and would otherwise undercount.
-            releaseInFlightDecode()
+            releaseInFlightDecode(vtFailed: true)
             statsCollector.recordDecoderDiscard()
             if let abandonedState = statsCollector.recordDecodeAbandoned() {
                 OSSignposter.decode.endInterval(
@@ -536,8 +535,9 @@ extension VideoDecoder {
                     abandonedState,
                     "outcome=abandoned status=\(decodeStatus, privacy: .public)")
             }
-            OSSignposter.decode.emitEvent("IDRRequested", "trigger=vt_decode_rejected")
-            backend?.requestIdrFrame()
+            // The frame never decoded, so later P-frames would reference a hole:
+            // resync through the depacketizer's wait-for-IDR, not a bare request.
+            noteVtDecodeFailure(epoch: pending.epoch, status: decodeStatus)
         }
     }
 
