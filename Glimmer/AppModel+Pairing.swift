@@ -55,7 +55,7 @@ extension AppModel {
     /// One launchable app captured from the host's /applist right after pairing.
     /// A small named struct instead of a 4-field tuple; passed straight through
     /// to `saveHost`.
-    struct PairedApp {
+    struct PairedApp: Equatable {
         let id: Int
         let name: String
         let hdr: Bool

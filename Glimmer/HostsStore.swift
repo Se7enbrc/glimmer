@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import Network
 import os.log
 
 extension AppModel {
@@ -95,8 +96,8 @@ extension AppModel {
         var loaded: [Host] = []
         for i in 1...count {
             let hostname = defaults.string(forKey: "hosts.\(i).hostname") ?? ""
-            let appsCount = defaults.integer(forKey: "hosts.\(i).apps.size")
-            guard appsCount > 0, !hostname.isEmpty else { continue }
+            let stored = Self.readApps(prefix: "hosts.\(i)", defaults: defaults)
+            guard !stored.isEmpty, !hostname.isEmpty else { continue }
 
             let uuid = defaults.string(forKey: "hosts.\(i).uuid") ?? hostname
             let hasCustom = defaults.bool(forKey: "hosts.\(i).customname")
@@ -104,15 +105,7 @@ extension AppModel {
             let local = defaults.string(forKey: "hosts.\(i).localaddress")
             let manual = defaults.string(forKey: "hosts.\(i).manualaddress")
 
-            var apps: [LibraryApp] = []
-            for j in 1...appsCount {
-                let appName = defaults.string(forKey: "hosts.\(i).apps.\(j).name") ?? "Untitled"
-                let appId = defaults.integer(forKey: "hosts.\(i).apps.\(j).id")
-                let hdr = defaults.bool(forKey: "hosts.\(i).apps.\(j).hdr")
-                let hidden = defaults.bool(forKey: "hosts.\(i).apps.\(j).hidden")
-                if hidden { continue }
-                apps.append(LibraryApp(id: appId, name: appName, hdr: hdr, hidden: hidden))
-            }
+            let apps = stored.filter { !$0.hidden }.map { LibraryApp(id: $0.id, name: $0.name, hdr: $0.hdr, hidden: false) }
 
             let lastKey = "glimmer.lastConnected.\(uuid)"
             let last = defaults.object(forKey: lastKey) as? Date
@@ -164,7 +157,7 @@ extension AppModel {
 
     /// Find the `hosts.N` slot index for a host id (uuid, hostname fallback) -
     /// the shared lookup renameHost pioneered. 0 = no match.
-    private func hostSlot(for hostID: String, defaults: UserDefaults) -> Int {
+    nonisolated private static func hostSlot(for hostID: String, defaults: UserDefaults) -> Int {
         let count = defaults.integer(forKey: "hosts.size")
         guard count > 0 else { return 0 }
         for i in 1...count {
@@ -175,20 +168,20 @@ extension AppModel {
         return 0
     }
 
-    /// Backfill/refresh a host's MAC from a successful /serverinfo. Zeroed or
-    /// empty MACs are rejected so a bad refresh never clobbers a real one.
     func setWakeOnLAN(_ host: Host, enabled: Bool) {
         let defaults = UserDefaults.standard
-        let slot = hostSlot(for: host.id, defaults: defaults)
+        let slot = Self.hostSlot(for: host.id, defaults: defaults)
         guard slot > 0 else { return }
         defaults.set(enabled, forKey: "hosts.\(slot).wol")
         loadHosts()
     }
 
+    /// Backfill/refresh a host's MAC from a successful /serverinfo. Zeroed or
+    /// empty MACs are rejected so a bad refresh never clobbers a real one.
     func updateHostMac(hostID: String, mac: String?) {
         guard let normalized = WakeOnLAN.normalizeMac(mac) else { return }
         let defaults = UserDefaults.standard
-        let slot = hostSlot(for: hostID, defaults: defaults)
+        let slot = Self.hostSlot(for: hostID, defaults: defaults)
         guard slot > 0 else { return }
         let key = "hosts.\(slot).mac"
         guard defaults.string(forKey: key) != normalized else { return }
@@ -259,7 +252,7 @@ extension AppModel {
             defaults.set(false, forKey: "\(prefix).customname")
         }
 
-        writeApps(apps, prefix: prefix, defaults: defaults)
+        Self.writeApps(apps, prefix: prefix, defaults: defaults)
 
         // Pin the cert under the canonical uuid key too (belt-and-braces; the
         // pairing flow already file-store-pins, but keep them in lockstep).
@@ -293,7 +286,7 @@ extension AppModel {
     /// Rewrite one slot's `apps.N.*` block: clear the stale higher-index
     /// entries a shorter applist would otherwise leave behind, then write the
     /// fresh list. Split out of `saveHost` for the same reason as `saveSlot`.
-    private func writeApps(_ apps: [PairedApp], prefix: String, defaults: UserDefaults) {
+    nonisolated private static func writeApps(_ apps: [PairedApp], prefix: String, defaults: UserDefaults) {
         let oldApps = defaults.integer(forKey: "\(prefix).apps.size")
         if oldApps > apps.count {
             for j in (apps.count + 1)...oldApps {
@@ -310,6 +303,92 @@ extension AppModel {
             defaults.set(app.hdr, forKey: "\(prefix).apps.\(j).hdr")
             defaults.set(app.hidden, forKey: "\(prefix).apps.\(j).hidden")
         }
+    }
+
+    /// One slot's stored apps, hidden ones included, in stored order.
+    nonisolated private static func readApps(prefix: String, defaults: UserDefaults) -> [PairedApp] {
+        let count = defaults.integer(forKey: "\(prefix).apps.size")
+        guard count > 0 else { return [] }
+        return (1...count).map { j in
+            PairedApp(id: defaults.integer(forKey: "\(prefix).apps.\(j).id"),
+                      name: defaults.string(forKey: "\(prefix).apps.\(j).name") ?? "Untitled",
+                      hdr: defaults.bool(forKey: "\(prefix).apps.\(j).hdr"),
+                      hidden: defaults.bool(forKey: "\(prefix).apps.\(j).hidden"))
+        }
+    }
+
+    /// Replace a PC's stored apps with a fresh /applist, pairing's stand-in Desktop
+    /// included. Apps hidden here stay hidden; an empty list is ignored because
+    /// `loadHosts` drops a PC with no apps. True when the stored list changed.
+    nonisolated static func storeApps(_ apps: [PairedApp], hostID: String, in defaults: UserDefaults) -> Bool {
+        let slot = hostSlot(for: hostID, defaults: defaults)
+        guard slot > 0, !apps.isEmpty else { return false }
+        let prefix = "hosts.\(slot)"
+        let old = readApps(prefix: prefix, defaults: defaults)
+        let hiddenIDs = Set(old.filter(\.hidden).map(\.id))
+        let merged = apps.map { PairedApp(id: $0.id, name: $0.name, hdr: $0.hdr, hidden: $0.hidden || hiddenIDs.contains($0.id)) }
+        guard merged != old else { return false }
+        writeApps(merged, prefix: prefix, defaults: defaults)
+        return true
+    }
+
+    /// Fetch a paired PC's /applist and store it. The chip poller calls this, and so
+    /// can anything else that needs the current list. False when the PC didn't answer.
+    @discardableResult
+    func refreshAppList(for host: Host) async -> Bool {
+        let client = NetworkClient(server: nativeServerInfo(for: host))
+        let fetched = try? await client.appList()
+        await client.shutdown()
+        guard let fetched, !fetched.isEmpty else { return false }
+        let apps = fetched.map { PairedApp(id: $0.id, name: $0.name, hdr: $0.hdrCapable, hidden: $0.hidden) }
+        if Self.storeApps(apps, hostID: host.id, in: .standard) { loadHosts() }
+        return true
+    }
+
+    /// Save the address a PC answers at after a DHCP move. Only the discovered
+    /// address changes; the one the user typed at pairing stays as entered.
+    nonisolated static func storeAddress(_ address: String, hostID: String, in defaults: UserDefaults) -> Bool {
+        let slot = hostSlot(for: hostID, defaults: defaults)
+        let key = "hosts.\(slot).localaddress"
+        guard slot > 0, defaults.string(forKey: key) != address else { return false }
+        defaults.set(address, forKey: key)
+        return true
+    }
+
+    /// A PC on a new DHCP lease still answers mDNS. Browse for up to `seconds` and save
+    /// the first IPv4 address that proves to be this PC over its pinned TLS channel
+    /// (Wake on LAN only sends over IPv4). True when the saved address changed.
+    @discardableResult
+    func healAddress(of host: Host, within seconds: Double) async -> Bool {
+        var probe = nativeServerInfo(for: host)
+        let saved = probe.address
+        guard probe.serverCertPEM != nil else { return false }
+        let discovery = HostDiscovery()
+        let results = await discovery.start()
+        let deadline = Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            await discovery.stop()
+        }
+        var moved: String?
+        // Every change to the list re-checks it, so a PC still booting gets another try.
+        search: for await found in results {
+            for address in Set(found.map(\.host)) where address != saved && IPv4Address(address) != nil {
+                probe.address = address
+                let client = NetworkClient(server: probe)
+                let answer = try? await client.fetchServerInfo()
+                await client.shutdown()
+                if answer?.uniqueId == host.id {
+                    moved = address
+                    break search
+                }
+            }
+        }
+        deadline.cancel()
+        await discovery.stop()
+        guard let moved, Self.storeAddress(moved, hostID: host.id, in: .standard) else { return false }
+        Diag.notice("\(host.displayName) answered at a new network address; saved it", "Host")
+        loadHosts()
+        return true
     }
 
     func selectHost(_ host: Host) {

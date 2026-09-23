@@ -64,18 +64,20 @@ extension AppModel {
         restartHostStatusPolling()
     }
 
-    /// Sunshine's /serverinfo every 3 s until it answers or the budget ends;
-    /// this polls the app, not the power state.
+    /// Sunshine's /serverinfo every 3 s until it answers or the budget ends; this polls
+    /// the app, not the power state. mDNS runs alongside in case the PC came back on a
+    /// new DHCP address, and each try dials the latest saved address.
     private func waitForSunshine(host: Host, budgetSeconds: Double) async -> Bool {
+        let search = Task { await healAddress(of: host, within: budgetSeconds) }
+        defer { search.cancel() }
         let deadline = Date().addingTimeInterval(budgetSeconds)
-        let info = nativeServerInfo(for: host)
         while Date() < deadline {
-            let client = NetworkClient(server: info)
+            let current = hosts.first { $0.id == host.id } ?? host
+            let client = NetworkClient(server: nativeServerInfo(for: current))
             let answered = (try? await client.fetchServerInfo()) != nil
             await client.shutdown()
             if answered { return true }
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            if Task.isCancelled { return false }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return false }
         }
         return false
     }

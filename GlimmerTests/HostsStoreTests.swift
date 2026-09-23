@@ -1,8 +1,9 @@
 //
 //  HostsStoreTests.swift
 //
-//  The paired-PC store and its poller: what a PC that replaces the selection
-//  gets, and how often it's polled.
+//  The paired-PC store and the poller's asks of it: app lists refreshed after
+//  pairing, an address healed after a DHCP move, when /applist is fetched, and
+//  what a PC that replaces the selection gets.
 //
 
 import Foundation
@@ -10,6 +11,84 @@ import Testing
 @testable import Glimmer
 
 struct HostsStoreTests {
+
+    private typealias App = AppModel.PairedApp
+    private static let desktopStandIn = App(id: 881448767, name: "Desktop", hdr: false, hidden: false)
+
+    /// A scratch domain holding one PC paired as `tower`, with `apps` stored.
+    private func pairedTower(apps: [App] = [desktopStandIn]) throws -> UserDefaults {
+        let suite = "io.ugfugl.Glimmer.tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(1, forKey: "hosts.size")
+        defaults.set("tower", forKey: "hosts.1.hostname")
+        defaults.set("TOWER-ID", forKey: "hosts.1.uuid")
+        defaults.set("192.0.2.10", forKey: "hosts.1.localaddress")
+        defaults.set("192.0.2.10", forKey: "hosts.1.manualaddress")
+        #expect(AppModel.storeApps(apps, hostID: "TOWER-ID", in: defaults))
+        return defaults
+    }
+
+    private func storedNames(_ defaults: UserDefaults) -> [String] {
+        (0..<defaults.integer(forKey: "hosts.1.apps.size")).compactMap {
+            defaults.string(forKey: "hosts.1.apps.\($0 + 1).name")
+        }
+    }
+
+    @Test func aFreshListReplacesThePairingStandIn() throws {
+        let defaults = try pairedTower()
+        let fresh = [App(id: 1, name: "Desktop", hdr: false, hidden: false),
+                     App(id: 2, name: "Steam Big Picture", hdr: true, hidden: false)]
+        #expect(AppModel.storeApps(fresh, hostID: "TOWER-ID", in: defaults))
+        #expect(storedNames(defaults) == ["Desktop", "Steam Big Picture"])
+        #expect(defaults.integer(forKey: "hosts.1.apps.1.id") == 1)
+        #expect(!AppModel.storeApps(fresh, hostID: "TOWER-ID", in: defaults))
+    }
+
+    @Test func aShorterListLeavesNoStaleApps() throws {
+        let defaults = try pairedTower(apps: [App(id: 1, name: "Desktop", hdr: false, hidden: false),
+                                              App(id: 2, name: "Old Game", hdr: false, hidden: false)])
+        #expect(AppModel.storeApps([App(id: 1, name: "Desktop", hdr: false, hidden: false)],
+                                   hostID: "TOWER-ID", in: defaults))
+        #expect(storedNames(defaults) == ["Desktop"])
+        #expect(defaults.object(forKey: "hosts.1.apps.2.name") == nil)
+    }
+
+    @Test func appsHiddenOnThisMacStayHidden() throws {
+        let defaults = try pairedTower(apps: [App(id: 1, name: "Desktop", hdr: false, hidden: true)])
+        #expect(AppModel.storeApps([App(id: 1, name: "Desktop", hdr: false, hidden: false),
+                                    App(id: 2, name: "Elden Ring", hdr: true, hidden: false)],
+                                   hostID: "TOWER-ID", in: defaults))
+        #expect(defaults.bool(forKey: "hosts.1.apps.1.hidden"))
+        #expect(!defaults.bool(forKey: "hosts.1.apps.2.hidden"))
+    }
+
+    @Test func anEmptyListOrUnknownPCChangesNothing() throws {
+        let defaults = try pairedTower()
+        #expect(!AppModel.storeApps([], hostID: "TOWER-ID", in: defaults))
+        #expect(!AppModel.storeApps([App(id: 1, name: "Desktop", hdr: false, hidden: false)],
+                                    hostID: "OTHER-ID", in: defaults))
+        #expect(storedNames(defaults) == ["Desktop"])
+        #expect(defaults.integer(forKey: "hosts.1.apps.1.id") == Self.desktopStandIn.id)
+    }
+
+    @Test func aMovedPCKeepsTheAddressTheUserTyped() throws {
+        let defaults = try pairedTower()
+        #expect(AppModel.storeAddress("192.0.2.77", hostID: "TOWER-ID", in: defaults))
+        #expect(defaults.string(forKey: "hosts.1.localaddress") == "192.0.2.77")
+        #expect(defaults.string(forKey: "hosts.1.manualaddress") == "192.0.2.10")
+        #expect(!AppModel.storeAddress("192.0.2.77", hostID: "TOWER-ID", in: defaults))
+        #expect(!AppModel.storeAddress("192.0.2.99", hostID: "OTHER-ID", in: defaults))
+    }
+
+    @Test func appListIsFetchedOncePerLoopAndForUnknownApps() {
+        #expect(AppModel.needsAppList(runningID: 0, known: [1], fetchedFor: nil))
+        #expect(!AppModel.needsAppList(runningID: 0, known: [1], fetchedFor: 0))
+        #expect(!AppModel.needsAppList(runningID: 1, known: [1], fetchedFor: 0))
+        #expect(AppModel.needsAppList(runningID: 7, known: [1], fetchedFor: 0))
+        // Still unknown after its fetch (hidden here, say): don't ask again every poll.
+        #expect(!AppModel.needsAppList(runningID: 7, known: [1], fetchedFor: 7))
+    }
 
     @MainActor @Test func theClosedLauncherPollStaysFresh() {
         let tolerance: TimeInterval = 2, probeTimeout: TimeInterval = 2
