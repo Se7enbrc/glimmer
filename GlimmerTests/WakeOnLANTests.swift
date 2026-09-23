@@ -37,12 +37,21 @@ struct WakeOnLANTests {
         #expect(WakeOnLAN.magicPacket(mac: "00:00:00:00:00:00") == nil)
     }
 
-    @Test func targetsCoverBroadcastsThenTheHostOnBothPorts() {
+    @Test func targetsCoverBroadcastsThenThePCWithSunshinesPortsToo() {
         let targets = WakeOnLAN.targets(
             hostAddresses: ["192.168.1.50", nil, " tower.local ", "192.168.1.50"],
             broadcasts: ["192.168.1.255", "255.255.255.255"])
-        #expect(targets.map(\.host) == ["255.255.255.255", "255.255.255.255", "192.168.1.255", "192.168.1.255",
-                                        "192.168.1.50", "192.168.1.50", "tower.local", "tower.local"])
-        #expect(Set(targets.map(\.port)) == [9, 47009])
+        #expect(targets.map(\.host) == ["255.255.255.255", "192.168.1.255", "192.168.1.50", "tower.local"])
+        #expect(targets[0].ports == [9, 47009])
+        #expect(targets[1].ports == [9, 47009])
+        for target in targets.dropFirst(2) {
+            #expect(target.ports == [9, 47009, 47998, 47999, 48000, 48002, 48010])
+        }
+    }
+
+    @Test func aPCAddressThatIsABroadcastGetsOnlyTheWakePorts() {
+        let targets = WakeOnLAN.targets(hostAddresses: ["255.255.255.255"], broadcasts: [])
+        #expect(targets.count == 1)
+        #expect(targets[0].ports == [9, 47009])
     }
 }
