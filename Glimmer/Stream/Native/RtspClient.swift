@@ -53,9 +53,8 @@ struct RtspHandshakeResult {
     /// Whether ANNOUNCE asks for the high tier that `opusConfig` describes.
     var highQualityAudio = true
 
-    /// Stereo default OPUS_MULTISTREAM config - the single source the struct
-    /// default and the fast-start audio ping (constructed mid-handshake, before
-    /// opus is otherwise referenced) both use.
+    /// Stereo Opus layout: the handshake default and the base every
+    /// `SdpScan.audioLayout` result is built from.
     static let defaultOpusConfig = OpusConfig(
         sampleRate: 48000, channelCount: 2, streams: 1, coupledStreams: 1,
         samplesPerFrame: 240, mapping: [0, 1])
