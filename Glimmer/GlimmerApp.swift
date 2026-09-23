@@ -228,11 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Diag.notice("app launching - Glimmer \(version) (\(build)) commit \(BuildInfo.commit) "
             + "built \(BuildInfo.date) (launchedAtLogin=\(launchedAtLogin))", "Launch")
 
-        // Defaults registration deliberately does NOT happen here: it has to run
-        // before AppModel reads its keys, which is GlimmerApp.init() - one
-        // initializer earlier than this delegate callback. See
-        // `GlimmerApp.registerDefaults()`.
-        //
+        // Defaults are registered in GlimmerApp.init (`prepareDefaults()`), one
+        // initializer before this callback, because AppModel reads them on creation.
+
         // Crash recovery: if a prior session died mid-stream with the pointer
         // acceleration linearized, restore the user's saved value now (no-op in
         // the clean case). Runs before any window/stream can re-engage capture.
@@ -255,10 +253,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Login-launched? Start as `.accessory` so the Dock icon never
-        // appears alongside an invisible window. didBecomeKey on a
-        // subsequent user-triggered window open flips us back to
-        // `.regular` via the recheck observer.
+        // Login-launched: start as `.accessory` so no Dock icon shows beside an
+        // invisible window; a window the user opens later flips it back (recheck below).
         if launchedAtLogin {
             NSApp.setActivationPolicy(.accessory)
             Diag.info("login launch → activation policy .accessory (menu-bar only)", "Launch")
@@ -284,11 +280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     #if canImport(Sparkle)
-    /// Check for updates on every user-initiated open, in addition to Sparkle's
-    /// daily scheduled check - a cold start should surface a newer release right
-    /// away instead of waiting up to a day. `checkForUpdatesInBackground` is
-    /// silent unless an update is actually available. Skipped on login launches
-    /// (the user didn't open it; the daily scheduled check covers that session).
+    /// Check for updates on every open the user makes, on top of Sparkle's daily check,
+    /// so a cold start surfaces a newer release at once; silent unless there is one.
+    /// Skipped on login launches, which the daily check covers.
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !launchedAtLogin else { return }
         // Sparkle's own scheduled check may already be running; asking again
