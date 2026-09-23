@@ -114,6 +114,7 @@
 		D1000022 /* VideoDepacketizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000021 /* VideoDepacketizer.swift */; };
 		D1000024 /* RtpVideoQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000023 /* RtpVideoQueue.swift */; };
 		D1000026 /* VideoRtpReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000025 /* VideoRtpReceiver.swift */; };
+		DEC0DE202609221900000008 /* VideoRtpReceiver+Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */; };
 		D1000028 /* UdpPinger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000027 /* UdpPinger.swift */; };
 		D1B00006 /* StreamSession+Downshift.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B00005 /* StreamSession+Downshift.swift */; };
 		D1B00004 /* BitrateDownshiftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B00003 /* BitrateDownshiftController.swift */; };
@@ -301,6 +302,7 @@
 		DEC0DE202609221900000002 /* SessionReceiptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000001 /* SessionReceiptTests.swift */; };
 		DEC0DE202609221900000004 /* AudioVideoSkewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */; };
 		DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */; };
+		DEC0DE202609221900000010 /* VideoRecoveryEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */; };
 		DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */; };
 		DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000DA /* WiredBitrateTests.swift */; };
 		DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */; };
@@ -466,6 +468,7 @@
 		D1000021 /* VideoDepacketizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoDepacketizer.swift; sourceTree = "<group>"; };
 		D1000023 /* RtpVideoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpVideoQueue.swift; sourceTree = "<group>"; };
 		D1000025 /* VideoRtpReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoRtpReceiver.swift; sourceTree = "<group>"; };
+		DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/VideoRtpReceiver+Recovery.swift"; sourceTree = "<group>"; };
 		D1000027 /* UdpPinger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/UdpPinger.swift; sourceTree = "<group>"; };
 		D1B00005 /* StreamSession+Downshift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Downshift.swift"; sourceTree = "<group>"; };
 		D1B00003 /* BitrateDownshiftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/BitrateDownshiftController.swift; sourceTree = "<group>"; };
@@ -654,6 +657,7 @@
 		DEC0DE202609221900000001 /* SessionReceiptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReceiptTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioVideoSkewTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryConfigRowTests.swift; sourceTree = "<group>"; };
+		DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoRecoveryEventTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MiniPlayerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000DA /* WiredBitrateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WiredBitrateTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollQuantizerTests.swift"; sourceTree = "<group>"; };
@@ -943,6 +947,7 @@
 				D1000D10 /* RtpVideoQueue+AddPacket.swift */,
 				D1000D20 /* RtpVideoQueue+Reconstruct.swift */,
 				D1000025 /* VideoRtpReceiver.swift */,
+				DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */,
 				D1000027 /* UdpPinger.swift */,
 				D1B00005 /* StreamSession+Downshift.swift */,
 				D1B00003 /* BitrateDownshiftController.swift */,
@@ -1063,6 +1068,7 @@
 				DEC0DE202609221900000001 /* SessionReceiptTests.swift */,
 				DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */,
 				DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */,
+				DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */,
 				DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */,
 				DEC0DE2026092000000000DA /* WiredBitrateTests.swift */,
 				DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */,
@@ -1401,6 +1407,7 @@
 				D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */,
 				D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */,
 				D1000026 /* VideoRtpReceiver.swift in Sources */,
+				DEC0DE202609221900000008 /* VideoRtpReceiver+Recovery.swift in Sources */,
 				D1000028 /* UdpPinger.swift in Sources */,
 				D1B00006 /* StreamSession+Downshift.swift in Sources */,
 				D1B00004 /* BitrateDownshiftController.swift in Sources */,
@@ -1511,6 +1518,7 @@
 				DEC0DE202609221900000002 /* SessionReceiptTests.swift in Sources */,
 				DEC0DE202609221900000004 /* AudioVideoSkewTests.swift in Sources */,
 				DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */,
+				DEC0DE202609221900000010 /* VideoRecoveryEventTests.swift in Sources */,
 				DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */,
 				DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */,
 				DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */,

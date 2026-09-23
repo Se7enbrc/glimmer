@@ -112,6 +112,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// deliver→enqueue age `inputLocalLatency` can't see - it starts at enqueue).
     /// Same self-locked Stage; observed off the present path. Measurement only.
     let inputDeliverLatency = LatencyHistograms.Stage()
+    /// RFI loss episodes: first loss detected → the frame that ended it, once per
+    /// episode on the video receive thread (see VideoLossEpisode).
+    let rfiRecoveryMs = LatencyHistograms.Stage(bounds: LatencyHistograms.Stage.glassToGlassBoundsMs)
 
     /// PIPELINE CADENCE (clump forensics): inter-arrival between CONSECUTIVE
     /// frames at three boundaries - receive (last packet), assemble

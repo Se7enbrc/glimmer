@@ -47,7 +47,7 @@ struct SessionReport {
     let aggregate: SessionAggregate
     let histograms: LatencyHistogramSnapshot?
     let counters: TelemetryCounters
-    /// Stages kept outside the per-tick snapshot (the client input legs), so
+    /// Stages kept outside the per-tick snapshot (input legs, RFI recovery), so
     /// they have no active-seconds form and ride `latency_raw` only.
     var sessionWideStages: [(String, LatencyHistogramSnapshot.Stage)] = []
 

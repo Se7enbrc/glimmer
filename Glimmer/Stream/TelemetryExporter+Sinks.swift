@@ -51,7 +51,8 @@ extension TelemetryExporter {
             counters: counters,
             sessionWideStages: tracker.map { [
                 ("input_deliver", $0.inputDeliverLatency.snapshotValue()),
-                ("input_queue_to_wire", $0.inputLocalLatency.snapshotValue())
+                ("input_queue_to_wire", $0.inputLocalLatency.snapshotValue()),
+                ("rfi_recovery", $0.rfiRecoveryMs.snapshotValue())
             ] } ?? [])
         let json = report.renderJSON()
         let reportURL = ndjsonURL
@@ -99,7 +100,7 @@ extension TelemetryExporter {
         }
     }
 
-    // MARK: - Engine EVENT sink (audio_ttf / audio_pending)
+    // MARK: - Engine EVENT sink (audio_ttf / audio_pending / loss_episode / video_gap)
 
     /// Process-global handle for EVENT rows from engine components that have no
     /// Engine EVENT sink: installed by `start()`, cleared by `stop()`, read by
@@ -162,11 +163,23 @@ extension TelemetryExporter {
             preStartEvents.append(fields)
             return
         }
-        exporter.workQueue.async { [weak exporter] in
-            guard let exporter else { return }
-            let header = "\"ts\":\"\(exporter.isoFormatter.string(from: Date()))\","
-                + "\"session\":\"\(exporter.sessionId)\","
-            exporter.appendNDJSON("{" + header + fields.joined(separator: ",") + "}")
+        exporter.writeEvent(fields)
+    }
+
+    /// Mid-stream EVENT rows (loss episodes, gaps, key frames): built and written
+    /// only while an exporter is live, never buffered, so with telemetry off the
+    /// caller pays one lock and no formatting.
+    static func recordLiveEvent(_ fields: @autoclosure () -> [String]) {
+        guard let exporter = eventSinkBox.withLock({ $0 }) else { return }
+        exporter.writeEvent(fields())
+    }
+
+    private func writeEvent(_ fields: [String]) {
+        workQueue.async { [weak self] in
+            guard let self else { return }
+            let header = "\"ts\":\"\(self.isoFormatter.string(from: Date()))\","
+                + "\"session\":\"\(self.sessionId)\","
+            self.appendNDJSON("{" + header + fields.joined(separator: ",") + "}")
         }
     }
 

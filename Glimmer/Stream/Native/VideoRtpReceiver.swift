@@ -37,7 +37,7 @@ import Network
 import Darwin
 
 final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
-    private static let cat = "NativeVideo"
+    static let cat = "NativeVideo"
 
     private let host: NWEndpoint.Host
     private let videoPort: UInt16
@@ -53,7 +53,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     private let requestIdr: () -> Void
     /// Called when the depacketizer detects frame loss (RFI window). Wired to
     /// the ENet control loop by NativeBackend.
-    private let invalidateReferenceFrames: (_ from: Int, _ to: Int) -> Void
+    let invalidateReferenceFrames: (_ from: Int, _ to: Int) -> Void
     /// Called per-frame as FEC blocks complete-with-recovery or are abandoned
     /// (= moonlight's connectionSendFrameFecStatus). Wired to the ENet control
     /// loop's bounded FEC-status queue by NativeBackend. Best-effort.
@@ -84,6 +84,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     // Diagnostics latches.
     private var loggedFirstPacket = false
     private var pingCount: UInt32 = 0
+    /// The open RFI loss episode, if any (receive thread only; +Recovery).
+    var lossEpisode = VideoLossEpisode()
 
     // SS_ENC_VIDEO bit (Limelight: ENCFLG_VIDEO maps to SS_ENC_VIDEO on the
     // EncryptionFeaturesEnabled bitmask). For our SDP this is 0 → plaintext.
@@ -444,6 +446,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     func depacketizerDidAssembleFrame(_ unit: DecodeUnit) {
         guard let sink else { return }
+        let isIDR = unit.frameType == StreamProtocol.FRAME_TYPE_IDR
         // Latency telemetry (opt-in; nil = zero cost). t_receive + t_assemble are
         // both already captured upstream - `receiveTimeUs` is the frame's
         // last/first-packet arrival and `enqueueTimeUs` is the reassemble
@@ -460,25 +463,15 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                 receiveNanos: unit.receiveTimeUs &* 1000,
                 assembleNanos: unit.enqueueTimeUs &* 1000,
                 frameBytes: unit.fullLength,
-                isIDR: unit.frameType == StreamProtocol.FRAME_TYPE_IDR,
+                isIDR: isIDR,
                 // Host capture+encode latency for THIS frame, so glass-to-glass is
                 // per-frame (the host-encode leg). 1/10 ms on the wire; converted
                 // to ms inside the tracker.
                 hostEncodeTenthsMs: unit.frameHostProcessingLatency)
-            // P2 IDR/RFI ROUND-TRIP (signal: IDR-RTT): if an IDR landed while a
-            // request was outstanding, this IS the resulting frame - resolve the
-            // round-trip (request-send → arrival) into the histogram + trace.
-            // Gate-on only (the tracker exists), so this is paired with the gate-on
-            // arm in EnetControlChannel and costs nothing off. An unsolicited IDR
-            // (the host's own keyframe cadence, no request pending) resolves to nil
-            // and records nothing.
-            if unit.frameType == StreamProtocol.FRAME_TYPE_IDR,
-               let roundTripMs = TelemetryCounters.shared.p2.resolveIdrArrival(
-                    TelemetryCounters.monotonicNowNanos()) {
-                TelemetryCounters.shared.idrRoundTripMatchedTotal.increment()
-                tracker.recordIdrRoundTrip(frameIndex: unit.frameNumber, roundTripMs: roundTripMs)
-            }
+            // IDR round trip + `idr_received` (+Recovery); reads the open episode.
+            if isIDR { noteKeyFrame(unit, tracker: tracker) }
         }
+        if lossEpisode.isOpen { closeLossEpisode(at: unit, isIDR: isIDR) }
         let result = sink.submitDecodeUnit(unit)
         if result == StreamProtocol.DR_NEED_IDR {
             // Three producers share this return (VideoDecoder+Decode.swift
@@ -496,7 +489,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // into wait-for-IDR on this thread, so no further non-IDR frame can
             // reach the submit boundary until the resync IDR lands); the stall
             // keeps its WARN.
-            if isExpectedPostGateResync(isIDR: unit.frameType == StreamProtocol.FRAME_TYPE_IDR) {
+            if isExpectedPostGateResync(isIDR: isIDR) {
                 Diag.info("NativeVideo dropping pre-IDR frames until resync IDR "
                     + "(expected after decode gate; frame \(unit.frameNumber))", Self.cat)
             } else {
@@ -548,10 +541,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         (sink as? VideoDecoder)?.secondsSinceDecodeGateLifted() ?? .infinity
     }
 
-    func depacketizerDetectedFrameLoss(from: Int, to: Int) {
-        Diag.info("NativeVideo frame loss detected \(from)..\(to) → RFI", Self.cat)
-        invalidateReferenceFrames(from, to)
-    }
+    // depacketizerDetectedFrameLoss (the loss-episode bookkeeping) lives in
+    // VideoRtpReceiver+Recovery.swift.
 
     func depacketizerNeedsIdr() {
         // Inside the gate-lift resync window this is the DESIGNED refocus path

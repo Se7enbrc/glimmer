@@ -39,9 +39,8 @@ extension VideoDepacketizer {
         case 4, 5:  // intra-refresh / P-frame with RFI
             // Host recovery frame after an RFI request: accept it by clearing
             // the RFI wait so it falls through the lastPacket gate (c:872-878).
+            // The receiver logs the episode it ends once the frame assembles.
             if waitingForRefInvalFrame {
-                Diag.notice("NativeVideo post-invalidation recovery frame \(frameIndex) "
-                    + "(\(typeByte == 5 ? "P" : "I")-frame)", Self.cat)
                 waitingForRefInvalFrame = false
                 waitingForNextSuccessfulFrame = false
                 // P2 IDR/RFI ROUND-TRIP: this recovery frame resolves an RFI
