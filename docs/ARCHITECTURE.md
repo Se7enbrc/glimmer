@@ -361,11 +361,12 @@ builds silently drop multi-controller events without it). Sunshine keeps a
 paired client's virtual pads across a reconnect and ignores an arrival for a
 slot it holds, so the forwarder remembers each slot's last arrival
 (`announcedControllers`) and, when input is ready again, removes every slot
-whose pad left or changed before it replays the arrivals. State updates go
-through `sendMultiController`. Host-driven feedback comes back through
-`ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`), motion-sensor
-enable (`0x5501` - answered with `sendControllerMotion` samples), and RGB
-lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`, and
+whose pad left or changed before it replays the arrivals. An entry is cleared
+only there, since a removal sent into a link that has already died is lost.
+State updates go through `sendMultiController`. Host-driven feedback comes back
+through `ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`),
+motion-sensor enable (`0x5501` - answered with `sendControllerMotion` samples),
+and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`, and
 `ControllerBattery` own the actuator/sampler sides.
 
 **Raw-HID gamepads.** Pads GameController doesn't own reach the host through

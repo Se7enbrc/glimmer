@@ -366,10 +366,9 @@ extension InputForwarder {
                                   leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
         ) ?? -2
         record("LiSendMultiControllerEvent(removal)", rc)
-        announcedControllers[slot] = nil
     }
 
-    /// Every stream start: retire the slots whose pad left or changed while the link was down,
+    /// Every stream start: retire each slot the PC may still hold whose pad left or changed,
     /// then replay each arrival and re-push held state, which the arrival's fallback event zeroed.
     /// Removals go first so the first arrival's flush carries them ahead of any new pad.
     func announceControllers() {
@@ -378,6 +377,7 @@ extension InputForwarder {
         for state in attachedHIDControllers.values { current[state.slot] = state.arrival }
         for slot in Self.staleControllerSlots(announced: announcedControllers, current: current) {
             sendControllerRemoval(slot: slot)
+            announcedControllers[slot] = nil
         }
         for state in attachedControllers.values { sendArrival(slot: state.slot, state.arrival) }
         for state in attachedHIDControllers.values {

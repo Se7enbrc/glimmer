@@ -49,8 +49,9 @@ struct ControllerArrivalTests {
         #expect(InputForwarder.staleControllerSlots(announced: current, current: current).isEmpty)
     }
 
-    /// A pad unplugged while the link was down is retired when the stream comes back,
-    /// and one unplugged mid-stream is retired at once.
+    /// A pad unplugged while the link was down is retired when the stream comes back.
+    /// One unplugged mid-stream stays on the ledger until the next stream start, in case
+    /// its removal went into a link that had already died.
     @Test func aPadThatLeftIsRetired() throws {
         let forwarder = InputForwarder()
         defer { forwarder.detach() }
@@ -69,6 +70,9 @@ struct ControllerArrivalTests {
         forwarder.attach(gamepad: pad)
         #expect(forwarder.announcedControllers[slot] != nil)
         forwarder.detach(gamepad: pad)
+        #expect(forwarder.announcedControllers[slot] != nil)
+        forwarder.setReady(false)
+        forwarder.setReady(true)
         #expect(forwarder.announcedControllers[slot] == nil)
     }
 }

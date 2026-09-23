@@ -302,8 +302,8 @@ public final class InputForwarder {
     /// Sent to the host as `activeGamepadMask` on every controller event.
     var gamepadMask: UInt16 = 0
 
-    /// Each slot's last arrival as the PC saw it. It outlives a reconnect, as
-    /// Sunshine's virtual pads do, so the next stream start can retire stale ones.
+    /// What the PC may still hold in each slot. Only a stream start retires an entry,
+    /// since a removal sent into a link that is already dead never arrives.
     var announcedControllers: [UInt8: ControllerArrival] = [:]
 
     /// Per-slot DualSense/DualShock touchpad finger tracking, so the touchpad
