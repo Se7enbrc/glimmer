@@ -158,7 +158,7 @@ struct ReadinessChip: View {
                 .accessibilityAddTraits(chip == .certMismatch ? .isButton : [])
                 .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
 
-                // HDR-active chip: only while a stream is confirmed PQ/HLG
+                // HDR-active chip: only while a stream is confirmed PQ (HDR10)
                 // end-to-end (the static SpecChipsRow tag is just the pref).
                 // Intentionally NOT glass - a vivid status badge should pop
                 // (Apple's HIG carves badges out of the glass-everything rule).

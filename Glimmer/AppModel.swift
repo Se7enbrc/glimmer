@@ -148,7 +148,7 @@ final class AppModel {
 
     /// Effective HDR-active state from the native engine. True only when the
     /// host signalled HDR mode AND the bitstream is 10-bit AND the Metal
-    /// layer is fully configured for PQ/HLG EDR output. Drives the "HDR"
+    /// layer is fully configured for PQ (HDR10) EDR output. Drives the "HDR"
     /// chip in the stream UI.
     var nativeHDRActive: Bool = false
 

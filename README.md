@@ -16,7 +16,7 @@ process. No external player, no C engine.
 ## What you get
 
 - **Video.** Hardware-decoded H.264, HEVC, and AV1, 8- and 10-bit, with a real
-  PQ/HLG HDR pipeline. Up to 4K 240 Hz.
+  HDR10 pipeline. Up to 4K 240 Hz.
 - **Pacing.** Locks the display to the stream cadence, runs passthrough on a
   clean link, buffers only for measured jitter. Tuned against per-frame
   telemetry.

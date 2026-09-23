@@ -460,7 +460,7 @@ public enum StreamEvent: Sendable {
     case hdrModeChanged(Bool)
     /// Raised by the video decoder when the effective HDR-active state
     /// changes: host enabled HDR AND we have a 10-bit stream AND the Metal
-    /// layer is configured for PQ/HLG with EDR. This is the "show the HDR
+    /// layer is configured for PQ (HDR10) with EDR. This is the "show the HDR
     /// chip" signal.
     case hdrActive(Bool)
     /// Audio receive-start failed (H7): the session came up VIDEO-ONLY (the ping
