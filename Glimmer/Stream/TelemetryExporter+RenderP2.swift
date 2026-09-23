@@ -82,10 +82,10 @@ extension TelemetryRenderer {
     /// scrape).
     private static func promReconnectDisconnect(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         builder.emitCounter("glimmer_reconnect_total",
-                            "Reconnects this run (a connection re-established after a drop).",
+                            "Reconnects this session (a connection re-established after a drop).",
                             snap.reconnectTotal)
         builder.emitCounter("glimmer_wake_total",
-                            "Wakes from sleep this run while a stream was live.",
+                            "Wakes from sleep this session while a stream was live.",
                             snap.wakeTotal)
         builder.emitCounter("glimmer_route_change_total",
                             "Egress route/link-class changes this run (e.g. wake on a "

@@ -177,10 +177,9 @@ final class TelemetryCounters: @unchecked Sendable {
     /// re-establishes its connection in place after a drop. Per session; an
     /// in-place reconnect's own reset keeps it (`resetForReconnect`).
     let reconnectTotal = Counter()
-    /// WAKE count (signal: lifecycle): incremented each time the Mac wakes from
-    /// sleep while a stream is live. Per session like `reconnectTotal`; a climb
-    /// here that precedes a reconnect/disconnect marks the wake-on-different-AP
-    /// stale-link case.
+    /// WAKE count (signal: lifecycle): the Mac woke from sleep while a stream was live.
+    /// Per session like `reconnectTotal`; a climb before a reconnect/disconnect marks
+    /// the wake-on-different-AP stale-link case.
     let wakeTotal = Counter()
     /// ROUTE-CHANGE count (signal: lifecycle): incremented each time the stream's
     /// egress route/link-class flips (the WiFiTelemetry route-change edge that

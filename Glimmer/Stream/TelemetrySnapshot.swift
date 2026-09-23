@@ -352,9 +352,9 @@ struct TelemetrySnapshot: Sendable {
     /// explicit NDJSON EVENT line exactly once (see the exporter). nil before any
     /// stage has fired.
     var handshake: HandshakeBreakdown?
-    /// Reconnect count this run (monotonic) - a second-or-later established edge.
+    /// Reconnect count this session - connections re-established in place after a drop.
     var reconnectTotal: UInt64 = 0
-    /// Wake-from-sleep count this run (monotonic) - wakes while a stream was live.
+    /// Wake-from-sleep count this session - wakes while a stream was live.
     var wakeTotal: UInt64 = 0
     /// Route/link-class change count this run (monotonic) - the egress-route flip
     /// (e.g. wake on a different AP) the NDJSON route_change event already marks.
