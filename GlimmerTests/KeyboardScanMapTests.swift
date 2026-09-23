@@ -5,7 +5,8 @@
 //  over the carbonToVKScanCode table: Carbon kVK_* keyCode -> Windows VK_*
 //  scancode. A regression here mis-drives the host's keyboard, so we pin a
 //  representative span (letters, digits, modifiers, arrows, function keys,
-//  numpad, punctuation) plus the "unmapped returns nil" contract.
+//  numpad, punctuation, ISO and JIS keys) plus the "unmapped returns nil"
+//  contract.
 //
 
 import Carbon.HIToolbox
@@ -81,7 +82,44 @@ struct KeyboardScanMapTests {
         #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_Comma) == 0xBC)      // VK_OEM_COMMA
         #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_Minus) == 0xBD)      // VK_OEM_MINUS
         #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_Slash) == 0xBF)      // VK_OEM_2
-        #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_Grave) == 0xC0)      // VK_OEM_3
+    }
+
+    // MARK: - ISO keyboards report the key left of 1 and the one right of left Shift swapped
+
+    @Test func isoKeyboardSwapsSectionAndGrave() {
+        #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_Grave, isISOKeyboard: false) == 0xC0)   // VK_OEM_3
+        #expect(vkScanCode(forCarbonKeyCode: kVK_ISO_Section, isISOKeyboard: false) == 0xE2)  // VK_OEM_102
+        #expect(vkScanCode(forCarbonKeyCode: kVK_ISO_Section, isISOKeyboard: true) == 0xC0)
+        #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_Grave, isISOKeyboard: true) == 0xE2)
+        #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_A, isISOKeyboard: true) == 0x41)
+    }
+
+    // MARK: - PC keyboard keys macOS names differently
+
+    @Test func pcKeyboardKeysReachTheirPCKeys() {
+        #expect(vkScanCode(forCarbonKeyCode: kVK_Help) == 0x2D)            // VK_INSERT
+        #expect(vkScanCode(forCarbonKeyCode: kVK_ContextualMenu) == 0x5D)  // VK_APPS
+        #expect(vkScanCode(forCarbonKeyCode: kVK_F13) == 0x2C)             // VK_SNAPSHOT
+        #expect(vkScanCode(forCarbonKeyCode: kVK_F14) == 0x91)             // VK_SCROLL
+        #expect(vkScanCode(forCarbonKeyCode: kVK_F15) == 0x13)             // VK_PAUSE
+        #expect(vkScanCode(forCarbonKeyCode: kVK_F16) == 0x7F)             // VK_F16
+    }
+
+    // MARK: - JIS
+
+    @Test func jisKeys() {
+        let yen = VKScanCode(vk: 0xDC, flags: VKScanCode.nonNormalized)
+        #expect(vkScanCode(forCarbonKeyCode: kVK_JIS_Yen) == yen)
+        #expect(vkScanCode(forCarbonKeyCode: kVK_JIS_Underscore) == VKScanCode(vk: 0xE2, flags: VKScanCode.nonNormalized))
+        // ¥ shares VK_OEM_5 with the backslash key yet is a different PC key.
+        #expect(vkScanCode(forCarbonKeyCode: kVK_ANSI_Backslash) != yen)
+        #expect(vkScanCode(forCarbonKeyCode: kVK_JIS_KeypadComma) == 0x6C)  // VK_SEPARATOR
+        #expect(vkScanCode(forCarbonKeyCode: kVK_JIS_Eisu) == 0x1D)         // VK_NONCONVERT
+        #expect(vkScanCode(forCarbonKeyCode: kVK_JIS_Kana) == 0x1C)         // VK_CONVERT
+    }
+
+    @Test func wireCodeIsMarkedPositional() {
+        #expect(VKScanCode(vk: 0x57).wireCode == Int16(bitPattern: 0x8057))
     }
 
     // MARK: - Numpad

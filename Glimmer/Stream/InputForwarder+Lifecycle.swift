@@ -3,14 +3,15 @@
 //
 //  Session lifecycle for the input path: installing the `StreamInputView` into
 //  the stream window, promoting it to first responder once the window is
-//  actually key, tearing the whole thing down, and flipping the ready gate the
-//  native backend's `connectionStarted` callback drives. Split from
-//  InputForwarder.swift - same idiom as the ControllerForwarder split, to keep
-//  that file under the length limit; the per-event forwarding (keys, modifiers,
-//  mouse capture) stays there and in InputForwarder+Capture/+StreamView.swift.
+//  actually key, tearing the whole thing down, flipping the ready gate the
+//  native backend's `connectionStarted` callback drives, and releasing held
+//  input at those edges. Split from InputForwarder.swift - same idiom as the
+//  ControllerForwarder split, to keep that file under the length limit; the
+//  per-event forwarding (keys, modifiers, mouse capture) stays there and in
+//  InputForwarder+Capture/+StreamView.swift.
 //
 //  Split cost (the ControllerForwarder.swift note, applied here): stored
-//  properties can't live in an extension, so the state these four touch stays on
+//  properties can't live in an extension, so the state these touch stays on
 //  `InputForwarder` and relies on default `internal` access - including
 //  `isReady`, whose setter widened from `private(set)` to `internal(set)`
 //  because `detach()` and `setReady(_:)` write it from this file.
@@ -57,6 +58,8 @@ extension InputForwarder {
         window.contentView = view
         self.inputView = view
         window.acceptsMouseMovedEvents = true
+        initialConnectPending = true
+        loggedUnmappedKeyCodes = []
 
         log.info("InputForwarder attached to window; first-responder install deferred until window is key")
     }
@@ -135,6 +138,7 @@ extension InputForwarder {
         inputView = nil
         window = nil
         isReady = false
+        initialConnectPending = false
 
         // A quit-chord hold can be mid-dwell at teardown (the dwell firing is
         // itself one way the session ends) - cancel it so the timer can't
@@ -157,6 +161,11 @@ extension InputForwarder {
         if ready != was {
             log.info("Input forwarding ready=\(ready, privacy: .public)")
             if ready {
+                initialConnectPending = false
+                // A new session starts with nothing held on the PC, and a key
+                // released during the gap never sent its up: release it all.
+                raiseAllHeldInputs(reason: "reconnect")
+                lastCapsLock = NSEvent.modifierFlags.contains(.capsLock)
                 // Re-send arrival events for any already-attached controllers
                 // so the host learns about them now that the stream is up.
                 for state in attachedControllers.values {
@@ -178,5 +187,39 @@ extension InputForwarder {
                 removeDiagnosticMonitors()
             }
         }
+    }
+
+    /// Send key-up / button-release for everything we believe the host holds,
+    /// then clear the bookkeeping (modifiers included). A key still physically
+    /// held stays released until re-pressed, as in upstream clients.
+    func raiseAllHeldInputs(reason: String) {
+        let keyCount = heldKeys.count
+        let buttonCount = heldMouseButtons.count
+        if isReady {
+            for key in heldKeys {
+                let rc = backend?.sendKeyboard(
+                    keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_UP),
+                    modifiers: 0, flags: key.flags) ?? -2
+                record("LiSendKeyboardEvent2(raise-all)", rc)
+            }
+            for button in heldMouseButtons {
+                let rc = backend?.sendMouseButton(
+                    action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
+                record("LiSendMouseButtonEvent(raise-all)", rc)
+            }
+            for vk in heldModifierVKs.sorted() {
+                let rc = backend?.sendKeyboard(
+                    keyCode: VKScanCode(vk: vk).wireCode,
+                    action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
+                record("LiSendKeyboardEvent2(modifier release)", rc)
+            }
+            if keyCount + buttonCount > 0 {
+                Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
+                    + "mouse button(s) on \(reason)", "Stream")
+            }
+        }
+        heldKeys.removeAll()
+        heldMouseButtons.removeAll()
+        heldModifierVKs.removeAll()
     }
 }

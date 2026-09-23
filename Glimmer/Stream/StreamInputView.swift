@@ -16,7 +16,7 @@ import AppKit
 /// confined to the view layer and InputForwarder to the C-bridge layer.
 @MainActor
 protocol StreamInputViewDelegate: AnyObject {
-    func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) -> Bool
+    func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent)
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent)
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent)
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent)
@@ -158,7 +158,7 @@ final class StreamInputView: NSView {
         // The delegate forwards the key, or drops a ⌘ chord left with the Mac
         // that no menu item took (super would only beep). moonlight instead
         // forwards such chords to the PC without the Win modifier.
-        _ = delegate?.streamView(self, handleKeyDown: event)
+        delegate?.streamView(self, handleKeyDown: event)
     }
 
     override func keyUp(with event: NSEvent) {

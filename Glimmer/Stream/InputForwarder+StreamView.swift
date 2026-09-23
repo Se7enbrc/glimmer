@@ -20,17 +20,15 @@ import os.log
 // below.
 
 extension InputForwarder: StreamInputViewDelegate {
-    func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) -> Bool {
+    func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-        // Quit hotkey on key-down only. Don't forward. This check happens
-        // BEFORE the sys-key capture gate so a Cmd-bearing quit hotkey (the
-        // default ⌃⌘Q) keeps working even when capture is off - that's an
-        // intentional Glimmer-level intercept, not a forward to the host.
+        // Quit hotkey, key-down only and never forwarded. Checked before the
+        // ⌘ gate so a custom chord with ⌘ still quits while ⌘ is the Mac's.
         if !event.isARepeat, quitHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Quit hotkey detected - invoking onQuitHotkey")
             onQuitHotkey?()
-            return true
+            return
         }
 
         // Stats-overlay hotkey. Same intercept story as the quit hotkey:
@@ -41,7 +39,7 @@ extension InputForwarder: StreamInputViewDelegate {
         if !event.isARepeat, statsHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Stats hotkey detected - invoking onStatsHotkey")
             onStatsHotkey?()
-            return true
+            return
         }
 
         // Telemetry-bookmark chord (signal 4 - "that felt bad"). CLIENT-ONLY:
@@ -62,7 +60,7 @@ extension InputForwarder: StreamInputViewDelegate {
            bookmarkHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Bookmark hotkey detected - invoking onBookmarkHotkey")
             onBookmarkHotkey?()
-            return true
+            return
         }
 
         // Pointer chord - WINDOW MODE ONLY, and a TOGGLE: it captures a free
@@ -76,7 +74,7 @@ extension InputForwarder: StreamInputViewDelegate {
            releasePointerHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Pointer hotkey detected - toggling capture")
             togglePointerCapture(reason: "pointer chord")
-            return true
+            return
         }
 
         // Mini player chord: the same client-only intercept as quit/stats,
@@ -84,13 +82,23 @@ extension InputForwarder: StreamInputViewDelegate {
         if !event.isARepeat, miniPlayerHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Mini player hotkey detected - toggling")
             onMiniPlayerHotkey?()
-            return true
+            return
+        }
+
+        // Until the first connection is live the invisible stream window holds
+        // key focus, so a bare Esc cancels the connect as the launcher's would.
+        // From then on Esc is game input, reconnects included.
+        if initialConnectPending, !event.isARepeat, Int(event.keyCode) == kVK_Escape,
+           mods.isDisjoint(with: [.command, .option, .control, .shift]) {
+            log.info("Esc before the stream went live - cancelling the connect")
+            onQuitHotkey?()
+            return
         }
 
         // Paste chord (moonlight's ⌃⌥⇧V): types the Mac clipboard into the PC.
         if !event.isARepeat, PasteText.chord.matches(event: event, modifiers: mods) {
             pasteClipboardAsText()
-            return true
+            return
         }
 
         // Hold Esc to free the pointer (window mode, captured only). NOT
@@ -99,64 +107,23 @@ extension InputForwarder: StreamInputViewDelegate {
         // latency. Only a ~1s hold releases; see InputForwarder+EscapeHold.
         noteEscapeKeyDown(event)
 
-        // macOS Accessibility Zoom keyboard shortcuts. These are pure OS
-        // chords with no in-game meaning - if the user accidentally hits one
-        // mid-fight (especially ⌥⌘8, which is right next to ⌥⌘9 and ⌥⌘0 that
-        // many games bind to ability slots), macOS slams a full-screen zoom
-        // on top of the stream. Swallow them BEFORE the sys-keys gate so
-        // they're consumed regardless of `captureSysKeys`. Returning `true`
-        // from this delegate makes StreamInputView.keyDown skip the
-        // `super.keyDown` call, which is what prevents macOS from seeing
-        // the event and engaging the zoom - verified by reading
-        // StreamInputView.keyDown above, which only walks the responder
-        // chain via super when the delegate signals it didn't consume.
-        //
-        //   ⌥⌘8  - toggle Accessibility Zoom on/off
-        //   ⌥⌘=  - zoom in (also ⌥⌘+ on layouts where = needs shift)
-        //   ⌥⌘-  - zoom out
-        let zoomChars: Set<String> = ["8", "=", "+", "-"]
-        let isMacOSZoomChord = mods == [.command, .option]
-            && zoomChars.contains(event.charactersIgnoringModifiers ?? "")
-        if !event.isARepeat, isMacOSZoomChord {
-            // SECURITY: do not log the character - even on this code path
-            // (which only fires for ⌥⌘8/=/-/+), an attacker who can race a
-            // key bind across this branch could observe arbitrary chars
-            // in unified log otherwise. Log keyCode + mods, which are
-            // positional and non-sensitive.
-            let modsRaw = mods.rawValue
-            let keyCode = event.keyCode
-            log.info("Swallowed macOS Accessibility Zoom chord mods=\(modsRaw, privacy: .public) keyCode=\(keyCode, privacy: .public)")
-            return true
+        // Unless ⌘ goes to the game (opted in and the pointer held) a ⌘ chord
+        // is the Mac's and never forwarded. Repeats are dropped: the PC makes its own.
+        if mods.contains(.command), !forwardsCommand { return }
+        guard !event.isARepeat, isReady else { return }
+        guard let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else {
+            noteUnmappedKey(event.keyCode)
+            return
         }
-
-        // Sys-key capture gate. Unless ⌘ goes to the game (opted in AND the
-        // pointer held), treat any Cmd-modified key-down as a macOS shortcut and
-        // let it fall through to the responder chain. Returning `false` from
-        // the delegate tells StreamInputView to call `super.keyDown` instead
-        // of swallowing the event, which is what gives macOS a chance to run
-        // ⌘-Tab / ⌘-Space / ⌘-H / ⌘-Q etc. natively.
-        //
-        // Implementation note: `event.isARepeat` events fire while the user
-        // is holding a Cmd-letter combo. We let those fall through too - the
-        // responder chain has its own auto-repeat semantics for system
-        // shortcuts and we don't want to double-fire.
-        if mods.contains(.command), !forwardsCommand {
-            return false
-        }
-
-        // Ignore auto-repeated keys; the host generates its own repeats.
-        guard !event.isARepeat, isReady else { return true }
-        guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return true }
-        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
+        syncModifiers(to: event.modifierFlags)
         let rc = backend?.sendKeyboard(
-            keyCode: wireCode,
+            keyCode: key.wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_DOWN),
             modifiers: Int8(bitPattern: modifierByte(from: mods)),
-            flags: 0
+            flags: key.flags
         ) ?? -2
         record("LiSendKeyboardEvent2(down)", rc)
-        heldKeys.insert(wireCode)
-        return true
+        heldKeys.insert(key)
     }
 
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {
@@ -165,55 +132,59 @@ extension InputForwarder: StreamInputViewDelegate {
         // must behave exactly as it did before the gesture existed, including
         // while the stream is mid-handshake and forwarding nothing.
         noteEscapeKeyUp(event)
-        guard isReady else { return }
+        // Only a key the host holds gets an up: a down under the ⌘ gate never
+        // went out, and one released on focus loss or a reconnect already did.
+        guard isReady, let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)),
+              heldKeys.remove(key) != nil else { return }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return }
-        let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
-
-        // Mirror the key-down gate: under an unforwarded ⌘ the down was never
-        // forwarded, so no up either. A key held from before ⌘ went down was
-        // forwarded and must be released, or the host keeps it pressed.
-        if mods.contains(.command), !forwardsCommand, !heldKeys.contains(wireCode) {
-            return
-        }
-
         let rc = backend?.sendKeyboard(
-            keyCode: wireCode,
+            keyCode: key.wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_UP),
             modifiers: Int8(bitPattern: modifierByte(from: mods)),
-            flags: 0
+            flags: key.flags
         ) ?? -2
         record("LiSendKeyboardEvent2(up)", rc)
-        heldKeys.remove(wireCode)
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        // Each modifier SIDE is tracked on its own (device-dependent bits), so
-        // holding both Shifts and releasing one sends exactly that side's up.
-        // Cmd is macOS-owned: never forwarded unless `forwardsCommand`.
-        let downNow = ModifierSides.held(in: event.modifierFlags, includeCommand: forwardsCommand)
-        let capsChanged = mods.contains(.capsLock) != lastCapsLock
-        lastCapsLock = mods.contains(.capsLock)
-        let pressed = downNow.subtracting(heldModifierVKs)
-        let released = heldModifierVKs.subtracting(downNow)
-        heldModifierVKs = downNow
+        let capsLock = event.modifierFlags.contains(.capsLock)
+        let capsChanged = capsLock != lastCapsLock
+        lastCapsLock = capsLock
         guard isReady else { return }
-
-        let modByte = Int8(bitPattern: modifierByte(from: mods))
-        for vk in released.sorted() { sendModifier(vk, down: false, modByte: modByte) }
-        for vk in pressed.sorted() { sendModifier(vk, down: true, modByte: modByte) }
+        syncModifiers(to: event.modifierFlags)
+        // Windows toggles Caps Lock on each press, so a Mac toggle is one full
+        // press and release, and nothing is left held on the PC.
         if capsChanged {
-            sendModifier(0x14, down: mods.contains(.capsLock), modByte: modByte) // VK_CAPITAL
+            let modByte = Int8(bitPattern: modifierByte(from: event.modifierFlags))
+            sendModifier(0x14, down: true, modByte: modByte) // VK_CAPITAL
+            sendModifier(0x14, down: false, modByte: modByte)
         }
+    }
+
+    /// Send the modifier sides that changed since the host was last told, so
+    /// a Shift held through a reconnect, sleep or screen lock reaches the PC.
+    /// Each SIDE is its own entry; ⌘ only counts while `forwardsCommand`.
+    private func syncModifiers(to flags: NSEvent.ModifierFlags) {
+        let downNow = ModifierSides.held(in: flags, includeCommand: forwardsCommand)
+        let modByte = Int8(bitPattern: modifierByte(from: flags))
+        for vk in heldModifierVKs.subtracting(downNow).sorted() { sendModifier(vk, down: false, modByte: modByte) }
+        for vk in downNow.subtracting(heldModifierVKs).sorted() { sendModifier(vk, down: true, modByte: modByte) }
+        heldModifierVKs = downNow
     }
 
     func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {
         let action: Int8 = down ? Int8(StreamProtocol.KEY_ACTION_DOWN) : Int8(StreamProtocol.KEY_ACTION_UP)
         let rc = backend?.sendKeyboard(
-            keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),
+            keyCode: VKScanCode(vk: vk).wireCode,
             action: action, modifiers: modByte, flags: 0) ?? -2
         record("LiSendKeyboardEvent2(modifier)", rc)
+    }
+
+    /// One notice per unmapped key per session, so a key that does nothing on
+    /// the PC can be diagnosed from the log.
+    private func noteUnmappedKey(_ keyCode: UInt16) {
+        guard loggedUnmappedKeyCodes.insert(keyCode).inserted else { return }
+        Diag.notice("input: key code \(keyCode) has no PC mapping and was not sent", "Stream")
     }
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
@@ -512,7 +483,14 @@ extension HotkeyChord {
         if (alt && !mods.contains(.option))    || (!alt && mods.contains(.option)) { return false }
         if (shift && !mods.contains(.shift))   || (!shift && mods.contains(.shift)) { return false }
         if (cmd && !mods.contains(.command))   || (!cmd && mods.contains(.command)) { return false }
-        return event.charactersIgnoringModifiers?.lowercased() == keyChar.lowercased()
+        let typed = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        if typed == keyChar.lowercased() { return true }
+        // A non-Latin layout types a local letter (й for Q), so match the key's
+        // US position instead, as moonlight does. Latin layouts keep theirs.
+        guard !typed.allSatisfy(\.isASCII),
+              let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode))?.vk,
+              (0x30...0x39).contains(vk) || (0x41...0x5A).contains(vk) else { return false }
+        return String(Character(Unicode.Scalar(UInt8(vk)))).lowercased() == keyChar.lowercased()
     }
 }
 

@@ -19,7 +19,8 @@ extension InputForwarder {
     /// forwarded to the PC only while ⌘ is.
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool {
         guard forwardsCommand, event.modifierFlags.contains(.command) else { return false }
-        return streamView(view, handleKeyDown: event)
+        streamView(view, handleKeyDown: event)
+        return true
     }
 
     /// Capture ended with ⌘ down: ⌘ is the Mac's again, so the PC's Win key is
