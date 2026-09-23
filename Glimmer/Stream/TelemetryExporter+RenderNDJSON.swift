@@ -299,6 +299,8 @@ extension TelemetryRenderer {
         builder.addCount("drops_decoder", snap.dropsDecoder)
         builder.addCount("drops_backpressure", snap.dropsBackpressure)
         builder.addCount("drops_presentation_late", snap.dropsPresentationLate)
+        // Frames lost while waiting for an IDR/RFI recovery frame (not in frame_loss_total).
+        builder.addCount("drops_recovery_wait_total", snap.dropsRecoveryWaitTotal)
         // Designed suppressed-mode drops + the 0/1 context gauge, split from
         // drops_presentation_late so that counter stays a genuine-lateness
         // signal while the window is backgrounded.

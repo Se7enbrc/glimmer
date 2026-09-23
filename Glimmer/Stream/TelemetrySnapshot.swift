@@ -214,6 +214,8 @@ struct TelemetrySnapshot: Sendable {
     var dropsBackpressure: UInt64?
     var dropsPresentationLate: UInt64?
     var presentationGaps: UInt64?
+    /// Frames discarded at the depacketizer's recovery gate (waiting for IDR/RFI).
+    var dropsRecoveryWaitTotal: UInt64 = 0
 
     // input
     var inputEventsPerSecond: Double?

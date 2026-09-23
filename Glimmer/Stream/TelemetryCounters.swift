@@ -333,6 +333,9 @@ final class TelemetryCounters: @unchecked Sendable {
     /// drops_suppressed flat - is distinguishable from a genuine decode wedge.
     /// VideoDecoder increments on its quiet-drop path; always-live integer add.
     let decodeGatedDropTotal = Counter()
+    /// Assembled frames the depacketizer discarded while waiting for an IDR or
+    /// RFI recovery frame (its recovery gate); no other drop counter sees them.
+    let recoveryWaitDropTotal = Counter()
 
     /// STREAM-DISCONTINUITY flushes: param-set rebuilds mid-stream that flush the
     /// renderer + clear the pacer queue (a real multi-frame skip). 0 on a healthy

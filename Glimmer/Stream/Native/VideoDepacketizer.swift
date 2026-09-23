@@ -278,7 +278,8 @@ final class VideoDepacketizer {
     private func beginFrame(pkt: CompletedPacket, frameIndex: UInt32) {
         // Make sure this is the next consecutive frame (c:805-826).
         if Self.isBefore32(nextFrameNumber, frameIndex) {
-            Diag.warn("NativeVideo network dropped frames \(nextFrameNumber)..\(frameIndex - 1)", Self.cat)
+            // Wrapping: a host-driven index can cross 0 while nextFrameNumber is high.
+            Diag.warn("NativeVideo network dropped frames \(nextFrameNumber)..\(frameIndex &- 1)", Self.cat)
             nextFrameNumber = frameIndex
             // C:821 - wait for the next complete frame before re-requesting
             // recovery (network-recovery approximation).
@@ -315,6 +316,7 @@ final class VideoDepacketizer {
         // THROUGH this gate and reaches reassembleFrame. Anything else while
         // we're still waiting is dropped (and an IDR/RFI re-requested).
         if waitingForIdrFrame || waitingForRefInvalFrame {
+            TelemetryCounters.shared.recoveryWaitDropTotal.increment()
             if waitingForIdrFrame {
                 // c:1080-1088 - only re-request after the first clean frame
                 // post-loss, to avoid IDR-spamming an unstable network.

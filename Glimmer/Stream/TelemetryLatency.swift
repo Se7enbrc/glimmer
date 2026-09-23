@@ -194,6 +194,9 @@ final class FrameTimingTracker: @unchecked Sendable {
         /// glass-to-glass omits the host-encode leg rather than guessing. Captured
         /// at assemble (it rides the DecodeUnit) so glass-to-glass is per-frame.
         let hostEncodeMs: Double
+        /// Assembled while the window was suppressed or decode-gated: any later
+        /// drop was designed, whatever the state when it is evicted.
+        var assembledHidden = false
         var submitNanos: UInt64 = 0
         var outputNanos: UInt64 = 0
     }
@@ -286,12 +289,14 @@ final class FrameTimingTracker: @unchecked Sendable {
                          frameBytes: Int32 = 0, isIDR: Bool = false,
                          hostEncodeTenthsMs: UInt16 = 0) {
         guard rtpTimestamp != 0 else { return }
+        let counters = TelemetryCounters.shared
         let timing = Timing(frameIndex: frameIndex,
                             receiveNanos: receiveNanos,
                             assembleNanos: assembleNanos,
                             frameBytes: frameBytes,
                             isIDR: isIDR,
-                            hostEncodeMs: Double(hostEncodeTenthsMs) / 10.0)
+                            hostEncodeMs: Double(hostEncodeTenthsMs) / 10.0,
+                            assembledHidden: counters.presentSuppressed || counters.decodeGated)
         os_unfair_lock_lock(mapLock)
         // Cadence deltas for the receive + assemble boundaries (clump
         // forensics). Captured under the map lock we already hold; observed

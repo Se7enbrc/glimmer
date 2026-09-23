@@ -190,6 +190,7 @@ extension TelemetryExporter {
         snap.dropsBackpressure = source.backpressureDrops()
         snap.dropsPresentationLate = source.presentationLateDrops()
         snap.presentationGaps = source.presentationGaps()
+        snap.dropsRecoveryWaitTotal = counters.recoveryWaitDropTotal.value
     }
 
     /// Fill the process-level sample (CPU / threads), the P1 RESOURCE view, and
