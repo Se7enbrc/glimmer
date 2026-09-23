@@ -258,10 +258,12 @@ When enabled, a stream writes to `~/Library/Logs/Glimmer/`:
 - `telemetry-<timestamp>.ndjson`: per-second stream metrics, plus event rows
   (bookmarks, video gaps, loss episodes, key frames);
 - `telemetry-session-<timestamp>.json`: a one-shot session scorecard;
-- `telemetry-frames-<timestamp>.ndjson`: the per-frame trace plus every input
-  event sent (`input_mouse`, `input_mouse_abs`, `input_pad`, `input_motion`,
-  `input_scroll`), segmented. Motion is sampled at 20 Hz per sensor; keyboard
-  keys are never recorded;
+- `telemetry-frames-<timestamp>.ndjson`: the per-frame trace, segmented, plus
+  the merged input Glimmer sent: mouse movement (`input_mouse`,
+  `input_mouse_abs`), controller state (`input_pad`), motion sensors
+  (`input_motion`, sampled at 20 Hz per sensor) and scroll (`input_scroll`).
+  Keys, mouse buttons, pasted text and DualSense touchpad touches are not
+  recorded;
 - `glimmer-<timestamp>.log`: a richer per-session diagnostic log.
 
 The exporter also serves the per-second metrics on a local Prometheus endpoint,
@@ -270,10 +272,10 @@ this repository and nothing in the app depends on one; the NDJSON and the
 scorecard are the portable, self-contained way to analyze a session.
 
 Old files are pruned in two passes. At every launch, whatever the setting, any
-file in the directory older than 14 days is deleted. At the start of each
-diagnostics session, the per-frame traces and per-second files are trimmed to a
-300 MB budget: trace segments before per-second files, oldest first, the most
-recent session last. Scorecards and diagnostic logs only ever age out. The
+Glimmer log or telemetry file older than 14 days is deleted. At the start of
+each diagnostics session, the per-frame traces and per-second files are trimmed
+to a 300 MB budget: trace segments before per-second files, oldest first, the
+most recent session last. Scorecards and diagnostic logs only ever age out. The
 budget is enforced before the new session's files exist, so the session being
 recorded can exceed it; its trace keeps the first segment and the newest three,
 up to about 384 MB.
@@ -294,13 +296,17 @@ lands in the frame trace as an `"event":"bookmark"` row on the same clock as the
 input rows (`t_ms`, milliseconds of Mac uptime). The input rows just before it
 show what Glimmer sent: a stray `input_mouse` delta, an `input_pad` button mask
 that changed, or an `input_scroll` whose `sent_y` differs from what macOS
-delivered (`dy`, `units_y`). If no row is there, the event never left the Mac.
+delivered (`dy`, `units_y`). Only movement, controller state and scroll are
+traced. For those, no row means Glimmer didn't send it, so it came from the PC
+side. Keys, mouse buttons and touchpad touches leave no row either way.
 
 ```sh
 cd ~/Library/Logs/Glimmer
-# Input rows in the ~400 trace lines (about 2 s at 120 fps) before each bookmark:
-grep -h -B 400 '"event":"bookmark"' telemetry-frames-<timestamp>*.ndjson |
-    grep -E '"event":"(input_|bookmark)'
+# The newest bookmark's t_ms, then the input rows in the 2 s before it, in order:
+bm=$(grep -h '"event":"bookmark"' telemetry-frames-<timestamp>*.ndjson | jq .t_ms | sort -n | tail -1)
+jq -c --argjson bm "$bm" 'select((.event // "" | startswith("input_"))
+    and .t_ms > $bm - 2000 and .t_ms <= $bm)' telemetry-frames-<timestamp>*.ndjson |
+    jq -sc 'sort_by(.t_ms)[]'
 ```
 
 ### "Video freezes for a moment on Wi-Fi"
@@ -332,14 +338,14 @@ each gap.
 
 These have no Settings row. Each lives in the app's defaults domain
 (`defaults write io.ugfugl.Glimmer <key> -bool YES` or `-float N`;
-`defaults delete io.ugfugl.Glimmer <key>` restores the default) and applies from
-the next stream. The `pacerTick*` and `cruise*` keys are escape hatches for
-chasing a regression, not tuning advice.
+`defaults delete io.ugfugl.Glimmer <key>` restores the default) and, unless its
+row says otherwise, applies from the next stream. The `pacerTick*` and `cruise*`
+keys are escape hatches for chasing a regression, not tuning advice.
 
 | Key                      | Type, default | Effect                                                                                                                                    |
 | ------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `bitrateBoostWifi`       | float, 1.5    | Highest quality's multiplier on the Wi-Fi bitrate ask. The Wi-Fi cap and the radio gate still apply.                                      |
-| `hidGamepadClaimAll`     | bool, NO      | The raw-HID gamepad path also takes pads GameController owns, to exercise it without unusual hardware.                                    |
+| `hidGamepadClaimAll`     | bool, NO      | The raw-HID path also takes pads GameController owns, for testing without odd hardware. Reconnect the pad or relaunch to apply.           |
 | `telemetryListenLAN`     | bool, NO      | Serves the Prometheus endpoint (port 9847) on every interface instead of loopback, so anyone on your network can read it.                 |
 | `diagFileLogDebug`       | bool, NO      | Debug lines in `glimmer-<timestamp>.log` too. Same as the Verbose session log file toggle in the hidden Telemetry section.                |
 | `pacerTickOffMain`       | bool, YES     | NO moves the present tick back onto the main run loop.                                                                                    |
