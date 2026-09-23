@@ -405,9 +405,9 @@ final class AppModel {
     /// is seen and the user hasn't decided yet. Transient.
     var showRawHIDPrompt = false
 
-    /// Name of a generic HID pad waiting for Input Monitoring, and the
-    /// launcher's offer for it. Transient (see AppModel+RawHID).
-    var hidPermissionPadName: String?
+    /// The generic HID pad waiting for Input Monitoring, and the launcher's
+    /// offer for it. Transient (see AppModel+RawHID).
+    var hidPermissionPad: HIDGamepadDevice?
     var showHIDPermissionPrompt = false
 
     /// Whether the user has answered the auto-offer (Enable or Cancel) - so we

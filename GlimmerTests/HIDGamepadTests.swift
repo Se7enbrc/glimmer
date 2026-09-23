@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Glimmer
 
@@ -162,5 +163,21 @@ struct HIDGamepadTests {
         #expect(!InputForwarder.chordSatisfied(.l1r1l2r2, custom: [], held: held))
         #expect(!InputForwarder.chordSatisfied(.custom, custom: [], held: held))
         #expect(!InputForwarder.chordSatisfied(.none, custom: [], held: held))
+    }
+
+    /// Not Now quiets one pad until relaunch; Don't Ask Again outlives it.
+    @Test func permissionOfferAnswersAreKeptPerPad() throws {
+        let suite = "io.ugfugl.Glimmer.tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var offers = HIDPermissionOffers(defaults: defaults)
+        offers.answer("2DC8:301B", dontAskAgain: false)
+        offers.answer("0F0D:00C1", dontAskAgain: true)
+        #expect(!offers.shouldOffer("2DC8:301B"))
+        #expect(!offers.shouldOffer("0F0D:00C1"))
+        #expect(offers.shouldOffer("20D6:A711"))
+        let relaunched = HIDPermissionOffers(defaults: defaults)
+        #expect(relaunched.shouldOffer("2DC8:301B"))
+        #expect(!relaunched.shouldOffer("0F0D:00C1"))
     }
 }

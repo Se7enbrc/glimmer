@@ -19,8 +19,8 @@ extension AppModel {
         "Glimmer will read your DualSense's raw input to access the Options, "
         + "Create/Share, and Mute buttons.\n\nmacOS will then ask for "
         + "\u{201C}Input Monitoring\u{201D} permission. Its dialog says "
-        + "\u{201C}keystrokes\u{201D} because that's the same system permission "
-        + "- but Glimmer only reads the controller, never your keyboard."
+        + "\u{201C}keystrokes\u{201D} because that's the same system permission, "
+        + "but Glimmer only reads the controller, never your keyboard."
 
     /// Offer the raw-HID feature if a DualSense is connected and the user
     /// hasn't enabled it or been asked. Never interrupts a live stream.
@@ -65,25 +65,31 @@ extension AppModel {
         "macOS doesn't recognise this controller on its own, so Glimmer reads it "
         + "directly.\n\nmacOS will ask for \u{201C}Input Monitoring\u{201D} "
         + "permission. Its dialog says \u{201C}keystrokes\u{201D} because that's "
-        + "the same system permission - but Glimmer only reads the controller, "
+        + "the same system permission, but Glimmer only reads the controller, "
         + "never your keyboard."
+
+    /// Answers to the generic-pad offer; process lifetime is "until relaunch".
+    static var hidPermissionOffers = HIDPermissionOffers()
+
+    var hidPermissionPadName: String? { hidPermissionPad?.name }
 
     /// A generic pad attached without the permission. Offered from the launcher
     /// only; a pad seen mid-stream is offered when the stream ends.
     func hidPadNeedsPermission(_ pad: HIDGamepadDevice) {
-        hidPermissionPadName = pad.name
+        guard Self.hidPermissionOffers.shouldOffer(pad.hardwareID) else { return }
+        hidPermissionPad = pad
         maybeOfferHIDPermission()
     }
 
     func maybeOfferHIDPermission() {
-        guard !isStreaming, hidPermissionPadName != nil, !HIDGamepadManager.accessGranted else { return }
+        guard !isStreaming, hidPermissionPad != nil, !HIDGamepadManager.accessGranted else { return }
         showHIDPermissionPrompt = true
     }
 
     /// "Continue": the system prompt blocks its thread for a moment, so it
     /// runs off main. A grant re-opens the pads; a refusal opens the pane.
     func continueHIDPermission() {
-        dismissHIDPermission()
+        answerHIDPermission(dontAskAgain: false)
         DispatchQueue.global(qos: .userInitiated).async {
             let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
             DispatchQueue.main.async {
@@ -92,8 +98,34 @@ extension AppModel {
         }
     }
 
-    func dismissHIDPermission() {
+    /// "Not Now": skip this pad until relaunch.
+    func dismissHIDPermission() { answerHIDPermission(dontAskAgain: false) }
+
+    /// "Don't Ask Again": skip this pad for good.
+    func declineHIDPermission() { answerHIDPermission(dontAskAgain: true) }
+
+    private func answerHIDPermission(dontAskAgain: Bool) {
+        if let pad = hidPermissionPad { Self.hidPermissionOffers.answer(pad.hardwareID, dontAskAgain: dontAskAgain) }
         showHIDPermissionPrompt = false
-        hidPermissionPadName = nil
+        hidPermissionPad = nil
     }
+}
+
+/// Which generic pads the Input Monitoring offer skips, by hardware ID: any
+/// answer skips a pad until relaunch, and Don't Ask Again is kept in defaults.
+struct HIDPermissionOffers {
+    static let declinedKey = "hidPermissionDeclinedPads"
+    var defaults = UserDefaults.standard
+    private(set) var answered: Set<String> = []
+
+    func shouldOffer(_ hardwareID: String) -> Bool {
+        !answered.contains(hardwareID) && !declined.contains(hardwareID)
+    }
+
+    mutating func answer(_ hardwareID: String, dontAskAgain: Bool) {
+        answered.insert(hardwareID)
+        if dontAskAgain { defaults.set(declined.union([hardwareID]).sorted(), forKey: Self.declinedKey) }
+    }
+
+    private var declined: Set<String> { Set(defaults.stringArray(forKey: Self.declinedKey) ?? []) }
 }

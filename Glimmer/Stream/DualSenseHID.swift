@@ -160,6 +160,14 @@ final class DualSenseHID: @unchecked Sendable {
         if shouldStop { stop() }
     }
 
+    /// After an in-app grant: re-open a running reader so reports flow without
+    /// a relaunch (HIDGamepadManager.reopenAll's twin). Main thread only.
+    func reopen() {
+        guard isActive else { return }
+        stop()
+        start()
+    }
+
     private func start() {
         // Permission is requested by the opt-in UI; opening here never prompts.
         let ctx = Unmanaged.passUnretained(self).toOpaque()
