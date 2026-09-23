@@ -262,6 +262,26 @@ struct ParserHelperTests {
         #expect(dp.splitAnnexBParamSets(Data([0x00]))[0].kind == .picData)
     }
 
+    // MARK: - VideoDepacketizer frame-index wrap (host-controlled index)
+
+    /// A host can walk the frame index across zero in forward jumps under half the
+    /// space; the gap log for frame 0 after 0xFFFFFFF0 must not trap. Every frame
+    /// waits at the recovery gate (no IDR yet), so each one is counted there.
+    @Test func frameIndexWrappingPastZeroDoesNotTrap() {
+        let dp = depacketizer(hevc: true)
+        let before = TelemetryCounters.shared.recoveryWaitDropTotal.value
+        let frames: [UInt32] = [0x7FFF_FFFF, 0xFFFF_FFF0, 0]
+        for (spi, frame) in frames.enumerated() {
+            dp.process(VideoDepacketizer.CompletedPacket(
+                frameIndex: frame, flags: 0x07,   // PIC_DATA | EOF | SOF: a one-packet frame
+                extraFlags: 0, fecCurrentBlock: 0, fecLastBlock: 0,
+                streamPacketIndex: UInt32(spi) << 8, rtpTimestamp: 0,
+                presentationTimeUs: UInt64(spi + 1) * 1_000, receiveTimeUs: UInt64(spi + 1) * 1_000,
+                payload: []))
+        }
+        #expect(TelemetryCounters.shared.recoveryWaitDropTotal.value &- before >= UInt64(frames.count))
+    }
+
     // MARK: - RtpAudioQueue.padShard (pad/clamp a byte buffer to a fixed size)
 
     /// A fresh audio queue. The init only sets a couple of fields - no queue or

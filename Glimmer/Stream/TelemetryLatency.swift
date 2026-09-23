@@ -278,7 +278,8 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// but never presented (dropped at decode or pacing) can't leak.
     private static let maxInFlight = 256
 
-    private init(sessionId: String) {
+    /// Internal for tests; the engine only reaches a tracker through `shared`.
+    init(sessionId: String) {
         self.sessionId = sessionId
         mapLock.initialize(to: os_unfair_lock_s())
         warmupLock.initialize(to: os_unfair_lock_s())
