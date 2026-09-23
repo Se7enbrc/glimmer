@@ -45,10 +45,6 @@ public actor StreamSession {
     let audioDecoder = AudioDecoder()
     var window: StreamWindow?
 
-    /// Bring the stream window back from the background. Used by the
-    /// launcher UI's "Back to stream" affordance when the user has
-    /// Cmd-Tabbed away (which orderOut'd the window) and now wants to
-    /// resume.
     /// The menu bar panel shows the pointer while it is open over a stream;
     /// the window's own re-key path hides it again.
     public func setCursorHidden(_ hidden: Bool) async {
@@ -62,6 +58,8 @@ public actor StreamSession {
         await MainActor.run { win?.toggleMiniPlayer() }
     }
 
+    /// Bring the stream window back from the background: the launcher's "Back
+    /// to stream" after the user Cmd-Tabbed away (which ordered the window out).
     public func resumeWindow() async {
         // Capture the StreamWindow reference on the actor first (it lives
         // here, isolated to us), then hop to the main actor to touch
@@ -247,8 +245,12 @@ public actor StreamSession {
     static let deadPeerTerminationCode: Int32 = -1
     /// Bound the reconnect episode: at most this many attempts...
     static let reconnectAttemptCap = 5
-    /// ...and at most this long wall-clock before we give up and tear down.
+    /// ...and at most this much awake time before we give up and tear down. A
+    /// lid closed mid-episode doesn't spend it (see ReconnectBudget).
     static let reconnectWindowSeconds: TimeInterval = 30.0
+    /// How long a PC-sent terminate waits on /serverinfo to learn whether the PC
+    /// ended the session on purpose. No answer in time means reconnect.
+    static let hostEndProbeSeconds: TimeInterval = 1.5
 
     // MARK: - Launch deadline (M6)
 
@@ -269,7 +271,7 @@ public actor StreamSession {
     /// watchdog) and makes `handleHostTerminate` ignore re-entrant terminates
     /// fired by the dead/old backend mid-reconnect.
     var isReconnecting = false
-    /// Attempt counter + deadline for the current reconnect episode.
+    /// Attempt counter for the current reconnect episode.
     var reconnectAttempts = 0
     /// The inputs needed to rebuild the connection on a reconnect, captured at
     /// `start()`: the original server (for a fresh NetworkClient), the requested

@@ -62,7 +62,60 @@ extension StreamSession {
             return
         }
 
-        await runReconnectEpisode(code: code)
+        // Our own dead-peer (-1) says nothing about the PC. A code the PC sent may
+        // mean it ended the session on purpose, so ask before relaunching anything.
+        if code != Self.deadPeerTerminationCode {
+            isReconnecting = true   // the probe owns the outcome; re-entrant terminates wait
+            let runningAppID = await probeRunningAppID()
+            isReconnecting = false
+            guard isStreaming, !stopInProgress else { return }
+            if Self.pcEndedSession(runningAppID: runningAppID, appID: reconnectAppID) {
+                Diag.notice("The PC ended the session (code 0x\(String(UInt32(bitPattern: code), radix: 16)), "
+                    + "now running app \(runningAppID ?? 0)) - ending the stream, not reconnecting.", "Stream")
+                await endStreamClosedByPC()
+                return
+            }
+        }
+        await runReconnectEpisode(code: code, cause: Self.reconnectCause(code: code))
+    }
+
+    /// Whether the PC ended the session on purpose: it answered and no longer
+    /// runs our app (0 after a quit on the PC or Force Stop, another id after a
+    /// takeover). No answer means Sunshine is restarting, which a reconnect rides out.
+    static func pcEndedSession(runningAppID: Int?, appID: Int?) -> Bool {
+        guard let runningAppID, let appID else { return false }
+        return runningAppID != appID
+    }
+
+    /// Why the episode's log line says the link went away: -1 is our own link
+    /// dropping, not the PC restarting.
+    static func reconnectCause(code: Int32) -> String {
+        if code == deadPeerTerminationCode { return "our link to the PC dropped (code -1)" }
+        return "the PC closed the live stream (code 0x\(String(UInt32(bitPattern: code), radix: 16))), "
+            + "likely restarting across a lock or desktop switch"
+    }
+
+    /// One quick /serverinfo: the app the PC runs now, or nil if it didn't
+    /// answer in time.
+    private func probeRunningAppID() async -> Int? {
+        guard let server = reconnectServer else { return nil }
+        let deadline = Date().addingTimeInterval(Self.hostEndProbeSeconds)
+        let net = NetworkClient(server: server)
+        await net.setRequestDeadline(deadline)
+        let info = try? await StreamAttempt.run(until: deadline) { try await net.fetchServerInfo() }
+        await net.shutdown()
+        return info?.currentGameID
+    }
+
+    /// The PC ended the session on purpose: end it like a clean close, with no
+    /// error banner and no /launch.
+    private func endStreamClosedByPC() async {
+        // Nothing of ours left to /cancel, and a /cancel would quit whatever
+        // another device is streaming now.
+        ownsHostSession = false
+        hostSessionClientID = nil
+        bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: 0))
+        await stop(cause: .hostClosedClean)
     }
 
     /// SELF-INITIATED reconnect to apply a lowered bitrate (see
@@ -86,34 +139,32 @@ extension StreamSession {
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
         await runReconnectEpisode(
             code: Self.deadPeerTerminationCode,
-            bannerText: "Connection is weak. Lowering quality to \(toKbps / 1000) Mbps…")
+            cause: "lowering the bitrate to \(toKbps / 1000) Mbps",
+            bannerText: "Weak connection. Lowering quality to \(toKbps / 1000) Mbps…")
     }
 
     /// Drive a bounded reconnect episode: hold the frozen frame, retry the
     /// in-place rebuild with a short backoff until it succeeds or we exhaust the
     /// attempt/time budget, then resume (`.reconnected`) or give up (real
     /// teardown). MainActor work happens inside `reconnectInPlace`.
-    private func runReconnectEpisode(code: Int32, bannerText: String = "Reconnecting…") async {
+    private func runReconnectEpisode(code: Int32, cause: String, bannerText: String = "Reconnecting…") async {
         isReconnecting = true
         reconnectAttempts = 0
-        let deadline = Date().addingTimeInterval(Self.reconnectWindowSeconds)
+        let budget = ReconnectBudget(seconds: Self.reconnectWindowSeconds)
         bridge?.eventContinuation?.yield(.reconnecting)
         // Surface the hold over the frozen frame - the launcher's phase chip is
         // occluded by the fullscreen window, so this banner is the only in-stream
-        // signal that we're holding rather than dead.
+        // signal that we're holding rather than dead. It announces itself.
         let winForBanner = window
         await MainActor.run {
             winForBanner?.reconnectBanner.setText(bannerText)
             winForBanner?.reconnectBanner.setVisible(true)
         }
-        Diag.notice(
-            "Host closed the live stream (code 0x\(String(UInt32(bitPattern: code), radix: 16))) "
-            + "- reconnecting in place, holding the last frame (the host likely restarted "
-            + "across a lock/desktop transition).",
-            "Stream")
+        Diag.notice("Reconnecting in place, holding the last frame: \(cause).", "Stream")
 
+        var pcMovedOn = false
         while isStreaming, !stopInProgress,
-              reconnectAttempts < Self.reconnectAttemptCap, Date() < deadline {
+              reconnectAttempts < Self.reconnectAttemptCap, let budgetEnd = budget.deadline() {
             reconnectAttempts += 1
             // Backoff: the host (Sunshine) is mid-restart and its HTTPS endpoint
             // may not answer for ~3s. A short ramp (0.8s, 1.6s, then 2.4s) keeps
@@ -121,14 +172,23 @@ extension StreamSession {
             // waitForHostIdle poll absorbs the rest of the host's settle time.
             let delayMs = UInt64(min(reconnectAttempts, 3)) * 800
             do {
-                let delay = min(Double(delayMs) / 1000, max(0, deadline.timeIntervalSinceNow))
+                let delay = min(Double(delayMs) / 1000, max(0, budgetEnd.timeIntervalSinceNow))
                 try await Task.sleep(for: .seconds(delay))
             } catch {
                 break
             }
-            if Task.isCancelled || !isStreaming || stopInProgress || Date() >= deadline { break }
+            // Re-derive after the backoff: a lid closed during it spent no budget.
+            guard !Task.isCancelled, isStreaming, !stopInProgress,
+                  let deadline = budget.deadline() else { break }
             Diag.notice("reconnect attempt \(reconnectAttempts)/\(Self.reconnectAttemptCap)...", "Stream")
-            if await reconnectInPlace(deadline: deadline) {
+            let resumed: Bool
+            do {
+                resumed = try await reconnectInPlace(deadline: deadline)
+            } catch {
+                pcMovedOn = true
+                break
+            }
+            if resumed {
                 isReconnecting = false
                 reconnectAttempts = 0
                 // Count the genuine reconnect HERE. The established-edge inference
@@ -156,6 +216,11 @@ extension StreamSession {
         let winForGiveup = window
         await MainActor.run { winForGiveup?.reconnectBanner.setVisible(false) }
         guard isStreaming, !stopInProgress else { return }
+        if pcMovedOn {
+            Diag.notice("reconnect: the PC is running another app now - ending the stream.", "Stream")
+            await endStreamClosedByPC()
+            return
+        }
         Diag.error(
             "reconnect exhausted after \(reconnectAttempts) attempt(s) - tearing down",
             "Stream")
@@ -167,8 +232,9 @@ extension StreamSession {
     /// backend, re-point input/decoder at it, and re-run the handshake +
     /// /launch + startConnection against the (restarted) host - all while the
     /// window, decoder, frozen frame, bridge, and event stream stay alive.
-    /// Returns true once the connection is back up.
-    private func reconnectInPlace(deadline: Date) async -> Bool {
+    /// Returns true once the connection is back up; throws when the PC now runs
+    /// another app, which no retry can change.
+    private func reconnectInPlace(deadline: Date) async throws(TakeoverRequired) -> Bool {
         guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline else { return false }
         await refreshReconnectAsk()
         guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline,
@@ -239,6 +305,7 @@ extension StreamSession {
             fresh.interruptConnection()
             await net.shutdown()
             if self.network === net { self.network = nil }
+            if let takeover = error as? TakeoverRequired { throw takeover }
             return false
         }
 
@@ -313,5 +380,22 @@ extension StreamSession {
             OSSignposter.network.endInterval("ConnectFlow", state, "outcome=reconnect")
             connectFlowState = nil
         }
+    }
+}
+
+/// A reconnect episode's time budget, counted in awake time so a lid closed
+/// mid-episode doesn't spend it. Each pass turns what's left into a wall-clock
+/// deadline; an attempt in flight across sleep fails on its stale one.
+struct ReconnectBudget {
+    let end: SuspendingClock.Instant
+
+    init(seconds: TimeInterval, now: SuspendingClock.Instant = .now) {
+        end = now.advanced(by: .seconds(seconds))
+    }
+
+    /// Nil once the awake budget is spent.
+    func deadline(now: SuspendingClock.Instant = .now, wallNow: Date = Date()) -> Date? {
+        let left = now.duration(to: end)
+        return left > .zero ? wallNow.addingTimeInterval(left / .seconds(1)) : nil
     }
 }
