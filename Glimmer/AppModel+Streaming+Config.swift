@@ -193,6 +193,7 @@ extension AppModel {
         var cfg = StreamConfig(width: effectiveWidth, height: effectiveHeight,
                                fps: effectiveFPS, bitrateKbps: effectiveBitrateKbps)
         cfg.captureSysKeys = captureSysKeys
+        cfg.playAudioOnHost = muteMacWhileStreaming
         // The notch choice only means something on a notched panel; elsewhere
         // the session always takes the borderless cover (see
         // effectiveStreamCoversNotch for the issue this closes).

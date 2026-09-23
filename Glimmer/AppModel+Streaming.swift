@@ -121,7 +121,6 @@ extension AppModel {
 
         var cfg = nativeStreamConfig(for: host)
         cfg.windowTitle = Self.streamWindowTitle(hostName: host.displayName, appName: app.name)
-        cfg.playAudioOnHost = muteMacWhileStreaming
         // One line naming how the stream will be shown and what was asked for,
         // so a "why is it 1080p in a window" report answers itself from the log.
         Diag.info("Show the stream: \(cfg.displayMode.displayName.lowercased()) - requesting "
