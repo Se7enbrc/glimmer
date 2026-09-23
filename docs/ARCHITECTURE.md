@@ -357,7 +357,11 @@ Cmd-bearing custom quit chord keeps working in either mode.
 `attachedControllers: [ObjectIdentifier: AttachedController]`. Slot assignment
 is a 16-bit `gamepadMask` - bit N == 1 means slot N is in use. Arrival is
 announced via `sendControllerArrival` with probed capabilities (some Sunshine
-builds silently drop multi-controller events without it). State updates go
+builds silently drop multi-controller events without it). Sunshine keeps a
+paired client's virtual pads across a reconnect and ignores an arrival for a
+slot it holds, so the forwarder remembers each slot's last arrival
+(`announcedControllers`) and, when input is ready again, removes every slot
+whose pad left or changed before it replays the arrivals. State updates go
 through `sendMultiController`. Host-driven feedback comes back through
 `ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`), motion-sensor
 enable (`0x5501` - answered with `sendControllerMotion` samples), and RGB
