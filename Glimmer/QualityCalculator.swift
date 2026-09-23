@@ -320,7 +320,7 @@ extension AppModel {
     ///
     /// Writes through the custom properties, so their didSets persist all
     /// three keys - only ever call this behind an explicit user action (the
-    /// Quality pane's "Use native resolution") or when Custom is already the
+    /// Quality pane's "Use Native Resolution") or when Custom is already the
     /// live preset. The bitrate needs no seeding: it is derived from the mode
     /// every time the effective config is computed (`recommendedBitrateMbps`).
     func snapCustomToDisplay() {

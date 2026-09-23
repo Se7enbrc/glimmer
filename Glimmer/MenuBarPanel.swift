@@ -146,9 +146,9 @@ struct MenuBarPanel: View {
                 Image(systemName: "chart.bar.xaxis")
                     .frame(width: 18)
                     .foregroundStyle(.secondary)
-                Text("Stats overlay")
+                Text("Stream stats")
                 Spacer()
-                Toggle("Stats overlay", isOn: Binding(
+                Toggle("Stream stats", isOn: Binding(
                     get: { model.statsOverlayShown },
                     set: { _ in model.toggleStatsOverlayFromMenu() }))
                 .labelsHidden()

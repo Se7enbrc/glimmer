@@ -54,8 +54,8 @@ struct DiagnosticsPane: View {
             } footer: {
                 Text("Reads the controller directly through macOS. If a signal "
                     + "lights up here but not in a stream, the issue is in how "
-                    + "the stream forwards it - try this view right after a "
-                    + "Cmd-Tab to confirm input is still live.")
+                    + "the stream forwards it. Try this view right after a "
+                    + "⌘-Tab to confirm input is still live.")
             }
 
             Section {
@@ -113,9 +113,9 @@ struct DiagnosticsPane: View {
                     }
                     Text("Press \(HotkeyChord.defaultBookmark.displayString) during a "
                         + "stream when it \u{201C}feels bad\u{201D} to drop a "
-                        + "timestamped marker into the telemetry. Client-only - never "
-                        + "sent to the host - and intercepted only while telemetry is "
-                        + "on; otherwise the keystroke passes straight through.")
+                        + "timestamped marker into the telemetry. The marker stays on "
+                        + "this Mac, and the shortcut is only caught while telemetry is "
+                        + "on; otherwise it goes to the PC like any other key.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } header: {

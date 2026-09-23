@@ -83,7 +83,7 @@ struct StatsThresholdsEditor: View {
 
             HStack {
                 Spacer()
-                Button("Restore defaults") {
+                Button("Restore Defaults") {
                     model.statsThresholds = .default
                 }
                 .controlSize(.small)

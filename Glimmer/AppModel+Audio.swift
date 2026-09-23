@@ -40,7 +40,7 @@ extension AppModel {
         prePausedMacOutput = nil
     }
 
-    /// Live-apply for the "Silence this Mac while streaming" toggle, called
+    /// Live-apply for the "Mute this Mac while streaming" toggle, called
     /// from its didSet. Settings is reachable mid-stream (⌘, on the
     /// backgrounded launcher) and the label is present-tense, so a flip acts
     /// NOW while a stream is live: ON → mute, OFF → restore. Outside a

@@ -95,8 +95,8 @@ struct GeneralPane: View {
                     }
                 }
                 Toggle("Mute this Mac while streaming", isOn: $model.muteMacWhileStreaming)
-                Text("Keeps game audio on the gaming PC's output only; this Mac stays silent "
-                    + "for the length of the stream.")
+                Text("Turns this Mac's volume all the way down while you stream, so other apps go quiet "
+                    + "too, and back up when you stop. The PC doesn't play the sound instead.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -373,19 +373,19 @@ struct QualityPane: View {
                     // disappears into the game the moment it is over the
                     // picture, so say up front how to get it back.
                     if model.streamDisplayMode == .window {
-                        Text("The game takes your mouse while the pointer is over the window - "
-                            + "hold Esc or switch apps to get it back.")
+                        Text("The game takes your mouse while the pointer is over the window. "
+                            + "Hold Esc or switch apps to get it back.")
                     }
                 }
             }
 
             Section {
-                Toggle("Watch the stream's health while you play (small overlay over the picture)",
-                       isOn: $model.showStreamStats)
+                Toggle("Stream stats", isOn: $model.showStreamStats)
                 // Footnote tracks the actual configured chord so it stays
-                // accurate if the user rebinds the hotkey in Shortcuts.
-                Text("Ping, frame rate, decode time. Press \(model.statsHotkey.displayString) "
-                    + "(configurable in Input) while streaming to toggle the overlay.")
+                // accurate if the user rebinds the hotkey in Input.
+                Text("A small overlay over the picture with ping, frame rate and decode time. Press "
+                    + "\(model.statsHotkey.displayString) while streaming to show or hide it; you can change "
+                    + "the shortcut in Settings › Input.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 // Overlay position lives here (not a right-click menu - the
@@ -477,9 +477,9 @@ struct QualityPane: View {
         // survived microRows growing to 7 with zero signal.
         switch preset {
         case .minimal:
-            return "\(StatsOverlayDefaults.minimalRows.count) metrics - render FPS, latency, bitrate"
+            return "\(StatsOverlayDefaults.minimalRows.count) metrics: render FPS, latency, bitrate"
         case .micro:
-            return "\(StatsOverlayDefaults.microRows.count) metrics - framerate, network, bitrate"
+            return "\(StatsOverlayDefaults.microRows.count) metrics: frame rate, network, bitrate"
         case .extended: return "All stream metrics (not audio or Mac vitals)"
         case .custom:   return "Pick rows individually below"
         }
