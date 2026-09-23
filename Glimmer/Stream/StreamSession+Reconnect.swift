@@ -143,10 +143,9 @@ extension StreamSession {
             bannerText: "Weak connection. Lowering quality to \(toKbps / 1000) Mbps…")
     }
 
-    /// Drive a bounded reconnect episode: hold the frozen frame, retry the
-    /// in-place rebuild with a short backoff until it succeeds or we exhaust the
-    /// attempt/time budget, then resume (`.reconnected`) or give up (real
-    /// teardown). MainActor work happens inside `reconnectInPlace`.
+    /// Drive a bounded reconnect episode: hold the frozen frame and retry the
+    /// in-place rebuild with a short backoff, then resume (`.reconnected`) or,
+    /// once the attempts or the awake-time budget run out, tear down for real.
     private func runReconnectEpisode(code: Int32, cause: String, bannerText: String = "Reconnecting…") async {
         isReconnecting = true
         reconnectAttempts = 0
@@ -228,12 +227,9 @@ extension StreamSession {
         await stop(cause: .hostError)
     }
 
-    /// One reconnect attempt: tear down ONLY the dead connection, swap in a fresh
-    /// backend, re-point input/decoder at it, and re-run the handshake +
-    /// /launch + startConnection against the (restarted) host - all while the
-    /// window, decoder, frozen frame, bridge, and event stream stay alive.
-    /// Returns true once the connection is back up; throws when the PC now runs
-    /// another app, which no retry can change.
+    /// One attempt: swap in a fresh backend and re-run the handshake, /launch and
+    /// connect while the window, decoder and event stream stay alive. Returns true
+    /// once back up; throws when the PC now runs another app.
     private func reconnectInPlace(deadline: Date) async throws(TakeoverRequired) -> Bool {
         guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline else { return false }
         await refreshReconnectAsk()
