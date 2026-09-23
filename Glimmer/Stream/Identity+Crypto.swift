@@ -169,7 +169,7 @@ extension IdentityManager {
     //
     // Pre-OpenSSL builds laundered the client cert/key through a SecIdentity in
     // the login keychain. The control channel now runs on OpenSSL straight from
-    // the PEMs, so that item is dead weight - preflight() deletes it on launch.
+    // the PEMs, so that item is dead weight - the versioned cleanup deletes it once.
 
     private static let dpLabel = "Glimmer Client Identity"
 
