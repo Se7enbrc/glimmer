@@ -22,7 +22,6 @@
 //
 
 import Foundation
-import SwiftUI
 import os
 
 extension StreamSession {
@@ -106,9 +105,6 @@ extension StreamSession {
         await MainActor.run {
             winForBanner?.reconnectBanner.setText(bannerText)
             winForBanner?.reconnectBanner.setVisible(true)
-            // VoiceOver can't reach a CALayer banner by focus - announce the
-            // reconnect explicitly (the most safety-critical in-stream state).
-            AccessibilityNotification.Announcement(bannerText).post()
         }
         Diag.notice(
             "Host closed the live stream (code 0x\(String(UInt32(bitPattern: code), radix: 16))) "
