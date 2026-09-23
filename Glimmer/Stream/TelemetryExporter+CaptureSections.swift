@@ -258,8 +258,8 @@ extension TelemetryExporter {
             "\"audio_cushion_base_ms\":\(Int(AudioDecoder.playoutCushionBaseMs))",
             "\"audio_cushion_step_ms\":\(Int(AudioDecoder.playoutCushionStepMs))",
             // The cap depends on the link, resolved after this line is written, so
-            // each 1 Hz row carries the effective one (audio_cushion_max_ms).
-            "\"audio_overrun_ceiling_ms\":\(Int(AudioDecoder.bufferOverrunCeilingMs))",
+            // each 1 Hz row carries it (audio_cushion_max_ms); over-run ceiling = cap + slack.
+            "\"audio_overrun_slack_ms\":\(Int(AudioDecoder.bufferOverrunCeilingSlackMs))",
             "\"input_idle_gap_s\":\(Int(TelemetryCounters.idleGapSeconds))"
         ]
         appendNDJSON("{" + fields.joined(separator: ",") + "}")

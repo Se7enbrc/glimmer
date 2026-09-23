@@ -152,18 +152,10 @@ extension AudioDecoder {
     /// wired but nowhere near a tunnel's, so the 300ms cap let the ratchet pin it
     /// far deeper than needed. 200ms covers Wi-Fi gaps; still keyed and decaying.
     static let playoutCushionMaxMsWifi: Double = 200
-    /// Slack (ms) the OVER-RUN ceiling sits ABOVE the active cushion cap so a
-    /// max-deepened cushion can PRE-ROLL + absorb its post-gap catch-up clump
-    /// without tripping the backstop. The runtime ceiling (`effectiveOverrunCeilingMs`)
-    /// tracks the link-aware cap: wired 150+40=190ms, tunnel/wifi 300+40=340ms.
+    /// Slack (ms) the OVER-RUN ceiling sits ABOVE the active cushion cap, so a max-deepened
+    /// cushion can PRE-ROLL and absorb its post-gap catch-up clump without tripping the backstop.
+    /// The runtime ceiling (`effectiveOverrunCeilingMs`): wired 190ms, Wi-Fi 240ms, tunnel 340ms.
     static let bufferOverrunCeilingSlackMs: Double = 40
-    /// Over-run ceiling (ms) for STATIC-context callers (telemetry export); the
-    /// runtime gate uses `effectiveOverrunCeilingMs`. The dogshit-link BACKSTOP,
-    /// not the steady-state governor - that is TRIM-TOWARD-TARGET
-    /// (`meterRegisterScheduleOrOverrun`). Sized to the deepest (tunnel) cap +
-    /// slack so even that fits: 300+40=340ms.
-    static let bufferOverrunCeilingMs: Double =
-        playoutCushionMaxMsTunnel + bufferOverrunCeilingSlackMs
 
     /// LINK-AWARE cushion cap (ms) for a resolved stream-link class. A wired NIC's
     /// delivery-gap envelope fits the 150ms wired cap; a wifi/tunnel link's is
