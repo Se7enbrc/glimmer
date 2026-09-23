@@ -104,6 +104,14 @@ struct GlimmerCLITests {
         #expect(GlimmerCLI.statusText(nil) == "Unavailable")
     }
 
+    @Test func aFailedPairSaysToRunItAgainNotToClickTryAgain() {
+        for failure in [PairingFailure.timedOut, .rejected] {
+            let line = GlimmerCLI.pairFailureMessage(failure, pc: "192.0.2.10")
+            #expect(line.contains("192.0.2.10") && line.contains("glimmer pair") && !line.contains("Try Again"))
+        }
+        #expect(GlimmerCLI.pairFailureMessage(.unreachable, pc: "x") == PairingFailure.unreachable.message(pc: "x"))
+    }
+
     @Test func csvQuotesNamesSoCommasAndQuotesSurvive() {
         let app = HostApp(id: 42, name: "Halo, \"Infinite\"", hdrCapable: true, hidden: false)
         #expect(GlimmerCLI.csvRow(app) == "\"Halo, \"\"Infinite\"\"\",42,true,false")

@@ -25,8 +25,21 @@ extension GlimmerCLI {
             print("Paired with \(host.displayName).")
             return Exit.ok
         }
-        printError(model.pairingMessage ?? "Pairing failed.")
+        if case .failure(let failure) = model.pairingPhase {
+            printError(pairFailureMessage(failure, pc: address))
+        } else {
+            printError("Pairing failed.")
+        }
         return Exit.failed
+    }
+
+    /// The pair sheet's failure words, with a rerun in place of its Try Again button.
+    nonisolated static func pairFailureMessage(_ failure: PairingFailure, pc: String) -> String {
+        switch failure {
+        case .timedOut: "The code wasn't entered on \(pc) in time. Run glimmer pair again for a new code."
+        case .rejected: "\(pc) didn't accept the pairing. Run glimmer pair again for a new code."
+        case .invalidAddress, .unreachable: failure.message(pc: pc)
+        }
     }
 
     /// Over the pinned connection, so a PC that stopped trusting this Mac

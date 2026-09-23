@@ -26,9 +26,16 @@ extension GlimmerCLI {
         return Exit.ok
     }
 
-    /// The readiness chip's words, with the round trip when there is one.
+    /// The PC's polled state in a word or two, with the round trip when there is one.
     nonisolated static func statusText(_ live: HostLiveStatus?) -> String {
-        let word = MenuBarPresentation.readiness(live?.state, fresh: true) ?? "Unavailable"
+        let word = switch live?.state {
+        case .idle: "Ready"
+        case .streamingApp(let name): "Busy: \(name)"
+        case .streamingUnknownApp: "Busy"
+        case .asleep: "Asleep"
+        case .certMismatch: "Needs pairing again"
+        case .unknown, nil: "Unavailable"
+        }
         guard let rtt = live?.rttMs, live?.state != .asleep else { return word }
         return "\(word) · \(rtt) ms"
     }
