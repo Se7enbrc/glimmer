@@ -22,12 +22,13 @@ enum PairingPhase: Equatable {
     case failure(PairingFailure)
 }
 
-/// Why a pairing attempt ended. Every protocol rejection (wrong PIN, bad host
-/// signature, PC busy pairing someone else) shares `.rejected` and its wording.
+/// Why a pairing attempt ended. A wrong PIN and a bad host signature share
+/// `.rejected` and its wording; `.busy` is Sunshine holding another open request.
 enum PairingFailure: Error, Equatable {
     case invalidAddress
     case unreachable
     case timedOut
+    case busy
     case rejected
 
     static let addressHint = "Enter a PC name like tower.local or an IP address like 192.168.1.10."
@@ -37,6 +38,9 @@ enum PairingFailure: Error, Equatable {
         case .invalidAddress: return Self.addressHint
         case .unreachable: return AppModel.unreachableMessage(pc)
         case .timedOut: return "The code wasn't entered on \(pc) in time. Choose Try Again to get a new code."
+        case .busy:
+            return "\(pc) is busy with another pairing request. "
+                + "Cancel it on Sunshine's PIN page or wait a few minutes, then choose Try Again."
         case .rejected: return "\(pc) didn't accept the pairing. Choose Try Again to get a new code."
         }
     }

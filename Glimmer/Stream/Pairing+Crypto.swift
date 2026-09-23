@@ -282,6 +282,10 @@ extension PairingClient {
             code = Int(codeRaw) ?? -1
         }
         if code == 200 { return }
+        // Sunshine's session verdicts: 408 it expired, 409 this Mac's earlier request is
+        // still open, 503 too many are open. Each has its own words on the pair sheet.
+        if code == 408 { throw PairingFailure.timedOut }
+        if code == 409 || code == 503 { throw PairingFailure.busy }
 
         let message = root.attributes["status_message"] ?? ""
         throw StreamError.pairingFailed("host returned status \(code) \(message)")

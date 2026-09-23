@@ -41,6 +41,9 @@ extension GlimmerCLI {
     nonisolated static func pairFailureMessage(_ failure: PairingFailure, pc: String) -> String {
         switch failure {
         case .timedOut: "The code wasn't entered on \(pc) in time. Run glimmer pair again for a new code."
+        case .busy:
+            "\(pc) is busy with another pairing request. "
+                + "Cancel it on Sunshine's PIN page or wait a few minutes, then run glimmer pair again."
         case .rejected: "\(pc) didn't accept the pairing. Run glimmer pair again for a new code."
         case .invalidAddress, .unreachable: failure.message(pc: pc)
         }

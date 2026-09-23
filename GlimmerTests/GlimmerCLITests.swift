@@ -122,7 +122,7 @@ struct GlimmerCLITests {
     }
 
     @Test func aFailedPairSaysToRunItAgainNotToClickTryAgain() {
-        for failure in [PairingFailure.timedOut, .rejected] {
+        for failure in [PairingFailure.timedOut, .busy, .rejected] {
             let line = GlimmerCLI.pairFailureMessage(failure, pc: "192.0.2.10")
             #expect(line.contains("192.0.2.10") && line.contains("glimmer pair") && !line.contains("Try Again"))
         }

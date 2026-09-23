@@ -165,16 +165,16 @@ extension AppModel {
             return hosts.first { $0.id == paired.uniqueId }
         } catch {
             guard (try? checkPairing(attempt)) != nil else { return nil }
-            // A timeout says so; every other cause (wrong PIN, signature, status)
-            // is one `.rejected`, detail in the private log only (#10).
+            // A timeout or a busy PC says so; every other cause (wrong PIN, signature,
+            // status) is one `.rejected`, detail in the private log only (#10).
             log.error(
                 """
                 Pairing failed for host=\(address, privacy: .private(mask: .hash)): \
-                \(error.localizedDescription, privacy: .private)
+                \(String(describing: error), privacy: .private)
                 """
             )
             let failure = error as? PairingFailure ?? .rejected
-            Diag.error(failure == .timedOut ? "Pairing timed out waiting for the PIN" : "Pairing failed", "Pairing")
+            Diag.error("Pairing failed: \(failure)", "Pairing")
             pairingPhase = .failure(failure)
             return nil
         }

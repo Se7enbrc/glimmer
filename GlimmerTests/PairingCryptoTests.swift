@@ -251,10 +251,27 @@ struct PairingCryptoTests {
         #expect(cancelled is CancellationError)
     }
 
+    /// Sunshine's own session verdicts keep their meaning; any other status is a refusal.
+    @Test func pairStatusCodesKeepSunshinesMeaning() throws {
+        func verdict(_ code: Int) throws -> Error? {
+            let xml = try XMLTreeBuilder.parse(data: Data("<root status_code=\"\(code)\"><paired>0</paired></root>".utf8))
+            do { try PairingClient.verifyResponseStatus(xml) } catch { return error }
+            return nil
+        }
+        #expect(try verdict(200) == nil)
+        #expect(try verdict(408) as? PairingFailure == .timedOut)
+        #expect(try verdict(409) as? PairingFailure == .busy)
+        #expect(try verdict(503) as? PairingFailure == .busy)
+        #expect(try verdict(400) is StreamError)
+        // A PC that expired the request mid-wait reads as a timeout, not a refusal.
+        let expired = PairingClient.pinEntryError(PairingFailure.timedOut, deadline: Date().addingTimeInterval(60))
+        #expect(expired as? PairingFailure == .timedOut)
+    }
+
     /// The sheet words every outcome from this: each names the PC, and a timeout
     /// reads differently from a refusal so nobody retypes a code that was right.
     @Test func pairingFailureMessagesNameThePC() {
-        for failure in [PairingFailure.unreachable, .timedOut, .rejected] {
+        for failure in [PairingFailure.unreachable, .timedOut, .busy, .rejected] {
             #expect(failure.message(pc: "TOWER").contains("TOWER"))
             #expect(!failure.message(pc: "TOWER").contains(" - "))
         }
