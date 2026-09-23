@@ -3,7 +3,8 @@
 //
 //  The in-stream signals: banner pills (width clamp, the leave hint a stuck
 //  pill earns, VoiceOver announcements), the leave-hint budget, the codes a
-//  video-less bring-up ends with, and the stats HUD's non-color emphasis.
+//  video-less bring-up ends with and their toasts, and the stats HUD's
+//  non-color emphasis.
 //
 
 import AppKit
@@ -158,6 +159,18 @@ struct StreamSignalTests {
         #expect(code(true, 2.5) == -101)
         #expect(code(false, 2.5) == -1)
         #expect(code(false, .infinity) == -1)
+    }
+
+    /// Each bring-up code reaches the user as its own fix, not the generic toast.
+    @Test func theEndedToastNamesTheFix() {
+        let traffic = AppModel.streamEndedMessage(code: -100, hostName: "Den PC")
+        let frame = AppModel.streamEndedMessage(code: -101, hostName: "Den PC")
+        let other = AppModel.streamEndedMessage(code: -1, hostName: "Den PC")
+        #expect(traffic.contains("Den PC") && traffic.contains("UDP port 47998"))
+        #expect(frame.contains("Den PC") && frame.contains("codec"))
+        #expect(other == "Stream to Den PC ended unexpectedly.")
+        #expect(Set([traffic, frame, other]).count == 3)
+        #expect(![traffic, frame, other].contains { $0.localizedCaseInsensitiveContains("host") })
     }
 
     // MARK: Stats HUD

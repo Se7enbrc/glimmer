@@ -398,6 +398,21 @@ extension AppModel {
         }
     }
 
+    /// The toast for a stream that ended with a non-zero code. The watchdog's
+    /// bring-up codes (see watchdogTerminationCode) each name their own fix.
+    static func streamEndedMessage(code: Int32, hostName: String) -> String {
+        switch code {
+        case StreamSession.noVideoTrafficTerminationCode:
+            return "No video from \(hostName) reached this Mac. "
+                + "Make sure the PC's firewall allows UDP port 47998."
+        case StreamSession.noVideoFrameTerminationCode:
+            return "Video from \(hostName) arrived but couldn't be decoded. "
+                + "Try another codec from the PC's ⋯ menu."
+        default:
+            return "Stream to \(hostName) ended unexpectedly."
+        }
+    }
+
     /// Handle one engine event for the session streaming `host`. The host is
     /// the SESSION's host captured at stream() entry - never `selectedHost`,
     /// which the ⌘1-⌘9 shortcuts and the toolbar pill can re-point mid-flight
@@ -429,7 +444,7 @@ extension AppModel {
             streamPhase = .idle
             nativeHDRActive = false
             if code != 0 {
-                nativeStreamError = "Stream to \(host.displayName) ended unexpectedly."
+                nativeStreamError = Self.streamEndedMessage(code: code, hostName: host.displayName)
             }
         case .reconnecting:
             // The host closed a live session (it likely restarted across a
