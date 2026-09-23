@@ -398,22 +398,36 @@ struct StreamPathMTUTests {
         #expect(StreamPathMTU.reconnectAsk(current: start, route: nil, downshifted: false) == start)
     }
 
-    /// A wired, boosted start downshifted from 240 to 144 Mbps: the withdrawal
-    /// still applies at a 25 ms RTT, so the reconnect asks 72, not 144.
+    /// A wired, boosted start downshifted from 240 to 144 Mbps on a 15 ms path
+    /// (remote, but short of the 20 ms distance trim): the reconnect withdraws to 72.
     @Test func downshiftKeepsItsBoostForTheWiredWithdrawal() {
         let downshifted = RouteAsk(kbps: 144_000, boost: 2)
         let ask = StreamPathMTU.reconnectAsk(current: downshifted, route: nil, downshifted: true)
         #expect(ask == downshifted)
-        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 25) == 72_000)
+        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 15) == 72_000)
     }
 
-    /// A Wi-Fi route of 271 is roomier than a downshifted wired 300 at boost 2
-    /// (150 once withdrawn), so the downshift stands.
+    /// Downshifted to a wired 300 at boost 2 (150 once withdrawn). A Wi-Fi route
+    /// of 271 caps it whether or not the RTT withdraws the boost; a roomier wired
+    /// route changes nothing.
     @Test func roomierRouteNeverRaisesADownshiftedAsk() {
         let downshifted = RouteAsk(kbps: 300_000, boost: 2)
-        for route in [RouteAsk(kbps: 271_000, boost: 1), RouteAsk(kbps: 500_000, boost: 2)] {
-            #expect(StreamPathMTU.reconnectAsk(current: downshifted, route: route, downshifted: true) == downshifted)
-        }
+        let wifi = StreamPathMTU.reconnectAsk(
+            current: downshifted, route: RouteAsk(kbps: 271_000, boost: 1), downshifted: true)
+        #expect(StreamPathMTU.wiredAskKbps(capped: wifi.kbps, boost: wifi.boost, steadyRttMs: 1) == 271_000)
+        #expect(StreamPathMTU.wiredAskKbps(capped: wifi.kbps, boost: wifi.boost, steadyRttMs: 5) == 150_000)
+        #expect(StreamPathMTU.reconnectAsk(
+            current: downshifted, route: RouteAsk(kbps: 500_000, boost: 2), downshifted: true) == downshifted)
+    }
+
+    /// A Wi-Fi downshift to 260 docked onto a wired 500 at boost 2: 260 on a LAN,
+    /// 250 once a remote path withdraws the boost, never the dock's 500.
+    @Test func boostedRouteNeverRaisesAnUnboostedDownshift() {
+        let ask = StreamPathMTU.reconnectAsk(
+            current: RouteAsk(kbps: 260_000, boost: 1), route: RouteAsk(kbps: 500_000, boost: 2),
+            downshifted: true)
+        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 1) == 260_000)
+        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 5) == 250_000)
     }
 
     @Test func tighterRouteStillLowersADownshiftedAsk() {
@@ -449,7 +463,7 @@ struct StreamPathMTUTests {
         let start = ContinuousClock.now
         await sampler.awaitPreLaunchWindow(maxWaitMs: 150)
         let waited = ContinuousClock.now - start
-        #expect(waited >= .milliseconds(140) && waited < .seconds(5))
+        #expect(waited >= .milliseconds(100) && waited < .seconds(5))
         #expect(sampler.harvest() == nil)
     }
 

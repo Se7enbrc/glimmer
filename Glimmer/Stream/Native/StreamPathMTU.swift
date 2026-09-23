@@ -130,7 +130,7 @@ final class RttSampler: @unchecked Sendable {
 
     /// Starts sampling immediately: there is no useful window between
     /// construction and the first sample. The loop holds the sampler until
-    /// `harvest()` or `maxSamples` ends it, so every exit path must harvest.
+    /// `harvest()` or `maxSamples` ends it; a connect that throws first runs to the cap.
     init(host: String, port: UInt16) {
         self.host = host
         self.port = port
@@ -358,14 +358,14 @@ enum StreamPathMTU {
     }
 
     /// The ask a reconnect rebuilds from: the current route's, but never above a
-    /// downshift. A downshift keeps its boost for the wired withdrawal, so the
-    /// two compare unboosted.
+    /// downshift. Downshifted, it takes the lower of the two both before and after
+    /// the RTT withdraws the wired boost, so neither outcome can raise either ask.
     static func reconnectAsk(current: RouteAsk, route: RouteAsk?, downshifted: Bool) -> RouteAsk {
-        guard downshifted else { return route ?? current }
-        guard let route, Double(route.kbps) / route.boost < Double(current.kbps) / current.boost else {
-            return current
-        }
-        return route
+        guard let route else { return current }
+        guard downshifted else { return route }
+        let kbps = min(current.kbps, route.kbps)
+        let withdrawn = min(Double(current.kbps) / current.boost, Double(route.kbps) / route.boost)
+        return RouteAsk(kbps: kbps, boost: Double(kbps) / withdrawn)
     }
 
     /// Fewer samples than this cannot cap: "consistently high" needs a sample.
