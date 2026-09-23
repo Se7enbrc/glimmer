@@ -11,9 +11,8 @@
 //  JITTER REGRESSION FIX (root-caused on a clean-but-jittery wifi link): the
 //  old "callback throttled" trip keyed on buffer depth (`depth >= maxQueuedFrames`)
 //  + late-drops, which is the NORMAL signature of healthy jitter absorption
-//  (the FecHeadroomController deepens the buffer 24→48ms, so the FIFO
-//  legitimately fills and drop-to-newest late-drops under zero-loss wifi
-//  jitter). It mis-fired 98× on a clean-but-jittery link, its self-heal
+//  (the FIFO legitimately fills and drop-to-newest late-drops under zero-loss
+//  wifi jitter). It mis-fired 98× on a clean-but-jittery link, its self-heal
 //  (force-release → rebuildLink) re-seeded the cadence and tripped the
 //  present_stall give-up that disabled the pacer for ~5s of unpaced direct
 //  presentation each - turning recoverable jitter into hard hitches. The
@@ -175,18 +174,9 @@ extension StreamSession {
         self.sawLinkSilentLastTick = linkSilent
         self.lastWatchdogTotalTicks = live.totalTicks
 
-        // GENUINE present-freeze trip - the ONLY remaining present-stall signal,
-        // and it is jitter-proof BY CONSTRUCTION. It fires only when the present
-        // callback is still ticking (the link is alive, NOT linkDead), frames are
-        // QUEUED, yet NO frame has reached the renderer for a full, jitter-proof
-        // window. Crucially it never keys on the buffer being DEEP or on late-drop
-        // count: under zero-loss wifi jitter (amplified by the
-        // FecHeadroomController deepening the buffer 24→48ms) the FIFO
-        // LEGITIMATELY pins full and drop-to-newest late-drops some frames WHILE
-        // the pacer keeps releasing ~1 frame/tick (and the present-loop backoff
-        // presents the freshest frame whenever the head goes hopelessly late) -
-        // that keeps `secondsSinceLastRelease` fresh, so a full buffer never
-        // trips this.
+        // GENUINE present-freeze trip, the only present-stall signal: the link ticks and frames are QUEUED,
+        // yet none reached the renderer for a full window. Wi-Fi jitter over the fixed 24ms reorder hold can
+        // pin the FIFO full, but the pacer still releases (`secondsSinceLastRelease` stays fresh), so depth never trips it.
         //
         // DROUGHT GATE (root-caused on a lossy wifi link): the release clock ALSO
         // goes stale when there is simply nothing to release - a wire-loss

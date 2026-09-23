@@ -101,8 +101,6 @@ Components:
   reorders, FEC-recovers, and assembles packets → `VideoDepacketizer` which
   emits `DecodeUnit`s to the `VideoSink` (the `VideoDecoder`).
   `ReedSolomon.swift` is the GF(256) erasure decoder (see CREDITS.md).
-  `FecHeadroomController` adaptively deepens receive headroom under sustained
-  loss with a bounded, recovering control loop.
 - **Audio receive** - `RtpAudioReceiver` (+`+Socket`, `+Decrypt`, `+Ping`,
   `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`) /
   `AudioFecDecoder` → Opus decode in `AudioDecoder` (AVAudioEngine playout with

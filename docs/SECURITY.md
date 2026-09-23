@@ -165,18 +165,22 @@ retry.
 
 ## Pinning
 
-Host certs are pinned **after** successful pairing. The pin lives in a mode-0600
-file at `~/Library/Application Support/Glimmer/PinnedHosts/<hostID>.pem`, where
-`hostID` is the host's UUID (or its hostname, when that is all we have) with
-anything outside `[A-Za-z0-9-_.]` replaced by `_`. `PinnedCertStore`
-(`Types+Cert.swift`) owns it, at parent-directory mode 0700.
+Host certs are pinned **after** successful pairing. The pin lives in a file at
+`~/Library/Application Support/Glimmer/PinnedHosts/<hostID>.pem`, where `hostID`
+is the host's UUID (or its hostname, when that is all we have) with anything
+outside `[A-Za-z0-9-_.]` replaced by `_`. `PinnedCertStore` (`Types+Cert.swift`)
+owns it.
 
-The pins moved out of `UserDefaults` because `cfprefsd` is shared across
-same-UID processes: any other process running as the user could rewrite a pin
-through the preferences daemon. They are stored as PEM rather than a raw
-`SecCertificate`, because PEM survives keychain wipes, OS migrations, and Time
-Machine restores in a way the `SecCertificate` ref does not. The cert is public
-information; the threat mode-0600 addresses is _write_, not _read_.
+That file is the only pin source because our pairing flow is what writes it,
+after the RSA-verified handshake, not because of its file mode: mode 0600 keeps
+other users out, but any process running as the same user can write it, just as
+it can rewrite `UserDefaults`. The copy older builds kept in `UserDefaults`
+(`hosts.N.srvcert`) is only a one-way migration hint, and if the two ever
+disagree the connection is refused and the PC must be paired again. Pins are
+stored as PEM rather than a raw `SecCertificate`, because PEM survives keychain
+wipes, OS migrations, and Time Machine restores in a way the `SecCertificate`
+ref does not. The cert is public information, so a pin needs integrity, not
+secrecy.
 
 **Once pinned, ANY mismatch fails the connection.** Enforcement lives in
 `ControlTransport.swift`: `performBlocking` runs a post-handshake exact-DER pin
