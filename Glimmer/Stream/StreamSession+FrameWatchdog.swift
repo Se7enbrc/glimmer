@@ -175,8 +175,7 @@ extension StreamSession {
             bytes received but no decoded output: decodeIdle=\(decodeIdle, privacy: .public)s \
             receiveIdle=\(receiveIdle, privacy: .public)s (host is sending data we cannot decode - corrupt bitstream, missing IDR, \
             or codec mismatch)
-            """
-        )
+            """)
         // Mirror into the in-app LogStore so the decode-only stall is visible in
         // Troubleshooting → Logs (which reads only Diag.*).
         Diag.warn(
@@ -263,8 +262,7 @@ extension StreamSession {
                     Frame watchdog: no decoded frame in \(decodeIdleSeconds)s but control link is alive (ACK \
                     \(health.sinceLastAckMs, privacy: .public)ms ago) - holding, not tearing down (host likely paused video for a \
                     sign-in/desktop transition); requesting IDRs until it resumes
-                    """
-                )
+                    """)
                 Diag.notice(
                     "Video stalled \(Int(decodeIdleSeconds))s but the connection is "
                     + "alive - holding and requesting keyframes (host likely paused "
@@ -281,8 +279,7 @@ extension StreamSession {
         log.error("""
             Frame watchdog tripped - no decoded frame in \(decodeIdleSeconds)s (last byte reception \
             \(receiveDesc, privacy: .public)); tearing down
-            """
-        )
+            """)
         // Also surface to the in-app LogStore (the user's Troubleshooting → Logs
         // view reads ONLY Diag.*, not os.Logger), so a watchdog-triggered stop
         // shows WHY it ran instead of a bare "Stream session stopping".

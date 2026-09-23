@@ -312,8 +312,7 @@ public struct VideoFormats: OptionSet, Sendable {
             VT capability probe: H264=\(h264, privacy: .public) HEVC=\(hevc, privacy: .public) \
             HEVCMain10=\(hevcM10, privacy: .public) HEVC444=\(hevc444, privacy: .public) AV1=\(av1, privacy: .public) \
             AV1Main10=\(av1M10, privacy: .public) AV1_444=\(av1444, privacy: .public) raw=0x\(raw, privacy: .public)
-            """
-        )
+            """)
         return out
     }
 
