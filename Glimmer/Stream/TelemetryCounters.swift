@@ -62,6 +62,9 @@ final class TelemetryCounters: @unchecked Sendable {
     let fecRecoveredFramesTotal = Counter()
     let inputEventsTotal = Counter()
     let inputBatchFlushTotal = Counter()
+    /// Gyro/accel samples handed to the batcher. Kept out of `inputEventsTotal`:
+    /// sensor noise never idles, so it would pin the input-idle state.
+    let inputMotionTotal = Counter()
     /// Input flush ticks that early-returned because the LOCAL outbound send count
     /// was over cap (the radio draining slowly) - one cause of the input p99 tail.
     let inputFlushSendBackloggedSkipTotal = Counter()

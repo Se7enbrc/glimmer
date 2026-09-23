@@ -392,6 +392,7 @@ extension TelemetryExporter {
         let fecRecoveredTotal = counters.fecRecoveredFramesTotal.value
         let inputEventsTotal = counters.inputEventsTotal.value
         let inputFlushTotal = counters.inputBatchFlushTotal.value
+        let inputMotionTotal = counters.inputMotionTotal.value
         let preFecLostTotal = counters.videoPacketsLostPreFecTotal.value
         let outOfOrderTotal = counters.videoPacketsOutOfOrderTotal.value
         let duplicateTotal = counters.videoPacketsDuplicateTotal.value
@@ -418,6 +419,10 @@ extension TelemetryExporter {
                 }
                 if inputFlushTotal >= prevInputFlushTotal {
                     snap.inputFlushPerSecond = Double(inputFlushTotal &- prevInputFlushTotal) / dt
+                }
+                let prevMotion = Self.captureBaselines.inputMotionTotal
+                if inputMotionTotal >= prevMotion {
+                    snap.inputMotionPerSecond = Double(inputMotionTotal &- prevMotion) / dt
                 }
                 // P1 PRESENT stale-frame repeats/sec (the invisible-stutter rate).
                 if staleRepeatTotal >= prevStaleFrameRepeatTotal {
@@ -452,6 +457,7 @@ extension TelemetryExporter {
         prevFecRecoveredTotal = fecRecoveredTotal
         prevInputEventsTotal = inputEventsTotal
         prevInputFlushTotal = inputFlushTotal
+        Self.captureBaselines.inputMotionTotal = inputMotionTotal
         prevPreFecLostTotal = preFecLostTotal
         prevOutOfOrderTotal = outOfOrderTotal
         prevDuplicateTotal = duplicateTotal

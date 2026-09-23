@@ -176,13 +176,9 @@ final class LatencyHistograms: @unchecked Sendable {
     /// can be tens of ms), so it gets its own coarse-tailed bound set below.
     let glassToGlass = Stage(bounds: Stage.glassToGlassBoundsMs)
 
-    /// INPUT-TO-PHOTON (estimate): felt input latency, composed from the SAME
-    /// legs as glass-to-glass (host-encode + ~RTT/2 + client pipeline) for the
-    /// frame that carries an input's response, recorded once per input stamp.
-    /// It therefore reads >= glass_to_glass by construction. Labelled an estimate
-    /// because the host doesn't mark which frame reflects an input. (The prior
-    /// form measured time-to-next-present and read 4-5x BELOW g2g - bounded by
-    /// the frame interval, not the round trip.) Shares the coarse bounds.
+    /// INPUT-TO-PHOTON (estimate), once per input stamp: client input legs + uplink
+    /// ~RTT/2 + half a host frame + that frame's glass-to-glass (see
+    /// composeInputToPhoton). Shares the coarse bounds.
     let inputToPhoton = Stage(bounds: Stage.glassToGlassBoundsMs)
 
     func reset() {

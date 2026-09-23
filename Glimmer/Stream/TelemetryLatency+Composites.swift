@@ -29,19 +29,11 @@ extension FrameTimingTracker {
         return haveAny ? total : nil
     }
 
-    /// Input-to-photon (signal 2): a felt-latency estimate composed from the
-    /// SAME known legs as glass-to-glass (host-encode + ~RTT/2 + client
-    /// pipeline), recorded ONCE per fresh input stamp. The old form -
-    /// (first present after the stamp) − stamp - measured time-to-NEXT-present,
-    /// bounded by the frame interval, so it read 4-5x BELOW glass-to-glass
-    /// (structurally impossible for felt latency: a present ~8ms out shows
-    /// content fixed a host round-trip ago). Composing the legs makes it
-    /// >= glass_to_glass by construction. Consume-once on the input stamp keeps
-    /// "one observation per input" so an idle stream's static frames can't
-    /// re-count an old input. Reuses the always-live last-input instant the
-    /// InputBatcher stamps via `noteInputEvent()` for the gate only - no new
-    /// clock, no new input-side write.
-    func computeInputToPhoton(presentNanos: UInt64, glassToGlassMs: Double?) -> Double? {
+    /// Input-to-photon (signal 2), an ESTIMATE recorded once per fresh input stamp
+    /// (`noteInputEvent`), so an idle stream's static frames can't re-count an old
+    /// input. The host doesn't mark which frame reflects an input.
+    func computeInputToPhoton(presentNanos: UInt64, glassToGlassMs: Double?,
+                              hostFrameIntervalMs: Double) -> Double? {
         guard let lastInputNanos = TelemetryCounters.shared.lastInputNanos else { return nil }
         guard presentNanos > lastInputNanos else { return nil }
         // Consume-once gate on the lock this present path already takes for
@@ -49,12 +41,19 @@ extension FrameTimingTracker {
         os_unfair_lock_lock(warmupLock)
         let alreadyConsumed = lastInputConsumedNanos == lastInputNanos
         lastInputConsumedNanos = lastInputNanos
+        let clientLegsMs = lastInputLegsMs
         os_unfair_lock_unlock(warmupLock)
-        guard !alreadyConsumed else { return nil }
-        // HONEST composition: the felt input round trip is the same pipeline
-        // glass-to-glass measures for THIS input-carrying frame - input rides
-        // the link, the host encodes the response, it transits back, our
-        // pipeline presents it. Same legs, so it can never read below g2g.
-        return glassToGlassMs
+        guard !alreadyConsumed, let glassToGlassMs else { return nil }
+        return Self.composeInputToPhoton(
+            glassToGlassMs: glassToGlassMs, clientLegsMs: clientLegsMs,
+            rttMs: TelemetryCounters.shared.rttMs, hostFrameIntervalMs: hostFrameIntervalMs)
+    }
+
+    /// The input round trip: client legs (deliver + queue→wire), uplink ~RTT/2, the
+    /// average wait for the host's next frame (half an interval), then that frame's
+    /// glass-to-glass (which carries the downlink). Unknown legs (0) add nothing.
+    static func composeInputToPhoton(glassToGlassMs: Double, clientLegsMs: Double,
+                                     rttMs: Double, hostFrameIntervalMs: Double) -> Double {
+        glassToGlassMs + max(clientLegsMs, 0) + max(rttMs, 0) / 2 + max(hostFrameIntervalMs, 0) / 2
     }
 }

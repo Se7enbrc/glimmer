@@ -323,6 +323,7 @@ extension TelemetryRenderer {
     ) {
         builder.add("input_events_per_s", snap.inputEventsPerSecond)
         builder.add("input_flush_per_s", snap.inputFlushPerSecond)
+        builder.add("input_motion_per_s", snap.inputMotionPerSecond)
         builder.addCount("input_idle_to_active_total", snap.inputIdleToActiveTotal)
         builder.add("input_since_last_ms", snap.timeSinceLastInputMs)
         // Host rumble RECEIVED at dispatch (pre-guard) + the invalid-drop
@@ -423,6 +424,9 @@ extension TelemetryRenderer {
         addStage("lat_end_to_end", histograms.endToEnd)
         addStage("glass_to_glass", histograms.glassToGlass)
         addStage("input_to_photon_est", histograms.inputToPhoton)
+        // The client input legs input_to_photon_est is built from.
+        if let stage = snap.inputDeliverLatency { addStage("lat_input_deliver", stage) }
+        if let stage = snap.inputLocalLatency { addStage("lat_input_queue_to_wire", stage) }
         // DECODE time split by frame type (signal: DECODE).
         addStage("decode_idr", histograms.decodeIDR)
         addStage("decode_p", histograms.decodeP)

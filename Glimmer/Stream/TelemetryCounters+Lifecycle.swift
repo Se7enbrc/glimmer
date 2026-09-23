@@ -77,6 +77,7 @@ extension TelemetryCounters {
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
                         tickMissPreemptedTotal, tickMissLinkskipTotal,
                         suppressedDropTotal, decodeGatedDropTotal, recoveryWaitDropTotal,
+                        inputMotionTotal,
                         discontinuityFlushTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
                         audioFecMismatchTotal, audioUnderrunTotal, audioOverrunTotal,

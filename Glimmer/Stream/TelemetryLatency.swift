@@ -166,6 +166,10 @@ final class FrameTimingTracker: @unchecked Sendable {
     private var lastReceiveNanos: UInt64 = 0
     private var lastAssembleNanos: UInt64 = 0
     private var lastOutputNanos: UInt64 = 0
+    /// Smoothed host frame interval (ms) from assembled frames' 90 kHz RTP deltas,
+    /// 0 until two frames; guarded by `mapLock`.
+    private var lastAssembledRtp: UInt32 = 0
+    private var hostFrameIntervalEwmaMs = 0.0
     /// Cadence deltas above this are a content gap (idle desktop, scene load),
     /// not delivery cadence - skipped so they can't pollute the histogram sum.
     private static let cadenceGapCutoffNanos: UInt64 = 1_000_000_000
@@ -246,6 +250,12 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// observation (consume-once; see computeInputToPhoton in the Composites
     /// split). Module-internal + rides `warmupLock` so the split can reach both.
     var lastInputConsumedNanos: UInt64 = 0
+    /// Client-side legs (deliver + queue→wire, ms) of the latest flushed input;
+    /// rides `warmupLock` like the consume-once stamp it is read with.
+    var lastInputLegsMs = 0.0
+    func noteInputLegs(_ legsMs: Double) {
+        os_unfair_lock_lock(warmupLock); lastInputLegsMs = legsMs; os_unfair_lock_unlock(warmupLock)
+    }
     func armResumePresentTag() {
         os_unfair_lock_lock(warmupLock); resumePresentPending = true; os_unfair_lock_unlock(warmupLock)
     }
@@ -305,6 +315,7 @@ final class FrameTimingTracker: @unchecked Sendable {
         let prevAssemble = lastAssembleNanos
         lastReceiveNanos = receiveNanos
         lastAssembleNanos = assembleNanos
+        foldHostFrameIntervalLocked(rtpTimestamp)
         if inFlight[rtpTimestamp] == nil {
             insertionOrder.append(rtpTimestamp)
         }
@@ -328,6 +339,23 @@ final class FrameTimingTracker: @unchecked Sendable {
     private func observeCadence(_ stage: LatencyHistograms.Stage, prev: UInt64, now: UInt64) {
         guard prev > 0, now > prev, now &- prev < Self.cadenceGapCutoffNanos else { return }
         stage.observe(Double(now &- prev) / 1_000_000.0)
+    }
+
+    /// Fold one assembled frame's RTP delta into the host-interval EWMA (wrap-safe;
+    /// a backward step or a gap over 1 s is not cadence). Called under `mapLock`.
+    private func foldHostFrameIntervalLocked(_ rtp: UInt32) {
+        defer { lastAssembledRtp = rtp }
+        guard lastAssembledRtp != 0 else { return }
+        let deltaMs = Double(rtp &- lastAssembledRtp) / 90.0
+        guard deltaMs > 0, deltaMs < 1_000 else { return }
+        hostFrameIntervalEwmaMs = hostFrameIntervalEwmaMs == 0
+            ? deltaMs : hostFrameIntervalEwmaMs + 0.1 * (deltaMs - hostFrameIntervalEwmaMs)
+    }
+
+    /// Smoothed host frame interval (ms), 0 before two assembled frames.
+    var hostFrameIntervalMs: Double {
+        os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
+        return hostFrameIntervalEwmaMs
     }
 
     /// Stage t_submit. Called just before VTDecompressionSessionDecodeFrame
@@ -375,6 +403,7 @@ final class FrameTimingTracker: @unchecked Sendable {
         if let idx = insertionOrder.firstIndex(of: rtpTimestamp) {
             insertionOrder.remove(at: idx)
         }
+        let hostFrameIntervalMs = hostFrameIntervalEwmaMs
         os_unfair_lock_unlock(mapLock)
 
         // Compute the five sub-stage deltas in ms. A stage timestamp of 0 means
@@ -422,14 +451,11 @@ final class FrameTimingTracker: @unchecked Sendable {
         let glassToGlass = computeGlassToGlass(hostEncodeMs: timing.hostEncodeMs, pipelineMs: endToEnd)
         if !warmingUp, let value = glassToGlass { histograms.glassToGlass.observe(value) }
 
-        // INPUT-TO-PHOTON estimate (signal 2): the felt input round trip,
-        // composed from the SAME legs as glass-to-glass for THIS input-carrying
-        // frame (host-encode + ~RTT/2 + pipeline), so it can't read below g2g.
-        // Still an estimate (the host doesn't mark which frame reflects an
-        // input); each input stamp records at most one observation (consume-once
-        // - see the Composites split), so an idle stream's static frames can't
-        // inflate it.
-        let inputToPhoton = computeInputToPhoton(presentNanos: presentNanos, glassToGlassMs: glassToGlass)
+        // INPUT-TO-PHOTON estimate (signal 2): client legs + uplink + the wait for
+        // the host's next frame + this frame's glass-to-glass, once per input
+        // stamp (see the Composites split).
+        let inputToPhoton = computeInputToPhoton(
+            presentNanos: presentNanos, glassToGlassMs: glassToGlass, hostFrameIntervalMs: hostFrameIntervalMs)
         if !warmingUp, let value = inputToPhoton { histograms.inputToPhoton.observe(value) }
 
         traceWriter.append(renderTraceLine(TraceRecord(

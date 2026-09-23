@@ -228,6 +228,8 @@ struct TelemetrySnapshot: Sendable {
     // input
     var inputEventsPerSecond: Double?
     var inputFlushPerSecond: Double?
+    /// Gyro/accel samples per second; not input events (see inputMotionTotal).
+    var inputMotionPerSecond: Double?
     /// Idle→active input edge count (monotonic). A short-window `increase()` of
     /// this marks the exact "resumed controlling after idle" beat so the latency
     /// transient is auto-correlatable instead of hand-reconstructed.

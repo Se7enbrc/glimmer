@@ -198,17 +198,13 @@ extension TelemetryRenderer {
             "glimmer_latency_glass_to_glass_ms",
             "Glass-to-glass latency histogram (host encode + ~RTT/2 + receive→present), ms.",
             stage: histograms.glassToGlass)
-        // Input-to-photon ESTIMATE (signal 2): first-present-after-input −
-        // input-sent, consume-once per input stamp (see TelemetryLatency+
-        // Composites). A lower bound on felt input latency (the host doesn't
-        // mark which frame reflects an input) - the help text says estimate so
-        // a reader can't misread it as measured. UNCAPPED up to the ~1s
-        // plausibility ceiling; an earlier 38ms freshness cap pinned max/p99 at
-        // the cap itself.
+        // Input-to-photon ESTIMATE (signal 2), composed per input stamp in
+        // TelemetryLatency+Composites; the help text says estimate so it is
+        // never read as measured.
         builder.emitHistogram(
             "glimmer_latency_input_to_photon_ms",
-            "Input-to-photon latency ESTIMATE histogram (first present after an input, "
-            + "one observation per input stamp), ms.",
+            "Input-to-photon latency ESTIMATE histogram (client input legs + RTT/2 + half a host frame "
+            + "+ glass-to-glass, one observation per input stamp), ms.",
             stage: histograms.inputToPhoton)
         // DECODE time split by frame type (signal: DECODE) - the submit→output
         // decode delta bucketed separately for IDR keyframes vs P-frames, so the

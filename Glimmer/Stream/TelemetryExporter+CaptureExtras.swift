@@ -300,6 +300,8 @@ extension TelemetryExporter {
         var audioPingsSentTotal: UInt64?
         /// Previous-tick system `udps_fullsock` (UInt32, wraps; nil until read).
         var udpFullSockTotal: UInt32?
+        /// Previous-tick gyro/accel sample total, for input_motion_per_s.
+        var inputMotionTotal: UInt64 = 0
     }
     nonisolated(unsafe) static var captureBaselines = CaptureBaselines()
 }

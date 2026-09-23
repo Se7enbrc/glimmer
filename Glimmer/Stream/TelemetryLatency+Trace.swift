@@ -67,10 +67,9 @@ extension FrameTimingTracker {
         add("submit_to_output_ms", record.submitToOutput)
         add("output_to_present_ms", record.outputToPresent)
         add("end_to_end_ms", record.endToEnd)
-        // The two headline composite signals, per frame. input_to_photon is a
-        // lower-bound ESTIMATE (the host doesn't mark which frame reflects an
-        // input) - the key name keeps `_est` so a reader never mistakes it for a
-        // measured number.
+        // The two headline composite signals, per frame. input_to_photon is an
+        // ESTIMATE (the host doesn't mark which frame reflects an input); `_est`
+        // keeps a reader from mistaking it for a measured number.
         add("glass_to_glass_ms", record.glassToGlass)
         add("input_to_photon_est_ms", record.inputToPhoton)
         return "{" + fields.joined(separator: ",") + "}"
