@@ -145,6 +145,11 @@ extension AppModel {
             pairingPhase = .failure(.unreachable)
             return nil
         }
+        guard !fetched.isRealGFE else {
+            Diag.error("Pairing: PC runs NVIDIA GameStream, not Sunshine", "Pairing")
+            pairingPhase = .failure(.gameStream)
+            return nil
+        }
         do {
             pairingPhase = .awaitingPin
             // Always the full handshake: this /serverinfo came over plain HTTP,

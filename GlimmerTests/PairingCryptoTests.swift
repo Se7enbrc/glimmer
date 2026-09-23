@@ -222,6 +222,18 @@ struct PairingCryptoTests {
         #expect(await client.server.pairStatus == .paired)
     }
 
+    /// GameStream is told apart by its `<state>`, not by `GfeVersion`, which Sunshine sends too.
+    @Test func gameStreamIsToldApartByItsState() async throws {
+        func isGameStream(_ body: String) async throws -> Bool {
+            let client = NetworkClient(server: ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER"))
+            let xml = try XMLTreeBuilder.parse(data: Data("<root status_code=\"200\">\(body)</root>".utf8))
+            await client.hydrateServerInfo(from: xml, fetchedOverPaired: false)
+            return await client.server.isRealGFE
+        }
+        #expect(try await isGameStream("<state>MJOLNIR_STATE_SERVER_AVAILABLE</state>"))
+        #expect(try await isGameStream("<GfeVersion>3.23.0.74</GfeVersion><state>SUNSHINE_SERVER_FREE</state>") == false)
+    }
+
     /// TLS with no pin would send /launch's input key to any certificate, so it
     /// is refused up front, before any connection is attempted.
     @Test func httpsWithoutAPinIsRefused() async {
@@ -271,7 +283,7 @@ struct PairingCryptoTests {
     /// The sheet words every outcome from this: each names the PC, and a timeout
     /// reads differently from a refusal so nobody retypes a code that was right.
     @Test func pairingFailureMessagesNameThePC() {
-        for failure in [PairingFailure.unreachable, .timedOut, .busy, .rejected] {
+        for failure in [PairingFailure.unreachable, .gameStream, .timedOut, .busy, .rejected] {
             #expect(failure.message(pc: "TOWER").contains("TOWER"))
             #expect(!failure.message(pc: "TOWER").contains(" - "))
         }

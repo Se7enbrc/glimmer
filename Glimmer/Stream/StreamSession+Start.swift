@@ -237,9 +237,9 @@ extension StreamSession {
             reason: "Glimmer is streaming")
     }
 
-    /// Step 1 of start(): fetch /serverinfo, stamp its launch sub-leg, log the
-    /// handshake line, and refuse an unpaired PC, named as the user knows it. A
-    /// throw unwinds through start()'s power-assertion and orphaned-network defers.
+    /// Step 1 of start(): fetch /serverinfo, stamp its launch sub-leg, log the handshake line, and
+    /// refuse a GameStream or unpaired PC, named as the user knows it. A throw unwinds through
+    /// start()'s power-assertion and orphaned-network defers.
     private func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
         let serverinfoStart = Date()
@@ -248,6 +248,7 @@ extension StreamSession {
             serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
         // swiftlint:disable:next line_length
         log.info("fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) codecSupport=0x\(String(serverInfo.serverCodecSupport.rawValue, radix: 16))")
+        if serverInfo.isRealGFE { throw StreamError.gameStreamHost }
         if serverInfo.pairStatus != .paired { throw NetworkClient.notPaired(pcName) }
         return serverInfo
     }

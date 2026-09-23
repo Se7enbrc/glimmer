@@ -194,7 +194,7 @@ enum GlimmerCLI {
         case .hostUnreachable, .sunshineNeedsRestart, .truncatedRead, .sessionFailed:
             return Exit.unreachable
         case .binaryNotFound, .launchFailed, .decoderFailed, .audioFailed, .crypto,
-             .streamPortsBlocked, .hostTimedOut, .hostRefused:
+             .streamPortsBlocked, .hostTimedOut, .hostRefused, .gameStreamHost:
             return Exit.failed
         }
     }

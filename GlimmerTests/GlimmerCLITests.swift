@@ -79,6 +79,7 @@ struct GlimmerCLITests {
         #expect(GlimmerCLI.exitCode(for: StreamError.hostRefused(message: "Service Unavailable", code: 503)) == exit.failed)
         #expect(GlimmerCLI.exitCode(for: StreamError.hostTimedOut) == exit.failed)
         #expect(GlimmerCLI.exitCode(for: StreamError.streamPortsBlocked(proto: "UDP", port: 47998)) == exit.failed)
+        #expect(GlimmerCLI.exitCode(for: StreamError.gameStreamHost) == exit.failed)
         #expect(GlimmerCLI.exitCode(for: CancellationError()) == exit.failed)
     }
 
@@ -98,6 +99,8 @@ struct GlimmerCLITests {
             == "Tower couldn't start the app.")
         #expect(GlimmerCLI.message(for: StreamError.hostRefused(message: "Game is not installed", code: 500), host: tower)
             == "Tower couldn't start the app: Game is not installed.")
+        #expect(GlimmerCLI.message(for: StreamError.gameStreamHost, host: tower)
+            == AppModel.needsSunshineMessage("Tower"))
     }
 
     /// `glimmer list` prints the readiness chip's words, with room for a long name.
@@ -127,6 +130,7 @@ struct GlimmerCLITests {
             #expect(line.contains("192.0.2.10") && line.contains("glimmer pair") && !line.contains("Try Again"))
         }
         #expect(GlimmerCLI.pairFailureMessage(.unreachable, pc: "x") == PairingFailure.unreachable.message(pc: "x"))
+        #expect(GlimmerCLI.pairFailureMessage(.gameStream, pc: "x") == AppModel.needsSunshineMessage("x"))
     }
 
     @Test func csvQuotesNamesSoCommasAndQuotesSurvive() {

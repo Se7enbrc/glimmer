@@ -387,15 +387,8 @@ public struct ServerInfo: Sendable {
     public var pairStatus: PairStatus = .unpaired
     public var appVersion: String?              // GFE/Sunshine version string
     public var gfeVersion: String?
-    /// True only for genuine NVIDIA GameStream hosts. Sunshine also populates
-    /// `GfeVersion` in its `/serverinfo` response for compatibility, so a
-    /// non-empty `gfeVersion` does NOT prove real GFE. moonlight-qt
-    /// distinguishes by looking at `<state>` for the substring "MJOLNIR"
-    /// (NVIDIA's internal codename) - Sunshine's `<state>` is
-    /// "SUNSHINE_SERVER_FREE" / "_BUSY" instead. This field gates the
-    /// GFE-only `fps>60 → fps=0` workaround in the launch query; applying
-    /// that workaround to Sunshine makes Sunshine fall back to safe SDR
-    /// defaults including 8-bit codecs, killing HDR negotiation.
+    /// True only for NVIDIA GameStream, whose `<state>` holds "MJOLNIR" (moonlight-qt's test); Sunshine sends
+    /// `GfeVersion` too, so that proves nothing. Pairing and stream start refuse such a PC.
     public var isRealGFE: Bool = false
     public var maxLumaPixelsHEVC: Int = 0       // HEVC capability hint
     public var serverCodecSupport: VideoFormats = []  // server-supported formats (decoded into our VIDEO_FORMAT_* bitmask for our own use)
@@ -504,6 +497,8 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     /// The PC answers on its plain port only: Sunshine's secure listener needs a
     /// restart. Carries the sentence that names the fix.
     case sunshineNeedsRestart(String)
+    /// The PC runs NVIDIA GameStream, not Sunshine. Refused before anything is launched.
+    case gameStreamHost
 
     public var description: String {
         switch self {
@@ -526,6 +521,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         case .hostTimedOut: return "The PC didn't respond in time."
         case .hostRefused(let message, let code): return "\(message) (code \(code))"
         case .hostCertChanged(let sentence), .sunshineNeedsRestart(let sentence): return sentence
+        case .gameStreamHost: return AppModel.needsSunshineMessage("the PC")
         }
     }
 

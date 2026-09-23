@@ -30,6 +30,12 @@ extension AppModel {
         "Couldn't reach \(pcName). Make sure it's awake and on the same network."
     }
 
+    /// Every surface's words for a PC running NVIDIA GameStream, which Glimmer
+    /// refuses at pairing and at stream start.
+    nonisolated static func needsSunshineMessage(_ pcName: String) -> String {
+        "Glimmer needs Sunshine on \(pcName), which is running NVIDIA GameStream."
+    }
+
     /// A start()-throw as the banner's sentence and the recovery it calls for.
     /// "Make sure it's awake" is only for a PC that never answered; once it has,
     /// the copy names what actually failed.
@@ -48,6 +54,9 @@ extension AppModel {
             return (sentence, .pairing)
         case .sunshineNeedsRestart(let sentence):
             return (sentence, .other)
+        case .gameStreamHost:
+            // Sunshine brings its own certificate, so the next step after installing it is pairing.
+            return (needsSunshineMessage(hostName), .pairing)
         case .pairingRejected:
             return ("Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu.", .pairing)
         case .sessionFailed(RtspError.encryptedVideoRequiredCode):

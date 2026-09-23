@@ -27,6 +27,7 @@ enum PairingPhase: Equatable {
 enum PairingFailure: Error, Equatable {
     case invalidAddress
     case unreachable
+    case gameStream
     case timedOut
     case busy
     case rejected
@@ -37,6 +38,7 @@ enum PairingFailure: Error, Equatable {
         switch self {
         case .invalidAddress: return Self.addressHint
         case .unreachable: return AppModel.unreachableMessage(pc)
+        case .gameStream: return AppModel.needsSunshineMessage(pc)
         case .timedOut: return "The code wasn't entered on \(pc) in time. Choose Try Again to get a new code."
         case .busy:
             return "\(pc) is busy with another pairing request. "

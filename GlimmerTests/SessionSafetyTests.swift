@@ -197,7 +197,8 @@ struct SessionSafetyTests {
              "Tower couldn't start the app: Is a display connected?"),
             (StreamError.launchFailed("Malformed XML on /launch"), .other, "Tower couldn't start the app."),
             (StreamError.sessionFailed(-1), .other, "Tower answered, but the stream couldn't start."),
-            (StreamError.truncatedRead("recv timeout"), .unreachable, AppModel.unreachableMessage("Tower"))
+            (StreamError.truncatedRead("recv timeout"), .unreachable, AppModel.unreachableMessage("Tower")),
+            (StreamError.gameStreamHost, .pairing, "Glimmer needs Sunshine on Tower, which is running NVIDIA GameStream.")
         ]
         for (error, kind, message) in cases {
             let failure = AppModel.connectFailure(for: error, hostName: "Tower")

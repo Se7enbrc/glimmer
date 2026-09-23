@@ -174,7 +174,7 @@ extension NetworkClient {
         }
         // Distinguish real GFE from Sunshine-pretending-to-be-GFE by the
         // `<state>` field. NVIDIA's state strings contain "MJOLNIR"; Sunshine
-        // uses "SUNSHINE_SERVER_*". Used to gate the fps>60 launch-URL quirk.
+        // uses "SUNSHINE_SERVER_*". Pairing and stream start refuse real GFE.
         if let state = xml.string(forChild: "state") {
             server.isRealGFE = state.contains("MJOLNIR")
         }
