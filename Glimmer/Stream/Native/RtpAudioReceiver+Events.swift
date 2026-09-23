@@ -126,7 +126,7 @@ extension RtpAudioReceiver {
     /// the sink hops onto the exporter queue); called from the receive thread
     /// (audio_ttf) and the pending probe (audio_pending).
     private func emitAudioEvent(_ fields: [String]) {
-        Diag.notice("EVENT {" + fields.joined(separator: ",") + "}", Self.cat)
+        Diag.notice("EVENT {\(fields.joined(separator: ","))}", Self.cat)
         TelemetryExporter.recordEvent(fields)
     }
 }

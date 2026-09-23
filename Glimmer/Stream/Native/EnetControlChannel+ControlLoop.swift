@@ -27,7 +27,7 @@ extension EnetControlChannel {
     /// Latch the peer dead exactly once, whichever path sees it first (socket
     /// failure, ACK silence, host DISCONNECT or TERMINATION): logs `reason` and
     /// fires onTerminated(code). Later reports of the same death are no-ops.
-    func declarePeerDead(code: Int32, reason: String) {
+    func declarePeerDead(code: Int32, reason: DiagMessage) {
         let first = withState { () -> Bool in
             let wasAlive = !disconnected
             disconnected = true

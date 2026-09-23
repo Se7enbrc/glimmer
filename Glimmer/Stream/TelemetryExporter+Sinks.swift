@@ -79,8 +79,8 @@ extension TelemetryExporter {
         let sinceConnect =
             Double(now.uptimeNanoseconds &- connectInstant.uptimeNanoseconds) / 1_000_000_000.0
         let count = counters.bookmarkTotal.value
-        Diag.notice(String(format: "BOOKMARK #%llu at t+%.3fs - user flagged jank "
-            + "(\"that felt bad\")", count, sinceConnect), Self.logCategory)
+        Diag.notice("BOOKMARK #\(count) at t+\(String(format: "%.3f", sinceConnect))s - user flagged jank "
+            + "(\"that felt bad\")", Self.logCategory)
         if let tracker = FrameTimingTracker.shared {
             tracker.traceWriter.append(tracker.bookmarkLine(total: count, uptimeNanos: now.uptimeNanoseconds))
         }

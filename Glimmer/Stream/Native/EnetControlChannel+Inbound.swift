@@ -314,13 +314,13 @@ extension EnetControlChannel {
     /// Count an inbound control payload that failed authentication; only the
     /// first per session is logged, the total rides logIgnoredControlTotals.
     /// Always returns false, so callers can `return` it.
-    private func rejectInboundControl(_ why: String) -> Bool {
+    private func rejectInboundControl(_ why: DiagMessage) -> Bool {
         let first = withState { () -> Bool in
             rejectedInboundControl += 1
             return rejectedInboundControl == 1
         }
         if first {
-            Diag.error("ENet rejected inbound control (\(why)); counting further rejections quietly",
+            Diag.error("ENet rejected inbound control (" + why + "); counting further rejections quietly",
                        Self.logCategory)
         }
         return false

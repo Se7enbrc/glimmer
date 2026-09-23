@@ -349,13 +349,12 @@ enum QoSAudit {
             }
         }
         if !confirmed.isEmpty {
-            Diag.notice("QoS audit OK - hot-path threads on P-core tier: "
-                + confirmed.joined(separator: ", ") + ". (Network.swift .utility queue is "
-                + "control-plane, correctly NOT hot-path.)", category)
+            Diag.notice("QoS audit OK - hot-path threads on P-core tier: \(confirmed.joined(separator: ", ")). "
+                + "(Network.swift .utility queue is control-plane, correctly NOT hot-path.)", category)
         }
         if !demotions.isEmpty {
             Diag.warn("QoS audit FLAG - thread(s) on a low QoS tier while drawing CPU: "
-                + demotions.joined(separator: ", ") + " - a hot path may have been demoted "
+                + "\(demotions.joined(separator: ", ")) - a hot path may have been demoted "
                 + "off the P-core tier.", category)
         }
         if !matchedHotPath {
