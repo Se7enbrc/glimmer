@@ -104,13 +104,9 @@ struct WiFiSnapshot: Sendable {
     var band: String?
 }
 
-/// CoreWLAN-backed sampler. The exporter builds one per session and calls
-/// `sample()` once per ~1Hz tick on its queue; the launcher's route monitor
-/// keeps its own and calls only `txRateMbps()`, on the monitor's queue.
-///
-/// `@unchecked Sendable`: `CWWiFiClient`/`CWInterface` are not annotated Sendable
-/// by the SDK, but each instance is only ever touched from its owner's single
-/// serial queue, so the access is serialized by construction.
+/// CoreWLAN sampler: the exporter calls `sample()` at ~1Hz on its queue, the route
+/// monitor calls `txRateMbps()` on its own. `@unchecked Sendable` holds because each
+/// instance is touched only from its owner's serial queue.
 final class WiFiTelemetry: @unchecked Sendable {
 
     private let client = CWWiFiClient.shared()
