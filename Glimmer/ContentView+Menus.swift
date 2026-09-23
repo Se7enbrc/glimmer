@@ -84,10 +84,9 @@ private struct HostContextMenu: ViewModifier {
         } label: {
             Label("Rename…", systemImage: "pencil")
         }
-        // Per-host codec cap. Automatic negotiates AV1 → HEVC → H.264
-        // against what this host's encoder supports, so the override
-        // exists only for the host whose preferred codec misbehaves -
-        // hence a submenu here, not a Quality-pane item.
+        // Per-host codec cap. Automatic negotiates AV1 → HEVC → H.264 against
+        // this PC's encoder, so the override is only for a PC whose preferred
+        // codec misbehaves: a submenu here, not a Quality-pane item.
         Picker(selection: $codecPref) {
             ForEach(HostCodecPreference.allCases) { pref in
                 Text(pref.displayName).tag(pref)

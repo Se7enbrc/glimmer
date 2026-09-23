@@ -2,21 +2,16 @@
 //  SettingsGeneralStreamingPanes+LoginItem.swift
 //
 //  `LoginItemManager` - the SMAppService login-item lifecycle behind the
-//  General pane's two launch toggles, plus the reconcile that AppModel+Lifecycle
-//  runs at launch and the General pane runs when it shows. Split out of
-//  SettingsGeneralStreamingPanes.swift to keep that file under the length
-//  limit: this is registration plumbing, not a pane, and it has a caller
-//  outside Settings.
+//  General pane's two launch toggles, and the reconcile that launch and the
+//  General pane run. Registration plumbing, not a pane, so it lives apart.
 //
 
 import Foundation
 import ServiceManagement
 
-/// Owns the SMAppService login-item lifecycle, shared by the General toggles
-/// and the reconcile. Registration is keyed by the user's saved
-/// intent (UserDefaults `launchAtLogin` / `launchMinimized`):
-///   * minimized → register the HELPER (relaunches the main app suppressed)
-///   * not minimized → register the main app (normal open at login)
+/// Registration follows the saved intent (`launchAtLogin` / `launchMinimized`):
+/// minimized registers the HELPER, which relaunches the main app suppressed;
+/// otherwise the main app itself opens at login.
 enum LoginItemManager {
     static let helperBundleID = "io.ugfugl.Glimmer.LoginHelper"
     /// The app build (path + CFBundleVersion) the last successful register ran from.
@@ -85,10 +80,9 @@ enum LoginItemManager {
         }
     }
 
-    /// Square the saved intent with macOS, at launch and when the General pane
-    /// shows: a registration invalidated by an update or move self-heals (the
-    /// "doesn't start after reboot" fix); one the user removed turns the toggle
-    /// off. Returns the login item's status, nil when Open at login is off.
+    /// Square the saved intent with macOS: an update or move self-heals (the
+    /// "doesn't start after reboot" fix), a removal turns the toggle off.
+    /// Returns the login item's status, nil when Open at login is off.
     @discardableResult
     static func reconcile() -> SMAppService.Status? {
         let defaults = UserDefaults.standard

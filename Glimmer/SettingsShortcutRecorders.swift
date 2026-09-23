@@ -182,10 +182,9 @@ struct HotkeyBadge: View {
 
 // MARK: - Controller chord capture (#9)
 
-/// Records a custom controller chord by reading live held buttons. The
-/// user holds the combo and releases; the set held just before release becomes
-/// the chord. Reuses the input-test ControllerMonitor (to engage GameController
-/// value updates) + the DualSense raw-HID reader for the center buttons.
+/// Records a custom controller chord from live held buttons: the user holds
+/// the combo and releases, and everything held before release is the chord.
+/// Reads GameController pads, raw-HID pads and the DualSense centre buttons.
 struct ChordCaptureSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
