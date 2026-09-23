@@ -106,10 +106,11 @@ final class AppModel {
     // number follows resolution and refresh (and, in a window, the capped
     // refresh) on its own. Nothing to persist and nothing to ask - the result
     // is visible in the next-stream summary. See QualityCalculator.
-    var customHDR: Bool = true {
+    /// HDR under every preset, on by default; off offers no 10-bit format (SDR).
+    var streamHDR: Bool = true {
         didSet {
-            UserDefaults.standard.set(customHDR, forKey: "customHDR")
-            if qualityPreset == .custom { persistQualitySettings() }
+            UserDefaults.standard.set(streamHDR, forKey: "streamHDR")
+            persistQualitySettings()
         }
     }
 
@@ -550,7 +551,7 @@ final class AppModel {
         customWidth = min(max(Self.persistedPositiveInt("customWidth") ?? customWidth, 640), 7680)
         customHeight = min(max(Self.persistedPositiveInt("customHeight") ?? customHeight, 480), 4320)
         customFPS = min(max(Self.persistedPositiveInt("customFPS") ?? customFPS, 30), 240)
-        customHDR = Self.persistedBool("customHDR") ?? customHDR
+        streamHDR = Self.persistedBool("streamHDR") ?? streamHDR
         captureSysKeys = Self.persistedBool("captureSysKeys") ?? captureSysKeys
         streamCoversNotch = Self.persistedBool("streamCoversNotch") ?? streamCoversNotch
         // Registered default (GlimmerApp) answers the absent-key case; an

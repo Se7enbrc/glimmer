@@ -59,7 +59,6 @@ public struct StreamConfig: Sendable {
     /// can decode," so the host's RTSP codec negotiation never picks a
     /// format we'd have to reject in `handleSetup`.
     public var videoFormats: VideoFormats = .probedSupported
-    public var hdr: Bool = true
     public var colorSpace: ColorSpace = .rec2020
     public var colorRange: ColorRange = .full
     /// Default to full-stream encryption (video + audio). Older

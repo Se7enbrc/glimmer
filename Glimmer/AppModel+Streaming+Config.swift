@@ -43,8 +43,19 @@ extension AppModel {
     var displayBitrateKbps: Int {
         _ = displayInfoRevision  // codec override writes UserDefaults; bump re-evaluates the chip
         guard let host = selectedHost else { return effectiveBitrateKbps }
-        let formats = HostCodecPreference.load(for: host.id).apply(to: .probedSupported)
-        return wireBitrateKbps(forFormats: formats)
+        return wireBitrateKbps(forFormats: offeredVideoFormats(for: host))
+    }
+
+    /// What this Mac offers the PC: the probed formats under the PC's codec
+    /// choice (right-click › Codec), less the 10-bit ones when HDR is off.
+    func offeredVideoFormats(for host: Host) -> VideoFormats {
+        Self.videoFormats(HostCodecPreference.load(for: host.id).apply(to: .probedSupported), hdr: streamHDR)
+    }
+
+    /// With no 10-bit format on offer the PC encodes SDR, and the launch
+    /// request leaves out hdrMode (sent only when one is offered).
+    nonisolated static func videoFormats(_ formats: VideoFormats, hdr: Bool) -> VideoFormats {
+        hdr ? formats : formats.subtracting(VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_MASK_10BIT))
     }
 
     /// The dial is sized for Wi-Fi. Wired end to end (the Mac's route says
@@ -168,22 +179,19 @@ extension AppModel {
     }
 
     /// Bridge our published quality settings into the engine's StreamConfig.
-    /// The codec set is the probed client capability capped by the host's
-    /// override (right-click → Codec; Automatic by default, which negotiates
-    /// AV1 → HEVC → H.264 against what the host can actually encode).
+    /// The codec set is `offeredVideoFormats(for:)`; Automatic negotiates
+    /// AV1 → HEVC → H.264 against what the host can actually encode.
     func nativeStreamConfig(for host: Host) -> StreamConfig {
         persistQualitySettings()
         var cfg = StreamConfig(width: effectiveWidth, height: effectiveHeight,
                                fps: effectiveFPS, bitrateKbps: effectiveBitrateKbps)
-        cfg.hdr = effectiveHDR
         cfg.captureSysKeys = captureSysKeys
         // The notch choice only means something on a notched panel; elsewhere
         // the session always takes the borderless cover (see
         // effectiveStreamCoversNotch for the issue this closes).
         cfg.coversNotch = effectiveStreamCoversNotch
         cfg.displayMode = effectiveDisplayMode
-        let codecPref = HostCodecPreference.load(for: host.id)
-        cfg.videoFormats = codecPref.apply(to: .probedSupported)
+        cfg.videoFormats = offeredVideoFormats(for: host)
         // Codec-aware wire budget (see wireBitrateKbps): the H.264-anchored dial
         // scaled by the negotiated codec's efficiency. The spec chip reads the same
         // path so what's shown matches what's sent.

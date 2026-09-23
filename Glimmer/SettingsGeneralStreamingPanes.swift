@@ -344,7 +344,7 @@ struct QualityPane: View {
                     // measured anchors (AppModel.measuredBitrateAnchors). The
                     // resulting figure is in the next-stream summary below.
                     Toggle("Brighter highlights, deeper color (needs HDR on host and display)",
-                           isOn: $model.customHDR)
+                           isOn: $model.streamHDR)
                         .help("HDR - sends a 10-bit high-dynamic-range stream when the host and this display both support it.")
                     HStack {
                         Text("Currently driving: \(model.currentDisplayDescription)")
