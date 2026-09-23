@@ -480,6 +480,19 @@ struct StreamPathMTUTests {
         await waiting.value
         #expect(ContinuousClock.now - start < .seconds(5))
     }
+
+    /// Every exit from the connect path harvests, so the harvest must end the
+    /// loop; otherwise a failed connect keeps probing the PC.
+    @Test func harvestStopsTheSampler() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
+        let first = sampler.harvest()?.count ?? 0
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(first > 0)
+        // Only a probe already in flight at the harvest can still land.
+        #expect((sampler.harvest()?.count ?? 0) <= first + 1)
+    }
 }
 
 /// A loopback TCP port for the RTT probes. Listening, the kernel completes each

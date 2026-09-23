@@ -220,6 +220,8 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         rtspClient = nil
         videoReceiver = nil
         audioReceiver = nil
+        // A backend that outlives its session must not keep the decoder's engine alive.
+        audioSink = nil
         inputBatcher = nil
         inputReady = false
         stateLock.unlock()

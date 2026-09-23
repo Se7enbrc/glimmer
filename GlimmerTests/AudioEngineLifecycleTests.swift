@@ -89,4 +89,19 @@ struct AudioEngineLifecycleTests {
         toggle()
         #expect(fired.wait(timeout: .now() + 0.5) == .timedOut)
     }
+
+    /// A backend that outlives its session must let the decoder, and the
+    /// AVAudioEngine it owns, go once the connection stops.
+    @Test func stoppedBackendReleasesTheAudioDecoder() {
+        let backend = NativeBackend()
+        weak var released: AudioDecoder?
+        do {
+            let decoder = AudioDecoder()
+            released = decoder
+            backend.attachAudioSink(decoder)
+        }
+        #expect(released != nil)
+        backend.stopConnection()
+        #expect(released == nil)
+    }
 }
