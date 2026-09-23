@@ -252,12 +252,16 @@ final class AWDLHelperManager: ObservableObject {
                 // the reliable `sfltool resetbtm` fix in the log for support, not the UI.
                 if Self.isWedgedRegistration(ns) {
                     log.error("""
-                        AWDL helper register failed: \(detail, privacy: .public) - wedged Background Task \
+                        AWDL helper register failed: \(ns.localizedDescription, privacy: .private) \
+                        [\(ns.domain, privacy: .public) \(ns.code, privacy: .public)] - wedged Background Task \
                         Management record; reliable clear is 'sudo sfltool resetbtm' + restart
                         """)
                     state = .unavailable(Self.wedgedRegistrationMessage)
                 } else {
-                    log.error("AWDL helper register failed: \(detail, privacy: .public)")
+                    log.error("""
+                        AWDL helper register failed: \(ns.localizedDescription, privacy: .private) \
+                        [\(ns.domain, privacy: .public) \(ns.code, privacy: .public)]
+                        """)
                     state = .unavailable(detail)
                 }
             }

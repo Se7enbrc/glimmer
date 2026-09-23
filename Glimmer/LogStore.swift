@@ -247,7 +247,7 @@ final class SessionLogFileSink: @unchecked Sendable {
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             } catch {
-                self.log.error("Diag file sink: could not create log dir: \(error.localizedDescription, privacy: .public)")
+                self.log.error("Diag file sink: could not create log dir: \(error.localizedDescription, privacy: .private)")
                 return
             }
             // ISO8601 with ':' is filename-legal on APFS; same stamp shape as the
@@ -262,7 +262,7 @@ final class SessionLogFileSink: @unchecked Sendable {
                 self.fileHandle = try FileHandle(forWritingTo: url)
                 self.log.notice("Diag file sink → \(url.path, privacy: .public)")
             } catch {
-                self.log.error("Diag file sink: could not open file: \(error.localizedDescription, privacy: .public)")
+                self.log.error("Diag file sink: could not open file: \(error.localizedDescription, privacy: .private)")
                 return
             }
             let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
@@ -325,7 +325,7 @@ final class SessionLogFileSink: @unchecked Sendable {
         do {
             try fileHandle.write(contentsOf: data)
         } catch {
-            log.error("Diag file sink write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Diag file sink write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

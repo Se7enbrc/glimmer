@@ -78,7 +78,7 @@ final class FrameTraceWriter: @unchecked Sendable {
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             } catch {
-                self.log.error("Telemetry frames: could not create log dir: \(error.localizedDescription, privacy: .public)")
+                self.log.error("Telemetry frames: could not create log dir: \(error.localizedDescription, privacy: .private)")
                 return
             }
             self.logDir = dir
@@ -104,7 +104,7 @@ final class FrameTraceWriter: @unchecked Sendable {
         do {
             fileHandle = try FileHandle(forWritingTo: url)
         } catch {
-            log.error("Telemetry frames: could not open file: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry frames: could not open file: \(error.localizedDescription, privacy: .private)")
             return false
         }
         log.notice("Telemetry per-frame trace → \(url.path, privacy: .public)")
@@ -184,7 +184,7 @@ final class FrameTraceWriter: @unchecked Sendable {
             // a segment never overshoots the cap by more than a single batch.
             if bytesWritten >= Self.maxFileBytes { rollover() }
         } catch {
-            log.error("Telemetry per-frame trace write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry per-frame trace write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

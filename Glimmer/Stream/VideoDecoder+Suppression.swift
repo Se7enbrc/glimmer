@@ -443,7 +443,7 @@ extension VideoDecoder {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.log.warning(
-                        "Layer failedToDecode (\(errDesc, privacy: .public)) - proactive present-path self-heal")
+                        "Layer failedToDecode (\(errDesc, privacy: .private)) - proactive present-path self-heal")
                     OSSignposter.render.emitEvent("LayerFailedToDecode", "")
                     self.recoverPresentPath(reason: "failed_to_decode")
                 }

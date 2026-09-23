@@ -216,7 +216,7 @@ extension StreamSession {
             }
             return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
         } catch let first as StreamError {
-            log.error("primary launch path failed: \(String(describing: first), privacy: .public)")
+            log.error("primary launch path failed: \(String(describing: first), privacy: .private)")
             try checkAttempt(deadline: deadline)
             let fresh = try await network.fetchServerInfo()
             try checkAttempt(deadline: deadline)

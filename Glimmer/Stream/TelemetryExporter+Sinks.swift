@@ -64,7 +64,7 @@ extension TelemetryExporter {
             Diag.notice("Telemetry SESSION REPORT written → \(reportURL.lastPathComponent) "
                 + "(duration \(String(format: "%.1f", durationSeconds))s).", Self.logCategory)
         } catch {
-            log.error("Telemetry session report write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry session report write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -189,7 +189,7 @@ extension TelemetryExporter {
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
-            log.error("Telemetry: could not create log dir: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry: could not create log dir: \(error.localizedDescription, privacy: .private)")
             return
         }
         // C2: prune the Logs dir (age + byte budget) BEFORE this session's
@@ -205,7 +205,7 @@ extension TelemetryExporter {
             fileHandle = try FileHandle(forWritingTo: url)
             log.notice("Telemetry NDJSON → \(url.path, privacy: .public)")
         } catch {
-            log.error("Telemetry: could not open NDJSON file: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry: could not open NDJSON file: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -217,7 +217,7 @@ extension TelemetryExporter {
         } catch {
             // A write failure (disk full, file removed) shouldn't take down the
             // stream - drop the line and keep going.
-            log.error("Telemetry NDJSON write failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Telemetry NDJSON write failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }
