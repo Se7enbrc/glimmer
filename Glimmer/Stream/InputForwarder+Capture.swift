@@ -312,8 +312,8 @@ extension InputForwarder {
         // with it. The body of `logDiagnosticEvent` below enforces this;
         // do not add an accessor that's documented as "returns valid
         // values only for events of type X" without gating on the type.
+        // No key events: with a known layout, key codes are the typed text.
         let mask: NSEvent.EventTypeMask = [
-            .keyDown, .keyUp, .flagsChanged,
             .leftMouseDown, .leftMouseUp,
             .rightMouseDown, .rightMouseUp,
             .otherMouseDown, .otherMouseUp,
@@ -374,11 +374,6 @@ extension InputForwarder {
             subtype = -1
         }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
-        // keyCode is safe for keyDown/keyUp/flagsChanged. For everything
-        // else NSEvent guarantees keyCode reads (it returns the value of
-        // the underlying CGEvent's keycode field or 0).
-        let kc = (type == .keyDown || type == .keyUp || type == .flagsChanged)
-            ? Int(event.keyCode) : -1
         // For scrollWheel events specifically, also log the magnitude so we
         // can tell real-user scroll input from micro-deltas (free-spin
         // wheels, tilt-wheel side-clicks, the host's own scroll-injection).
@@ -410,7 +405,7 @@ extension InputForwarder {
             srcID = "pid=\(pid)/state=\(stateID)"
         }
         // swiftlint:disable:next line_length
-        log.info("DiagEvent t=\(now, privacy: .public) type=\(typeRaw, privacy: .public)(\(typeName, privacy: .public)) subtype=\(subtype, privacy: .public) mods=0x\(String(mods, radix: 16), privacy: .public) kc=\(kc, privacy: .public) dx=\(scrollX, privacy: .public) dy=\(scrollY, privacy: .public) src=\(srcID, privacy: .public)")
+        log.info("DiagEvent t=\(now, privacy: .public) type=\(typeRaw, privacy: .public)(\(typeName, privacy: .public)) subtype=\(subtype, privacy: .public) mods=0x\(String(mods, radix: 16), privacy: .public) dx=\(scrollX, privacy: .public) dy=\(scrollY, privacy: .public) src=\(srcID, privacy: .public)")
     }
 
     /// Stable human-readable names for every NSEvent type we might log.

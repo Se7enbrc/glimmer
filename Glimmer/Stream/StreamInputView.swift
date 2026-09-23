@@ -8,7 +8,6 @@
 //
 
 import AppKit
-import os.log
 
 // MARK: - StreamInputViewDelegate
 
@@ -154,33 +153,9 @@ final class StreamInputView: NSView {
     // MARK: NSResponder - keyboard
 
     override func keyDown(with event: NSEvent) {
-        // Diagnostic: confirms the responder chain is delivering keyDown
-        // to this view. If this never logs in a live run, the bug is upstream
-        // (window not key, view not first responder, app not active) and the
-        // fix is in StreamWindow.show() / InputForwarder.installFirstResponder().
-        //
-        // SECURITY: do NOT include the character value here - `chars=...` at
-        // `.public` would leak every keystroke (passwords typed mid-stream
-        // included) into the unified log, where any process with the right
-        // entitlement can read it. Scan code + modifier mask are positional
-        // and not PII; that's all we need to fingerprint event delivery.
-        let modsHex = String(event.modifierFlags.rawValue, radix: 16)
-        Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Input")
-            .debug("StreamInputView.keyDown keyCode=\(event.keyCode, privacy: .public) mods=0x\(modsHex, privacy: .public)")
-        // The delegate returns `true` when it consumed the event (forwarded
-        // to the host, or handled it locally as the quit hotkey). It returns
-        // `false` for Cmd-modified events when sys-key capture is off - in
-        // that case we want macOS to deal with it, but most of those chords
-        // have already been handled higher in the dispatch chain:
-        //   * Cmd-Tab / Cmd-Space - WindowServer intercepts; we never see them.
-        //   * Cmd-Q / Cmd-H / Cmd-M / Cmd-W - main menu's performKeyEquivalent
-        //     fires before keyDown, so we only see these here if no menu
-        //     item is bound.
-        // For the remaining "unbound Cmd-chord" leftovers, calling `super.keyDown`
-        // would walk up the responder chain to `noResponderFor:` and beep.
-        // moonlight-qt also drops these silently - see keyboard.cpp's
-        // `if (!isSystemKeyCaptureActive()) return;`. Match that: swallow
-        // silently without forwarding and without beeping.
+        // The delegate forwards the key, or drops a ⌘ chord left with the Mac
+        // that no menu item took (super would only beep). moonlight instead
+        // forwards such chords to the PC without the Win modifier.
         _ = delegate?.streamView(self, handleKeyDown: event)
     }
 
@@ -189,9 +164,6 @@ final class StreamInputView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        let modsHex = String(event.modifierFlags.rawValue, radix: 16)
-        Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Input")
-            .info("StreamInputView.flagsChanged keyCode=\(event.keyCode, privacy: .public) mods=0x\(modsHex, privacy: .public)")
         delegate?.streamView(self, handleFlagsChanged: event)
     }
 
