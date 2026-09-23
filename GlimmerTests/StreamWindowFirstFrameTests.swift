@@ -107,7 +107,7 @@ struct StreamWindowFirstFrameTests {
 private final class MotionRecorder: StreamInputViewDelegate {
     var moves = 0
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) { moves += 1 }
-    func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) -> Bool { true }
+    func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {}
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {}
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {}
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {}
