@@ -548,8 +548,7 @@ public final class InputForwarder {
             }
             if keyCount + buttonCount > 0 {
                 Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
-                    + "mouse button(s) on \(reason) - the physical release would have "
-                    + "gone to the newly focused app", "Stream")
+                    + "mouse button(s) on \(reason)", "Stream")
             }
         }
         heldKeys.removeAll()

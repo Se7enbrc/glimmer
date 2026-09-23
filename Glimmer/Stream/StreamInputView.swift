@@ -26,6 +26,7 @@ protocol StreamInputViewDelegate: AnyObject {
     func streamViewPointerDidEnter(_ view: StreamInputView)
     func streamViewPointerDidExit(_ view: StreamInputView)
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool
+    func streamViewPaste(_ view: StreamInputView)
 }
 
 // MARK: - StreamInputView
@@ -176,6 +177,12 @@ final class StreamInputView: NSView {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    /// Edit › Paste, and ⌘V while ⌘ stays with the Mac: the clipboard is typed
+    /// into the PC as text (InputForwarder+Paste.swift).
+    @objc func paste(_ sender: Any?) {
+        delegate?.streamViewPaste(self)
     }
 
     // MARK: NSResponder - mouse

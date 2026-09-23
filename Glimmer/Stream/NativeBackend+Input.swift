@@ -41,7 +41,7 @@ extension NativeBackend {
     //
     // Each method builds the plaintext NV_INPUT_HEADER+body with InputEncoder
     // (pure bytes) and seals/sends it over the encrypted control stream on the
-    // input class's channel (keyboard 0x02, mouse/scroll/hscroll 0x03, gamepad
+    // input class's channel (keyboard 0x02, mouse/scroll/hscroll 0x03, text 0x06, gamepad
     // 0x10 + num%16). Return contract matches LiSend*: -2 when the input stream
     // isn't ready (mirrors InputStream.c's `initialized` guard), 0 on a queued
     // send, -1 on a seal/send failure. InputForwarder.record() tolerates -2.
@@ -144,6 +144,17 @@ extension NativeBackend {
                                          touchpadIndex: touchpadIndex, pointerId: pointerId,
                                          x: x, y: y, pressure: pressure),
             channel: gamepadChannel(Int(num)))
+    }
+
+    /// = LiSendUtf8TextEvent: whole code points, packed to the host's limit, on
+    /// CTRL_CHANNEL_UTF8. Each packet flushes pending merged input first, so the
+    /// text lands after everything already sent.
+    public func sendUtf8Text(_ text: String) -> Int32 {
+        guard let batcher = readyBatcher() else { return Self.inputNotReady }
+        for packet in InputEncoder.utf8TextPackets(text) {
+            _ = batcher.passThrough(packet, channel: Enet.ctrlChannelUtf8)
+        }
+        return 0
     }
 
     /// CTRL_CHANNEL_GAMEPAD_BASE + (controllerNumber % MAX_GAMEPADS).

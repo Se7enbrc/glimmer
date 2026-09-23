@@ -199,6 +199,36 @@ struct InputEncoderTests {
         #expect(out.count == 12)
     }
 
+    // MARK: 12. UTF-8 text (8 + up to 32 bytes)
+
+    @Test func utf8TextKnownAnswer() {
+        let out = InputEncoder.utf8Text(Array("A\u{20AC}".utf8))
+        var expected = header(bodyLength: 8, magicLE: 0x0000_0017) // magic + 4 text bytes
+        expected += [0x41, 0xE2, 0x82, 0xAC]                         // "A€", unterminated
+        #expect(out == expected)
+    }
+
+    @Test func utf8TextPacketsCarryAtMostThirtyTwoTextBytes() {
+        let packets = InputEncoder.utf8TextPackets(String(repeating: "x", count: 40))
+        #expect(packets.map(\.count) == [8 + 32, 8 + 8])
+    }
+
+    /// The host decodes each packet on its own, so a code point that would
+    /// straddle the limit starts the next packet instead.
+    @Test func utf8TextPacketsNeverSplitACodePoint() {
+        let euros = String(repeating: "\u{20AC}", count: 11) // 33 bytes
+        let packets = InputEncoder.utf8TextPackets(euros)
+        #expect(packets.map(\.count) == [8 + 30, 8 + 3])
+        for packet in packets {
+            #expect(String(validating: packet.dropFirst(8), as: UTF8.self) != nil)
+        }
+        #expect(String(validating: packets.flatMap { $0.dropFirst(8) }, as: UTF8.self) == euros)
+    }
+
+    @Test func emptyTextSendsNoPackets() {
+        #expect(InputEncoder.utf8TextPackets("").isEmpty)
+    }
+
     // MARK: header invariant: size field == body length == total - 4
 
     @Test func headerSizeFieldEqualsBodyLength() {
@@ -209,7 +239,8 @@ struct InputEncoderTests {
             InputEncoder.mouseButton(action: 0x07, button: 1),
             InputEncoder.scroll(1),
             InputEncoder.hscroll(1),
-            InputEncoder.controllerBattery(num: 0, state: 0, percentage: 0)
+            InputEncoder.controllerBattery(num: 0, state: 0, percentage: 0),
+            InputEncoder.utf8Text(Array("hi".utf8))
         ]
         for pkt in packets {
             let sizeField = (UInt32(pkt[0]) << 24) | (UInt32(pkt[1]) << 16)

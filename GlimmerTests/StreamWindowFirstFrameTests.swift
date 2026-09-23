@@ -101,4 +101,5 @@ private final class MotionRecorder: StreamInputViewDelegate {
     func streamViewPointerDidEnter(_ view: StreamInputView) {}
     func streamViewPointerDidExit(_ view: StreamInputView) {}
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool { false }
+    func streamViewPaste(_ view: StreamInputView) {}
 }

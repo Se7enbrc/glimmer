@@ -87,6 +87,12 @@ extension InputForwarder: StreamInputViewDelegate {
             return true
         }
 
+        // Paste chord (moonlight's ⌃⌥⇧V): types the Mac clipboard into the PC.
+        if !event.isARepeat, PasteText.chord.matches(event: event, modifiers: mods) {
+            pasteClipboardAsText()
+            return true
+        }
+
         // Hold Esc to free the pointer (window mode, captured only). NOT
         // consumed and never returns early: Esc is a game input, so the tap
         // that opens a menu must forward on this very event with no added
