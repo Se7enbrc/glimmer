@@ -24,23 +24,25 @@ is sized to that.
 
 **In scope:**
 
-- **Same-LAN passive observer** - packet sniffer on the LAN. The control channel
-  runs mutual TLS post-pairing; the video / audio / input streams are
-  AES-128-GCM encrypted end-to-end under `EncryptionPreference.all`, which is
-  the default (see `Glimmer/Stream/Types.swift`).
+- **Same-LAN passive observer** - packet sniffer on the LAN. The HTTP control
+  requests run mutual TLS once paired. In the stream itself, the ENet control
+  channel, which also carries keyboard, mouse and controller input, is
+  AES-128-GCM encrypted. Audio and video travel unencrypted on the LAN: Sunshine
+  offers audio encryption, which Glimmer doesn't request yet, and Glimmer has no
+  encrypted-video path.
 - **Same-LAN active MITM** - an attacker who can intercept or redirect traffic
   between the Mac and the host. Defended by RSA-validated pairing handshake +
   post-pairing cert pinning (see Pairing + Pinning sections below). Pre-pairing
   first contact is HTTP, which is acceptable because there's nothing to MITM yet
   - the pin is established by an out-of-band PIN the user types into the host's
     UI, which is what authenticates the cert we then pin.
-- **Same-UID malware on the Mac** - partially defended. Glimmer is unsandboxed
-  (see Runtime hardening below for why), so the identity and pinned-cert files
-  live in the home directory at mode 0600 / parent dir 0700 rather than inside a
-  sandbox container. Another app under the same UID cannot read them by default
-  POSIX permissions, but the container boundary is gone; a TCC-allowlisted
-  attacker with Full Disk Access still wins, as it did before - that's an
-  OS-level boundary, not a Glimmer-specific defence.
+- **Same-UID malware on the Mac** - not defended. Glimmer is unsandboxed (see
+  Runtime hardening below for why), so the identity and pinned-cert files live
+  in the home directory at mode 0600 / parent dir 0700 rather than inside a
+  sandbox container. Mode 0600 keeps other users on the Mac out, but any process
+  running as you can read the client key, impersonate this Mac to every paired
+  PC, and rewrite the pinned host certificates. This is an accepted risk that
+  moonlight-qt shares.
 - **Hostile host** - a host that has somehow been compromised cannot escalate
   beyond producing bad video / audio / input echoes. The pinned-cert pairing
   limits a hostile host to one the user has explicitly trusted out-of-band.
@@ -105,9 +107,10 @@ keychain once builds became Developer ID signed, and stayed on files:
   `~/Library/Preferences`, no keychain at all. Glimmer's mode-0600 home files
   are already stricter: only the owning UID can read them, and 0600 beats 0644.
 
-The one residual exposure is a Full-Disk-Access same-UID process reading the
-key. That is a narrow OS-level threat, and one the reference implementation
-doesn't address either.
+The residual exposure is any process running as the same user: 0600 does not
+stop it from copying the key or rewriting a pin. Only a sandbox or the
+data-protection keychain would, and both are ruled out above. The reference
+implementation has the same exposure.
 
 **One-shot moonlight-qt migration.** On first launch, Glimmer reads the
 `com.moonlight-stream.Moonlight` preference domain. If a moonlight-qt install
@@ -122,8 +125,8 @@ run. See `Identity+Loading.swift` and `HostsStore.swift`.
 ## Pairing
 
 The GameStream PIN handshake. Protocol-fixed by GameStream / Sunshine; we don't
-get to pick the primitives. Five HTTP rounds plus a final HTTPS liveness check
-(`Glimmer/Stream/Pairing.swift`).
+get to pick the primitives. Four HTTP rounds plus a final HTTPS `pairchallenge`
+liveness check (`Glimmer/Stream/Pairing.swift`).
 
 **Primitives:**
 
@@ -150,10 +153,11 @@ the one our PIN would have produced - see step 4 in `runPairingFlow`).
    typed out-of-band.
 
 Only then does `NetworkClient.setPinnedHostCert` get called. This is **not**
-trust-on-first-use: `NetworkClient.fetchServerInfo` will NOT auto-pin on first
-contact. The previous "auto-pin on first /serverinfo" behaviour was the
-canonical same-LAN-attacker-rides-an-induced-TLS-error gap; closed in the same
-refactor that moved the pin into the pairing flow (search for `SECURITY (C2)` in
+trust-on-first-use: first contact never pins. `NetworkClient.fetchServerInfo`
+ignores the `<PlainCert>` and `<PairStatus>` a plain-HTTP `/serverinfo` returns,
+so a device answering port 47989 can neither plant a pin nor skip the PIN, and
+every pairing runs the full handshake. `NetworkClient` also refuses any HTTPS
+request that has no pin to check (search for `SECURITY (C2)` in
 `NetworkClient+Endpoints.swift`).
 
 **Failure path.** Any deviation throws `StreamError.pairingFailed` with a
@@ -161,7 +165,8 @@ specific message at `.private` log privacy. The caller sees a uniform "pairing
 failed" - the specific cause (wrong PIN, MITM detected, host mid-pair with
 someone else) is recoverable from logs under our subsystem, not from the UI. We
 send `/unpair` after a failure to clear the host's "Already pairing" state for
-retry.
+retry. The one cause the UI does name is a PIN nobody entered within five
+minutes, since that reveals nothing about the handshake.
 
 ## Pinning
 
@@ -204,7 +209,7 @@ the cert cannot also produce the PIN.
 
 ## Transport
 
-- **Pre-pairing:** plain HTTP on **47989** for `/serverinfo` and the five
+- **Pre-pairing:** plain HTTP on **47989** for `/serverinfo` and the four HTTP
   pairing rounds. There's no TLS to validate yet; the out-of-band PIN
   authenticates the cert we then pin.
 - **Post-pairing:** HTTPS on **47984** for `/serverinfo`, `/launch`, `/cancel`,
@@ -213,12 +218,9 @@ the cert cannot also produce the PIN.
   pinned host cert authenticates the host to us. The system trust store is NOT
   consulted; the pinned PEM is the entire trust anchor.
 - **Stream:** the Swift-native engine's RTP video/audio + ENet-subset control
-  channels (`Glimmer/Stream/Native/`). AES-128-GCM, key derived from the launch
-  response's `rikey` (or `gcmkey` on Sunshine). `EncryptionPreference.all` is
-  the default - encrypts video, audio, and input. `.audioOnly` encrypts audio +
-  input but leaves video plaintext (saves bandwidth on slower CPUs at the cost
-  of clear-text frame data on the wire); `.none` is exposed for diagnostics, not
-  recommended.
+  channels (`Glimmer/Stream/Native/`). The control channel, input included, is
+  AES-128-GCM under the per-session key exchanged over mutual TLS at `/launch`.
+  RTP audio and video are plaintext on the LAN.
 
 ## Runtime hardening
 
@@ -257,10 +259,10 @@ malicious host. With the sandbox gone, that is addressed by hardening the
 parsers directly instead:
 
 - **Fuzz the host-reachable parsers** - a deterministic swift-testing suite
-  (`GlimmerTests/FuzzTests.swift`) hammers Annex-B / RTP / FEC / RTSP / ENet /
-  AES-GCM with random + mutated-valid input, asserting they reject rather than
-  trap. It found and fixed an out-of-bounds read in the Reed-Solomon FEC
-  decoders (a shard shorter than the block size).
+  (`GlimmerTests/FuzzTests.swift`) hammers Annex-B / FEC / RTSP / SDP / ENet /
+  AES-GCM / HTTP control headers with random + mutated-valid input, asserting
+  they reject rather than trap. It found and fixed an out-of-bounds read in the
+  Reed-Solomon FEC decoders (a shard shorter than the block size).
 - **Hardened Runtime library validation is ON for Release.** The embedded
   OpenSSL/Opus dylibs are re-signed under the team id at build time, so the
   Release entitlements drop `disable-library-validation`. Adhoc / Debug builds
@@ -313,7 +315,9 @@ their session use the host PC's recording tools, not the Mac's.
 - Network errors with sanitized URLs (rikey/gcmkey stripped).
 - VT decode errors and codec configuration ints (`videoFormat=0x...`, `bytes=N`,
   `idr=true/false`).
-- Host addresses at `.private` privacy (default).
+- `Diag` lines at `.public` privacy, host addresses included. Every `Diag` line
+  is mirrored to the unified log as `.public` (`LogStore.swift`); callers keep
+  secrets out of the message itself.
 - Pin-mismatch events (no fingerprints).
 - Pairing-step transitions (no payload data).
 
