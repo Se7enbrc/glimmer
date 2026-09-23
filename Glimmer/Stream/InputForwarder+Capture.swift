@@ -390,8 +390,11 @@ extension InputForwarder {
             let stateID = cg.getIntegerValueField(.eventSourceStateID)
             srcID = "pid=\(pid)/state=\(stateID)"
         }
-        // swiftlint:disable:next line_length
-        log.info("DiagEvent t=\(now, privacy: .public) type=\(typeRaw, privacy: .public)(\(typeName, privacy: .public)) subtype=\(subtype, privacy: .public) mods=0x\(String(mods, radix: 16), privacy: .public) dx=\(scrollX, privacy: .public) dy=\(scrollY, privacy: .public) src=\(srcID, privacy: .public)")
+        log.info("""
+            DiagEvent t=\(now, privacy: .public) type=\(typeRaw, privacy: .public)(\(typeName, privacy: .public)) \
+            subtype=\(subtype, privacy: .public) mods=0x\(String(mods, radix: 16), privacy: .public) \
+            dx=\(scrollX, privacy: .public) dy=\(scrollY, privacy: .public) src=\(srcID, privacy: .public)
+            """)
     }
 
     /// Stable human-readable names for every NSEvent type we might log.
