@@ -144,7 +144,9 @@ extension AppModel {
             let session = StreamSession(backend: NativeBackend())
             await MainActor.run { self.nativeSession = session }
             await session.authorizeTakeover(takeoverAuthorized)
-            await session.setRouteAskProvider(routeAskProvider(forFormats: cfg.videoFormats, hostID: host.id))
+            if let launch = cfg.bitrateDecision {
+                await session.setRouteAskProvider(routeAskProvider(launch: launch, hostID: host.id))
+            }
             var caughtError: Error?
             var takeover: TakeoverRequired?
             do {

@@ -112,11 +112,31 @@ struct WiredBitrateTests {
         let wired = BitrateDecision(mode: .highestQuality, dialKbps: 226_000, codecMultiplier: 0.8,
                                     boost: AppModel.wiredBitrateMultiplier, radioGatePhyMbps: nil)
         func ask(_ route: HostRouteMonitor.RouteClass, selected: String?) -> RouteAsk? {
-            AppModel.reconnectRouteAsk(wired, route: route, selectedHostID: selected, sessionHostID: "pc-a")
+            AppModel.reconnectRouteAsk(wired, route: route, phyRateMbps: nil,
+                                       selectedHostID: selected, sessionHostID: "pc-a")
         }
         #expect(ask(.wired, selected: "pc-a") == RouteAsk(kbps: 361_600, boost: 2))
         #expect(ask(.unknown, selected: "pc-a") == nil)
         #expect(ask(.tunnel, selected: "pc-b") == nil)
         #expect(ask(.wired, selected: nil) == nil)
+    }
+
+    /// Settings changed mid-stream apply next stream: a reconnect keeps the launch's
+    /// dial, codec and mode, and takes only the boost, cap and radio gate of its route.
+    @Test func aReconnectMovesOnlyTheRoutePartOfTheLaunchAsk() {
+        // Launched on Wi-Fi under Highest quality; Settings now say something else.
+        let launch = BitrateDecision(mode: .highestQuality, dialKbps: 226_000, codecMultiplier: 0.8,
+                                     boost: AppModel.wifiBitrateMultiplier, radioGatePhyMbps: 1152)
+        func ask(_ decision: BitrateDecision, _ route: HostRouteMonitor.RouteClass, phy: Double? = nil) -> RouteAsk? {
+            AppModel.reconnectRouteAsk(decision, route: route, phyRateMbps: phy,
+                                       selectedHostID: "pc-a", sessionHostID: "pc-a")
+        }
+        #expect(ask(launch, .wired) == RouteAsk(kbps: 361_600, boost: 2))
+        #expect(ask(launch, .tunnel) == RouteAsk(kbps: 180_800, boost: 1))
+        #expect(ask(launch, .wifi, phy: 144) == RouteAsk(kbps: 50_400, boost: 1))
+        // A Bandwidth saver launch stays unboosted on any route.
+        var saver = launch
+        saver.mode = .bandwidthSaver
+        #expect(ask(saver, .wired) == RouteAsk(kbps: 180_800, boost: 1))
     }
 }

@@ -96,30 +96,43 @@ extension AppModel {
                  boost: rttWithdrawableBoost(decision, route: route))
     }
 
-    /// Every reconnect asks this for the route the Mac is on then.
-    func routeAskProvider(forFormats formats: VideoFormats, hostID: String) -> @MainActor @Sendable () -> RouteAsk? {
+    /// Every reconnect asks this: the launch's decision on the route the Mac is on
+    /// then. Preset, size and Bandwidth changes in Settings apply next stream.
+    func routeAskProvider(launch: BitrateDecision, hostID: String) -> @MainActor @Sendable () -> RouteAsk? {
         { [weak self] in
             guard let self else { return nil }
-            return Self.reconnectRouteAsk(bitrateDecision(forFormats: formats), route: hostRoute.routeClass,
+            return Self.reconnectRouteAsk(launch, route: hostRoute.routeClass, phyRateMbps: hostRoute.wifiPhyRateMbps,
                                           selectedHostID: selectedHost?.id, sessionHostID: hostID)
         }
     }
 
     /// The route monitor follows the launcher's selection, so its reading is the
     /// session's only while that PC is selected and resolved. nil keeps the ask.
-    nonisolated static func reconnectRouteAsk(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass,
-                                              selectedHostID: String?, sessionHostID: String) -> RouteAsk? {
+    nonisolated static func reconnectRouteAsk(
+        _ launch: BitrateDecision, route: HostRouteMonitor.RouteClass, phyRateMbps: Double?,
+        selectedHostID: String?, sessionHostID: String
+    ) -> RouteAsk? {
         guard selectedHostID == sessionHostID, route != .unknown else { return nil }
-        return routeAsk(decision, route: route)
+        return routeAsk(onRoute(launch, route: route, phyRateMbps: phyRateMbps), route: route)
+    }
+
+    /// `decision` with the route's part filled in: the boost (Highest quality
+    /// only) and the radio gate. Its dial, codec and mode stay as decided.
+    nonisolated static func onRoute(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass,
+                                    phyRateMbps: Double?) -> BitrateDecision {
+        var decision = decision
+        decision.boost = decision.mode == .highestQuality ? routeBoost(route).boost : 1
+        decision.radioGatePhyMbps = phyRateMbps
+        return decision
     }
 
     /// The inputs `routeAskKbps` multiplies, also recorded in the telemetry config event.
     func bitrateDecision(forFormats formats: VideoFormats) -> BitrateDecision {
         var codec = Self.codecBudgetMultiplier(for: formats)
         if case .custom = qualityPreset { codec = 1 }
-        let boost = bitrateMode == .highestQuality ? Self.routeBoost(hostRoute.routeClass).boost : 1
-        return BitrateDecision(mode: bitrateMode, dialKbps: effectiveBitrateKbps, codecMultiplier: codec,
-                               boost: boost, radioGatePhyMbps: hostRoute.wifiPhyRateMbps)
+        let settings = BitrateDecision(mode: bitrateMode, dialKbps: effectiveBitrateKbps, codecMultiplier: codec,
+                                       boost: 1, radioGatePhyMbps: nil)
+        return Self.onRoute(settings, route: hostRoute.routeClass, phyRateMbps: hostRoute.wifiPhyRateMbps)
     }
 
     /// The part of the decision's boost the connect-time RTT may withdraw: only
