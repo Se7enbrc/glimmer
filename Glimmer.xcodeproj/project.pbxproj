@@ -36,6 +36,7 @@
 		DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE01000000000000000B /* ContentView+Menus.swift */; };
 		DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */; };
 		DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE04000000000000000B /* ContentView+StreamButton.swift */; };
+		DEC0DE202609232100000001 /* ContentView+ConnectBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609232100000002 /* ContentView+ConnectBanner.swift */; };
 		DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */; };
 		DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */; };
 		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
@@ -413,6 +414,7 @@
 		DEC0DE01000000000000000B /* ContentView+Menus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Menus.swift"; sourceTree = "<group>"; };
 		DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ReadinessChip.swift"; sourceTree = "<group>"; };
 		DEC0DE04000000000000000B /* ContentView+StreamButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+StreamButton.swift"; sourceTree = "<group>"; };
+		DEC0DE202609232100000002 /* ContentView+ConnectBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ConnectBanner.swift"; sourceTree = "<group>"; };
 		DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsGeneralStreamingPanes+LoginItem.swift"; sourceTree = "<group>"; };
 		DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming+Config.swift"; sourceTree = "<group>"; };
 		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
@@ -816,6 +818,7 @@
 				DEC0DE01000000000000000B /* ContentView+Menus.swift */,
 				DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */,
 				DEC0DE04000000000000000B /* ContentView+StreamButton.swift */,
+				DEC0DE202609232100000002 /* ContentView+ConnectBanner.swift */,
 				DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */,
 				A100017B /* SettingsGeneralStreamingPanes.swift */,
 				DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */,
@@ -1298,6 +1301,7 @@
 				DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */,
 				DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */,
 				DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */,
+				DEC0DE202609232100000001 /* ContentView+ConnectBanner.swift in Sources */,
 				DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */,
 				A100017A /* SettingsGeneralStreamingPanes.swift in Sources */,
 				DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */,

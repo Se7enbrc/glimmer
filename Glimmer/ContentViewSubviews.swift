@@ -1,12 +1,8 @@
 //
 //  ContentViewSubviews.swift
 //
-//  Host-hero presentation pieces split out of ContentView.swift: the app-icon
-//  and spec-chip rows, plus the empty-pairing and stream-ended states. Internal
-//  so ContentView.swift composes. The three larger pieces that used to live here
-//  now have their own files, for length: ContentView+ReadinessChip.swift (the
-//  status chip), ContentView+PowerControls.swift (the Luna power cluster), and
-//  ContentView+StreamButton.swift (the morphing Stream button and its style).
+//  Host-hero pieces split out of ContentView.swift: the app-icon and
+//  spec-chip rows, plus the empty-pairing and stream-ended states.
 //
 
 import Accessibility
@@ -118,7 +114,11 @@ struct AppIconsRow: View {
                 Button {
                     model.requestStream(app: app, on: host)
                 } label: {
+                    // macOS 27 hides a plain menu-item symbol image by
+                    // default; these items name an app (not an action), so
+                    // force the icon back on rather than go text-only.
                     Label(app.name, systemImage: app.systemImage)
+                        .labelStyle(.titleAndIcon)
                 }
                 // Each ITEM is a launch, so each item parks - the menu itself
                 // stays openable so the list is still readable mid-session.
@@ -173,9 +173,10 @@ struct SpecChipsRow: View {
 // MARK: - Empty pairing state
 
 struct EmptyPairingState: View {
-    @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showPair = false
+    /// Owned by MainWindow so its `.sheet` survives the swap to ConnectSurface
+    /// the moment pairing fills `model.hosts` - see MainWindow.showPair.
+    @Binding var showPair: Bool
 
     var body: some View {
         // No leading/trailing Spacers: they centred this state inside a window
@@ -225,7 +226,7 @@ struct EmptyPairingState: View {
             Button {
                 showPair = true
             } label: {
-                Label("Pair a PC", systemImage: "plus.circle.fill")
+                Label("Pair a PC…", systemImage: "plus.circle.fill")
                     .frame(minWidth: 260)
             }
             .buttonStyle(StreamButtonStyle())
@@ -233,9 +234,6 @@ struct EmptyPairingState: View {
         }
         .padding(40)
         .fixedSize(horizontal: false, vertical: true)
-        .sheet(isPresented: $showPair) {
-            PairSheet().environment(model)
-        }
     }
 }
 
