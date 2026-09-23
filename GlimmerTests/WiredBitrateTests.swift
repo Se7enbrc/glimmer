@@ -105,4 +105,18 @@ struct WiredBitrateTests {
         #expect(AppModel.routeAsk(decision(.bandwidthSaver, boost: 1, phy: nil), route: .wired)
             == RouteAsk(kbps: 180_800, boost: 1))
     }
+
+    /// The route monitor follows the launcher's selection: another PC selected, or
+    /// a route not resolved yet, keeps the current ask instead of an unboosted one.
+    @Test func aReconnectKeepsItsAskUnlessTheRouteIsTheSessionPCs() {
+        let wired = BitrateDecision(mode: .highestQuality, dialKbps: 226_000, codecMultiplier: 0.8,
+                                    boost: AppModel.wiredBitrateMultiplier, radioGatePhyMbps: nil)
+        func ask(_ route: HostRouteMonitor.RouteClass, selected: String?) -> RouteAsk? {
+            AppModel.reconnectRouteAsk(wired, route: route, selectedHostID: selected, sessionHostID: "pc-a")
+        }
+        #expect(ask(.wired, selected: "pc-a") == RouteAsk(kbps: 361_600, boost: 2))
+        #expect(ask(.unknown, selected: "pc-a") == nil)
+        #expect(ask(.tunnel, selected: "pc-b") == nil)
+        #expect(ask(.wired, selected: nil) == nil)
+    }
 }

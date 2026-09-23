@@ -73,10 +73,9 @@ extension AppModel {
         return value > 0 ? value : wifiBitrateMultiplier
     }
 
-    /// The H.264-anchored quality dial (`effectiveBitrateKbps`) scaled by the
-    /// negotiated codec's efficiency, then by the route. The spec UI and
-    /// `nativeStreamConfig` both read this so the shown bitrate can't drift
-    /// from what's sent. Custom skips the codec discount, as before.
+    /// The spec chip's bitrate: the dial scaled by codec and route through
+    /// `routeAsk`, the path the launch, the chip and reconnects share, so the
+    /// shown bitrate can't drift from what's sent.
     func wireBitrateKbps(forFormats formats: VideoFormats) -> Int {
         Self.routeAsk(bitrateDecision(forFormats: formats), route: hostRoute.routeClass).kbps
     }
@@ -98,11 +97,20 @@ extension AppModel {
     }
 
     /// Every reconnect asks this for the route the Mac is on then.
-    func routeAskProvider(forFormats formats: VideoFormats) -> @MainActor @Sendable () -> RouteAsk? {
+    func routeAskProvider(forFormats formats: VideoFormats, hostID: String) -> @MainActor @Sendable () -> RouteAsk? {
         { [weak self] in
             guard let self else { return nil }
-            return Self.routeAsk(bitrateDecision(forFormats: formats), route: hostRoute.routeClass)
+            return Self.reconnectRouteAsk(bitrateDecision(forFormats: formats), route: hostRoute.routeClass,
+                                          selectedHostID: selectedHost?.id, sessionHostID: hostID)
         }
+    }
+
+    /// The route monitor follows the launcher's selection, so its reading is the
+    /// session's only while that PC is selected and resolved. nil keeps the ask.
+    nonisolated static func reconnectRouteAsk(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass,
+                                              selectedHostID: String?, sessionHostID: String) -> RouteAsk? {
+        guard selectedHostID == sessionHostID, route != .unknown else { return nil }
+        return routeAsk(decision, route: route)
     }
 
     /// The inputs `routeAskKbps` multiplies, also recorded in the telemetry config event.
