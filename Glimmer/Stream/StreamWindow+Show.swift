@@ -34,60 +34,9 @@ extension StreamWindow {
         //    options between sessions.
         previousPresentationOptions = NSApp.presentationOptions
 
-        // 2. Choose presentation options. NOT APPLIED HERE - they're
-        //    applied in `fadeInOnFirstFrame()` so the menu bar / Dock stay
-        //    visible during the C-handshake gap. Hiding them at show()
-        //    time exposed the bare desktop (no menu bar, no
-        //    Dock) for several hundred ms while the stream connected,
-        //    which read as a letterbox flash. The choice of options
-        //    themselves is unchanged; only the timing moved.
-        //
-        //    The candidates and why we picked what we picked:
-        //
-        //      .hideMenuBar           - totally hides the menu bar. Combined
-        //                               with .hideDock this is the most
-        //                               aggressive option. Downside: AppKit
-        //                               can be funny about restoring state
-        //                               cleanly if the app crashes mid-stream.
-        //      .autoHideMenuBar       - menu bar slides away but reveals on
-        //                               cursor-to-top. While the stream is up
-        //                               the window is sized to the full
-        //                               screen at `.normal` level; AppKit
-        //                               does not surface the menu bar over a
-        //                               frontmost window in this mode, so
-        //                               the reveal-on-top behaviour does not
-        //                               actually paint anything on the user.
-        //                               This is what we use.
-        //      .disableProcessSwitching - blocks Cmd-Tab from switching out.
-        //                               We deliberately DON'T set this:
-        //                               we want the user to be able to
-        //                               Cmd-Tab away if they need to (e.g.
-        //                               an urgent message). Cmd-Tab away
-        //                               drops us behind the new active app,
-        //                               which is the correct UX.
-        //
-        //    .autoHideDock is paired with .autoHideMenuBar because AppKit
-        //    requires them to be set together (setting .autoHideMenuBar
-        //    without auto-hiding the Dock raises NSInvalidArgumentException).
-        //
-        //    UPDATE: switched from .autoHideMenuBar → .hideMenuBar so the
-        //    window actually owns the full panel area on notched MacBooks.
-        //    `.autoHideMenuBar` keeps the 37pt menu-bar zone reserved (the
-        //    bar slides in on cursor-to-top), which means our fullscreen
-        //    frame is screen.frame.height = 1890 on a 14" MBP instead of
-        //    the panel's true 1964. The bitstream we receive is 1964 tall;
-        //    resizeAspect then letterboxes left/right ~57px. `.hideMenuBar`
-        //    actually hides the bar entirely and lets the window cover the
-        //    full physical panel including the notch zone - matching what
-        //    SDL FULLSCREEN_DESKTOP gives moonlight-qt. There's no
-        //    in-stream menu-bar-reveal in this mode, which we don't want
-        //    during gaming anyway (the cursor is hidden + associate-false while
-        //    relative aim is engaged).
-        //    The safe-area opt-out is the `coversNotch` toggle below.
-        // Sync the delegate's notch-coverage flag with the public toggle
-        // so AppKit's willUseFullScreenContentSize: returns the right
-        // size when the user clicks Stream. The presentation-options
-        // application is deferred to `fadeInOnFirstFrame()` (see above).
+        // 2. The menu bar and Dock stay until the first frame: the fade-in hides
+        //    them, since hiding them now shows a bare desktop through the
+        //    still-invisible window (applyPresentationOptions has the set).
         streamDelegate.coversNotch = coversNotch
 
         // 3. Bring the *app* to the foreground before we ask the *window* to
@@ -109,31 +58,12 @@ extension StreamWindow {
             window.setFrame(screen.frame, display: true)
         }
 
-        // 4b. PRE-EMPTIVELY warp the cursor to the screen center, ONCE, as a
-        //     cosmetic pre-position before relative aim engages. This runs
-        //     BEFORE the relative-delta pipeline and the associate-false latch
-        //     are live (enterCapturedMode fires later via installFirstResponder
-        //     / the becomeKey observer), so it cannot inject a motion delta to
-        //     the host. Its only job is to place the (about-to-be-hidden,
-        //     about-to-be-disassociated) cursor somewhere sane. The Y-convention
-        //     is handled by the shared `StreamCursor.warpToCentre` helper (CGWarp
-        //     wants Quartz top-left, not AppKit bottom-left; the helper also
-        //     handles the non-primary/scaled-screen flip correctly).
-        // First show only: on the return from the mini player the forwarder is
-        // live and a warp's distance would land on the host as one huge delta.
-        if firstShow, let screen {
-            StreamCursor.warpToCentre(of: screen)
+        // 4b. The first show parks the cursor at the fade-in. A return from the
+        //     mini player re-centres it only if it sits off this screen, where the
+        //     frozen cursor would take clicks outside the cover.
+        if !firstShow, let screen, !StreamCursor.isOnScreen(NSEvent.mouseLocation, frame: screen.frame) {
+            warpCursorToCentre(of: screen)
         }
-        // NOTE: the actual relative-aim engagement -
-        // `CGAssociateMouseAndMouseCursorPosition(false)` - is done by
-        // InputForwarder.enterCapturedMode() once the window is key, NOT here.
-        // This is the SDL_SetRelativeMouseMode(true) recipe: the OS stops moving
-        // the (already-hidden, see setCursorHidden below) cursor so it can never
-        // reach a hot corner, and relative HID deltas are read off the CGEvent's
-        // kCGMouseEventDeltaX/Y. The prior associate-false attempt failed only
-        // because it was paired with NSEvent.deltaX/Y (which goes silent) and no
-        // hide; both are fixed now. See the file-top notes in
-        // InputForwarder+Capture.swift for the full contract.
 
         // 5. Two fullscreen paths, picked by `coversNotch`. This mirrors
         //    moonlight-qt's session.cpp:588 logic for handling notched
@@ -153,12 +83,6 @@ extension StreamWindow {
         //       creation and reserves the menu-bar / notch area as safe
         //       inset, so content lays out below the notch. Used when the
         //       user explicitly wants the safe-area framing.
-        //
-        //    Earlier the codebase hardcoded path B because we believed
-        //    HDR engagement required Space-based fullscreen - that's only
-        //    half-right. Borderless at .mainMenu level + the right
-        //    presentation options also engages HDR (which is what
-        //    moonlight-qt has been doing all along).
         // Start invisible - we fade in on the first decoded frame so the
         // user never sees the borderless covering window mid-handshake
         // (an empty AVSampleBufferDisplayLayer renders black and reads
@@ -236,10 +160,12 @@ extension StreamWindow {
             window.toggleFullScreen(nil)
         }
 
-        setCursorHidden(true)
-
         installLifecycleObservers()
-        if !firstShow { applyPresentationOptions(coversNotch: coversNotch) }
+        // The first show leaves the cursor and the menu bar to the fade-in.
+        if !firstShow {
+            setCursorHidden(true)
+            applyPresentationOptions(coversNotch: coversNotch)
+        }
 
         // NOTE: cursor ASSOCIATION (the SDL_SetRelativeMouseMode equivalent) is
         // owned by InputForwarder.enterCapturedMode()/exitCapturedMode(), which
@@ -261,9 +187,9 @@ extension StreamWindow {
     /// backstop re-activates and re-installs.
     private func installKeyBackstop() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            // didClose guard: close() keeps the window alive ~250ms for the fade,
-            // so a connect that failed at ~1-1.5s must not steal focus back here.
-            guard let self, !self.didClose else { return }
+            // didClose: the close fade keeps the window alive ~250ms. A Cmd-Tab
+            // away is the user's choice, not an activate the system refused.
+            guard let self, !self.didClose, !self.userBackgrounded else { return }
             let win = self.window
             let isKey = win.isKeyWindow
             let isFullscreen = win.styleMask.contains(.fullScreen)
@@ -553,6 +479,7 @@ extension StreamWindow {
         if let saved = previousPresentationOptions {
             NSApp.presentationOptions = saved
         }
+        userBackgrounded = true
         onBackgroundedChanged?(true)
         log.info("Stream window resigned key - cursor restored, window ordered out (stream continues in background)")
     }

@@ -36,33 +36,9 @@
 //  This is the same architectural choice moonlight-qt made on macOS and
 //  the reason their HDR output is correct on the same panel.
 //
-//  Why we don't use `NSWindow.toggleFullScreen(_:)`:
-//
-//    `toggleFullScreen` puts the window in macOS's *Space-based* fullscreen
-//    mode. That mode is owned by the OS, which means:
-//      • Cursor-to-top reveals the menu bar.
-//      • Esc / ⌘Esc can yank the user out of the stream.
-//      • Cmd-Tab into the app surfaces the menu bar and Dock.
-//    None of that is acceptable for a game-streaming client where Esc is a
-//    game input and the user genuinely wants the host to own the screen.
-//
-//  What we do instead - same approach SDL's `SDL_WINDOW_FULLSCREEN_DESKTOP`
-//  takes on macOS, which moonlight-qt selects on this platform:
-//
-//    • Borderless window sized to the target NSScreen's full frame.
-//    • Window level kept at `.normal` (same as SDL FULLSCREEN_DESKTOP).
-//      `CGShieldingWindowLevel()` looks attractive - chrome can't paint
-//      above it - but it's the screen-lock / screensaver level, and
-//      AppKit lets a window become first responder at that level while
-//      silently dropping `sendEvent:` key delivery, so hotkeys (quit,
-//      stats) stop firing in-stream. The
-//      `presentationOptions = [.autoHideMenuBar, .autoHideDock]` gate is
-//      what hides the chrome, NOT the window level.
-//    • `collectionBehavior` includes `.canJoinAllSpaces` so the window stays
-//      visible across Space switches, and explicitly does NOT include
-//      `.fullScreenPrimary` (we're not using Space-based fullscreen).
-//    • `NSApplication.presentationOptions` is set to auto-hide the menu bar
-//      and Dock while the stream is up, then restored on close.
+//  Full screen has two paths, picked in show() by `coversNotch`. A (default):
+//  a borderless window at mainMenuWindow + 1 with [.hideMenuBar, .hideDock] and
+//  no Space. B: a Space via toggleFullScreen with the auto-hide options.
 
 import AppKit
 import AVFoundation
@@ -232,12 +208,16 @@ public final class StreamWindow {
     /// would pace to the wrong refresh.
     public var onScreenChanged: (@MainActor () -> Void)?
 
-    /// Set by `show()` and cleared by the first-frame fade-in. Guards
-    /// the fade-in animation against being re-fired on subsequent first-
-    /// frame events (e.g. a mid-stream resolution change that flushes the
-    /// decoder and produces a new "first" frame - the window is already
-    /// visible, no fade needed).
-    var awaitingFirstFrameFadeIn = false
+    /// Set by show(), cleared by the first-frame fade-in. Until then the window
+    /// is invisible and passes clicks through to the launcher's Cancel, and it
+    /// takes neither the pointer nor the menu bar.
+    var awaitingFirstFrameFadeIn = false {
+        didSet { window.ignoresMouseEvents = awaitingFirstFrameFadeIn }
+    }
+
+    /// The user left the stream on purpose (Cmd-Tab away). Until they come
+    /// back, no backstop or fade-in pulls the window forward or takes the pointer.
+    var userBackgrounded = false
 
     /// The window level `show()` parked the streaming window at (in the
     /// `coversNotch == true` borderless-covering path, `mainMenuWindow + 1`).
@@ -262,21 +242,9 @@ public final class StreamWindow {
     /// deactivated. Bumped by BOTH observers so the later event always wins.
     var resignGeneration = 0
 
-    /// Called once the window is on screen and key. InputForwarder uses this
-    /// to install its StreamInputView as the window's first responder.
-    ///
-    /// Why this hook exists: a borderless KeyableWindow can be on screen,
-    /// orderedFront, and *still* not be key if the app wasn't active at the
-    /// moment makeKeyAndOrderFront ran. We delay first-responder install
-    /// until after we've confirmed key status; without this delay the
-    /// responder chain silently routes nowhere and `keyDown` never reaches
-    /// our content view.
-    ///
-    /// (Historical note: we used to drive this off `didEnterFullScreenNotification`
-    /// because `toggleFullScreen` was async and reset the responder chain
-    /// as part of its Space transition. We no longer go through Space-based
-    /// fullscreen, so there's no async transition and no responder reset -
-    /// we fire this synchronously once the window is up.)
+    /// Called once the window is on screen and key, and again by the first-frame
+    /// fade-in: InputForwarder installs its first responder, then takes the
+    /// pointer (it holds off while the window passes clicks through).
     public var onDidBecomeReadyForInput: (@MainActor () -> Void)?
 
     public init(displayMode: StreamDisplayMode = .fullScreen) {
@@ -316,26 +284,8 @@ public final class StreamWindow {
         )
         window.isReleasedWhenClosed = false
 
-        // Window level: keep at `.normal` (the AppKit default). This is the
-        // same level SDL uses for SDL_WINDOW_FULLSCREEN_DESKTOP and what
-        // moonlight-qt rides on for its borderless cover on macOS.
-        //
-        // We *tried* `NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))`
-        // - the level the system uses for the screen-lock window. It is
-        // indeed above all chrome. But it has a fatal flaw for an interactive
-        // app: AppKit will mark a window at that level as `isKeyWindow = true`
-        // and `firstResponder` will point at our StreamInputView, yet
-        // `sendEvent:` silently drops keyDown/keyUp delivery. The window
-        // becomes a one-way visual surface - mouse hover works (it's
-        // position-based), but the user's quit / stats hotkeys never fire.
-        //
-        // The right gate for hiding the menu bar + Dock is
-        // `NSApp.presentationOptions = [.autoHideMenuBar, .autoHideDock]`
-        // below, NOT the window level. AppKit will not surface the menu bar
-        // over our content while those options are set, even at `.normal`.
-        // If a future macOS release decides to paint chrome over us anyway,
-        // bump to `.mainMenu` (one above the menu bar's level, still inside
-        // AppKit's event-routable range) - never to shielding level.
+        // Starts at .normal; show() raises Path A to mainMenuWindow + 1. Never the
+        // shielding level: AppKit makes a window key there but drops its key events.
         window.level = .normal
 
         // Collection behavior:

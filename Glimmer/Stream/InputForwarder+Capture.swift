@@ -141,7 +141,9 @@ extension InputForwarder {
     /// and we don't use it. Resets the sub-pixel residual so the first post-focus
     /// mouseMoved doesn't carry stale fractional pixels. Re-entrant.
     func enterCapturedMode() {
-        guard !isMouseCaptured else { return }
+        // A window still passing clicks through (waiting for its first frame)
+        // cannot hold the pointer either; the fade-in engages it.
+        guard !isMouseCaptured, window?.ignoresMouseEvents != true else { return }
         mouseResidualX = 0
         mouseResidualY = 0
         // Reset the Cruise inter-batch clock AND the windowed-velocity accums

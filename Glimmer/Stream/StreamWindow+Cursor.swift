@@ -102,40 +102,44 @@ extension StreamWindow {
     /// own the balanced show; this never fights them (it only ever hides).
     func reengageForeground() {
         guard !didClose else { return }
-        // Window mode: the cursor follows pointer capture (the pointer being
-        // over the window), and the level and presentation options are AppKit's.
-        // Only the backgrounded signal applies - the "Back to stream" /
-        // Dock-click return after a miniaturize lands here.
+        userBackgrounded = false
+        // Window mode: the cursor follows pointer capture, and the level and
+        // presentation options are AppKit's. Only the backgrounded signal applies.
         if displayMode == .window {
             onBackgroundedChanged?(false)
             return
         }
-        // Cursor: re-hide. Idempotent + latch-balanced via the single owner -
-        // hides iff currently shown, capping the count at 1.
-        setCursorHidden(true)
-        // Belt-and-braces: if the WindowServer had the system cursor drawn at
-        // the moment we re-hid (it was visible while backgrounded), the per-view
-        // transparent-cursor backstop guarantees no arrow can paint over the
-        // stream on the next mouse move.
-        reassertCursorHiddenIfNeeded()
-        // Window level: re-elevate to the saved streaming level so we cover the
-        // notch again. Only in the borderless-covering path - the Space-based
-        // (`coversNotch == false`) window's level is owned by AppKit's
-        // fullscreen system, so we leave it alone there (matching the
-        // becomeKey observer's gate).
+        // Path A re-raises to its covering level; Path B's level is AppKit's.
         if coversNotch, let level = streamingWindowLevel {
             window.level = level
         }
-        // Re-apply the streaming presentation flags so the menu bar / Dock
-        // auto-hide again while we're in fullscreen-cover mode. Mirrors the
-        // gate in show() - coversNotch picks the strict `.hideMenuBar +
-        // .hideDock` for notch coverage, otherwise the softer
-        // `.autoHideMenuBar + .autoHideDock`.
-        if coversNotch {
-            NSApp.presentationOptions = [.hideMenuBar, .hideDock]
-        } else {
-            NSApp.presentationOptions = [.autoHideMenuBar, .autoHideDock]
+        // Before the first frame the cursor and the menu bar stay the user's;
+        // the fade-in takes them. The re-hide is latch-safe and the transparent
+        // cursor backstops an arrow the WindowServer drew while we were away.
+        if !awaitingFirstFrameFadeIn {
+            setCursorHidden(true)
+            reassertCursorHiddenIfNeeded()
+            applyPresentationOptions(coversNotch: coversNotch)
         }
         onBackgroundedChanged?(false)
+    }
+
+    /// The first frame is up, so the stream takes the pointer; a failing connect
+    /// leaves it with the user. Full screen also takes key back from a launcher
+    /// click (only while Glimmer is active), then parks and hides the cursor.
+    func takePointerOnFirstFrame() {
+        if displayMode == .fullScreen {
+            if NSApp.isActive, !window.isKeyWindow { window.makeKey() }
+            if let screen = window.screen { warpCursorToCentre(of: screen) }
+            setCursorHidden(true)
+        }
+        onDidBecomeReadyForInput?()
+    }
+
+    /// Park the cursor mid-screen. The view drops the next motion event, which
+    /// carries the warp's jump rather than the user's hand.
+    func warpCursorToCentre(of screen: NSScreen) {
+        StreamCursor.warpToCentre(of: screen)
+        (window.contentView as? StreamInputView)?.discardsNextMotion = true
     }
 }

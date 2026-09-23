@@ -30,8 +30,10 @@ extension StreamWindow {
     /// the first-frame event (resolution change, decoder flush) don't
     /// re-animate an already-visible window.
     public func fadeInOnFirstFrame() {
-        guard awaitingFirstFrameFadeIn else { return }
+        // didClose: the first frame can land inside the close fade.
+        guard awaitingFirstFrameFadeIn, !didClose else { return }
         awaitingFirstFrameFadeIn = false
+        if !userBackgrounded { takePointerOnFirstFrame() }
         // The window is at level `mainMenuWindow + 1` (notch path) or in a
         // fullscreen Space (safe-area path), so as alphaValue ramps 0 → 1
         // it visually covers the menu bar (level 24) and the Dock (level
@@ -67,20 +69,23 @@ extension StreamWindow {
         })
     }
 
-    /// Hide/auto-hide the menu bar + Dock once the stream window is opaque.
-    /// Extracted from `fadeInOnFirstFrame` so the fade completion handler
-    /// captures no non-Sendable closure - the handler runs on the main run
-    /// loop, so MainActor isolation is sound.
+    /// The one place the streaming options are set. Only for a live, visible
+    /// full-screen cover: a late fade-in completion or a backgrounded window
+    /// must not hide the menu bar under the launcher. Window mode keeps both.
     func applyPresentationOptions(coversNotch cover: Bool) {
-        // Window mode never touches the app's presentation options - the menu
-        // bar and Dock stay, that's the point of a window. (`show()` skipped
-        // saving them too, so close() has nothing to restore.)
-        guard displayMode == .fullScreen else { return }
-        if cover {
-            NSApp.presentationOptions = [.hideMenuBar, .hideDock]
-        } else {
-            NSApp.presentationOptions = [.autoHideMenuBar, .autoHideDock]
-        }
+        guard displayMode == .fullScreen, !didClose, window.isVisible else { return }
+        NSApp.presentationOptions = Self.streamingPresentationOptions(coversNotch: cover)
+    }
+
+    /// Path A hides the menu bar and Dock, Path B auto-hides them; AppKit wants
+    /// a Dock option with either. Both turn off shake-to-find and, on macOS 27,
+    /// Hot Corners, which an uncaptured hidden cursor can still reach.
+    nonisolated static func streamingPresentationOptions(coversNotch: Bool) -> NSApplication.PresentationOptions {
+        var options: NSApplication.PresentationOptions =
+            coversNotch ? [.hideMenuBar, .hideDock] : [.autoHideMenuBar, .autoHideDock]
+        options.insert(.disableCursorLocationAssistance)
+        if #available(macOS 27, *) { options.insert(.disableScreenCornerInteractions) }
+        return options
     }
 
     /// Tear the stream window down cleanly. Safe to call more than once.

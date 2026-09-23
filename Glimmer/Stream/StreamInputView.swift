@@ -77,6 +77,10 @@ final class StreamInputView: NSView {
     var acceptsActivatingClick = false
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { acceptsActivatingClick }
 
+    /// Set when the stream warps the cursor: the next motion event carries the
+    /// warp's jump rather than the user's hand, so it never reaches the PC.
+    var discardsNextMotion = false
+
     override var acceptsFirstResponder: Bool { true }
     override var isOpaque: Bool { true }
     override func becomeFirstResponder() -> Bool { true }
@@ -193,10 +197,15 @@ final class StreamInputView: NSView {
 
     // MARK: NSResponder - mouse
 
-    override func mouseMoved(with event: NSEvent) { delegate?.streamView(self, handleMouseMoved: event) }
-    override func mouseDragged(with event: NSEvent) { delegate?.streamView(self, handleMouseMoved: event) }
-    override func rightMouseDragged(with event: NSEvent) { delegate?.streamView(self, handleMouseMoved: event) }
-    override func otherMouseDragged(with event: NSEvent) { delegate?.streamView(self, handleMouseMoved: event) }
+    override func mouseMoved(with event: NSEvent) { forwardMotion(event) }
+    override func mouseDragged(with event: NSEvent) { forwardMotion(event) }
+    override func rightMouseDragged(with event: NSEvent) { forwardMotion(event) }
+    override func otherMouseDragged(with event: NSEvent) { forwardMotion(event) }
+
+    private func forwardMotion(_ event: NSEvent) {
+        guard !discardsNextMotion else { discardsNextMotion = false; return }
+        delegate?.streamView(self, handleMouseMoved: event)
+    }
 
     override func mouseDown(with event: NSEvent) { delegate?.streamView(self, handleMouseDown: event) }
     override func rightMouseDown(with event: NSEvent) { delegate?.streamView(self, handleMouseDown: event) }
@@ -214,26 +223,13 @@ final class StreamInputView: NSView {
     // consumed: AppKit does not route enter/exit anywhere else.
     override func mouseEntered(with event: NSEvent) { delegate?.streamViewPointerDidEnter(self) }
     override func mouseExited(with event: NSEvent) { delegate?.streamViewPointerDidExit(self) }
-
-    // NOTE: warpCursorIfNearEdge was DELETED with the P0 mouse-snap fix. Under
-    // the SDL associate-false model (InputForwarder.enterCapturedMode) the OS
-    // does not move the system cursor while relative aim is engaged, so the
-    // cursor can never reach a screen edge / hot corner - there is nothing to
-    // warp away from. The per-motion warp was the source of the edge→centre
-    // reconciliation delta that snapped in-game aim to an edge/corner; removing
-    // it (and switching to associate-false) eliminates the bug class entirely.
-    // The one remaining warp is the cosmetic pre-position in StreamWindow.show()
-    // (StreamCursor.warpToCentre), which runs BEFORE the delta pipeline / the
-    // associate-false latch is live, so it cannot leak a delta.
 }
 
 // MARK: - Shared cursor-centering helper
 
-/// One owner of the warp-to-centre coordinate convention. The ONLY remaining
-/// call site is the cosmetic pre-position in `StreamWindow.show()` - it runs
-/// once, before the relative-delta pipeline and the associate-false latch are
-/// live, so it cannot inject a motion delta. (The per-motion edge warp it used
-/// to share with was deleted by the P0 mouse-snap fix.)
+/// One owner of the cursor's screen geometry. The warp's only caller is
+/// `StreamWindow.warpCursorToCentre`, which also has the view drop the motion
+/// event that carries the jump.
 ///
 /// `CGWarpMouseCursorPosition` takes GLOBAL TOP-LEFT (y-down) coordinates -
 /// the Quartz/CoreGraphics display space whose origin is the top-left of the
@@ -259,5 +255,12 @@ enum StreamCursor {
             y: quartzTop + screen.frame.height / 2.0
         )
         CGWarpMouseCursorPosition(centre)
+    }
+
+    /// Is an AppKit mouse location on this screen? Pointer rows run from
+    /// minY + 1 to maxY (the top row is maxY), so the frame's own half-open
+    /// `contains` would call the top row off screen and the bottom edge on.
+    static func isOnScreen(_ point: CGPoint, frame: CGRect) -> Bool {
+        point.x >= frame.minX && point.x < frame.maxX && point.y > frame.minY && point.y <= frame.maxY
     }
 }
