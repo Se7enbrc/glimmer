@@ -165,6 +165,80 @@ struct SessionSafetyTests {
         #expect(StreamAttempt.requiresTakeover(occupied: true, owner: "", client: "", authorized: false))
     }
 
+    /// Each start failure gets copy that names its real fix, and a kind the
+    /// banner and menu bar route their action on. Only a PC that never
+    /// answered is told to check that it's awake.
+    @Test func connectFailuresNameTheFix() {
+        let cases: [(Error, AppModel.StreamErrorKind, String)] = [
+            (StreamError.hostUnreachable("connect to 10.0.0.2:47984 failed or timed out"), .unreachable,
+             AppModel.unreachableMessage("Tower")),
+            (StreamError.hostUnreachable("This PC's certificate changed. Pair it again."), .pairing,
+             "This PC's certificate changed. Pair it again."),
+            (StreamError.hostUnreachable("Tower answers on its plain port. Restart Sunshine on the PC."), .other,
+             "Tower answers on its plain port. Restart Sunshine on the PC."),
+            (StreamError.pairingFailed("Host is not paired. Use the pair sheet first."), .pairing,
+             "Couldn't pair with Tower. Choose Pair Again… from the PC's ⋯ menu."),
+            (StreamError.streamPortsBlocked(proto: "UDP", port: 47999), .other,
+             "Tower answered, but the stream couldn't get through. Check that the PC's firewall allows UDP 47999."),
+            (StreamError.hostTimedOut, .other, "Tower took too long to start the app."),
+            (StreamError.hostRefused(message: "Is a display connected", code: 503), .other,
+             "Tower couldn't start the app: Is a display connected."),
+            (StreamError.hostRefused(message: "Is a display connected?", code: 503), .other,
+             "Tower couldn't start the app: Is a display connected?"),
+            (StreamError.launchFailed("Malformed XML on /launch"), .other, "Tower couldn't start the app."),
+            (StreamError.sessionFailed(-1), .other, "Tower answered, but the stream couldn't start."),
+            (StreamError.truncatedRead("recv timeout"), .unreachable, AppModel.unreachableMessage("Tower"))
+        ]
+        for (error, kind, message) in cases {
+            let failure = AppModel.connectFailure(for: error, hostName: "Tower")
+            #expect(failure.kind == kind, "\(error)")
+            #expect(failure.message == message)
+        }
+    }
+
+    /// Cancel, the quit chord and the close button all end a connect by choice:
+    /// no banner, no "Stream ended", no last-played stamp. A real failure isn't.
+    @Test func userStopsAreNotConnectFailures() {
+        #expect(AppModel.connectWasCancelled(by: CancellationError(), cancelRequested: false))
+        #expect(AppModel.connectWasCancelled(by: StreamError.sessionFailed(-1), cancelRequested: true))
+        #expect(AppModel.connectWasCancelled(by: nil, cancelRequested: true))
+        #expect(!AppModel.connectWasCancelled(by: StreamError.sessionFailed(-1), cancelRequested: false))
+        #expect(!AppModel.connectWasCancelled(by: nil, cancelRequested: false))
+    }
+
+    /// A stop that interrupted the connect leg surfaces as a cancel; a real
+    /// failure keeps the engine's cause instead of collapsing to a bare code.
+    @Test func connectLegKeepsItsCause() {
+        #expect(StreamSession.connectLegError(StreamError.sessionFailed(-1), stopping: true) is CancellationError)
+        let blocked = StreamSession.connectLegError(
+            StreamError.streamPortsBlocked(proto: "UDP", port: 47999), stopping: false)
+        guard case .streamPortsBlocked(let proto, let port) = blocked as? StreamError else {
+            Issue.record("expected streamPortsBlocked, got \(blocked)")
+            return
+        }
+        #expect(proto == "UDP" && port == 47999)
+        guard case .sessionFailed(-1) = StreamSession.connectLegError(CancellationError(), stopping: false)
+            as? StreamError else {
+            Issue.record("an unexplained cancel is still a failed connect")
+            return
+        }
+    }
+
+    /// An RTSP port that never took the connection names itself; other RTSP
+    /// failures keep their code.
+    @Test func rtspConnectTimeoutNamesThePort() {
+        guard case .streamPortsBlocked("TCP", 48010) = NativeBackend.mapToStreamError(
+            RtspError.connectTimeout(48010)) else {
+            Issue.record("expected streamPortsBlocked")
+            return
+        }
+        guard case .sessionFailed(454) = NativeBackend.mapToStreamError(
+            RtspError.nonOK(step: "SETUP", code: 454)) else {
+            Issue.record("expected sessionFailed(454)")
+            return
+        }
+    }
+
     @Test func pairingResultsRequireCurrentAttemptAndHost() {
         let first = PairingAttempt(address: "first.local")
         let second = PairingAttempt(address: "second.local")

@@ -392,7 +392,7 @@ extension NativeBackend {
             handshake = try await rtsp.performHandshake()
         } catch {
             Diag.error("native backend: RTSP handshake failed: \(error)", Self.logCategory)
-            events.stageFailed("RTSP handshake", code: rtspCode(error))
+            events.stageFailed("RTSP handshake", code: Self.rtspCode(error))
             throw error
         }
         events.stageComplete("RTSP handshake")
@@ -442,7 +442,11 @@ extension NativeBackend {
                 stageFailed: { name, code in events.stageFailed(name, code: code) })
         } catch {
             Diag.error("native backend: control stream failed: \(error)", Self.logCategory)
-            // establishAndStart already fired the specific stageFailed.
+            // establishAndStart already fired the specific stageFailed. No
+            // VERIFY_CONNECT means the control port's UDP never got through.
+            if case EnetError.connectTimeout = error {
+                throw StreamError.streamPortsBlocked(proto: "UDP", port: handshake.controlPort)
+            }
             throw error
         }
     }

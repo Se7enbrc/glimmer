@@ -1,12 +1,9 @@
 //
 //  AppModel+Streaming.swift
 //
-//  The streaming session lifecycle: the launch entry points (requestStream /
-//  takeover confirm / stream(app:on:)), the single teardown cleanup, the
-//  engine's StreamEvent handling, the connect cancel + connect-hold
-//  adjudication, and the stream-ended toast copy. Split out of AppModel.swift
-//  to keep each unit focused; the derived spec/hero-verb accessors and the
-//  Host → engine config bridge live in AppModel+Streaming+Config.swift.
+//  The stream session lifecycle: launch entry points, the one teardown, engine
+//  events and connect cancel. Config lives in AppModel+Streaming+Config.swift,
+//  failure copy in AppModel+StreamFailure.swift.
 //
 
 import Foundation
@@ -228,11 +225,9 @@ extension AppModel {
     /// stays one site - never duplicate any of this elsewhere (a second
     /// "cleanup" is how zombie state is made).
     private func cleanupAfterStream(host: Host, caughtError: Error?) {
-        if caughtError != nil, Self.connectCancelRequested {
-            // The user cancelled this connect from the capsule -
-            // start()'s throw is the teardown ARRIVING, not a failure
-            // to report. A red "couldn't reach" banner here would
-            // contradict a deliberate, successful cancel.
+        let cancelled = Self.connectWasCancelled(by: caughtError, cancelRequested: Self.connectCancelRequested)
+        if cancelled {
+            // start()'s throw is the user's stop arriving, not a failure to report.
             self.log.info("Connect cancelled by user - suppressing the failure banner")
             self.nativeStreamError = nil
         } else if let caughtError {
@@ -242,9 +237,7 @@ extension AppModel {
             let localized = (caughtError as NSError).localizedDescription
             self.log.error("Stream start failed for \(hostName, privacy: .public): \(localized, privacy: .public)")
             Diag.error("Stream start failed for \(hostName): \(localized)", "Stream")
-            let failure = Self.connectFailure(for: caughtError, hostName: hostName)
-            self.nativeStreamError = failure.message
-            self.nativeStreamErrorKind = failure.kind
+            self.showStreamFailure(Self.connectFailure(for: caughtError, hostName: hostName))
         }
         // M3: do NOT unconditionally clear nativeStreamError here. A host-side
         // "ended unexpectedly" terminate (code != 0) already set the banner on
@@ -292,20 +285,15 @@ extension AppModel {
                 Diag.info("Session receipt skipped - never went live or under the "
                     + "5-minute stash threshold", "Stream")
             }
-            self.streamEndedToastVisible = true
-            // Stamp "last played" with the stream-END time (now),
-            // not the start time. This is the value HostsStore reads
-            // back into `Host.lastConnected` for both the
-            // launcher's "last played N ago" label and most-recent-host
-            // ordering - writing it at end keeps this host most-recent
-            // while making the relative-time label read time-since-end.
-            // Always a past instant, so the relative-time label can
-            // never go stale/negative while the next stream is live.
-            // Shares the `wasStreaming` gate with the toast above: the
-            // connection-failure path stamps the attempt's end time too
-            // (matching the previous start-time write, which also fired
-            // on failures), and the label still reads correctly.
-            UserDefaults.standard.set(Date(), forKey: "glimmer.lastConnected.\(host.id)")
+            // A cancelled connect never streamed: no "Stream ended", and the PC
+            // keeps its place in the list (and its ⌘N shortcut).
+            if !cancelled {
+                self.streamEndedToastVisible = true
+                // "Last played" is the stream-END time, read back as `Host.lastConnected`
+                // for the "last played N ago" label and the PC order. A failed connect
+                // stamps its attempt too, by design.
+                UserDefaults.standard.set(Date(), forKey: "glimmer.lastConnected.\(host.id)")
+            }
         }
         // Re-arm the readiness-chip poller so it goes back to
         // "Ready · 12 ms" instead of holding its last value from
@@ -327,62 +315,6 @@ extension AppModel {
         afterStreamEnd()
     }
 
-    /// Every surface's words for a PC that never answered: the launcher, the
-    /// pair sheet, `glimmer` and the Shortcuts actions.
-    nonisolated static func unreachableMessage(_ pcName: String) -> String {
-        "Couldn't reach \(pcName). Make sure it's awake and on the same network."
-    }
-
-    /// A start()-throw as the banner's sentence and the recovery it calls for.
-    /// The "make sure it's awake" copy is only for a genuine reach failure, never
-    /// for a PC that answered and refused (pairing, launch).
-    static func connectFailure(for error: Error, hostName: String) -> (message: String, kind: StreamErrorKind) {
-        let unreachable = (message: unreachableMessage(hostName), kind: StreamErrorKind.unreachable)
-        // The control layer always throws StreamError; anything else is most likely a reach failure.
-        guard let streamError = error as? StreamError else { return unreachable }
-        switch streamError {
-        case .hostUnreachable(let detail) where detail.contains("cert"):
-            // The network layer's own sentence for a changed PC certificate.
-            return (detail, .pairing)
-        case .hostUnreachable(let detail) where detail.contains("Restart Sunshine"):
-            // A wedged HTTPS listener (classifyPairedPathFailure): the PC is awake.
-            return (detail, .other)
-        case .sessionFailed(RtspError.encryptedVideoRequiredCode):
-            // The PC answered and refused us: its settings require encrypted video.
-            return (RtspError.encryptedVideoRequired.description, .other)
-        case .hostUnreachable, .sessionFailed, .binaryNotFound, .truncatedRead:
-            return unreachable
-        case .pairingFailed(let detail) where detail.contains("Pair Again…"):
-            // classifyPairedPathFailure's host-named sentence (a 401 or a TLS rejection).
-            return (detail, .pairing)
-        case .pairingFailed, .pairingRejected:
-            return ("Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu.", .pairing)
-        case .launchFailed:
-            return ("\(hostName) answered but couldn't start the app. It may already be in use.", .other)
-        case .decoderFailed:
-            return ("Couldn't start the video decoder for \(hostName).", .other)
-        case .audioFailed:
-            return ("Couldn't start audio for \(hostName).", .other)
-        case .crypto:
-            return ("A security error stopped the connection to \(hostName).", .other)
-        }
-    }
-
-    /// The toast for a stream that ended with a non-zero code. The watchdog's
-    /// bring-up codes (see watchdogTerminationCode) each name their own fix.
-    static func streamEndedMessage(code: Int32, hostName: String) -> String {
-        switch code {
-        case StreamSession.noVideoTrafficTerminationCode:
-            return "No video from \(hostName) reached this Mac. "
-                + "Make sure the PC's firewall allows UDP port 47998."
-        case StreamSession.noVideoFrameTerminationCode:
-            return "Video from \(hostName) arrived but couldn't be decoded. "
-                + "Try another codec from the PC's ⋯ menu."
-        default:
-            return "Stream to \(hostName) ended unexpectedly."
-        }
-    }
-
     /// Handle one engine event for the session streaming `host`. The host is
     /// the SESSION's host captured at stream() entry - never `selectedHost`,
     /// which the ⌘1-⌘9 shortcuts and the toolbar pill can re-point mid-flight
@@ -397,10 +329,10 @@ extension AppModel {
             // Don't repaint "Connecting…" over the "Cancelling…" a cancel click
             // earned, or over a reconnect's own "Reconnecting to <PC>…".
             if !Self.connectCancelRequested, !isReconnecting { streamPhase = .connecting(stage: connecting) }
-        case .stageComplete:              break
-        case .stageFailed:
-            nativeStreamError = "Couldn't reach \(host.displayName)."
-            nativeStreamErrorKind = .unreachable
+        case .stageComplete, .stageFailed:
+            // A failed stage only reaches here from a reconnect attempt; the real
+            // failure arrives as start()'s throw or the give-up terminate.
+            break
         case .connectionEstablished:
             streamPhase = .streaming
             isReconnecting = false
@@ -415,8 +347,7 @@ extension AppModel {
             streamPhase = .idle
             nativeHDRActive = false
             if code != 0 {
-                nativeStreamError = Self.streamEndedMessage(code: code, hostName: host.displayName)
-                nativeStreamErrorKind = .other
+                showStreamFailure((Self.streamEndedMessage(code: code, hostName: host.displayName), .other))
             }
         case .reconnecting:
             // The host closed a live session (it likely restarted across a

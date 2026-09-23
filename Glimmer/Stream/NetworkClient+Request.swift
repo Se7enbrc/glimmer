@@ -138,7 +138,7 @@ extension NetworkClient {
         if code == 401 {
             throw StreamError.hostUnreachable("Host requires pairing (\(message))")
         }
-        throw StreamError.launchFailed("\(message) (code \(code))")
+        throw StreamError.hostRefused(message: message, code: code)
     }
 
     // MARK: - Codec mode decoding

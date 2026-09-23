@@ -286,16 +286,19 @@ final class RtspClient: @unchecked Sendable {
                 return try await oneShot(bytes)
             } catch let rtspError as RtspError {
                 // Connection-refused-style failures get retried until the
-                // deadline; everything else propagates.
+                // deadline, then name the port that never took us; everything
+                // else propagates.
                 if interrupted.isSet { throw RtspError.interrupted }
-                if case .transportFailure = rtspError, Date() < deadline {
-                    attempt += 1
-                    Diag.info("RTSP TCP connect not ready (attempt \(attempt)); retry in 500ms",
-                              Self.logCategory)
-                    try await Self.sleep(ms: 500)
-                    continue
+                guard case .transportFailure = rtspError else { throw rtspError }
+                guard Date() < deadline else {
+                    Diag.error("RTSP port \(rtspPort) still failing after \(attempt) retries: \(rtspError)",
+                               Self.logCategory)
+                    throw RtspError.connectTimeout(rtspPort)
                 }
-                throw rtspError
+                attempt += 1
+                Diag.info("RTSP TCP connect not ready (attempt \(attempt)); retry in 500ms",
+                          Self.logCategory)
+                try await Self.sleep(ms: 500)
             }
         }
     }

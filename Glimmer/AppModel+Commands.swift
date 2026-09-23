@@ -236,7 +236,7 @@ extension AppModel {
         do {
             try await client.cancel()
             await client.shutdown()
-        } catch StreamError.launchFailed {
+        } catch StreamError.launchFailed, StreamError.hostRefused {
             await client.shutdown()
             // Older Sunshine answers 503 while another device is connected.
             throw StreamError.launchFailed(

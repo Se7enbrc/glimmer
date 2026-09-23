@@ -511,6 +511,13 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     /// timeout or transport error mid-body), distinct from a clean EOF. Surfaced
     /// instead of letting a half-read body reach the XML parser as "Malformed XML".
     case truncatedRead(String)
+    /// The PC answered /launch, but a stream port never took the connection:
+    /// almost always its firewall. Carries the port to allow.
+    case streamPortsBlocked(proto: String, port: UInt16)
+    /// The PC didn't finish launching the app before the launch deadline.
+    case hostTimedOut
+    /// The PC answered with an error status; carries Sunshine's own message.
+    case hostRefused(message: String, code: Int)
 
     public var description: String {
         switch self {
@@ -529,6 +536,9 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         case .audioFailed(let reason): return "Audio failed: \(reason)"
         case .crypto(let reason): return "Cryptography error: \(reason)"
         case .truncatedRead(let reason): return "Control connection ended early: \(reason)"
+        case .streamPortsBlocked(let proto, let port): return "The stream couldn't get through on \(proto) \(port)."
+        case .hostTimedOut: return "The PC didn't respond in time."
+        case .hostRefused(let message, let code): return "\(message) (code \(code))"
         }
     }
 

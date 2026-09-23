@@ -39,6 +39,7 @@
 		DEC0DE202609232100000001 /* ContentView+ConnectBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609232100000002 /* ContentView+ConnectBanner.swift */; };
 		DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */; };
 		DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */; };
+		DEC0DE202609230700000001 /* AppModel+StreamFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609230700000002 /* AppModel+StreamFailure.swift */; };
 		A100017A /* SettingsGeneralStreamingPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100017B /* SettingsGeneralStreamingPanes.swift */; };
 		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
 		DEC0DE202609222400000001 /* SettingsShortcutRecorders.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */; };
@@ -421,6 +422,7 @@
 		DEC0DE202609232100000002 /* ContentView+ConnectBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ConnectBanner.swift"; sourceTree = "<group>"; };
 		DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsGeneralStreamingPanes+LoginItem.swift"; sourceTree = "<group>"; };
 		DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming+Config.swift"; sourceTree = "<group>"; };
+		DEC0DE202609230700000002 /* AppModel+StreamFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+StreamFailure.swift"; sourceTree = "<group>"; };
 		A100017B /* SettingsGeneralStreamingPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsGeneralStreamingPanes.swift; sourceTree = "<group>"; };
 		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
 		DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsShortcutRecorders.swift; sourceTree = "<group>"; };
@@ -828,6 +830,7 @@
 				DEC0DE04000000000000000B /* ContentView+StreamButton.swift */,
 				DEC0DE202609232100000002 /* ContentView+ConnectBanner.swift */,
 				DEC0DE06000000000000000B /* AppModel+Streaming+Config.swift */,
+				DEC0DE202609230700000002 /* AppModel+StreamFailure.swift */,
 				A100017B /* SettingsGeneralStreamingPanes.swift */,
 				DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */,
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
@@ -1315,6 +1318,7 @@
 				DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */,
 				DEC0DE202609232100000001 /* ContentView+ConnectBanner.swift in Sources */,
 				DEC0DE06000000000000000A /* AppModel+Streaming+Config.swift in Sources */,
+				DEC0DE202609230700000001 /* AppModel+StreamFailure.swift in Sources */,
 				A100017A /* SettingsGeneralStreamingPanes.swift in Sources */,
 				DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */,
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,

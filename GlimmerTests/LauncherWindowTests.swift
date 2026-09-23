@@ -27,8 +27,6 @@ struct ConnectBannerActionTests {
     @Test func genuineReachFailuresOfferWake() {
         let errors: [Error] = [
             StreamError.hostUnreachable("control write failed"),
-            StreamError.sessionFailed(-1),
-            StreamError.binaryNotFound,
             StreamError.truncatedRead("recv timed out"),
             CancellationError()
         ]
@@ -62,7 +60,8 @@ struct ConnectBannerActionTests {
 
     @Test func failuresAfterThePCAnsweredTryAgain() {
         let errors: [StreamError] = [
-            .launchFailed("busy"), .decoderFailed("hevc"), .audioFailed("opus"), .crypto("aes")
+            .launchFailed("busy"), .decoderFailed("hevc"), .audioFailed("opus"), .crypto("aes"),
+            .sessionFailed(-1), .streamPortsBlocked(proto: "UDP", port: 47999), .hostTimedOut
         ]
         for error in errors {
             #expect(action(for: error) == .tryAgain, "\(error)")
@@ -75,15 +74,17 @@ struct ConnectBannerActionTests {
         #expect(action(for: StreamError.launchFailed("busy"), pc: "Repair Rig") == .tryAgain)
     }
 
-    /// The engine's own failure edges record their kind alongside the sentence.
+    /// A reconnect's failed stage leaves the banner alone; the give-up terminate
+    /// records its kind alongside the sentence.
     @Test func engineFailuresRecordTheirKind() {
         let model = AppModel()
         let rig = Host(id: "pc-1", name: "rig", customName: "Repair Rig", localAddress: "192.0.2.10", manualAddress: nil,
                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
         model.nativeStreamErrorKind = .pairing
         model.handleNativeEvent(.stageFailed(name: "RTSP handshake", errorCode: -1), host: rig)
-        #expect(model.nativeStreamErrorKind == .unreachable)
+        #expect(model.nativeStreamError == nil && model.nativeStreamErrorKind == .pairing)
         model.handleNativeEvent(.connectionTerminated(errorCode: -1), host: rig)
+        #expect(model.nativeStreamError == "Lost the connection to Repair Rig.")
         #expect(model.nativeStreamErrorKind == .other)
     }
 }

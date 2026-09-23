@@ -165,12 +165,14 @@ struct StreamSignalTests {
     @Test func theEndedToastNamesTheFix() {
         let traffic = AppModel.streamEndedMessage(code: -100, hostName: "Den PC")
         let frame = AppModel.streamEndedMessage(code: -101, hostName: "Den PC")
-        let other = AppModel.streamEndedMessage(code: -1, hostName: "Den PC")
+        let lost = AppModel.streamEndedMessage(code: -1, hostName: "Den PC")
+        let other = AppModel.streamEndedMessage(code: -102, hostName: "Den PC")
         #expect(traffic.contains("Den PC") && traffic.contains("UDP port 47998"))
         #expect(frame.contains("Den PC") && frame.contains("codec"))
+        #expect(lost == "Lost the connection to Den PC.")
         #expect(other == "Stream to Den PC ended unexpectedly.")
-        #expect(Set([traffic, frame, other]).count == 3)
-        #expect(![traffic, frame, other].contains { $0.localizedCaseInsensitiveContains("host") })
+        #expect(Set([traffic, frame, lost, other]).count == 4)
+        #expect(![traffic, frame, lost, other].contains { $0.localizedCaseInsensitiveContains("host") })
     }
 
     // MARK: Stats HUD

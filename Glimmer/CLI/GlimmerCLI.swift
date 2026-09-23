@@ -195,7 +195,8 @@ enum GlimmerCLI {
             return Exit.notPaired
         case .truncatedRead, .sessionFailed:
             return Exit.unreachable
-        case .binaryNotFound, .launchFailed, .decoderFailed, .audioFailed, .crypto:
+        case .binaryNotFound, .launchFailed, .decoderFailed, .audioFailed, .crypto,
+             .streamPortsBlocked, .hostTimedOut, .hostRefused:
             return Exit.failed
         }
     }

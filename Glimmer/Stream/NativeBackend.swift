@@ -175,7 +175,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
                 completion(StreamError.sessionFailed(-1))
                 return
             }
-            completion(resultBox.get().map { self?.mapToStreamError($0) ?? .sessionFailed(-1) })
+            completion(resultBox.get().map { Self.mapToStreamError($0) })
         }
         bridgeThread.qualityOfService = .userInitiated
         bridgeThread.name = "Glimmer.nativeConnect"
@@ -190,16 +190,17 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         func get() -> Error? { lock.lock(); defer { lock.unlock() }; return value }
     }
 
-    private func mapToStreamError(_ error: Error) -> StreamError {
+    static func mapToStreamError(_ error: Error) -> StreamError {
         if let streamError = error as? StreamError { return streamError }
-        return StreamError.sessionFailed(rtspCode(error))
+        if case .connectTimeout(let port) = error as? RtspError { return .streamPortsBlocked(proto: "TCP", port: port) }
+        return .sessionFailed(rtspCode(error))
     }
 
     func checkInterrupted() -> Bool {
         withState { interrupted }
     }
 
-    func rtspCode(_ error: Error) -> Int32 {
+    static func rtspCode(_ error: Error) -> Int32 {
         switch error as? RtspError {
         case .nonOK(_, let code): return Int32(code)
         case .encryptedVideoRequired: return RtspError.encryptedVideoRequiredCode
