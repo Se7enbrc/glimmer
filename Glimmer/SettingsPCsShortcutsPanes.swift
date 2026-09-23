@@ -207,12 +207,12 @@ struct ShortcutsPane: View {
         @Bindable var model = model
         // Row names double as the "Already used for" names, so a recording
         // can't copy another shortcut or a fixed one.
-        let stop = "Stop Streaming", stats = "Show or hide stream stats"
-        let pointer = "Capture or release the pointer", mini = "Mini Player"
+        let stop = "Stop Streaming", stats = "Show or Hide Stream Stats"
+        let pointer = "Capture or Release the Pointer", mini = "Mini Player", paste = "Paste as Text"
         let taken: [(name: String, chord: HotkeyChord)] = [
             (stop, model.quitHotkey), (stats, model.statsHotkey),
             (pointer, model.releasePointerHotkey), (mini, model.miniPlayerHotkey),
-            ("Bookmark a rough moment", .defaultBookmark), ("Paste as text", PasteText.chord)
+            ("Bookmark a Rough Moment", .defaultBookmark), (paste, PasteText.chord)
         ]
         Form {
             Section("In-stream shortcuts") {
@@ -240,6 +240,15 @@ struct ShortcutsPane: View {
                 HotkeyRow(label: mini, hotkey: $model.miniPlayerHotkey, taken: taken)
                 Text("Shrinks the stream to a small window that floats over your other apps, and brings it "
                     + "back. Click the mini player to play; hold Esc to get the pointer back.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Text(paste)
+                    Spacer()
+                    StaticChordBadge(chord: PasteText.chord)
+                }
+                Text("Types this Mac's clipboard into the PC as text, whatever the PC's keyboard layout. "
+                    + "⌘V does the same while ⌘ stays with this Mac.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

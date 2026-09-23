@@ -13,21 +13,40 @@ import SwiftUI
 
 // MARK: - Recording rules
 
+@MainActor
 extension HotkeyChord {
     /// Why this chord can't be an in-stream shortcut, or nil when it can.
     /// `taken` lists every other shortcut by the name Settings shows.
-    func recordingProblem(taken: [(name: String, chord: HotkeyChord)]) -> String? {
+    func recordingProblem(taken: [(name: String, chord: HotkeyChord)],
+                          menu: NSMenu? = NSApp.mainMenu) -> String? {
         if shift, !ctrl, !alt, !cmd {
             return "Add ⌃, ⌥ or ⌘. With ⇧ alone, every capital letter would trigger it."
         }
-        // The main menu answers these before the stream sees them.
-        if cmd, ["q", "w", "h", "m"].contains(keyChar.lowercased()) {
-            return "This Mac already uses \(displayString)."
+        // The main menu answers its key equivalents before the stream sees them.
+        if let menu, let title = menuItemTitle(in: menu) {
+            return "Already used for \(title.hasSuffix("…") ? String(title.dropLast()) : title)."
         }
         if let owner = taken.first(where: { $0.chord.displayString == displayString }) {
             return "Already used for \(owner.name)."
         }
         return nil
+    }
+
+    /// The title of the visible menu item this chord triggers, searching submenus.
+    private func menuItemTitle(in menu: NSMenu) -> String? {
+        for item in menu.items where !item.isHidden {
+            if triggers(item) { return item.title }
+            if let submenu = item.submenu, let title = menuItemTitle(in: submenu) { return title }
+        }
+        return nil
+    }
+
+    /// An uppercase key equivalent implies ⇧, as AppKit reads it.
+    private func triggers(_ item: NSMenuItem) -> Bool {
+        let key = item.keyEquivalent, mods = item.keyEquivalentModifierMask
+        guard !key.isEmpty, key.lowercased() == keyChar.lowercased() else { return false }
+        return mods.contains(.command) == cmd && mods.contains(.option) == alt && mods.contains(.control) == ctrl
+            && (mods.contains(.shift) || key != key.lowercased()) == shift
     }
 }
 

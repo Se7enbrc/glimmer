@@ -107,7 +107,7 @@ struct DiagnosticsPane: View {
 
                 Section {
                     HStack {
-                        Text("Bookmark a rough moment")
+                        Text("Bookmark a Rough Moment")
                         Spacer()
                         StaticChordBadge(chord: .defaultBookmark)
                     }
@@ -166,7 +166,7 @@ struct DiagnosticsPane: View {
 /// Read-only chord badge for non-configurable shortcuts (the bookmark chord is
 /// fixed). Mirrors the look of the interactive `HotkeyBadge` capsule without the
 /// capture machinery, so it reads as the same family of UI.
-private struct StaticChordBadge: View {
+struct StaticChordBadge: View {
     let chord: HotkeyChord
 
     var body: some View {
