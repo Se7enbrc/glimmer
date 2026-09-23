@@ -69,8 +69,8 @@ struct StreamButton: View {
         case connect
         case connecting
         case liveBackgrounded
-        /// Host asleep + Luna power gate passed: the hero CTA becomes the one
-        /// obvious action ("Wake and Connect") instead of a dead Stream button.
+        /// PC asleep with Wake on LAN on: the hero CTA becomes the one obvious
+        /// action (Wake and Connect) instead of a dead Stream button.
         case wake
         /// A wake in flight (packets sent, waiting up to 90 s for Sunshine).
         /// Like `.connecting` the capsule stays enabled and is the cancel.
