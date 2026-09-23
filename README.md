@@ -22,10 +22,12 @@ process. No external player, no C engine.
   telemetry.
 - **Audio.** Opus through AVAudioEngine with a small adaptive cushion, so device
   switches and rough Wi-Fi don't crackle.
-- **Controllers.** Xbox and DualSense: rumble, trigger rumble, gyro, touchpad,
-  battery, light bar - whatever the pad has. Hold-to-quit chord. An optional
-  raw-input mode (off by default, needs Input Monitoring) adds the DualSense
-  buttons macOS hides and the host's adaptive-trigger effects.
+- **Controllers.** Xbox, DualSense and every other pad macOS supports, plus
+  other USB and Bluetooth HID gamepads through SDL's controller database (those
+  need Input Monitoring). Rumble, trigger rumble, gyro, touchpad, battery and
+  light bar, whatever the pad has. Hold-to-stop chord. An optional raw-input
+  mode (off by default, needs Input Monitoring) adds the DualSense buttons macOS
+  hides and the host's adaptive-trigger effects.
 - **Mouse and keyboard.** Raw 1:1 aim at your Mac's tracking speed with the
   acceleration curve removed, an optional velocity-gated boost on fast flicks,
   optional ⌘-shortcut forwarding.
