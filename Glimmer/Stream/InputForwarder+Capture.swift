@@ -202,6 +202,7 @@ extension InputForwarder {
     func exitCapturedMode() {
         guard isMouseCaptured else { return }
         isMouseCaptured = false
+        releaseCommandSides()
         // Re-associate: hand cursor control back to the OS so the pointer tracks
         // the device again wherever the user goes after leaving the stream.
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))

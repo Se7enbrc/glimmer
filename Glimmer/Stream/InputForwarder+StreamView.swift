@@ -129,8 +129,8 @@ extension InputForwarder: StreamInputViewDelegate {
             return true
         }
 
-        // Sys-key capture gate. When the user has not opted into forwarding
-        // Cmd combos, treat any Cmd-modified key-down as a macOS shortcut and
+        // Sys-key capture gate. Unless ⌘ goes to the game (opted in AND the
+        // pointer held), treat any Cmd-modified key-down as a macOS shortcut and
         // let it fall through to the responder chain. Returning `false` from
         // the delegate tells StreamInputView to call `super.keyDown` instead
         // of swallowing the event, which is what gives macOS a chance to run
@@ -140,7 +140,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // is holding a Cmd-letter combo. We let those fall through too - the
         // responder chain has its own auto-repeat semantics for system
         // shortcuts and we don't want to double-fire.
-        if mods.contains(.command), !captureSysKeys {
+        if mods.contains(.command), !forwardsCommand {
             return false
         }
 
@@ -170,10 +170,10 @@ extension InputForwarder: StreamInputViewDelegate {
         guard let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else { return }
         let wireCode = Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk))
 
-        // Mirror the key-down gate: under ⌘ with capture off the down was never
+        // Mirror the key-down gate: under an unforwarded ⌘ the down was never
         // forwarded, so no up either. A key held from before ⌘ went down was
         // forwarded and must be released, or the host keeps it pressed.
-        if mods.contains(.command), !captureSysKeys, !heldKeys.contains(wireCode) {
+        if mods.contains(.command), !forwardsCommand, !heldKeys.contains(wireCode) {
             return
         }
 
@@ -191,8 +191,8 @@ extension InputForwarder: StreamInputViewDelegate {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // Each modifier SIDE is tracked on its own (device-dependent bits), so
         // holding both Shifts and releasing one sends exactly that side's up.
-        // Cmd is macOS-owned: never forwarded unless sys-key capture is on.
-        let downNow = ModifierSides.held(in: event.modifierFlags, includeCommand: captureSysKeys)
+        // Cmd is macOS-owned: never forwarded unless `forwardsCommand`.
+        let downNow = ModifierSides.held(in: event.modifierFlags, includeCommand: forwardsCommand)
         let capsChanged = mods.contains(.capsLock) != lastCapsLock
         lastCapsLock = mods.contains(.capsLock)
         let pressed = downNow.subtracting(heldModifierVKs)
@@ -208,7 +208,7 @@ extension InputForwarder: StreamInputViewDelegate {
         }
     }
 
-    private func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {
+    func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {
         let action: Int8 = down ? Int8(StreamProtocol.KEY_ACTION_DOWN) : Int8(StreamProtocol.KEY_ACTION_UP)
         let rc = backend?.sendKeyboard(
             keyCode: Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)),

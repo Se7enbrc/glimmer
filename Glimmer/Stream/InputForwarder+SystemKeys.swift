@@ -10,12 +10,26 @@ import AppKit
 
 extension InputForwarder {
 
+    /// ⌘ is the PC's Win key only while ⌘ shortcuts belong to the game and the
+    /// stream holds the pointer, the same window the global hotkeys are off for.
+    /// Otherwise ⌘ stays the Mac's, so a ⌘-Tab or ⌘V never leaves a lone Win tap.
+    var forwardsCommand: Bool { captureSysKeys && isMouseCaptured }
+
     /// A ⌘ key equivalent, offered before the main menu sees it. Claimed and
-    /// forwarded only while ⌘ shortcuts belong to the game and the pointer is
-    /// held, the same window the global hotkeys are off for.
+    /// forwarded to the PC only while ⌘ is.
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool {
-        guard captureSysKeys, isMouseCaptured, event.modifierFlags.contains(.command) else { return false }
+        guard forwardsCommand, event.modifierFlags.contains(.command) else { return false }
         return streamView(view, handleKeyDown: event)
+    }
+
+    /// Capture ended with ⌘ down: ⌘ is the Mac's again, so the PC's Win key is
+    /// let go here, and nothing later (a paste, a modifier change) finds it held.
+    func releaseCommandSides() {
+        let sides = heldModifierVKs.intersection([0x5B, 0x5C]) // VK_LWIN, VK_RWIN
+        guard !sides.isEmpty else { return }
+        heldModifierVKs.subtract(sides)
+        guard isReady else { return }
+        for vk in sides.sorted() { sendModifier(vk, down: false, modByte: 0) }
     }
 }
 

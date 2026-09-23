@@ -272,9 +272,9 @@ public final class InputForwarder {
     ///     non-Cmd key that happens to be pressed while the user holds
     ///     Cmd doesn't reach the host with a phantom Win-key modifier.
     ///
-    /// When this is `true`, the InputForwarder is transparent - every Cmd
-    /// chord is forwarded as a Win-key chord - at the cost of macOS no
-    /// longer reacting to those combos until the stream ends. That's the
+    /// When this is `true` and the stream holds the pointer (`forwardsCommand`),
+    /// every Cmd chord is forwarded as a Win-key chord - at the cost of macOS no
+    /// longer reacting to those combos while the pointer is held. That's the
     /// mode power users on dedicated streaming hardware want.
     ///
     /// Note: the configured quit hotkey (see `quitHotkey`) is detected BEFORE
@@ -561,19 +561,19 @@ public final class InputForwarder {
         if flags.contains(.control) { b |= StreamProtocol.MODIFIER_CTRL }
         if flags.contains(.shift) { b |= StreamProtocol.MODIFIER_SHIFT }
         if flags.contains(.option) { b |= StreamProtocol.MODIFIER_ALT }
-        // Only fold Cmd into MODIFIER_META when sys-key capture is on. With
-        // capture off, the user expects Cmd to be a macOS-only key - sending
+        // Only fold Cmd into MODIFIER_META while ⌘ is forwarded. Otherwise
+        // the user expects Cmd to be a macOS-only key - sending
         // MODIFIER_META alongside an unrelated keypress would make the host
         // see e.g. "Win+T" for a stray ⌘-T the user pressed to open a tab in
         // a backgrounded mac app.
-        if flags.contains(.command), captureSysKeys { b |= StreamProtocol.MODIFIER_META }
+        if flags.contains(.command), forwardsCommand { b |= StreamProtocol.MODIFIER_META }
         return UInt8(truncatingIfNeeded: b)
     }
 
     /// Send key-up for any modifier our state thinks is currently down. Used
     /// during detach so the host doesn't see a "ctrl is held forever" state.
     ///
-    /// We deliberately omit the Cmd modifier when `captureSysKeys` is false:
+    /// We deliberately omit the Cmd modifier when `forwardsCommand` is false:
     /// the corresponding VK_LWIN/VK_RWIN down was never sent (we filter Cmd
     /// out of `flagsChanged`), so sending a stray up here would be a
     /// fabricated event the host would react to.

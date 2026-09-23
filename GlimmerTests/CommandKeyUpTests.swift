@@ -100,4 +100,30 @@ struct CommandKeyEquivalentTests {
             #expect(forwarder.heldKeys.isEmpty)
         }
     }
+
+    /// Left ⌘ down, as its flagsChanged reports it (device bit 0x8).
+    private func leftCommandDown() throws -> NSEvent {
+        let flags = NSEvent.ModifierFlags(rawValue: NSEvent.ModifierFlags.command.rawValue | 0x8)
+        return try #require(NSEvent.keyEvent(
+            with: .flagsChanged, location: .zero, modifierFlags: flags, timestamp: 1,
+            windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+            isARepeat: false, keyCode: UInt16(kVK_Command)))
+    }
+
+    /// Opted in with the pointer free, ⌘ is the Mac's, so ⌘V pastes and ⌘-Tab
+    /// leaves with no Win key held on the PC for a release to turn into Start.
+    @Test func commandIsNotTheWinKeyWhileThePointerIsFree() throws {
+        let forwarder = forwarder(optedIn: true, captured: false)
+        forwarder.streamView(StreamInputView(), handleFlagsChanged: try leftCommandDown())
+        #expect(forwarder.heldModifierVKs.isEmpty)
+        #expect(forwarder.modifierByte(from: [.command]) == 0)
+    }
+
+    @Test func capturedCommandIsTheWinKeyUntilCaptureEnds() throws {
+        let forwarder = forwarder(optedIn: true, captured: true)
+        forwarder.streamView(StreamInputView(), handleFlagsChanged: try leftCommandDown())
+        #expect(forwarder.heldModifierVKs == [0x5B])
+        forwarder.exitCapturedMode()
+        #expect(forwarder.heldModifierVKs.isEmpty)
+    }
 }

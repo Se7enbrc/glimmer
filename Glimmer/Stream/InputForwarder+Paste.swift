@@ -46,7 +46,7 @@ extension InputForwarder {
         raiseAllHeldInputs(reason: "paste")
         // Modifiers still down (the chord's own) are up on the PC now: count them
         // as held, so letting go sends a harmless release instead of a press.
-        heldModifierVKs = ModifierSides.held(in: NSEvent.modifierFlags, includeCommand: captureSysKeys)
+        heldModifierVKs = ModifierSides.held(in: NSEvent.modifierFlags, includeCommand: forwardsCommand)
         log.info("Pasting \(text.utf8.count, privacy: .public) bytes as text")
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(50))
