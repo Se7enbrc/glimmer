@@ -326,6 +326,17 @@
 		D96F6019901B5705F1040F52 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 505E37FB63C22AC476506587 /* Foundation.framework */; };
 		F5951726E170AD3E1F645B80 /* HostStatusPoller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447FF92C9458E21549E4965D /* HostStatusPoller.swift */; };
 		FB153DF267467B06C6BE3467 /* MacSystemStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */; };
+		DEC0DE202609220100000002 /* GlimmerMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000001 /* GlimmerMain.swift */; };
+		DEC0DE202609220100000004 /* GlimmerCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000003 /* GlimmerCLI.swift */; };
+		DEC0DE202609220100000006 /* GlimmerCLI+List.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000005 /* GlimmerCLI+List.swift */; };
+		DEC0DE202609220100000008 /* GlimmerCLI+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000007 /* GlimmerCLI+Commands.swift */; };
+		DEC0DE202609220100000010 /* GlimmerCLI+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000009 /* GlimmerCLI+Stream.swift */; };
+		DEC0DE202609220100000012 /* AppModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000011 /* AppModel+Commands.swift */; };
+		DEC0DE202609220100000014 /* AppModel+Derived.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000013 /* AppModel+Derived.swift */; };
+		DEC0DE202609220100000016 /* GlimmerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000015 /* GlimmerIntents.swift */; };
+		DEC0DE202609220100000020 /* MenuBarChartAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000019 /* MenuBarChartAccessibility.swift */; };
+		DEC0DE202609220100000026 /* GlimmerCLITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000025 /* GlimmerCLITests.swift */; };
+		DEC0DE202609220100000028 /* StreamOverridesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000027 /* StreamOverridesTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -513,6 +524,17 @@
 		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Network+Support.swift"; sourceTree = "<group>"; };
 		D1000069 /* InputForwarder+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Capture.swift"; sourceTree = "<group>"; };
 		D1000CR1 /* InputForwarder+Cruise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Cruise.swift"; sourceTree = "<group>"; };
+		DEC0DE202609220100000001 /* GlimmerMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLI/GlimmerMain.swift; sourceTree = "<group>"; };
+		DEC0DE202609220100000003 /* GlimmerCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLI/GlimmerCLI.swift; sourceTree = "<group>"; };
+		DEC0DE202609220100000005 /* GlimmerCLI+List.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+List.swift"; sourceTree = "<group>"; };
+		DEC0DE202609220100000007 /* GlimmerCLI+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+Commands.swift"; sourceTree = "<group>"; };
+		DEC0DE202609220100000009 /* GlimmerCLI+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+Stream.swift"; sourceTree = "<group>"; };
+		DEC0DE202609220100000011 /* AppModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Commands.swift"; sourceTree = "<group>"; };
+		DEC0DE202609220100000013 /* AppModel+Derived.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Derived.swift"; sourceTree = "<group>"; };
+		DEC0DE202609220100000015 /* GlimmerIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerIntents.swift; sourceTree = "<group>"; };
+		DEC0DE202609220100000019 /* MenuBarChartAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarChartAccessibility.swift; sourceTree = "<group>"; };
+		DEC0DE202609220100000025 /* GlimmerCLITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerCLITests.swift; sourceTree = "<group>"; };
+		DEC0DE202609220100000027 /* StreamOverridesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamOverridesTests.swift; sourceTree = "<group>"; };
 		D100006B /* InputForwarder+StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+StreamView.swift"; sourceTree = "<group>"; };
 		D100006D /* StreamWindow+Show.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Show.swift"; sourceTree = "<group>"; };
 		D100006F /* StatsOverlayLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StatsOverlayLayer.swift; sourceTree = "<group>"; };
@@ -1018,6 +1040,15 @@
 				71A5B2E11628E68BFAF05421 /* AppIcon.icon */,
 				2C2C61CA646A8599B4EC06C5 /* AWDLHelperManager.swift */,
 				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
+				DEC0DE202609220100000001 /* GlimmerMain.swift */,
+				DEC0DE202609220100000003 /* GlimmerCLI.swift */,
+				DEC0DE202609220100000005 /* GlimmerCLI+List.swift */,
+				DEC0DE202609220100000007 /* GlimmerCLI+Commands.swift */,
+				DEC0DE202609220100000009 /* GlimmerCLI+Stream.swift */,
+				DEC0DE202609220100000011 /* AppModel+Commands.swift */,
+				DEC0DE202609220100000013 /* AppModel+Derived.swift */,
+				DEC0DE202609220100000015 /* GlimmerIntents.swift */,
+				DEC0DE202609220100000019 /* MenuBarChartAccessibility.swift */,
 			);
 			path = Glimmer;
 			sourceTree = "<group>";
@@ -1097,6 +1128,8 @@
 				DEC0DE202609221600000001 /* ControllerInputRateTests.swift */,
 				D2000038 /* StreamProtocolConstantsTests.swift */,
 				064F5F39A59E54E022FEE74E /* FuzzTests.swift */,
+				DEC0DE202609220100000025 /* GlimmerCLITests.swift */,
+				DEC0DE202609220100000027 /* StreamOverridesTests.swift */,
 			);
 			name = GlimmerTests;
 			path = GlimmerTests;
@@ -1482,6 +1515,15 @@
 				FB153DF267467B06C6BE3467 /* MacSystemStats.swift in Sources */,
 				109EA4B557EB9EFC0400C751 /* AWDLHelperManager.swift in Sources */,
 				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
+				DEC0DE202609220100000002 /* GlimmerMain.swift in Sources */,
+				DEC0DE202609220100000004 /* GlimmerCLI.swift in Sources */,
+				DEC0DE202609220100000006 /* GlimmerCLI+List.swift in Sources */,
+				DEC0DE202609220100000008 /* GlimmerCLI+Commands.swift in Sources */,
+				DEC0DE202609220100000010 /* GlimmerCLI+Stream.swift in Sources */,
+				DEC0DE202609220100000012 /* AppModel+Commands.swift in Sources */,
+				DEC0DE202609220100000014 /* AppModel+Derived.swift in Sources */,
+				DEC0DE202609220100000016 /* GlimmerIntents.swift in Sources */,
+				DEC0DE202609220100000020 /* MenuBarChartAccessibility.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1551,6 +1593,8 @@
 				DEC0DE202609221600000002 /* ControllerInputRateTests.swift in Sources */,
 				D2000039 /* StreamProtocolConstantsTests.swift in Sources */,
 				D5CD78BE12E450A9FDBE6424 /* FuzzTests.swift in Sources */,
+				DEC0DE202609220100000026 /* GlimmerCLITests.swift in Sources */,
+				DEC0DE202609220100000028 /* StreamOverridesTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
