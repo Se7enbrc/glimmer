@@ -277,6 +277,13 @@ public actor StreamSession {
     var reconnectServer: ServerInfo?
     var reconnectConfig: StreamConfig?
     var reconnectAppID: Int?
+    /// The ask for the route the Mac is on now, read by every reconnect so a
+    /// route change mid-session re-derives the bitrate. Nil keeps the start's.
+    var routeAskProvider: (@MainActor @Sendable () -> RouteAsk?)?
+
+    func setRouteAskProvider(_ provider: @escaping @MainActor @Sendable () -> RouteAsk?) {
+        routeAskProvider = provider
+    }
 
     // MARK: - Mid-session bitrate downshift (see BitrateDownshiftController)
 

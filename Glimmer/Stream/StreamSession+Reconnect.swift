@@ -170,7 +170,9 @@ extension StreamSession {
     /// Returns true once the connection is back up.
     private func reconnectInPlace(deadline: Date) async -> Bool {
         guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline else { return false }
-        guard let server = reconnectServer,
+        await refreshReconnectAsk()
+        guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline,
+              let server = reconnectServer,
               let config = reconnectConfig,
               let appID = reconnectAppID,
               let win = window, let inp = input, let dec = videoDecoder else { return false }
@@ -209,6 +211,7 @@ extension StreamSession {
         let net = NetworkClient(server: server)
         self.network = net
         await net.setRequestDeadline(deadline)
+        let backendConfig: BackendStreamConfig
         do {
             try checkAttempt(deadline: deadline)
             let serverInfo = try await StreamAttempt.run(until: deadline) {
@@ -222,7 +225,7 @@ extension StreamSession {
             // Re-probe the path on reconnect: the route may have moved (the
             // tunnel-flap case this whole clamp exists for), so remoteness and
             // the advertised packet size are resolved fresh, never inherited.
-            let backendConfig = makeBackendConfig(
+            backendConfig = makeBackendConfig(
                 config: config, launch: launch, server: serverInfo)
             // duringReconnect: connectBackend's failure path must NOT run the
             // full stop() (that would blank the frozen frame + bounce to the
@@ -257,11 +260,30 @@ extension StreamSession {
 
         await net.setRequestDeadline(nil)
         guard isStreaming, !stopInProgress, !Task.isCancelled else { return false }
+        // The overlay and telemetry show what this connection asked for.
+        dec.setNegotiatedBitrateKbps(Int(backendConfig.bitrate))
 
         // 4. Nudge a keyframe so the fresh VT session repaints over the frozen
         //    frame promptly (Sunshine sends one at start; cheap insurance).
         backend.requestIdrFrame()
         return true
+    }
+
+    /// Re-derive the ask for the route the Mac is on now, which may have changed
+    /// since the start. A downshift stays the ceiling (StreamPathMTU.reconnectAsk).
+    private func refreshReconnectAsk() async {
+        var route: RouteAsk?
+        if let provider = routeAskProvider { route = await MainActor.run { provider() } }
+        guard let config = reconnectConfig else { return }
+        let ask = StreamPathMTU.reconnectAsk(
+            current: RouteAsk(kbps: config.bitrateKbps, boost: config.bitrateBoost),
+            route: route, downshifted: downshift.downshiftCount > 0)
+        if ask.kbps != config.bitrateKbps {
+            Diag.notice("Reconnect ask for the current route: \(ask.kbps / 1000) Mbps "
+                + "(was \(config.bitrateKbps / 1000)).", "Stream")
+        }
+        reconnectConfig?.bitrateKbps = ask.kbps
+        reconnectConfig?.bitrateBoost = ask.boost
     }
 
     /// H5 cleanup: a `stop()` slipped in while this attempt was mid-handshake, so

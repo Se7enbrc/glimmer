@@ -240,6 +240,13 @@ final class RttSampler: @unchecked Sendable {
     }
 }
 
+/// A route's bitrate ask after the radio gate and cap, and the wired boost in
+/// it that the measured RTT may still withdraw.
+struct RouteAsk: Sendable, Equatable {
+    var kbps: Int
+    var boost: Double
+}
+
 /// What the connect-time gate actually decided, latched for the telemetry
 /// exporter. This exists because the per-session diagnostic log
 /// (`glimmer-<ts>.log`) does not begin capturing until the backend starts
@@ -350,6 +357,17 @@ enum StreamPathMTU {
         return Int((Double(capped) / boost).rounded())
     }
 
+    /// The ask a reconnect rebuilds from: the current route's, but never above a
+    /// downshift. A downshift keeps its boost for the wired withdrawal, so the
+    /// two compare unboosted.
+    static func reconnectAsk(current: RouteAsk, route: RouteAsk?, downshifted: Bool) -> RouteAsk {
+        guard downshifted else { return route ?? current }
+        guard let route, Double(route.kbps) / route.boost < Double(current.kbps) / current.boost else {
+            return current
+        }
+        return route
+    }
+
     /// Fewer samples than this cannot cap: "consistently high" needs a sample.
     static let minGateSamples = 5
 
@@ -373,9 +391,8 @@ enum StreamPathMTU {
     /// is a safe answer (it caps nothing), so waiting is worse than not knowing.
     private static let rttProbeTimeoutMs: Int32 = 400
 
-    /// How many handshakes to sample before taking the minimum. Three costs
-    /// ~120 ms on a 40 ms path - about 4% of the measured 3.0 s click-to-first-
-    /// frame - and a LAN exits after the first (see `sampledRttMs`).
+    /// Handshakes in the reconnect burst: ~120 ms on a 40 ms path, a few ms on
+    /// a LAN, against a reconnect that takes over a second.
     private static let rttProbeSamples = 3
 
     /// The port is irrelevant to route selection (connect() on UDP only picks
@@ -408,22 +425,11 @@ enum StreamPathMTU {
                                rtt: rtt)
     }
 
-    /// SYNCHRONOUS fallback for the reconnect path, which has no pre-connect
-    /// window to sample across. A handful of back-to-back handshakes - enough to
-    /// place the band, not enough for a real p95, which is precisely why the
-    /// primary path uses `RttSampler` over the free wall-clock instead.
-    ///
-    /// EARLY EXIT: if the first sample is already under the local ceiling we are
-    /// on a LAN, the gate will cap nothing, and further samples cannot change
-    /// that - so a local session pays exactly one ~1 ms handshake.
+    /// Reconnect fallback: no free window to sample across, so a few back-to-back
+    /// handshakes, all of them. One LAN sample settles the distance gate but not
+    /// the wired boost's 2 ms test, and a lone sample must not decide that.
     private static func burstRtt(host: String, port: UInt16) -> RttStats? {
-        var samples: [Double] = []
-        for _ in 0..<rttProbeSamples {
-            guard let sample = measureOneRttMs(host: host, port: port) else { continue }
-            samples.append(sample)
-            if sample < localRttCeilingMs { break }   // LAN - no cap possible
-        }
-        return RttStats(samples: samples)
+        RttStats(samples: (0..<rttProbeSamples).compactMap { _ in measureOneRttMs(host: host, port: port) })
     }
 
     /// One TCP handshake, timed. SYN → SYN-ACK is exactly one round trip, with

@@ -382,7 +382,55 @@ struct StreamPathMTUTests {
         #expect(StreamPathMTU.cappedBitrateKbps(configured: 84_000, path: path) == 42_000)
     }
 
+    // MARK: - Reconnect ask (the route may have moved since the start)
+
+    /// Undocked mid-stream: the reconnect asks what Wi-Fi carries, with no wired
+    /// boost left for the RTT to withdraw.
+    @Test func reconnectTakesTheCurrentRoutesAsk() {
+        let ask = StreamPathMTU.reconnectAsk(
+            current: RouteAsk(kbps: 361_600, boost: 2), route: RouteAsk(kbps: 271_000, boost: 1),
+            downshifted: false)
+        #expect(ask == RouteAsk(kbps: 271_000, boost: 1))
+    }
+
+    @Test func reconnectWithoutARouteKeepsTheStartsAsk() {
+        let start = RouteAsk(kbps: 361_600, boost: 2)
+        #expect(StreamPathMTU.reconnectAsk(current: start, route: nil, downshifted: false) == start)
+    }
+
+    /// A wired, boosted start downshifted from 240 to 144 Mbps: the withdrawal
+    /// still applies at a 25 ms RTT, so the reconnect asks 72, not 144.
+    @Test func downshiftKeepsItsBoostForTheWiredWithdrawal() {
+        let downshifted = RouteAsk(kbps: 144_000, boost: 2)
+        let ask = StreamPathMTU.reconnectAsk(current: downshifted, route: nil, downshifted: true)
+        #expect(ask == downshifted)
+        #expect(StreamPathMTU.wiredAskKbps(capped: ask.kbps, boost: ask.boost, steadyRttMs: 25) == 72_000)
+    }
+
+    /// A Wi-Fi route of 271 is roomier than a downshifted wired 300 at boost 2
+    /// (150 once withdrawn), so the downshift stands.
+    @Test func roomierRouteNeverRaisesADownshiftedAsk() {
+        let downshifted = RouteAsk(kbps: 300_000, boost: 2)
+        for route in [RouteAsk(kbps: 271_000, boost: 1), RouteAsk(kbps: 500_000, boost: 2)] {
+            #expect(StreamPathMTU.reconnectAsk(current: downshifted, route: route, downshifted: true) == downshifted)
+        }
+    }
+
+    @Test func tighterRouteStillLowersADownshiftedAsk() {
+        let route = RouteAsk(kbps: 120_000, boost: 1)
+        #expect(StreamPathMTU.reconnectAsk(
+            current: RouteAsk(kbps: 300_000, boost: 2), route: route, downshifted: true) == route)
+    }
+
     // MARK: - RTT sampling against a loopback port
+
+    /// One LAN handshake used to end the burst, so a single sample decided the
+    /// wired withdrawal. Every sample is taken now.
+    @Test func reconnectBurstTakesEverySampleOnALan() throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let probe = StreamPathMTU.probe(host: "127.0.0.1", rttPort: port.port)
+        #expect(probe.rtt?.count == 3)
+    }
 
     @Test func fullWindowReleasesLaunchWithoutWaitingOutTheCap() async throws {
         let port = try #require(LoopbackPort(listening: true))
