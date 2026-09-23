@@ -12,9 +12,10 @@
 //  route), whose NWPath reports the egress interface class for THAT
 //  destination. Path updates are pushed on every route-table event
 //  (dock/undock, VPN up, Wi-Fi join), so the glyph flips live with no timers.
-//  Idle cost: one parked socket, zero traffic. Unlike the exporter probe we
-//  tolerate hostnames here - Network.framework resolves asynchronously off
-//  the main thread, and the launcher has no hot path to protect.
+//  Idle cost: one parked socket and zero traffic; a Wi-Fi route adds a 1 Hz
+//  PHY-rate read on the monitor's utility queue, never the main thread.
+//  Unlike the exporter probe we tolerate hostnames here - Network.framework
+//  resolves asynchronously off the main thread.
 //
 
 import Foundation
@@ -47,25 +48,37 @@ final class HostRouteMonitor {
     @ObservationIgnored private var phyTimer: DispatchSourceTimer?
     @ObservationIgnored private let radio = WiFiTelemetry()
 
+    /// Runs while the route is Wi-Fi, streaming or not, so a reconnect always
+    /// has a median. The CoreWLAN read happens on the monitor's utility queue;
+    /// the main actor only files the result.
     private func setPhySampling(_ on: Bool) {
         phyTimer?.cancel()
         phyTimer = nil
         phySamples.removeAll()
         wifiPhyRateMbps = nil
         guard on else { return }
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .seconds(1))
-        timer.setEventHandler { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, let rate = self.radio.sample().txRateMbps else { return }
-                self.phySamples.append(rate)
-                if self.phySamples.count > 10 { self.phySamples.removeFirst() }
-                self.wifiPhyRateMbps = self.phySamples.sorted()[self.phySamples.count / 2]
-            }
+        let radio = radio
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now(), repeating: .seconds(1), leeway: .milliseconds(100))
+        timer.setEventHandler { @Sendable [weak self] in
+            guard let self, let rate = radio.txRateMbps() else { return }
+            Task { @MainActor in self.recordPhyRate(rate) }
         }
         timer.resume()
         phyTimer = timer
     }
+
+    /// Assigns only a moved median: every write re-renders the spec chips.
+    private func recordPhyRate(_ rate: Double) {
+        guard phyTimer != nil else { return }  // a read that landed after sampling stopped
+        phySamples.append(rate)
+        if phySamples.count > 10 { phySamples.removeFirst() }
+        let median = phySamples.sorted()[phySamples.count / 2]
+        if median != wifiPhyRateMbps { wifiPhyRateMbps = median }
+    }
+
+    /// Called when the route leaves wired; AppModel parks AWDL if a stream is up.
+    @ObservationIgnored var onLeftWired: (() -> Void)?
 
     /// Chip glyph for the current route - bolt for wired, arcs for Wi-Fi,
     /// nothing when the route is a tunnel or unknown.
@@ -116,6 +129,7 @@ final class HostRouteMonitor {
             Task { @MainActor [weak self] in
                 guard let self, self.generation == gen else { return }
                 if (fresh == .wifi) != (self.routeClass == .wifi) { self.setPhySampling(fresh == .wifi) }
+                if self.routeClass == .wired, fresh != .wired { self.onLeftWired?() }
                 self.routeClass = fresh
             }
         }
@@ -158,5 +172,11 @@ extension AppModel {
     /// observer.
     func refreshHostRoute() {
         hostRoute.monitor(address: selectedHostRouteAddress)
+    }
+
+    /// A stream parks AWDL at start only off a wired route; one that leaves
+    /// wired mid-stream parks it now (`suppressForStream` is idempotent).
+    func parkAWDLIfStreaming() {
+        if isStreaming { AWDLHelperManager.shared.suppressForStream() }
     }
 }

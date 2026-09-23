@@ -580,6 +580,7 @@ final class AppModel {
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self) ?? quitHotkey
         statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self) ?? statsHotkey
         controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self) ?? controllerQuitChord
+        hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
 
     // MARK: Mute/restore Mac audio

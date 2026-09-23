@@ -20,8 +20,9 @@
 //  GATING + HOT-PATH SAFETY (load-bearing - see TelemetryExporter.swift):
 //    * Sampled ONLY on the exporter's ~1Hz capture tick, on its serial queue -
 //      NEVER the hot path. There is no per-frame and no per-packet cost.
-//    * When telemetry is off (default), the exporter never exists, so this is
-//      never constructed and never called: zero overhead.
+//    * When telemetry is off (default), the exporter never exists, so `sample()`
+//      is never called. The launcher's route monitor reads only `txRateMbps()`,
+//      once a second on a Wi-Fi route, on its own utility queue.
 //    * `CWWiFiClient.shared()` + one `interface()` read per tick is a cheap
 //      framework call (no scan triggered - we read the CURRENT association, never
 //      `scanForNetworks`, which WOULD disrupt the link). Wrapped so any CoreWLAN
@@ -103,16 +104,27 @@ struct WiFiSnapshot: Sendable {
     var band: String?
 }
 
-/// CoreWLAN-backed sampler. Stateless aside from a cached `CWWiFiClient` (the
-/// singleton CoreWLAN itself vends). Constructed by the exporter only when the
-/// gate is on; `sample()` is called once per ~1Hz tick on the exporter queue.
+/// CoreWLAN-backed sampler. The exporter builds one per session and calls
+/// `sample()` once per ~1Hz tick on its queue; the launcher's route monitor
+/// keeps its own and calls only `txRateMbps()`, on the monitor's queue.
 ///
 /// `@unchecked Sendable`: `CWWiFiClient`/`CWInterface` are not annotated Sendable
-/// by the SDK, but we only ever touch them from the exporter's single serial
-/// queue (one caller, one thread), so the access is serialized by construction.
+/// by the SDK, but each instance is only ever touched from its owner's single
+/// serial queue, so the access is serialized by construction.
 final class WiFiTelemetry: @unchecked Sendable {
 
     private let client = CWWiFiClient.shared()
+
+    /// Read once per sampler: without Location access it is always nil, and
+    /// every read is an XPC round trip that airportd logs as an error.
+    private lazy var ssid: String? = client.interface()?.ssid()
+
+    /// The negotiated tx rate alone, in one CoreWLAN read; nil with no
+    /// interface or no association (CoreWLAN reports 0).
+    func txRateMbps() -> Double? {
+        guard let rate = client.interface()?.transmitRate(), rate > 0 else { return nil }
+        return rate
+    }
 
     /// Capture one radio sample. Reads the CURRENT association only - never
     /// triggers a scan (which would disrupt the link). Any CoreWLAN failure or a
@@ -149,7 +161,7 @@ final class WiFiTelemetry: @unchecked Sendable {
 
         // SSID is nil on macOS 14+ without Location authorization - that's fine,
         // the band/channel still resolve and carry the AP identity we need most.
-        snap.ssid = interface.ssid()
+        snap.ssid = ssid
         if let channel = interface.wlanChannel() {
             snap.channel = channel.channelNumber
             snap.band = Self.bandLabel(channel.channelBand)
