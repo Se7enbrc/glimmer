@@ -5,7 +5,7 @@
 //  shares with the other accent CTAs: the six `ButtonRole` states (choose a PC,
 //  stream, connecting, back-to-stream, wake, waking) and the two roles that are
 //  really CANCELS - `.connecting` and `.waking` both stay enabled, carry a quiet
-//  trailing "Cancel", and bind ⎋. Split out of ContentViewSubviews.swift to keep
+//  trailing cancel label, and bind ⎋. Split out of ContentViewSubviews.swift to keep
 //  each file under the length limit.
 //
 
@@ -74,7 +74,7 @@ struct StreamButton: View {
     ///                       stage subtext. Tap (or ⎋) CANCELS the attempt -
     ///                       a stuck connect must never strand the user.
     ///   * `.liveBackgrounded` - stream running, window hidden. Tap = "Back
-    ///                       to stream".
+    ///                       to Stream".
     private enum ButtonRole {
         case noPC
         case connect
@@ -175,11 +175,10 @@ struct StreamButton: View {
                         Text("Wake and Connect")
                             .font(.system(size: 17, weight: .semibold))
                             .contentTransition(.opacity)
-                        // A failed wake: one plain sentence with the real limits.
-                        // A cancelled wake shows nothing.
-                        if let host = model.selectedHost, model.wakeFailedHostID == host.id,
-                           let reason = model.wakeFailureReason {
-                            Text(reason.line)
+                        // One line that fits; the Wake on LAN limits live in the
+                        // tooltip. A cancelled wake shows nothing.
+                        if let reason = wakeFailure, let host = model.selectedHost {
+                            Text(Self.wakeFailureLine(reason, pcName: host.displayName))
                                 .font(.system(size: 11, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -194,7 +193,7 @@ struct StreamButton: View {
                         .contentTransition(.opacity)
                     // Same quiet trailing affordance as the connecting capsule:
                     // the whole capsule is the cancel, so name it.
-                    Text("Cancel")
+                    Text("Stop Waiting")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 4)
@@ -237,50 +236,82 @@ struct StreamButton: View {
                         model.requestStream(app: app, on: host)
                     } label: {
                         Label(app.name, systemImage: app.systemImage)
+                            .labelStyle(.titleAndIcon)
                     }
                     // Same second-concurrent-session gate as the app tiles.
                     .disabled(model.isStreaming)
                 }
             }
         }
-        .help(role == .noPC ? "Pair a PC first to start streaming"
-            : role == .connecting ? "Cancel the connection attempt"
-            : role == .waking ? "Stop waiting for this PC to wake up"
-            : "Right-click to choose an app")
+        .help(guidance.help)
         // VoiceOver hint mirrors the sighted-only `.help` so assistive-tech
         // users learn WHY the button is disabled (noPC) or what a click does.
-        .accessibilityHint(
-            role == .noPC ? "Pair a PC first to start streaming"
-                : role == .connecting ? "Cancels the connection attempt"
-                : role == .waking ? "Stops waiting for this PC to wake up"
-                : role == .connect ? "Right-click to choose an app" : ""
-        )
+        .accessibilityHint(guidance.hint)
         .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: isConnecting)
         .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: model.isStreaming)
     }
 
-    /// Steady primary line during connect. Prefers the SESSION's own friendly
-    /// stage ("Connecting to <host>..." / "Cancelling…", stamped with the host
-    /// captured at stream() entry): ⌘1-⌘9 can re-point `selectedHost`
-    /// mid-handshake, and the capsule must keep naming the PC it's dialling.
+    /// Tooltip and VoiceOver hint for the current role, kept in one place.
+    private var guidance: (help: String, hint: String) {
+        switch role {
+        case .noPC: ("Pair a PC first to start streaming", "Pair a PC first to start streaming")
+        case .connect: ("Right-click to choose an app", "Right-click to choose an app")
+        case .connecting: ("Cancel the connection attempt", "Cancels the connection attempt")
+        case .liveBackgrounded: ("Show the stream window", "Shows the stream window")
+        case .wake where wakeFailure == .noAnswer: (Self.wakeLimits, Self.wakeLimits)
+        case .wake:
+            ("Wake this PC, then connect. Right-click to choose an app.",
+             "Wakes this PC, then connects. Right-click to choose an app.")
+        case .waking: ("Stop waiting for this PC to wake up", "Stops waiting for this PC to wake up")
+        }
+    }
+
+    private static let wakeLimits = AppModel.wakeNoAnswerHint
+        + " It also has to be turned on in the PC's network adapter settings."
+
+    /// Why the selected PC's last wake failed; nil once it is another PC's.
+    private var wakeFailure: AppModel.WakeFailureReason? {
+        guard let host = model.selectedHost, model.wakeFailedHostID == host.id else { return nil }
+        return model.wakeFailureReason
+    }
+
+    /// The one line under Wake and Connect; it has to fit the capsule.
+    static func wakeFailureLine(_ reason: AppModel.WakeFailureReason, pcName: String) -> String {
+        switch reason {
+        case .noAnswer: "No answer from \(pcName)."
+        case .couldNotSend: reason.line
+        }
+    }
+
+    private var connectingStage: String? {
+        if case .connecting(let stage) = model.streamPhase { return stage }
+        return nil
+    }
+
     private var connectingPrimary: String {
-        if case .connecting(let stage) = model.streamPhase,
-           stage.hasPrefix("Connecting to ") || stage == "Cancelling…" {
+        Self.connectingPrimary(stage: connectingStage, selectedName: model.selectedHost?.displayName)
+    }
+
+    private var connectingSubtext: String? {
+        Self.connectingSubtext(stage: connectingStage, primary: connectingPrimary)
+    }
+
+    /// Steady primary line. Prefers the SESSION's own stage (connect, reconnect
+    /// or "Cancelling…"), which names the PC it's dialling even after ⌘1-⌘9
+    /// re-points `selectedHost` mid-handshake.
+    static func connectingPrimary(stage: String?, selectedName: String?) -> String {
+        if let stage, stage.hasPrefix("Connecting to ") || stage.hasPrefix("Reconnecting to ")
+            || stage == "Cancelling…" {
             return stage
         }
-        if let name = model.selectedHost?.displayName {
-            return "Connecting to \(name)…"
-        }
+        if let selectedName { return "Connecting to \(selectedName)…" }
         return "Connecting…"
     }
 
-    /// Optional engine-stage subtext below the primary line - surfaced only
-    /// when the stage adds information beyond the primary ("RTSP handshake"),
-    /// stripping whatever the primary already carries ("Connecting to X..."
-    /// duplicates, the "Cancelling…" repaint).
-    private var connectingSubtext: String? {
-        guard case .connecting(let stage) = model.streamPhase, !stage.isEmpty else { return nil }
-        if stage == connectingPrimary { return nil }
+    /// Engine-stage subtext below the primary line, only when it adds
+    /// something the primary doesn't already say ("RTSP handshake").
+    static func connectingSubtext(stage: String?, primary: String) -> String? {
+        guard let stage, !stage.isEmpty, stage != primary else { return nil }
         if stage.hasPrefix("Connecting to ") || stage == "Connecting…" { return nil }
         return stage
     }
