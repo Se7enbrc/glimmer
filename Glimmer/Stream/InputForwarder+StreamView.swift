@@ -115,7 +115,7 @@ extension InputForwarder: StreamInputViewDelegate {
             noteUnmappedKey(event.keyCode)
             return
         }
-        syncModifiers(to: event.modifierFlags)
+        if modifiersNeedResync { syncModifiers(to: event.modifierFlags) }
         let rc = backend?.sendKeyboard(
             keyCode: key.wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_DOWN),
@@ -170,6 +170,7 @@ extension InputForwarder: StreamInputViewDelegate {
         for vk in heldModifierVKs.subtracting(downNow).sorted() { sendModifier(vk, down: false, modByte: modByte) }
         for vk in downNow.subtracting(heldModifierVKs).sorted() { sendModifier(vk, down: true, modByte: modByte) }
         heldModifierVKs = downNow
+        modifiersNeedResync = false
     }
 
     /// Before the stream is live, leaving is the launcher's cancel, so the

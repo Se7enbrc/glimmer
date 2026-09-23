@@ -40,9 +40,9 @@
 //     modifiers) fires only on focus loss, a reconnect and `detach()` (stream
 //     teardown), so state never resets mid-game while the window stays key.
 //     `heldModifierVKs` (one entry per modifier SIDE) is diffed in
-//     `flagsChanged` and before each key-down, so we only emit modifier
-//     transitions, and releasing one of two held Shifts releases exactly that
-//     one on the host.
+//     `flagsChanged`, and before a key-down only after a raise-all, so we only
+//     emit modifier transitions, and releasing one of two held Shifts releases
+//     exactly that one on the host.
 //
 //   * Mouse motion is *relative* via the SDL associate-false model
 //     (P0 mouse-snap fix). When relative aim is engaged we call
@@ -508,6 +508,10 @@ public final class InputForwarder {
 
     /// Win VK codes of the modifier sides the host has been told are held.
     var heldModifierVKs: Set<Int16> = []
+    /// Set when the PC may not match `heldModifierVKs` (attach, raise-all). Only
+    /// then does a key-down resync: a tool-posted ⌃C carries ⌃ with no
+    /// flagsChanged, and syncing it would leave Ctrl held on the PC.
+    var modifiersNeedResync = true
     /// The Mac's Caps Lock state last seen, so a toggle is sent exactly once.
     var lastCapsLock = false
 

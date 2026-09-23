@@ -153,6 +153,18 @@ struct ReconnectHeldInputTests {
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_ANSI_A, mods: [.control], at: 3))
         #expect(forwarder.heldModifierVKs == [0xA2])  // VK_LCONTROL
     }
+
+    @Test func toolPostedShortcutLeavesNoModifierHeld() throws {
+        let forwarder = InputForwarder()
+        forwarder.isReady = true
+        let view = StreamInputView()
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_ANSI_A, chars: "a"))
+        forwarder.streamView(view, handleKeyUp: try key(.keyUp, kVK_ANSI_A, chars: "a", at: 2))
+        // A posted ⌃C: its flags carry ⌃ but no flagsChanged came first.
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_ANSI_C, mods: [.control], chars: "c", at: 3))
+        #expect(forwarder.heldModifierVKs.isEmpty)
+        #expect(forwarder.heldKeys == [0x43])
+    }
 }
 
 @MainActor

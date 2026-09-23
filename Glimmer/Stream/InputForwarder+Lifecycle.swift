@@ -59,6 +59,7 @@ extension InputForwarder {
         self.inputView = view
         window.acceptsMouseMovedEvents = true
         initialConnectPending = true
+        modifiersNeedResync = true
         loggedUnmappedKeyCodes = []
 
         log.info("InputForwarder attached to window; first-responder install deferred until window is key")
@@ -221,5 +222,6 @@ extension InputForwarder {
         heldKeys.removeAll()
         heldMouseButtons.removeAll()
         heldModifierVKs.removeAll()
+        modifiersNeedResync = true
     }
 }
