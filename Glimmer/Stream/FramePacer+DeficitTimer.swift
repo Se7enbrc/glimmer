@@ -42,13 +42,9 @@ extension FramePacer {
         }
     }
 
-    /// One off-tick beat: run the NORMAL release pipeline (trim → backoff →
-    /// due-gate, every safeguard intact) against a synthetic vsync, then
-    /// repaint for the governor if nothing real flowed. `CACurrentMediaTime()`
-    /// shares CADisplayLink's timebase, so the cadence base stays on one clock
-    /// - when real ticks resume mid-deficit their targetTimestamps slot onto
-    /// the same grid and the due gate just keeps pacing. A beat before the
-    /// panel vsync a tick's frame scans out on skips its release (`tickOwnsScanout`).
+    /// One off-tick beat through the normal release pipeline (trim, backoff, due gate) on
+    /// `CACurrentMediaTime()`, the link's own timebase, then a governor repaint if nothing flowed.
+    /// A beat before the panel vsync a tick's frame scans out on skips its release.
     func deficitTimerFired() {
         let mediaNow = CACurrentMediaTime()
         os_unfair_lock_lock(&lock)
@@ -60,7 +56,7 @@ extension FramePacer {
         os_unfair_lock_unlock(&lock)
         guard active else { return }
         if !tickOwnsVsync {
-            releaseDueFrame(targetTimestamp: mediaNow, vsyncInterval: interval)
+            releaseDueFrame(targetTimestamp: mediaNow, vsyncInterval: interval, tickScanout: .nan)
         }
         maybeRepaintForGovernor(interval: interval)
         // Keep the rate window rolling from here too: with ticks FULLY stopped

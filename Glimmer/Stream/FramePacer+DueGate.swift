@@ -265,8 +265,7 @@ extension FramePacer {
     /// frame per tick (one present per vsync), after trimming sustained lag.
     /// `tickScanout` is the panel vsync a tick's release lands on (NaN off-tick).
     func releaseDueFrame(
-        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval,
-        tickScanout: CFTimeInterval = .nan
+        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, tickScanout: CFTimeInterval
     ) {
         var toPresent: Entry?
         var trimmed: [CMSampleBuffer] = []

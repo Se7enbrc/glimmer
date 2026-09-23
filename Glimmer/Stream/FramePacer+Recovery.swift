@@ -226,12 +226,9 @@ extension FramePacer {
         installLink(on: view)
     }
 
-    /// Compact identity of the screen `view` is on: display ID | panel max |
-    /// backing scale. The three things whose change makes a rebind MATERIAL -
-    /// anything else arriving via screen-parameter notifications is VRR/HDR
-    /// housekeeping the bound link already follows. Falls back to "none" when
-    /// the view has no window/screen (or the screen no display ID) yet, which
-    /// never equals a real signature, so the degenerate case still rebinds.
+    /// Display ID | panel max | backing scale of `view`'s screen, the changes that make a rebind
+    /// material (other screen-parameter notices are VRR/HDR housekeeping the link follows).
+    /// "none" for a missing window, screen or display ID never matches, so that case rebinds.
     @MainActor
     static func screenSignature(for view: NSView) -> String {
         guard let screen = view.window?.screen else { return "none" }
