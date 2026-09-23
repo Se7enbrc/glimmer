@@ -58,6 +58,11 @@ extension NetworkClient {
             } catch let err as StreamError {
                 if case .hostUnreachable(let detail) = err {
                     log.error("HTTPS to pinned host failed (\(detail, privacy: .public)) - refusing HTTP fallback to preserve cert pin")
+                    // A different certificate proves 47984 answered, so the PC is up
+                    // whatever the plain port says; don't let a blocked 47989 hide it.
+                    if Self.isCertChange(detail) {
+                        throw Self.classifyPairedPathFailure(detail, hostName: server.serverName)
+                    }
                     // Disambiguate before blaming the network: a READ-ONLY
                     // plain-HTTP probe (the pin is NEVER rebound from it -
                     // the C2 contract above stands). It answers exactly one
@@ -120,7 +125,7 @@ extension NetworkClient {
         if detail.hasPrefix("TLS handshake") {
             return .pairingFailed("\(name) rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu.")
         }
-        if detail.contains("cert mismatch") || detail.contains("no certificate") {
+        if isCertChange(detail) {
             return .hostCertChanged(
                 "\(name)'s certificate changed. To trust it, choose Pair Again… from the PC's ⋯ menu."
             )
@@ -129,6 +134,11 @@ extension NetworkClient {
         return .sunshineNeedsRestart(
             "\(name) answers on its plain port but not its secure one. Restart Sunshine on the PC."
         )
+    }
+
+    /// ControlTransport's detail for a pinned PC presenting a different certificate, or none.
+    static func isCertChange(_ detail: String) -> Bool {
+        detail.contains("cert mismatch") || detail.contains("no certificate")
     }
 
     /// Populate `server` from the /serverinfo XML, split out of

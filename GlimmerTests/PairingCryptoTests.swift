@@ -240,7 +240,7 @@ struct PairingCryptoTests {
     @Test func getservercertDyingAtItsDeadlineIsATimeout() {
         let deadline = Date()
         let late = PairingClient.pinEntryError(
-            StreamError.launchFailed("The host didn't respond in time."), deadline: deadline, now: deadline)
+            StreamError.hostTimedOut, deadline: deadline, now: deadline)
         #expect(late as? PairingFailure == .timedOut)
         // A refusal a minute in is the host, not the person, and keeps its cause.
         let early = PairingClient.pinEntryError(

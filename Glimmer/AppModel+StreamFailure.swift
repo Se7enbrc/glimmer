@@ -2,7 +2,8 @@
 //  AppModel+StreamFailure.swift
 //
 //  What the launcher banner and the menu bar say when a stream fails to start
-//  or ends badly, and which fix each failure asks for. Pure, so it's testable.
+//  or ends badly, and which fix each failure asks for. The mappings are pure
+//  and tested; showStreamFailure is the one place they reach the UI.
 //
 
 import Foundation
@@ -57,12 +58,12 @@ extension AppModel {
                 + "Check that the PC's firewall allows \(proto) \(port).", .other)
         case .hostTimedOut:
             return ("\(hostName) took too long to start the app.", .other)
-        case .hostRefused(let message, _):
+        case .hostRefused(let message, _) where !sentence(message).isEmpty:
             return ("\(hostName) couldn't start the app: \(sentence(message))", .other)
-        case .launchFailed:
+        case .hostRefused, .launchFailed:
             return ("\(hostName) couldn't start the app.", .other)
         case .sessionFailed, .binaryNotFound:
-            // Only the connect leg throws these, after /launch succeeded: the PC is awake.
+            // In practice the connect leg, after /launch succeeded: the PC is awake.
             return ("\(hostName) answered, but the stream couldn't start.", .other)
         case .decoderFailed:
             return ("Couldn't start the video decoder for \(hostName).", .other)

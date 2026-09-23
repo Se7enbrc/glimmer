@@ -76,7 +76,9 @@ struct GlimmerCLITests {
         #expect(GlimmerCLI.exitCode(for: StreamError.pairingFailed("pair it again")) == exit.notPaired)
         #expect(GlimmerCLI.exitCode(for: StreamError.pairingRejected) == exit.notPaired)
         #expect(GlimmerCLI.exitCode(for: StreamError.truncatedRead("eof")) == exit.unreachable)
-        #expect(GlimmerCLI.exitCode(for: StreamError.launchFailed("Service Unavailable (code 503)")) == exit.failed)
+        #expect(GlimmerCLI.exitCode(for: StreamError.hostRefused(message: "Service Unavailable", code: 503)) == exit.failed)
+        #expect(GlimmerCLI.exitCode(for: StreamError.hostTimedOut) == exit.failed)
+        #expect(GlimmerCLI.exitCode(for: StreamError.streamPortsBlocked(proto: "UDP", port: 47998)) == exit.failed)
         #expect(GlimmerCLI.exitCode(for: CancellationError()) == exit.failed)
     }
 
@@ -90,6 +92,12 @@ struct GlimmerCLITests {
         #expect(GlimmerCLI.message(for: StreamError.sunshineNeedsRestart(wedged), host: tower) == wedged)
         #expect(GlimmerCLI.message(for: StreamError.launchFailed("Tower wouldn't quit the app."), host: tower)
             == "Tower wouldn't quit the app.")
+        // The banner's own sentences, named for the PC, not a generic "The PC".
+        #expect(GlimmerCLI.message(for: StreamError.hostTimedOut, host: tower) == "Tower took too long to start the app.")
+        #expect(GlimmerCLI.message(for: StreamError.hostRefused(message: "  ", code: 503), host: tower)
+            == "Tower couldn't start the app.")
+        #expect(GlimmerCLI.message(for: StreamError.hostRefused(message: "Game is not installed", code: 500), host: tower)
+            == "Tower couldn't start the app: Game is not installed.")
     }
 
     /// `glimmer list` prints the readiness chip's words, with room for a long name.

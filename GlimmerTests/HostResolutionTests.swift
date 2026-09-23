@@ -132,6 +132,15 @@ final class PairedPathFailureClassificationTests: XCTestCase {
         }
         XCTAssertTrue(text.hasPrefix("The PC"))
     }
+
+    /// A changed certificate is classified without the plain-port probe, so a
+    /// blocked 47989 can't turn it into "make sure it's awake".
+    func testCertChangeIsRecognizedWithoutTheProbe() {
+        XCTAssertTrue(NetworkClient.isCertChange("pinned host cert mismatch"))
+        XCTAssertTrue(NetworkClient.isCertChange("host presented no certificate"))
+        XCTAssertFalse(NetworkClient.isCertChange("connect to x:47984 failed or timed out"))
+        XCTAssertFalse(NetworkClient.isCertChange("TLS handshake failed"))
+    }
 }
 
 /// The launcher banner keeps the network layer's Pair Again… sentences as

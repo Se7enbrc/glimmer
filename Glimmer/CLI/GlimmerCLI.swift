@@ -208,7 +208,8 @@ enum GlimmerCLI {
         case Exit.notPaired: return notPairedMessage(host)
         default:
             if case .launchFailed(let detail) = error as? StreamError { return detail }
-            return (error as? StreamError)?.description ?? error.localizedDescription
+            guard error is StreamError else { return error.localizedDescription }
+            return AppModel.connectFailure(for: error, hostName: name).message
         }
     }
 
