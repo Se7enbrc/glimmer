@@ -114,6 +114,28 @@ extension GlimmerCLI {
             .first { $0.processIdentifier != own }
     }
 
+    /// Opens (or brings forward) the app through Launch Services. Returns its
+    /// instance, never this process, or nil after saying why.
+    static func openGlimmer() async -> NSRunningApplication? {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        // This process is registered under Glimmer's bundle ID too; with no app
+        // running, Launch Services could otherwise "activate" it and launch nothing.
+        configuration.createsNewApplicationInstance = runningGlimmer() == nil
+        let opened: NSRunningApplication
+        do {
+            opened = try await NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration)
+        } catch {
+            printError("Couldn't open Glimmer: \(error.localizedDescription)")
+            return nil
+        }
+        // With the app already open, Launch Services can answer with this process.
+        if opened.processIdentifier != ProcessInfo.processInfo.processIdentifier { return opened }
+        if let app = runningGlimmer() { return app }
+        printError("Couldn't open Glimmer. Open it from the Applications folder and try again.")
+        return nil
+    }
+
     /// Posts `request` to the running app each second until it replies or
     /// `timeout` passes. Later replies to the same request arrive on `replies`.
     static func ask(

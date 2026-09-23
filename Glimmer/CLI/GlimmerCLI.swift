@@ -62,14 +62,15 @@ enum GlimmerCLI {
           wake <pc> [--wait]             Send Wake on LAN, and wait for the PC to answer
           help                           Show this help
 
-        <pc> is a paired PC's name or address. Run Glimmer with no command to open the app.
+        <pc> is a paired PC's name or address. Run glimmer with no command to open the app.
         Exit status: 0 success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired.
         """
 
-    /// A bare word (a verb, or a typo that gets usage) or -h/--help routes to
-    /// the CLI. Login, Launch Services, Sparkle, Xcode and test launches pass
-    /// nothing or only dashed arguments, so they always reach the app.
+    /// Run as `glimmer` (the cask's link), it's always the CLI; otherwise a bare
+    /// word or -h/--help is. Login, Launch Services, Sparkle, Xcode and tests run
+    /// `.../MacOS/Glimmer` with dashed arguments or none, so they reach the app.
     nonisolated static func isInvocation(_ argv: [String]) -> Bool {
+        if let name = argv.first, (name as NSString).lastPathComponent == "glimmer" { return true }
         guard argv.count > 1 else { return false }
         return !argv[1].hasPrefix("-") || argv[1] == "--help" || argv[1] == "-h"
     }
@@ -107,6 +108,8 @@ enum GlimmerCLI {
     /// Run on the main run loop so network callbacks and distributed
     /// notifications arrive; the verb's exit code ends the process.
     static func start(arguments: [String]) {
+        // Line by line even into a pipe, so a script reads `--json` events live.
+        setvbuf(stdout, nil, _IOLBF, 0)
         Task {
             exit(await run(arguments))
         }
@@ -114,6 +117,8 @@ enum GlimmerCLI {
     }
 
     static func run(_ args: [String]) async -> Int32 {
+        // `glimmer` on its own opens the one app, never a copy in this process.
+        guard !args.isEmpty else { return await openGlimmer() == nil ? Exit.failed : Exit.ok }
         let command: Command
         do {
             command = try parse(args)

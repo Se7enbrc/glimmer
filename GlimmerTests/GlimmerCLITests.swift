@@ -16,13 +16,18 @@ struct GlimmerCLITests {
              apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: nil)
     }
 
-    @Test func onlyABareWordOrHelpTakesOverTheLaunch() {
+    @Test func theCommandNameOrABareWordTakesOverTheLaunch() {
         #expect(GlimmerCLI.isInvocation(["glimmer", "list"]))
         #expect(GlimmerCLI.isInvocation(["glimmer", "stream", "Tower", "Desktop"]))
         #expect(GlimmerCLI.isInvocation(["glimmer", "--help"]))
-        // A typo gets usage, not a second copy of the app.
-        #expect(GlimmerCLI.isInvocation(["glimmer", "lsit"]))
+        // Through the cask's link, never a second copy of the app in the
+        // terminal: alone it opens the app, and unknown flags get usage.
+        #expect(GlimmerCLI.isInvocation(["glimmer"]))
+        #expect(GlimmerCLI.isInvocation(["/opt/homebrew/bin/glimmer", "--version"]))
+        // The app binary itself: a typo gets usage, not a second copy.
+        #expect(GlimmerCLI.isInvocation(["/Applications/Glimmer.app/Contents/MacOS/Glimmer", "lsit"]))
         // No arguments, the login helper, Launch Services, Xcode and tests: the app.
+        #expect(!GlimmerCLI.isInvocation(["/Applications/Glimmer.app/Contents/MacOS/Glimmer"]))
         #expect(!GlimmerCLI.isInvocation(["Glimmer"]))
         #expect(!GlimmerCLI.isInvocation(["Glimmer", "--launched-at-login"]))
         #expect(!GlimmerCLI.isInvocation(["Glimmer", "-psn_0_123456"]))

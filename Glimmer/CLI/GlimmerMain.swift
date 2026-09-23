@@ -1,9 +1,9 @@
 //
 //  GlimmerMain.swift
 //
-//  The process entry point. A bare word in argv[1] runs the `glimmer` command
-//  line headlessly; anything else (no arguments, --launched-at-login, -psn_*,
-//  -NS*, Xcode and test arguments) starts the app exactly as before.
+//  The process entry point. Run as `glimmer`, or with a bare word in argv[1],
+//  it's the command line; anything else (no arguments, --launched-at-login,
+//  -psn_*, -NS*, Xcode and test arguments) starts the app exactly as before.
 //
 
 import Darwin
