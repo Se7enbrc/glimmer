@@ -296,9 +296,12 @@ lands in the frame trace as an `"event":"bookmark"` row on the same clock as the
 input rows (`t_ms`, milliseconds of Mac uptime). The input rows just before it
 show what Glimmer sent: a stray `input_mouse` delta, an `input_pad` button mask
 that changed, or an `input_scroll` whose `sent_y` differs from what macOS
-delivered (`dy`, `units_y`). Only movement, controller state and scroll are
-traced. For those, no row means Glimmer didn't send it, so it came from the PC
-side. Keys, mouse buttons and touchpad touches leave no row either way.
+delivered (`dy`, `units_y`). Mouse movement, controller state and scroll are
+traced in full, apart from the neutral controller state sent when a pad
+connects; for those, no row means Glimmer didn't send it, so it came from the PC
+side. Motion is sampled at 20 Hz, so a missing `input_motion` row proves
+nothing. Keys, mouse buttons, pasted text and touchpad touches leave no row
+either way.
 
 ```sh
 cd ~/Library/Logs/Glimmer
