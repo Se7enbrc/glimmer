@@ -70,6 +70,12 @@ static inline int gl_recvmsg_x_batch(int fd, uint8_t * _Nonnull storage, int str
     return n;
 }
 
+// MARK: - Main-thread identity
+// libpthread exports this (CoreFoundation uses it) but the public SDK header
+// doesn't declare it. ResourceTelemetry uses it to label the main thread.
+#include <pthread.h>
+extern pthread_t _Nonnull pthread_main_thread_np(void);
+
 // MARK: - Audio-configuration bit helpers
 // The GameStream/Sunshine audio configuration is a packed int (channelMask <<
 // 16 | channelCount << 8 | 0xCA). These mirror the function-style macros the

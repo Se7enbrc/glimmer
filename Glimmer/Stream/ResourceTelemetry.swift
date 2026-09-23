@@ -231,6 +231,9 @@ enum ResourceTelemetry {
                 let trimmed = Array(nameBuffer.prefix(while: { $0 != 0 }))
                 name = String(validating: trimmed, as: UTF8.self) ?? ""
             }
+            // The main thread has no pthread name; label it so its cost (UI,
+            // GameController, motion timers) isn't folded into "unnamed".
+            if pthread_equal(pthread, pthread_main_thread_np()) != 0 { name = "main" }
             var qosClass = qos_class_t(rawValue: 0)
             var relativePriority: Int32 = 0
             if pthread_get_qos_class_np(pthread, &qosClass, &relativePriority) == 0 {
