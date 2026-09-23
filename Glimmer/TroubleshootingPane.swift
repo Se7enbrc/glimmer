@@ -52,7 +52,7 @@ struct RawHIDControl: View {
             .onReceive(poll) { _ in working = currentlyWorking }
         } else {
             Button("Turn On…") { showExplain = true }
-                .alert("Turn On Extra DualSense Buttons?", isPresented: $showExplain) {
+                .alert("Turn on Extra DualSense buttons?", isPresented: $showExplain) {
                     Button("Turn On") { enable() }
                     Button("Cancel", role: .cancel) {}
                 } message: {

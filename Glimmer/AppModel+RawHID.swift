@@ -17,7 +17,7 @@ extension AppModel {
     /// (both the auto-offer on DualSense connect and the Settings toggle).
     static let rawHIDExplanation =
         "Glimmer will read your DualSense's raw input to access the Options, "
-        + "Create/Share, and Mute buttons.\n\nmacOS will then ask for "
+        + "Create and Mute buttons.\n\nmacOS will then ask for "
         + "\u{201C}Input Monitoring\u{201D} permission. Its dialog says "
         + "\u{201C}keystrokes\u{201D} because that's the same system permission, "
         + "but Glimmer only reads the controller, never your keyboard."
@@ -30,7 +30,7 @@ extension AppModel {
         if hasDualSense { showRawHIDPrompt = true }
     }
 
-    /// "Enable" from the auto-offer: turn it on and mark answered. We do NOT
+    /// "Turn On" from the auto-offer: turn it on and mark answered. We do NOT
     /// request the Input Monitoring permission or open System Settings here:
     ///   * `IOHIDRequestAccess` is SYNCHRONOUS and blocks the main thread for
     ///     ~2s while presenting/resolving the TCC prompt; on a live stream that
@@ -53,7 +53,7 @@ extension AppModel {
         showRawHIDPrompt = false
     }
 
-    /// "Cancel" from the auto-offer: don't ask again proactively.
+    /// "Don't Ask Again" from the auto-offer: never offer proactively again.
     func declineRawHIDPrompt() {
         rawHIDPromptAnswered = true
         showRawHIDPrompt = false

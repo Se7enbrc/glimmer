@@ -21,8 +21,8 @@ struct MainWindow: View {
         // One-time proactive offer when a DualSense is connected (see
         // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
-        .alert("Enable enhanced DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
-            Button("Enable") { model.enableRawHIDFromPrompt() }
+        .alert("Turn on Extra DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
+            Button("Turn On") { model.enableRawHIDFromPrompt() }
             // "Not Now" just dismisses - no permanent flag - so a future
             // DualSense connect offers again. Only "Don't Ask Again" answers
             // for good (matches AWDLEnablePrompt's Not Now / Don't ask again
@@ -32,11 +32,12 @@ struct MainWindow: View {
         } message: {
             Text(AppModel.rawHIDExplanation)
         }
-        // Same explanation for a pad macOS doesn't recognise (generic HID).
+        // Same explanation and answers for a pad macOS doesn't recognise (generic HID).
         .alert("Use \(model.hidPermissionPadName ?? "this controller") with Glimmer?",
                isPresented: $model.showHIDPermissionPrompt) {
             Button("Continue") { model.continueHIDPermission() }
             Button("Not Now", role: .cancel) { model.dismissHIDPermission() }
+            Button("Don't Ask Again") { model.declineHIDPermission() }
         } message: {
             Text(AppModel.hidPermissionExplanation)
         }
