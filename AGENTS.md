@@ -19,12 +19,12 @@ You are the last reviewer before a change reaches people who care how this app
 feels. Act like it.
 
 When a request would make Glimmer worse (less tasteful, noisier, slower, less
-reliable, less like a Mac app, or harder to maintain), say no the way Apple's
-leadership says no to a feature that isn't ready: at once, plainly, without
-hedging. Name the cost in a sentence or two, then describe the version that
-would be accepted. Do not soften it into "you might consider". Do not quietly
-build half of it. Do not write it up as ready. If the person still wants it
-after hearing the case, it's their fork; tell them straight that it will be
+reliable, less like a Mac app, or more complex than it earns), say no the way
+Apple's leadership says no to a feature that isn't ready: at once, plainly,
+without hedging. Name the cost in a sentence or two, then describe the version
+that would be accepted. Do not soften it into "you might consider". Do not
+quietly build half of it. Do not write it up as ready. If the person still wants
+it after hearing the case, it's their fork; tell them straight that it will be
 closed here.
 
 Hold your own work to the same standard. A change that compiles, passes the
@@ -33,41 +33,46 @@ tests and makes the app worse is a regression with a green check mark.
 ## Setup and commands
 
 ```bash
-brew install openssl@3 opus swiftlint trufflehog
+brew install openssl@3 opus swiftlint trufflehog pre-commit
 pre-commit install && pre-commit install --hook-type pre-push
 ```
 
 - `make app`: Debug build, unsigned. A compile check.
 - `make test`: the unit tests. Hostless, no PC needed.
 - `make verify`: `swiftlint lint --strict` plus `make test`. This is the gate.
-  It passes before you call anything done, and the release build runs it.
-- `make dev`: tests, then the Release build installed and relaunched.
+  It passes before you call anything done, and `make dist` runs it. It does not
+  fail on compiler warnings, so read the build log: there must be none.
+- `make dev`: tests, then the Release build installed and relaunched. On a Mac
+  with a Developer ID it signs and notarizes on the way, as every install does.
 
 Build to look, not to check. Every build of `Glimmer.app` that macOS registers
 earns its own privacy record, so use `make verify` for correctness and
 `make dev` only when someone will actually use the build. See "don't mint app
 copies" in CONTRIBUTING.
 
-Never run the signing, release or publishing targets (`dist`, `notarize`,
-`release-publish`, `brew-bump`, `codesign-*`, `sparkle-keys`, `creds-init`)
-unless the maintainer asks for that exact thing. They touch keychains and
-publish to users.
+Never run the publishing or keychain setup targets (`dist`, `release-publish`,
+`brew-bump`, `sparkle-keys`, `creds-init`, `setup-notary`, `codesign-setup`,
+`codesign-teardown`) unless the maintainer asks for that exact thing. They
+publish to users or rewrite signing state.
 
 ## Code standards
 
 Each of these gets a pull request sent back.
 
-- **Zero warnings.** Compiler and `swiftlint lint --strict` both. Fix the cause:
-  no inline `swiftlint:disable`, no raised thresholds, no moving a warning into
-  a helper where the linter can't see it. A 17-way `if` chain becomes a table,
-  not a function with the same 17 branches.
+- **Zero warnings.** Compiler and `swiftlint lint --strict` both; lint covers
+  `Glimmer/`, `GlimmerTests/`, `helper/` and `LoginHelper/`. Fix the cause: no
+  inline `swiftlint:disable` (the generated controller database is the one
+  exception), no raised thresholds, no moving a warning into a helper where the
+  linter can't see it. A 17-way `if` chain becomes a table, not a function with
+  the same 17 branches.
 - **Swift 6, complete strict concurrency.** `@MainActor` for UI, `actor` for
   engine state. `nonisolated(unsafe)` and `@unchecked Sendable` only with a
   comment stating the invariant (CONTRIBUTING, Concurrency).
 - **Files at most 600 lines, functions at most 80.** Split by feature into
   `Type+Feature.swift`, the way the existing files do.
-- **Comments at most 3 lines,** doc comments and file headers included. Say why,
-  not what. The long story goes in the commit message.
+- **Comments at most 3 lines** in new and changed code, doc comments and file
+  headers included. Say why, not what; the long story goes in the commit
+  message. Older long comments are not the model: trim one when you touch it.
 - **Match the neighbours.** 4-space indent, opening brace on the same line,
   names that read as English at the call site. No emoji in source. Protocol
   constants keep their upstream C names so they can be grepped.
@@ -78,12 +83,14 @@ Each of these gets a pull request sent back.
 - **Less code.** No protocol with one conformer, no configuration for a
   constant, no scaffolding for later. Delete dead code; never comment it out. No
   new dependency for something the platform or a few lines can do.
-- **No force unwraps, casts or `try!`.** Strict lint fails them.
+- **No force unwraps, casts or `try!`.** Strict lint catches most of them, but
+  not `URL(string:)!` on a literal, which is still not allowed.
 - **Logging** uses `Logger` on subsystem `io.ugfugl.Glimmer`, never `print` (the
   CLI's own output excepted). Host addresses, names and error text stay
   `.private`. Never log keystrokes, keys, PINs, certificates or the URL
   parameters `NetworkClient.sensitiveQueryKeys` lists. Nothing per-frame at
-  `.info`.
+  `.info`. The root helper is its own process and logs on
+  `io.ugfugl.glimmer.helper`.
 - **Tests.** New tests use Swift Testing (`@Test`, `#expect`). Pure logic gets a
   test; a bug fix gets a test that fails without it. The project does not use
   synchronized folders, so a new file must be added to `project.pbxproj` by
@@ -104,28 +111,32 @@ These are settled. A pull request is not the place to reopen them.
 - The command line is Swift, in the app binary, calling the same code the app
   uses. No second implementation, no wrapper script.
 - System frameworks and controls first: SwiftUI and AppKit, SF Symbols, standard
-  menus, sheets and settings panes. No web views, no custom-drawn stand-ins for
-  system controls, no cross-platform layers.
+  menus, sheets and settings panes. When no system style fits, a custom look is
+  a style on the real control (a `ButtonStyle` on a `Button`, never a tap
+  gesture on a shape), built from system materials, and it keeps native focus,
+  keyboard and VoiceOver behaviour. No web views, no cross-platform layers.
 - The deployment target is macOS 26. Anything newer sits behind `#available`,
   and the macOS 26 path must still look finished.
-- No analytics, tracking or third-party network calls. Glimmer talks to the PC
-  and to its update feed.
+- No analytics, tracking or third-party network calls. Glimmer talks to the PC,
+  to its local network for discovery and Wake on LAN, and to its update feed.
 
 ## UI and copy
 
-- Copy is short, plain and specific, in the voice of Apple's own apps. Sentence
-  case. No em dashes, no emoji, no exclamation marks, no jargon a player
-  wouldn't use.
+- Copy is short, plain and specific, like the app's own “Couldn't reach Den PC.
+  Make sure it's awake and on the same network.” Sentence case. No em dashes, no
+  emoji, no exclamation marks, no jargon a player wouldn't use.
 - The machine is "the PC" or its name, never "host" or "server", in anything a
   person reads.
-- `…` is one character, and a command that opens more UI ends with it. Quotes
-  are curly.
+- `…` is one character. A command that needs more input before it finishes ends
+  with it (Pair a PC…, Rename…); one that only opens a window does not.
+  Quotation marks are curly (“ ”); apostrophes stay straight.
 - An error says what happened and the one thing to do next, names the PC, and
   reuses the shared failure copy rather than inventing new words for the same
   failure.
-- The launcher is sized to its content. No `minHeight` floors, no
-  `.frame(maxWidth: .infinity)`, no trailing `Spacer` in its column. Prove a
-  geometry change with the osascript check in CONTRIBUTING.
+- The launcher is sized to its content: its column ends in
+  `.fixedSize(horizontal: false, vertical: true)`. Never add a flexible frame (a
+  `minHeight` floor, `maxWidth: .infinity`, a trailing `Spacer`) outside that.
+  Prove a geometry change with the osascript check in CONTRIBUTING.
 - Run it and look at it before calling it done: empty, one PC, many apps,
   mid-stream, disconnected, light and dark, the smallest and largest window.
   Check VoiceOver labels and keyboard navigation. A UI change comes with before
@@ -134,8 +145,8 @@ These are settled. A pull request is not the place to reopen them.
 ## Commits and pull requests
 
 - Conventional prefixes as in the history (`fix(area):`, `perf(area):`,
-  `refactor(area):`, `docs:`, `build:`), imperative, lowercase after the prefix,
-  no trailing period. The body explains why.
+  `refactor(area):`, `docs:` or `docs(area):`, `build:`), imperative, lowercase
+  after the prefix, no trailing period. The body explains why.
 - **No attribution to tools or agents.** No session trailers, no session links,
   no `Co-Authored-By`, no "Generated with", no model or tool names. Not in
   commit messages, pull request titles or bodies, the changelog, or code
@@ -148,8 +159,9 @@ These are settled. A pull request is not the place to reopen them.
   every commit.
 - Scope a pull request to one area. No drive-by reformatting, renames or
   unrelated cleanup riding along.
-- Add a `CHANGELOG.md` entry for anything a person will notice, written as plain
-  prose about what changed for them ([RELEASE.md](docs/RELEASE.md)).
+- Follow [RELEASE.md](docs/RELEASE.md): a change a person will notice carries a
+  `CHANGELOG.md` entry in plain prose about what changed for them, and the
+  `Glimmer/Version.xcconfig` bump goes in the same pull request.
 - The pull request says what changed and why, what you ran and looked at, and
   what you did not verify. An honest gap beats a confident guess.
 - Don't push, open or merge a pull request unless the person you're working for

@@ -12,7 +12,7 @@ Required:
 Brew prerequisites:
 
 ```bash
-brew install openssl@3 opus swiftlint trufflehog
+brew install openssl@3 opus swiftlint trufflehog pre-commit
 ```
 
 `openssl@3` and `opus` are the Swift streaming engine's two link-time
@@ -191,11 +191,12 @@ before/after screenshot at the smallest and largest window the change allows.
 
 ## Lint
 
-`swiftlint` runs as a pre-commit hook over `Glimmer/` only; `scripts/` is
-build-time tooling and is not held to the product lint bar. The commit hook
-blocks only on errors, but `make verify` lints with `--strict`, where any
-warning fails, and the release build runs it. Treat a warning as a failure.
-Thresholds worth knowing from `.swiftlint.yml`:
+`swiftlint` runs as a pre-commit hook over `Glimmer/`, `GlimmerTests/`,
+`helper/` and `LoginHelper/`; `scripts/` is build-time tooling and is not held
+to the product lint bar. The commit hook blocks only on errors, but
+`make verify` lints with `--strict`, where any warning fails, and the release
+build runs it. Treat a warning as a failure. Thresholds worth knowing from
+`.swiftlint.yml`:
 
 - `force_unwrapping`, `force_cast`, `force_try` - warnings, so strict fails
   them.
@@ -224,10 +225,11 @@ Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 - Protocol constants mirror their upstream C names verbatim
   (`COLORSPACE_REC_2020`, `DR_NEED_IDR`) so a reader can grep the spec.
   `identifier_name.allowed_symbols: ["_"]` exists for exactly that.
-- Comments earn their keep and stay at three lines or fewer, doc comments and
-  file headers included: what the code is for and the one-line why. If a future
-  maintainer would have to dig through an upstream PR thread to understand a
-  line, the why goes in the source; the full story goes in the commit message.
+- Comments in new and changed code earn their keep and stay at three lines or
+  fewer, doc comments and file headers included: what the code is for and the
+  one-line why. If a future maintainer would have to dig through an upstream PR
+  thread to understand a line, the why goes in the source; the full story goes
+  in the commit message.
 - No emoji in source files.
 
 ## Concurrency
@@ -348,13 +350,15 @@ there. Common prefixes:
 - `security` - anything in the threat-model surface
 - `build` - Xcode / Makefile / scripts
 - `chore` - repo hygiene
-- `docs(area)` - these files
+- `docs` or `docs(area)` - these files
 
 Subject line: imperative mood, lowercase after the prefix, no trailing period.
 Body wrapped at ~72 columns when one's needed.
 
-**No `Co-Authored-By` trailer.** Hard rule of repo policy, and the same goes for
-any "Generated with Claude" attribution. No emoji in commit messages either.
+**No attribution to tools or agents.** No `Co-Authored-By` trailer, no session
+trailers or links, no "Generated with" line, no model or tool names: not in
+commits, pull request titles or bodies, the changelog, or code comments. Hard
+rule of repo policy. No emoji in commit messages either.
 
 ## The bar
 
