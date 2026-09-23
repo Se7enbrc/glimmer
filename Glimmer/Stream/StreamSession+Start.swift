@@ -364,11 +364,11 @@ extension StreamSession {
             videoFormats=0x\(String(cfgSnapshot.supportedVideoFormats, radix: 16), privacy: .public) \
             refreshRateX100=\(cfgSnapshot.clientRefreshRateX100, privacy: .public) \
             colorSpace=\(cfgSnapshot.colorSpace, privacy: .public) colorRange=\(cfgSnapshot.colorRange, privacy: .public) \
-            remote=\(cfgSnapshot.streamingRemotely, privacy: .public) display=\(displayName, privacy: .public) \
+            remote=\(cfgSnapshot.streamingRemotely, privacy: .public) display=\(displayName, privacy: .private) \
             displayMaxFps=\(displayMaxFps, privacy: .public)
             """)
         Diag.notice("Stream config: \(cfgSnapshot.width)x\(cfgSnapshot.height)@\(cfgSnapshot.fps), "
-            + "\(cfgSnapshot.bitrate / 1000) Mbps, display \(displayName)", "Stream")
+            + "\(cfgSnapshot.bitrate / 1000) Mbps, display \(displayName, privacy: .private)", "Stream")
     }
 
     /// Arm the post-connection timers: the 2 Hz stats-overlay updater, the
