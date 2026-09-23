@@ -212,8 +212,9 @@ public final class AudioDecoder: @unchecked Sendable {
     // within the non-critical audio budget and under the over-run ceiling (cap+40ms),
     // so audio cannot drift seconds behind. The cushion
     // ADAPTS like the video pacer's jitter buffer: it starts at the base target and
-    // grows one step per measured under-run (a full drain), so a link whose delivery
-    // gaps outpace the base cushion deepens itself instead of glitching repeatedly.
+    // grows one step per measured under-run (a full drain; at most one per 10s, none
+    // after a gap longer than the cap), so a link whose delivery gaps outpace the
+    // base cushion deepens itself instead of glitching repeatedly.
     // It only grows on real evidence (an under-run), never blanket-deep - and it
     // DECAYS one step per sustained under-run-free window, so depth is a temporary,
     // evidence-keyed state that recovers toward the base, never a permanent pin.
@@ -273,8 +274,8 @@ public final class AudioDecoder: @unchecked Sendable {
     // memory in AudioDecoder+Resampler.swift.)
     /// Current adaptive cushion target (ms). Starts at the per-host SEEDED value
     /// (last session's learning; base when none) and grows by `playoutCushionStepMs`
-    /// (capped at `effectiveCushionMaxMs`) on each under-run. Exported as the
-    /// `audio_playout_target_ms` gauge (rides the published `AudioState`): fill vs
+    /// (capped at `effectiveCushionMaxMs`) on under-runs that aren't dead air.
+    /// Exported as the `audio_playout_target_ms` gauge (rides the published `AudioState`): fill vs
     /// target is the cushion judge - base 30 / cap 150 wired or 300 tunnel /
     /// ceiling cap+40 - legible only against the target it steers toward.
     var playoutTargetMs: Double = AudioDecoder.playoutCushionBaseMs
@@ -334,6 +335,12 @@ public final class AudioDecoder: @unchecked Sendable {
     /// 10ms step back down requires its own full quiet window. Guarded by
     /// `audioMeterLock`.
     var quietSinceNanos: UInt64 = 0
+    /// `DispatchTime` ns of the last under-run grow (rate limit). Guarded by
+    /// `audioMeterLock`.
+    var lastCushionGrowNanos: UInt64 = 0
+    /// The receiver's inter-arrival gap that ended with its newest datagram - the
+    /// dead-air test at an under-run edge (`noteArrivalGap`).
+    let lastArrivalGapNanos = AtomicUInt64()
 
     // MARK: - P1 AUDIO playout-stall watchdog (the 2026-08-12 overnight wedge)
     //

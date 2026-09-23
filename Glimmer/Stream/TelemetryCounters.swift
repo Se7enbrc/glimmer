@@ -271,6 +271,11 @@ final class TelemetryCounters: @unchecked Sendable {
     /// reconnect.
     let audioStallRecoveryTotal = Counter()
 
+    /// AUDIO DEAD-AIR under-runs (signal: AUDIO) - drains after an arrival gap longer
+    /// than the cushion cap: counted in `audioUnderrunTotal` too, but they neither
+    /// grow the cushion nor teach its floor (no cushion could have bridged them).
+    let audioUnderrunDeadairTotal = Counter()
+
     /// OVER-TARGET force-release count (signal: PRESENT). Bumped on each pacer tick
     /// where the due gate would have latched not-due against a GENUINE drainable
     /// backlog (one frame above the adaptive jitter-buffer target that survived the

@@ -71,7 +71,7 @@ extension TelemetryCounters {
                         decoderRecreateTotal, decoderRecreateFirstTotal,
                         decoderRecreateResolutionTotal, decoderRecreateColorspaceTotal,
                         staleFrameRepeatTotal, staleEmptyQueueTotal, audioNearMissTotal,
-                        audioStallRecoveryTotal,
+                        audioStallRecoveryTotal, audioUnderrunDeadairTotal,
                         presentGapDroughtTotal, reorderHoldExceededTotal,
                         pacerOverTargetReleaseTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,

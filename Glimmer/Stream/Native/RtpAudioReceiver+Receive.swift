@@ -190,11 +190,12 @@ extension RtpAudioReceiver {
     /// already tracked inter-arrival gaps; this completes the trio so "all
     /// sockets gapped together" (NIC doze) vs "one path stalled" is a single
     /// NDJSON-row query instead of a three-source manual cross-correlation.
-    /// Cost per datagram (~200/s at 5ms packets): one monotonic clock read +
-    /// one compare - far below the 5ms audio budget (the ~1s metrics fold pays
-    /// its own read; merging the two would mean restructuring its call
-    /// signature for a ~40ns saving). The counters' locked add fires only on a
-    /// >20ms gap, i.e. only after the socket just sat idle that long.
+    /// Cost per datagram (~200/s at 5ms packets): one monotonic clock read, one
+    /// compare and the sink's gap store - far below the 5ms audio budget (the
+    /// ~1s metrics fold pays its own read; merging the two would mean
+    /// restructuring its call signature for a ~40ns saving). The counters'
+    /// locked add fires only on a >20ms gap, i.e. only after the socket just
+    /// sat idle that long.
     /// recvQueue-confined; always-live, read only when telemetry is on.
     private func noteAudioArrivalGap() {
         let now = DispatchTime.now().uptimeNanoseconds
@@ -216,6 +217,9 @@ extension RtpAudioReceiver {
             if gap >= Self.flowResumeGapNanos {
                 sink?.notePacketFlowResumed(afterGapMs: Double(gap) / 1_000_000)
             }
+            // The decoder's dead-air test: an under-run after a gap no cushion
+            // could bridge must not deepen the cushion.
+            sink?.noteArrivalGap(nanos: gap)
         }
         lastDatagramArrivalNanos = now
     }
