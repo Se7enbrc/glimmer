@@ -19,6 +19,8 @@ enum MenuBarReadinessTone: Equatable {
 struct MenuBarMetric: Equatable {
     let value: String
     let label: String
+    /// VoiceOver's name for the label when the printed one is shorthand.
+    var spokenLabel: String?
 }
 
 enum MenuBarPrimaryAction: Equatable {
@@ -118,7 +120,8 @@ enum MenuBarPresentation {
     static func metrics(snapshot: StreamStatsSnapshot?, link: String?) -> [MenuBarMetric] {
         var out: [MenuBarMetric] = []
         let fps = snapshot?.receivedFps ?? snapshot?.renderedFps
-        out.append(MenuBarMetric(value: fps.map { "\(Int($0.rounded()))" } ?? "–", label: "Frames/s"))
+        out.append(MenuBarMetric(value: fps.map { "\(Int($0.rounded()))" } ?? "–", label: "Frames/s",
+                                spokenLabel: "Frames per second"))
         out.append(MenuBarMetric(value: snapshot?.rttMs.map { "\(Int($0.rounded())) ms" } ?? "–", label: "Latency"))
         let mbps = snapshot?.measuredBitrateMbps ?? snapshot?.negotiatedBitrateMbps
         out.append(MenuBarMetric(value: mbps.map { "\(Int($0.rounded())) Mbps" } ?? "–", label: "Bandwidth"))

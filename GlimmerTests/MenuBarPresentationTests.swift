@@ -63,6 +63,7 @@ struct MenuBarPresentationTests {
         let metrics = MenuBarPresentation.metrics(snapshot: snap, link: "Wi-Fi")
         #expect(metrics.map(\.value) == ["120", "3 ms", "78 Mbps", "Wi-Fi"])
         #expect(metrics.map(\.label) == ["Frames/s", "Latency", "Bandwidth", "Network"])
+        #expect(metrics[0].spokenLabel == "Frames per second")
         #expect(MenuBarPresentation.metrics(snapshot: nil, link: nil).map(\.value) == ["–", "–", "–", "–"])
     }
 

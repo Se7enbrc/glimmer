@@ -37,9 +37,11 @@ struct MenuBarPanel: View {
                                      @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(label.uppercased())
+                Text(label)
+                    .textCase(.uppercase)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tint)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if let trailing {
                     Text(trailing)
@@ -71,6 +73,7 @@ struct MenuBarPanel: View {
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
+            .modifier(RowHighlight())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -88,6 +91,7 @@ struct MenuBarPanel: View {
             }
             .padding(.vertical, 2)
             .contentShape(Rectangle())
+            .modifier(RowHighlight())
         }
         .buttonStyle(.plain)
     }
@@ -174,6 +178,9 @@ struct MenuBarPanel: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(metric.spokenLabel ?? metric.label)
+        .accessibilityValue(metric.value)
     }
 
     private var connectingCard: some View {
@@ -233,18 +240,21 @@ struct MenuBarPanel: View {
             }
         }
         if model.hosts.count > 1 {
+            // A Picker, not checkmark images: macOS 27 hides symbols in menus.
             row("PCs", systemImage: "desktopcomputer") {
-                ForEach(model.hosts) { candidate in
-                    Button {
-                        model.selectHost(candidate)
-                    } label: {
-                        if candidate.id == host.id {
-                            Label(candidate.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(candidate.displayName)
-                        }
+                Picker("PCs", selection: Binding(
+                    get: { model.selectedHost?.id },
+                    set: { id in
+                        guard id != model.selectedHost?.id,
+                              let pick = model.hosts.first(where: { $0.id == id }) else { return }
+                        model.selectHost(pick)
+                    })) {
+                    ForEach(model.hosts) { candidate in
+                        Text(candidate.displayName).tag(Optional(candidate.id))
                     }
                 }
+                .pickerStyle(.inline)
+                .labelsHidden()
             }
         }
         if model.isWaking(host) {
@@ -323,7 +333,7 @@ struct MenuBarPanel: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.glass)
-            .clipShape(Circle())
+            .buttonBorderShape(.circle)
             .help("Settings")
             Menu {
                 Button("Open Glimmer") { openLauncher() }
@@ -340,8 +350,8 @@ struct MenuBarPanel: View {
             }
             .menuStyle(.button)
             .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
             .menuIndicator(.hidden)
-            .clipShape(Circle())
         }
         .controlSize(.small)
         .padding(.horizontal, 4)
@@ -355,6 +365,27 @@ struct MenuBarPanel: View {
     private func activate() {
         // The OS decides foreground policy on macOS 14+; this is the request.
         NSApp.activate()
+    }
+}
+
+/// The pointer-over highlight Tahoe's own menu bar panels give a row,
+/// reaching a little past the text toward the card's edge.
+private struct RowHighlight: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background {
+                if hovering && isEnabled {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.fill.tertiary)
+                }
+            }
+            .padding(.horizontal, -6)
+            .padding(.vertical, -2)
+            .onHover { hovering = $0 }
     }
 }
 
