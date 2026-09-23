@@ -40,7 +40,7 @@
 //  client-side playout depth policy.
 //
 //  ITS SIBLING (it guards the same cushion): the DRIFT-TRACKING RESAMPLER - the
-//  deterministic clock-skew repayment, plus its per-host skew memory. It used to
+//  deterministic clock-skew repayment, plus its per-device skew memory. It used to
 //  live here; it now has its own file, AudioDecoder+Resampler.swift, which
 //  carries the measured fault and the jittery-link argument.
 //

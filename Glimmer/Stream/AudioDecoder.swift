@@ -153,12 +153,21 @@ public final class AudioDecoder: @unchecked Sendable {
     static let resamplerIntegralHoldFactor = 0.97
     /// True once the loop has run at least one ENGAGED tick this session. The
     /// disengage hold-bleed applies only after this: a pre-roll must not bleed
-    /// a persisted per-host skew seed before the loop ever engages with it.
+    /// a persisted per-device skew seed before the loop ever engages with it.
     var resamplerEverEngaged = false
-    /// Skew-save throttle state (audioMeterLock): the last opportunistic
-    /// per-host persist, so a stable integral writes at most ~1/min.
+    /// Skew-save window state (audioMeterLock): the last window close and the
+    /// last value written, so the memory writes at most ~1/min.
     var lastResamplerSkewSaveNanos: UInt64 = 0
     var lastSavedResamplerSkewPpm: Double = .nan
+    /// Skew memory key ("host|device UID", "" = don't persist) and the save
+    /// window's mean accumulator over quiet ticks. Guarded by `audioMeterLock`.
+    var resamplerSkewMemoryKey = ""
+    var resamplerQuietIntegralSumPpm: Double = 0
+    var resamplerQuietTicks = 0
+    /// Last cushion target the PI loop steered to and when it moved: a setpoint
+    /// move holds integration (it isn't skew). Guarded by `audioMeterLock`.
+    var resamplerSetpointMs: Double = 0
+    var resamplerSetpointMovedNanos: UInt64 = 0
     /// SHALLOW-RELEASE gate: the |integral ppm| ceiling under which the resampler is
     /// deemed to be CARRYING the skew (not railing), so the wired cushion may converge.
     /// Real host skews seen ~450ppm; above ~500 the loop is at/near its rail and the

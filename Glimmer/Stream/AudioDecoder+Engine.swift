@@ -44,16 +44,18 @@ extension AudioDecoder {
         // + route latch); seeding the target from per-host memory makes the cold
         // pre-roll build last session's learned depth, not re-pay 5-8 startup blips.
         let seed = Self.loadCushionSeed()
-        // Per-host skew seed: start the resampler's integral at the persisted
-        // converged clock offset so the session begins pre-corrected instead of
-        // re-drifting into the first minutes' underruns (the ratchet feed).
-        let skewSeedPpm = Self.loadResamplerSkewSeed(host: seed.host)
+        // Per-host+device skew seed: start the resampler's integral at the persisted
+        // offset between the PC's clock and THIS output device's clock, so the
+        // session begins pre-corrected instead of re-drifting into underruns.
+        let route = Self.sampleAudioRoute()
+        let skewKey = Self.resamplerSkewKey(host: seed.host, deviceUID: route.uid)
+        let skewSeedPpm = Self.loadResamplerSkewSeed(key: skewKey)
         if skewSeedPpm != 0 {
             Diag.notice("audio resampler skew seed: \(Int(skewSeedPpm.rounded()))ppm "
-                + "from per-host memory - starts pre-converged", "Stream.Audio")
+                + "from per-device memory - starts pre-converged", "Stream.Audio")
         }
         resetPlayoutStateForSession(seed: seed, sampleRate: sampleRate,
-                                    skewSeedPpm: skewSeedPpm)
+                                    skewSeedPpm: skewSeedPpm, skewKey: skewKey)
         announceCushionSeed(seed)
         // A/V-skew session edge: the skew store's pair-anchor + accumulator
         // reset here (one audio init per session IS the pair's session edge).
@@ -117,7 +119,7 @@ extension AudioDecoder {
         // Seed + track the audio OUTPUT route for the under-run breadcrumbs.
         // Installed only after the engine is up, so a failed init never leaves a
         // listener behind; `shutdown()` removes it.
-        installAudioRouteListener()
+        installAudioRouteListener(initial: route)
         // H3: recover playout across a mid-stream output-device/format change
         // (BT/AirPods connect-disconnect, HDMI/DP unplug, USB-DAC removal, OS
         // sample-rate change), which STOPS the engine's outputNode. Installed
@@ -132,7 +134,7 @@ extension AudioDecoder {
     /// held; this takes `audioMeterLock` for the duration of the reset (never the
     /// other way round).
     private func resetPlayoutStateForSession(seed: CushionSeed, sampleRate: Int32,
-                                             skewSeedPpm: Double) {
+                                             skewSeedPpm: Double, skewKey: String) {
         let seedNowNanos = DispatchTime.now().uptimeNanoseconds
         lastArrivalGapNanos.store(0)
         // AV call BEFORE the meter lock (leaf-lock discipline, audit remainder
@@ -148,6 +150,9 @@ extension AudioDecoder {
         resamplerIntegralPpm = skewSeedPpm; resamplerEpsPpm = 0
         resamplerEverEngaged = false
         lastResamplerSkewSaveNanos = 0; lastSavedResamplerSkewPpm = .nan
+        resamplerSkewMemoryKey = skewKey
+        resamplerQuietIntegralSumPpm = 0; resamplerQuietTicks = 0
+        resamplerSetpointMs = 0; resamplerSetpointMovedNanos = 0
         playoutStarted = false; playoutDrained = false; meterShutdown = false
         // FIX: clear the teardown latch on RE-init. A reconnect's stopConnection →
         // shutdown() set `isShutdown = true` and nothing reset it, so post-reconnect
