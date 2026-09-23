@@ -69,16 +69,19 @@ struct StreamIntent: AppIntent {
             return .result()
         }
         if model.selectedHost?.id != host.id { model.selectHost(host) }
-        if let target {
-            model.requestStream(app: target, on: host)
-            return .result()
-        }
         // The Stream button's app is the PC's running one only while a fresh sample
         // names it; a cold launch or a PC switch has none yet.
-        if !HostLiveStatus.isFresh(model.hostLiveStatus, for: host.id) {
+        if target == nil, !HostLiveStatus.isFresh(model.hostLiveStatus, for: host.id) {
             _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
         }
-        model.streamHeroApp()
+        await model.awaitRouteSettled(for: host)
+        try Task.checkCancellation()
+        guard !model.isStreaming else { throw PCIntentError.alreadyStreaming }
+        if let target {
+            model.requestStream(app: target, on: host)
+        } else {
+            model.streamHeroApp()
+        }
         return .result()
     }
 }
