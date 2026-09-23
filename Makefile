@@ -89,7 +89,7 @@ TAP_REPO        ?= Se7enbrc/homebrew-glimmer
 export RELEASES_REPO TAP_REPO
 # Which release `make brew-bump` points the cask at - the one being built by default.
 VERSION         ?= $(MARKETING_VERSION)
-SPARKLE_VERSION ?= 2.9.3
+SPARKLE_VERSION ?= 2.10.0
 export SPARKLE_VERSION
 
 # --- Privileged AWDL network helper (root LaunchDaemon) ---------------------
