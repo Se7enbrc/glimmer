@@ -310,10 +310,10 @@ their session use the host PC's recording tools, not the Mac's.
   into the unified log. We log `keyCode` (positional, non-PII) and the modifier
   mask only.
 - **URLs containing `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`,
-  `uniqueid`.** `NetworkClient.sensitiveQueryKeys` (`Network.swift`) is the key
-  set; the launch-URL redaction that consumes it lives in
-  `NetworkClient+Endpoints.swift`, and `dumpXMLRedacted` covers the response
-  bodies.
+  `uniqueid`, and the `sessionUrl0` tag.** `NetworkClient.sensitiveQueryKeys`
+  (`Network.swift`) is the key set; the launch-URL redaction that consumes it
+  lives in `NetworkClient+Endpoints.swift`, and `dumpXMLRedacted` covers the
+  response bodies, where `sessionUrl0` carries the PC's address and port.
 - **Cert PEMs / fingerprints at `.public`.** `ControlTransport` logs a
   pin-mismatch event but not the fingerprints - a hostile log scraper could
   otherwise read the pinned cert via `log show`.
@@ -326,9 +326,11 @@ their session use the host PC's recording tools, not the Mac's.
 - Network errors with sanitized URLs (rikey/gcmkey stripped).
 - VT decode errors and codec configuration ints (`videoFormat=0x...`, `bytes=N`,
   `idr=true/false`).
-- `Diag` lines at `.public` privacy, host addresses included. Every `Diag` line
-  is mirrored to the unified log as `.public` (`LogStore.swift`); callers keep
-  secrets out of the message itself.
+- `Diag` lines, which take Logger's `privacy:` argument (`LogStore.swift`).
+  Private values (PC names and addresses, uniqueids, error text) reach the
+  Troubleshooting viewer, its export and the session file, and show as
+  `<private>` in the unified log. Keys, PINs and certificates stay out of the
+  message entirely.
 - Pin-mismatch events (no fingerprints).
 - Pairing-step transitions (no payload data).
 
