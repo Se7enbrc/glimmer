@@ -315,11 +315,9 @@ extension FramePacer {
         // the adaptive target: the wifi jitter buffer still fills and holds as
         // designed; only latency ABOVE the (correct, possibly grown) target sheds.
         let effectiveTarget = decayTargetLocked()
-        // POST-GAP LENIENCY: in gap-recovery the trim ceiling rises to the cap so the
-        // bunched catch-up plays THROUGH (drained 1/vsync) instead of trim-to-newest -
-        // the discard that cost ~20% of frames on a gappy link; otherwise it stays at
-        // `effectiveTarget + 1`. Gated on a real empty-tick streak so ordinary motion-
-        // bunches still trim tight. Zero standing latency. See `gapAwareTrimLocked`.
+        // POST-GAP LENIENCY: after a real empty-tick streak the ceiling rises to the
+        // cap so the catch-up plays through instead of trimming (~20% discard on a
+        // gappy link), but only when fps < refresh leaves vsyncs to drain it.
         let nowTime = CFAbsoluteTimeGetCurrent()
         let (gapTrimmed, inGapRecovery) = gapAwareTrimLocked(
             now: nowTime, effectiveTarget: effectiveTarget)

@@ -87,6 +87,10 @@ extension FramePacer {
     /// 500ms = moonlight's pacing-history window. Latency exists only mid-burst; a
     /// surplus persisting past this is a standing build and trims tight.
     static let postDrainLenientSeconds = 0.5
+    /// The lenient ceiling applies only while the stream runs below this
+    /// fraction of the panel's nominal rate: at fps≈refresh frames arrive one
+    /// per tick, so a parked catch-up never drains and rides as ~5 frames of lag.
+    static let postGapDrainableRateRatio = 0.9
 
     /// After this many consecutive ticks with frames queued but nothing
     /// released, the in-pacer failsafe re-seeds the cadence base to force a

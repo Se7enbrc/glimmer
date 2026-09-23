@@ -224,13 +224,26 @@ extension FramePacer {
                 && now - liveness.lastGapRecoveryTime < FramePacer.postDrainLenientSeconds)
     }
 
+    /// Whether spare vsyncs can drain a post-gap catch-up: the learned stream
+    /// rate sits below `postGapDrainableRateRatio` of the NOMINAL panel rate
+    /// (link duration, so a realized-tick wobble can't flip it). Unknown panel → true.
+    static func postGapCatchUpDrains(
+        streamIntervalSeconds: Double, nominalVsyncSeconds: Double
+    ) -> Bool {
+        guard nominalVsyncSeconds.isFinite, nominalVsyncSeconds > 0 else { return true }
+        return nominalVsyncSeconds < streamIntervalSeconds * postGapDrainableRateRatio
+    }
+
     /// Trim the FIFO toward the drop ceiling, returning the stalest dropped buffers
-    /// and the gap-recovery flag. In gap-recovery the ceiling is the cap so the
-    /// bunched catch-up plays through; otherwise `effectiveTarget + 1`. Under `lock`.
+    /// and the gap-recovery flag. The cap while a drainable catch-up plays through
+    /// (see `postGapCatchUpDrains`), else `effectiveTarget + 1`. Under `lock`.
     func gapAwareTrimLocked(now: CFTimeInterval, effectiveTarget: Int)
         -> (trimmed: [CMSampleBuffer], inGapRecovery: Bool) {
         let inGapRecovery = inGapRecoveryLocked(now: now)
-        let dropTarget = inGapRecovery ? FramePacer.maxQueuedFrames
+        let lenient = inGapRecovery && Self.postGapCatchUpDrains(
+            streamIntervalSeconds: streamFrameIntervalSeconds,
+            nominalVsyncSeconds: refreshTelemetry.lastRefreshIntervalSeconds)
+        let dropTarget = lenient ? FramePacer.maxQueuedFrames
             : min(FramePacer.maxQueuedFrames, effectiveTarget + 1)
         var trimmed: [CMSampleBuffer] = []
         while queue.count > dropTarget { trimmed.append(queue.removeFirst().sampleBuffer) }
