@@ -313,15 +313,15 @@ AZERTY → QWERTY; we want the user's physical key position to win). Every
 physical key-down / key-up emits one keyboard event - no per-event modifier
 reset, no "release before press" coalescing. NKRO works because AppKit delivers
 each transition as its own `NSEvent` and the responder chain hands each to
-`keyDown(with:)` / `keyUp(with:)` independently. Stuck modifiers are released
-only in `detach()`.
+`keyDown(with:)` / `keyUp(with:)` independently. Held keys, mouse buttons and
+modifiers are released on focus loss, a paste, a reconnect and `detach()`.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and
 `.command` `flagsChanged` events so ⌘-Tab, ⌘-Space, ⌘-Q stay local-Mac chords.
 `captureSysKeys = true` forwards everything as a Win-key chord. The configured
 quit / stats hotkeys are detected before the captureSysKeys gate so a
-Cmd-bearing quit chord (default ⌃⌘Q) keeps working in either mode.
+Cmd-bearing custom quit chord keeps working in either mode.
 
 **Controller.** GameController framework. `GCControllerDidConnect` /
 `Disconnect` are observed; per-controller state is kept in
@@ -341,9 +341,7 @@ while the stream window is key. The broader gesture/pressure types (`.gesture` /
 `.beginGesture` / `.endGesture` / `.pressure`) are deliberately EXCLUDED: they
 carry the trackpad pan/scroll the OS synthesizes `mouseMoved` from, so
 swallowing them would kill cursor + scroll on trackpad-only Macs. Scroll wheel
-is NOT swallowed - scrolls forward as host scroll events. macOS Accessibility
-Zoom chords (⌥⌘8 / ⌥⌘= / ⌥⌘-) are intercepted unconditionally so they never
-reach the OS while a stream is up.
+is NOT swallowed - scrolls forward as host scroll events.
 
 **Input gating.** The engine refuses input until the control channel is up: the
 backend's `send*` methods return -2 before then (mirroring upstream
