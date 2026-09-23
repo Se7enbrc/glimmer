@@ -53,21 +53,33 @@ re-prompts).
 The canonical xcodebuild invocation (what `make app` runs) is:
 
 ```bash
+scripts/generate-build-info.sh
 xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
     -xcconfig Glimmer/StreamLib.xcconfig \
     OPENSSL_PREFIX=$(brew --prefix openssl@3) \
     OPUS_PREFIX=$(brew --prefix opus) \
+    CODE_SIGNING_ALLOWED=NO \
     -derivedDataPath ./build -destination 'platform=macOS' build
 ```
+
+The script writes `Glimmer/BuildInfo.generated.swift`, the commit and build date
+that telemetry stamps on every session. The project compiles that file but it is
+not checked in, so a fresh clone fails with a missing input file until the
+script has run once. `CODE_SIGNING_ALLOWED=NO` leaves signing to the Makefile's
+`sign` target; without it, Xcode's Automatic signing asks for the keychain once
+per nested bundle.
 
 For an inner-loop edit cycle, either use `make dev` (unit tests, then the
 notarized Release build, installed and relaunched - same signing path as
 `make install`), or work in Xcode against `Glimmer.xcodeproj`:
 
-1. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
+1. Run `scripts/generate-build-info.sh` once so
+   `Glimmer/BuildInfo.generated.swift` exists (`make app` and `make test` run it
+   for you).
+2. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
    Scheme → Run → Info). It supplies the OpenSSL/Opus search paths and the
-   version from `Glimmer/Version.xcconfig`; nothing needs prebuilding.
-2. Build and run.
+   version from `Glimmer/Version.xcconfig`.
+3. Build and run.
 
 Useful log tails:
 
