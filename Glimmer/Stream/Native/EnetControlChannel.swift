@@ -388,8 +388,9 @@ final class EnetControlChannel: @unchecked Sendable {
     let stateLock = NSLock()
     let interrupted = ManagedAtomicFlag()
 
-    /// Fired when the host sends a TERMINATION (0x0109). Wired by NativeBackend
-    /// to connectionTerminated + teardown.
+    /// Fired once when the peer dies (declarePeerDead): host TERMINATION or
+    /// DISCONNECT, ACK silence, or a failed socket. Wired by NativeBackend to
+    /// connectionTerminated + teardown.
     var onTerminated: ((Int32) -> Void)?
     /// Fired (on CHANGE only) when the host signals HDR mode (0x010e).
     var onHdrMode: ((Bool) -> Void)?
@@ -452,6 +453,9 @@ final class EnetControlChannel: @unchecked Sendable {
     /// ~90s of coverage; any future undispatched type could flood identically.
     /// The totals are surfaced once at teardown by logIgnoredControlTotals().
     var ignoredControlCounts: [UInt16: UInt64] = [:]
+    /// Inbound control payloads that failed authentication (lock-guarded): the
+    /// first is logged, the total once at teardown, so a spoofed flood can't fill the log.
+    var rejectedInboundControl: UInt64 = 0
 
     /// Most recent HDR mastering metadata the host announced, if any.
     func hdrMetadata() -> HdrMetadata? { withState { lastHdrMetadata } }
@@ -511,10 +515,15 @@ final class EnetControlChannel: @unchecked Sendable {
     /// under stateLock, so the interrupt() + close() teardown pair logs at most
     /// once (whichever runs first with a non-empty map wins).
     func logIgnoredControlTotals() {
-        let counts = withState { () -> [UInt16: UInt64] in
-            let taken = ignoredControlCounts
+        let (counts, rejected) = withState { () -> ([UInt16: UInt64], UInt64) in
+            let taken = (ignoredControlCounts, rejectedInboundControl)
             ignoredControlCounts = [:]
+            rejectedInboundControl = 0
             return taken
+        }
+        if rejected > 0 {
+            Diag.notice("ENet rejected \(rejected) unauthenticated inbound control payload(s) this session",
+                        Self.logCategory)
         }
         guard !counts.isEmpty else { return }
         let summary = counts.sorted { $0.key < $1.key }
@@ -563,18 +572,6 @@ final class EnetControlChannel: @unchecked Sendable {
     /// FEC status sink; must NEVER block the calling video thread.
     func queueFrameFecStatus(_ status: FrameFecStatus) {
         _ = status
-    }
-
-    func enetCode(_ error: Error) -> Int32 {
-        if let enetError = error as? EnetError {
-            switch enetError {
-            case .connectTimeout: return -110 // ETIMEDOUT-ish
-            case .interrupted: return -4
-            case .disconnected: return -103
-            default: return -1
-            }
-        }
-        return -1
     }
 }
 

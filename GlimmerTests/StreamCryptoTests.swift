@@ -38,8 +38,8 @@ struct StreamCryptoTests {
 
     // Build a full host->client ('H') on-the-wire envelope around an inner V2
     // plaintext, the same byte layout `seal` produces but in the opposite
-    // direction, so `open` accepts it.
-    private static func sealHostDirection(
+    // direction, so `open` accepts it. Shared with EnetControlChannelTests.
+    static func sealHostDirection(
         type: UInt16, payload: [UInt8], seq: UInt32, key: [UInt8]
     ) throws -> [UInt8] {
         var plaintext = [UInt8]()

@@ -19,6 +19,20 @@ extension EnetControlChannel {
         var lastHealthSnapshotMs: UInt32 = 0
     }
 
+    /// Latch the peer dead exactly once, whichever path sees it first (socket
+    /// failure, ACK silence, host DISCONNECT or TERMINATION): logs `reason` and
+    /// fires onTerminated(code). Later reports of the same death are no-ops.
+    func declarePeerDead(code: Int32, reason: String) {
+        let first = withState { () -> Bool in
+            let wasAlive = !disconnected
+            disconnected = true
+            return wasAlive
+        }
+        guard first else { return }
+        Diag.error(reason, Self.logCategory)
+        onTerminated?(code)
+    }
+
     /// One tick's reliable-command health, read under a SINGLE stateLock
     /// acquisition so every field describes the same instant (the dead-peer
     /// cutoff, the backpressure gate, and the near-miss edge must all agree).
@@ -102,12 +116,9 @@ extension EnetControlChannel {
         }
 
         if health.unackedCount > 0 && health.sinceLastAck >= Self.ackSilenceDeadMs {
-            Diag.error("ENet peer silent: no ACK in \(health.sinceLastAck)ms with "
+            declarePeerDead(code: -1, reason: "ENet peer silent: no ACK in \(health.sinceLastAck)ms with "
                 + "\(health.unackedCount) reliable command(s) outstanding "
-                + "(oldest \(health.oldestUnackedMs)ms) - host silently reset peer; terminating",
-                Self.logCategory)
-            withState { disconnected = true }
-            onTerminated?(-1)
+                + "(oldest \(health.oldestUnackedMs)ms) - host silently reset peer; terminating")
             return false
         }
 

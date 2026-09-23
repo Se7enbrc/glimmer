@@ -67,6 +67,18 @@ extension EnetControlChannel {
         stageDone("START_B")
     }
 
+    func enetCode(_ error: Error) -> Int32 {
+        if let enetError = error as? EnetError {
+            switch enetError {
+            case .connectTimeout: return -110 // ETIMEDOUT-ish
+            case .interrupted: return -4
+            case .disconnected: return -103
+            default: return -1
+            }
+        }
+        return -1
+    }
+
     // MARK: - UDP socket
 
     func openSocket() async throws {
@@ -76,6 +88,8 @@ extension EnetControlChannel {
         }
         let conn = NWConnection(host: host, port: nwPort, using: params)
         setConnection(conn) // locked write - see connLock
+        // An interrupt() that landed before the store above had nothing to cancel.
+        if interrupted.isSet { throw EnetError.interrupted }
 
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let resumed = ManagedAtomicFlag()
@@ -87,7 +101,14 @@ extension EnetControlChannel {
                 case .failed(let err):
                     if resumed.testAndSet() {
                         cont.resume(throwing: EnetError.socketFailure("\(err)"))
+                    } else if let self, !self.interrupted.isSet {
+                        // A connected UDP flow that fails (its interface went
+                        // away) never recovers: end the peer now, not at the 10s ACK cutoff.
+                        self.declarePeerDead(code: -1, reason: "ENet socket failed (\(err)); peer is gone")
                     }
+                case .cancelled:
+                    // Only our own interrupt()/close() cancel; never a peer death.
+                    if resumed.testAndSet() { cont.resume(throwing: EnetError.interrupted) }
                 default:
                     break
                 }
@@ -213,6 +234,9 @@ extension EnetControlChannel {
     /// handle_verify_connect (protocol.c:948-1008). Validate connectID +
     /// throttle params; learn outgoingPeerID + session ids; mark connected.
     func handleVerifyConnect(_ reader: inout ByteReader) {
+        // ENet acts on VERIFY_CONNECT only while connecting; a late or forged one
+        // must not flip `disconnected` behind declarePeerDead's back.
+        if withState({ connected }) { return }
         guard let vcOutgoingPeerID = reader.u16BE(),
               let vcIncomingSession = reader.u8(),
               let vcOutgoingSession = reader.u8(),
