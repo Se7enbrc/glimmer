@@ -1,8 +1,8 @@
 //
 //  EnetControlChannelTests.swift
 //
-//  Drives EnetControlChannel through its inbound parser and control-loop tick
-//  with no live socket: every send drops on the nil connection,
+//  Drives EnetControlChannel through its inbound parser, control-loop tick and
+//  recovery drain with no live socket: every send drops on the nil connection,
 //  so the observable effects are the callbacks and the channel's own state.
 //
 
@@ -63,6 +63,10 @@ struct EnetControlChannelTests {
             type: CtrlV2.termination, payload: payload, seq: seq, key: key)
     }
 
+    private static func urgentRelSeq(_ channel: EnetControlChannel) -> UInt16 {
+        channel.withState { channel.channelOutgoingReliableSeq[Enet.ctrlChannelUrgent] ?? 0 }
+    }
+
     // MARK: - Unauthenticated packets can't silence the channel
 
     @Test func forgedReliableDoesNotMakeGenuineMessagesStale() throws {
@@ -97,6 +101,50 @@ struct EnetControlChannelTests {
         #expect(!channel.controlLoopTick(&state))
         channel.onDatagram(Self.reliable(relSeq: 1, try Self.termination(seq: 0)))
         #expect(codes.values == [-1])
+    }
+
+    // MARK: - IDR/RFI requests wake the control loop
+
+    @Test func requestBurstWakesTheLoopOnce() throws {
+        let (channel, _) = try Self.makeChannel()
+        #expect(channel.recoveryWake.wait(timeout: .now()) == .timedOut)
+        channel.invalidateReferenceFrames(from: 10, to: 11)
+        channel.invalidateReferenceFrames(from: 12, to: 13)
+        channel.requestIdrFrame()
+        channel.requestIdrFrame()
+        // One wake for the RFI edge, one for the IDR edge, none for the repeats.
+        #expect(channel.recoveryWake.wait(timeout: .now()) == .success)
+        #expect(channel.recoveryWake.wait(timeout: .now()) == .success)
+        #expect(channel.recoveryWake.wait(timeout: .now()) == .timedOut)
+    }
+
+    @Test func repeatRfiWaitsOutTheSpacingThenSends() throws {
+        let (channel, _) = try Self.makeChannel()
+        channel.invalidateReferenceFrames(from: 10, to: 12)
+        #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
+        #expect(Self.urgentRelSeq(channel) == 1)
+
+        // A second loss inside the spacing is held, and the loop wakes when it's due.
+        channel.invalidateReferenceFrames(from: 13, to: 14)
+        let wait = channel.drainPendingRecoveryRequests()
+        #expect(wait >= 1 && wait <= EnetControlChannel.rfiMinSpacingMs)
+        #expect(Self.urgentRelSeq(channel) == 1)
+
+        channel.lastRfiSentMs = channel.serviceTimeMs &- EnetControlChannel.rfiMinSpacingMs
+        #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
+        #expect(Self.urgentRelSeq(channel) == 2)
+    }
+
+    @Test func idrLeavesAtOnceAndSupersedesAHeldRfi() throws {
+        let (channel, _) = try Self.makeChannel()
+        channel.invalidateReferenceFrames(from: 10, to: 12)
+        _ = channel.drainPendingRecoveryRequests()
+        channel.invalidateReferenceFrames(from: 13, to: 14)
+        _ = channel.drainPendingRecoveryRequests() // held by the spacing
+        channel.requestIdrFrame()
+        #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
+        #expect(Self.urgentRelSeq(channel) == 2)
+        #expect(channel.withState { channel.pendingRfi == nil })
     }
 
     // MARK: - Cancel never strands the connect

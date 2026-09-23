@@ -18,6 +18,8 @@ extension EnetControlChannel {
     /// ~30s of stacked silence; caps it well under the 30s outer net so a half-dead
     /// host fails fast. Each stage's timeout is clamped to the time remaining.
     static let handshakeDeadlineMs = 13_000
+    /// Poll interval of the VERIFY_CONNECT and START ACK waits.
+    static let handshakePollNanos: UInt64 = 2_000_000
 
     /// Open the UDP socket, run the CONNECT handshake to VERIFY_CONNECT + ACK,
     /// then send START_A and START_B reliably. Returns once both are ACKed
@@ -227,7 +229,9 @@ extension EnetControlChannel {
                 throw EnetError.connectTimeout
             }
             checkRetransmit()
-            try await Task.sleep(nanoseconds: 20_000_000) // 20ms tick
+            // 2ms poll: VERIFY_CONNECT lands within an RTT, and a 20ms poll
+            // added ~17ms per stage. Retransmits are time-based, so unchanged.
+            try await Task.sleep(nanoseconds: Self.handshakePollNanos)
         }
     }
 
@@ -330,7 +334,7 @@ extension EnetControlChannel {
                 throw EnetError.startFailed("\(label) not ACKed within \(timeoutMs)ms")
             }
             checkRetransmit()
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(nanoseconds: Self.handshakePollNanos)
         }
     }
 }

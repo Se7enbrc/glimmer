@@ -57,14 +57,6 @@ extension NativeBackend {
             try await performControlStage(handshake: handshake, config: config,
                                           host: host, events: events)
 
-            // The audio PING already started mid-handshake; now (post-handshake)
-            // bring up the audio RECEIVE side: init the decoder + start the recv
-            // loop on the SAME unconnected socket. If the early ping path didn't run
-            // (no audio sink), startAudioReceive() still opens the ping so the
-            // combined A/V session stays alive (Sunshine withholds video RTP until
-            // it has seen the audio ping too).
-            startAudioReceive(handshake: handshake, config: config, server: server, host: host)
-
             // --- Connected. Bring up native video receive + keepalive loop. ---
             // Flip inputReady here (the InputStream.c `initialized` analogue): the
             // control stream is now up, so send* can seal + send input packets.
@@ -82,6 +74,11 @@ extension NativeBackend {
 
             try await startVideoStage(handshake: handshake, config: config,
                                       server: server, host: host, events: events)
+
+            // Audio receive after the video ping (moonlight's control, video,
+            // audio order): the host answers that ping with its first frame, so
+            // the 35-130 ms decoder and engine bring-up no longer delays it.
+            startAudioReceive(handshake: handshake, config: config, server: server, host: host)
         } catch {
             // Any failure after the audio ping may have started must not leak the
             // ping thread/socket (and recv loop, if it reached startAudioReceive).

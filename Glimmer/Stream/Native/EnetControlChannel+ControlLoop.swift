@@ -17,7 +17,12 @@ extension EnetControlChannel {
     struct ControlLoopState {
         var lastPeriodicPingMs: UInt32 = 0
         var lastHealthSnapshotMs: UInt32 = 0
+        /// How long the loop may wait for a recovery wake before the next tick.
+        var nextWaitMs = EnetControlChannel.controlTickMs
     }
+
+    /// The control loop's idle tick; a recovery request wakes it sooner.
+    static let controlTickMs: UInt32 = 20
 
     /// Latch the peer dead exactly once, whichever path sees it first (socket
     /// failure, ACK silence, host DISCONNECT or TERMINATION): logs `reason` and
@@ -135,12 +140,12 @@ extension EnetControlChannel {
             sendEnetPing()
         }
 
-        // Drain coalesced IDR/RFI requests: at most ONE REQUEST_IDR (and one
-        // RFI) per tick, no matter how many failed frames asked for one since
-        // the last drain. This is moonlight's requestIdrFrameFunc dedicated-drain
-        // (ControlStream.c:1624-1640) collapsed onto the 20ms control tick - it
-        // turns the per-failed-frame IDR storm into one request per loss event.
-        drainPendingRecoveryRequests()
+        // Drain coalesced IDR/RFI requests: at most ONE REQUEST_IDR (or one
+        // RFI) per drain, no matter how many failed frames asked for one since
+        // the last. This is moonlight's requestIdrFrameFunc dedicated drain
+        // (ControlStream.c:1624-1640): a request wakes the loop, so it leaves
+        // at once, and the per-failed-frame IDR storm stays one per loss event.
+        state.nextWaitMs = drainPendingRecoveryRequests()
 
         // Reliable retransmits (covers both ping types + IDR/RFI/LTR).
         checkRetransmit()
@@ -175,14 +180,15 @@ extension EnetControlChannel {
     ///
     /// SYNCHRONOUS variant - run on a DEDICATED Thread (qos .userInteractive) by
     /// NativeBackend, NOT on the Swift cooperative pool. The 20ms tick is a
-    /// blocking Thread.sleep so the loop that must emit ACKs/keepalives cannot be
+    /// blocking semaphore wait so the loop that must emit ACKs/keepalives cannot be
     /// de-prioritized or starved behind high-QoS main-thread input - the moonlight
-    /// LossStats + ControlRecv dedicated-thread guarantee.
+    /// LossStats + ControlRecv dedicated-thread guarantee. An IDR/RFI request
+    /// signals `recoveryWake` to end the wait early.
     func runControlLoopSync() {
         var state = startControlLoop()
         while !interrupted.isSet {
             if !controlLoopTick(&state) { break }
-            Thread.sleep(forTimeInterval: 0.020) // 20ms tick (blocking)
+            _ = recoveryWake.wait(timeout: .now() + .milliseconds(Int(state.nextWaitMs)))
         }
         Diag.notice("ENet control loop stopped", Self.logCategory)
     }

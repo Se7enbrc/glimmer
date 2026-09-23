@@ -195,11 +195,17 @@ final class EnetControlChannel: @unchecked Sendable {
     // Without this, every failed frame fires its own reliable wire IDR - the
     // 890,891,892... "decoder requested IDR" storm that amplifies loss.
     //
-    // Glimmer's drain point is the existing 20ms control-loop tick (controlLoopTick
-    // → drainPendingRecoveryRequests). `requestIdrFrame()` and
-    // `invalidateReferenceFrames(from:to:)` now only SET state here; the tick
-    // sends AT MOST ONE REQUEST_IDR (and at most one RFI) per loss event. All
-    // guarded by stateLock via withState.
+    // `requestIdrFrame()` and `invalidateReferenceFrames(from:to:)` SET state
+    // here (under stateLock) and wake the control loop, whose drain sends AT
+    // MOST ONE REQUEST_IDR (or RFI) per loss event.
+
+    /// Wakes the control loop the moment a request goes idle→pending, so an
+    /// IDR/RFI leaves now instead of on the next 20ms tick. Edge-signaled only,
+    /// so its count never builds up past a couple of spare wakes.
+    let recoveryWake = DispatchSemaphore(value: 0)
+    /// serviceTimeMs of the last wire RFI; repeats keep the old tick's spacing.
+    /// Control-loop thread only.
+    var lastRfiSentMs: UInt32?
 
     /// Level-triggered "an IDR is needed" flag (mirrors PltSetEvent on
     /// idrFrameRequiredEvent). Multiple requests between drains collapse to one

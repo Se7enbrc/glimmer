@@ -80,57 +80,74 @@ extension EnetControlChannel {
     /// Request an IDR frame - COALESCED. Mirrors LiRequestIdrFrame
     /// (ControlStream.c:415-422): level-triggered, and a pending IDR supersedes
     /// (flushes) any queued RFI since a full IDR recovers the whole span. This
-    /// only SETS state; the actual wire REQUEST_IDR is sent AT MOST ONCE per
-    /// control-loop drain (drainPendingRecoveryRequests), so the per-failed-frame
+    /// SETS state and wakes the control loop; the wire REQUEST_IDR is sent AT
+    /// MOST ONCE per drain (drainPendingRecoveryRequests), so the per-failed-frame
     /// IDR storm collapses to one packet per loss event. Safe to call from any
     /// thread (depacketizer/decoder/watchdog) - it just takes stateLock.
     func requestIdrFrame() {
-        withState {
+        let wake = withState { () -> Bool in
+            let wasIdle = !idrPending
             idrPending = true
             // A full IDR makes any queued RFI redundant (LiRequestIdrFrame
             // freeBasicLbqList(referenceFrameControlQueue)).
             pendingRfi = nil
+            return wasIdle
         }
+        if wake { recoveryWake.signal() }
     }
 
     /// Invalidate reference frames (RFI) - COALESCED. Mirrors
-    /// queueFrameInvalidationTuple (ControlStream.c:388-410): only SETS the
-    /// pending window; the wire RFI is sent at most once per control-loop drain.
-    /// If an IDR is already pending it supersedes the RFI (the IDR recovers the
-    /// whole span), so we don't queue one. Multiple RFIs between drains coalesce
-    /// to the widest window seen. Safe to call from any thread.
+    /// queueFrameInvalidationTuple (ControlStream.c:388-410): SETS the pending
+    /// window and wakes the control loop; the wire RFI is sent at most once per
+    /// drain. If an IDR is already pending it supersedes the RFI (the IDR
+    /// recovers the whole span), so we don't queue one. Multiple RFIs between
+    /// drains coalesce to the widest window seen. Safe to call from any thread.
     func invalidateReferenceFrames(from firstFrame: Int, to lastFrame: Int) {
-        withState {
+        let wake = withState { () -> Bool in
             // An IDR already supersedes an RFI; don't bother queuing one.
-            guard !idrPending else { return }
+            guard !idrPending else { return false }
             if let existing = pendingRfi {
                 pendingRfi = (min(existing.from, firstFrame), max(existing.to, lastFrame))
-            } else {
-                pendingRfi = (firstFrame, lastFrame)
+                return false
             }
+            pendingRfi = (firstFrame, lastFrame)
+            return true
         }
+        if wake { recoveryWake.signal() }
     }
 
-    /// Drain the coalesced IDR/RFI requests onto the wire. Called once per
-    /// control-loop tick (controlLoopTick) on the loop's dedicated thread -
-    /// the single drain point that mirrors moonlight's requestIdrFrameFunc
-    /// (ControlStream.c:1624-1640). Sends AT MOST ONE REQUEST_IDR and AT MOST
-    /// ONE RFI per tick; an IDR supersedes a same-tick RFI. stateLock is taken
-    /// only to read+clear the flags, never across the (blocking) send.
-    func drainPendingRecoveryRequests() {
-        let (sendIdr, rfi): (Bool, (from: Int, to: Int)?) = withState {
+    /// Minimum spacing (ms) between wire RFIs: repeats mid-burst keep the old
+    /// 20ms tick's volume while the first RFI of a loss event leaves at once.
+    static let rfiMinSpacingMs: UInt32 = 20
+
+    /// Drain the coalesced IDR/RFI requests onto the wire, on the control loop's
+    /// dedicated thread - the single drain point that mirrors moonlight's
+    /// requestIdrFrameFunc (ControlStream.c:1624-1640). Sends AT MOST ONE
+    /// REQUEST_IDR or ONE RFI; an IDR supersedes a pending RFI, and an RFI inside
+    /// `rfiMinSpacingMs` of the last one stays pending. stateLock is taken only
+    /// to read+clear the flags, never across the (blocking) send. Returns how
+    /// long the loop may wait before the next drain.
+    func drainPendingRecoveryRequests() -> UInt32 {
+        let now = serviceTimeMs
+        let sinceRfi = lastRfiSentMs.map { now &- $0 } ?? Self.rfiMinSpacingMs
+        let rfiDue = sinceRfi >= Self.rfiMinSpacingMs
+        let (sendIdr, rfi, rfiHeld): (Bool, (from: Int, to: Int)?, Bool) = withState {
             let idr = idrPending
             idrPending = false
             // An IDR supersedes the RFI (redundant once we ask for a full IDR).
-            let window = idr ? nil : pendingRfi
-            pendingRfi = nil
-            return (idr, window)
+            if idr { pendingRfi = nil }
+            let window = rfiDue ? pendingRfi : nil
+            if rfiDue { pendingRfi = nil }
+            return (idr, window, pendingRfi != nil)
         }
         if sendIdr {
             sendIdrFrameNow()
         } else if let rfi {
+            lastRfiSentMs = now
             sendRfiNow(from: rfi.from, to: rfi.to)
         }
+        // A held RFI ends the wait the moment it comes due.
+        return rfiHeld ? Self.rfiMinSpacingMs - sinceRfi : Self.controlTickMs
     }
 
     /// Send one REQUEST_IDR on the wire (gen7Enc: type 0x0302, payload {0,0},
