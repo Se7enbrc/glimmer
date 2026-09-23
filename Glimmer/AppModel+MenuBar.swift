@@ -28,8 +28,7 @@ extension AppModel {
     /// The selected PC with the launcher's chip and power state; nil when none is paired.
     var menuBarHost: MenuBarHost? {
         guard let host = selectedHost else { return nil }
-        let live = hostLiveStatus?.hostID == host.id ? hostLiveStatus : nil
-        return MenuBarHost(chip: ChipPresentation(live: live), canWake: canWake(host), waking: isWaking(host))
+        return MenuBarHost(chip: polledChip(for: host), canWake: canWake(host), waking: isWaking(host))
     }
 
     var menuBarModeLine: String {

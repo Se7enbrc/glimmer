@@ -22,8 +22,19 @@ extension AppModel {
         }
     }
 
+    /// The PC this Mac is streaming from or connecting to; nil when idle.
+    var streamingHostID: String? {
+        isStreaming ? lastLaunchAttempt?.host.id : nil
+    }
+
+    /// The launcher's chip for `host` from the poll alone; a reading taken
+    /// for another PC is ignored.
+    func polledChip(for host: Host) -> ChipPresentation {
+        ChipPresentation(live: hostLiveStatus?.hostID == host.id ? hostLiveStatus : nil)
+    }
+
     /// Bring the stream window back from the background. Called by the
-    /// launcher's "Back to stream" CTA when nativeStreamBackgrounded is true.
+    /// launcher's "Back to Stream" CTA when nativeStreamBackgrounded is true.
     public func resumeStreamWindow() {
         Task { [weak self] in
             await self?.nativeSession?.resumeWindow()

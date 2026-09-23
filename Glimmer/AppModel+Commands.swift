@@ -103,7 +103,7 @@ extension AppModel {
         guard let id = info[CommandChannel.Key.id],
               let decision = CommandChannel.decide(
                 info, handled: &Self.handledCommandIDs, hosts: hosts,
-                streamingFrom: Self.commandStreamHostID ?? (isStreaming ? lastLaunchAttempt?.host.id : nil))
+                streamingFrom: Self.commandStreamHostID ?? streamingHostID)
         else { return }
         switch decision {
         case .stream(let app, let host, let takeover):
@@ -228,13 +228,10 @@ extension AppModel {
     }
 
     /// Ends whatever the PC is running without streaming into it: /cancel
-    /// over the pinned connection, then a fresh readiness poll.
+    /// over the pinned connection, then a fresh readiness poll. Without a pin
+    /// the request refuses before sending anything.
     func quitRunningApp(on host: Host) async throws {
-        let info = nativeServerInfo(for: host)
-        guard info.serverCertPEM != nil else {
-            throw StreamError.pairingFailed("\(host.displayName) isn't paired with this Mac.")
-        }
-        let client = NetworkClient(server: info)
+        let client = NetworkClient(server: nativeServerInfo(for: host))
         defer { restartHostStatusPolling() }
         do {
             try await client.cancel()
@@ -248,5 +245,12 @@ extension AppModel {
             await client.shutdown()
             throw error
         }
+    }
+
+    /// A failed quit in the launcher: the refusal reads as the command line
+    /// prints it, anything else as a failed connect does.
+    static func quitFailureMessage(for error: Error, hostName: String) -> String {
+        if case .launchFailed(let detail) = error as? StreamError { return detail }
+        return connectFailureBanner(for: error, hostName: hostName)
     }
 }

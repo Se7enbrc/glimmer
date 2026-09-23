@@ -1,8 +1,8 @@
 //
 //  ContentView+Menus.swift
 //
-//  The shared per-host menu (Rename / Codec / Wake on LAN / Pair Again / Unpair): the
-//  right-click menu on the hero card and Settings' PCTile, and the tile's
+//  The shared per-host menu (Rename / Codec / Wake on LAN / Pair Again / Quit / Unpair):
+//  the right-click menu on the hero card and Settings' PCTile, and the tile's
 //  visible menu button. The menu bar item's panel lives in MenuBarPanel.swift.
 //
 
@@ -12,7 +12,7 @@ import SwiftUI
 // MARK: - Shared per-host menu
 
 /// Actions for a paired host, one item list for the right-click menu and the
-/// visible menu button. Carries its own confirmation dialog + rename alert;
+/// visible menu button. Carries its own dialogs, alerts and pair sheet;
 /// needs the AppModel in the environment.
 private struct HostContextMenu: ViewModifier {
     let host: Host
@@ -24,12 +24,21 @@ private struct HostContextMenu: ViewModifier {
     @State private var showPairAgain = false
     @State private var draftName = ""
     @State private var codecPref: HostCodecPreference
+    /// The app the Quit item named when it was chosen; nil when the PC didn't say.
+    @State private var quitApp: String?
+    @State private var showQuitConfirm = false
+    @State private var quitFailure: String?
+    private var quitName: String { quitApp ?? "the running app" }
 
     init(host: Host, asButton: Bool) {
         self.host = host
         self.asButton = asButton
         _codecPref = State(initialValue: HostCodecPreference.load(for: host.id))
     }
+
+    /// Unpairing or re-pairing the PC mid-stream would pull its pin out from
+    /// under the live session.
+    private var isStreamingThisPC: Bool { model.streamingHostID == host.id }
 
     func body(content: Content) -> some View {
         Group {
@@ -67,6 +76,22 @@ private struct HostContextMenu: ViewModifier {
             Text("Shown in the launcher and PC list. Leave it empty to show the PC's own name.")
         }
         .confirmationDialog(
+            "Quit \(quitName) on \(host.displayName)?",
+            isPresented: $showQuitConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Quit \(quitApp ?? "App")", role: .destructive) { quitRunningApp() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Anything unsaved in \(quitName) will be lost.")
+        }
+        .alert("Couldn't quit \(quitName)", isPresented: Binding(
+            get: { quitFailure != nil }, set: { if !$0 { quitFailure = nil } })) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(quitFailure ?? "")
+        }
+        .confirmationDialog(
             "Unpair \(host.displayName)?",
             isPresented: $showUnpairConfirm,
             titleVisibility: .visible
@@ -74,7 +99,7 @@ private struct HostContextMenu: ViewModifier {
             Button("Unpair", role: .destructive) { model.unpair(host) }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Glimmer will forget this PC and leave a clean state. You can pair again at any time.")
+            Text("Glimmer will forget \(host.displayName). You can pair it again at any time.")
         }
         // Pre-filled so it lands on the PIN step; pairing re-pins the PC's certificate.
         .sheet(isPresented: $showPairAgain) {
@@ -104,26 +129,47 @@ private struct HostContextMenu: ViewModifier {
         // Several surfaces mount this menu; reload at present-time so a
         // change on one is reflected in the other's checkmark.
         .onAppear { codecPref = HostCodecPreference.load(for: host.id) }
-        // Wake on LAN needs the MAC Sunshine reports; without one the
-        // switch is shown off and disabled so the reason is visible.
+        // Wake on LAN needs the MAC Sunshine reports; without one the switch
+        // is off and disabled, and its title says why.
+        let hasMac = WakeOnLAN.normalizeMac(host.macAddress) != nil
         Toggle(isOn: Binding(
-            get: { host.wakeOnLAN && WakeOnLAN.normalizeMac(host.macAddress) != nil },
+            get: { host.wakeOnLAN && hasMac },
             set: { model.setWakeOnLAN(host, enabled: $0) })) {
-            Label("Wake on LAN", systemImage: "powersleep")
+            Label(hasMac ? "Wake on LAN" : "Wake on LAN (PC hasn't reported its network address)",
+                  systemImage: "powersleep")
         }
-        .disabled(WakeOnLAN.normalizeMac(host.macAddress) == nil)
-        .help("Wakes this PC before connecting when it is asleep. Works on your home network; "
-            + "over a VPN it depends on your router, and over Tailscale it can't reach the PC.")
+        .disabled(!hasMac)
         Divider()
         Button {
             showPairAgain = true
         } label: {
             Label("Pair Again…", systemImage: "key")
         }
+        .disabled(isStreamingThisPC)
+        // Only while the chip says an app is running; `app` is nil when the PC didn't name it.
+        if !isStreamingThisPC, case .streamingElsewhere(let app) = model.polledChip(for: host) {
+            Button {
+                quitApp = app
+                showQuitConfirm = true
+            } label: {
+                Label("Quit \(app ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
+            }
+        }
         Button(role: .destructive) {
             showUnpairConfirm = true
         } label: {
             Label("Unpair…", systemImage: "minus.circle")
+        }
+        .disabled(isStreamingThisPC)
+    }
+
+    private func quitRunningApp() {
+        Task {
+            do {
+                try await model.quitRunningApp(on: host)
+            } catch {
+                quitFailure = AppModel.quitFailureMessage(for: error, hostName: host.displayName)
+            }
         }
     }
 }
