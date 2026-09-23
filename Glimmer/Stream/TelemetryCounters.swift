@@ -174,13 +174,13 @@ final class TelemetryCounters: @unchecked Sendable {
     //      below any hot-path budget; see TelemetrySessionEvents.swift. ----
     //
     /// RECONNECT count (signal: lifecycle): incremented each time a session
-    /// re-establishes its connection after a drop within the same run. The
-    /// climb-then-recover pattern that a single "connected" gauge can't show.
+    /// re-establishes its connection in place after a drop. Per session; an
+    /// in-place reconnect's own reset keeps it (`resetForReconnect`).
     let reconnectTotal = Counter()
     /// WAKE count (signal: lifecycle): incremented each time the Mac wakes from
-    /// sleep while a stream is live. Run-global (NOT reset per session, like
-    /// `reconnectTotal`); a climb here that precedes a reconnect/disconnect marks
-    /// the wake-on-different-AP stale-link case.
+    /// sleep while a stream is live. Per session like `reconnectTotal`; a climb
+    /// here that precedes a reconnect/disconnect marks the wake-on-different-AP
+    /// stale-link case.
     let wakeTotal = Counter()
     /// ROUTE-CHANGE count (signal: lifecycle): incremented each time the stream's
     /// egress route/link-class flips (the WiFiTelemetry route-change edge that

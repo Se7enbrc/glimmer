@@ -87,7 +87,7 @@ extension TelemetryRenderer {
     private static func ndjsonSessionLifecycle(_ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot) {
         if let handshake = snap.handshake {
             builder.add("handshake_rtsp_ms", handshake.rtspMs)
-            builder.add("handshake_pairing_ms", handshake.pairingMs)
+            builder.add("handshake_control_setup_ms", handshake.controlSetupMs)
             builder.add("handshake_enet_connect_ms", handshake.enetConnectMs)
             builder.add("handshake_first_frame_ms", handshake.firstFrameMs)
             builder.add("handshake_total_ms", handshake.totalMs)

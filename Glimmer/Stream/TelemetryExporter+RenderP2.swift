@@ -35,9 +35,9 @@ extension TelemetryRenderer {
         builder.emit("glimmer_handshake_rtsp_ms",
                      "RTSP/SDP handshake duration this session, ms (connect breakdown).",
                      handshake.rtspMs)
-        builder.emit("glimmer_handshake_pairing_ms",
-                     "Pairing/auth leg (RTSP-done → ENet-connect start) this session, ms.",
-                     handshake.pairingMs)
+        builder.emit("glimmer_handshake_control_setup_ms",
+                     "Control-channel setup (RTSP-done → ENet-connect start) this connect, ms.",
+                     handshake.controlSetupMs)
         builder.emit("glimmer_handshake_enet_connect_ms",
                      "ENet control-channel connect (CONNECT → START_A/B ACKed) this session, ms.",
                      handshake.enetConnectMs)

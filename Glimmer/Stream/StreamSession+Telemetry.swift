@@ -67,21 +67,23 @@ extension StreamSession {
             + "marker (client-only; never sent to the host).", TelemetryExporter.logCategory)
     }
 
-    /// Reset ALL session-scoped telemetry state + anchor the P2 CONNECT-HANDSHAKE
-    /// timeline, at the connect START edge - BEFORE `startConnection` spins the
-    /// receivers up. The reset lives HERE, not in the exporter's `start()`
-    /// (which runs only once the connection is established): a warm host's
-    /// audio latches its one-shot TTF mid-handshake, so an exporter-time reset
-    /// ran AFTER the latch - wiping the fresh record from the scorecard while
-    /// the pre-reset latch had already served the PRIOR session's values into
-    /// the event row (the chimeric byte-identical connect_to_decoded_ms).
-    /// Resetting at this edge makes every one-shot latch (audio TTF, first-
-    /// packet gauge, the socket-open fallback anchor) start clean before any
-    /// receiver can race it. Always-live; when telemetry is off nothing reads
-    /// the state, so this is a few harmless stores at the rarest site there is
-    /// (one connect).
+    /// Reset telemetry and anchor the P2 handshake timeline at the connect START
+    /// edge, before any receiver can latch a one-shot. A session's first connect
+    /// resets everything; an in-place reconnect keeps the totals and first handshake.
     func anchorTelemetryConnectStart(hostAddress: String) {
-        TelemetryCounters.shared.resetForNewSession()
+        let counters = TelemetryCounters.shared
+        let now = TelemetryCounters.monotonicNowNanos()
+        if isReconnecting {
+            counters.p2.anchorReconnect(
+                now, audioTtfMs: counters.audioFirstPacketMs, audioTtf: counters.audioTtf.latched)
+            counters.resetForReconnect()
+        } else {
+            counters.resetForNewSession()
+            counters.p2.reset()
+            counters.p2.anchorConnectStart(now)
+            // Isolates the launch-path leg (click → connect-start); no-op without a click.
+            ConnectTimingTelemetry.shared.markConnectStart()
+        }
         // Open the Diag file sink HERE - at connect-start, before
         // startConnection runs the RTSP/ENet handshake - so the handshake and
         // the `RTSP negotiated codec=...` line land in the file and get shipped.
@@ -96,13 +98,6 @@ extension StreamSession {
         // the exporter is built long after the address is known, so the
         // connect edge hands it over (one String store, always-live).
         StreamRouteProbe.latchHost(hostAddress)
-        let p2 = TelemetryCounters.shared.p2
-        p2.reset()
-        p2.anchorConnectStart(TelemetryCounters.monotonicNowNanos())
-        // Mark connect-start on the click latch too, to isolate the launch-path
-        // leg (click → connect-start). The click was anchored earlier, in
-        // stream(); this measures the gap. No-op if telemetry never anchored.
-        ConnectTimingTelemetry.shared.markConnectStart()
     }
 
     /// Called only from GENUINE teardown (user stop / watchdog / connect failure).

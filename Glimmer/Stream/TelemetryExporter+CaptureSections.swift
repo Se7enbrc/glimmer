@@ -257,7 +257,7 @@ extension TelemetryExporter {
             fields.append("\"\(key)\":\(TelemetryRenderer.jsonNumber(value))")
         }
         add("rtsp_ms", breakdown.rtspMs)
-        add("pairing_ms", breakdown.pairingMs)
+        add("control_setup_ms", breakdown.controlSetupMs)
         add("enet_connect_ms", breakdown.enetConnectMs)
         add("first_frame_ms", breakdown.firstFrameMs)
         add("total_ms", breakdown.totalMs)

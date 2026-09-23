@@ -411,9 +411,9 @@ extension TelemetryExporter {
                         Double(now.uptimeNanoseconds &- foldedAt.uptimeNanoseconds) / 1_000_000_000.0
                     if foldDt > 0.05 { snap.packetsPerSecond = Double(packetsDelta) / foldDt }
                 }
-                // Guard each delta against a reset/wrap: resetForNewSession zeroes
-                // the totals mid-run, so emit only across a monotonic window (the
-                // prev rebaselines below regardless) - else &- renders a 2^64 spike.
+                // Guard each delta against a counter reset/wrap: emit only across a
+                // monotonic window (the prev rebaselines below regardless) - else &-
+                // renders a 2^64 spike.
                 if inputEventsTotal >= prevInputEventsTotal {
                     snap.inputEventsPerSecond = Double(inputEventsTotal &- prevInputEventsTotal) / dt
                 }

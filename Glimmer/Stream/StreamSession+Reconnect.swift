@@ -137,7 +137,7 @@ extension StreamSession {
                 reconnectAttempts = 0
                 // Count the genuine reconnect HERE. The established-edge inference
                 // (markEstablishedReportingReconnect) can't: reconnectInPlace re-runs
-                // connectBackend → anchorTelemetryConnectStart → p2.reset(), which
+                // connectBackend → anchorTelemetryConnectStart → p2.anchorReconnect(), which
                 // wipes the established memory before the fresh edge fires, so that
                 // path always reads the reconnect as a first connect. This site is
                 // the unambiguous "a drop was silently recovered" signal.

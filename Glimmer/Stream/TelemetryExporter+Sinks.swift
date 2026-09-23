@@ -37,7 +37,7 @@ extension TelemetryExporter {
             Double(now.uptimeNanoseconds &- connectInstant.uptimeNanoseconds) / 1_000_000_000.0
         // Final cumulative histograms (session-wide) for the percentiles. nil if
         // the latency rig never recorded a frame this session.
-        let histograms = FrameTimingTracker.shared?.histograms.snapshot()
+        let tracker = FrameTimingTracker.shared
         let report = SessionReport(
             sessionId: sessionId,
             client: TelemetryRenderer.clientNameRaw,
@@ -47,8 +47,12 @@ extension TelemetryExporter {
             generatedISO8601: isoFormatter.string(from: Date()),
             durationSeconds: durationSeconds,
             aggregate: sessionAggregate,
-            histograms: histograms,
-            counters: counters)
+            histograms: tracker?.histograms.snapshot(),
+            counters: counters,
+            sessionWideStages: tracker.map { [
+                ("input_deliver", $0.inputDeliverLatency.snapshotValue()),
+                ("input_queue_to_wire", $0.inputLocalLatency.snapshotValue())
+            ] } ?? [])
         let json = report.renderJSON()
         let reportURL = ndjsonURL
             .deletingLastPathComponent()

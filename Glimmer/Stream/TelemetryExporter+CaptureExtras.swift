@@ -69,9 +69,9 @@ extension TelemetryExporter {
         if let prev = prevCaptureTime {
             let dt = Double(now.uptimeNanoseconds &- prev.uptimeNanoseconds) / 1_000_000_000.0
             if dt > 0.05 {
-                // Guard each delta against a reset/wrap: resetForNewSession zeroes
-                // the totals mid-run, so emit only across a monotonic window (skip
-                // + rebaseline below otherwise) - else &- renders a ~2^64 spike.
+                // Guard each delta against a counter reset/wrap: emit only across a
+                // monotonic window (skip + rebaseline below otherwise) - else &-
+                // renders a ~2^64 spike.
                 if overTargetTotal >= baselines.pacerOverTargetReleaseTotal {
                     extras.pacerOverTargetReleasesPerSecond =
                         Double(overTargetTotal &- baselines.pacerOverTargetReleaseTotal) / dt
