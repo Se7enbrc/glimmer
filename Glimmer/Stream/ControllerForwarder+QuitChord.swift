@@ -4,7 +4,7 @@
 //  Controller-side quit-chord matching, the hold-to-quit dwell, and the
 //  shared held-buttons reader. Topic split from ControllerForwarder.swift
 //  (file-length budget): the chord predicate, the dwell that makes the
-//  "Hold to leave the stream" label honest, and the button-set helper are one
+//  "Hold to stop streaming" label honest, and the button-set helper are one
 //  self-contained unit consumed by pushControllerState
 //  (ControllerForwarder.swift) and the Settings capture sheet. Internal (not
 //  private) is the split's access cost - the InputForwarder stored-property
@@ -116,7 +116,7 @@ extension InputForwarder {
     // MARK: - Hold-to-quit dwell
 
     /// How long the chord must stay FULLY held before the stream ends. The
-    /// Settings picker is labeled "Hold to leave the stream" and its footnote
+    /// Settings picker is labeled "Hold to stop streaming" and its footnote
     /// says "Hold these buttons simultaneously..." - the mechanism has to honour
     /// that promise. Without a dwell the chord fired on the FIRST coincident
     /// frame, so with the .l1r1 option any in-game moment where both

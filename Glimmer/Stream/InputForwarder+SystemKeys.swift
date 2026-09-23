@@ -1,7 +1,7 @@
 //
 //  InputForwarder+SystemKeys.swift
 //
-//  "Use ⌘ shortcuts inside the game": while the stream holds the pointer, the
+//  "Send ⌘ to the PC as the Windows key": while the stream holds the pointer, the
 //  Mac's global hotkeys are off and ⌘ key equivalents go to the PC, the way
 //  SDL's keyboard grab works for moonlight.
 //
