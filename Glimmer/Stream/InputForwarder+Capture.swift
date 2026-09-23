@@ -61,13 +61,13 @@ extension InputForwarder {
     //     zoom/swipe handlers.
     //   * Accessibility Zoom's ⌥⌘8/=/- are global hotkeys the app never sees,
     //     except while ⌘ shortcuts go to the game (global hotkeys off, see
-    //     GlobalHotKeys below); then handleKeyDown swallows them.
+    //     GlobalHotKeys below); then they go to the PC like any other ⌘ chord.
     //   * Hot corners (Mission Control etc.): under associate-false the OS does
     //     not move the cursor, so it can never reach a corner - the warp's old
     //     job is gone entirely (warpCursorIfNearEdge deleted).
     //   * Ctrl+scroll Accessibility Zoom: this is interlocked at the
     //     WindowServer/SkyLight layer BELOW NSEvent dispatch, so neither the
-    //     monitor above nor the chord swallow can cancel it. With the cursor
+    //     monitor above nor any key handler can cancel it. With the cursor
     //     associate-false the scroll still reaches us as a relative event; the
     //     documented non-freezing replacement remains the kCGAnnotatedSession-
     //     EventTap escalation scoped in the diagnostic-tap comment below (a
