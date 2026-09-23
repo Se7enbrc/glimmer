@@ -255,16 +255,28 @@ Turning the toggle on applies to the next stream, not the running one.
 
 When enabled, a stream writes to `~/Library/Logs/Glimmer/`:
 
-- `telemetry-<timestamp>.ndjson` - per-second stream metrics;
-- `telemetry-session-<timestamp>.json` - a one-shot session scorecard;
-- `telemetry-frames-<timestamp>.ndjson` - the per-frame trace, segmented;
-- `glimmer-<timestamp>.log` - a richer per-session diagnostic log.
+- `telemetry-<timestamp>.ndjson`: per-second stream metrics, plus event rows
+  (bookmarks, video gaps, loss episodes, key frames);
+- `telemetry-session-<timestamp>.json`: a one-shot session scorecard;
+- `telemetry-frames-<timestamp>.ndjson`: the per-frame trace plus every input
+  event sent (`input_mouse`, `input_mouse_abs`, `input_pad`, `input_motion`,
+  `input_scroll`), segmented. Motion is sampled at 20 Hz per sensor; keyboard
+  keys are never recorded;
+- `glimmer-<timestamp>.log`: a richer per-session diagnostic log.
 
 The exporter also serves the per-second metrics on a local Prometheus endpoint,
 which is what a maintainer-local dashboard rig would scrape. No such rig is in
 this repository and nothing in the app depends on one; the NDJSON and the
-scorecard are the portable, self-contained way to analyze a session. Old files
-are swept against a byte budget, so the directory does not grow without bound.
+scorecard are the portable, self-contained way to analyze a session.
+
+Old files are pruned in two passes. At every launch, whatever the setting, any
+file in the directory older than 14 days is deleted. At the start of each
+diagnostics session, the per-frame traces and per-second files are trimmed to a
+300 MB budget: trace segments before per-second files, oldest first, the most
+recent session last. Scorecards and diagnostic logs only ever age out. The
+budget is enforced before the new session's files exist, so the session being
+recorded can exceed it; its trace keeps the first segment and the newest three,
+up to about 384 MB.
 
 Press **⌃B** during a stream to drop a timestamped "that felt bad" bookmark into
 the telemetry. The chord is intercepted only while telemetry is on; otherwise
@@ -274,6 +286,68 @@ template asks for.
 
 `make enable-telem` / `make disable-telem` flip the same preference from the
 command line.
+
+### "A movement or press I didn't make"
+
+Press **⌃B** as soon as it happens. Besides the per-second file, the bookmark
+lands in the frame trace as an `"event":"bookmark"` row on the same clock as the
+input rows (`t_ms`, milliseconds of Mac uptime). The input rows just before it
+show what Glimmer sent: a stray `input_mouse` delta, an `input_pad` button mask
+that changed, or an `input_scroll` whose `sent_y` differs from what macOS
+delivered (`dy`, `units_y`). If no row is there, the event never left the Mac.
+
+```sh
+cd ~/Library/Logs/Glimmer
+# Input rows in the ~400 trace lines (about 2 s at 120 fps) before each bookmark:
+grep -h -B 400 '"event":"bookmark"' telemetry-frames-<timestamp>*.ndjson |
+    grep -E '"event":"(input_|bookmark)'
+```
+
+### "Video freezes for a moment on Wi-Fi"
+
+Each per-second row carries the radio (`wifi_rssi_dbm`, `wifi_tx_rate_mbps`,
+`wifi_channel`, `wifi_band`), whether the Wi-Fi helper had AWDL parked
+(`awdl_suppressing`), and how many datagrams the kernel dropped at a full socket
+buffer (`udp_fullsock_delta`). A `video_gap` event row marks every video arrival
+gap over 100 ms. If `udp_fullsock_delta` stays 0 through a gap, the packets were
+lost before they reached the Mac.
+
+To see what the radio was doing at that moment, turn on airportd's Wi-Fi debug
+logging before the stream, press **⌃B** at each freeze, then read airportd's log
+around the `video_gap` and bookmark times. Rows stamp `ts` in UTC, so pass the
+same times with a `+0000` offset:
+
+```sh
+sudo wdutil log +wifi      # before the stream
+# ...stream, press ⌃B at each freeze...
+log show --info --debug --timezone UTC --predicate 'process == "airportd"' \
+    --start '2026-01-01 20:31:40+0000' --end '2026-01-01 20:32:20+0000'
+sudo wdutil log -wifi      # afterwards; debug logging is chatty
+```
+
+Look for a scan, roam, channel switch or power-save change in the second before
+each gap.
+
+### Hidden defaults
+
+These have no Settings row. Each lives in the app's defaults domain
+(`defaults write io.ugfugl.Glimmer <key> -bool YES` or `-float N`;
+`defaults delete io.ugfugl.Glimmer <key>` restores the default) and applies from
+the next stream. The `pacerTick*` and `cruise*` keys are escape hatches for
+chasing a regression, not tuning advice.
+
+| Key                      | Type, default | Effect                                                                                                                                    |
+| ------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `bitrateBoostWifi`       | float, 1.5    | Highest quality's multiplier on the Wi-Fi bitrate ask. The Wi-Fi cap and the radio gate still apply.                                      |
+| `hidGamepadClaimAll`     | bool, NO      | The raw-HID gamepad path also takes pads GameController owns, to exercise it without unusual hardware.                                    |
+| `telemetryListenLAN`     | bool, NO      | Serves the Prometheus endpoint (port 9847) on every interface instead of loopback, so anyone on your network can read it.                 |
+| `diagFileLogDebug`       | bool, NO      | Debug lines in `glimmer-<timestamp>.log` too. Same as the Verbose session log file toggle in the hidden Telemetry section.                |
+| `pacerTickOffMain`       | bool, YES     | NO moves the present tick back onto the main run loop.                                                                                    |
+| `pacerTickRealtime`      | bool, YES     | NO drops the tick thread's real-time scheduling.                                                                                          |
+| `cruiseTraversalEnabled` | bool, NO      | Boosts fast mouse flicks on streams wider than 1920 pixels. Off because aim and flicks overlap in speed.                                  |
+| `cruiseVKnee`            | float, 1100   | Cruise: below this speed (HID counts per second) the gain is exactly 1.                                                                   |
+| `cruiseVFull`            | float, 1800   | Cruise: from this speed the full gain (stream width ÷ 1920) applies.                                                                      |
+| `cruiseDragDeltaScale`   | float, 1.35   | Scales dragged-mouse deltas while raw aim is on, since macOS damps them. 1.0 turns it off; clamped to 0.5 to 3.0. Applies without cruise. |
 
 ## Other Instruments templates worth knowing
 
