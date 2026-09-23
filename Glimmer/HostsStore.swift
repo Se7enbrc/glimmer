@@ -399,11 +399,13 @@ extension AppModel {
     }
 
     /// Every write to `selectedHost` lands here. A different PC (a switch, an unpair,
-    /// the launch-time load) gets a fresh chip and poll; the route monitor moves
-    /// only on a real address change, since monitor() drops the PHY samples.
+    /// the launch-time load) gets a fresh chip, wake state and poll; the route monitor
+    /// moves only on a real address change, since monitor() drops the PHY samples.
     func selectionChanged(from old: Host?) {
         if old?.id != selectedHost?.id {
             hostLiveStatus = nil
+            wakeFailedHostID = nil
+            wakeFailureReason = nil
             restartHostStatusPolling()
         }
         if old.map(Self.routeAddress) != selectedHostRouteAddress { refreshHostRoute() }

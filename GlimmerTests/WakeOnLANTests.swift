@@ -2,9 +2,11 @@
 //  WakeOnLANTests.swift
 //
 //  The wake packet and where it goes: MAC normalisation (zeroed or malformed
-//  fails closed), the 102-byte magic packet, and the target list.
+//  fails closed), the 102-byte magic packet, the target list, and what a wake
+//  that sent nothing reports.
 //
 
+import Foundation
 import Testing
 @testable import Glimmer
 
@@ -53,5 +55,24 @@ struct WakeOnLANTests {
         let targets = WakeOnLAN.targets(hostAddresses: ["255.255.255.255"], broadcasts: [])
         #expect(targets.count == 1)
         #expect(targets[0].ports == [9, 47009])
+    }
+
+    private func tower(mac: String) -> Glimmer.Host {
+        Glimmer.Host(id: "tower", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
+                     apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, gfeVersion: nil, macAddress: mac)
+    }
+
+    @MainActor @Test func aWakeThatSendsNothingStopsAtOnce() async {
+        let started = Date()
+        let outcome = await AppModel().sendWakeAndWait(tower(mac: "aa:bb:cc:dd:ee:ff"), waitSeconds: 90) { _, _ in 0 }
+        #expect(outcome == .couldNotSend)
+        #expect(outcome.failureReason == .couldNotSend)
+        #expect(Date().timeIntervalSince(started) < 5)
+    }
+
+    @MainActor @Test func aPCWithoutAMacIsNotWoken() async {
+        let outcome = await AppModel().sendWakeAndWait(tower(mac: "00:00:00:00:00:00"), waitSeconds: nil) { _, _ in 1 }
+        #expect(outcome == .noMac)
+        #expect(outcome.failureReason == nil)
     }
 }

@@ -106,10 +106,14 @@ struct HostsStoreTests {
         model.selectedHost = Self.host("tower", address: "192.0.2.10")
         model.hostLiveStatus = HostLiveStatus(hostID: "tower", state: .idle, rttMs: 3,
                                               sunshineVersion: "2026.1", capturedAt: Date())
+        model.wakeFailedHostID = "tower"
+        model.wakeFailureReason = .noAnswer
         let towerPoll = model.hostStatusTask
         // What loadHosts does once tower is unpaired.
         model.selectedHost = Self.host("den", address: "192.0.2.20")
         #expect(model.hostLiveStatus == nil)
+        #expect(model.wakeFailedHostID == nil)
+        #expect(model.wakeFailureReason == nil)
         #expect(model.hostStatusTask != nil)
         #expect(model.hostStatusTask != towerPoll)
     }

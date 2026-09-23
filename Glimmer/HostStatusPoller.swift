@@ -151,8 +151,12 @@ extension AppModel {
 
         case .reachable(let rttMs):
             // Host answered → clear the unreachable streak so a later transient
-            // miss starts counting from zero again.
+            // miss starts counting from zero again, and any stale wake failure.
             hostUnreachableStreak = 0
+            if wakeFailedHostID == snap.id {
+                wakeFailedHostID = nil
+                wakeFailureReason = nil
+            }
             // Step 2: now that we know the host is up, ask /serverinfo who
             // it is and whether it's busy. We do this on a fresh
             // NetworkClient per poll - the client is cheap to construct and
