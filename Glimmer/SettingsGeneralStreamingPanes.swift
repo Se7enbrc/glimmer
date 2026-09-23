@@ -242,11 +242,22 @@ struct QualityPane: View {
                 }
                 .pickerStyle(.segmented)
                 .help("Highest quality asks for the most the link can carry: twice the usual bitrate over Ethernet, "
-                    + "half as much again over Wi-Fi, always held to what the radio is doing. "
-                    + "Bandwidth saver keeps the lighter ask.")
+                    + "or half as much again over Wi-Fi, held to what the radio is doing. "
+                    + "Bandwidth saver asks for the usual bitrate.")
             } footer: {
-                Text("Highest quality spends more bits on every frame, which is where grain comes from. "
-                    + "Bandwidth saver keeps the lighter ask. Applies next stream.")
+                Text("Highest quality gives every frame more bits, which keeps fine detail from turning to grain. "
+                    + "Bandwidth saver uses less. Applies next stream.")
+            }
+
+            // One HDR switch for every preset, on by default; off asks the PC
+            // for SDR. Read at session start, like Bandwidth.
+            Section {
+                Toggle("HDR", isOn: $model.streamHDR)
+                    .toggleStyle(.switch)
+                    .help("Sends a 10-bit high-dynamic-range stream when the PC and this display both support it. "
+                        + "Off asks the PC for SDR.")
+            } footer: {
+                Text("Brighter highlights, deeper color (needs HDR on the PC and this display). Applies next stream.")
             }
 
             // Notch coverage in its own compact card. DEFAULT ON: full-panel
@@ -345,15 +356,12 @@ struct QualityPane: View {
                     // is two questions we can answer better ourselves from the
                     // measured anchors (AppModel.measuredBitrateAnchors). The
                     // resulting figure is in the next-stream summary below.
-                    Toggle("Brighter highlights, deeper color (needs HDR on host and display)",
-                           isOn: $model.streamHDR)
-                        .help("HDR - sends a 10-bit high-dynamic-range stream when the host and this display both support it.")
                     HStack {
                         Text("Currently driving: \(model.currentDisplayDescription)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Use native resolution") {
+                        Button("Use Native Resolution") {
                             model.snapCustomToDisplay()
                         }
                         .buttonStyle(.borderless)
