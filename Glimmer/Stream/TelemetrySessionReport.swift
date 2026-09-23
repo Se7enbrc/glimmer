@@ -399,6 +399,7 @@ struct SessionReport {
             ("audio_fec_recovered", counters.audioFecRecoveredTotal.value),
             ("audio_fec_mismatch", counters.audioFecMismatchTotal.value),
             ("audio_underrun", counters.audioUnderrunTotal.value),
+            ("audio_underrun_deadair", counters.audioUnderrunDeadairTotal.value),
             ("audio_overrun", counters.audioOverrunTotal.value),
             ("audio_trim", counters.audioTrimTotal.value),
             ("audio_receive_failed", counters.audioReceiveFailedTotal.value),

@@ -386,6 +386,7 @@ extension AudioDecoder {
         // target - without it a fill hugging a flat ceiling is indistinguishable
         // from the old disguised-permanent-give-up re-pin.
         let targetMs = playoutTargetMs
+        let cushionMaxMs = effectiveCushionMaxMs
         // Engage the drift resampler only in steady playout - the SAME gate the trim
         // uses (Meter trim path). During pre-roll / re-prime / drain the rebuild
         // machinery owns recovery and driveResampler slews the rate back to 1.0.
@@ -451,7 +452,8 @@ extension AudioDecoder {
                 resamplerPpm: appliedPpm,
                 // Engine-running mirror: 1 = AVAudioEngine up. Catches the post-
                 // reconnect "packets flow but playout dead" latch in one query.
-                engineRunning: engineUp))
+                engineRunning: engineUp,
+                cushionMaxMs: cushionMaxMs))
     }
 
     // MARK: - Playout-stall watchdog (detection + recovery)

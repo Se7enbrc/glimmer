@@ -392,8 +392,11 @@ struct AudioSnapshot: Sendable {
     var packetsLostTotal: UInt64 = 0
     /// Audio packets recovered by Reed-Solomon FEC this session (monotonic).
     var fecRecoveredTotal: UInt64 = 0
-    /// Audio packets accepted per second this window (derived from the delta).
+    /// Audio packets accepted per second this window (derived from the delta);
+    /// 0 once no receive fold has landed for `audioFoldSilenceSeconds`.
     var packetsPerSecond: Double?
+    /// Longest audio inter-arrival gap this tick (ms), counting one still open.
+    var gapMaxMs: Double?
     /// Unrecovered audio-loss rate this window (lost / expected), 0...1.
     var lossRate: Double?
     /// Audio FEC-recovery rate this window (recovered / (recovered + accepted)),
@@ -486,4 +489,7 @@ struct TelemetrySource: Sendable {
     /// is never read as a fullscreen one. Defaulted so callers that predate
     /// the mode keep compiling.
     var displayMode: String = StreamDisplayMode.defaultMode.rawValue
+    /// The negotiated stream shape and codec and the bitrate decision, for the
+    /// same config event. nil where no session built it.
+    var stream: StreamTelemetryConfig?
 }

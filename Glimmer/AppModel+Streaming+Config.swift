@@ -77,16 +77,23 @@ extension AppModel {
     /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
     /// Bandwidth saver is the lighter ask from before the boosts existed.
     func routeAskKbps(forFormats formats: VideoFormats) -> Int {
+        let decision = bitrateDecision(forFormats: formats)
+        let wiredCap = decision.mode == .highestQuality && hostRoute.routeClass == .wired
+        return Self.wireBitrateKbps(dial: decision.dialKbps, codecMultiplier: decision.codecMultiplier,
+                                    boost: decision.boost,
+                                    capKbps: wiredCap ? Self.wiredBitrateCapKbps : Self.maxBitrateKbps)
+    }
+
+    /// The inputs `routeAskKbps` multiplies, also recorded in the telemetry config event.
+    func bitrateDecision(forFormats formats: VideoFormats) -> BitrateDecision {
         var codec = Self.codecBudgetMultiplier(for: formats)
         if case .custom = qualityPreset { codec = 1 }
-        guard bitrateMode == .highestQuality else {
-            return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
-                                        boost: 1, capKbps: Self.maxBitrateKbps)
+        var boost = 1.0
+        if bitrateMode == .highestQuality {
+            boost = hostRoute.routeClass == .wired ? Self.wiredBitrateMultiplier : Self.wifiBitrateBoost
         }
-        let wired = hostRoute.routeClass == .wired
-        return Self.wireBitrateKbps(dial: effectiveBitrateKbps, codecMultiplier: codec,
-                                    boost: wired ? Self.wiredBitrateMultiplier : Self.wifiBitrateBoost,
-                                    capKbps: wired ? Self.wiredBitrateCapKbps : Self.maxBitrateKbps)
+        return BitrateDecision(mode: bitrateMode, dialKbps: effectiveBitrateKbps, codecMultiplier: codec,
+                               boost: boost, radioGatePhyMbps: hostRoute.wifiPhyRateMbps)
     }
 
     /// Pure so the rule is testable: dial × codec × boost, clamped to the floor
@@ -180,6 +187,7 @@ extension AppModel {
                 + "\(cfg.bitrateKbps / 1000) Mbps instead of \(routeAsk / 1000).", "Stream")
         }
         cfg.bitrateBoost = wiredBitrateBoost
+        cfg.bitrateDecision = bitrateDecision(forFormats: cfg.videoFormats)
         return cfg
     }
 

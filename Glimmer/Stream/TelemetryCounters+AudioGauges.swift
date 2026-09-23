@@ -105,6 +105,37 @@ extension TelemetryCounters {
     }
 }
 
+// MARK: - Audio arrival gaps (`audio_gap_max_ms`)
+
+/// The longest gap between audio datagrams each 1 Hz tick, counting one still
+/// open at the tick, so a blackout reads as it grows rather than only once it
+/// ends. The receive thread notes every arrival; the exporter takes the max.
+final class AudioArrivalGaps: Sendable {
+    static let shared = AudioArrivalGaps()
+
+    private let state = OSAllocatedUnfairLock(initialState: (lastNanos: UInt64(0), maxGapNanos: UInt64(0)))
+
+    func noteArrival(at now: UInt64) {
+        state.withLock {
+            if $0.lastNanos != 0, now > $0.lastNanos { $0.maxGapNanos = max($0.maxGapNanos, now - $0.lastNanos) }
+            $0.lastNanos = now
+        }
+    }
+
+    /// Take (and reset) this tick's longest gap in ms; nil before any audio arrived.
+    func takeMaxMs(now: UInt64) -> Double? {
+        state.withLock {
+            guard $0.lastNanos != 0 else { return nil }
+            let open = now > $0.lastNanos ? now - $0.lastNanos : 0
+            let gap = max($0.maxGapNanos, open)
+            $0.maxGapNanos = 0
+            return Double(gap) / 1_000_000
+        }
+    }
+
+    func reset() { state.withLock { $0 = (0, 0) } }
+}
+
 // MARK: - Audio-TTF context (warm/cold classification + host-idle covariate)
 
 /// The shared state behind the `audio_ttf` event's warm/cold classification and

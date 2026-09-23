@@ -123,6 +123,7 @@ extension TelemetryRenderer {
         // Receive-start failures (H7): >0 with audio dark = video-only session.
         builder.addCount("audio_receive_failed_total", extras.audioReceiveFailedTotal)
         builder.add("audio_pkts_per_s", audio.packetsPerSecond)
+        builder.add("audio_gap_max_ms", audio.gapMaxMs)
         builder.add("audio_loss_rate", audio.lossRate)
         builder.add("audio_fec_recovery_rate", audio.fecRecoveryRate)
         builder.add("audio_engine_running", audio.engineRunning.map { $0 ? 1.0 : 0.0 })
@@ -130,9 +131,11 @@ extension TelemetryRenderer {
         builder.add("audio_resampler_ppm", audio.resamplerPpm)
         builder.add("audio_buffer_fill_min_ms", audio.bufferFillMinMs)
         // The adaptive target the fill is steered toward - fill vs target is
-        // the cushion judge (base 30 / cap 150 / ceiling 190).
+        // the cushion judge - and the link's cap on it.
         builder.add("audio_playout_target_ms", extras.audioPlayoutTargetMs)
+        builder.add("audio_cushion_max_ms", extras.audioCushionMaxMs)
         builder.addCount("audio_underrun_total", audio.underrunTotal)
+        builder.addCount("audio_underrun_deadair_total", extras.audioUnderrunDeadairTotal)
         builder.addCount("audio_overrun_total", audio.overrunTotal)
         // Designed playout-backlog trims (5ms chops), split out so the overrun
         // total above stays ceiling-backstop-only.
@@ -325,6 +328,7 @@ extension TelemetryRenderer {
         builder.add("input_events_per_s", snap.inputEventsPerSecond)
         builder.add("input_flush_per_s", snap.inputFlushPerSecond)
         builder.add("input_motion_per_s", snap.inputMotionPerSecond)
+        builder.add("dualsense_hid_reports_per_s", extras.dualSenseHidReportsPerSecond)
         builder.addCount("input_idle_to_active_total", snap.inputIdleToActiveTotal)
         builder.add("input_since_last_ms", snap.timeSinceLastInputMs)
         // Host rumble RECEIVED at dispatch (pre-guard) + the invalid-drop

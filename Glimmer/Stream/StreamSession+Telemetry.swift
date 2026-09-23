@@ -49,7 +49,12 @@ extension StreamSession {
             displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() },
             // The mode the session STARTED in (a Path-B Space exit can land it
             // in a window later; the per-second rows don't re-state it).
-            displayMode: (reconnectConfig?.displayMode ?? .defaultMode).rawValue)
+            displayMode: (reconnectConfig?.displayMode ?? .defaultMode).rawValue,
+            // The decoder's setup ran during the connect, so the shape is negotiated.
+            stream: StreamTelemetryConfig(
+                width: Int(decoder.streamWidth), height: Int(decoder.streamHeight),
+                fps: Int(decoder.streamFps), codec: VideoDecoder.codecLabel(for: decoder.streamVideoFormat),
+                bitrate: reconnectConfig?.bitrateDecision))
 
         guard let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: serverName) else {
             // Gate off - the default. Nothing allocated, nothing started.
@@ -79,6 +84,8 @@ extension StreamSession {
             counters.resetForReconnect()
         } else {
             counters.resetForNewSession()
+            // A reconnect keeps it: the audio gap across the drop is real.
+            AudioArrivalGaps.shared.reset()
             counters.p2.reset()
             counters.p2.anchorConnectStart(now)
             // Isolates the launch-path leg (click → connect-start); no-op without a click.

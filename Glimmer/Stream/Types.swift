@@ -42,6 +42,8 @@ public struct StreamConfig: Sendable {
     /// The wired boost folded into `bitrateKbps` (1 = none), so the connect-time
     /// gate can withdraw it when the measured path says a Wi-Fi hop is present.
     public var bitrateBoost: Double = 1
+    /// How `bitrateKbps` was chosen, for the telemetry config event only.
+    public var bitrateDecision: BitrateDecision?
     public var remoteness: Remoteness = .auto
     /// Default to whatever the system default-output device can render
     /// natively (stereo / 5.1 / 7.1). The host will downmix if it doesn't
@@ -107,6 +109,17 @@ public struct StreamConfig: Sendable {
         self.fps = fps
         self.bitrateKbps = bitrateKbps
     }
+}
+
+/// The inputs of the launcher's bitrate ask: Settings › Quality › Bandwidth, the
+/// quality dial, the multipliers applied to it, and the Wi-Fi PHY rate that capped it.
+public struct BitrateDecision: Sendable {
+    public var mode: BitrateMode
+    public var dialKbps: Int
+    public var codecMultiplier: Double
+    public var boost: Double
+    /// The median Wi-Fi PHY rate the ask was capped against; nil off Wi-Fi.
+    public var radioGatePhyMbps: Double?
 }
 
 public enum Remoteness: Sendable {

@@ -222,5 +222,6 @@ extension RtpAudioReceiver {
             sink?.noteArrivalGap(nanos: gap)
         }
         lastDatagramArrivalNanos = now
+        AudioArrivalGaps.shared.noteArrival(at: now)
     }
 }

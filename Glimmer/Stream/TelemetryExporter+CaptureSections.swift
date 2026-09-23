@@ -18,7 +18,21 @@
 
 import Foundation
 
+/// What a session streamed: the negotiated shape and codec, and the launcher's
+/// bitrate decision. Built once at exporter start for the config event.
+struct StreamTelemetryConfig: Sendable {
+    var width: Int
+    var height: Int
+    var fps: Int
+    var codec: String
+    var bitrate: BitrateDecision?
+}
+
 extension TelemetryExporter {
+
+    /// A receive fold lands about once a second; this long without one is a
+    /// silence the row reports as 0 pkts/s rather than leaving the rate out.
+    static let audioFoldSilenceSeconds = 1.5
 
     /// Fill the P1 AUDIO block (the other stream): the monotonic receive +
     /// playout totals, the per-second rates derived from this tick's deltas, the
@@ -27,8 +41,8 @@ extension TelemetryExporter {
     /// fill and playout-target fields come from one stamp), and the one-shot
     /// cold-start first-packet time. On the exporter queue - never a hot path. The
     /// rates use the same delta-over-interval model as the video receive-quality +
-    /// stale-repeat rates; each rate is emitted only when its denominator is
-    /// non-zero so a silent (no-audio) tick doesn't publish a 0/0.
+    /// stale-repeat rates, each emitted only on a non-zero denominator (no 0/0);
+    /// pkts/s alone reads 0 once the folds stop (a blackout, not the beat).
     func fillAudio(
         into snap: inout TelemetrySnapshot, now: DispatchTime,
         state: TelemetryCounters.AudioState?
@@ -55,10 +69,10 @@ extension TelemetryExporter {
                 // totals fold once per ~1s audio-metrics window, which BEATS
                 // against this 1Hz tick (0 on some ticks, two windows on
                 // others) - divide by the true inter-fold interval instead.
-                if packetsDelta > 0, let foldedAt = Self.captureBaselines.audioPacketsCapturedAt {
+                if let foldedAt = Self.captureBaselines.audioPacketsCapturedAt {
                     let foldDt =
                         Double(now.uptimeNanoseconds &- foldedAt.uptimeNanoseconds) / 1_000_000_000.0
-                    if foldDt > 0.05 { audio.packetsPerSecond = Double(packetsDelta) / foldDt }
+                    audio.packetsPerSecond = Self.audioPacketsPerSecond(delta: packetsDelta, sinceFold: foldDt)
                 }
                 audio.underrunsPerSecond = Double(underrunTotal &- prevAudioUnderrunTotal) / dt
                 audio.overrunsPerSecond = Double(overrunTotal &- prevAudioOverrunTotal) / dt
@@ -97,6 +111,7 @@ extension TelemetryExporter {
         // - the field that proves the cushion holds above 0 (or quantifies a residual
         // drain). Independent of the last-writer-wins state gauge above.
         audio.bufferFillMinMs = counters.takeAudioBufferFillMinMs()
+        audio.gapMaxMs = AudioArrivalGaps.shared.takeMaxMs(now: now.uptimeNanoseconds)
         audio.firstPacketMs = counters.audioFirstPacketMs
 
         // Only attach the audio block once audio has actually flowed (any total or
@@ -106,6 +121,13 @@ extension TelemetryExporter {
             || audio.bufferFillMs != nil || audio.bufferFillMinMs != nil {
             snap.audio = audio
         }
+    }
+
+    /// Audio pkts/s over the true inter-fold interval: nil on a tick between two
+    /// folds (the 1 Hz beat), 0 once none has landed for `audioFoldSilenceSeconds`.
+    static func audioPacketsPerSecond(delta: UInt64, sinceFold seconds: Double) -> Double? {
+        if delta > 0 { return seconds > 0.05 ? Double(delta) / seconds : nil }
+        return seconds > audioFoldSilenceSeconds ? 0 : nil
     }
 
     /// Fill the P2 SESSION-LIFECYCLE block (handshake breakdown + reconnect /
@@ -208,7 +230,7 @@ extension TelemetryExporter {
             // resizable layer, so its present-path numbers must not be judged
             // against the fullscreen baseline without knowing.
             "\"display_mode\":\"\(TelemetryRenderer.jsonStringEscape(source.displayMode))\""
-        ] + linkGateFields + [
+        ] + linkGateFields + Self.streamConfigFields(source.stream) + [
             // The keepalive is CONDITIONAL (EnvSignalController): both cadence
             // dials + the policy flag, so the session file self-describes the
             // regimes it could run; the live per-row value is
@@ -235,11 +257,35 @@ extension TelemetryExporter {
             "\"env_shadow_mode\":\(!EnvSignalController.reconcilerEnabled)",
             "\"audio_cushion_base_ms\":\(Int(AudioDecoder.playoutCushionBaseMs))",
             "\"audio_cushion_step_ms\":\(Int(AudioDecoder.playoutCushionStepMs))",
-            "\"audio_cushion_max_ms\":\(Int(AudioDecoder.playoutCushionMaxMs))",
+            // The cap depends on the link, resolved after this line is written, so
+            // each 1 Hz row carries the effective one (audio_cushion_max_ms).
             "\"audio_overrun_ceiling_ms\":\(Int(AudioDecoder.bufferOverrunCeilingMs))",
             "\"input_idle_gap_s\":\(Int(TelemetryCounters.idleGapSeconds))"
         ]
         appendNDJSON("{" + fields.joined(separator: ",") + "}")
+    }
+
+    /// The config event's stream fields: the negotiated shape and codec, and how
+    /// the bitrate ask was built, so a session shows whether the ask was its limit.
+    static func streamConfigFields(_ stream: StreamTelemetryConfig?) -> [String] {
+        guard let stream else { return [] }
+        var fields = [
+            "\"stream_width\":\(stream.width)",
+            "\"stream_height\":\(stream.height)",
+            "\"stream_fps\":\(stream.fps)",
+            "\"codec\":\"\(TelemetryRenderer.jsonStringEscape(stream.codec))\""
+        ]
+        guard let bitrate = stream.bitrate else { return fields }
+        fields += [
+            "\"bitrate_mode\":\"\(bitrate.mode.rawValue)\"",
+            "\"bitrate_dial_kbps\":\(bitrate.dialKbps)",
+            "\"bitrate_codec_mult\":" + TelemetryRenderer.jsonNumber(bitrate.codecMultiplier),
+            "\"bitrate_boost\":" + TelemetryRenderer.jsonNumber(bitrate.boost)
+        ]
+        if let phy = bitrate.radioGatePhyMbps {
+            fields.append("\"radio_gate_phy_mbps\":" + TelemetryRenderer.jsonNumber(phy))
+        }
+        return fields
     }
 
     /// Render the one-shot CONNECT-HANDSHAKE breakdown as an explicit NDJSON EVENT

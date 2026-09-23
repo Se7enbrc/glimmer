@@ -116,5 +116,8 @@ extension TelemetryCounters {
         /// bring the engine back reads 0 here while packets still flow - the direct
         /// "playout dead" signal. nil before the engine first starts.
         var engineRunning: Bool?
+        /// The cushion cap (ms) for the resolved link (wired 150 / Wi-Fi 200 /
+        /// tunnel 300): the ceiling the target grows to, and the dead-air gap bound.
+        var cushionMaxMs: Double?
     }
 }
