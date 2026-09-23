@@ -89,9 +89,10 @@ extension VideoDecoder {
             consecutiveBacklogOverflow = 0
             lastVtDecodeFailed = false
             inFlightDecodeLock.unlock()
-            log.error(
-                // swiftlint:disable:next line_length
-                "Decode stall ESCALATION (\(backlog) in flight, VT dark \(String(format: "%.1f", vtDark))s) - abandoning wedged session, forcing recreate with this IDR")
+            log.error("""
+                Decode stall ESCALATION (\(backlog) in flight, VT dark \(String(format: "%.1f", vtDark))s) - abandoning wedged \
+                session, forcing recreate with this IDR
+                """)
             Diag.error("Video decode produced nothing for \(String(format: "%.1f", vtDark))s "
                 + "(\(backlog) frames in flight) - rebuilding the decode session in "
                 + "place with the arriving IDR", "Stream")
@@ -131,9 +132,10 @@ extension VideoDecoder {
         let streak = consecutiveBacklogOverflow
         consecutiveBacklogOverflow = 0
         inFlightDecodeLock.unlock()
-        log.warning(
-            // swiftlint:disable:next line_length
-            "Decode backlog stall (\(backlog) in flight, overflowStreak=\(streak), vtDraining=\(vtDraining)) - dropping frame, flushing to next IDR")
+        log.warning("""
+            Decode backlog stall (\(backlog) in flight, overflowStreak=\(streak), vtDraining=\(vtDraining)) - dropping frame, \
+            flushing to next IDR
+            """)
         OSSignposter.decode.emitEvent("IDRRequested", "trigger=decode_backlog_stall")
         return .dropAndFlush
     }
