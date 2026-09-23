@@ -231,10 +231,9 @@ enum ControlTransport {
     /// most, so anything past this is a broken or hostile responder.
     static let maxResponseBytes = 4 * 1024 * 1024
 
-    /// Read until peer close or `Content-Length` body bytes arrive (SO_RCVTIMEO
-    /// bounds a stuck read). A non-positive read mid-body surfaces as a distinct
+    /// Read until peer close or `Content-Length` body bytes arrive; SO_RCVTIMEO and a
+    /// per-read lifetime check bound a stuck or trickling peer. A short body is a
     /// truncatedRead, not a half-body the XML parser later calls "Malformed XML".
-    /// The lifetime is checked every read, so a trickling peer can't outlast it.
     static func readAll(fd: Int32, ssl: OpaquePointer?, lifetime: RequestLifetime) throws -> Data {
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 16 * 1024)
