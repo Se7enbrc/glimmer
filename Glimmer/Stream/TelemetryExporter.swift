@@ -455,7 +455,7 @@ final class TelemetryExporter: @unchecked Sendable {
                     // sink still runs; the stream is never affected.
                     self.log.error("""
                         Telemetry HTTP listener failed (port \(Self.port) busy?): \
-                        \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues
+                        \(error.localizedDescription, privacy: .private) - skipping HTTP, NDJSON continues
                         """)
                     Diag.warn("Telemetry HTTP endpoint unavailable (port \(Self.port) likely busy); "
                         + "NDJSON log continues.", Self.logCategory)
@@ -478,7 +478,7 @@ final class TelemetryExporter: @unchecked Sendable {
         } catch {
             log.error("""
                 Telemetry: NWListener init failed: \
-                \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues
+                \(error.localizedDescription, privacy: .private) - skipping HTTP, NDJSON continues
                 """)
         }
     }
