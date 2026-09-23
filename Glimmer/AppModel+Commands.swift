@@ -36,9 +36,40 @@ enum CommandChannel {
         static let ended = "ended"
     }
 
+    /// What the app does with one request.
+    enum Decision: Equatable {
+        case stream(LibraryApp, on: Host, takeover: Bool)
+        case rejected(String)
+        case stop
+        case notMine
+    }
+
     static func post(_ name: Notification.Name, _ info: [String: String]) {
         DistributedNotificationCenter.default().postNotificationName(
             name, object: nil, userInfo: info, deliverImmediately: true)
+    }
+
+    /// The app's rules for a request, without side effects. `handled` holds the
+    /// ids already answered, so a repeat gets nil; `streamingFrom` is the PC
+    /// this Mac is streaming from, if any.
+    static func decide(
+        _ info: [String: String], handled: inout Set<String>, hosts: [Host], streamingFrom: String?
+    ) -> Decision? {
+        guard let id = info[Key.id], let hostID = info[Key.host], handled.insert(id).inserted else { return nil }
+        switch info[Key.verb] {
+        case "stream":
+            guard streamingFrom == nil else { return .rejected("Glimmer is already streaming. Stop that stream first.") }
+            let appID = info[Key.app].flatMap { Int($0) }
+            guard let host = hosts.first(where: { $0.id == hostID }),
+                  let app = host.apps.first(where: { $0.id == appID }) else {
+                return .rejected("Glimmer doesn't know that PC or app.")
+            }
+            return .stream(app, on: host, takeover: info[Key.takeover] == "1")
+        case "quit":
+            return streamingFrom == hostID ? .stop : .notMine
+        default:
+            return nil
+        }
     }
 }
 
@@ -59,33 +90,29 @@ extension AppModel {
     }
 
     func handleCommand(_ info: [String: String]) {
-        typealias Key = CommandChannel.Key
-        guard let id = info[Key.id], let hostID = info[Key.host],
-              Self.handledCommandIDs.insert(id).inserted else { return }
-        switch info[Key.verb] {
-        case "stream":
-            loadHosts()
-            let host = hosts.first { $0.id == hostID }
-            let appID = info[Key.app].flatMap { Int($0) }
-            if let host, let app = host.apps.first(where: { $0.id == appID }), !isStreaming {
-                Diag.notice("Stream requested from the command line", "Stream")
-                selectHost(host)
-                stream(app: app, on: host, takeoverAuthorized: info[Key.takeover] == "1")
-                replyToCommand(id, CommandChannel.Event.accepted)
-                reportCommandSession(id)
-            } else {
-                let why = isStreaming ? "Glimmer is already streaming. Stop that stream first."
-                    : "Glimmer doesn't know that PC or app."
-                replyToCommand(id, CommandChannel.Event.rejected, why)
-            }
-        case "quit":
+        // A PC paired from the command line since launch is only in defaults.
+        if info[CommandChannel.Key.verb] == "stream" { loadHosts() }
+        guard let id = info[CommandChannel.Key.id],
+              let decision = CommandChannel.decide(
+                info, handled: &Self.handledCommandIDs, hosts: hosts,
+                streamingFrom: isStreaming ? lastLaunchAttempt?.host.id : nil)
+        else { return }
+        switch decision {
+        case .stream(let app, let host, let takeover):
+            Diag.notice("Stream requested from the command line", "Stream")
+            selectHost(host)
+            stream(app: app, on: host, takeoverAuthorized: takeover)
+            replyToCommand(id, CommandChannel.Event.accepted)
+            reportCommandSession(id)
+        case .rejected(let why):
+            replyToCommand(id, CommandChannel.Event.rejected, why)
+        case .stop:
             // Our own stream from that PC stops through stop(), which cancels
             // on the host and can't trigger a reconnect; a bare /cancel would.
-            let mine = isStreaming && lastLaunchAttempt?.host.id == hostID
-            if mine { stopStreamFromMenu(source: "the command line") }
-            replyToCommand(id, mine ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
-        default:
-            break
+            stopStreamFromMenu(source: "the command line")
+            replyToCommand(id, CommandChannel.Event.stopped)
+        case .notMine:
+            replyToCommand(id, CommandChannel.Event.notMine)
         }
     }
 
