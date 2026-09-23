@@ -292,13 +292,9 @@ enum StreamPathMTU {
     /// on a LAN and the configured (1392) packet size stands.
     static let standardEthernetMTU = 1500
 
-    /// Per-datagram bytes that ride ABOVE the advertised video packet payload,
-    /// budgeted worst-case so the clamp can never under-count:
-    ///   IPv6 header 40 (IPv4 is 20) + UDP 8 + RTP 12-16 + the NV video packet
-    ///   header + AES-GCM tag/IV when video encryption is on (encryption
-    ///   defaults to `.all`), plus slack for a second encapsulation.
-    /// Deliberately generous - overshooting costs a few bytes of payload per
-    /// packet; undershooting costs a fragmented packet, which is the bug.
+    /// Worst-case bytes above the video payload: IPv6 40 + UDP 8 + RTP 12-16 + the
+    /// NV header + AES-GCM tag/IV, plus a second encapsulation. Overshooting costs a
+    /// few payload bytes; undershooting fragments the packet, which is the bug.
     static let datagramOverheadBudget = 128
 
     /// moonlight-common-c's Internet packet size, and the value `SdpBuilder`
