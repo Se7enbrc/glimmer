@@ -2,11 +2,221 @@
 
 ## 2026.9.7 - Unreleased
 
+A stuck stream always shows the way out, ⌘ shortcuts and paste reach the PC, and
+video and audio recover on their own.
+
+More of macOS 27. If you set the controller Home button to defer to the app in
+System Settings › Game Controllers, the PS button now works as Guide on the PC;
+with the default setting, the Game Overlay behaves as before. Glimmer also asks
+macOS which controllers it handles itself, so a generic controller from Sony,
+Microsoft, Nintendo or Apple that macOS doesn't support now works, and a
+supported controller is no longer read twice.
+
+In full screen, shake-to-find is off and, on macOS 27, so are Hot Corners.
+
+VoiceOver announces in-stream banners when they appear or change, and in
+Settings › PCs it reads the default star as "Default PC" and says when it is
+selected. With Differentiate Without Color on, warning and critical values in
+Stream stats also turn semibold.
+
+A stream that never shows video now ends with a reason of its own: no video
+arrived, or video arrived but couldn't be decoded. The generic "ended
+unexpectedly" is no longer used for either.
+
+The way out is always on screen. The hold banner now reads "Waiting for video…",
+and if it or "Reconnecting…" stays up for 5 seconds it adds the Stop Streaming
+shortcut, for example "Press ⌃⌥Q to stop streaming". That hint also shows on
+your first three streams instead of once ever, starts again when you change the
+shortcut or the controller chord, and isn't used up when the first frame arrives
+while the stream window is in the background. Banners now fit narrow windows and
+the mini player: a long one shortens with an ellipsis instead of losing both
+ends.
+
+While a stream connects, the pointer and the menu bar stay yours. The invisible
+stream window lets clicks through to Cancel, and the cursor is only centred,
+hidden and captured once the first frame fades in. Switching to another app
+while it connects is respected: Glimmer no longer pulls you back 1.5 seconds
+later, and a stream that ends just after its first frame no longer leaves the
+launcher without a menu bar or Dock.
+
+Streams over a VPN, and streams started before Glimmer has worked out the route
+to the PC, now ask for the same bitrate as in 2026.9.5. The Wi-Fi 1.5x boost
+applies only when the route really is Wi-Fi, where the check on the radio's link
+rate can still trim it.
+
+Video recovers by itself. After a decode error Glimmer waits for the next
+keyframe instead of feeding broken frames to the decoder, and a decode session
+that stops producing frames is rebuilt within a few seconds. Before, the stream
+could sit on "Holding…" until you reconnected.
+
+If the stream reconnects while its window is hidden, for example after the Mac
+sleeps and wakes, Glimmer stops decoding video again after 2 seconds. Before, it
+could decode every frame for hours with nothing on screen, even on battery.
+
+Late video packets are held for a fixed 24 ms. The adaptive control that tried
+to widen the hold is gone: the hold is only one packet deep, so the wider window
+never came into play. Packets rebuilt by error correction no longer switch the
+hold on.
+
+On remote connections, the bitrate downshift now counts arriving packets rather
+than whole frames when it decides whether reception is still alive, so it
+responds when the path can't carry the bitrate.
+
+On Wi-Fi, Glimmer no longer stalls for about 13 ms every second to read the
+radio's link rate. The read runs in the background now, which removes a
+once-a-second hitch while idle and while streaming.
+
+Audio holds up when devices change. Switching output devices no longer sets off
+a burst of audio errors left behind by every earlier stream, because each stream
+now lets go of its output-device listener when it ends. Unplugging a dock,
+handing AirPods off or losing HDMI mid-stream can no longer crash Glimmer while
+the audio engine restarts.
+
+Audio stays with the picture. After a long dropout, audio no longer ends up
+about 200 ms behind video: a gap longer than the audio buffer can cover no
+longer makes the buffer deeper, and a burst of dropouts deepens it by at most
+one step. Clock correction no longer winds up against the buffer trim and
+settles on the real clock difference. Each output device's correction is
+remembered separately, so switching speakers no longer starts the next stream
+with the wrong one.
+
+Coming back from the mini player re-centres the cursor when it was left on
+another display, so clicks can't land outside the stream.
+
+A daily update check no longer shows its alert over a live stream or takes focus
+from the game. The alert waits until the stream ends. Checks you start yourself,
+and checks made when no stream is running, behave as before.
+
+Fixes a crash when a stream's frame index wrapped past zero.
+
 Whole wheel notches. A trackpad or Magic Mouse scrolls in fractions of a notch,
 and a game that counts whole notches ignores fractions. Glimmer now adds them up
 and sends whole notches; a mouse wheel is untouched. With telemetry on, every
 wheel event is in the trace with what macOS delivered and what was sent, so a
-wheel that a game ignores can be shown to have reached the host.
+wheel that a game ignores can be shown to have reached the PC.
+
+Gyro and motion aiming reach the PC as soon as the controller reports them,
+instead of being polled on a fixed timer. Samples arrive evenly spaced and up to
+10 ms fresher, and the Mac no longer wakes 200 times a second to poll.
+
+The Input Monitoring prompt for a generic controller no longer comes back every
+time the controller reconnects: any answer quiets it for that controller until
+Glimmer relaunches. Granting access from Glimmer's own prompt now turns on Extra
+DualSense buttons right away, with no relaunch. You only need to relaunch after
+turning the switch on by hand in System Settings, and the instructions now say
+so.
+
+"Use ⌘ shortcuts inside the game" now does what it says. While the stream has
+the pointer, ⌘-Tab, ⌘-Space, ⌘Q and the rest go to the PC instead of the Mac,
+and ⌘-Tab no longer opens the Start menu on the PC.
+
+Paste into the PC as text. Edit › Paste, ⌘V (whenever ⌘ stays with the Mac) or
+⌃⌥⇧V types the Mac clipboard on the PC as characters, so passwords, links, codes
+and accented text arrive as written.
+
+HDR has its own switch in Settings › Quality, on by default, and it applies to
+every preset, so you can pick SDR and still use Native Retina or HiDPI. The
+choice is now real: turning it off makes the PC send SDR. The "Your next stream"
+summary shows HDR only when HDR is on and the display can show it.
+
+Each PC tile in Settings › PCs has a ⋯ button with the same Rename, Codec, Wake
+on LAN and Unpair items as its right-click menu. The Refresh paired PCs button
+is gone, since it did nothing you could see.
+
+The shortcut recorder no longer accepts ⇧ alone, ⌘ with Q, W, H or M, or a
+shortcut that is already in use; it says why under the badge and waits for
+another try. A controller chord now needs at least two buttons. If you pick a
+chord that a DualSense can only fire with Extra DualSense buttons, such as the
+Moonlight default or a custom chord with Create or Mute, an orange note under
+the picker says so and has a Turn On button.
+
+Open at login follows System Settings. If you remove Glimmer from System
+Settings › General › Login Items, Open at login now turns off instead of Glimmer
+adding itself back at the next launch. After an update or a move, the login item
+is still repaired as before. The toggles are now called Open at login and Open
+in the menu bar only.
+
+Settings say what the app does, in one set of names: Stop Streaming for the
+shortcut and the controller chord, Stream stats for the overlay, PC instead of
+host, and Title Case buttons. The mute footnote says the Mac's volume goes down
+rather than the sound moving to the PC.
+
+Glimmer no longer deletes login-keychain items labelled "Imported Private Key"
+on first launch. That is the default label macOS gives many imported
+certificates, so the old cleanup could remove a VPN, Wi-Fi (802.1X) or S/MIME
+identity. The cleanup of Glimmer's own old keychain item now runs once instead
+of on every launch.
+
+The Wi-Fi stutter protection helper now uses the macOS code-signing check to
+decide which apps may connect to it, so another client connecting and then
+quitting can no longer turn AirDrop back on in the middle of a stream. It also
+stopped repeating the same line in the session log every 5 seconds.
+
+With diagnostics on, key codes are no longer written to the system log.
+
+Late presents are split by cause. Telemetry rows now show how much of the
+late-present count comes from the game's own uneven frame delivery, along with
+the game's typical and 95th-percentile frame interval and how often neighbouring
+frames were uneven. The rest is the pacer's share.
+
+The input-to-photon estimate now adds the input's own legs on the Mac, half the
+round trip up to the PC and half a game frame on top of glass-to-glass, so the
+two are no longer the same number. The input legs and the rate of motion samples
+are in the row too.
+
+A Wi-Fi blackout can be traced to its cause: each row records whether AirDrop's
+radio was parked and how many packets the kernel dropped at a full socket
+buffer. Counts of late-packet holds taken and of the packets they rescued
+replace the retired error-correction gauges. Diagnostics no longer treat a
+sleeping or undocked stream as a bad Wi-Fi link.
+
+Frames dropped while waiting for a keyframe or recovery frame are now counted,
+and frame-drop records no longer blame the pacer for frames dropped while the
+window was hidden. Loss recoveries, long video gaps and keyframe arrivals are
+each logged once as an event, replacing one log line per discarded frame, and
+the receipt adds how long each recovery took.
+
+The configuration line records the stream's resolution, frame rate and codec,
+and how the bitrate was chosen: the Bandwidth setting, the quality dial, the
+codec and route multipliers and the Wi-Fi rate cap. Each row carries the audio
+cushion cap for the actual link, dead-air under-runs and the raw DualSense
+report rate. The handshake step between stream setup and the connection is now
+labelled control setup rather than pairing.
+
+Receipts cover one whole session across an in-place reconnect. Totals counted
+before the reconnect are kept, the handshake shown is the first connect's with
+the reconnect's steps listed separately, and the reconnect and wake counts start
+at zero for each session.
+
+A session that never received audio says so in its receipt, with the ping count.
+A mid-stream audio blackout shows as 0 audio packets per second, and each row
+gives the longest audio gap in that second. When the PC never starts sending
+audio, the log keeps saying so at 30 seconds and every 10 minutes after that,
+not just once at 3 seconds.
+
+The A/V skew meter sets its reference only at a clean moment, so an audio
+under-run or a keyframe recovery no longer leaves it reporting about 300 ms of
+audio lag that wasn't there. Its 95th and 99th percentiles no longer collapse
+onto the maximum.
+
+Logs are kept in check with diagnostics off too. Glimmer deletes log files older
+than 14 days at launch; before, the Logs folder was only pruned when a
+diagnostics session started. Over the size budget, per-frame traces go first,
+then 1 Hz files, and diagnostic logs and session receipts are only ever deleted
+for age. In a long session the per-frame trace keeps the connect segment (first
+frame, pacer lock-in and early loss) along with the newest segments, not just
+the newest four.
+
+Input trace lines are no longer built when telemetry is off, and gyro and
+accelerometer trace lines are capped at 20 per second per sensor. What is sent
+to the PC is unchanged.
+
+Package power no longer reads 0 W on ticks where the energy counters hadn't
+updated, and the main thread has its own line in the per-thread CPU data instead
+of being counted under "unnamed". The launcher's PC reachability check no longer
+logs an "already cancelled" network fault every 10 seconds. Turning diagnostics
+off after a session no longer leaves the adaptive jitter buffer stuck at that
+session's last level until relaunch.
 
 ## 2026.9.6 - 2026-09-20
 
