@@ -453,15 +453,19 @@ final class TelemetryExporter: @unchecked Sendable {
                 case .failed(let error):
                     // Busy port (or any bind failure): log + skip. The NDJSON
                     // sink still runs; the stream is never affected.
-                    // swiftlint:disable:next line_length
-                    self.log.error("Telemetry HTTP listener failed (port \(Self.port) busy?): \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues")
+                    self.log.error("""
+                        Telemetry HTTP listener failed (port \(Self.port) busy?): \
+                        \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues
+                        """)
                     Diag.warn("Telemetry HTTP endpoint unavailable (port \(Self.port) likely busy); "
                         + "NDJSON log continues.", Self.logCategory)
                     self.listener?.cancel()
                     self.listener = nil
                 case .ready:
-                    // swiftlint:disable:next line_length
-                    self.log.notice("Telemetry HTTP ready on \(self.lanBindEnabled ? "0.0.0.0" : "127.0.0.1", privacy: .public):\(Self.port)")
+                    self.log.notice("""
+                        Telemetry HTTP ready on \
+                        \(self.lanBindEnabled ? "0.0.0.0" : "127.0.0.1", privacy: .public):\(Self.port)
+                        """)
                 default:
                     break
                 }
@@ -472,8 +476,10 @@ final class TelemetryExporter: @unchecked Sendable {
             newListener.start(queue: workQueue)
             listener = newListener
         } catch {
-            // swiftlint:disable:next line_length
-            log.error("Telemetry: NWListener init failed: \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues")
+            log.error("""
+                Telemetry: NWListener init failed: \
+                \(error.localizedDescription, privacy: .public) - skipping HTTP, NDJSON continues
+                """)
         }
     }
 
