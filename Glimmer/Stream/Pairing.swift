@@ -1,20 +1,9 @@
 //
 //  Pairing.swift
 //
-//  PIN-based pairing handshake with a GameStream host (GFE or Sunshine).
-//
-//  Ported from moonlight-qt's app/backend/nvpairingmanager.{cpp,h} (GPLv3; see
-//  CREDITS.md). The protocol is four rounds over plain HTTP plus a final HTTPS
-//  pairchallenge liveness check; each round mixes AES-128-ECB symmetric crypto
-//  (keyed off the PIN the user types into the host UI) with RSA signatures over our
-//  long-lived client cert. If any step deviates by a single byte the host
-//  silently rejects us, so the comments below are unusually thorough -
-//  this is the kind of code where "it didn't work" debug sessions are
-//  measured in hours.
-//
-//  All hex on the wire is lowercase. All AES operations use 16-byte blocks
-//  with padding explicitly disabled - moonlight's protocol is raw ECB on
-//  pre-sized buffers, not the higher-level CBC/CTR shapes you'd expect.
+//  PIN pairing with a GameStream host, ported from moonlight-qt's nvpairingmanager (GPLv3; see CREDITS.md):
+//  four plain-HTTP rounds of raw AES-128-ECB (PIN-keyed, 16-byte blocks, no padding) and RSA signatures over
+//  our client cert, then an HTTPS pairchallenge. Wire hex is lowercase; one wrong byte and the host rejects us.
 //
 
 import Foundation
@@ -56,10 +45,8 @@ public actor PairingClient {
     }
 
     // MARK: - Pairing flow
-    //
-    // The flow has four HTTP rounds plus a final HTTPS challenge. Each round
-    // is a one-shot GET with all parameters in the query string; there's no
-    // session state on the host side beyond what we tell it on each call.
+    // Four HTTP rounds plus a final HTTPS challenge, each a one-shot GET with every parameter
+    // in the query string; the host keeps no session state beyond what each call tells it.
 
     private func runPairingFlow(pin: String) async throws -> ServerInfo {
 
@@ -248,35 +235,9 @@ public actor PairingClient {
         server.serverCertPEM = serverCertPEM
         server.pairStatus = .paired
 
-        // ---------------------------------------------------------------
-        // PERSISTED PIN COMMIT - SECURITY-CRITICAL LATE COMMIT.
-        // SECURITY: this block MUST stay at the very bottom of the
-        // pair flow, AFTER step 7 (HTTPS pairchallenge) has returned a
-        // paired=1 over a TLS handshake gated by the in-memory pin set
-        // at step 5. Moving this block earlier in the flow re-introduces
-        // a window where a mid-handshake hijacker can get pinned: an
-        // attacker who survives the symmetric crypto rounds but loses
-        // step 6 / step 7 must NOT leave a persisted pin behind.
-        // Do not refactor this block above the step 7
-        // `verifyResponseStatus` / `paired=="1"` checks - if you're
-        // considering moving it, you're reopening exactly the bug this
-        // comment is here to prevent.
-        // ---------------------------------------------------------------
-        //
-        // Keyed by the host's UUID so a fresh process launch can re-load
-        // the pin without re-pairing. The host UUID (not the user's) is
-        // the right key because moonlight-qt identifies hosts by
-        // uniqueId - this aligns with how the rest of Glimmer looks up
-        // paired hosts. We store the PEM (not the raw SecCertificate)
-        // for forward-compat: PEM survives keychain wipes, OS
-        // migrations, and Time Machine restores in a way that
-        // SecCertificate refs do not. The cert is public information so
-        // the same-UID-readable concern from H1 doesn't apply here.
-        //
-        // If the host's cert ever rotates (Sunshine reinstall, OS reset)
-        // the user lands on the `NetworkClient.fetchServerInfo` pin-mismatch
-        // error, which tells them to pair again - the next successful run
-        // through this function overwrites the persisted PEM with the new one.
+        // SECURITY: persist the pin (public PEM, keyed by host uniqueId) only here, AFTER step 7's pinned
+        // pairchallenge returned paired=1; earlier lets a hijacker who fails step 6/7 leave a pin behind.
+        // A rotated host cert hits fetchServerInfo's pin-mismatch error; the next pairing overwrites it.
         persistPinnedCert(serverCertPEM: serverCertPEM)
 
         log.info("Pairing succeeded for \(self.server.address, privacy: .public)")

@@ -103,21 +103,9 @@ extension NetworkClient {
         return server
     }
 
-    /// Turn a paired-path (HTTPS) failure into the user-facing verdict, once
-    /// the plain-HTTP probe has proven the host is up. The `detail` strings
-    /// are ControlTransport's own (stable, ours), so matching on them is a
-    /// contract, not a heuristic:
-    ///   * "connect to ..." - TCP to 47984 refused or timed out while 47989
-    ///     answers: Sunshine's HTTPS listener is wedged (seen 2026-09-02 with
-    ///     zombie connections pinning its accept loop). Host-side; only a
-    ///     Sunshine restart clears it. NOT a pairing problem.
-    ///   * "Host requires pairing" - the host answered 401 over mutual TLS:
-    ///     it genuinely no longer knows this client.
-    ///   * "TLS handshake ..." - Sunshine rejects unknown client certs at the
-    ///     handshake, so this is the other face of "not paired".
-    ///   * "pinned host cert mismatch" / "host presented no certificate" -
-    ///     the HOST's cert changed: pairing again trusts the new one.
-    ///   * anything else - honest generic: up on plain HTTP, broken on HTTPS.
+    /// Map a paired-path (HTTPS) failure, once plain HTTP proved the host up, by ControlTransport's own `detail`
+    /// strings: "connect to" = Sunshine's 47984 listener wedged (restart it, not a pairing issue); a 401 ("Host
+    /// requires pairing") or "TLS handshake" = the PC forgot this Mac; cert mismatch or none = its cert changed.
     static func classifyPairedPathFailure(_ detail: String, hostName: String) -> StreamError {
         let name = hostName.isEmpty ? "The PC" : hostName
         if detail.hasPrefix("connect to") {

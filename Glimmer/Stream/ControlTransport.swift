@@ -307,17 +307,9 @@ enum ControlTransport {
         }
     }
 
-    /// Read `Content-Length` out of a completed header block (the bytes BEFORE
-    /// the blank-line terminator), so `readAll` can stop exactly at the body end
-    /// instead of waiting on the peer close. nil = no usable header. Split out of
-    /// `readAll` so the read loop stays inside the complexity bar; the last
-    /// matching header line wins, exactly as the inline loop did.
-    ///
-    /// FAIL CLOSED on non-UTF-8 header bytes. HTTP/1.1 headers are protocol text;
-    /// a lossy decode would silently substitute replacement characters and let us
-    /// keep reading a stream we cannot actually parse. This is host-supplied
-    /// input, so garbage in must surface as an error, not as a half-understood
-    /// header. An empty or negative value counts as no header.
+    /// `Content-Length` from a completed header block, so `readAll` stops at the body end instead of waiting for
+    /// the peer to close; the last matching line wins, and nil (also for an empty or negative value) = no header.
+    /// Fails closed on non-UTF-8 headers: this is host-supplied input, and a lossy decode would half-parse it.
     static func contentLengthHeader(in headerBytes: Data) throws -> Int? {
         guard let head = String(bytes: headerBytes, encoding: .utf8) else {
             throw StreamError.hostUnreachable("malformed HTTP response (headers are not UTF-8)")
