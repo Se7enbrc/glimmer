@@ -334,14 +334,16 @@ final class AWDLHelperManager: ObservableObject {
         heartbeatTask?.cancel()
         heartbeatTask = Task { @MainActor in
             var tick = 0
+            var lastLogged: UInt64 = 0
             while !Task.isCancelled {
                 self.suppressing = await self.client.setAWDLDown(true, reason: "stream")
                 // ~5s: pull the daemon's re-raise count → telemetry gauge + a breadcrumb
-                // when macOS is actively fighting awdl0 back up (link contention).
+                // each time macOS fights awdl0 back up again (link contention).
                 if tick % 5 == 0, let n = await self.client.reSuppressCount() {
                     TelemetryCounters.shared.setAWDLHelper(
                         .init(suppressing: self.suppressing, reSuppressTotal: n))
-                    if n > 0 {
+                    if n > lastLogged {
+                        lastLogged = n
                         Diag.info("AWDL re-suppress \(n) - macOS re-raised awdl0 this stream", "Stream")
                     }
                 }
