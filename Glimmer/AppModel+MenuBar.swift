@@ -2,8 +2,9 @@
 //  AppModel+MenuBar.swift
 //
 //  What the menu bar item reads and the few actions only it needs: the icon
-//  state, the first row, controller readings, PC readiness, the Connection
-//  Details snapshot (refreshed only while the menu is open), stop, overlay.
+//  state, the first row, the selected PC as the launcher reads it, the pads,
+//  the Connection Details snapshot (refreshed only while the menu is open),
+//  stop, overlay, pairing and the takeover question.
 //
 
 import AppKit
@@ -22,48 +23,18 @@ extension AppModel {
 
     var menuBarPrimaryAction: MenuBarPrimaryAction {
         MenuBarPresentation.primaryAction(
-            phase: streamPhase, hostSelected: selectedHost != nil, heroApp: heroTargetAppName)
+            phase: streamPhase, reconnecting: isReconnecting, host: menuBarHost, heroApp: heroTargetAppName)
     }
 
-    /// Named battery readings for every connected pad that reports one.
-    var menuBarControllers: [(name: String, percent: Int, charging: Bool)] {
-        _ = controllerConnected
-        return GCController.controllers().compactMap { controller in
-            let name = controller.vendorName ?? "Controller"
-            if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery {
-                return (name, hid.percent, hid.charging)
-            }
-            guard let battery = controller.battery, let reading = ControllerBattery.uiReading(battery) else {
-                return nil
-            }
-            return (name, reading.percent, reading.charging == true)
-        }
-    }
-
-    /// One word for the selected PC from a fresh live status, else nil.
-    var menuBarReadiness: String? {
-        guard let host = selectedHost, let live = hostLiveStatus, live.hostID == host.id else { return nil }
-        let fresh = Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale
-        return MenuBarPresentation.readiness(live.state, fresh: fresh)
-    }
-
-    var menuBarHostAsleep: Bool {
-        guard let host = selectedHost, let live = hostLiveStatus, live.hostID == host.id,
-              Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale else { return false }
-        return live.state == .asleep
+    /// The selected PC with the launcher's chip and power state; nil when none is paired.
+    var menuBarHost: MenuBarHost? {
+        guard let host = selectedHost else { return nil }
+        let live = hostLiveStatus?.hostID == host.id ? hostLiveStatus : nil
+        return MenuBarHost(chip: ChipPresentation(live: live), canWake: canWake(host), waking: isWaking(host))
     }
 
     var menuBarModeLine: String {
         MenuBarPresentation.modeLine(width: effectiveWidth, height: effectiveHeight, fps: effectiveFPS, hdr: nativeHDRActive)
-    }
-
-    var menuBarStateWord: String {
-        MenuBarPresentation.stateWord(menuBarIconState, readiness: menuBarReadiness)
-    }
-
-    var menuBarReadinessTone: MenuBarReadinessTone {
-        guard menuBarReadiness != nil, let live = hostLiveStatus else { return .off }
-        return MenuBarPresentation.readinessTone(live.state)
     }
 
     var menuBarMetrics: [MenuBarMetric] {
@@ -76,12 +47,12 @@ extension AppModel {
         return nil
     }
 
-    /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.
     /// The menu bar row and the chord land in the same place.
     func toggleMiniPlayer() {
         Task { [weak self] in await self?.nativeSession?.toggleMiniPlayer() }
     }
 
+    /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.
     func stopStreamFromMenu(source: String = "the menu bar") {
         guard let session = nativeSession, !menuStopInProgress else { return }
         menuStopInProgress = true
@@ -94,6 +65,11 @@ extension AppModel {
         let next = !statsOverlayShown
         statsOverlayShown = next
         Task { await session.setStatsOverlay(next) }
+    }
+
+    /// Opens the launcher's pair sheet; a PC's address skips to the PIN step.
+    func requestPairing(for host: Host?) {
+        pairSheetAddress = host.map { $0.localAddress ?? $0.manualAddress ?? "" } ?? ""
     }
 
     /// Refresh Connection Details about once a second while the menu is open.
@@ -112,6 +88,8 @@ extension AppModel {
     }
 
     private func refreshMenuBarDetails() {
+        let pads = readMenuBarControllers()
+        if pads != menuBarControllers { menuBarControllers = pads }
         guard isStreaming, let session = nativeSession else { menuDetails = nil; return }
         Task { [weak self] in
             let details = await session.menuBarDetails()
@@ -123,16 +101,32 @@ extension AppModel {
         }
     }
 
+    /// Every pad the Mac sees, with a battery reading where one exists. Reads
+    /// the raw-HID list without touching its attach and detach hooks.
+    private func readMenuBarControllers() -> [MenuBarController] {
+        let pads = GCController.controllers().map { controller in
+            let name = controller.vendorName ?? "Controller"
+            if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery {
+                return MenuBarController(name: name, percent: hid.percent, charging: hid.charging)
+            }
+            let reading = controller.battery.flatMap(ControllerBattery.uiReading)
+            return MenuBarController(name: name, percent: reading?.percent, charging: reading?.charging == true)
+        }
+        let raw = HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }.map {
+            MenuBarController(name: $0.name, percent: $0.batteryPercentage.map(Int.init), charging: false)
+        }
+        return MenuBarPresentation.controllers(gameController: pads, rawHID: raw)
+    }
+
     /// The takeover question has to reach the user even with the launcher
     /// closed (a launch from the menu bar); the launcher's own dialog handles
     /// the visible case.
     func presentTakeoverAlertIfNeeded() {
         guard let pending = pendingTakeover, !mainWindowVisible else { return }
         let alert = NSAlert()
-        alert.messageText = "Take over the stream?"
-        alert.informativeText = "\(pending.host.displayName) is already streaming \(pending.occupantApp). "
-            + "Starting your stream will end that session."
-        alert.addButton(withTitle: "Take Over")
+        alert.messageText = MenuBarPresentation.takeoverMessage(app: pending.occupantApp, pc: pending.host.displayName)
+        alert.informativeText = "It will quit and your stream will start."
+        alert.addButton(withTitle: "Quit and Stream").hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
         NSApp.activate()
         if alert.runModal() == .alertFirstButtonReturn {

@@ -191,12 +191,14 @@ final class AppModel {
         let occupantApp: String
     }
 
-    // Menu bar: reconnect edge, the Stop row's latch, the overlay mirror and
-    // the Connection Details snapshot (see AppModel+MenuBar).
+    // Menu bar (see AppModel+MenuBar): reconnect edge, Stop latch, overlay mirror,
+    // Connection Details, the pads, and a pair sheet asked of the launcher.
     var isReconnecting = false
     var menuStopInProgress = false
     var statsOverlayShown = false
     var menuDetails: StreamStatsSnapshot?
+    var menuBarControllers: [MenuBarController] = []
+    var pairSheetAddress: String?
     @ObservationIgnored var menuRefreshTimer: Timer?
 
     var showStreamStats: Bool = false {

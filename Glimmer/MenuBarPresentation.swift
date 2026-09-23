@@ -12,10 +12,6 @@ enum MenuBarIconState: Equatable {
     case idle, connecting, reconnecting, streaming, attention
 }
 
-enum MenuBarReadinessTone: Equatable {
-    case ready, busy, off, trouble
-}
-
 struct MenuBarMetric: Equatable {
     let value: String
     let label: String
@@ -23,11 +19,40 @@ struct MenuBarMetric: Equatable {
     var spokenLabel: String?
 }
 
+/// The selected PC as the launcher reads it: its chip and its power state.
+struct MenuBarHost: Equatable {
+    let chip: ChipPresentation
+    let canWake: Bool
+    let waking: Bool
+}
+
 enum MenuBarPrimaryAction: Equatable {
     case stream(app: String)
+    case wake
+    case waking
+    case pairAgain
     case cancelConnection
+    case stopStreaming
     case backToStream
     case none
+
+    /// Try Again only helps when the PC looks able to stream.
+    var allowsRetry: Bool {
+        if case .stream = self { return true }
+        return false
+    }
+}
+
+/// One pad in the Controller card; a nil percent is a pad with no reading.
+struct MenuBarController: Equatable {
+    let name: String
+    let percent: Int?
+    let charging: Bool
+
+    var status: String {
+        guard let percent else { return "Connected" }
+        return "\(percent)%" + (charging ? ", charging" : "")
+    }
 }
 
 enum MenuBarPresentation {
@@ -65,54 +90,39 @@ enum MenuBarPresentation {
         }
     }
 
-    static func primaryAction(phase: StreamPhase, hostSelected: Bool, heroApp: String) -> MenuBarPrimaryAction {
+    /// The launcher's one button, in the menu bar: a sleeping PC wakes, an
+    /// untrusted one pairs again, and a reconnect is a stream you can stop.
+    static func primaryAction(phase: StreamPhase, reconnecting: Bool, host: MenuBarHost?,
+                              heroApp: String) -> MenuBarPrimaryAction {
         switch phase {
         case .streaming: return .backToStream
-        case .connecting, .disconnecting: return .cancelConnection
-        case .idle, .error: return hostSelected ? .stream(app: heroApp) : .none
+        case .connecting, .disconnecting: return reconnecting ? .stopStreaming : .cancelConnection
+        case .idle, .error:
+            guard let host else { return .none }
+            if host.waking { return .waking }
+            switch host.chip {
+            case .certMismatch: return .pairAgain
+            case .asleep where host.canWake: return .wake
+            default: return .stream(app: heroApp)
+            }
         }
     }
 
-    static func batteryRow(name: String, percent: Int, charging: Bool) -> String {
-        "\(name) · \(percent)%" + (charging ? ", charging" : "")
+    /// GameController's pads, then raw-HID pads it doesn't own, matched by
+    /// name the way HIDGamepadManager yields a pad to GameController.
+    static func controllers(gameController: [MenuBarController], rawHID: [MenuBarController]) -> [MenuBarController] {
+        let owned = Set(gameController.map(\.name))
+        return gameController + rawHID.filter { !owned.contains($0.name) }
     }
 
-    /// One word for the selected PC, or nil when the reading is stale or unknown.
-    static func readiness(_ state: HostLiveStatus.State?, fresh: Bool) -> String? {
-        guard fresh, let state else { return nil }
-        switch state {
-        case .idle: return "Ready"
-        case .streamingApp(let name): return "Busy: \(name)"
-        case .streamingUnknownApp: return "Busy"
-        case .asleep: return "Asleep"
-        case .certMismatch: return "Needs pairing again"
-        case .unknown: return "Unavailable"
-        }
+    /// The takeover question's first line; the running app will quit.
+    static func takeoverMessage(app: String, pc: String) -> String {
+        app.prefix(1).uppercased() + app.dropFirst() + " is running on \(pc)."
     }
 
     /// The mode line under the stream card's header, in the launcher's wording.
     static func modeLine(width: Int, height: Int, fps: Int, hdr: Bool) -> String {
         "\(width) × \(height) · \(fps) Hz" + (hdr ? " · HDR" : "")
-    }
-
-    static func readinessTone(_ state: HostLiveStatus.State?) -> MenuBarReadinessTone {
-        switch state {
-        case .idle: .ready
-        case .streamingApp, .streamingUnknownApp: .busy
-        case .asleep, .unknown, nil: .off
-        case .certMismatch: .trouble
-        }
-    }
-
-    /// The right-hand word of the stream card's header.
-    static func stateWord(_ state: MenuBarIconState, readiness: String?) -> String {
-        switch state {
-        case .idle: readiness ?? "Idle"
-        case .connecting: "Connecting…"
-        case .reconnecting: "Reconnecting…"
-        case .streaming: "Streaming"
-        case .attention: "Needs attention"
-        }
     }
 
     /// The big numbers: frames arriving (true even with the window hidden),
@@ -127,17 +137,6 @@ enum MenuBarPresentation {
         out.append(MenuBarMetric(value: mbps.map { "\(Int($0.rounded())) Mbps" } ?? "–", label: "Bandwidth"))
         out.append(MenuBarMetric(value: link ?? "–", label: "Network"))
         return out
-    }
-
-    static func batterySymbol(percent: Int, charging: Bool) -> String {
-        if charging { return "battery.100percent.bolt" }
-        switch percent {
-        case ..<10: return "battery.0percent"
-        case ..<35: return "battery.25percent"
-        case ..<60: return "battery.50percent"
-        case ..<85: return "battery.75percent"
-        default: return "battery.100percent"
-        }
     }
 
     static func linkLabel(_ route: HostRouteMonitor.RouteClass) -> String? {

@@ -178,7 +178,7 @@ struct StreamButton: View {
                         // A wake that got no answer: one plain sentence with the
                         // real limits. A cancelled wake shows nothing.
                         if let host = model.selectedHost, model.wakeFailedHostID == host.id {
-                            Text("No answer. \(AppModel.wakeNoAnswerHint)")
+                            Text(AppModel.wakeNoAnswerLine)
                                 .font(.system(size: 11, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)

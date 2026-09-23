@@ -6,6 +6,7 @@
 //
 
 import Accessibility
+import Foundation
 import Testing
 @testable import Glimmer
 
@@ -27,31 +28,68 @@ struct MenuBarPresentationTests {
         #expect(MenuBarPresentation.accessibilityLabel(state: .idle, hostName: nil) == "Glimmer")
     }
 
-    @Test func primaryActionIsWhatYouNeedNow() {
-        #expect(MenuBarPresentation.primaryAction(phase: .idle, hostSelected: true, heroApp: "Desktop") == .stream(app: "Desktop"))
-        #expect(MenuBarPresentation.primaryAction(phase: .idle, hostSelected: false, heroApp: "Desktop") == .none)
-        #expect(MenuBarPresentation.primaryAction(phase: .connecting(stage: "x"), hostSelected: true, heroApp: "D") == .cancelConnection)
-        #expect(MenuBarPresentation.primaryAction(phase: .streaming, hostSelected: true, heroApp: "D") == .backToStream)
+    private func action(_ phase: StreamPhase = .idle, reconnecting: Bool = false,
+                        chip: ChipPresentation = .ready(rttMs: nil), canWake: Bool = true,
+                        waking: Bool = false) -> MenuBarPrimaryAction {
+        MenuBarPresentation.primaryAction(phase: phase, reconnecting: reconnecting,
+                                          host: MenuBarHost(chip: chip, canWake: canWake, waking: waking),
+                                          heroApp: "Desktop")
+    }
+
+    @Test func primaryActionIsTheLaunchersButton() {
+        #expect(action() == .stream(app: "Desktop"))
+        #expect(MenuBarPresentation.primaryAction(phase: .idle, reconnecting: false, host: nil, heroApp: "D") == .none)
+        #expect(action(chip: .asleep) == .wake)
+        #expect(action(chip: .asleep, canWake: false) == .stream(app: "Desktop"))
+        #expect(action(chip: .asleep, waking: true) == .waking)
+        #expect(action(chip: .certMismatch) == .pairAgain)
+        #expect(action(.error("x"), chip: .certMismatch) == .pairAgain)
+        #expect(action(chip: .streamingElsewhere(appName: "Elden Ring")) == .stream(app: "Desktop"))
+        #expect(action(.streaming) == .backToStream)
+    }
+
+    @Test func aReconnectStopsRatherThanCancels() {
+        #expect(action(.connecting(stage: "x")) == .cancelConnection)
+        #expect(action(.connecting(stage: "Reconnecting to Tower…"), reconnecting: true) == .stopStreaming)
+    }
+
+    @Test func tryAgainOnlyWhereTheLaunchWouldGoThrough() {
+        #expect(action().allowsRetry)
+        #expect(!action(chip: .asleep).allowsRetry)
+        #expect(!action(chip: .certMismatch).allowsRetry)
+        #expect(!action(.streaming).allowsRetry)
+    }
+
+    @Test func thePCReadsAsItDoesInTheLauncher() {
+        let now = Date()
+        func chip(_ state: HostLiveStatus.State, age: TimeInterval = 0) -> ChipPresentation {
+            ChipPresentation(live: HostLiveStatus(hostID: "a", state: state, rttMs: 4, sunshineVersion: nil,
+                                                  capturedAt: now.addingTimeInterval(-age)), now: now)
+        }
+        #expect(chip(.idle) == .ready(rttMs: 4))
+        #expect(chip(.streamingApp(name: "Elden Ring")) == .streamingElsewhere(appName: "Elden Ring"))
+        #expect(chip(.streamingUnknownApp(id: 9)) == .streamingElsewhere(appName: nil))
+        #expect(chip(.certMismatch) == .certMismatch)
+        #expect(chip(.asleep) == .asleep)
+        #expect(chip(.asleep, age: HostLiveStatus.stale + 1) == .unknown)
+        #expect(ChipPresentation(live: nil) == .unknown)
+    }
+
+    @Test func everyPadShowsOnceWithOrWithoutABattery() {
+        let dualSense = MenuBarController(name: "DualSense", percent: 80, charging: true)
+        let wired = MenuBarController(name: "Xbox Controller", percent: nil, charging: false)
+        let raw = MenuBarController(name: "8BitDo", percent: 25, charging: false)
+        let yielded = MenuBarController(name: "DualSense", percent: nil, charging: false)
+        let pads = MenuBarPresentation.controllers(gameController: [dualSense, wired], rawHID: [yielded, raw])
+        #expect(pads == [dualSense, wired, raw])
+        #expect(pads.map(\.status) == ["80%, charging", "Connected", "25%"])
     }
 
     @Test func readingsAreWordedPlainly() {
-        #expect(MenuBarPresentation.batteryRow(name: "DualSense", percent: 25, charging: false) == "DualSense · 25%")
-        #expect(MenuBarPresentation.batteryRow(name: "DualSense", percent: 80, charging: true) == "DualSense · 80%, charging")
-        #expect(MenuBarPresentation.readiness(.idle, fresh: true) == "Ready")
-        #expect(MenuBarPresentation.readiness(.streamingApp(name: "Elden Ring"), fresh: true) == "Busy: Elden Ring")
-        #expect(MenuBarPresentation.readiness(.streamingUnknownApp(id: 9), fresh: true) == "Busy")
-        #expect(MenuBarPresentation.readiness(.unknown, fresh: true) == "Unavailable")
-        #expect(MenuBarPresentation.readiness(.asleep, fresh: false) == nil)
         #expect(MenuBarPresentation.modeLine(width: 3024, height: 1964, fps: 120, hdr: true) == "3024 × 1964 · 120 Hz · HDR")
         #expect(MenuBarPresentation.modeLine(width: 1920, height: 1080, fps: 60, hdr: false) == "1920 × 1080 · 60 Hz")
-        #expect(MenuBarPresentation.stateWord(.idle, readiness: "Ready") == "Ready")
-        #expect(MenuBarPresentation.stateWord(.idle, readiness: nil) == "Idle")
-        #expect(MenuBarPresentation.stateWord(.reconnecting, readiness: "Ready") == "Reconnecting…")
-        #expect(MenuBarPresentation.readinessTone(.idle) == .ready)
-        #expect(MenuBarPresentation.readinessTone(.streamingApp(name: "x")) == .busy)
-        #expect(MenuBarPresentation.readinessTone(.certMismatch) == .trouble)
-        #expect(MenuBarPresentation.batterySymbol(percent: 25, charging: false) == "battery.25percent")
-        #expect(MenuBarPresentation.batterySymbol(percent: 5, charging: true) == "battery.100percent.bolt")
+        #expect(MenuBarPresentation.takeoverMessage(app: "Elden Ring", pc: "Tower") == "Elden Ring is running on Tower.")
+        #expect(MenuBarPresentation.takeoverMessage(app: "another app", pc: "Tower") == "Another app is running on Tower.")
     }
 
     @Test func metricsUseWhatArrivesAndDashTheRest() {

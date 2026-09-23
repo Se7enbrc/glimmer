@@ -19,8 +19,8 @@ struct MenuBarPanel: View {
             if let error = model.nativeStreamError { attentionCard(error) }
             switch model.menuBarPrimaryAction {
             case .backToStream: streamCard
-            case .cancelConnection: connectingCard
-            case .stream, .none: pcCard
+            case .cancelConnection, .stopStreaming: connectingCard
+            case .stream, .wake, .waking, .pairAgain, .none: pcCard
             }
             controllerCard
             footer
@@ -96,6 +96,15 @@ struct MenuBarPanel: View {
         .buttonStyle(.plain)
     }
 
+    private func prominentButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glassProminent)
+        .controlSize(.large)
+    }
+
     // MARK: Cards
 
     private func attentionCard(_ message: String) -> some View {
@@ -103,14 +112,14 @@ struct MenuBarPanel: View {
             Text(message)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
-            if message.localizedCaseInsensitiveContains("pair") {
-                actionRow("Open Glimmer", systemImage: "macwindow") { openLauncher() }
-            } else {
+            if model.menuBarPrimaryAction.allowsRetry {
                 actionRow("Try Again", systemImage: "arrow.clockwise") {
                     model.nativeStreamError = nil
                     model.retryLastLaunch()
+                    activate()
                 }
             }
+            actionRow("Dismiss", systemImage: "xmark") { model.nativeStreamError = nil }
         }
     }
 
@@ -143,10 +152,7 @@ struct MenuBarPanel: View {
             if !model.isMiniPlayer {
                 actionRow("Mini Player", systemImage: "pip.enter") { model.toggleMiniPlayer() }
             }
-            actionRow(model.menuStopInProgress ? "Stopping…" : "Stop Streaming", systemImage: "stop.fill") {
-                model.stopStreamFromMenu()
-            }
-            .disabled(model.menuStopInProgress)
+            stopRow
             HStack(spacing: 8) {
                 Image(systemName: "chart.bar.xaxis")
                     .frame(width: 18)
@@ -161,6 +167,13 @@ struct MenuBarPanel: View {
                 .controlSize(.small)
             }
         }
+    }
+
+    private var stopRow: some View {
+        actionRow(model.menuStopInProgress ? "Stopping…" : "Stop Streaming", systemImage: "stop.fill") {
+            model.stopStreamFromMenu()
+        }
+        .disabled(model.menuStopInProgress)
     }
 
     /// A big value with its chart color under it; the legend for the charts.
@@ -183,6 +196,7 @@ struct MenuBarPanel: View {
         .accessibilityValue(metric.value)
     }
 
+    /// A first connect can be cancelled; a reconnect is a live stream, so it stops.
     private var connectingCard: some View {
         card("Stream", trailing: model.selectedHost?.displayName) {
             HStack(spacing: 10) {
@@ -192,32 +206,23 @@ struct MenuBarPanel: View {
                     .lineLimit(1)
             }
             Divider()
-            actionRow("Cancel Connection", systemImage: "xmark.circle") { model.cancelConnect() }
+            if model.menuBarPrimaryAction == .stopStreaming {
+                stopRow
+            } else {
+                actionRow("Cancel Connection", systemImage: "xmark.circle") { model.cancelConnect() }
+            }
         }
     }
 
     @ViewBuilder private var pcCard: some View {
         if let host = model.selectedHost {
-            card("PC", trailing: nil) {
+            card("PC") {
                 HStack {
                     Text(host.displayName).font(.title3.weight(.semibold)).lineLimit(1)
                     Spacer()
-                    if let readiness = model.menuBarReadiness {
-                        readinessPill(readiness, tone: model.menuBarReadinessTone)
-                    }
+                    if let chip = model.menuBarHost?.chip { readinessPill(chip) }
                 }
-                if case .stream(let app) = model.menuBarPrimaryAction {
-                    Button {
-                        model.streamHeroApp()
-                        activate()
-                    } label: {
-                        Label("Stream \(app)", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.large)
-                }
-                Divider()
+                primaryControl(host: host)
                 pcRows(host: host)
             }
         } else {
@@ -225,13 +230,46 @@ struct MenuBarPanel: View {
                 Text("No PC paired yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                actionRow("Pair a PC…", systemImage: "plus.circle") { openLauncher() }
+                actionRow("Pair a PC…", systemImage: "plus.circle") { pair(nil) }
             }
+        }
+    }
+
+    /// The launcher's one button for this PC, in the same words.
+    @ViewBuilder private func primaryControl(host: Host) -> some View {
+        switch model.menuBarPrimaryAction {
+        case .stream(let app):
+            prominentButton("Stream \(app)", systemImage: "play.fill") {
+                model.streamHeroApp()
+                activate()
+            }
+        case .wake:
+            prominentButton("Wake and Connect", systemImage: "power") { model.wakeHost(host, thenConnect: true) }
+            if model.wakeFailedHostID == host.id {
+                Text(AppModel.wakeNoAnswerLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .waking:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Waking \(host.displayName)…").lineLimit(1)
+                Spacer()
+                Button("Stop Waiting") { model.cancelWake(host) }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+            }
+        case .pairAgain:
+            prominentButton("Pair Again…", systemImage: "key.fill") { pair(host) }
+        case .backToStream, .cancelConnection, .stopStreaming, .none:
+            EmptyView()
         }
     }
 
     @ViewBuilder private func pcRows(host: Host) -> some View {
         let apps = host.apps.filter { !$0.hidden }
+        if apps.count > 1 || model.hosts.count > 1 { Divider() }
         if apps.count > 1 {
             row("Stream App", systemImage: "square.grid.2x2") {
                 ForEach(apps) { app in
@@ -257,46 +295,24 @@ struct MenuBarPanel: View {
                 .labelsHidden()
             }
         }
-        if model.isWaking(host) {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.mini).frame(width: 18)
-                Text("Waking \(host.displayName)…")
-                Spacer()
-                Button("Stop Waiting") { model.cancelWake(host) }
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
-            }
-        } else if model.canWake(host), model.menuBarHostAsleep {
-            actionRow("Wake and Connect", systemImage: "power") {
-                model.wakeHost(host, thenConnect: true)
-            }
-        }
     }
 
-    private func readinessPill(_ text: String, tone: MenuBarReadinessTone) -> some View {
+    private func readinessPill(_ chip: ChipPresentation) -> some View {
         HStack(spacing: 5) {
-            Circle().fill(toneColor(tone)).frame(width: 6, height: 6)
-            Text(text).font(.caption.weight(.medium))
+            Circle().fill(chip.dotColor).frame(width: 6, height: 6)
+            Text(chip.label).font(.caption.weight(.medium))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(.fill.tertiary, in: Capsule())
-    }
-
-    private func toneColor(_ tone: MenuBarReadinessTone) -> Color {
-        switch tone {
-        case .ready: .green
-        case .busy: .orange
-        case .off: .secondary
-        case .trouble: .red
-        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(chip.accessibility)
     }
 
     @ViewBuilder private var controllerCard: some View {
         let pads = model.menuBarControllers
         if let first = pads.first {
-            card(pads.count > 1 ? "Controllers" : "Controller",
-                 trailing: pads.count == 1 ? "\(first.percent)%" + (first.charging ? ", charging" : "") : nil) {
+            card(pads.count > 1 ? "Controllers" : "Controller", trailing: pads.count == 1 ? first.status : nil) {
                 ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
@@ -306,14 +322,16 @@ struct MenuBarPanel: View {
                             Text(pad.name).font(.subheadline).lineLimit(1)
                             Spacer()
                             if pads.count > 1 {
-                                Text("\(pad.percent)%")
+                                Text(pad.status)
                                     .font(.subheadline.monospacedDigit())
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        ProgressView(value: Double(pad.percent), total: 100)
-                            .progressViewStyle(.linear)
-                            .tint(pad.percent <= 20 && !pad.charging ? .red : .accentColor)
+                        if let percent = pad.percent {
+                            ProgressView(value: Double(percent), total: 100)
+                                .progressViewStyle(.linear)
+                                .tint(percent <= 20 && !pad.charging ? .red : .accentColor)
+                        }
                     }
                 }
             }
@@ -355,6 +373,12 @@ struct MenuBarPanel: View {
         }
         .controlSize(.small)
         .padding(.horizontal, 4)
+    }
+
+    /// The pair sheet lives on the launcher, so open it there.
+    private func pair(_ host: Host?) {
+        model.requestPairing(for: host)
+        openLauncher()
     }
 
     private func openLauncher() {

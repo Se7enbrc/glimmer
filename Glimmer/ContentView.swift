@@ -64,6 +64,11 @@ struct MainWindow: View {
         .sheet(isPresented: $showAWDLPrompt) {
             AWDLEnablePrompt(manager: AWDLHelperManager.shared)
         }
+        // Pair a PC… and Pair Again… from the menu bar land here.
+        .sheet(isPresented: Binding(get: { model.pairSheetAddress != nil },
+                                    set: { if !$0 { model.pairSheetAddress = nil } })) {
+            PairSheet(initialAddress: model.pairSheetAddress ?? "").environment(model)
+        }
         .task {
             guard !awdlPromptChecked else { return }
             awdlPromptChecked = true

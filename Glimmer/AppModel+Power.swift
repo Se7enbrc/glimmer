@@ -28,6 +28,8 @@ extension AppModel {
     static let wakeBudgetSeconds: Double = 90
     /// The launcher and `glimmer wake` both say this when a wake gets no answer.
     static let wakeNoAnswerHint = "Wake on LAN works on your home network; over Tailscale it can't reach the PC."
+    /// Under Wake and Connect once a wake got no answer, in the launcher and the menu bar.
+    static let wakeNoAnswerLine = "No answer. \(wakeNoAnswerHint)"
 
     /// The PC opted in and Sunshine has told us its network address.
     func canWake(_ host: Host) -> Bool {

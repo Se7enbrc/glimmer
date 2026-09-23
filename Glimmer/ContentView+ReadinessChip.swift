@@ -80,6 +80,23 @@ enum ChipPresentation: Equatable {
         return false
     }
 
+    /// A PC's polled state. No sample yet, or one past the stale window (the
+    /// PC stopped answering a while back), reads as Checking.
+    init(live: HostLiveStatus?, now: Date = Date()) {
+        guard let live, now.timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale else {
+            self = .unknown
+            return
+        }
+        switch live.state {
+        case .unknown: self = .unknown
+        case .idle: self = .ready(rttMs: live.rttMs)
+        case .streamingApp(let name): self = .streamingElsewhere(appName: name)
+        case .streamingUnknownApp: self = .streamingElsewhere(appName: nil)
+        case .asleep: self = .asleep
+        case .certMismatch: self = .certMismatch
+        }
+    }
+
     private static func truncate(_ str: String, to max: Int) -> String {
         if str.count <= max { return str }
         let end = str.index(str.startIndex, offsetBy: max - 1)
@@ -111,20 +128,7 @@ struct ReadinessChip: View {
 
         // Polled live snapshot → chip state. The host-id guard in
         // `publishLiveStatus` already scopes it to the selected host.
-        guard let live = model.hostLiveStatus else { return .unknown }
-        // Aged-out samples (the host stopped answering /serverinfo a while
-        // back) shouldn't keep lying about a stream that ended hours ago.
-        if Date().timeIntervalSince(live.capturedAt) > HostLiveStatus.stale {
-            return .unknown
-        }
-        switch live.state {
-        case .unknown:                          return .unknown
-        case .idle:                             return .ready(rttMs: live.rttMs)
-        case .streamingApp(let name):           return .streamingElsewhere(appName: name)
-        case .streamingUnknownApp:              return .streamingElsewhere(appName: nil)
-        case .asleep:                           return .asleep
-        case .certMismatch:                     return .certMismatch
-        }
+        return ChipPresentation(live: model.hostLiveStatus)
     }
 
     var body: some View {
