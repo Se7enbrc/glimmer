@@ -290,9 +290,13 @@ extension VideoDecoder {
             // Surface the "I lost a frame to the OS" moment as a discrete
             // event so a profile run can spot the recovery amongst the
             // per-frame intervals.
+            let failure = renderer.error as NSError?
             OSSignposter.render.emitEvent(
                 "RendererFailed",
-                "error=\(String(describing: renderer.error), privacy: .public)")
+                """
+                domain=\(failure?.domain ?? "none", privacy: .public) code=\(failure?.code ?? 0, privacy: .public) \
+                error=\(String(describing: renderer.error), privacy: .private)
+                """)
             // Route to the MODE-AGNOSTIC self-heal: flush, and if the renderer
             // has HARD-failed (a bare flush won't clear it - the 4K240
             // HDR wedge), REBUILD the layer so the present path can't latch
