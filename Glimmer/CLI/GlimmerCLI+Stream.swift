@@ -45,14 +45,14 @@ extension GlimmerCLI {
         return await handOff(app: app, host: host, takeover: takeover, command: command)
     }
 
-    /// The named app, ignoring case, or the launcher's hero target (the probe
-    /// just selected this PC, so a running app is resumed as it is there).
+    /// The named app, matched as Stream from PC matches it, or the launcher's hero
+    /// target (the probe just selected this PC, so a running app is resumed).
     private static func pickApp(_ name: String?, on host: Host, model: AppModel) -> LibraryApp? {
         guard let name else {
             if model.heroTargetApp == nil { printError("Glimmer doesn't know any apps on \(host.displayName).") }
             return model.heroTargetApp
         }
-        if let app = host.apps.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) { return app }
+        if let app = host.app(named: name) { return app }
         let known = host.apps.map(\.name).joined(separator: ", ")
         printError("Glimmer doesn't know “\(name)” on \(host.displayName). Its apps: \(known)")
         return nil

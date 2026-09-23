@@ -192,16 +192,6 @@ enum PCIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
     }
 }
 
-extension Host {
-    /// The app a spoken or typed name means: an exact match first, then one
-    /// that differs only in case, accents or surrounding spaces.
-    func app(named name: String) -> LibraryApp? {
-        let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return apps.first { $0.name == wanted }
-            ?? apps.first { $0.name.compare(wanted, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
-    }
-}
-
 extension AppModel {
     /// The model once launch has loaded the paired PCs.
     static func forIntent() async throws -> AppModel {
