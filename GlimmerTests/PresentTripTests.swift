@@ -1,15 +1,9 @@
 //
 //  PresentTripTests.swift
 //
-//  The renderer-starvation trip (wedge audit 2026-08-17): during warm handover
-//  and the pre-first-release stretch of a fresh pacer, every submit
-//  direct-presents - depth pins at 0 and totalReleases at 0, so every
-//  pre-existing trip (presentStalled, tickDeficit: both require depth > 0;
-//  linkDead: false on a ticking link) was structurally blind while a latched
-//  renderer discarded every decoded frame forever. The deep consecutive
-//  reject streak is the one signal that survives depth 0 - each increment is
-//  proof a decoded frame reached willPresent and was refused - and it now
-//  opens an episode in its own right.
+//  The present-path trips: the deep reject streak opens an episode at depth 0, the one
+//  signal a latched renderer leaves during warm handover, and the present-freeze trip
+//  stays quiet on the burst that ends a network drought.
 //
 
 import Foundation
@@ -55,5 +49,36 @@ struct PresentTripTests {
     @Test func tripThresholdFarAboveClassification() {
         #expect(StreamSession.rendererStarvationStreakTrip
             >= 10 * StreamSession.rendererRejectStreakTrip)
+    }
+
+    /// A burst landing after a ~350ms drought meets a stale release clock, but
+    /// the queue only just filled - that is not a wedge.
+    @Test func postDroughtBurstDoesNotTrip() {
+        let live = liveness(sinceRelease: 0.35, queueNonEmptyFor: 0.005)
+        #expect(!StreamSession.presentStallTripped(live: live, inStartupGrace: false))
+    }
+
+    /// A latched gate holds frames continuously while nothing releases.
+    @Test func queueHeldThroughStaleWindowTrips() {
+        let live = liveness(sinceRelease: 0.35, queueNonEmptyFor: 0.3)
+        #expect(StreamSession.presentStallTripped(live: live, inStartupGrace: false))
+    }
+
+    /// A refusing renderer drains the queue every tick, so the non-empty clock
+    /// keeps restarting; the reject streak still lets the freeze trip on time.
+    @Test func refusingRendererTripsDespiteFreshQueue() {
+        let live = liveness(sinceRelease: 0.35, queueNonEmptyFor: 0.004, rejectStreak: 30)
+        #expect(StreamSession.presentStallTripped(live: live, inStartupGrace: false))
+    }
+
+    private func liveness(
+        sinceRelease: Double, queueNonEmptyFor: Double, rejectStreak: Int = 0
+    ) -> FramePacer.LivenessSnapshot {
+        FramePacer.LivenessSnapshot(
+            secondsSinceLastTick: 0.004, secondsSinceLastRelease: sinceRelease, depth: 2,
+            secondsQueueNonEmpty: queueNonEmptyFor, running: true, totalTicks: 5000,
+            totalReleases: 4000, streamFrameIntervalSeconds: 1.0 / 120, adaptiveTargetDepth: 1,
+            recentTicksPerSecond: 120, recentReleasesPerSecond: 120, tickDeficitSeconds: 0,
+            expectedTickHz: 120, tickDeficitModeActive: false, presentRejectStreak: rejectStreak)
     }
 }

@@ -152,6 +152,20 @@ extension StreamSession {
         !inStartupGrace && rejectStreak >= rendererStarvationStreakTrip
     }
 
+    /// The present-freeze trip predicate, pure (unit-tested); rationale inline
+    /// in `evaluatePresentTrip`. Keeps the link-dead two-tick latch out.
+    static func presentStallTripped(live: FramePacer.LivenessSnapshot, inStartupGrace: Bool) -> Bool {
+        !inStartupGrace
+            && live.secondsSinceLastTick <= presentLinkDeadThreshold
+            && live.depth > 0
+            && live.secondsSinceLastRelease > presentStallThreshold
+            && live.totalReleases > 0
+            // A burst after a ~350ms drought also meets a stale release clock, so the queue must have held
+            // frames the whole window (a gate wedge never empties it) or the renderer is refusing them.
+            && (live.secondsQueueNonEmpty > presentStallThreshold
+                || live.presentRejectStreak >= rendererRejectStreakTrip)
+    }
+
     /// Compute the present-path trip flags for one watchdog evaluation. Also
     /// advances the two-tick link-silent tracking state (`sawLinkSilentLastTick`,
     /// `lastWatchdogTotalTicks`) - it MUST run every evaluation, trip or not, so
@@ -204,12 +218,8 @@ extension StreamSession {
         // wedge. `totalReleases > 0` so the pre-first-frame window is owned by the
         // decode-output watchdog, not this one.
         let linkTicking = live.secondsSinceLastTick <= StreamSession.presentLinkDeadThreshold
-        let presentStalled =
-            !inStartupGrace
-            && linkTicking
-            && live.depth > 0
-            && live.secondsSinceLastRelease > StreamSession.presentStallThreshold
-            && live.totalReleases > 0
+        let presentStalled = StreamSession.presentStallTripped(
+            live: live, inStartupGrace: inStartupGrace)
 
         // TICK-DEFICIT trip - the partial-rate collapse class the two trips
         // above are structurally blind to: the governor throttles the link to

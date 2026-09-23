@@ -90,6 +90,10 @@ extension FramePacer {
             return
         }
 
+        // Empty → non-empty edge: the present watchdog times a wedge from here, so
+        // a post-drought burst restarts the clock instead of reading as a stall.
+        if queue.isEmpty { liveness.queueNonEmptySince = CFAbsoluteTimeGetCurrent() }
+
         // Insert in hostPTS order. Common case (in-order arrival) is an append;
         // the search walks back from the tail so a single reorder is cheap.
         if ptsSeconds.isFinite {

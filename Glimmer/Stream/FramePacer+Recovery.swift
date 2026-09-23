@@ -35,6 +35,9 @@ extension FramePacer {
         /// Frames currently waiting in the jitter buffer. A non-empty queue
         /// combined with a stale `secondsSinceLastRelease` is the wedge.
         let depth: Int
+        /// Seconds the queue has held frames without emptying, 0 when empty. A
+        /// wedge keeps it climbing; a burst after a network drought restarts it.
+        let secondsQueueNonEmpty: Double
         /// Whether the pacer is between start() and stop().
         let running: Bool
         /// Cumulative tick count since start() - the instrumentation derives a
@@ -293,10 +296,12 @@ extension FramePacer {
         let events = serviceTickDeficitLocked(now: now)
         let sinceTick = liveness.lastTickHostTime.isFinite ? now - liveness.lastTickHostTime : .infinity
         let sinceRelease = liveness.lastReleaseHostTime.isFinite ? now - liveness.lastReleaseHostTime : .infinity
+        let nonEmptyFor = queue.isEmpty ? 0 : now - liveness.queueNonEmptySince
         let snapshot = LivenessSnapshot(
             secondsSinceLastTick: sinceTick,
             secondsSinceLastRelease: sinceRelease,
             depth: queue.count,
+            secondsQueueNonEmpty: nonEmptyFor,
             running: running,
             totalTicks: liveness.tickCount,
             totalReleases: liveness.releaseCount,

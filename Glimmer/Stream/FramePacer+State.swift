@@ -80,6 +80,10 @@ extension FramePacer {
         /// renderer (`willPresent` returned true). If this stops advancing while
         /// the queue is non-empty, the present path is wedged.
         var lastReleaseHostTime: CFTimeInterval = .nan
+        /// `CFAbsoluteTimeGetCurrent()` when a submit last found the queue empty.
+        /// Only submit refills it and trims/evictions never empty it, so while the
+        /// queue holds frames this is when it last went from empty to non-empty.
+        var queueNonEmptySince: CFTimeInterval = .nan
         /// Count of consecutive ticks where the queue was non-empty but nothing was
         /// released (the wedge signature: `due` latched false). Reset on any
         /// release. Used to log the diagnostic once it crosses a threshold.
