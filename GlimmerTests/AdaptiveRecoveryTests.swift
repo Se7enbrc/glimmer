@@ -95,8 +95,8 @@ struct RtpVideoQueueRecoveryTests {
     private func makeQueue() -> RtpVideoQueue {
         let depacketizer = VideoDepacketizer(delegate: delegate,
                                              negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_H265,
-                                             appVersionQuad: [7, 1, 450, 0], colorSpace: 0)
-        return RtpVideoQueue(depacketizer: depacketizer, packetSize: 64, multiFecCapable: true)
+                                             colorSpace: 0)
+        return RtpVideoQueue(depacketizer: depacketizer, packetSize: 64)
     }
 
     /// One data shard of a two-data, one-parity frame (fecPercentage 50).

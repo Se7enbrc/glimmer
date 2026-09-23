@@ -159,8 +159,17 @@ struct ParserHelperTests {
         let format = hevc ? StreamProtocol.VIDEO_FORMAT_H265 : StreamProtocol.VIDEO_FORMAT_H264
         return VideoDepacketizer(delegate: NoopDepacketizerDelegate(),
                                  negotiatedVideoFormat: format,
-                                 appVersionQuad: [7, 1, 450, 0],
                                  colorSpace: 0)
+    }
+
+    /// Sunshine's short header (0x01) is 8 bytes; any other first byte takes its 7.1.431 length, 24.
+    @Test func frameHeaderLengthFollowsSunshinesVersion() {
+        var short: [UInt8] = [0x01, 0, 0, 1] + [UInt8](repeating: 0, count: 60)
+        #expect(depacketizer(hevc: true).parseFrameHeader(&short, frameIndex: 1) == 8)
+        var long: [UInt8] = [0x81, 0, 0, 1] + [UInt8](repeating: 0, count: 60)
+        #expect(depacketizer(hevc: true).parseFrameHeader(&long, frameIndex: 1) == 24)
+        var runt: [UInt8] = [0x01, 0, 0]
+        #expect(depacketizer(hevc: true).parseFrameHeader(&runt, frameIndex: 1) == -1)
     }
 
     @Test func splitAnnexBNoStartCodeIsSinglePicData() {

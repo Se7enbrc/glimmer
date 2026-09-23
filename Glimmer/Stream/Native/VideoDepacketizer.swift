@@ -18,8 +18,8 @@
 //   - On the LAST packet of a frame, the payload MUST be truncated to
 //     (lastPacketPayloadLength - frameHeaderSize) - AV1 is intolerant of the
 //     FEC trailing-zero padding that H.264/HEVC Annex-B tolerates (c:1030-1041).
-//   - Frame-header length is version + byte0 dependent (c:914-965). For our
-//     target (>= 7.1.450): data[0]==0x01 ⇒ 8 bytes, data[0]==0x81 ⇒ 44 bytes.
+//   - Frame-header length follows data[0] at Sunshine's version, 7.1.431 (c:914-965):
+//     0x01 ⇒ 8 bytes, anything else ⇒ 24.
 //
 //  H.264/HEVC (Annex-B) SPECIFICS (c:974-1025 + the slow-path NAL routing):
 //   - The accumulated AU is an Annex-B elementary stream. FEC trailing-zero
@@ -72,7 +72,6 @@ final class VideoDepacketizer {
 
     private weak var delegate: VideoDepacketizerDelegate?
     private let negotiatedVideoFormat: Int32
-    let appVersionQuad: [Int32]
     private let colorSpace: Int32
 
     // The 16-byte NV header is stripped by RtpVideoQueue before handing us the
@@ -126,11 +125,9 @@ final class VideoDepacketizer {
     private var loggedFirstFrame = false
     private var loggedFirstIdr = false
 
-    init(delegate: VideoDepacketizerDelegate, negotiatedVideoFormat: Int32,
-         appVersionQuad: [Int32], colorSpace: Int32) {
+    init(delegate: VideoDepacketizerDelegate, negotiatedVideoFormat: Int32, colorSpace: Int32) {
         self.delegate = delegate
         self.negotiatedVideoFormat = negotiatedVideoFormat
-        self.appVersionQuad = appVersionQuad
         self.colorSpace = colorSpace
     }
 

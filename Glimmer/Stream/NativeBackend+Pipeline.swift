@@ -72,8 +72,7 @@ extension NativeBackend {
             Diag.notice("native backend: CONNECTED (RTSP + ENet control + START_A/B complete). "
                 + "Native input uplink ready. Starting native video receive.", Self.logCategory)
 
-            try await startVideoStage(handshake: handshake, config: config,
-                                      server: server, host: host, events: events)
+            try await startVideoStage(handshake: handshake, config: config, host: host, events: events)
 
             // Audio receive after the video ping (moonlight's control, video,
             // audio order): the host answers that ping with its first frame, so
@@ -109,7 +108,7 @@ extension NativeBackend {
     /// long-lived loops so `run()` can return "connected".
     func startVideoStage(
         handshake: RtspHandshakeResult, config: BackendStreamConfig,
-        server: BackendServerInfo, host: NWEndpoint.Host, events: NativeConnectionEvents
+        host: NWEndpoint.Host, events: NativeConnectionEvents
     ) async throws {
         events.stageStarting("video stream initialization")
 
@@ -157,9 +156,6 @@ extension NativeBackend {
         }
         sink.start()
 
-        let appVersionQuad = Self.versionQuad(server.appVersion)
-        let multiFecCapable = Self.appVersionAtLeast(appVersionQuad, 7, 1, 431)
-
         let receiver = VideoRtpReceiver(
             host: host,
             videoPort: handshake.videoPort,
@@ -170,9 +166,7 @@ extension NativeBackend {
             negotiatedVideoFormat: videoFormat,
             encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled,
             aesKey: config.remoteInputAesKey,
-            appVersionQuad: appVersionQuad,
             colorSpace: config.colorSpace,
-            multiFecCapable: multiFecCapable,
             sink: sink,
             requestIdr: { [weak enet] in enet?.requestIdrFrame() },
             invalidateReferenceFrames: { [weak enet] from, to in

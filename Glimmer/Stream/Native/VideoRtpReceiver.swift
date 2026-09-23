@@ -106,9 +106,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
          negotiatedVideoFormat: Int32,
          encryptionFeaturesEnabled: UInt32,
          aesKey: [UInt8],
-         appVersionQuad: [Int32],
          colorSpace: Int32,
-         multiFecCapable: Bool,
          sink: VideoSink,
          requestIdr: @escaping () -> Void,
          invalidateReferenceFrames: @escaping (_ from: Int, _ to: Int) -> Void,
@@ -128,12 +126,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         self.depacketizer = VideoDepacketizer(
             delegate: self,
             negotiatedVideoFormat: negotiatedVideoFormat,
-            appVersionQuad: appVersionQuad,
             colorSpace: colorSpace)
-        self.rtpQueue = RtpVideoQueue(
-            depacketizer: depacketizer,
-            packetSize: packetSize,
-            multiFecCapable: multiFecCapable)
+        self.rtpQueue = RtpVideoQueue(depacketizer: depacketizer, packetSize: packetSize)
         // Route per-frame FEC status from the queue's reportFinalFrameFecStatus()
         // call sites out to the ENet control loop (Sunshine SS_FRAME_FEC_PTYPE).
         self.rtpQueue.frameFecStatusSink = sendFrameFecStatus

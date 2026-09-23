@@ -90,9 +90,7 @@ extension RtpVideoQueue {
         // unused on this path (the block index/count come from multiFecBlocks).
         let nv = rtp.dataOffset
         let fecInfo = le32(bytes, nv + 12)
-        // Legacy fixup for non-multi-FEC servers (we're multiFecCapable, so this
-        // branch never runs for our host, but keep it faithful).
-        let multiFecBlocks: UInt8 = multiFecCapable ? bytes[nv + 11] : 0x00
+        let multiFecBlocks = bytes[nv + 11]
         let fields = NvFields(
             frameIndex: le32(bytes, nv + 4),
             fecIndex: (fecInfo & 0x3FF000) >> 12,

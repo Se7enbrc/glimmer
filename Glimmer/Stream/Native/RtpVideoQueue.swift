@@ -75,7 +75,6 @@ final class RtpVideoQueue {
 
     let depacketizer: VideoDepacketizer
     let packetSize: Int
-    let multiFecCapable: Bool
 
     /// Best-effort sink for per-frame FEC status (Sunshine SS_FRAME_FEC_PTYPE).
     /// Called from reportFinalFrameFecStatus() at the SAME three call sites as
@@ -269,10 +268,9 @@ final class RtpVideoQueue {
         25, 50, 75, 100, 150, 200, 300, 500, 750, 1_000, 1_500, 2_000, 3_000, 5_000, 10_000, 20_000
     ]
 
-    init(depacketizer: VideoDepacketizer, packetSize: Int, multiFecCapable: Bool) {
+    init(depacketizer: VideoDepacketizer, packetSize: Int) {
         self.depacketizer = depacketizer
         self.packetSize = packetSize
-        self.multiFecCapable = multiFecCapable
         Self.lastDatagramUs.store(0, ordering: .relaxed)
     }
 

@@ -119,7 +119,6 @@ struct FuzzTests {
         let format = hevc ? StreamProtocol.VIDEO_FORMAT_H265 : StreamProtocol.VIDEO_FORMAT_H264
         return VideoDepacketizer(delegate: FuzzNoopDelegate(),
                                  negotiatedVideoFormat: format,
-                                 appVersionQuad: [7, 1, 450, 0],
                                  colorSpace: 0)
     }
 
