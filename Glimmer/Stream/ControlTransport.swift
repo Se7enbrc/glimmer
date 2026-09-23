@@ -46,9 +46,9 @@ enum ControlTransport {
     struct TLSCredential: Sendable {
         let clientCertPEM: String?
         let clientKeyPEM: String?
-        /// non-nil → the host leaf must match it byte-for-byte (DER) or the
-        /// handshake is refused (MITM gate). nil → first-contact pairing: any
-        /// cert is accepted and returned for the caller to pin after RSA verifies.
+        /// The host leaf must match it byte-for-byte (DER) or the handshake is
+        /// refused (MITM gate). NetworkClient never opens TLS without one, and
+        /// only a finished PIN handshake supplies it.
         let pinnedCertPEM: String?
     }
 
@@ -113,7 +113,7 @@ enum ControlTransport {
         if !tls {
             try lifetime.check()
             try writeAll(fd: fd, ssl: nil, requestBytes)
-            let raw = try readAll(fd: fd, ssl: nil)
+            let raw = try readAll(fd: fd, ssl: nil, lifetime: lifetime)
             return try parse(raw)
         }
 
@@ -160,7 +160,7 @@ enum ControlTransport {
 
         try lifetime.check()
         try writeAll(fd: fd, ssl: ssl, requestBytes)
-        let raw = try readAll(fd: fd, ssl: ssl)
+        let raw = try readAll(fd: fd, ssl: ssl, lifetime: lifetime)
         SSL_shutdown(ssl)   // best-effort clean close; body is already read
         return try parse(raw)
     }
@@ -227,10 +227,15 @@ enum ControlTransport {
         }
     }
 
+    /// Ceiling for one control response. Real replies are tens of KiB of XML at
+    /// most, so anything past this is a broken or hostile responder.
+    static let maxResponseBytes = 4 * 1024 * 1024
+
     /// Read until peer close or `Content-Length` body bytes arrive (SO_RCVTIMEO
     /// bounds a stuck read). A non-positive read mid-body surfaces as a distinct
     /// truncatedRead, not a half-body the XML parser later calls "Malformed XML".
-    private static func readAll(fd: Int32, ssl: OpaquePointer?) throws -> Data {
+    /// The lifetime is checked every read, so a trickling peer can't outlast it.
+    static func readAll(fd: Int32, ssl: OpaquePointer?, lifetime: RequestLifetime) throws -> Data {
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 16 * 1024)
         var contentLength: Int?
@@ -240,6 +245,7 @@ enum ControlTransport {
             return data.count - headerEnd < contentLength
         }
         readLoop: while true {
+            try lifetime.check()
             let n: Int = buf.withUnsafeMutableBytes { raw in
                 if let ssl { return Int(SSL_read(ssl, raw.baseAddress, Int32(raw.count))) }
                 return read(fd, raw.baseAddress, raw.count)
@@ -283,6 +289,7 @@ enum ControlTransport {
                 headerEnd = r.upperBound
                 contentLength = try contentLengthHeader(in: data[data.startIndex..<r.lowerBound])
             }
+            try enforceSizeCap(received: data.count, declared: contentLength)
             if let headerEnd, let contentLength, data.count - headerEnd >= contentLength { break }
         }
         // A peer close before a declared Content-Length was met is a truncated body.
@@ -292,6 +299,13 @@ enum ControlTransport {
                 + "(have \(data.count) bytes)")
         }
         return data
+    }
+
+    /// Throws once a response outgrows `maxResponseBytes`, received or declared.
+    private static func enforceSizeCap(received: Int, declared: Int?) throws {
+        if received > maxResponseBytes || (declared ?? 0) > maxResponseBytes {
+            throw StreamError.hostUnreachable("control response too large")
+        }
     }
 
     /// Read `Content-Length` out of a completed header block (the bytes BEFORE
@@ -304,14 +318,16 @@ enum ControlTransport {
     /// a lossy decode would silently substitute replacement characters and let us
     /// keep reading a stream we cannot actually parse. This is host-supplied
     /// input, so garbage in must surface as an error, not as a half-understood
-    /// header.
-    private static func contentLengthHeader(in headerBytes: Data) throws -> Int? {
+    /// header. An empty or negative value counts as no header.
+    static func contentLengthHeader(in headerBytes: Data) throws -> Int? {
         guard let head = String(bytes: headerBytes, encoding: .utf8) else {
             throw StreamError.hostUnreachable("malformed HTTP response (headers are not UTF-8)")
         }
         var length: Int?
         for line in head.split(separator: "\r\n") where line.lowercased().hasPrefix("content-length:") {
-            length = Int(line.split(separator: ":")[1].trimmingCharacters(in: .whitespaces))
+            let parts = line.split(separator: ":", maxSplits: 1)
+            let value = parts.count == 2 ? Int(parts[1].trimmingCharacters(in: .whitespaces)) : nil
+            length = value.flatMap { $0 >= 0 ? $0 : nil }
         }
         return length
     }
