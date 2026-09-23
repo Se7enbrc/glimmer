@@ -123,6 +123,9 @@ public final class InputForwarder {
     /// Called when the user presses the configured quit hotkey. The session
     /// owner wires this to stop streaming.
     public var onQuitHotkey: (@MainActor () -> Void)?
+    /// Leaving before the first connection is live cancels the connect, as the
+    /// launcher's Cancel does. Falls back to `onQuitHotkey` when unset.
+    public var onCancelConnect: (@MainActor () -> Void)?
 
     /// Provider for the quit hotkey. Called on every keyDown so changes the
     /// user makes in Settings while a stream is live take effect immediately

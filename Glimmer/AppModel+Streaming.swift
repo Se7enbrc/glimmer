@@ -198,7 +198,8 @@ extension AppModel {
                     },
                     onMiniPlayerChanged: { [weak self] mini in
                         self?.isMiniPlayer = mini
-                    }
+                    },
+                    onCancelConnect: { [weak self] in self?.cancelConnect() }
                 )
                 for await event in events {
                     // Pass the SESSION's host, not selectedHost: ⌘1-⌘9 / the
@@ -526,13 +527,9 @@ extension AppModel {
         Self.connectCapsuleShown = true
     }
 
-    /// Abort an in-flight connect - the connecting capsule's click action
-    /// (and its ⎋ shortcut). Routes through the SESSION's own teardown so
-    /// there is exactly ONE cleanup site: stop() interrupts the handshake,
-    /// start() returns or throws, and the single cleanup in stream()'s Task
-    /// drains state back to idle. We only repaint the visible stage here -
-    /// never isStreaming/streamPhase-to-idle directly - because faking the
-    /// end state from a second site is how zombie sessions are made.
+    /// Abort an in-flight connect (the capsule, its ⎋, or ⎋ in the stream window before it is
+    /// live) through the session's own stop(), so stream()'s Task stays the one cleanup site;
+    /// faking the end state here is how zombie sessions are made.
     func cancelConnect() {
         guard case .connecting = streamPhase, let session = nativeSession else { return }
         guard !Self.connectCancelRequested else { return }  // one stop() is plenty (it's idempotent anyway)

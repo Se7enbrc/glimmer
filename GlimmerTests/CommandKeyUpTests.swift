@@ -191,25 +191,33 @@ struct ConnectEscapeTests {
     @Test func bareEscCancelsOnlyUntilTheStreamIsLive() throws {
         let forwarder = InputForwarder()
         let quits = Tally()
+        let cancels = Tally()
         forwarder.onQuitHotkey = { quits.calls += 1 }
+        forwarder.onCancelConnect = { cancels.calls += 1 }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 64, height: 64),
                               styleMask: .borderless, backing: .buffered, defer: true)
         forwarder.attach(to: window)
         defer { forwarder.detach() }
         let view = try #require(forwarder.inputView)
+        let quitChord = try key(.keyDown, kVK_ANSI_Q, mods: [.control, .option], chars: "q", at: 4)
 
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, mods: [.shift]))
-        #expect(quits.calls == 0)
+        #expect(cancels.calls == 0)
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape))
-        #expect(quits.calls == 1)
+        #expect(cancels.calls == 1)
+        forwarder.streamView(view, handleKeyDown: quitChord)
+        #expect(cancels.calls == 2)
+        #expect(quits.calls == 0)
 
         forwarder.setReady(true)
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, at: 2))
-        #expect(quits.calls == 1)
+        #expect(cancels.calls == 2)
         #expect(forwarder.heldKeys == [0x1B])
         // A reconnect gap does not turn Esc back into cancel.
         forwarder.setReady(false)
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, at: 3))
+        forwarder.streamView(view, handleKeyDown: quitChord)
+        #expect(cancels.calls == 2)
         #expect(quits.calls == 1)
     }
 }

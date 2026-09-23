@@ -43,6 +43,7 @@ extension StreamSession {
         let customControllerChordProvider: @MainActor () -> Set<ControllerButton>
         let onBackgroundedChanged: (@MainActor (Bool) -> Void)?
         let onMiniPlayerChanged: (@MainActor (Bool) -> Void)?
+        let onCancelConnect: (@MainActor () -> Void)?
     }
 
     /// Build the leave-hint string: the keyboard hotkey, plus the controller chord
@@ -120,6 +121,7 @@ extension StreamSession {
         inp.miniPlayerHotkeyProvider = options.miniPlayerHotkeyProvider
         inp.controllerQuitChordProvider = options.controllerQuitChordProvider
         inp.customControllerChordProvider = options.customControllerChordProvider
+        inp.onCancelConnect = options.onCancelConnect
         dec.statsOverlayEnabled = initialStatsOverlay
         dec.setNegotiatedBitrateKbps(options.negotiatedBitrateKbps)
         dec.setActiveAudioConfigLabel(config.audio.displayLabel)

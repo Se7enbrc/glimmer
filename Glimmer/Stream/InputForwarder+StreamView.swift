@@ -26,8 +26,8 @@ extension InputForwarder: StreamInputViewDelegate {
         // Quit hotkey, key-down only and never forwarded. Checked before the
         // ⌘ gate so a custom chord with ⌘ still quits while ⌘ is the Mac's.
         if !event.isARepeat, quitHotkeyProvider().matches(event: event, modifiers: mods) {
-            log.info("Quit hotkey detected - invoking onQuitHotkey")
-            onQuitHotkey?()
+            log.info("Quit hotkey detected - leaving the stream")
+            quitOrCancelConnect()
             return
         }
 
@@ -91,7 +91,7 @@ extension InputForwarder: StreamInputViewDelegate {
         if initialConnectPending, !event.isARepeat, Int(event.keyCode) == kVK_Escape,
            mods.isDisjoint(with: [.command, .option, .control, .shift]) {
             log.info("Esc before the stream went live - cancelling the connect")
-            onQuitHotkey?()
+            quitOrCancelConnect()
             return
         }
 
@@ -170,6 +170,12 @@ extension InputForwarder: StreamInputViewDelegate {
         for vk in heldModifierVKs.subtracting(downNow).sorted() { sendModifier(vk, down: false, modByte: modByte) }
         for vk in downNow.subtracting(heldModifierVKs).sorted() { sendModifier(vk, down: true, modByte: modByte) }
         heldModifierVKs = downNow
+    }
+
+    /// Before the stream is live, leaving is the launcher's cancel, so the
+    /// connect ends as cancelled rather than failed.
+    private func quitOrCancelConnect() {
+        if initialConnectPending, let onCancelConnect { onCancelConnect() } else { onQuitHotkey?() }
     }
 
     func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {

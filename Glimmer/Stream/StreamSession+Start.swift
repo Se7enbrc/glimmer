@@ -50,7 +50,9 @@ extension StreamSession {
         controllerQuitChordProvider: @escaping @MainActor () -> ControllerQuitChord = { .none },
         customControllerChordProvider: @escaping @MainActor () -> Set<ControllerButton> = { [] },
         onBackgroundedChanged: (@MainActor (Bool) -> Void)? = nil,
-        onMiniPlayerChanged: (@MainActor (Bool) -> Void)? = nil
+        onMiniPlayerChanged: (@MainActor (Bool) -> Void)? = nil,
+        // Esc or the quit chord before the stream is live: the caller's cancel.
+        onCancelConnect: (@MainActor () -> Void)? = nil
     ) async throws -> AsyncStream<StreamEvent> {
         guard !isStreaming, !stopInProgress else {
             throw StreamError.sessionFailed(-1)
@@ -143,7 +145,8 @@ extension StreamSession {
             controllerQuitChordProvider: controllerQuitChordProvider,
             customControllerChordProvider: customControllerChordProvider,
             onBackgroundedChanged: onBackgroundedChanged,
-            onMiniPlayerChanged: onMiniPlayerChanged))
+            onMiniPlayerChanged: onMiniPlayerChanged,
+            onCancelConnect: onCancelConnect))
 
         // --- 4a) Build + publish the session bridge (see publishBridge): weak
         // refs to every subsystem + self so a torn-down subsystem just makes its
