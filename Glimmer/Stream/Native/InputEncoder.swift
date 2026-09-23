@@ -104,12 +104,9 @@ private enum ControllerCap {
 
 // MARK: - InputEncoder
 
-/// Stateless builders, one per input message. Each returns the plaintext
-/// NV_INPUT_HEADER + typed body ready to be sealed by the control channel.
-///
-/// Mirrors the C exactly, with GFE-only behaviour omitted: this targets
-/// Sunshine (IS_SUNSHINE == true), where keyboard modifier fix-ups are skipped
-/// and the Sunshine extension fields are always populated.
+/// Stateless builders, one per input message, each returning the plaintext NV_INPUT_HEADER + body the control
+/// channel seals. They mirror the C with IS_SUNSHINE true, since a GameStream PC is refused before a stream
+/// starts: GameStream's keyboard modifier fix-ups are skipped and the Sunshine extension fields always filled.
 enum InputEncoder {
 
     // MARK: Header helper
@@ -201,8 +198,8 @@ enum InputEncoder {
 
     // MARK: 6. Horizontal scroll - LiSendHighResHScrollEvent (10 bytes)
 
-    /// SS_HSCROLL_PACKET: header + short scrollAmount BE. Sunshine-only on the
-    /// wire (the !IS_SUNSHINE → LI_ERR_UNSUPPORTED guard is enforced by the caller).
+    /// SS_HSCROLL_PACKET: header + short scrollAmount BE. Sunshine-only on the wire, which is the only
+    /// kind of PC a stream reaches, so the C's !IS_SUNSHINE → LI_ERR_UNSUPPORTED guard has no case here.
     static func hscroll(_ amount: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.ssHscroll, bodyLength: 6) // 10 - 4

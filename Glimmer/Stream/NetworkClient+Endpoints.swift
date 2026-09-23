@@ -254,9 +254,8 @@ extension NetworkClient {
         let riKeyHex = riKey.map { String(format: "%02x", $0) }.joined()
         let riKeyID = Self.bigEndianInt32(from: riKeyIV)
 
-        // HDR signaling - only attach the static-metadata bag if the client
-        // actually intends to negotiate a 10-bit format. Without this, GFE
-        // 3.22+ will refuse to enable HDR even on a 10-bit-capable host.
+        // HDR signaling rides only when a 10-bit format can be negotiated: Sunshine turns HDR on from
+        // hdrMode=1. The clientHdrCap* keys are moonlight-qt's, sent unchanged.
         let supports10bit = !config.videoFormats
             .isDisjoint(with: [.hevcMain10, .av1Main10])
         let hdrParams = supports10bit

@@ -95,9 +95,8 @@ extension NativeBackend {
     }
 
     public func sendHScroll(_ amount: Int16) -> Int32 {
-        // hscroll rides the mouse channel (CTRL_CHANNEL_MOUSE, InputStream.c).
-        // Sunshine-only on the wire, but the !IS_SUNSHINE → LI_ERR_UNSUPPORTED
-        // guard is moot here (we only ever target Sunshine).
+        // hscroll rides the mouse channel (CTRL_CHANNEL_MOUSE, InputStream.c). It is Sunshine-only,
+        // and a GameStream PC is refused before a stream starts, so the C's !IS_SUNSHINE guard is moot.
         dispatchInput(InputEncoder.hscroll(amount), channel: Enet.ctrlChannelMouse)
     }
 

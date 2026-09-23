@@ -115,11 +115,9 @@ extension InputForwarder {
 
     func attach(gamepad: GCController) {
         dualSenseRouting.syncControllers()
-        // Allocate the lowest free slot 0..15. moonlight-common-c supports up
-        // to 16 controllers on Sunshine hosts, up to 4 on GFE. A 17th pad is
-        // REFUSED outright: falling back to slot 0 would silently double-map
-        // it (two handlers interleaving full states into one controllerNumber,
-        // plus a haptics register tearing down the legitimate pad's engines).
+        // Lowest free slot 0..15, Sunshine's 16-pad limit (MAX_GAMEPADS). A 17th pad is REFUSED: slot 0 would
+        // double-map it, two handlers interleaving full states into one controllerNumber and a haptics
+        // register tearing down the legitimate pad's engines.
         guard let slot = (0..<UInt8(16)).first(where: { (gamepadMask & (1 << $0)) == 0 }) else {
             Diag.notice("controller attach refused: all 16 slots occupied "
                 + "(\(gamepad.vendorName ?? "Unknown"))", "Controller")
