@@ -90,16 +90,9 @@ extension StreamSession {
         // reconnect - so a route that moved mid-session is re-judged, never
         // inherited from the original connect.
         isRemotePathSession = resolvedRemoteness == .remote
-        // ONE packet size, resolved here and used EVERYWHERE - the SDP we
-        // advertise, the receive buffer, and (load-bearing) the Reed-Solomon
-        // shard length the FEC reconstructor rebuilds recovered packets at
-        // (RtpVideoQueue+Reconstruct). Advertising one size while reconstructing
-        // at another rebuilds every FEC-recovered packet at the wrong length and
-        // feeds garbage to the decoder - visible as the purple/white HDR
-        // corruption, and ONLY on a lossy link, because a clean one never
-        // exercises FEC recovery. The receive buffer adds its own headroom on
-        // top (packetSize + 64, + MAX_RTP_HEADER_SIZE), so a smaller value is
-        // safe there; there is no case for keeping the two apart.
+        // One size for the SDP and the receiver, less the 32-byte header when video is encrypted
+        // (VideoDecryptor.packetSize). FEC rebuilds at each block's longest shard, capped at that
+        // size plus the RTP header, so a PC that sends shorter shards still recovers cleanly.
         let resolvedPacketSize = StreamPathMTU.advertisedPacketSize(
             configured: config.packetSize,
             isRemote: resolvedRemoteness == .remote,

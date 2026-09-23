@@ -111,16 +111,9 @@ public actor PairingClient {
             failureMessage: "clientchallenge: host returned paired!=1 (likely wrong PIN entry mode)"
         )
 
-        // ---------------------------------------------------------------
-        // Step 4: serverchallengeresp
-        //
-        // Decrypt the host's response (size depends on the hash algo: hash
-        // length + 16-byte server challenge + cert sig). Then construct OUR
-        // proof:
-        //   hash( hostServerChallenge || ourCertSig || clientSecret )
-        // and send it back encrypted. The host uses this to prove WE know
-        // the PIN.
-        // ---------------------------------------------------------------
+        // Step 4: serverchallengeresp. The reply decrypts to the host's SHA-256 hash and a 16-byte
+        // challenge; we answer with hash(hostServerChallenge || ourCertSig || clientSecret), encrypted,
+        // which proves to the host that we know the PIN.
         let parsed = try parseServerChallenge(challengeResp: challengeResp, aesKey: aesKey)
 
         let clientSecret = try Self.randomBytes(16)

@@ -17,9 +17,9 @@
 //     streamPacketIndex(4 LE) frameIndex(4 LE) flags(1) extraFlags(1)
 //     multiFecFlags(1) multiFecBlocks(1) fecInfo(4 LE) = 16 bytes.
 //
-//  The FEC block operates over the WHOLE packet (RTP+NV+payload), zero-padded to
-//  receiveSize = packetSize + MAX_RTP_HEADER_SIZE(16). Recovered shards are
-//  complete RTP packets re-fed through queuePacket. Multi-FEC (host 7.1.431+):
+//  The FEC block operates over the WHOLE packet (RTP+NV+payload), zero-padded to the
+//  block's longest shard, at most packetSize + MAX_RTP_HEADER_SIZE(16). Recovered shards
+//  are complete RTP packets re-fed through queuePacket. Multi-FEC (host 7.1.431+):
 //  a frame can span up to 4 FEC blocks; only after the LAST block is the frame
 //  submitted.
 

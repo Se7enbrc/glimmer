@@ -317,18 +317,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     // MARK: - Lifecycle
 
-    /// FAST-START phase (mid-handshake): open the socket + start the burst-ping
-    /// loop. Mirrors moonlight's notifyAudioPortNegotiationComplete(), which opens
-    /// the audio socket and starts the ping thread the instant SETUP-audio is
-    /// parsed - BEFORE PLAY - because Sunshine won't aim audio at us (GFE 3.22
-    /// won't even reply to PLAY) until it has received a ping. Needs only
-    /// host/audioPort/pingPayload, all known at SETUP-audio time. Idempotent.
-    ///
-    /// We may receive audio before startReceive() opens the recv loop; that's
-    /// fine - the kernel buffers it in SO_RCVBUF, and when the recv loop drains
-    /// that buffer back-to-back the startup gate reads it as a BURST and drops
-    /// the stale excess (the fixed 500ms drop this replaced handled at most
-    /// 500ms of such backlog; the gate handles any depth).
+    /// FAST-START (at SETUP-audio, before PLAY): open the socket and start the burst ping, as moonlight's
+    /// notifyAudioPortNegotiationComplete() does, since Sunshine won't aim audio at us until it has one.
+    /// Audio that lands first waits in SO_RCVBUF, and the startup gate drops that stale burst. Idempotent.
     func startPing() throws {
         if pingStarted { return }
         try openSocket()

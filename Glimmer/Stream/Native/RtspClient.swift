@@ -110,7 +110,7 @@ final class RtspClient: @unchecked Sendable {
 
     /// Fired synchronously once SETUP-audio is parsed (encryption settled at DESCRIBE), before SETUP video,
     /// ANNOUNCE and PLAY, so the audio ping is running first: moonlight's notifyAudioPortNegotiationComplete(),
-    /// since Sunshine won't aim audio at us (and GFE 3.22 won't answer PLAY) until it has seen a ping.
+    /// since Sunshine won't aim audio at us until it has seen a ping.
     var onAudioPortNegotiated: ((
         _ audioPort: UInt16, _ pingPayload: [UInt8], _ audioEncryption: Bool, _ opus: OpusConfig
     ) -> Void)?

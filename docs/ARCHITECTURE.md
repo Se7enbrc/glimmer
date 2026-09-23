@@ -532,7 +532,7 @@ pins to the CDHash, every rebuild trips a "Glimmer wants to use its key" prompt.
 Files don't have that problem. Mode 0600 + atomic writes + stat-after-chmod
 verification (some FUSE / NFS backends silently ignore the chmod).
 
-`Pairing.swift`: the GameStream PIN handshake, five HTTP rounds plus a final
+`Pairing.swift`: the GameStream PIN handshake, four HTTP rounds plus a final
 HTTPS liveness check. AES-128-ECB on raw 16-byte buffers (no padding - the
 protocol pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]`, with
 SHA-256 for the challenge hashes too; a GameStream PC is refused before the
