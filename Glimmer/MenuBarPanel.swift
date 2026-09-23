@@ -413,10 +413,9 @@ private struct RowHighlight: ViewModifier {
     }
 }
 
-/// Sixty seconds, newest at the right, on one baseline: bandwidth bars rise
-/// above it (full height is the session's asked bitrate, or the minute's peak)
-/// and latency runs as a line below it (30 ms, or the minute's peak), so a
-/// hitch is a pink spike under a blue dip. Hovering reads any second back.
+/// Sixty seconds on one baseline: bandwidth bars above it (scaled to the asked
+/// bitrate or the minute's peak), latency as a line below it (30 ms or the peak),
+/// so a hitch is a pink spike under a blue dip. Hovering reads any second back.
 private struct StreamChart: View {
     let mbps: [Double]
     let latency: [Double]
