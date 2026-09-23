@@ -25,6 +25,7 @@ protocol StreamInputViewDelegate: AnyObject {
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent)
     func streamViewPointerDidEnter(_ view: StreamInputView)
     func streamViewPointerDidExit(_ view: StreamInputView)
+    func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool
 }
 
 // MARK: - StreamInputView
@@ -165,6 +166,16 @@ final class StreamInputView: NSView {
 
     override func flagsChanged(with event: NSEvent) {
         delegate?.streamView(self, handleFlagsChanged: event)
+    }
+
+    /// Key equivalents reach the view before the main menu, so while ⌘
+    /// shortcuts belong to the game the forwarder claims them here (⌘Q, ⌘W
+    /// and the rest go to the PC instead of Glimmer's menus).
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown, delegate?.streamView(self, handleKeyEquivalent: event) == true {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     // MARK: NSResponder - mouse

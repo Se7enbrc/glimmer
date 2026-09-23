@@ -242,6 +242,7 @@
 		DEC0DE2026091900000000DD /* ControllerForwarder+HID.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000DE /* ControllerForwarder+HID.swift */; };
 		DEC0DE2026091900000000DF /* HIDGamepadCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E0 /* HIDGamepadCard.swift */; };
 		DEC0DE2026091300000000B3 /* InputForwarder+CommandKeyUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */; };
+		DEC0DE202609221400000001 /* InputForwarder+SystemKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221400000002 /* InputForwarder+SystemKeys.swift */; };
 		DEC0DE2026091800000000C3 /* ModifierSides.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C4 /* ModifierSides.swift */; };
 		DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */; };
 		DEC0DE840000000000000009 /* AppModel+RawHID.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000000A /* AppModel+RawHID.swift */; };
@@ -583,6 +584,7 @@
 		DEC0DE2026091900000000DE /* ControllerForwarder+HID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+HID.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E0 /* HIDGamepadCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadCard.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+CommandKeyUp.swift"; sourceTree = "<group>"; };
+		DEC0DE202609221400000002 /* InputForwarder+SystemKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+SystemKeys.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C4 /* ModifierSides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ModifierSides.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+PointerAffordances.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000000A /* AppModel+RawHID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RawHID.swift"; sourceTree = "<group>"; };
@@ -822,6 +824,7 @@
 				DEC0DE2026091900000000DE /* ControllerForwarder+HID.swift */,
 				DEC0DE2026091900000000E0 /* HIDGamepadCard.swift */,
 				DEC0DE2026091300000000B4 /* InputForwarder+CommandKeyUp.swift */,
+				DEC0DE202609221400000002 /* InputForwarder+SystemKeys.swift */,
 				DEC0DE2026091800000000C4 /* ModifierSides.swift */,
 				DEC0DE84000000000000001A /* StreamWindow+PointerAffordances.swift */,
 				DEC0DE84000000000000000A /* AppModel+RawHID.swift */,
@@ -1273,6 +1276,7 @@
 				DEC0DE2026091900000000DD /* ControllerForwarder+HID.swift in Sources */,
 				DEC0DE2026091900000000DF /* HIDGamepadCard.swift in Sources */,
 				DEC0DE2026091300000000B3 /* InputForwarder+CommandKeyUp.swift in Sources */,
+				DEC0DE202609221400000001 /* InputForwarder+SystemKeys.swift in Sources */,
 				DEC0DE2026091800000000C3 /* ModifierSides.swift in Sources */,
 				DEC0DE840000000000000019 /* StreamWindow+PointerAffordances.swift in Sources */,
 				DEC0DE840000000000000009 /* AppModel+RawHID.swift in Sources */,

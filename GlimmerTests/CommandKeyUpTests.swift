@@ -66,3 +66,38 @@ struct HeldKeyReleaseUnderCommandTests {
         #expect(forwarder.heldKeys.isEmpty)
     }
 }
+
+/// With ⌘ shortcuts sent to the game, a ⌘ key equivalent goes to the PC only
+/// while the stream holds the pointer; otherwise it stays the Mac's.
+@MainActor
+struct CommandKeyEquivalentTests {
+
+    private func commandTab() throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [.command], timestamp: 1,
+            windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+            isARepeat: false, keyCode: UInt16(kVK_Tab)))
+    }
+
+    private func forwarder(optedIn: Bool, captured: Bool) -> InputForwarder {
+        let forwarder = InputForwarder()
+        forwarder.isReady = true
+        forwarder.captureSysKeys = optedIn
+        forwarder.isMouseCaptured = captured
+        return forwarder
+    }
+
+    @Test func capturedStreamSendsCommandChordsToThePC() throws {
+        let forwarder = forwarder(optedIn: true, captured: true)
+        #expect(forwarder.streamView(StreamInputView(), handleKeyEquivalent: try commandTab()))
+        #expect(forwarder.heldKeys.count == 1)
+    }
+
+    @Test func commandChordsStayWithTheMacUnlessOptedInAndCaptured() throws {
+        for (optedIn, captured) in [(false, true), (true, false), (false, false)] {
+            let forwarder = forwarder(optedIn: optedIn, captured: captured)
+            #expect(!forwarder.streamView(StreamInputView(), handleKeyEquivalent: try commandTab()))
+            #expect(forwarder.heldKeys.isEmpty)
+        }
+    }
+}

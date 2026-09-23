@@ -59,8 +59,9 @@ extension InputForwarder {
     //     consumes them for our key stream window. Sufficient on its own -
     //     these dispatch through AppKit, so returning nil stops the default
     //     zoom/swipe handlers.
-    //   * macOS Accessibility "Smart Zoom" keyboard chords (⌥⌘8/=/-): swallowed
-    //     in streamView(_:handleKeyDown:) (InputForwarder+StreamView.swift).
+    //   * Accessibility Zoom's ⌥⌘8/=/- are global hotkeys the app never sees,
+    //     except while ⌘ shortcuts go to the game (global hotkeys off, see
+    //     GlobalHotKeys below); then handleKeyDown swallows them.
     //   * Hot corners (Mission Control etc.): under associate-false the OS does
     //     not move the cursor, so it can never reach a corner - the warp's old
     //     job is gone entirely (warpCursorIfNearEdge deleted).
@@ -182,6 +183,7 @@ extension InputForwarder {
             }
         }
         isMouseCaptured = true
+        if captureSysKeys { GlobalHotKeys.setDisabled(true) }
         log.info("""
             Mouse capture: relative aim engaged (associate-false; coalescing off; \
             cursor disassociated, visibility owned by StreamWindow)
@@ -203,6 +205,7 @@ extension InputForwarder {
         // Re-associate: hand cursor control back to the OS so the pointer tracks
         // the device again wherever the user goes after leaving the stream.
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+        GlobalHotKeys.setDisabled(false)
         // Restore the system's prior mouse-coalescing setting (the `true` that
         // pairs with the `false` from enterCapturedMode) so we don't leak our
         // override into other apps after the stream ends. Clear the saved value
