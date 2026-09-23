@@ -192,13 +192,15 @@ before/after screenshot at the smallest and largest window the change allows.
 ## Lint
 
 `swiftlint` runs as a pre-commit hook over `Glimmer/` only; `scripts/` is
-build-time tooling and is not held to the product lint bar. The baseline is
-intentionally non-strict: warnings are surfaced for review but only errors block
-the commit. Thresholds worth knowing from `.swiftlint.yml`:
+build-time tooling and is not held to the product lint bar. The commit hook
+blocks only on errors, but `make verify` lints with `--strict`, where any
+warning fails, and the release build runs it. Treat a warning as a failure.
+Thresholds worth knowing from `.swiftlint.yml`:
 
-- `force_unwrapping`, `force_cast`, `force_try` - warning only.
-- File length and type body warn at 600, function body at 80. The errors sit at
-  1500 / 1500 / 250, well above the current largest case.
+- `force_unwrapping`, `force_cast`, `force_try` - warnings, so strict fails
+  them.
+- File length and type body warn at 600, function body at 80, and strict holds
+  every file to that.
 - `line_length` warns at 140, errors at 280, ignoring URLs and comments.
 
 The pre-commit wrapper runs `swiftlint --fix` first; if it modifies any staged
@@ -214,7 +216,7 @@ Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 
 ## Style
 
-- 2-space indent, opening brace on the same line, trailing newline. Match
+- 4-space indent, opening brace on the same line, trailing newline. Match
   neighbouring files.
 - File / type names match the load-bearing type they contain
   (`VideoDecoder.swift` → `class VideoDecoder`). Extensions split out by feature
@@ -222,11 +224,10 @@ Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 - Protocol constants mirror their upstream C names verbatim
   (`COLORSPACE_REC_2020`, `DR_NEED_IDR`) so a reader can grep the spec.
   `identifier_name.allowed_symbols: ["_"]` exists for exactly that.
-- Comments earn their keep: short for obvious code, expansive when documenting a
-  non-obvious decision. The HDR pipeline comments in `VideoDecoder.swift` and
-  the bridge-lifetime comment in `StreamSession.swift` are the bar - if a future
-  maintainer would have to dig through an upstream PR thread to understand why a
-  line exists, the comment goes in the source.
+- Comments earn their keep and stay at three lines or fewer, doc comments and
+  file headers included: what the code is for and the one-line why. If a future
+  maintainer would have to dig through an upstream PR thread to understand a
+  line, the why goes in the source; the full story goes in the commit message.
 - No emoji in source files.
 
 ## Concurrency

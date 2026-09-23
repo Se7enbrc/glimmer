@@ -19,7 +19,7 @@ numbers (before/after) are the house currency - see docs/PROFILING.md.
 ## Checklist
 
 - [ ] `make app` builds clean
-- [ ] `swiftlint lint` introduces no new violations
+- [ ] `make verify` passes (strict lint, zero warnings, tests)
 - [ ] Comments explain the WHY for any non-obvious decision (see
       docs/CONTRIBUTING.md → Style)
 - [ ] No `Co-Authored-By` / AI-attribution trailers in commits
