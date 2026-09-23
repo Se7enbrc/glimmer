@@ -101,6 +101,13 @@ extension FrameTimingTracker {
         }
     }
 
+    /// The ⌃B bookmark as a trace row on the input rows' clock (`t_ms`), so the
+    /// input sent just before it is one search away.
+    func bookmarkLine(total: UInt64, uptimeNanos: UInt64) -> String {
+        "{\"session\":\"\(sessionId)\",\"event\":\"bookmark\",\"bookmark_total\":\(total),"
+            + "\"t_ms\":\(jsonNumber(Double(uptimeNanos) / 1_000_000.0))}"
+    }
+
     /// Same integer/decimal discipline as TelemetryRenderer.jsonNumber so the
     /// per-frame trace and the per-second snapshot read consistently.
     func jsonNumber(_ value: Double) -> String {

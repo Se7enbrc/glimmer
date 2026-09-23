@@ -170,4 +170,14 @@ struct TelemetryRowTests {
         #expect(traced == 20)
         #expect(InputBatcher.motionTraceDue(lastNanos: last, nowNanos: last + 1, isGyroNull: true))
     }
+
+    @Test func bookmarkRowSitsOnTheInputRowsClock() throws {
+        let tracker = FrameTimingTracker(sessionId: "test")
+        let line = tracker.bookmarkLine(total: 3, uptimeNanos: 92_230_141_830_000)
+        let row = try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        #expect(row["event"] as? String == "bookmark")
+        #expect(row["bookmark_total"] as? Int == 3)
+        // Input rows stamp `t_ms` as uptime in milliseconds; a bookmark must read the same.
+        #expect(abs((row["t_ms"] as? Double ?? 0) - 92_230_141.83) < 0.001)
+    }
 }
