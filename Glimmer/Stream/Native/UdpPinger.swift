@@ -197,6 +197,13 @@ final class UdpPinger: @unchecked Sendable {
         }
     }
 
+    /// SS_PING (AudioStream.c / VideoStream.c): the 16-byte X-SS-Ping-Payload, then the sequence number big-endian.
+    static func datagram(payload: [UInt8], sequence: UInt32) -> [UInt8] {
+        var out = payload
+        withUnsafeBytes(of: sequence.bigEndian) { out.append(contentsOf: $0) }
+        return out
+    }
+
     /// Resolve a host STRING to an IP-literal `NWEndpoint.Host`, ONCE, at
     /// connection start (issue #70). An IPv4/IPv6 literal passes through with
     /// no DNS at all; a hostname is resolved via getaddrinfo - the SAME

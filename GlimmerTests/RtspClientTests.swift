@@ -35,6 +35,15 @@ struct RtspClientTests {
         #expect(request.headerValue("X-GS-ClientVersion") == "14")
     }
 
+    /// Sunshine's 16-char X-SS-Ping-Payload goes out verbatim, followed by a big-endian sequence number.
+    @Test func pingCarriesTheSetupPayloadAndSequence() {
+        var setup = RtspMessage()
+        setup.headers.append(("X-SS-Ping-Payload", "0123456789ABCDEF"))
+        let payload = Self.makeClient(port: 9).parsePingPayload(setup)
+        #expect(payload == Array("0123456789ABCDEF".utf8))
+        #expect(UdpPinger.datagram(payload: payload, sequence: 0x0102_0304) == payload + [1, 2, 3, 4])
+    }
+
     // MARK: - Cancel never strands the connect
 
     @Test func cancelledConnectEndsTheWaitAsInterrupted() {

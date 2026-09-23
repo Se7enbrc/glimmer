@@ -40,9 +40,8 @@ struct RtspHandshakeResult {
     /// Sunshine x-ss-general.featureFlags from the DESCRIBE SDP (RtspConnection.c:1145).
     /// 0 if absent. Bit 0x02 = LI_FF_CONTROLLER_TOUCH_EVENTS gates controllerTouch.
     var featureFlags: UInt32 = 0
-    /// 16 raw bytes from SETUP-video X-SS-Ping-Payload. Empty → legacy 4-byte
-    /// ("PING") video ping. Captured verbatim (NOT hex/base64-decoded), and only
-    /// if the header value is exactly 16 chars (else the host ignores it).
+    /// 16 raw bytes from SETUP-video X-SS-Ping-Payload, captured verbatim (not hex-decoded) and only when the
+    /// value is exactly 16 chars. Sunshine always sends one; without it no ping of ours would match.
     var videoPingPayload: [UInt8] = []
     /// Same for SETUP-audio - the 16-byte ping the RtpAudioReceiver sends.
     var audioPingPayload: [UInt8] = []
@@ -480,7 +479,7 @@ final class RtspClient: @unchecked Sendable {
         result.videoPort = parsePort(videoResp) ?? 47998
         result.videoPingPayload = parsePingPayload(videoResp)
         Diag.info("RTSP video ping payload: "
-            + (result.videoPingPayload.isEmpty ? "absent (legacy PING)" : "captured 16 bytes"),
+            + (result.videoPingPayload.isEmpty ? "absent" : "captured 16 bytes"),
             Self.logCategory)
 
         // 5) SETUP control (carries X-SS-Connect-Data + control port).

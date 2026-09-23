@@ -12,16 +12,9 @@
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  PING (AudioStream.c:38-65): send a 20-byte SS_PING
-//  { payload[16] + sequenceNumber (UInt32 BE) } - the fast-start burst first,
-//  then the CONDITIONAL steady cadence (EnvSignalController.steadyPingInterval
-//  - 75ms Wi-Fi-doze keepalive / 500ms relaxed; upstream pings a flat
-//  500ms) - payload =
-//  the 16 raw bytes from the SETUP-audio X-SS-Ping-Payload header. seq starts
-//  at 1, incremented BEFORE each send. If no payload captured (legacy GFE), send the 4-byte "PING"
-//  { 0x50,0x49,0x4E,0x47 }. The host won't reply to RTSP PLAY (GFE 3.22) and
-//  won't aim audio at us until it has received a ping - so ping + receive MUST
-//  share one socket.
+//  PING (AudioStream.c:38-65): a 20-byte SS_PING, SETUP-audio's 16-byte X-SS-Ping-Payload then a big-endian
+//  sequence number from 1: a fast-start burst, then EnvSignalController's steady cadence. Sunshine aims audio
+//  at the ping's source port only once it has one, so ping and receive MUST share one socket.
 //
 //  RECEIVE (AudioStream.c:239-383): drop runts (< 12 bytes), byteswap the RTP header, feed the queue and
 //  decode, AES-CBC decrypting first when SS_ENC_AUDIO is on. A backlog-aware startup gate replaces the C's
@@ -91,7 +84,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     let host: NWEndpoint.Host
     let audioPort: UInt16
-    let pingPayload: [UInt8]   // 16 bytes, or empty for legacy "PING"
+    let pingPayload: [UInt8]   // 16 bytes
     let audioPacketDuration: Int
     private let opusConfig: OpusConfig
     private let audioConfig: Int32
@@ -286,7 +279,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     static let audioPendingProbeSeconds = 3.0
 
     /// `host` is an IP literal from RTSP, `audioPort` SETUP-audio's (fallback 48000), `pingPayload` X-SS-Ping-Payload's
-    /// 16 bytes (empty for legacy GFE); `opusConfig.samplesPerFrame` is 48 × `audioPacketDuration` ms. `aesKey` and
+    /// 16 bytes; `opusConfig.samplesPerFrame` is 48 × `audioPacketDuration` ms. `aesKey` and
     /// `aesIvId` (remoteInputAesKey/Iv, whose first 4 bytes seed the IV) are used only when `audioEncryption` is on.
     init(host: NWEndpoint.Host,
          audioPort: UInt16,
@@ -348,8 +341,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         TelemetryCounters.shared.anchorAudioStreamStart()
         startPingLoop()
         Diag.notice("NativeAudio ping started → \(host):\(audioPort) "
-            + "(\(pingPayload.isEmpty ? "legacy ping" : "16-byte ping"), "
-            + "burst \(Int(Self.burstIntervalSec * 1000))ms for "
+            + "(burst \(Int(Self.burstIntervalSec * 1000))ms for "
             + "\(Int(Self.burstDurationSec))s → steady conditional "
             + "\(Int(Self.steadyIntervalSec * 1000))ms fast / "
             + "\(Int(UdpPinger.relaxedPingIntervalSeconds * 1000))ms relaxed)", Self.cat)

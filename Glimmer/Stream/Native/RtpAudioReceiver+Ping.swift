@@ -59,17 +59,8 @@ extension RtpAudioReceiver {
 
     private func sendPing() {
         guard fd >= 0 else { return }
-        let datagram: [UInt8]
-        if !pingPayload.isEmpty {
-            pingCount &+= 1
-            var out = pingPayload                 // 16 bytes
-            withUnsafeBytes(of: pingCount.bigEndian) { out.append(contentsOf: $0) }  // 4 bytes BE
-            datagram = out
-        } else {
-            // Legacy GFE 4-byte "PING". Still count it for the metric.
-            pingCount &+= 1
-            datagram = [0x50, 0x49, 0x4E, 0x47]
-        }
+        pingCount &+= 1
+        let datagram = UdpPinger.datagram(payload: pingPayload, sequence: pingCount)
         let sent = datagram.withUnsafeBytes { raw in
             withUnsafePointer(to: &destAddr) { sp in
                 sp.withMemoryRebound(to: sockaddr.self, capacity: 1) { sap in

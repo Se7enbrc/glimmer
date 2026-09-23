@@ -44,10 +44,8 @@ extension RtspClient {
         return UInt16(port)
     }
 
-    /// Capture X-SS-Ping-Payload from a SETUP response (RtspConnection.c:1269).
-    /// The header VALUE must be EXACTLY 16 chars and is memcpy'd verbatim as raw
-    /// bytes - NO hex/base64 decode. If absent or not 16 chars, returns empty
-    /// (→ legacy 4-byte "PING").
+    /// Capture X-SS-Ping-Payload from a SETUP response (RtspConnection.c:1269). The value must be EXACTLY
+    /// 16 chars and is memcpy'd verbatim as raw bytes, no hex/base64 decode; anything else returns empty.
     func parsePingPayload(_ response: RtspMessage) -> [UInt8] {
         guard let value = response.headerValue("X-SS-Ping-Payload") else { return [] }
         // Latin-1 maps each char to one byte, matching the C memcpy of raw chars.

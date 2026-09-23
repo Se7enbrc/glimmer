@@ -13,15 +13,9 @@
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  PING (VideoStream.c:54-82): send a 20-byte SS_PING
-//  { char payload[16]; uint32 sequenceNumber (BIG-endian) } on the CONDITIONAL
-//  steady cadence (EnvSignalController.steadyPingInterval - 75ms Wi-Fi-doze
-//  keepalive / 500ms relaxed; upstream pings a flat 500ms). payload = the 16
-//  raw bytes captured from SETUP-video X-SS-Ping-Payload. sequenceNumber starts
-//  at 1, incremented BEFORE each send. If no payload captured (legacy GFE),
-//  send the 4-byte { 0x50,0x49,0x4E,0x47 } ("PING") instead. The host will NOT
-//  start sending video until it receives a ping - this is the most likely fix
-//  for the frame watchdog firing on the native path today.
+//  PING (VideoStream.c:54-82): a 20-byte SS_PING, SETUP-video's 16-byte X-SS-Ping-Payload then a big-endian
+//  sequence number from 1, on EnvSignalController's steady cadence (75ms Wi-Fi keepalive, 500ms relaxed).
+//  Sunshine sends no video until it has one, and matches only the payload (we set ML_FF_SESSION_ID_V1).
 //
 //  RECEIVE (VideoStream.c:85-236): drop runts, open SS_ENC_VIDEO packets (only when the PC requires
 //  it) with VideoDecryptor, and hand the rest to RtpVideoQueue, which host-byteswaps the RTP header,
@@ -40,7 +34,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     private let host: NWEndpoint.Host
     private let videoPort: UInt16
-    private let pingPayload: [UInt8]   // 16 bytes, or empty for legacy
+    private let pingPayload: [UInt8]   // 16 bytes
     private let packetSize: Int
     /// Negotiated stream bitrate (kbps). Sizes SO_RCVBUF by bandwidth-delay
     /// product (see `openSocket`) instead of a fixed packet count.
@@ -412,17 +406,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     private func sendPing() {
         guard fd >= 0 else { return }
-        let datagram: [UInt8]
-        if !pingPayload.isEmpty {
-            pingCount &+= 1
-            var out = pingPayload                 // 16 bytes
-            let beSeq = pingCount.bigEndian
-            withUnsafeBytes(of: beSeq) { out.append(contentsOf: $0) }  // 4 bytes BE
-            datagram = out
-        } else {
-            // Legacy GFE 4-byte "PING".
-            datagram = [0x50, 0x49, 0x4E, 0x47]
-        }
+        pingCount &+= 1
+        let datagram = UdpPinger.datagram(payload: pingPayload, sequence: pingCount)
         _ = datagram.withUnsafeBytes { raw in
             withUnsafePointer(to: &destAddr) { sp in
                 sp.withMemoryRebound(to: sockaddr.self, capacity: 1) { sap in
@@ -435,8 +420,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         // unjudgeable from data. Always-live integer add at ≤13.3Hz.
         EnvSignalController.shared.videoPingsSentTotal.increment()
         if pingCount == 1 {
-            Diag.notice("NativeVideo first video ping sent → \(host):\(videoPort) "
-                + "(\(pingPayload.isEmpty ? "legacy" : "payload") seq=\(pingCount))", Self.cat)
+            Diag.notice("NativeVideo first video ping sent → \(host):\(videoPort) (seq=\(pingCount))", Self.cat)
         }
     }
 
