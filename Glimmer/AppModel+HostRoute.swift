@@ -159,7 +159,7 @@ extension AppModel {
     }
 
     /// The address `nativeServerInfo(for:)` dials: discovered, then typed, then the name.
-    static func routeAddress(_ host: Host) -> String {
+    nonisolated static func routeAddress(_ host: Host) -> String {
         host.localAddress ?? host.manualAddress ?? host.name
     }
 

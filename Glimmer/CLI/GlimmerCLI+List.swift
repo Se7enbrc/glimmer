@@ -21,7 +21,7 @@ extension GlimmerCLI {
         // One PC at a time: a handful of 2-second probes at most.
         for host in model.hosts {
             let live = await probe(host, model: model)
-            print("\(host.displayName)\t\(address(of: host))\t\(statusText(live))")
+            print("\(host.displayName)\t\(AppModel.routeAddress(host))\t\(statusText(live))")
         }
         return Exit.ok
     }

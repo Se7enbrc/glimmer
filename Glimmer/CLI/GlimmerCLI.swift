@@ -171,10 +171,6 @@ enum GlimmerCLI {
         return nil
     }
 
-    nonisolated static func address(of host: Host) -> String {
-        host.localAddress ?? host.manualAddress ?? host.name
-    }
-
     /// One readiness probe through the launcher's own poller, in place of the loop
     /// a selection starts. A first poll that learns the PC's MAC reloads the host
     /// list and resets the selection, dropping its result; one retry covers that.
@@ -224,6 +220,6 @@ enum GlimmerCLI {
     }
 
     nonisolated static func notPairedMessage(_ host: Host) -> String {
-        "\(host.displayName) needs pairing again. Run: glimmer pair \(address(of: host))"
+        "\(host.displayName) needs pairing again. Run: glimmer pair \(AppModel.routeAddress(host))"
     }
 }
