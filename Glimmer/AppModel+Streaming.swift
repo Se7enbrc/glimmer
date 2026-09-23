@@ -64,6 +64,9 @@ extension AppModel {
         streamPhase = .connecting(stage: "Connecting to \(host.displayName)…")
         nativeStreamError = nil
         nativeHDRActive = false
+        // Unmount a toast still in its hold from the last session, so the next
+        // stream end mounts a fresh one with a full hold.
+        streamEndedToastVisible = false
     }
 
     /// Retry repeats the last requested launch, not the hero target.
@@ -88,12 +91,6 @@ extension AppModel {
         }
         Diag.notice("Starting stream → \(host.displayName) · \(app.name)", "Stream")
         armLaunchState(app: app, host: host)
-        // Re-arm the disconnect toast for back-to-back cycles: if the
-        // previous session's toast is still inside its 2-4 s hold, dropping
-        // the flag here unmounts it (cancelling its hold task) so the NEXT
-        // stream end mounts a fresh toast with a full hold, instead of the
-        // new toast inheriting the old one's residual timer.
-        streamEndedToastVisible = false
         // NB: the "last played" timestamp is intentionally NOT written here.
         // It records when the stream ENDED, not when it started - writing it
         // on start made the launcher's "last played N ago" label tick from
@@ -146,8 +143,8 @@ extension AppModel {
             // The Swift-native engine is the only path.
             let session = StreamSession(backend: NativeBackend())
             await MainActor.run { self.nativeSession = session }
-            await session.setRouteAskProvider { [weak self] in self?.routeAsk(for: host) }
             await session.authorizeTakeover(takeoverAuthorized)
+            await session.setRouteAskProvider(routeAskProvider(forFormats: cfg.videoFormats))
             var caughtError: Error?
             var takeover: TakeoverRequired?
             do {

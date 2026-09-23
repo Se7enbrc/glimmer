@@ -90,4 +90,18 @@ struct WiredBitrateTests {
         #expect(ask == RouteAsk(kbps: start.bitrateKbps, boost: start.bitrateBoost))
         #expect(ask.kbps == model.wireBitrateKbps(forFormats: model.offeredVideoFormats(for: pc)))
     }
+
+    /// A reconnect asks the route it finds: Wi-Fi through the radio gate with no
+    /// boost to withdraw, wired under its own cap with the boost the RTT may take back.
+    @Test func aReconnectAsksTheRouteItFinds() {
+        func decision(_ mode: BitrateMode, boost: Double, phy: Double?) -> BitrateDecision {
+            BitrateDecision(mode: mode, dialKbps: 226_000, codecMultiplier: 0.8, boost: boost, radioGatePhyMbps: phy)
+        }
+        let wired = decision(.highestQuality, boost: AppModel.wiredBitrateMultiplier, phy: nil)
+        #expect(AppModel.routeAsk(wired, route: .wired) == RouteAsk(kbps: 361_600, boost: 2))
+        let wifi = decision(.highestQuality, boost: AppModel.wifiBitrateMultiplier, phy: 600)
+        #expect(AppModel.routeAsk(wifi, route: .wifi) == RouteAsk(kbps: 210_000, boost: 1))
+        #expect(AppModel.routeAsk(decision(.bandwidthSaver, boost: 1, phy: nil), route: .wired)
+            == RouteAsk(kbps: 180_800, boost: 1))
+    }
 }

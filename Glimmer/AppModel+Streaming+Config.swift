@@ -84,10 +84,29 @@ extension AppModel {
     /// The route's ask before the Wi-Fi radio gate: dial × codec × boost.
     /// Bandwidth saver is the lighter ask from before the boosts existed.
     func routeAskKbps(forFormats formats: VideoFormats) -> Int {
-        let decision = bitrateDecision(forFormats: formats)
-        let cap = decision.mode == .highestQuality ? Self.routeBoost(hostRoute.routeClass).capKbps : Self.maxBitrateKbps
-        return Self.wireBitrateKbps(dial: decision.dialKbps, codecMultiplier: decision.codecMultiplier,
-                                    boost: decision.boost, capKbps: cap)
+        Self.routeAskKbps(bitrateDecision(forFormats: formats), route: hostRoute.routeClass)
+    }
+
+    nonisolated static func routeAskKbps(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> Int {
+        let cap = decision.mode == .highestQuality ? routeBoost(route).capKbps : maxBitrateKbps
+        return wireBitrateKbps(dial: decision.dialKbps, codecMultiplier: decision.codecMultiplier,
+                               boost: decision.boost, capKbps: cap)
+    }
+
+    /// What a reconnect asks the route it finds for: the ask after the radio gate,
+    /// with the wired boost the measured RTT may still withdraw.
+    nonisolated static func routeAsk(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> RouteAsk {
+        RouteAsk(kbps: StreamPathMTU.wifiAskKbps(ask: routeAskKbps(decision, route: route),
+                                                 phyRateMbps: decision.radioGatePhyMbps),
+                 boost: rttWithdrawableBoost(decision, route: route))
+    }
+
+    /// Every reconnect asks this for the route the Mac is on then.
+    func routeAskProvider(forFormats formats: VideoFormats) -> @MainActor @Sendable () -> RouteAsk? {
+        { [weak self] in
+            guard let self else { return nil }
+            return Self.routeAsk(bitrateDecision(forFormats: formats), route: hostRoute.routeClass)
+        }
     }
 
     /// The inputs `routeAskKbps` multiplies, also recorded in the telemetry config event.
