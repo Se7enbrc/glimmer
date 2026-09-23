@@ -272,6 +272,7 @@
 		DEC0DE202609221300000002 /* AudioCushionDeadAirTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221300000001 /* AudioCushionDeadAirTests.swift */; };
 		DEC0DE202609221300000004 /* AudioResamplerHoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221300000003 /* AudioResamplerHoldTests.swift */; };
 		DEC0DE202609221300000006 /* AudioEngineLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221300000005 /* AudioEngineLifecycleTests.swift */; };
+		DEC0DE202609221300000008 /* AudioPendingProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221300000007 /* AudioPendingProbeTests.swift */; };
 		D2B00010 /* HostResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000F /* HostResolutionTests.swift */; };
 		D2000031 /* StreamCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000030 /* StreamCryptoTests.swift */; };
 		D2000033 /* PairingCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000032 /* PairingCryptoTests.swift */; };
@@ -610,6 +611,7 @@
 		DEC0DE202609221300000001 /* AudioCushionDeadAirTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCushionDeadAirTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221300000003 /* AudioResamplerHoldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioResamplerHoldTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221300000005 /* AudioEngineLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngineLifecycleTests.swift; sourceTree = "<group>"; };
+		DEC0DE202609221300000007 /* AudioPendingProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPendingProbeTests.swift; sourceTree = "<group>"; };
 		D2B0000F /* HostResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResolutionTests.swift; sourceTree = "<group>"; };
 		D2000030 /* StreamCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamCryptoTests.swift; sourceTree = "<group>"; };
 		D2000032 /* PairingCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCryptoTests.swift; sourceTree = "<group>"; };
@@ -1004,6 +1006,7 @@
 				DEC0DE202609221300000001 /* AudioCushionDeadAirTests.swift */,
 				DEC0DE202609221300000003 /* AudioResamplerHoldTests.swift */,
 				DEC0DE202609221300000005 /* AudioEngineLifecycleTests.swift */,
+				DEC0DE202609221300000007 /* AudioPendingProbeTests.swift */,
 				D2B0000F /* HostResolutionTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
 				D2000032 /* PairingCryptoTests.swift */,
@@ -1437,6 +1440,7 @@
 				DEC0DE202609221300000002 /* AudioCushionDeadAirTests.swift in Sources */,
 				DEC0DE202609221300000004 /* AudioResamplerHoldTests.swift in Sources */,
 				DEC0DE202609221300000006 /* AudioEngineLifecycleTests.swift in Sources */,
+				DEC0DE202609221300000008 /* AudioPendingProbeTests.swift in Sources */,
 				D2B00010 /* HostResolutionTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
 				D2000033 /* PairingCryptoTests.swift in Sources */,
