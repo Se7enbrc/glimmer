@@ -412,27 +412,9 @@ final class RtspClient: @unchecked Sendable {
         try await performSetupRounds(into: &result)
 
         // 6) ANNOUNCE (control stream id) with the SDP payload.
-        let sdpBuilder = SdpBuilder(
-            config: config,
-            videoPort: result.videoPort,
-            urlSafeAddr: urlSafeAddr,
-            addrFamilyToken: addrFamilyToken,
-            negotiatedVideoFormat: result.negotiatedVideoFormat,
-            encryptionFeaturesEnabled: result.encryptionFeaturesEnabled,
-            // RFI is advertised (maxNumReferenceFrames=0) only when the host
-            // offered it (DESCRIBE SDP) AND our decoder supports it for the
-            // negotiated codec - the VideoSink's RFI capability bits.
-            serverSupportsRfi: result.referenceFrameInvalidationSupported,
-            decoderRfiCapabilities: VideoDecoder.rfiCapabilities,
-            highQualityAudio: result.highQualityAudio)
-        let sdpPayload = sdpBuilder.build()
-        Diag.info("RTSP ANNOUNCE \(Self.controlStreamId) (SDP \(sdpPayload.count) bytes)",
+        let announce = makeAnnounce(result)
+        Diag.info("RTSP ANNOUNCE \(Self.controlStreamId) (SDP \(announce.payload?.count ?? 0) bytes)",
                   Self.logCategory)
-        var announce = makeRequest("ANNOUNCE", Self.controlStreamId)
-        announce.headers.append(("Session", sessionIdString))
-        announce.headers.append(("Content-type", "application/sdp"))
-        announce.headers.append(("Content-length", "\(sdpPayload.count)"))
-        announce.payload = sdpPayload
         let announceResp = try await transact(announce)
         try check(announceResp, step: "ANNOUNCE")
 

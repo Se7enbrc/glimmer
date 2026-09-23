@@ -155,6 +155,31 @@ struct RtspClientTests {
         #expect(throws: (any Error).self) { try rtsp.unsealRtsp(Data(wire)) }
     }
 
+    /// Sunshine reads a sealed message into 2048 bytes and refuses one whose 24-byte header plus payload
+    /// reaches that (rtsp.cpp), so the longest ANNOUNCE we can send, sealed, must stay under it.
+    @Test func worstCaseSealedAnnounceFitsSunshinesBuffer() throws {
+        let url = "rtspenc://[2001:0db8:ffff:ffff:ffff:ffff:ffff:ffff]:48010"
+        let (urlAddr, urlSafeAddr, family) = NativeBackend.addressInfo(rtspSessionUrl: url, fallbackAddress: "")
+        let config = BackendStreamConfig(
+            width: 7680, height: 4320, fps: 240, bitrate: Int32(AppModel.wiredBitrateCapKbps), packetSize: 1392,
+            streamingRemotely: StreamProtocol.STREAM_CFG_REMOTE, audioConfiguration: AudioConfig.surround71.cValue,
+            supportedVideoFormats: 0, clientRefreshRateX100: 24_000, colorSpace: 2, colorRange: 1,
+            encryptionFlags: 0, remoteInputAesKey: Self.key, remoteInputAesIv: Self.key)
+        let rtsp = RtspClient(
+            host: "127.0.0.1", rtspPort: 48010, rtspTargetUrl: url, urlAddr: urlAddr,
+            urlSafeAddr: urlSafeAddr, addrFamilyToken: family, config: config, serverCodecModeRaw: 0)
+        rtsp.sessionIdString = "DEADBEEFCAFE"
+        var result = RtspHandshakeResult(
+            audioPort: 48000, videoPort: 47998, controlPort: 47999, controlConnectData: 0,
+            sessionId: "DEADBEEFCAFE", negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_H265_MAIN10,
+            encryptionFeaturesSupported: 7, encryptionFeaturesEnabled: 7,
+            referenceFrameInvalidationSupported: true)
+        result.highQualityAudio = true
+        #expect(family == "IPv6" && rtsp.encryptedRtspEnabled)
+        let sealed = try rtsp.sealRtsp(rtsp.makeAnnounce(result).serialize())
+        #expect(sealed.count < 2048)
+    }
+
     // MARK: - Encryption negotiation
 
     @Test func controlAndAudioEncryptionFollowTheHostOffer() {

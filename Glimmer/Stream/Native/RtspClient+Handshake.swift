@@ -26,6 +26,27 @@ extension RtspClient {
         return msg
     }
 
+    /// The control ANNOUNCE and its SDP. RFI is advertised only when the PC offered it in DESCRIBE
+    /// and the decoder supports it for the negotiated codec.
+    func makeAnnounce(_ result: RtspHandshakeResult) -> RtspMessage {
+        let sdpPayload = SdpBuilder(
+            config: config,
+            videoPort: result.videoPort,
+            urlSafeAddr: urlSafeAddr,
+            addrFamilyToken: addrFamilyToken,
+            negotiatedVideoFormat: result.negotiatedVideoFormat,
+            encryptionFeaturesEnabled: result.encryptionFeaturesEnabled,
+            serverSupportsRfi: result.referenceFrameInvalidationSupported,
+            decoderRfiCapabilities: VideoDecoder.rfiCapabilities,
+            highQualityAudio: result.highQualityAudio).build()
+        var announce = makeRequest("ANNOUNCE", Self.controlStreamId)
+        announce.headers.append(("Session", sessionIdString))
+        announce.headers.append(("Content-type", "application/sdp"))
+        announce.headers.append(("Content-length", "\(sdpPayload.count)"))
+        announce.payload = sdpPayload
+        return announce
+    }
+
     func check(_ response: RtspMessage, step: String) throws {
         Diag.info("RTSP \(step) → \(response.statusCode)", Self.logCategory)
         if response.statusCode != 200 {
