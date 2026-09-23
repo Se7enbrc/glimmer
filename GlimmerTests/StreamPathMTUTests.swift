@@ -132,21 +132,9 @@ struct StreamPathMTUTests {
         #expect(text.contains("x-nv-video[0].packetSize:1024"))
     }
 
-    /// REGRESSION (shipped in 2026.7.8-rc1, purple/white HDR corruption).
-    ///
-    /// `packetSize` is not merely a buffer bound - it is the Reed-Solomon SHARD
-    /// LENGTH the FEC reconstructor rebuilds recovered packets at
-    /// (`RtpVideoQueue+Reconstruct`: `receiveSize = packetSize + MAX_RTP_HEADER_SIZE`
-    /// and `length: packetSize + dataOffset`). rc1 advertised a clamped 1024 to
-    /// the host while leaving the client reconstructing at 1392, so every
-    /// FEC-recovered packet was rebuilt at the wrong length and fed garbage to
-    /// VideoToolbox - 883 corruption events in 196s on a lossy tunnel, and zero
-    /// on the previous build. A clean link never shows it, because it never
-    /// exercises FEC recovery.
-    ///
-    /// The invariant: ONE resolved size reaches the SDP, the receive buffer, and
-    /// the FEC math. `BackendStreamConfig.packetSize` IS that value, and the SDP
-    /// echoes it rather than re-deriving its own.
+    /// The SDP echoes the stored size that also bounds the receive buffer and the FEC
+    /// shard length. 2026.7.8-rc1 advertised 1024 while rebuilding FEC shards at 1392
+    /// and corrupted every recovered frame on a lossy link.
     @Test func advertisedSizeIsExactlyTheStoredSizeUsedForFecReconstruction() {
         for size: Int32 in [512, 872, 1024, 1392] {
             let text = sdp(remote: StreamProtocol.STREAM_CFG_REMOTE, packetSize: size)

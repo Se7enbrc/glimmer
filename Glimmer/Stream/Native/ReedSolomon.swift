@@ -204,17 +204,9 @@ struct ReedSolomon {
 
     // MARK: - Decode (rs.c reed_solomon_decode + invert_mat)
 
-    /// Reconstruct erased DATA shards in place.
-    ///
-    /// - `shards`: ds+ps buffers, each exactly `bs` bytes (zero-padded for short
-    ///   packets). Indices 0..<ds are data, ds..<ds+ps are parity. Erased data
-    ///   slots may be any content; this method overwrites them.
-    /// - `marks`: length ds+ps; `true` == shard MISSING/erased. Only the first
-    ///   ds entries are recovered (parity recovery is never requested).
-    /// - `bs`: block size = StreamConfig.packetSize + MAX_RTP_HEADER_SIZE(16).
-    ///
-    /// Returns `true` on success (erased data shards now valid), `false` if
-    /// unrecoverable (fewer present parity shards than gaps). Mirrors rs.c:128.
+    /// Rebuilds the erased data shards in place (rs.c:128). `shards` holds ds data then ps
+    /// parity buffers of `bs` bytes, the block's shard length; `marks[i]` is true when shard
+    /// `i` is missing. Returns false when fewer parity shards survive than there are gaps.
     func decode(shards: inout [[UInt8]], marks: [Bool], bs: Int) -> Bool {
         let totalShards = ds + ps
         guard shards.count >= totalShards, marks.count >= totalShards else { return false }
