@@ -102,7 +102,12 @@ public enum HostReachability {
                     let ms = Int((Double(elapsedNs) / 1_000_000.0).rounded())
                     once.resume(with: .reachable(rttMs: ms))
                     conn.cancel()
-                case .failed, .cancelled:
+                case .failed:
+                    // Cancel so the connection releases this handler now
+                    // rather than at the deadline.
+                    once.resume(with: .unreachable)
+                    conn.cancel()
+                case .cancelled:
                     once.resume(with: .unreachable)
                 case .waiting:
                     // Waiting means we couldn't form the connection (host
@@ -119,12 +124,11 @@ public enum HostReachability {
 
             // Hard ceiling: if the OS never fires a terminal state within our
             // budget (e.g. SYN-ACK lost on a stale route), we still want the
-            // chip poller to make progress.
+            // chip poller to make progress. Only cancel if no state beat us to it.
             let deadlineMs = max(250, timeoutMs)
             DispatchQueue.global(qos: .utility)
                 .asyncAfter(deadline: .now() + .milliseconds(deadlineMs)) {
-                    once.resume(with: .unreachable)
-                    conn.cancel()
+                    if once.resume(with: .unreachable) { conn.cancel() }
                 }
         }
         return outcome
@@ -133,17 +137,20 @@ public enum HostReachability {
     /// Single-shot continuation guard. NWConnection happily fires multiple
     /// terminal states in quick succession (e.g. `.cancelled` after we cancel
     /// from `.ready`); resuming a `CheckedContinuation` twice traps.
-    private final class OnceResumer: @unchecked Sendable {
+    final class OnceResumer: @unchecked Sendable {
         private let cont: CheckedContinuation<Outcome, Never>
         private var fired = false
         private let lock = NSLock()
         init(cont: CheckedContinuation<Outcome, Never>) { self.cont = cont }
-        func resume(with value: Outcome) {
+        /// True only for the call that actually resumed.
+        @discardableResult
+        func resume(with value: Outcome) -> Bool {
             lock.lock()
             let shouldFire = !fired
             fired = true
             lock.unlock()
             if shouldFire { cont.resume(returning: value) }
+            return shouldFire
         }
     }
 }
