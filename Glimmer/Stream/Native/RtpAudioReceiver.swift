@@ -291,7 +291,6 @@ final class RtpAudioReceiver: @unchecked Sendable {
     init(host: NWEndpoint.Host,
          audioPort: UInt16,
          pingPayload: [UInt8],
-         appVersionQuad: [Int32],
          audioPacketDuration: Int,
          opusConfig: OpusConfig,
          audioConfig: Int32,
@@ -320,8 +319,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         // docs; replaces the C's fixed 500ms drop, AudioStream.c:248).
         self.startupDecisionPackets =
             max(2, Self.startupDecisionWindowMs / self.audioPacketDuration)
-        self.queue = RtpAudioQueue(appVersionQuad: appVersionQuad,
-                                   audioPacketDuration: self.audioPacketDuration)
+        self.queue = RtpAudioQueue(audioPacketDuration: self.audioPacketDuration)
     }
 
     // MARK: - Lifecycle

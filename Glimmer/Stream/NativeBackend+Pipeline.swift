@@ -270,19 +270,17 @@ extension NativeBackend {
     /// startAudioReceive() later brings up the SAME receiver's recv side, and run()'s catch tears it down.
     func startAudioPing(
         audioPort: UInt16, pingPayload: [UInt8], audioEncryption: Bool, opusConfig: OpusConfig,
-        config: BackendStreamConfig, server: BackendServerInfo, host: NWEndpoint.Host
+        config: BackendStreamConfig, host: NWEndpoint.Host
     ) {
         guard let sink = withState({ audioSink }) else {
             Diag.error("native backend: no audio sink injected; audio receive disabled",
                        Self.logCategory)
             return
         }
-        let appVersionQuad = Self.versionQuad(server.appVersion)
         let receiver = RtpAudioReceiver(
             host: host,
             audioPort: audioPort,
             pingPayload: pingPayload,
-            appVersionQuad: appVersionQuad,
             audioPacketDuration: 5,                 // SDP x-nv-aqos.packetDuration default
             opusConfig: opusConfig,
             audioConfig: config.audioConfiguration,
@@ -326,15 +324,6 @@ extension NativeBackend {
         }
     }
 
-    /// APP_VERSION_AT_LEAST helper for the quad.
-    static func appVersionAtLeast(_ quad: [Int32], _ major: Int32, _ minor: Int32,
-                                  _ patch: Int32) -> Bool {
-        guard quad.count >= 3 else { return false }
-        if quad[0] != major { return quad[0] > major }
-        if quad[1] != minor { return quad[1] > minor }
-        return quad[2] >= patch
-    }
-
     /// Name resolution + the RTSP/SDP handshake stages.
     func performRtspStage(
         server: BackendServerInfo, config: BackendStreamConfig,
@@ -342,7 +331,6 @@ extension NativeBackend {
     ) async throws -> RtspHandshakeResult {
         // --- Stage: name resolution ---
         events.stageStarting("name resolution")
-        let appVersionQuad = Self.versionQuad(server.appVersion)
         let rtspPort = Self.rtspPort(from: server.rtspSessionUrl)
         // Network.framework resolves the host lazily on connect; we surface the
         // address family from the URL/raw address for the SDP o= line.
@@ -352,7 +340,7 @@ extension NativeBackend {
             ? "rtsp://\(urlAddr):\(rtspPort)"
             : server.rtspSessionUrl
         Diag.info("name resolution: host=\(server.address) rtspPort=\(rtspPort) "
-            + "appVer=\(server.appVersion) quad=\(appVersionQuad)", Self.logCategory)
+            + "appVer=\(server.appVersion)", Self.logCategory)
         events.stageComplete("name resolution")
 
         if checkInterrupted() {
@@ -377,7 +365,7 @@ extension NativeBackend {
         rtsp.onAudioPortNegotiated = { [weak self] audioPort, pingPayload, audioEncryption, opus in
             self?.startAudioPing(audioPort: audioPort, pingPayload: pingPayload,
                                  audioEncryption: audioEncryption, opusConfig: opus,
-                                 config: config, server: server, host: host)
+                                 config: config, host: host)
         }
         withState { rtspClient = rtsp }
 

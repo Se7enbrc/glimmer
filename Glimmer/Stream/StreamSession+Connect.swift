@@ -144,7 +144,7 @@ extension StreamSession {
     ) async throws {
         let backendServer = BackendServerInfo(
             address: serverInfo.address,
-            appVersion: serverInfo.appVersion ?? "7.1.451.0",
+            appVersion: serverInfo.appVersion ?? "unknown",
             gfeVersion: serverInfo.gfeVersion ?? "3.23.0.74",
             rtspSessionUrl: launch.sessionURL,
             // RAW SCM_* bitmask from /serverinfo - see the landmine note in

@@ -193,7 +193,7 @@ struct RtspClientTests {
         // keyId + seq wraps past UInt32.max, as the host's u32 add does.
         let ivId: [UInt8] = [0xFF, 0xFF, 0xFF, 0xF0] + [UInt8](repeating: 0, count: 12)
         let receiver = RtpAudioReceiver(
-            host: "127.0.0.1", audioPort: 48000, pingPayload: [], appVersionQuad: [7, 1, 450, 0],
+            host: "127.0.0.1", audioPort: 48000, pingPayload: [],
             audioPacketDuration: 5, opusConfig: RtspHandshakeResult.defaultOpusConfig,
             audioConfig: 0, audioEncryption: true, aesKey: Self.key, aesIvId: ivId,
             sink: NullAudioSink())

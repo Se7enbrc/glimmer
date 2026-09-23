@@ -296,7 +296,12 @@ struct ParserHelperTests {
     /// A fresh audio queue. The init only sets a couple of fields - no queue or
     /// clock - so it is safe to construct for the pure byte-shape helpers.
     private func audioQueue() -> RtpAudioQueue {
-        RtpAudioQueue(appVersionQuad: [7, 1, 450, 0], audioPacketDuration: 5)
+        RtpAudioQueue(audioPacketDuration: 5)
+    }
+
+    /// Audio FEC is on from the first packet: Sunshine's 7.1.431 always passed moonlight's 7.1.415 gate.
+    @Test func audioFecStartsEnabled() {
+        #expect(!audioQueue().incompatibleServer)
     }
 
     @Test func padShortBufferZeroPadsToSize() {
