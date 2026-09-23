@@ -195,7 +195,7 @@ extension RtpVideoQueue {
            isFecRecoveryStillPossible(),
            receiveTimeUs &- bufferFirstRecvTimeUs < Self.reorderWindowUs {
             deferredDatagram = (rtp.bytes, receiveTimeUs)
-            Self.reorderHoldTakenTotal.increment()
+            TelemetryCounters.shared.reorderHoldTakenTotal.increment()
             return .finished(.queued)
         }
 
@@ -330,7 +330,7 @@ extension RtpVideoQueue {
             // never reorder frames into the depacketizer; we only delayed the
             // loss DECISION). Replay drives addPacket re-entrantly, but the
             // one-deep slot is cleared first so depth is bounded to 1.
-            if deferredDatagram != nil { Self.reorderHoldRescuedTotal.increment() }
+            if deferredDatagram != nil { TelemetryCounters.shared.reorderHoldRescuedTotal.increment() }
             replayDeferredDatagram()
         }
     }

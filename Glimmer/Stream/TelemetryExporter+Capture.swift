@@ -363,8 +363,8 @@ extension TelemetryExporter {
             snap.reorderDispHoldMs = reorder.holdMs
         }
         snap.reorderHoldExceededTotal = counters.reorderHoldExceededTotal.value
-        snap.reorderHoldTakenTotal = RtpVideoQueue.reorderHoldTakenTotal.value
-        snap.reorderHoldRescuedTotal = RtpVideoQueue.reorderHoldRescuedTotal.value
+        snap.reorderHoldTakenTotal = counters.reorderHoldTakenTotal.value
+        snap.reorderHoldRescuedTotal = counters.reorderHoldRescuedTotal.value
         snap.reorderDisplacementMsHist = FrameTimingTracker.shared?.reorderDisplacementMs.snapshotValue()
         snap.reorderDisplacementPacketsHist = FrameTimingTracker.shared?.reorderDisplacementPackets.snapshotValue()
         // Refresh the live RTT gauge the per-frame glass-to-glass computation

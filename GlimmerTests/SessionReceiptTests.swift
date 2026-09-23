@@ -76,6 +76,22 @@ struct SessionReceiptTests {
         #expect(counters.wakeTotal.value == 0)
     }
 
+    /// The reorder-hold totals are session totals like the rest: a reconnect keeps
+    /// them, and only a new session starts them at zero.
+    @Test func reorderHoldTotalsCountTheWholeSession() {
+        let counters = TelemetryCounters()
+        let now = TelemetryCounters.monotonicNowNanos()
+        counters.anchorConnectStart(now: now, reconnecting: false)
+        counters.reorderHoldTakenTotal.increment(by: 5)
+        counters.reorderHoldRescuedTotal.increment(by: 3)
+        counters.anchorConnectStart(now: now, reconnecting: true)
+        #expect(counters.reorderHoldTakenTotal.value == 5)
+        #expect(counters.reorderHoldRescuedTotal.value == 3)
+        counters.anchorConnectStart(now: now, reconnecting: false)
+        #expect(counters.reorderHoldTakenTotal.value == 0)
+        #expect(counters.reorderHoldRescuedTotal.value == 0)
+    }
+
     @Test func audioTimeToFirstPacketComesFromTheFirstConnect() throws {
         let counters = TelemetryCounters()
         counters.anchorConnectStart(now: TelemetryCounters.monotonicNowNanos() - 3_000 * Self.msNanos,

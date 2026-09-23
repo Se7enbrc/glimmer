@@ -145,12 +145,6 @@ final class RtpVideoQueue {
     /// next datagram for another frame replays it), so a wider window never runs.
     static let reorderWindowUs: UInt64 = 24_000
 
-    /// Holds taken (a next-frame datagram deferred) and holds that rescued their
-    /// frame (it completed before the deferred packet replayed). Process-global
-    /// like TelemetryCounters; reset per connection in `init`.
-    static let reorderHoldTakenTotal = TelemetryCounters.Counter()
-    static let reorderHoldRescuedTotal = TelemetryCounters.Counter()
-
     /// Uptime µs of the newest video datagram on the live connection (0 = none
     /// yet): the "reception alive" clock the decoder's receive-idle read and the
     /// env-signal window use, so frames shredded before decode still count.
@@ -280,8 +274,6 @@ final class RtpVideoQueue {
         self.packetSize = packetSize
         self.multiFecCapable = multiFecCapable
         Self.lastDatagramUs.store(0, ordering: .relaxed)
-        Self.reorderHoldTakenTotal.reset()
-        Self.reorderHoldRescuedTotal.reset()
     }
 
     /// Seconds since the last video datagram arrived; `.infinity` before the

@@ -244,12 +244,13 @@ final class TelemetryCounters: @unchecked Sendable {
     /// oscillation's visible half. not_due = staleFrameRepeatTotal − this.
     let staleEmptyQueueTotal = Counter()
 
-    /// REORDER-HOLD invariant violations (signal: NETWORK): a reordered packet
-    /// whose measured displacement exceeded the live reorder hold - it outlived
-    /// its release window and was promoted to pre-FEC loss. THE only reorder
-    /// signal worth alerting on (the raw ooo count is a physics floor on shared
-    /// spectrum; displacement < hold is the checked invariant).
+    /// REORDER-HOLD invariant violations (signal: NETWORK): a reordered packet that
+    /// outlived the hold and became pre-FEC loss. THE reorder signal worth alerting
+    /// on; the raw ooo count is a physics floor on shared spectrum.
     let reorderHoldExceededTotal = Counter()
+    /// Holds taken (a next-frame datagram deferred) and holds that rescued their frame.
+    let reorderHoldTakenTotal = Counter()
+    let reorderHoldRescuedTotal = Counter()
 
     /// PERCEIVED-GAP cause split (signal: PRESENT): the DROUGHT subset of
     /// `presentationGaps` - a present landed after a >100ms hold with frames

@@ -82,6 +82,7 @@ extension TelemetryCounters {
                         staleFrameRepeatTotal, staleEmptyQueueTotal, audioNearMissTotal,
                         audioStallRecoveryTotal, audioUnderrunDeadairTotal,
                         presentGapDroughtTotal, reorderHoldExceededTotal,
+                        reorderHoldTakenTotal, reorderHoldRescuedTotal,
                         pacerOverTargetReleaseTotal,
                         tickMissDescheduledTotal, tickMissCoalescedTotal,
                         tickMissPreemptedTotal, tickMissLinkskipTotal,
