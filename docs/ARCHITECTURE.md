@@ -534,9 +534,9 @@ verification (some FUSE / NFS backends silently ignore the chmod).
 
 `Pairing.swift`: the GameStream PIN handshake, five HTTP rounds plus a final
 HTTPS liveness check. AES-128-ECB on raw 16-byte buffers (no padding - the
-protocol pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]` (or SHA-1
-for pre-Gen-7 GFE, which we detect from `appversion` but don't expect to
-encounter on Sunshine). RSA signatures using the long-lived client cert prove
+protocol pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]`, with
+SHA-256 for the challenge hashes too; a GameStream PC is refused before the
+handshake starts. RSA signatures using the long-lived client cert prove
 possession of the private key.
 
 Critically: the host cert is pinned (`NetworkClient.setPinnedHostCert`) ONLY

@@ -1,17 +1,9 @@
 //
 //  PairingCryptoTests.swift
 //
-//  Coverage for the OpenSSL-backed pairing/identity crypto. These run because
-//  the test bundle is hosted by the Glimmer app (TEST_HOST), which links
-//  -lssl -lcrypto, so the OpenSSL primitives resolve at runtime.
-//
-//   - IdentityManager.aesKey(forPIN:salt:): first 16 bytes of
-//     SHA-256(salt || pin.utf8). Cross-checked here against CryptoKit's SHA256.
-//   - PairingClient.aesEcbEncrypt/Decrypt: AES-128-ECB round-trip (no padding).
-//   - PairingClient.digest: SHA-256 / SHA-1 known-answer.
-//   - PairingClient.signMessage / verifySignature: RSA sign->verify round-trip,
-//     using a throwaway keypair+cert generated IN-TEST via the app's own
-//     generateKeyPairAndCert() - no committed PEM fixture.
+//  The OpenSSL-backed pairing crypto, which resolves because the TEST_HOST app links -lssl -lcrypto: the PIN
+//  key (checked against CryptoKit), AES-128-ECB round trips, the SHA-256 digest, and RSA sign/verify on a
+//  keypair generated in-test by generateKeyPairAndCert(), so no PEM fixture is committed.
 //
 
 import Foundation
@@ -112,7 +104,7 @@ struct PairingCryptoTests {
 
     @Test func digestSha256KnownAnswer() throws {
         // SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
-        let out = try PairingClient.digest(Data("abc".utf8), sha256: true)
+        let out = try PairingClient.digest(Data("abc".utf8))
         #expect(out.count == 32)
         let expected = Data(SHA256.hash(data: Data("abc".utf8)))
         #expect(out == expected)
@@ -120,18 +112,16 @@ struct PairingCryptoTests {
             == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
-    @Test func digestSha1KnownAnswer() throws {
-        // SHA-1("abc") = a9993e364706816aba3e25717850c26c9cd0d89d
-        let out = try PairingClient.digest(Data("abc".utf8), sha256: false)
-        #expect(out.count == 20)
-        #expect(out.map { String(format: "%02x", $0) }.joined()
-            == "a9993e364706816aba3e25717850c26c9cd0d89d")
-    }
-
     @Test func digestCrossChecksCryptoKitOnRandomInput() throws {
         let data = Data((0..<137).map { UInt8(($0 * 31 + 7) & 0xFF) })
-        let out = try PairingClient.digest(data, sha256: true)
+        let out = try PairingClient.digest(data)
         #expect(out == Data(SHA256.hash(data: data)))
+    }
+
+    /// The step-4 proof goes straight from SHA-256 into AES-ECB: two whole blocks, nothing to pad.
+    @Test func proofHashFillsTwoAesBlocks() throws {
+        let hash = try PairingClient.digest(Data("challenge".utf8))
+        #expect(try PairingClient.aesEcbEncrypt(hash, key: Data(repeating: 7, count: 16)).count == 32)
     }
 
     // MARK: - RSA sign / verify round-trip (in-test keypair, no fixture)

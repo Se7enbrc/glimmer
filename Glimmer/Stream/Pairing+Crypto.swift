@@ -103,15 +103,14 @@ extension PairingClient {
 
     // MARK: Digest
 
-    static func digest(_ data: Data, sha256: Bool) throws -> Data {
-        let length = sha256 ? Int(SHA256_DIGEST_LENGTH) : Int(SHA_DIGEST_LENGTH)
-        let algo = sha256 ? "SHA256" : "SHA1"
-        var out = [UInt8](repeating: 0, count: length)
+    /// SHA-256, the only pairing hash Sunshine uses.
+    static func digest(_ data: Data) throws -> Data {
+        var out = [UInt8](repeating: 0, count: Int(SHA256_DIGEST_LENGTH))
 
         let ok = data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int32 in
             out.withUnsafeMutableBufferPointer { outBuf -> Int32 in
                 EVP_Q_digest(nil,
-                             algo, nil,
+                             "SHA256", nil,
                              raw.baseAddress, data.count,
                              outBuf.baseAddress, nil)
             }

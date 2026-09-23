@@ -63,19 +63,6 @@ public actor PairingClient {
         }
 
         // ---------------------------------------------------------------
-        // Step 0: figure out which hash algorithm to use.
-        //
-        // Gen 7+ (GFE 3.x and all Sunshine builds) uses SHA-256 with a
-        // 32-byte hash. Older GFE used SHA-1 + 20 bytes. We sniff the major
-        // version from server.appVersion ("7.1.431.0" -> 7). If we don't have
-        // a version string yet, assume modern - Sunshine never advertises a
-        // version field shape consistent with old GFE.
-        // ---------------------------------------------------------------
-        let useSha256 = parseMajorVersion(server.appVersion) >= 7 || server.appVersion == nil
-        let hashLength = useSha256 ? 32 : 20
-        log.info("Starting pair with hashLength=\(hashLength, privacy: .public)")
-
-        // ---------------------------------------------------------------
         // Step 1: getservercert
         //
         // We send a fresh 16-byte salt + our PEM cert (hex-encoded). The host
@@ -134,19 +121,14 @@ public actor PairingClient {
         // and send it back encrypted. The host uses this to prove WE know
         // the PIN.
         // ---------------------------------------------------------------
-        let parsed = try parseServerChallenge(
-            challengeResp: challengeResp,
-            aesKey: aesKey,
-            hashLength: hashLength
-        )
+        let parsed = try parseServerChallenge(challengeResp: challengeResp, aesKey: aesKey)
 
         let clientSecret = try Self.randomBytes(16)
         let encryptedHash = try buildEncryptedProofHash(
             hostServerChallenge: parsed.hostServerChallenge,
             clientSecret: clientSecret,
             clientCertPEM: clientCertPEM,
-            aesKey: aesKey,
-            useSha256: useSha256
+            aesKey: aesKey
         )
 
         let serverChallengeRespXml = try await pairRound(
@@ -177,8 +159,7 @@ public actor PairingClient {
             serverChallengeRespXml: serverChallengeRespXml,
             randomChallenge: randomChallenge,
             serverCertPEM: serverCertPEM,
-            serverResponseHash: parsed.serverResponseHash,
-            useSha256: useSha256
+            serverResponseHash: parsed.serverResponseHash
         )
 
         // ---------------------------------------------------------------
@@ -290,8 +271,7 @@ public actor PairingClient {
     /// PIN-correctness check after step 5) and the host's 16-byte challenge.
     private func parseServerChallenge(
         challengeResp: XMLNode,
-        aesKey: Data,
-        hashLength: Int
+        aesKey: Data
     ) throws -> (serverResponseHash: Data, hostServerChallenge: Data) {
         guard let challengeRespHex = Self.xmlString(challengeResp, tag: "challengeresponse"),
               let challengeRespBytes = Data(hex: challengeRespHex) else {
@@ -299,8 +279,9 @@ public actor PairingClient {
         }
         let challengeRespPlain = try Self.aesEcbDecrypt(challengeRespBytes, key: aesKey)
 
-        // First `hashLength` bytes are the host's own hash; we hold onto it
+        // The first 32 bytes are the host's own SHA-256; we hold onto it
         // for the PIN-correctness check after step 5.
+        let hashLength = Int(SHA256_DIGEST_LENGTH)
         guard challengeRespPlain.count >= hashLength + 16 else {
             throw StreamError.pairingFailed(
                 "clientchallenge: decrypted response too short (\(challengeRespPlain.count) bytes)")
@@ -382,16 +363,13 @@ public actor PairingClient {
         )
     }
 
-    /// Build our step-4 (serverchallengeresp) proof, split out of
-    /// `runPairingFlow`: hash(hostServerChallenge || ourCertSig || clientSecret),
-    /// zero-padded to a 32-byte AES block multiple, then AES-ECB-encrypted with
-    /// the PIN-derived key. The host uses this to prove WE know the PIN.
+    /// Build our step-4 (serverchallengeresp) proof: SHA-256(hostServerChallenge || ourCertSig || clientSecret),
+    /// two AES blocks, AES-ECB-encrypted with the PIN-derived key. The host uses it to prove WE know the PIN.
     private func buildEncryptedProofHash(
         hostServerChallenge: Data,
         clientSecret: Data,
         clientCertPEM: String,
-        aesKey: Data,
-        useSha256: Bool
+        aesKey: Data
     ) throws -> Data {
         let ourCertSig = try Self.signatureFromPemCert(clientCertPEM)
 
@@ -401,16 +379,7 @@ public actor PairingClient {
         challengeRespPayload.append(ourCertSig)
         challengeRespPayload.append(clientSecret)
 
-        let challengeRespHash = try Self.digest(challengeRespPayload, sha256: useSha256)
-
-        // Pad the hash up to 32 bytes so AES sees an even block multiple.
-        // moonlight does the same `resize(32)` after hashing - the extra
-        // zero bytes are part of the protocol, not just an alignment quirk.
-        var paddedHash = challengeRespHash
-        if paddedHash.count < 32 {
-            paddedHash.append(Data(repeating: 0, count: 32 - paddedHash.count))
-        }
-        return try Self.aesEcbEncrypt(paddedHash, key: aesKey)
+        return try Self.aesEcbEncrypt(Self.digest(challengeRespPayload), key: aesKey)
     }
 
     /// Step 5 host-proof verification, split out of `runPairingFlow`.
@@ -428,8 +397,7 @@ public actor PairingClient {
         serverChallengeRespXml: XMLNode,
         randomChallenge: Data,
         serverCertPEM: String,
-        serverResponseHash: Data,
-        useSha256: Bool
+        serverResponseHash: Data
     ) throws {
         // Step 5 payload: the host's random 16-byte serverSecret followed by an
         // RSA signature over (serverSecret || serverCert) using its private key.
@@ -464,7 +432,7 @@ public actor PairingClient {
         expectedResponse.append(randomChallenge)
         expectedResponse.append(try Self.signatureFromPemCert(serverCertPEM))
         expectedResponse.append(contentsOf: serverSecret)
-        let expectedResponseHash = try Self.digest(expectedResponse, sha256: useSha256)
+        let expectedResponseHash = try Self.digest(expectedResponse)
 
         guard expectedResponseHash == Data(serverResponseHash) else {
             // Wrong PIN - same external surface as the MITM branch so an
@@ -513,13 +481,5 @@ public actor PairingClient {
                 """
             )
         }
-    }
-
-    // MARK: - Version parsing
-
-    private nonisolated func parseMajorVersion(_ version: String?) -> Int {
-        guard let version else { return 7 }
-        let head = version.split(separator: ".").first ?? ""
-        return Int(head) ?? 7
     }
 }

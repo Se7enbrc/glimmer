@@ -139,9 +139,9 @@ liveness check (`Glimmer/Stream/Pairing.swift`).
 
 - AES-128-ECB on raw 16-byte buffers, no padding (the protocol pre-sizes
   everything to 16-byte multiples).
-- Key derivation: `SHA-256(salt || PIN)[0..16]` for Gen 7+ (modern GFE and all
-  Sunshine). SHA-1 for pre-Gen-7 GFE; sniffed from `appversion`. We don't expect
-  to encounter SHA-1 on Sunshine.
+- Key derivation: `SHA-256(salt || PIN)[0..16]`, and SHA-256 for the challenge
+  hashes, as every Sunshine build uses. A GameStream PC is refused before the
+  handshake starts.
 - RSA-2048 signatures using the long-lived client cert / host cert for the MITM
   check and the PIN-correctness check.
 
