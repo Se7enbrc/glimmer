@@ -169,7 +169,7 @@ final class AWDLHelperManager: ObservableObject {
     /// managing the stuck background item, shown instead of asking the user to run
     /// a raw `sudo` command.
     static let loginItemsHelpURL = URL(string:
-        "https://support.apple.com/guide/mac-help/change-login-items-extensions-settings-mtusr003/mac")!
+        "https://support.apple.com/guide/mac-help/change-login-items-extensions-settings-mtusr003/mac")
 
     /// `.notFound` is ambiguous: a genuine packaging miss, or a wedged record while
     /// the daemon IS present. Tell them apart so the message isn't a red herring.
