@@ -70,22 +70,18 @@ struct GeneralPane: View {
         @Bindable var model = model
         Form {
             Section {
-                // Outcome-first labels: what the user feels, with the
-                // tradeoff in the parenthetical. The mechanism (login items,
-                // SMAppService) stays in code comments and help text.
-                Toggle("Be ready at login (starts automatically with your Mac)", isOn: $launchAtLogin)
-                    .help("Registers Glimmer as a macOS login item.")
+                Toggle("Open at login", isOn: $launchAtLogin)
+                    .help("Adds Glimmer to System Settings › General › Login Items.")
                     .onChange(of: launchAtLogin) { _, on in
                         scheduleLoginItemRegistration(launchAtLogin: on, minimized: launchMinimized)
                     }
-                Toggle("Stay hidden at login (menu bar only until you ask)", isOn: $launchMinimized)
+                Toggle("Open in the menu bar only", isOn: $launchMinimized)
                     .onChange(of: launchMinimized) { _, on in
                         scheduleLoginItemRegistration(launchAtLogin: launchAtLogin, minimized: on)
                     }
                     .disabled(!launchAtLogin)
-                Text("When on, Glimmer launches into the menu bar at login without showing the "
-                    + "main window. Toggle it off to have the launcher open at login like a normal "
-                    + "app. Manual launches via Spotlight, Finder, or the Dock always open the window.")
+                Text("At login, Glimmer can start in the menu bar without showing its window. "
+                    + "Opening it from the Dock, Finder or Spotlight always shows the window.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if loginItemNeedsApproval {
@@ -121,12 +117,18 @@ struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            guard launchAtLogin else { loginItemNeedsApproval = false; return }
-            let service = launchMinimized
-                ? SMAppService.loginItem(identifier: LoginItemManager.helperBundleID)
-                : SMAppService.mainApp
-            loginItemNeedsApproval = (service.status == .requiresApproval)
+        .onAppear { refreshLoginItemState() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshLoginItemState()
+        }
+    }
+
+    /// Show what macOS actually has: a removal in System Settings turns the
+    /// toggle off, a pending approval shows the warning. Deferred like the
+    /// registration above, since reconcile may re-register.
+    private func refreshLoginItemState() {
+        DispatchQueue.main.async {
+            loginItemNeedsApproval = (LoginItemManager.reconcile() == .requiresApproval)
         }
     }
 }

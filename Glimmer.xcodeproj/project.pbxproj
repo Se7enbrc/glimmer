@@ -42,6 +42,7 @@
 		A100018A /* SettingsPCsShortcutsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100018B /* SettingsPCsShortcutsPanes.swift */; };
 		DEC0DE202609222400000001 /* SettingsShortcutRecorders.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */; };
 		DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */; };
+		DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */; };
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
 		DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D2 /* WakeOnLAN.swift */; };
 		DEC0DE2026092000000000C7 /* MenuBarPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C8 /* MenuBarPanel.swift */; };
@@ -401,6 +402,7 @@
 		A100018B /* SettingsPCsShortcutsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPCsShortcutsPanes.swift; sourceTree = "<group>"; };
 		DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsShortcutRecorders.swift; sourceTree = "<group>"; };
 		DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecordingTests.swift; sourceTree = "<group>"; };
+		DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemReconcileTests.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D2 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLAN.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C8 /* MenuBarPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPanel.swift"; sourceTree = "<group>"; };
@@ -1081,6 +1083,7 @@
 				DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */,
 				DEC0DE202609221700000002 /* StreamHDRTests.swift */,
 				DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */,
+				DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
@@ -1534,6 +1537,7 @@
 				DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */,
 				DEC0DE202609221700000001 /* StreamHDRTests.swift in Sources */,
 				DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */,
+				DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,
