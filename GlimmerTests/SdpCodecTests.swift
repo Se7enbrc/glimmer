@@ -125,10 +125,8 @@ struct SdpCodecTests {
             videoPort: 47998,
             urlSafeAddr: "10.0.0.5",
             addrFamilyToken: "IPv4",
-            rtspClientVersion: 14,
             negotiatedVideoFormat: format,
-            encryptionFeaturesEnabled: 0,
-            appVersionQuad: [7, 1, 450, 0])
+            encryptionFeaturesEnabled: 0)
     }
 
     private func sdpString(_ b: SdpBuilder) -> String {
@@ -197,12 +195,24 @@ struct SdpCodecTests {
         #expect(sdp.contains("a=x-nv-video[0].packetSize:1392 \r\n"))
     }
 
+    /// Sunshine's 7.1.431 never took moonlight's 7.1.446 DRC table, so small modes ask for none either.
+    @Test func smallResolutionsKeepDynamicResolutionOff() {
+        for (width, height) in [(640, 360), (1280, 480), (1920, 1080)] {
+            let small = SdpBuilder(
+                config: makeConfig(width: Int32(width), height: Int32(height)), videoPort: 47998,
+                urlSafeAddr: "10.0.0.5", addrFamilyToken: "IPv4",
+                negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_H265, encryptionFeaturesEnabled: 0)
+            let sdp = sdpString(small)
+            #expect(sdp.contains("a=x-nv-vqos[0].drc.enable:0 \r\n"))
+            #expect(!sdp.contains("drc.tableType"))
+        }
+    }
+
     @Test func encryptedVideoAdvertisesThePacketSizeLessItsHeader() {
         func sdp(encryption: UInt32) -> String {
             sdpString(SdpBuilder(
                 config: makeConfig(), videoPort: 47998, urlSafeAddr: "10.0.0.5", addrFamilyToken: "IPv4",
-                rtspClientVersion: 14, negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_H265,
-                encryptionFeaturesEnabled: encryption, appVersionQuad: [7, 1, 450, 0]))
+                negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_H265, encryptionFeaturesEnabled: encryption))
         }
         #expect(sdp(encryption: 7).contains("a=x-nv-video[0].packetSize:1360 \r\n"))
         #expect(sdp(encryption: 7).contains("a=x-ss-general.encryptionEnabled:7 \r\n"))

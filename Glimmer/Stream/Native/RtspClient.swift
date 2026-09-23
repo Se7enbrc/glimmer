@@ -1,11 +1,9 @@
 //
 //  RtspClient.swift
 //
-//  RTSP/SDP handshake over plain TCP for the Swift-native streaming engine.
-//  Source: RtspConnection.c (performRtspHandshake + transactRtspMessageTcp).
-//  Targets Sunshine 7.1.450 (AppVersionQuad [7,1,450,0]): useEnet=FALSE ⇒ RTSP
-//  over plain TCP, and APP_VERSION_AT_LEAST(7,1,431) ⇒ single PLAY "/" + control
-//  stream id "streamid=control/13/0".
+//  RTSP/SDP handshake for the Swift-native streaming engine, from RtspConnection.c (performRtspHandshake +
+//  transactRtspMessageTcp) at Sunshine's app version 7.1.431: plain TCP, one PLAY "/" and control stream
+//  "streamid=control/13/0".
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
@@ -98,10 +96,8 @@ final class RtspClient: @unchecked Sendable {
     let urlAddr: String
     let urlSafeAddr: String
     let addrFamilyToken: String
-    let rtspClientVersion: Int
     let config: BackendStreamConfig
     let serverCodecModeRaw: Int32
-    let appVersionQuad: [Int32]
 
     /// Global CSeq counter, starts at 1, increments per request.
     var currentSeqNumber = 1
@@ -134,6 +130,8 @@ final class RtspClient: @unchecked Sendable {
     }
 
     static let controlStreamId = "streamid=control/13/0"
+    /// rtspClientVersion for app version 7, the one Sunshine reports (RtspConnection.c).
+    static let clientVersion = 14
     /// SDP responses are a few KiB; anything past this is a hostile or broken peer.
     static let maxResponseBytes = 256 * 1024
 
@@ -144,10 +142,8 @@ final class RtspClient: @unchecked Sendable {
         urlAddr: String,
         urlSafeAddr: String,
         addrFamilyToken: String,
-        rtspClientVersion: Int,
         config: BackendStreamConfig,
-        serverCodecModeRaw: Int32,
-        appVersionQuad: [Int32]
+        serverCodecModeRaw: Int32
     ) {
         self.host = host
         self.rtspPort = rtspPort
@@ -156,10 +152,8 @@ final class RtspClient: @unchecked Sendable {
         self.urlAddr = urlAddr
         self.urlSafeAddr = urlSafeAddr
         self.addrFamilyToken = addrFamilyToken
-        self.rtspClientVersion = rtspClientVersion
         self.config = config
         self.serverCodecModeRaw = serverCodecModeRaw
-        self.appVersionQuad = appVersionQuad
     }
 
     func interrupt() {
@@ -174,7 +168,7 @@ final class RtspClient: @unchecked Sendable {
         var msg = RtspMessage(command: command, target: target)
         msg.headers.append(("CSeq", "\(currentSeqNumber)"))
         currentSeqNumber += 1
-        msg.headers.append(("X-GS-ClientVersion", "\(rtspClientVersion)"))
+        msg.headers.append(("X-GS-ClientVersion", "\(Self.clientVersion)"))
         // The C code adds Host on the !useEnet (TCP) path with value = urlAddr.
         msg.headers.append(("Host", urlAddr))
         return msg
@@ -424,10 +418,8 @@ final class RtspClient: @unchecked Sendable {
             videoPort: result.videoPort,
             urlSafeAddr: urlSafeAddr,
             addrFamilyToken: addrFamilyToken,
-            rtspClientVersion: rtspClientVersion,
             negotiatedVideoFormat: result.negotiatedVideoFormat,
             encryptionFeaturesEnabled: result.encryptionFeaturesEnabled,
-            appVersionQuad: appVersionQuad,
             // RFI is advertised (maxNumReferenceFrames=0) only when the host
             // offered it (DESCRIBE SDP) AND our decoder supports it for the
             // negotiated codec - the VideoSink's RFI capability bits.

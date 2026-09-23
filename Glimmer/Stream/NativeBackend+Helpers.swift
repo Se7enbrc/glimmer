@@ -2,8 +2,8 @@
 //  NativeBackend+Helpers.swift
 //
 //  Pure static helpers faithful to Connection.c / RtspConnection.c / Misc.c:
-//  version-quad parsing, RTSP client-version mapping, RTSP port + address-family
-//  derivation. Split out of NativeBackend.swift to keep each unit focused.
+//  version-quad parsing, RTSP port + address-family derivation. Split out of
+//  NativeBackend.swift to keep each unit focused.
 //
 
 import Foundation
@@ -21,17 +21,6 @@ extension NativeBackend {
             quad[i] = Int32(digits) ?? 0
         }
         return quad
-    }
-
-    /// rtspClientVersion: q[0]==7 (or default) → 14.
-    static func rtspClientVersion(quad: [Int32]) -> Int {
-        switch quad.first ?? 7 {
-        case 3: return 10
-        case 4: return 11
-        case 5: return 12
-        case 6: return 13
-        default: return 14
-        }
     }
 
     /// RtspPortNumber = last ':' integer of rtspSessionUrl, else 48010.

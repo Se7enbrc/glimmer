@@ -26,8 +26,13 @@ struct RtspClientTests {
         return RtspClient(
             host: "127.0.0.1", rtspPort: port, rtspTargetUrl: "rtsp://127.0.0.1:\(port)",
             urlAddr: "127.0.0.1", urlSafeAddr: "127.0.0.1", addrFamilyToken: "IPv4",
-            rtspClientVersion: 14, config: config, serverCodecModeRaw: 0,
-            appVersionQuad: [7, 1, 450, 0])
+            config: config, serverCodecModeRaw: 0)
+    }
+
+    /// Every request names RTSP client version 14, moonlight's for the app version 7 Sunshine reports.
+    @Test func requestsCarryClientVersion14() {
+        let request = Self.makeClient(port: 9).makeRequest("OPTIONS", "rtsp://127.0.0.1:48010")
+        #expect(request.headerValue("X-GS-ClientVersion") == "14")
     }
 
     // MARK: - Cancel never strands the connect

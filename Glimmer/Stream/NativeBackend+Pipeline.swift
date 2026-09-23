@@ -369,10 +369,8 @@ extension NativeBackend {
             urlAddr: urlAddr,
             urlSafeAddr: urlSafeAddr,
             addrFamilyToken: familyToken,
-            rtspClientVersion: Self.rtspClientVersion(quad: appVersionQuad),
             config: config,
-            serverCodecModeRaw: server.serverCodecModeRaw,
-            appVersionQuad: appVersionQuad)
+            serverCodecModeRaw: server.serverCodecModeRaw)
         // Fast-start audio: the instant the handshake parses SETUP-audio (BEFORE
         // PLAY), open the audio socket + start the burst ping so the host has our
         // ping by PLAY. moonlight's notifyAudioPortNegotiationComplete() ordering.

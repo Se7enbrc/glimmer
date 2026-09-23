@@ -8,11 +8,9 @@
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  TARGET PROFILE: Sunshine hosts reporting appVersion 7.1.450.0 →
-//  AppVersionQuad = [7,1,450,0]. q[2]=450 >= 404 ⇒ useEnet=FALSE ⇒ RTSP runs
-//  over plain TCP; APP_VERSION_AT_LEAST(7,1,431) is TRUE (single PLAY "/",
-//  control stream id "streamid=control/13/0"). We only build the TCP + 7.1.431+
-//  branches.
+//  TARGET PROFILE: Sunshine reports app version 7.1.431, so only that branch of the C is built: RTSP
+//  over plain TCP, one PLAY "/", control stream "streamid=control/13/0" and RTSP client version 14.
+//  GameStream PCs are refused before a stream starts.
 //
 //  WIRE FORMAT (exact bytes - off-by-one here = silent host rejection):
 //   Request line:  "<COMMAND> <target> RTSP/1.0\r\n"
@@ -218,15 +216,11 @@ struct SdpBuilder {
     let urlSafeAddr: String
     /// "IPv4" or "IPv6" token for the o= line.
     let addrFamilyToken: String
-    /// rtspClientVersion (= 14 for q[0]==7), used in the o= line.
-    let rtspClientVersion: Int
     /// NegotiatedVideoFormat from DESCRIBE (VIDEO_FORMAT_*). Drives the codec
     /// attribute block.
     let negotiatedVideoFormat: Int32
     /// EncryptionFeaturesEnabled (control-V2 and audio when the PC supports them, video when it requires it).
     let encryptionFeaturesEnabled: UInt32
-    /// 7.1.446+ DRC gate uses these.
-    let appVersionQuad: [Int32]
     /// Host RFI support, parsed from the DESCRIBE SDP
     /// (`x-nv-video[0].refPicInvalidation` ⇒ ReferenceFrameInvalidationSupported).
     /// Defaulted false so a host that never offered RFI degrades to full-IDR
@@ -378,12 +372,7 @@ struct SdpBuilder {
         attrs.append(("x-nv-general.useReliableUdp", "13"))
         attrs.append(("x-nv-vqos[0].fec.minRequiredFecPackets", "2"))
         attrs.append(("x-nv-vqos[0].bllFec.enable", "0"))
-        if appVersionAtLeast(7, 1, 446) && (config.width < 720 || config.height < 540) {
-            attrs.append(("x-nv-vqos[0].drc.enable", "1"))
-            attrs.append(("x-nv-vqos[0].drc.tableType", "2"))
-        } else {
-            attrs.append(("x-nv-vqos[0].drc.enable", "0"))
-        }
+        attrs.append(("x-nv-vqos[0].drc.enable", "0"))
         attrs.append(("x-nv-general.enableRecoveryMode", "0"))
 
         // --- back in getAttributesList (q[0]>=4) ---
@@ -433,7 +422,7 @@ struct SdpBuilder {
         // --- assemble: header + attrs + tail ---
         var sdp = ""
         sdp += "v=0\r\n"
-        sdp += "o=android 0 \(rtspClientVersion) IN \(addrFamilyToken) \(urlSafeAddr)\r\n"
+        sdp += "o=android 0 \(RtspClient.clientVersion) IN \(addrFamilyToken) \(urlSafeAddr)\r\n"
         sdp += "s=NVIDIA Streaming Client\r\n"
         for (name, value) in attrs {
             // "a=<name>:<value> \r\n" - trailing SPACE before CRLF is real.
@@ -444,12 +433,5 @@ struct SdpBuilder {
         sdp += "m=video \(videoPort)  \r\n"
 
         return Data(sdp.utf8)
-    }
-
-    private func appVersionAtLeast(_ major: Int32, _ minor: Int32, _ patch: Int32) -> Bool {
-        guard appVersionQuad.count >= 3 else { return false }
-        if appVersionQuad[0] != major { return appVersionQuad[0] > major }
-        if appVersionQuad[1] != minor { return appVersionQuad[1] > minor }
-        return appVersionQuad[2] >= patch
     }
 }

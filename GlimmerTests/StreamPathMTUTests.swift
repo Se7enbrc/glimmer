@@ -101,9 +101,7 @@ struct StreamPathMTUTests {
             remoteInputAesIv: [UInt8](repeating: 0, count: 16))
         let builder = SdpBuilder(
             config: config, videoPort: 47998, urlSafeAddr: "10.0.0.5",
-            addrFamilyToken: "IPv4", rtspClientVersion: 14,
-            negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0,
-            appVersionQuad: [7, 1, 450, 0])
+            addrFamilyToken: "IPv4", negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0)
         return String(data: builder.build(), encoding: .utf8) ?? ""
     }
 
@@ -156,9 +154,7 @@ struct StreamPathMTUTests {
             remoteInputAesIv: [UInt8](repeating: 0, count: 16))
         let builder = SdpBuilder(
             config: config, videoPort: 47998, urlSafeAddr: "10.0.0.5",
-            addrFamilyToken: "IPv4", rtspClientVersion: 14,
-            negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0,
-            appVersionQuad: [7, 1, 450, 0])
+            addrFamilyToken: "IPv4", negotiatedVideoFormat: 0, encryptionFeaturesEnabled: 0)
         let text = String(data: builder.build(), encoding: .utf8) ?? ""
         func value(_ key: String) -> Int {
             guard let r = text.range(of: "\(key):") else { return -1 }
