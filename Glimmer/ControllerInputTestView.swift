@@ -162,8 +162,7 @@ struct ControllerInputTest: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text("No controller connected").fontWeight(.medium)
-                Text("Pair a controller over Bluetooth or plug it in - it'll "
-                    + "appear here.")
+                Text("Pair a controller over Bluetooth or plug it in, and it appears here.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

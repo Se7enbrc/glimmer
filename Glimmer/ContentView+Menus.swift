@@ -1,7 +1,7 @@
 //
 //  ContentView+Menus.swift
 //
-//  The shared per-host menu (Rename / Codec / Wake on LAN / Unpair): the
+//  The shared per-host menu (Rename / Codec / Wake on LAN / Pair Again / Unpair): the
 //  right-click menu on the hero card and Settings' PCTile, and the tile's
 //  visible menu button. The menu bar item's panel lives in MenuBarPanel.swift.
 //
@@ -21,6 +21,7 @@ private struct HostContextMenu: ViewModifier {
     @Environment(AppModel.self) private var model
     @State private var showUnpairConfirm = false
     @State private var showRename = false
+    @State private var showPairAgain = false
     @State private var draftName = ""
     @State private var codecPref: HostCodecPreference
 
@@ -75,6 +76,10 @@ private struct HostContextMenu: ViewModifier {
         } message: {
             Text("Glimmer will forget this PC and leave a clean state. You can pair again at any time.")
         }
+        // Pre-filled so it lands on the PIN step; pairing re-pins the PC's certificate.
+        .sheet(isPresented: $showPairAgain) {
+            PairSheet(initialAddress: host.localAddress ?? host.manualAddress ?? "").environment(model)
+        }
     }
 
     @ViewBuilder private var items: some View {
@@ -103,12 +108,17 @@ private struct HostContextMenu: ViewModifier {
         Toggle(isOn: Binding(
             get: { host.wakeOnLAN && WakeOnLAN.normalizeMac(host.macAddress) != nil },
             set: { model.setWakeOnLAN(host, enabled: $0) })) {
-            Label("Wake on LAN", systemImage: "bolt.fill")
+            Label("Wake on LAN", systemImage: "powersleep")
         }
         .disabled(WakeOnLAN.normalizeMac(host.macAddress) == nil)
         .help("Wakes this PC before connecting when it is asleep. Works on your home network; "
             + "over a VPN it depends on your router, and over Tailscale it can't reach the PC.")
         Divider()
+        Button {
+            showPairAgain = true
+        } label: {
+            Label("Pair Again…", systemImage: "key")
+        }
         Button(role: .destructive) {
             showUnpairConfirm = true
         } label: {

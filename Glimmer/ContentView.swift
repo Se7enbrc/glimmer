@@ -84,7 +84,7 @@ struct MainWindow: View {
             titleVisibility: .visible,
             presenting: model.pendingTakeover
         ) { _ in
-            Button("Take over", role: .destructive) { model.confirmPendingTakeover() }
+            Button("Take Over", role: .destructive) { model.confirmPendingTakeover() }
             Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
         } message: { pending in
             Text("\(pending.host.displayName) is already streaming \(pending.occupantApp). Starting your stream will end that session.")
@@ -340,7 +340,7 @@ private struct ConnectBanner: View {
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Retry") {
+                    Button("Try Again") {
                         model.nativeStreamError = nil
                         model.retryLastLaunch()
                     }

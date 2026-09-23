@@ -503,7 +503,7 @@ struct StatsCustomRowsPicker: View {
     /// default; users opt in via Custom.
     private static let sections: [(title: String, rows: [(StatsRow.Kind, String)])] = [
         ("Frame rates", [
-            (.hostFps, "Host FPS"),
+            (.hostFps, "PC FPS"),
             (.networkFps, "Network FPS"),
             (.decodeFps, "Decode FPS"),
             (.renderFps, "Render FPS")
@@ -518,7 +518,7 @@ struct StatsCustomRowsPicker: View {
             (.smoothness, "Smoothness"),
             (.decodeTime, "Decode time"),
             (.bitrate, "Bitrate"),
-            (.hostProcessing, "Host encode latency")
+            (.hostProcessing, "PC encode latency")
         ]),
         ("Mac", [
             (.macCpu, "Mac CPU"),

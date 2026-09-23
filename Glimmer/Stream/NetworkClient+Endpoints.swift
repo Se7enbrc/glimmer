@@ -122,15 +122,15 @@ extension NetworkClient {
         let name = hostName.isEmpty ? "The PC" : hostName
         if detail.hasPrefix("connect to") {
             return .hostUnreachable(
-                "\(name) is awake, but Sunshine's secure port (47984) is refusing connections - "
+                "\(name) is awake, but Sunshine's secure port (47984) is refusing connections because "
                 + "its HTTPS listener is stuck. Restart Sunshine on the PC; quitting Glimmer will not help."
             )
         }
         if detail.contains("Host requires pairing") {
-            return .pairingFailed("\(name) no longer recognizes this Mac - pair it again from Settings → PCs.")
+            return .pairingFailed("\(name) no longer recognizes this Mac. Choose Pair Again… from the PC's ⋯ menu.")
         }
         if detail.hasPrefix("TLS handshake") {
-            return .pairingFailed("\(name) rejected this Mac's certificate - pair it again from Settings → PCs.")
+            return .pairingFailed("\(name) rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu.")
         }
         if detail.contains("cert mismatch") || detail.contains("no certificate") {
             return .hostUnreachable(

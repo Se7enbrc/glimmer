@@ -88,14 +88,14 @@ final class PairedPathFailureClassificationTests: XCTestCase {
         }
         XCTAssertTrue(text.contains("Restart Sunshine"))
         XCTAssertTrue(text.contains("47984"))
-        XCTAssertFalse(text.lowercased().contains("pair it again"))
+        XCTAssertFalse(text.contains("Pair Again…"))
     }
 
     func test401IsUnpaired() {
         guard case .pairingFailed(let text) = classify("Host requires pairing (401)") else {
             return XCTFail("expected pairingFailed")
         }
-        XCTAssertTrue(text.contains("pair it again"))
+        XCTAssertTrue(text.contains("Pair Again…"))
         XCTAssertTrue(text.hasPrefix("tower"))
     }
 
@@ -103,7 +103,7 @@ final class PairedPathFailureClassificationTests: XCTestCase {
         guard case .pairingFailed(let text) = classify("TLS handshake to tower:47984 failed (SSL_connect)") else {
             return XCTFail("expected pairingFailed")
         }
-        XCTAssertTrue(text.contains("pair it again"))
+        XCTAssertTrue(text.contains("Pair Again…"))
     }
 
     func testHostCertChangePointsAtTrustChip() {
@@ -119,5 +119,19 @@ final class PairedPathFailureClassificationTests: XCTestCase {
             return XCTFail("expected hostUnreachable")
         }
         XCTAssertTrue(text.hasPrefix("The PC"))
+    }
+}
+
+/// The launcher banner keeps the classifier's Pair Again… sentence as is, and
+/// any other pairing failure points at the same command.
+@MainActor
+struct PairingFailureBannerTests {
+
+    @Test func theBannerNamesPairAgain() {
+        let verdict = NetworkClient.classifyPairedPathFailure("Host requires pairing (401)", hostName: "Den PC")
+        let kept = AppModel.connectFailureBanner(for: verdict, hostName: "Den PC")
+        #expect(kept.hasPrefix("Den PC no longer recognizes this Mac."))
+        let rejected = AppModel.connectFailureBanner(for: StreamError.pairingRejected, hostName: "Den PC")
+        #expect(rejected.hasPrefix("Couldn't pair with Den PC.") && rejected.contains("Pair Again…"))
     }
 }

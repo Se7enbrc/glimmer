@@ -102,8 +102,8 @@ struct AboutPane: View {
             }
             Section("Projects we like") {
                 Text("Built for Sunshine, the open-source game-streaming host. Glimmer "
-                    + "speaks the Moonlight protocol - itself carrying NVIDIA GameStream "
-                    + "forward - and the transport is ported from moonlight-common-c, "
+                    + "speaks the Moonlight protocol, which carries NVIDIA GameStream "
+                    + "forward, and the transport is ported from moonlight-common-c, "
                     + "with respect. Full credits in CREDITS.md.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)

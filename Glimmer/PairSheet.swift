@@ -140,7 +140,7 @@ struct PairSheet: View {
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Stream now") {
+                Button("Stream Now") {
                     selectPairedHost()
                     model.streamDefaultApp()
                     dismiss()
@@ -159,7 +159,7 @@ struct PairSheet: View {
                 }
                 Button("Cancel") { cancelPairing(); dismiss() }
                 // Manual retry - pairing normally auto-starts with the code.
-                Button("Retry") { startPairing() }
+                Button("Try Again") { startPairing() }
                     .buttonStyle(StreamButtonStyle())
                     .disabled(model.pairingInFlight)
             }
@@ -237,7 +237,7 @@ private struct HostChooser: View {
                     Image(systemName: "wifi.exclamationmark")
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.orange)
-                    Text("No PCs found yet - enter the address below.")
+                    Text("No PCs found yet. Enter the address below.")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

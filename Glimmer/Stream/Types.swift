@@ -531,7 +531,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         // its signature failed verification (the MITM-detected branch
         // also throws .pairingRejected). The internal log distinguishes;
         // the surface does not.
-        case .pairingRejected: return "Pairing failed - try again."
+        case .pairingRejected: return "Pairing failed. Try again."
         case .launchFailed(let reason): return "Couldn't launch app: \(reason)"
         case .sessionFailed(let code): return "Streaming session ended (code \(code))."
         case .decoderFailed(let reason): return "Video decoder failed: \(reason)"

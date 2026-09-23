@@ -403,7 +403,7 @@ thought it was).
 the cursor is unhidden. The stream session keeps running - the decode pipeline
 and display layer are independent of window visibility (with presentation
 suppressed and decode gated while hidden; see Video pipeline). On the launcher
-side, the `Back to stream` affordance calls `StreamSession.resumeWindow()` to
+side, the `Back to Stream` affordance calls `StreamSession.resumeWindow()` to
 bring it back. We deliberately do NOT auto-reorder-front on
 `NSApp.didBecomeActive` - that fired on every app activation (clicking the
 launcher, Dock-clicking) and yanked the user back into the stream whenever they

@@ -217,7 +217,7 @@ struct MenuBarPanel: View {
                 Text("No PC paired yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                actionRow("Add a PC", systemImage: "plus.circle") { openLauncher() }
+                actionRow("Pair a PC…", systemImage: "plus.circle") { openLauncher() }
             }
         }
     }

@@ -81,7 +81,7 @@ struct StreamButton: View {
         case connecting
         case liveBackgrounded
         /// Host asleep + Luna power gate passed: the hero CTA becomes the one
-        /// obvious action ("Wake & Connect") instead of a dead Stream button.
+        /// obvious action ("Wake and Connect") instead of a dead Stream button.
         case wake
         /// A wake in flight (packets sent, waiting up to 90 s for Sunshine).
         /// Like `.connecting` the capsule stays enabled and is the cancel.
@@ -165,14 +165,14 @@ struct StreamButton: View {
                 case .liveBackgrounded:
                     Image(systemName: "play.tv.fill")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Back to stream")
+                    Text("Back to Stream")
                         .font(.system(size: 17, weight: .semibold))
                         .contentTransition(.opacity)
                 case .wake:
-                    Image(systemName: "bolt.fill")
+                    Image(systemName: "power")
                         .font(.system(size: 16, weight: .semibold))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Wake & Connect")
+                        Text("Wake and Connect")
                             .font(.system(size: 17, weight: .semibold))
                             .contentTransition(.opacity)
                         // A wake that got no answer: one plain sentence with the

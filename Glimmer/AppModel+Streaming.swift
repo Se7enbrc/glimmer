@@ -376,7 +376,7 @@ extension AppModel {
             // establishment (a truncated control read = the host dropped mid-
             // response) → asleep guidance is honest.
             return "Couldn't reach \(hostName). Make sure it's awake and on the same network."
-        case .pairingFailed(let detail) where detail.contains("pair it again"):
+        case .pairingFailed(let detail) where detail.contains("Pair Again…"):
             // The paired-path classification (NetworkClient.
             // classifyPairedPathFailure) - already the actionable, host-named
             // sentence (401 or a TLS-level rejection of our client cert).
@@ -384,7 +384,7 @@ extension AppModel {
         case .pairingFailed, .pairingRejected:
             // The host answered but pairing failed - point the user at the
             // real fix, not at the power switch.
-            return "Couldn't pair with \(hostName). Re-pair from Settings → PCs."
+            return "Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu."
         case .launchFailed:
             return "\(hostName) answered but couldn't start the app. It may already be in use."
         case .decoderFailed:

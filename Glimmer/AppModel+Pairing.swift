@@ -181,7 +181,7 @@ extension AppModel {
                 """
             )
             Diag.error("Pairing failed", "Pairing")
-            pairingPhase = .failure("Pairing failed - try again.")
+            pairingPhase = .failure("Pairing failed. Try again.")
             return nil
         }
     }

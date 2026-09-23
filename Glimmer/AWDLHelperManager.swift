@@ -163,7 +163,7 @@ final class AWDLHelperManager: ObservableObject {
     private static let wedgedRegistrationMessage =
         "macOS left a stuck background-item record (a known glitch after an app "
         + "update), so it won't register the helper. You can manage Glimmer's "
-        + "background items in System Settings - Login Items & Extensions."
+        + "background items in System Settings › General › Login Items & Extensions."
 
     /// Apple's official Login Items & Extensions guide - a credible reference for
     /// managing the stuck background item, shown instead of asking the user to run

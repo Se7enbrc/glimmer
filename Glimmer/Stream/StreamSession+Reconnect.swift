@@ -86,7 +86,7 @@ extension StreamSession {
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
         await runReconnectEpisode(
             code: Self.deadPeerTerminationCode,
-            bannerText: "Connection is weak - lowering quality to \(toKbps / 1000) Mbps…")
+            bannerText: "Connection is weak. Lowering quality to \(toKbps / 1000) Mbps…")
     }
 
     /// Drive a bounded reconnect episode: hold the frozen frame, retry the
