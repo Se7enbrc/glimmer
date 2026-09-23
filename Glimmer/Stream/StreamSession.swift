@@ -54,13 +54,16 @@ public actor StreamSession {
 
     /// The menu bar row: into the mini player, or back out of it.
     public func toggleMiniPlayer() async {
+        guard !isTearingDown else { return }
         let win = self.window
         await MainActor.run { win?.toggleMiniPlayer() }
     }
 
     /// Bring the stream window back from the background: the launcher's "Back
     /// to stream" after the user Cmd-Tabbed away (which ordered the window out).
+    /// A stopping session has already closed it; the /cancel may still be running.
     public func resumeWindow() async {
+        guard !isTearingDown else { return }
         // Capture the StreamWindow reference on the actor first (it lives
         // here, isolated to us), then hop to the main actor to touch
         // AppKit. Reaching into `self.window` from inside MainActor.run
