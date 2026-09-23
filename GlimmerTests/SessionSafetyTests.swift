@@ -169,13 +169,20 @@ struct SessionSafetyTests {
     /// banner and menu bar route their action on. Only a PC that never
     /// answered is told to check that it's awake.
     @Test func connectFailuresNameTheFix() {
+        // The pinned-path verdicts, named as fetchServerInfo names them.
+        let classify = { NetworkClient.classifyPairedPathFailure($0, hostName: "Tower") }
+        let stuck = "Tower is awake, but Sunshine's secure port (47984) is refusing connections because "
+            + "its HTTPS listener is stuck. Restart Sunshine on the PC; quitting Glimmer will not help."
         let cases: [(Error, AppModel.StreamErrorKind, String)] = [
-            (StreamError.hostUnreachable("connect to 10.0.0.2:47984 failed or timed out"), .unreachable,
+            (StreamError.hostUnreachable("connect to 192.0.2.10:47984 failed or timed out"), .unreachable,
              AppModel.unreachableMessage("Tower")),
-            (StreamError.hostUnreachable("This PC's certificate changed. Pair it again."), .pairing,
-             "This PC's certificate changed. Pair it again."),
-            (StreamError.hostUnreachable("Tower answers on its plain port. Restart Sunshine on the PC."), .other,
-             "Tower answers on its plain port. Restart Sunshine on the PC."),
+            (classify("connect to 192.0.2.10:47984 failed or timed out"), .other, stuck),
+            (classify("pinned host cert mismatch"), .pairing,
+             "Tower's certificate changed. To trust it, choose Pair Again… from the PC's ⋯ menu."),
+            (classify("Host requires pairing (Not paired)"), .pairing,
+             "Tower no longer recognizes this Mac. Choose Pair Again… from the PC's ⋯ menu."),
+            (classify("TLS handshake to 192.0.2.10:47984 failed (SSL_connect)"), .pairing,
+             "Tower rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu."),
             (StreamError.pairingFailed("Host is not paired. Use the pair sheet first."), .pairing,
              "Couldn't pair with Tower. Choose Pair Again… from the PC's ⋯ menu."),
             (StreamError.streamPortsBlocked(proto: "UDP", port: 47999), .other,
@@ -193,6 +200,7 @@ struct SessionSafetyTests {
             let failure = AppModel.connectFailure(for: error, hostName: "Tower")
             #expect(failure.kind == kind, "\(error)")
             #expect(failure.message == message)
+            #expect(!failure.message.contains(" - ") && !failure.message.contains("192.0.2.10"))
         }
     }
 
