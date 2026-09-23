@@ -57,6 +57,15 @@ struct StreamButtonTests {
         #expect(StreamButton.connectingSubtext(stage: stage, primary: primary) == nil)
     }
 
+    /// The engine re-runs its connect stages during a reconnect; they mustn't
+    /// turn the line back into a first connect.
+    @Test func aReconnectKeepsItsLineThroughTheEngineStages() {
+        let model = AppModel()
+        model.handleNativeEvent(.reconnecting, host: pc)
+        model.handleNativeEvent(.stageStarting(name: "RTSP handshake"), host: pc)
+        #expect(model.streamPhase == .connecting(stage: "Reconnecting to Tower…"))
+    }
+
     @Test func engineStagesSitUnderTheConnectingLine() {
         let primary = StreamButton.connectingPrimary(stage: "RTSP handshake", selectedName: "Tower")
         #expect(primary == "Connecting to Tower…")

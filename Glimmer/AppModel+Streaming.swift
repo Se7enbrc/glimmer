@@ -426,9 +426,9 @@ extension AppModel {
         let connecting = "Connecting to \(host.displayName)…"
         switch event {
         case .stageStarting:
-            // Don't let a late stage event repaint "Connecting…" over the
-            // "Cancelling…" the user's cancel click just earned.
-            if !Self.connectCancelRequested { streamPhase = .connecting(stage: connecting) }
+            // Don't repaint "Connecting…" over the "Cancelling…" a cancel click
+            // earned, or over a reconnect's own "Reconnecting to <PC>…".
+            if !Self.connectCancelRequested, !isReconnecting { streamPhase = .connecting(stage: connecting) }
         case .stageComplete:              break
         case .stageFailed:
             nativeStreamError = "Couldn't reach \(host.displayName)."
