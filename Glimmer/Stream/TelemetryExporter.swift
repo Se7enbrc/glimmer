@@ -310,6 +310,9 @@ final class TelemetryExporter: @unchecked Sendable {
             Self.eventSinkBox.withLock { $0 = nil }
             self.captureTimer?.cancel()
             self.captureTimer = nil
+            // The feed just stopped: withdraw the published decision so pacers
+            // go back to live jitter instead of this session's last level.
+            EnvSignalController.shared.endSession()
             self.listener?.cancel()
             self.listener = nil
             // Sweep still-open /metrics connections (silent/half-open peers
