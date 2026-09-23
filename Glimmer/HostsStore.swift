@@ -355,6 +355,16 @@ extension AppModel {
         return true
     }
 
+    /// Only a private-range IPv4 literal moves with a DHCP lease. A hostname or a
+    /// Tailscale or public address is the user's stable choice, so it's never healed.
+    nonisolated static func canHealAddress(_ address: String) -> Bool {
+        guard let raw = IPv4Address(address)?.rawValue else { return false }
+        let octets = Array(raw)
+        let (first, second) = (octets[0], octets[1])
+        return first == 10 || (first == 172 && (16...31).contains(second))
+            || (first == 192 && second == 168) || (first == 169 && second == 254)
+    }
+
     /// A PC on a new DHCP lease still answers mDNS. Browse for up to `seconds` and save
     /// the first IPv4 address that proves to be this PC over its pinned TLS channel
     /// (Wake on LAN only sends over IPv4). True when the saved address changed.
@@ -362,7 +372,7 @@ extension AppModel {
     func healAddress(of host: Host, within seconds: Double) async -> Bool {
         var probe = nativeServerInfo(for: host)
         let saved = probe.address
-        guard probe.serverCertPEM != nil else { return false }
+        guard probe.serverCertPEM != nil, Self.canHealAddress(saved) else { return false }
         let discovery = HostDiscovery()
         let results = await discovery.start()
         let deadline = Task {

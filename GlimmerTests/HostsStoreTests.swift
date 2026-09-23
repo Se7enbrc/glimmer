@@ -81,6 +81,19 @@ struct HostsStoreTests {
         #expect(!AppModel.storeAddress("192.0.2.99", hostID: "OTHER-ID", in: defaults))
     }
 
+    @Test(arguments: ["10.0.0.20", "172.16.4.2", "172.31.255.1", "192.168.1.20", "169.254.10.3"])
+    func aLANLeaseAddressIsHealed(_ address: String) {
+        #expect(AppModel.canHealAddress(address))
+    }
+
+    /// A PC paired over Tailscale or at a name keeps it, even when its LAN address
+    /// answers mDNS first; only a DHCP lease moves.
+    @Test(arguments: ["100.64.0.7", "100.127.1.2", "tower.example.ts.net", "pc.example.com", "tower.local",
+                      "203.0.113.9", "172.32.0.1", "fd7a:115c:a1e0::7"])
+    func aStableAddressIsNeverHealed(_ address: String) {
+        #expect(!AppModel.canHealAddress(address))
+    }
+
     @Test func appListIsFetchedOncePerLoopAndForUnknownApps() {
         #expect(AppModel.needsAppList(runningID: 0, known: [1], fetchedFor: nil))
         #expect(!AppModel.needsAppList(runningID: 0, known: [1], fetchedFor: 0))
