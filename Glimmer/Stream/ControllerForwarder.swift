@@ -174,12 +174,17 @@ extension InputForwarder {
         // reached us through GameController AND asked macOS to start a screen
         // recording. A streaming client has exactly one consumer for that button,
         // the host, so disable the gesture: the press is delivered immediately and
-        // macOS stays out of it. Home (PS) stays bound on purpose - the Game
-        // Overlay is a feature users expect from it and no chord depends on it.
+        // macOS stays out of it.
         if let create = gamepad.extendedGamepad?.buttonOptions, create.isBoundToSystemGesture {
             create.preferredSystemGestureState = .disabled
             Diag.info("controller \(slot): Create/Share was bound to a macOS system gesture - "
                 + "disabled so the press reaches the stream", "Controller")
+        }
+        // Home (PS): macOS 27 honors this only when the user picks Defer to app in
+        // System Settings › Game Controllers, so the default Game Overlay stays and
+        // Defer sends Guide to the PC.
+        if #available(macOS 27, *) {
+            gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
         }
 
         // DualSense + the user opted in: start the raw-HID side-channel so the

@@ -118,8 +118,7 @@ final class HIDGamepadManager {
         let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? 0
         let product = (IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber)?.intValue ?? 0
         let name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String
-        guard Self.claimAll || (![0x054C, 0x045E, 0x057E, 0x05AC].contains(vendor)
-              && !GCController.controllers().contains(where: { name != nil && $0.vendorName == name })) else { return }
+        guard Self.claimAll || !Self.ownedByGameController(device, vendor: vendor, name: name) else { return }
         var id: UInt64 = 0
         guard IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(device), &id) == kIOReturnSuccess,
               devices[id] == nil else { return }
@@ -143,6 +142,14 @@ final class HIDGamepadManager {
         onAttach?(pad)
         if access != kIOHIDAccessTypeGranted { onPermissionNeeded?(pad) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.recheckOwnership() }
+    }
+
+    /// macOS 27 fixed supportsHIDDevice for freshly attached devices; older
+    /// systems fall back to the platform-vendor and name checks.
+    private static func ownedByGameController(_ device: IOHIDDevice, vendor: Int, name: String?) -> Bool {
+        if #available(macOS 27, *) { return GCController.supportsHIDDevice(device) }
+        return [0x054C, 0x045E, 0x057E, 0x05AC].contains(vendor)
+            || GCController.controllers().contains { name != nil && $0.vendorName == name }
     }
 
     /// Does the same VID:PID also enumerate as a keyboard or a mouse?
