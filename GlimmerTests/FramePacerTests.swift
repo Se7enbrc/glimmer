@@ -48,22 +48,21 @@ struct FramePacerTests {
         }
     }
 
-    /// A timer beat inside a tick's vsync, before that tick's target scans
-    /// out, must not hand the renderer a second frame.
-    @Test func assistBeatInsideTickVsyncPresentsOnce() throws {
+    /// A timer beat before the tick's frame scans out must not hand the
+    /// renderer a second frame inside that panel vsync.
+    @Test func assistBeatBeforeTickScanoutPresentsOnce() throws {
         let (pacer, presents) = try makeAssistPacer()
-        let vsync = 1.0 / 120
-        pacer.releaseDueFrame(targetTimestamp: CACurrentMediaTime() + vsync, vsyncInterval: vsync)
+        releaseOnHalfRateTick(pacer, linkTimestamp: CACurrentMediaTime())
         pacer.deficitTimerFired()
         #expect(presents.withLock { $0 } == 1)
         #expect(pacer.queue.count == 1)
     }
 
-    /// Once the tick's scanout is behind us the next beat releases as usual.
-    @Test func assistBeatAfterScanoutReleases() throws {
+    /// The tick's target leads by two panel vsyncs, but its frame scans out on
+    /// the first; a beat past that lands on a later vsync and still releases.
+    @Test func assistBeatAfterFirstPanelVsyncReleases() throws {
         let (pacer, presents) = try makeAssistPacer()
-        let vsync = 1.0 / 120
-        pacer.releaseDueFrame(targetTimestamp: CACurrentMediaTime() - 2 * vsync, vsyncInterval: vsync)
+        releaseOnHalfRateTick(pacer, linkTimestamp: CACurrentMediaTime() - 1.5 * panelVsync)
         pacer.deficitTimerFired()
         #expect(presents.withLock { $0 } == 2)
     }
@@ -71,10 +70,10 @@ struct FramePacerTests {
     /// Only a plausible lead counts as a tick's pending scanout; a lead past 1s
     /// is a timebase jump the due gate's clamp must still recover.
     @Test func tickScanoutLeadBounds() {
-        #expect(FramePacer.tickOwnsScanout(now: 100, lastPresent: 100.008))
-        #expect(!FramePacer.tickOwnsScanout(now: 100, lastPresent: 99.99))
-        #expect(!FramePacer.tickOwnsScanout(now: 100, lastPresent: 105))
-        #expect(!FramePacer.tickOwnsScanout(now: 100, lastPresent: .nan))
+        #expect(FramePacer.tickOwnsScanout(now: 100, scanout: 100.008))
+        #expect(!FramePacer.tickOwnsScanout(now: 100, scanout: 99.99))
+        #expect(!FramePacer.tickOwnsScanout(now: 100, scanout: 105))
+        #expect(!FramePacer.tickOwnsScanout(now: 100, scanout: .nan))
     }
 
     /// The watchdog's non-empty clock starts on the empty → non-empty submit and
@@ -88,6 +87,16 @@ struct FramePacerTests {
         #expect(held >= 0 && held < StreamSession.presentStallThreshold)
         pacer.queue.removeAll()
         #expect(pacer.livenessSnapshot().secondsQueueNonEmpty == 0)
+    }
+
+    private let panelVsync = 1.0 / 120
+
+    /// A tick release as `handleTick` makes it with the link at half the panel's
+    /// rate: the target two panel vsyncs out, the scanout on the first.
+    private func releaseOnHalfRateTick(_ pacer: FramePacer, linkTimestamp: CFTimeInterval) {
+        pacer.releaseDueFrame(
+            targetTimestamp: linkTimestamp + 2 * panelVsync, vsyncInterval: panelVsync,
+            tickScanout: linkTimestamp + panelVsync)
     }
 
     private func makePacer(fps: Int32, queued: Int) throws -> FramePacer {

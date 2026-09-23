@@ -202,6 +202,9 @@ extension FramePacer {
         /// SAME buffer the layer is already displaying, so no extra surface is
         /// retained from VT's pool. Cleared on stop().
         var lastPresentedSampleBuffer: CMSampleBuffer?
+        /// Panel vsync (`link.timestamp + link.duration`) the last tick-released
+        /// frame scans out on; an off-tick beat before it would present twice.
+        var tickScanoutMediaTime: CFTimeInterval = .nan
         /// WARM HANDOVER: true while a re-enabled pacer keeps presenting DIRECT
         /// (submit bypasses the queue) until the rebuilt link proves a healthy
         /// realized tick rate - the cold cutover onto an un-primed link queued

@@ -263,7 +263,11 @@ extension FramePacer {
 
     /// Decide-and-release on the dedicated serial queue. Releases at most one
     /// frame per tick (one present per vsync), after trimming sustained lag.
-    func releaseDueFrame(targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval) {
+    /// `tickScanout` is the panel vsync a tick's release lands on (NaN off-tick).
+    func releaseDueFrame(
+        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval,
+        tickScanout: CFTimeInterval = .nan
+    ) {
         var toPresent: Entry?
         var trimmed: [CMSampleBuffer] = []
         var sampledDepth = 0
@@ -342,6 +346,7 @@ extension FramePacer {
         if !inGapRecovery,
            let backoff = takeBackoffNewestLocked(targetTimestamp: targetTimestamp) {
             sampledDepth = 0
+            tickDeficit.tickScanoutMediaTime = tickScanout
             os_unfair_lock_unlock(&lock)
             presentBackoffAndYield(backoff)
             // Yield: do NOT fall through to the due gate / starvation failsafe.
@@ -369,6 +374,7 @@ extension FramePacer {
             targetTimestamp: targetTimestamp, vsyncInterval: vsyncInterval,
             effectiveTarget: effectiveTarget)
         toPresent = gate.toPresent
+        if toPresent != nil { tickDeficit.tickScanoutMediaTime = tickScanout }
         let heldForGrowth = gate.heldForGrowth
 
         // Gap-recovery edge: a frame presenting right after an empty-tick streak

@@ -205,8 +205,12 @@ extension FramePacer {
             }
         }
 
+        // A frame released now scans out on the next PANEL vsync, which can sit
+        // before `target` when the link runs below the panel's rate.
+        let scanout = link.timestamp + vsyncInterval
         pacingQueue.async { [weak self] in
-            self?.releaseDueFrame(targetTimestamp: target, vsyncInterval: vsyncInterval)
+            self?.releaseDueFrame(
+                targetTimestamp: target, vsyncInterval: vsyncInterval, tickScanout: scanout)
         }
     }
 

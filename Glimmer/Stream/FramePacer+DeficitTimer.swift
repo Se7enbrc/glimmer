@@ -47,15 +47,16 @@ extension FramePacer {
     /// repaint for the governor if nothing real flowed. `CACurrentMediaTime()`
     /// shares CADisplayLink's timebase, so the cadence base stays on one clock
     /// - when real ticks resume mid-deficit their targetTimestamps slot onto
-    /// the same grid and the due gate just keeps pacing. A beat inside a
-    /// tick's not-yet-scanned-out vsync skips its release (`tickOwnsScanout`).
+    /// the same grid and the due gate just keeps pacing. A beat before the
+    /// panel vsync a tick's frame scans out on skips its release (`tickOwnsScanout`).
     func deficitTimerFired() {
         let mediaNow = CACurrentMediaTime()
         os_unfair_lock_lock(&lock)
         let active = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive)
             && running && !presentSuppressed
         let interval = streamFrameIntervalSeconds
-        let tickOwnsVsync = Self.tickOwnsScanout(now: mediaNow, lastPresent: lastPresentMediaTime)
+        let tickOwnsVsync = Self.tickOwnsScanout(
+            now: mediaNow, scanout: tickDeficit.tickScanoutMediaTime)
         os_unfair_lock_unlock(&lock)
         guard active else { return }
         if !tickOwnsVsync {
@@ -72,11 +73,11 @@ extension FramePacer {
         handleTickDeficitEvents(events)
     }
 
-    /// True when a real tick already released for a scanout still ahead of `now`
-    /// (a beat there would present twice in one vsync). A lead past 1s is a
-    /// timebase jump, left to the due gate's discontinuity clamp.
-    static func tickOwnsScanout(now: CFTimeInterval, lastPresent: CFTimeInterval) -> Bool {
-        let lead = lastPresent - now
+    /// True when a real tick's released frame has not yet scanned out at `now`
+    /// (a beat there would present twice in one panel vsync). A lead past 1s
+    /// is a timebase jump, left to the due gate's discontinuity clamp.
+    static func tickOwnsScanout(now: CFTimeInterval, scanout: CFTimeInterval) -> Bool {
+        let lead = scanout - now
         return lead > 0 && lead <= 1.0
     }
 
