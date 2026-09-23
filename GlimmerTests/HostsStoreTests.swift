@@ -15,11 +15,12 @@ struct HostsStoreTests {
     private typealias App = AppModel.PairedApp
     private static let desktopStandIn = App(id: 881448767, name: "Desktop", hdr: false, hidden: false)
 
-    /// A scratch domain holding one PC paired as `tower`, with `apps` stored.
-    private func pairedTower(apps: [App] = [desktopStandIn]) throws -> UserDefaults {
-        let suite = "io.ugfugl.Glimmer.tests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
+    /// `domain`, emptied, holding one PC paired as `tower` with `apps` stored. Each test
+    /// passes its own fixed name and removes it after: a fresh name per run would leave a
+    /// plist behind in ~/Library/Preferences every time (see MoonlightQtIdentityImportTests).
+    private func pairedTower(_ domain: String, apps: [App] = [desktopStandIn]) throws -> UserDefaults {
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defaults.removePersistentDomain(forName: domain)
         defaults.set(1, forKey: "hosts.size")
         defaults.set("tower", forKey: "hosts.1.hostname")
         defaults.set("TOWER-ID", forKey: "hosts.1.uuid")
@@ -36,7 +37,9 @@ struct HostsStoreTests {
     }
 
     @Test func aFreshListReplacesThePairingStandIn() throws {
-        let defaults = try pairedTower()
+        let domain = "io.ugfugl.Glimmer.tests.hosts-fresh-list"
+        let defaults = try pairedTower(domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
         let fresh = [App(id: 1, name: "Desktop", hdr: false, hidden: false),
                      App(id: 2, name: "Steam Big Picture", hdr: true, hidden: false)]
         #expect(AppModel.storeApps(fresh, hostID: "TOWER-ID", in: defaults))
@@ -46,8 +49,10 @@ struct HostsStoreTests {
     }
 
     @Test func aShorterListLeavesNoStaleApps() throws {
-        let defaults = try pairedTower(apps: [App(id: 1, name: "Desktop", hdr: false, hidden: false),
-                                              App(id: 2, name: "Old Game", hdr: false, hidden: false)])
+        let domain = "io.ugfugl.Glimmer.tests.hosts-shorter-list"
+        let defaults = try pairedTower(domain, apps: [App(id: 1, name: "Desktop", hdr: false, hidden: false),
+                                                      App(id: 2, name: "Old Game", hdr: false, hidden: false)])
+        defer { defaults.removePersistentDomain(forName: domain) }
         #expect(AppModel.storeApps([App(id: 1, name: "Desktop", hdr: false, hidden: false)],
                                    hostID: "TOWER-ID", in: defaults))
         #expect(storedNames(defaults) == ["Desktop"])
@@ -55,7 +60,9 @@ struct HostsStoreTests {
     }
 
     @Test func appsHiddenOnThisMacStayHidden() throws {
-        let defaults = try pairedTower(apps: [App(id: 1, name: "Desktop", hdr: false, hidden: true)])
+        let domain = "io.ugfugl.Glimmer.tests.hosts-hidden-apps"
+        let defaults = try pairedTower(domain, apps: [App(id: 1, name: "Desktop", hdr: false, hidden: true)])
+        defer { defaults.removePersistentDomain(forName: domain) }
         #expect(AppModel.storeApps([App(id: 1, name: "Desktop", hdr: false, hidden: false),
                                     App(id: 2, name: "Elden Ring", hdr: true, hidden: false)],
                                    hostID: "TOWER-ID", in: defaults))
@@ -64,7 +71,9 @@ struct HostsStoreTests {
     }
 
     @Test func anEmptyListOrUnknownPCChangesNothing() throws {
-        let defaults = try pairedTower()
+        let domain = "io.ugfugl.Glimmer.tests.hosts-empty-list"
+        let defaults = try pairedTower(domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
         #expect(!AppModel.storeApps([], hostID: "TOWER-ID", in: defaults))
         #expect(!AppModel.storeApps([App(id: 1, name: "Desktop", hdr: false, hidden: false)],
                                     hostID: "OTHER-ID", in: defaults))
@@ -73,7 +82,9 @@ struct HostsStoreTests {
     }
 
     @Test func aMovedPCKeepsTheAddressTheUserTyped() throws {
-        let defaults = try pairedTower()
+        let domain = "io.ugfugl.Glimmer.tests.hosts-moved-pc"
+        let defaults = try pairedTower(domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
         #expect(AppModel.storeAddress("192.0.2.77", hostID: "TOWER-ID", in: defaults))
         #expect(defaults.string(forKey: "hosts.1.localaddress") == "192.0.2.77")
         #expect(defaults.string(forKey: "hosts.1.manualaddress") == "192.0.2.10")
