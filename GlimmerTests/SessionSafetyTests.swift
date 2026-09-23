@@ -227,22 +227,33 @@ struct SessionSafetyTests {
         #expect(!AppModel.connectWasCancelled(by: nil, cancelRequested: false))
     }
 
-    /// A stop that interrupted the connect leg surfaces as a cancel; a real
+    /// Only the user's stop turns a failed connect leg into a cancel; a real
     /// failure keeps the engine's cause instead of collapsing to a bare code.
     @Test func connectLegKeepsItsCause() {
-        #expect(StreamSession.connectLegError(StreamError.sessionFailed(-1), stopping: true) is CancellationError)
+        let userStop = StreamSession.connectLegError(StreamError.sessionFailed(-1), stoppedBy: .userStopped)
+        #expect(userStop is CancellationError)
         let blocked = StreamSession.connectLegError(
-            StreamError.streamPortsBlocked(proto: "UDP", port: 47999), stopping: false)
+            StreamError.streamPortsBlocked(proto: "UDP", port: 47999), stoppedBy: nil)
         guard case .streamPortsBlocked(let proto, let port) = blocked as? StreamError else {
             Issue.record("expected streamPortsBlocked, got \(blocked)")
             return
         }
         #expect(proto == "UDP" && port == 47999)
-        guard case .sessionFailed(-1) = StreamSession.connectLegError(CancellationError(), stopping: false)
+        guard case .sessionFailed(-1) = StreamSession.connectLegError(CancellationError(), stoppedBy: nil)
             as? StreamError else {
             Issue.record("an unexplained cancel is still a failed connect")
             return
         }
+    }
+
+    /// The PC ending the session during bring-up tears it down too, but that
+    /// is a failure the user must hear about, not a silent cancel.
+    @Test func hostEndDuringConnectStillShowsABanner() {
+        let error = StreamSession.connectLegError(CancellationError(), stoppedBy: .hostError)
+        #expect(!(error is CancellationError))
+        #expect(!AppModel.connectWasCancelled(by: error, cancelRequested: false))
+        #expect(AppModel.connectFailure(for: error, hostName: "Tower").message
+            == "Tower answered, but the stream couldn't start.")
     }
 
     /// An RTSP port that never took the connection names itself; other RTSP

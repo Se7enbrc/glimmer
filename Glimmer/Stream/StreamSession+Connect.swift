@@ -224,18 +224,18 @@ extension StreamSession {
             // P2 DISCONNECT REASON: the connection never reached established -
             // latch connect-failed before the teardown so the cause is attributed
             // to the handshake, not the host terminate that may follow.
-            let stopping = isTearingDown
-            if !stopping { noteTelemetryDisconnect(.connectFailed) }
-            await stop()
-            throw Self.connectLegError(error, stopping: stopping)
+            let interruptedBy = stopCause
+            if !isTearingDown { noteTelemetryDisconnect(.connectFailed) }
+            await stop(cause: .connectFailed)
+            throw Self.connectLegError(error, stoppedBy: interruptedBy)
         }
     }
 
-    /// What a failed initial connect reports: a stop that interrupted it (the
-    /// quit chord, the close button, Cancel) is a cancel, not a failure, and a
-    /// real failure keeps the engine's cause so the banner can name the fix.
-    static func connectLegError(_ error: Error, stopping: Bool) -> Error {
-        if stopping { return CancellationError() }
+    /// What a failed initial connect reports: the user's stop (the quit chord,
+    /// the close button, Cancel) is a cancel, not a failure. Anything else, the
+    /// PC ending it included, keeps the engine's cause so the banner names the fix.
+    static func connectLegError(_ error: Error, stoppedBy cause: DisconnectReason?) -> Error {
+        if cause == .userStopped { return CancellationError() }
         return error as? StreamError ?? .sessionFailed(-1)
     }
 }

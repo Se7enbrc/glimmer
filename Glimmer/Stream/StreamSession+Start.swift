@@ -58,6 +58,7 @@ extension StreamSession {
             throw StreamError.sessionFailed(-1)
         }
         teardown = SharedTeardown()
+        stopCause = nil
         ownsHostSession = false
         isStreaming = true
 

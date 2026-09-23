@@ -38,6 +38,7 @@ extension StreamSession {
     ///   default silently attributing a dropped consumer to the user.
     func stop(cause: DisconnectReason) async {
         guard isStreaming || stopInProgress else { return }
+        if stopCause == nil { stopCause = cause }
         stopInProgress = true
         isStreaming = false
         launchTask?.cancel()

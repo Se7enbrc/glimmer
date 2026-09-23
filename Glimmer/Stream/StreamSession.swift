@@ -422,6 +422,9 @@ public actor StreamSession {
     var isStreaming = false
     // Set before teardown suspends; overlapping callers await the same work.
     var stopInProgress = false
+    // The first stop's cause this session: a failed connect tells the user's
+    // stop from the PC's by it.
+    var stopCause: DisconnectReason?
     var teardown = SharedTeardown()
     var takeoverAuthorized = false
     var ownsHostSession = false
