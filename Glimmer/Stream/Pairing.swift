@@ -28,25 +28,14 @@ public actor PairingClient {
     // MARK: Public API
 
     /// Walk the full PIN handshake. On success the returned `ServerInfo` has
-    /// `pairStatus = .paired` and `serverCertPEM` populated with the host's
-    /// pinned certificate. On failure we always send `/unpair` to the host
-    /// before throwing - leaving a half-paired state on the host side trips
-    /// "Already pairing" errors on retry.
+    /// `pairStatus = .paired` and `serverCertPEM` holding the host's pinned certificate.
     public func pair(pin: String) async throws -> ServerInfo {
-        do {
-            return try await runPairingFlow(pin: pin)
-        } catch {
-            // Best-effort cleanup. Swallow any error from unpair - we're
-            // already in the failure path and the original error is what
-            // the caller cares about.
-            await sendUnpair()
-            throw error
-        }
+        try await runPairingFlow(pin: pin)
     }
 
     // MARK: - Pairing flow
-    // Four HTTP rounds plus a final HTTPS challenge, each a one-shot GET with every parameter
-    // in the query string; the host keeps no session state beyond what each call tells it.
+    // Four HTTP rounds plus a final HTTPS challenge, each a one-shot GET. Sunshine keeps one session per
+    // client id until it completes, fails or expires; there is no /unpair to end it early.
 
     private func runPairingFlow(pin: String) async throws -> ServerInfo {
 
@@ -277,7 +266,6 @@ public actor PairingClient {
               !plainCertHex.isEmpty,
               let serverCertBytes = Data(hex: plainCertHex) else {
             // Empty plaincert means the host is mid-pair with someone else.
-            // Mirror moonlight's behaviour - kick its state machine and bail.
             throw StreamError.pairingFailed(
                 "getservercert: plaincert missing (host is likely already pairing with another client)")
         }
@@ -524,20 +512,6 @@ public actor PairingClient {
                 \(String(describing: error), privacy: .public)
                 """
             )
-        }
-    }
-
-    // MARK: - Unpair (failure cleanup)
-
-    private func sendUnpair() async {
-        do {
-            _ = try await network.request(
-                path: "unpair",
-                query: [:],
-                usePaired: false
-            )
-        } catch {
-            log.warning("unpair call failed: \(String(describing: error), privacy: .public)")
         }
     }
 
