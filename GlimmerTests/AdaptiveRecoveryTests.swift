@@ -77,7 +77,7 @@ struct EnvSignalEvidenceTests {
     }
 }
 
-// MARK: - RTP queue: reorder hold and datagram clock
+// MARK: - RTP queue: reorder hold, FEC rebuild and datagram clock
 
 /// Serialized: the hold counters and the datagram clock are process-global.
 @Suite(.serialized)
@@ -146,6 +146,45 @@ struct RtpVideoQueueRecoveryTests {
         #expect(!queue.receivedOosData)
         #expect(queue.queuePacket(entry(3), isFecRecovery: false))
         #expect(queue.receivedOosData)
+    }
+
+    /// Writes the RTP and NV fields Sunshine stamps on every shard after encoding:
+    /// shard `index` of block 0 of 2 in frame 1, three data shards at 50% FEC.
+    private func stampShard(_ shard: inout [UInt8], index: Int) {
+        shard[0] = RtpVideoQueue.FLAG_EXTENSION
+        shard[2] = 0
+        shard[3] = UInt8(index)
+        let fecInfo = UInt32(index << 12 | 3 << 22 | 50 << 4)
+        for byte in 0..<4 {
+            shard[16 + 4 + byte] = byte == 0 ? 1 : 0
+            shard[16 + 12 + byte] = UInt8(truncatingIfNeeded: fecInfo >> (8 * byte))
+        }
+        shard[16 + 11] = 1 << 6
+    }
+
+    /// A PC that caps the packet size sends shards shorter than the 80 bytes asked for.
+    /// A rebuilt middle shard keeps the real length, since padding would put zeros
+    /// inside the frame. At the requested size the rebuild is unchanged.
+    @Test(arguments: [80, 64])
+    func lostShardIsRebuiltAtTheRealShardLength(shardSize: Int) throws {
+        let queue = makeQueue()
+        var data = (0..<3).map { i in (0..<shardSize).map { UInt8(truncatingIfNeeded: 5 + i * 31 + $0 * 7) } }
+        let flags = [RtpVideoQueue.FLAG_SOF, 0, RtpVideoQueue.FLAG_EOF]
+        for index in 0..<3 {
+            stampShard(&data[index], index: index)
+            data[index][16 + 8] = flags[index] | RtpVideoQueue.FLAG_CONTAINS_PIC_DATA
+        }
+        var parity = ReedSolomonTests.cauchyParity(data: data, ds: 3, ps: 2, bs: shardSize)
+        stampShard(&parity[0], index: 3)
+
+        for shard in [data[0], data[2], parity[0]] {
+            queue.addRawDatagram(shard, receiveTimeUs: DispatchTime.now().uptimeNanoseconds / 1000)
+        }
+        let rebuilt = try #require(queue.completed.first { $0.sequenceNumber == 1 })
+        #expect(queue.completed.count == 3)
+        #expect(rebuilt.length == shardSize)
+        #expect(rebuilt.bytes[16 + 8] == data[1][16 + 8])
+        #expect(rebuilt.bytes[32..<rebuilt.length] == data[1][32...])
     }
 
     /// Reception is alive while datagrams arrive, even when no frame survives

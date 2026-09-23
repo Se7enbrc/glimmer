@@ -48,7 +48,7 @@ struct ReedSolomonTests {
 
     /// Compute the `ps` parity shards for `data` (ds shards of `bs` bytes each)
     /// using the exact Cauchy generator the decoder rebuilds internally.
-    private func cauchyParity(data: [[UInt8]], ds: Int, ps: Int, bs: Int) -> [[UInt8]] {
+    static func cauchyParity(data: [[UInt8]], ds: Int, ps: Int, bs: Int) -> [[UInt8]] {
         var parity = [[UInt8]](repeating: [UInt8](repeating: 0, count: bs), count: ps)
         for j in 0..<ps {
             for i in 0..<ds {
@@ -90,7 +90,7 @@ struct ReedSolomonTests {
         let ds = 6, ps = 3, bs = 32
         let rs = try #require(ReedSolomon(dataShards: ds, parityShards: ps))
         let data = makeDataShards(ds: ds, bs: bs, seed: 9)
-        let parity = cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
+        let parity = Self.cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
 
         var shards = data + parity
         var marks = [Bool](repeating: false, count: ds + ps)
@@ -106,7 +106,7 @@ struct ReedSolomonTests {
         let ds = 5, ps = 3, bs = 48
         let rs = try #require(ReedSolomon(dataShards: ds, parityShards: ps))
         let data = makeDataShards(ds: ds, bs: bs, seed: 42)
-        let parity = cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
+        let parity = Self.cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
 
         var shards = data + parity
         var marks = [Bool](repeating: false, count: ds + ps)
@@ -126,7 +126,7 @@ struct ReedSolomonTests {
         let ds = 4, ps = 2, bs = 16
         let rs = try #require(ReedSolomon(dataShards: ds, parityShards: ps))
         let data = makeDataShards(ds: ds, bs: bs)
-        let parity = cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
+        let parity = Self.cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
         var shards = data + parity
         let marks = [Bool](repeating: false, count: ds + ps)
         #expect(rs.decode(shards: &shards, marks: marks, bs: bs) == true)
@@ -137,7 +137,7 @@ struct ReedSolomonTests {
         let ds = 4, ps = 2, bs = 16
         let rs = try #require(ReedSolomon(dataShards: ds, parityShards: ps))
         let data = makeDataShards(ds: ds, bs: bs)
-        let parity = cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
+        let parity = Self.cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
 
         var shards = data + parity
         var marks = [Bool](repeating: false, count: ds + ps)
@@ -154,7 +154,7 @@ struct ReedSolomonTests {
         let ds = 5, ps = 3, bs = 24
         let rs = try #require(ReedSolomon(dataShards: ds, parityShards: ps))
         let data = makeDataShards(ds: ds, bs: bs, seed: 3)
-        let parity = cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
+        let parity = Self.cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
 
         var shards = data + parity
         var marks = [Bool](repeating: false, count: ds + ps)

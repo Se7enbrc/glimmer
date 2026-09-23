@@ -41,7 +41,10 @@ extension RtpVideoQueue {
             return -1
         }
 
-        let receiveSize = packetSize + Self.MAX_RTP_HEADER_SIZE
+        // Sunshine sends a block's shards at one length, shorter than we asked for when
+        // the PC caps the packet size. Parity is always full length: take the longest.
+        let receiveSize = min(pending.reduce(0) { max($0, $1.length) },
+                              packetSize + Self.MAX_RTP_HEADER_SIZE)
         guard let rs = decoder(dataShards: bufferDataPackets, parityShards: bufferParityPackets) else {
             Diag.error("NativeVideo reed_solomon_new failed (ds=\(bufferDataPackets) ps=\(bufferParityPackets))", Self.cat)
             return -1
@@ -182,7 +185,7 @@ extension RtpVideoQueue {
         }
 
         let recoveredEntry = Entry(
-            bytes: recovered, length: packetSize + dataOffset, seq: recoveredSeq,
+            bytes: recovered, length: recovered.count - Self.MAX_RTP_HEADER_SIZE + dataOffset, seq: recoveredSeq,
             ts: ts, ssrc: ssrc, header: header, isParity: false)
         _ = queuePacket(recoveredEntry, isFecRecovery: true)
     }
