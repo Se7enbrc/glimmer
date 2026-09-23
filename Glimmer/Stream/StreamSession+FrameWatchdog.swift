@@ -16,6 +16,22 @@ import os
 
 extension StreamSession {
 
+    /// moonlight-common-c's ML_ERROR_NO_VIDEO_TRAFFIC: no video frame ever
+    /// arrived, almost always a firewall on UDP 47998 or a VPN's MTU.
+    static let noVideoTrafficTerminationCode: Int32 = -100
+    /// ML_ERROR_NO_VIDEO_FRAME: video arrived, but not one frame decoded.
+    static let noVideoFrameTerminationCode: Int32 = -101
+
+    /// The terminate code a watchdog teardown reports. A bring-up that never
+    /// showed a frame names why, so the user gets the right fix; a stall
+    /// after video flowed is the dead-peer loss (-1).
+    static func watchdogTerminationCode(
+        neverDecodedFirstFrame: Bool, receiveIdleSeconds: Double
+    ) -> Int32 {
+        guard neverDecodedFirstFrame else { return deadPeerTerminationCode }
+        return receiveIdleSeconds.isFinite ? noVideoFrameTerminationCode : noVideoTrafficTerminationCode
+    }
+
     /// Install the frame-arrival watchdog. Polls every 1s on the main run
     /// loop; gates on `VideoDecoder.secondsSinceLastDecodedFrame()` so a
     /// host sending us packets we can't decode (corrupt bitstream, missing
@@ -273,10 +289,11 @@ extension StreamSession {
         // latch it before the synthetic terminate + stop so the cause is attributed
         // to the stall, not the host-error code the synthetic terminate carries.
         noteTelemetryDisconnect(.watchdogStall)
-        // Reuse `connectionTerminated` with a sentinel error code so UI
-        // can show a "host became unreachable" message. -1 maps to the
-        // existing "Stream ended unexpectedly" handler in AppModel.
-        bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: -1))
+        // Reuse `connectionTerminated` with a synthetic code so the UI can
+        // say why the stream ended (see watchdogTerminationCode).
+        let code = Self.watchdogTerminationCode(
+            neverDecodedFirstFrame: neverDecodedFirstFrame, receiveIdleSeconds: receiveIdleSeconds)
+        bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
         await stop()
     }
 }

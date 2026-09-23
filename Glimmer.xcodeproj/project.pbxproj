@@ -281,6 +281,7 @@
 		DEC0DE840000000000000013 /* TerminationGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000014 /* TerminationGateTests.swift */; };
 		DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001C /* WindowPointerTests.swift */; };
 		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
+		DEC0DE202609220900000001 /* StreamSignalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220900000002 /* StreamSignalTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */; };
 		DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */; };
@@ -615,6 +616,7 @@
 		DEC0DE840000000000000014 /* TerminationGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminationGateTests.swift; sourceTree = "<group>"; };
 		DEC0DE84000000000000001C /* WindowPointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPointerTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202609220900000002 /* StreamSignalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSignalTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLANTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MiniPlayerTests.swift"; sourceTree = "<group>"; };
@@ -1005,6 +1007,7 @@
 				DEC0DE840000000000000014 /* TerminationGateTests.swift */,
 				DEC0DE84000000000000001C /* WindowPointerTests.swift */,
 				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
+				DEC0DE202609220900000002 /* StreamSignalTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */,
 				DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */,
@@ -1434,6 +1437,7 @@
 				DEC0DE840000000000000013 /* TerminationGateTests.swift in Sources */,
 				DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */,
 				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
+				DEC0DE202609220900000001 /* StreamSignalTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */,
 				DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */,
