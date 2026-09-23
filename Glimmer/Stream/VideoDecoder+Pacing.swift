@@ -145,8 +145,10 @@ extension VideoDecoder {
         // NOTICE, not error: this is a RECOVERABLE transient degradation - the
         // direct path is watched and the adaptive pacer is continuously
         // re-engaged on a healthy link. It is NOT "for the rest of the session".
-        // swiftlint:disable:next line_length
-        log.notice("Present-path paced-recovery did not resume (\(reason, privacy: .public)); transiently reverting to direct renderer enqueue - pacer will re-engage when the link is healthy")
+        log.notice("""
+            Present-path paced-recovery did not resume (\(reason, privacy: .public)); transiently reverting to direct renderer \
+            enqueue - pacer will re-engage when the link is healthy
+            """)
         Diag.info(
             "Frame pacer transiently disabled after present-path stall (\(reason)); "
             + "stream continues with direct presentation, pacing re-engages when healthy",
@@ -169,9 +171,10 @@ extension VideoDecoder {
     /// stability-window timing and the per-session give-up budget.
     func reenablePacing(configuredFps: Int32) -> Bool {
         guard framePacer == nil, let view = pacingDrivingView else { return false }
-        log.notice(
-            // swiftlint:disable:next line_length
-            "Present-path recovered after give-up; re-enabling FramePacer (fresh pacer, warm handover - direct present continues until the rebuilt link proves healthy ticks)")
+        log.notice("""
+            Present-path recovered after give-up; re-enabling FramePacer (fresh pacer, warm handover - direct present continues \
+            until the rebuilt link proves healthy ticks)
+            """)
         Diag.info(
             "Frame pacer re-enabled after present-path recovery (warm handover); "
             + "pacing smoothing restores once the rebuilt link proves healthy ticks",
@@ -205,9 +208,10 @@ extension VideoDecoder {
         let layer = displayLayer
         let renderer = layer?.sampleBufferRenderer
         let failed = renderer?.status == .failed
-        log.notice(
-            // swiftlint:disable:next line_length
-            "Present-path self-heal (\(reason, privacy: .public)) rendererFailed=\(failed, privacy: .public) - flush\(failed ? "+rebuild" : "")+IDR")
+        log.notice("""
+            Present-path self-heal (\(reason, privacy: .public)) rendererFailed=\(failed, privacy: .public) - \
+            flush\(failed ? "+rebuild" : "")+IDR
+            """)
         OSSignposter.render.emitEvent(
             "PresentPathRecover",
             "reason=\(reason, privacy: .public) failed=\(failed, privacy: .public)")
