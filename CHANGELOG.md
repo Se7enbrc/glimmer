@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.9.7 - Unreleased
+## 2026.9.7 - 2026-09-23
 
 A command line and Shortcuts actions, safer pairing, streams from PCs that
 require encryption, a way out of every stuck stream, ⌘ shortcuts and paste that
@@ -380,7 +380,9 @@ decide which apps may connect to it, so another client connecting and then
 quitting can no longer turn AirDrop back on in the middle of a stream. It also
 stopped repeating the same line in the session log every 5 seconds.
 
-With diagnostics on, key codes are no longer written to the system log.
+With diagnostics on, key codes are no longer written to the system log. Your
+PC's address and name, your display's name and error details are kept out of it
+too; the log in Settings › Diagnostics still shows them in full.
 
 Late presents are split by cause. Telemetry rows now show how much of the
 late-present count comes from the game's own uneven frame delivery, along with
