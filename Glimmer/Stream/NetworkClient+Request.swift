@@ -52,9 +52,6 @@ extension NetworkClient {
         try await ensureIdentityLoaded()
         try StreamAttempt.checkDeadline(requestDeadline)
 
-        // GFE keys per-session state on `uniqueid`, so GFE gets moonlight-qt's
-        // shared constant (any client can quit any session); Sunshine gets this
-        // install's own id. See `wireUniqueID(forRealGFE:)`.
         let port = usePaired ? server.httpsPort : server.httpPort
 
         // Build the request-URI (path + query). URLComponents does the percent-
@@ -62,7 +59,7 @@ extension NetworkClient {
         var components = URLComponents()
         components.path = "/" + path
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "uniqueid", value: wireUniqueID(forRealGFE: server.isRealGFE)),
+            URLQueryItem(name: "uniqueid", value: clientUniqueID ?? Self.wireUniqueID),
             URLQueryItem(name: "uuid", value: Self.requestNonce())
         ]
         for (key, value) in query.sorted(by: { $0.key < $1.key }) {
@@ -188,16 +185,9 @@ extension NetworkClient {
     /// ours is finite so a vanished PC can't hang a task behind a closed sheet.
     static let pinEntryTimeout: TimeInterval = 300
 
-    /// The literal `uniqueid` value sent to GFE hosts. Must match moonlight-qt
-    /// exactly - see comment in `rawRequest`.
+    /// moonlight-qt's shared `uniqueid`, only a fallback: `ensureIdentityLoaded` sets this
+    /// install's own id before every request.
     static let wireUniqueID = "0123456789ABCDEF"
-
-    /// GFE keeps the shared constant (cross-client quit); Sunshine never keys
-    /// authorization on it and its PIN page lists clients, so each install
-    /// identifies itself. Falls back to the constant until the identity loads.
-    func wireUniqueID(forRealGFE isRealGFE: Bool) -> String {
-        isRealGFE ? Self.wireUniqueID : (clientUniqueID ?? Self.wireUniqueID)
-    }
 
     /// What the host's pairing page shows for this Mac: its computer name, or
     /// "Glimmer" when that is unavailable. Replaces Moonlight's legacy "roth".
