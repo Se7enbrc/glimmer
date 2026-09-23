@@ -109,7 +109,7 @@ extension NetworkClient {
     static func classifyPairedPathFailure(_ detail: String, hostName: String) -> StreamError {
         let name = hostName.isEmpty ? "The PC" : hostName
         if detail.hasPrefix("connect to") {
-            return .hostUnreachable(
+            return .sunshineNeedsRestart(
                 "\(name) is awake, but Sunshine's secure port (47984) is refusing connections because "
                 + "its HTTPS listener is stuck. Restart Sunshine on the PC; quitting Glimmer will not help."
             )
@@ -121,12 +121,13 @@ extension NetworkClient {
             return .pairingFailed("\(name) rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu.")
         }
         if detail.contains("cert mismatch") || detail.contains("no certificate") {
-            return .hostUnreachable(
+            return .hostCertChanged(
                 "\(name)'s certificate changed. To trust it, choose Pair Again… from the PC's ⋯ menu."
             )
         }
-        return .hostUnreachable(
-            "\(name) answers on its plain port but not its secure one (\(detail)). Restart Sunshine on the PC."
+        // The detail is in the log line above the call; the sentence stays plain.
+        return .sunshineNeedsRestart(
+            "\(name) answers on its plain port but not its secure one. Restart Sunshine on the PC."
         )
     }
 

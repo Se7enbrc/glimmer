@@ -105,7 +105,7 @@ extension StreamSession {
         let rttSampler = RttSampler(host: server.address, port: UInt16(server.httpsPort))
         // A throw below must still stop its loop, or it keeps probing the PC.
         defer { _ = rttSampler.harvest() }
-        let serverInfo = try await fetchAndVerifyServerInfo(network: network)
+        let serverInfo = try await fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
         try checkAttempt()
         await rttSampler.awaitPreLaunchWindow()
         try checkAttempt()
@@ -238,10 +238,9 @@ extension StreamSession {
     }
 
     /// Step 1 of start(): fetch /serverinfo, stamp its launch sub-leg, log the
-    /// one-line handshake diagnostic, and refuse an unpaired host. A throw here
-    /// unwinds through start()'s power-assertion + orphaned-network defers
-    /// exactly as it did inline.
-    private func fetchAndVerifyServerInfo(network: NetworkClient) async throws -> ServerInfo {
+    /// handshake line, and refuse an unpaired PC, named as the user knows it. A
+    /// throw unwinds through start()'s power-assertion and orphaned-network defers.
+    private func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
         let serverinfoStart = Date()
         let serverInfo = try await network.fetchServerInfo()
@@ -249,9 +248,7 @@ extension StreamSession {
             serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
         // swiftlint:disable:next line_length
         log.info("fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) codecSupport=0x\(String(serverInfo.serverCodecSupport.rawValue, radix: 16))")
-        if serverInfo.pairStatus != .paired {
-            throw StreamError.pairingFailed("Host is not paired. Use the pair sheet first.")
-        }
+        if serverInfo.pairStatus != .paired { throw NetworkClient.notPaired(pcName) }
         return serverInfo
     }
 

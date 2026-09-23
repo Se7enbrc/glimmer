@@ -498,6 +498,12 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     case hostTimedOut
     /// The PC answered with an error status; carries Sunshine's own message.
     case hostRefused(message: String, code: Int)
+    /// The PC is up, but its certificate isn't the one pinned at pairing.
+    /// Carries the sentence that names the fix (NetworkClient.classifyPairedPathFailure).
+    case hostCertChanged(String)
+    /// The PC answers on its plain port only: Sunshine's secure listener needs a
+    /// restart. Carries the sentence that names the fix.
+    case sunshineNeedsRestart(String)
 
     public var description: String {
         switch self {
@@ -519,6 +525,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
         case .streamPortsBlocked(let proto, let port): return "The stream couldn't get through on \(proto) \(port)."
         case .hostTimedOut: return "The PC didn't respond in time."
         case .hostRefused(let message, let code): return "\(message) (code \(code))"
+        case .hostCertChanged(let sentence), .sunshineNeedsRestart(let sentence): return sentence
         }
     }
 

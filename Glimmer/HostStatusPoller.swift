@@ -154,8 +154,7 @@ extension AppModel {
                 // as an amber "Trust needed" tap-to-re-pair, not "Asleep" - the
                 // host is reachable, only the trust relationship broke.
                 let state: HostLiveStatus.State
-                if case .hostUnreachable(let detail) = err,
-                   detail.lowercased().contains("cert") || detail.lowercased().contains("mitm") {
+                if case .hostCertChanged = err {
                     state = .certMismatch
                 } else {
                     // /serverinfo failed for some other reason (timeout, 5xx)

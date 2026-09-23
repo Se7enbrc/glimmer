@@ -189,11 +189,9 @@ enum GlimmerCLI {
     nonisolated static func exitCode(for error: Error) -> Int32 {
         guard let streamError = error as? StreamError else { return Exit.failed }
         switch streamError {
-        case .hostUnreachable(let detail):
-            return detail.contains("cert") ? Exit.notPaired : Exit.unreachable
-        case .pairingFailed, .pairingRejected:
+        case .hostCertChanged, .pairingFailed, .pairingRejected:
             return Exit.notPaired
-        case .truncatedRead, .sessionFailed:
+        case .hostUnreachable, .sunshineNeedsRestart, .truncatedRead, .sessionFailed:
             return Exit.unreachable
         case .binaryNotFound, .launchFailed, .decoderFailed, .audioFailed, .crypto,
              .streamPortsBlocked, .hostTimedOut, .hostRefused:
@@ -204,9 +202,7 @@ enum GlimmerCLI {
     /// One sentence for a failed request, pointing at the command that fixes it.
     nonisolated static func message(for error: Error, host: Host) -> String {
         let name = host.displayName
-        if case .hostUnreachable(let detail) = error as? StreamError, detail.contains("Restart Sunshine") {
-            return detail
-        }
+        if case .sunshineNeedsRestart(let sentence) = error as? StreamError { return sentence }
         switch exitCode(for: error) {
         case Exit.unreachable: return AppModel.unreachableMessage(name)
         case Exit.notPaired: return notPairedMessage(host)

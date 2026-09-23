@@ -39,22 +39,19 @@ extension AppModel {
         // The control layer always throws StreamError; anything else is most likely a reach failure.
         guard let streamError = error as? StreamError else { return unreachable }
         switch streamError {
-        case .hostUnreachable(let detail) where detail.contains("cert"):
-            // The network layer's own sentence for a changed PC certificate.
-            return (detail, .pairing)
-        case .hostUnreachable(let detail) where detail.contains("Restart Sunshine"):
-            // A wedged HTTPS listener (classifyPairedPathFailure): the PC is awake.
-            return (detail, .other)
         case .hostUnreachable, .truncatedRead:
             return unreachable
+        // The network layer's own PC-named sentences; the connect path throws no
+        // other pairing failure (the pair sheet's steps word their own).
+        case .hostCertChanged(let sentence), .pairingFailed(let sentence):
+            return (sentence, .pairing)
+        case .sunshineNeedsRestart(let sentence):
+            return (sentence, .other)
+        case .pairingRejected:
+            return ("Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu.", .pairing)
         case .sessionFailed(RtspError.encryptedVideoRequiredCode):
             // The PC answered and refused us: its settings require encrypted video.
             return (RtspError.encryptedVideoRequired.description, .other)
-        case .pairingFailed(let detail) where detail.contains("Pair Again…"):
-            // classifyPairedPathFailure's host-named sentence (a 401 or a TLS rejection).
-            return (detail, .pairing)
-        case .pairingFailed, .pairingRejected:
-            return ("Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu.", .pairing)
         case .streamPortsBlocked(let proto, let port):
             return ("\(hostName) answered, but the stream couldn't get through. "
                 + "Check that the PC's firewall allows \(proto) \(port).", .other)

@@ -83,8 +83,8 @@ final class PairedPathFailureClassificationTests: XCTestCase {
     }
 
     func testRefusedSecurePortIsNotAPairingProblem() {
-        guard case .hostUnreachable(let text) = classify("connect to tower:47984 failed or timed out") else {
-            return XCTFail("expected hostUnreachable")
+        guard case .sunshineNeedsRestart(let text) = classify("connect to tower:47984 failed or timed out") else {
+            return XCTFail("expected sunshineNeedsRestart")
         }
         XCTAssertTrue(text.contains("Restart Sunshine"))
         XCTAssertTrue(text.contains("47984"))
@@ -106,34 +106,36 @@ final class PairedPathFailureClassificationTests: XCTestCase {
         XCTAssertTrue(text.contains("Pair Again…"))
     }
 
-    /// The poller's "Trust needed" state and the stream banner both key off
-    /// "cert" in this copy, so it must survive any rewording.
+    /// The poller's "Trust needed" state and the stream banner both match this
+    /// case, not its words, so a PC named "Concert" can't trip either.
     func testHostCertChangePointsAtPairAgain() {
-        guard case .hostUnreachable(let text) = classify("pinned host cert mismatch") else {
-            return XCTFail("expected hostUnreachable")
+        guard case .hostCertChanged(let text) = classify("pinned host cert mismatch") else {
+            return XCTFail("expected hostCertChanged")
         }
         XCTAssertTrue(text.contains("Pair Again…"))
-        XCTAssertTrue(text.contains("cert"))
+        let stuck = NetworkClient.classifyPairedPathFailure("connect to x:47984 failed", hostName: "Concert")
+        XCTAssertEqual(AppModel.connectFailure(for: stuck, hostName: "Concert").kind, .other)
     }
 
-    func testNoCopyUsesASpacedDash() {
+    func testNoCopyUsesASpacedDashOrTheTransportDetail() {
         for detail in ["connect to x:47984 failed", "Host requires pairing", "TLS handshake failed",
                        "pinned host cert mismatch", "something else"] {
             XCTAssertFalse("\(classify(detail))".contains(" - "), detail)
         }
+        XCTAssertFalse("\(classify("empty HTTP response"))".contains("HTTP response"))
     }
 
     func testEmptyHostNameFallsBackToThePC() {
-        guard case .hostUnreachable(let text) = NetworkClient.classifyPairedPathFailure(
+        guard case .sunshineNeedsRestart(let text) = NetworkClient.classifyPairedPathFailure(
             "connect to x:47984 failed or timed out", hostName: "") else {
-            return XCTFail("expected hostUnreachable")
+            return XCTFail("expected sunshineNeedsRestart")
         }
         XCTAssertTrue(text.hasPrefix("The PC"))
     }
 }
 
-/// The launcher banner keeps the classifier's Pair Again… sentence as is, and
-/// any other pairing failure points at the same command.
+/// The launcher banner keeps the network layer's Pair Again… sentences as
+/// they are, and any other pairing failure points at the same command.
 @MainActor
 struct PairingFailureBannerTests {
 
@@ -141,6 +143,8 @@ struct PairingFailureBannerTests {
         let verdict = NetworkClient.classifyPairedPathFailure("Host requires pairing (401)", hostName: "Den PC")
         let kept = AppModel.connectFailure(for: verdict, hostName: "Den PC").message
         #expect(kept.hasPrefix("Den PC no longer recognizes this Mac."))
+        let noPin = AppModel.connectFailure(for: NetworkClient.notPaired("Den PC"), hostName: "Den PC").message
+        #expect(noPin == "Den PC isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
         let rejected = AppModel.connectFailure(for: StreamError.pairingRejected, hostName: "Den PC").message
         #expect(rejected.hasPrefix("Couldn't pair with Den PC.") && rejected.contains("Pair Again…"))
     }

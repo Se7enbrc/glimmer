@@ -72,7 +72,7 @@ struct GlimmerCLITests {
     @Test func failuresMapToTheirExitCodes() {
         let exit = GlimmerCLI.Exit.self
         #expect(GlimmerCLI.exitCode(for: StreamError.hostUnreachable("connect to x timed out")) == exit.unreachable)
-        #expect(GlimmerCLI.exitCode(for: StreamError.hostUnreachable("This PC's certificate changed.")) == exit.notPaired)
+        #expect(GlimmerCLI.exitCode(for: StreamError.hostCertChanged("Tower's certificate changed.")) == exit.notPaired)
         #expect(GlimmerCLI.exitCode(for: StreamError.pairingFailed("pair it again")) == exit.notPaired)
         #expect(GlimmerCLI.exitCode(for: StreamError.pairingRejected) == exit.notPaired)
         #expect(GlimmerCLI.exitCode(for: StreamError.truncatedRead("eof")) == exit.unreachable)
@@ -87,7 +87,7 @@ struct GlimmerCLITests {
         #expect(GlimmerCLI.message(for: StreamError.hostUnreachable("timed out"), host: tower)
             == "Couldn't reach Tower. Make sure it's awake and on the same network.")
         let wedged = "Tower is awake, but its HTTPS listener is stuck. Restart Sunshine on the PC."
-        #expect(GlimmerCLI.message(for: StreamError.hostUnreachable(wedged), host: tower) == wedged)
+        #expect(GlimmerCLI.message(for: StreamError.sunshineNeedsRestart(wedged), host: tower) == wedged)
         #expect(GlimmerCLI.message(for: StreamError.launchFailed("Tower wouldn't quit the app."), host: tower)
             == "Tower wouldn't quit the app.")
     }

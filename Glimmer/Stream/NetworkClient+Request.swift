@@ -29,6 +29,12 @@ extension NetworkClient {
                              timeout: timeout)
     }
 
+    /// A PC this Mac holds no pin for, in the sentence the banner shows as is.
+    static func notPaired(_ pcName: String) -> StreamError {
+        let name = pcName.isEmpty ? "The PC" : pcName
+        return .pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
+    }
+
     /// Workhorse. Builds the URL, attaches our uniqueid + a per-request UUID
     /// (matches GFE's expectation that every request has a unique nonce),
     /// optionally appends an unescaped query tail (for the backend's launch
@@ -42,10 +48,7 @@ extension NetworkClient {
 
         // SECURITY: TLS without a pin would hand /launch's input key to any
         // certificate. The pin only comes from a finished PIN handshake.
-        if usePaired && server.serverCertPEM == nil {
-            let name = server.serverName.isEmpty ? "The PC" : server.serverName
-            throw StreamError.pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
-        }
+        if usePaired && server.serverCertPEM == nil { throw Self.notPaired(server.serverName) }
         try await ensureIdentityLoaded()
         try StreamAttempt.checkDeadline(requestDeadline)
 
