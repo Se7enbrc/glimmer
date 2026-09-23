@@ -298,6 +298,8 @@ extension TelemetryExporter {
         /// restart (the counters reset at their own loop-start edges).
         var videoPingsSentTotal: UInt64?
         var audioPingsSentTotal: UInt64?
+        /// Previous-tick system `udps_fullsock` (UInt32, wraps; nil until read).
+        var udpFullSockTotal: UInt32?
     }
     nonisolated(unsafe) static var captureBaselines = CaptureBaselines()
 }

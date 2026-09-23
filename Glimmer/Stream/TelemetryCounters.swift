@@ -501,9 +501,8 @@ final class TelemetryCounters: @unchecked Sendable {
     let decodeStateLock = os_unfair_lock_t.allocate(capacity: 1)
     var decodeStateValue: DecodeState?
 
-    // Live FEC-HEALTH gauge storage (reorder-hold + headroom axes + per-frame
-    // parity headroom); the `FecHealthSnapshot` value type + accessors live in
-    // TelemetryCounters+Gauges.swift. Module-internal so those accessors reach it.
+    // Live FEC-HEALTH gauge storage; `FecHealthSnapshot` + its accessors live in
+    // TelemetryCounters+Gauges.swift.
     let fecHealthLock = os_unfair_lock_t.allocate(capacity: 1)
     var fecHealthValue: FecHealthSnapshot?
     // Live REORDER-DISPLACEMENT gauge storage (session max ms/packets + the

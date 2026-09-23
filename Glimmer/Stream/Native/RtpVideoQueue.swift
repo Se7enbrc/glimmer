@@ -454,11 +454,8 @@ final class RtpVideoQueue {
 
         // FEC HEALTH gauge (read-only). `parityMargin` is this window's worst
         // RECOVERED-frame headroom, or nil with no recovery (nothing consumed is no
-        // near-miss). The hold no longer adapts, so both level fields report 0.
+        // near-miss).
         counters.setFecHealth(TelemetryCounters.FecHealthSnapshot(
-            reorderHoldMs: Double(Self.reorderWindowUs) / 1000.0,
-            headroomLevel: 0,
-            lossLevel: 0,
             fecPercentage: fecPercentage,
             parityMargin: windowMinParityMargin == Int.max ? nil : windowMinParityMargin))
 

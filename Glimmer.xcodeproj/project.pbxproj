@@ -182,6 +182,7 @@
 		D10000C7 /* TelemetrySessionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C6 /* TelemetrySessionReport.swift */; };
 		D10000C9 /* TelemetrySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000C8 /* TelemetrySnapshot.swift */; };
 		D10000CB /* TelemetryExporter+RenderNDJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CA /* TelemetryExporter+RenderNDJSON.swift */; };
+		DEC0DE202609221800000002 /* TelemetryExporter+RenderNDJSONLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221800000001 /* TelemetryExporter+RenderNDJSONLink.swift */; };
 		D10000CD /* TelemetryFrameTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CC /* TelemetryFrameTrace.swift */; };
 		D10000CF /* TelemetryExporter+Capture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000CE /* TelemetryExporter+Capture.swift */; };
 		D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */; };
@@ -526,6 +527,7 @@
 		D10000C6 /* TelemetrySessionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetrySessionReport.swift; sourceTree = "<group>"; };
 		D10000C8 /* TelemetrySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetrySnapshot.swift; sourceTree = "<group>"; };
 		D10000CA /* TelemetryExporter+RenderNDJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderNDJSON.swift"; sourceTree = "<group>"; };
+		DEC0DE202609221800000001 /* TelemetryExporter+RenderNDJSONLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderNDJSONLink.swift"; sourceTree = "<group>"; };
 		D10000CC /* TelemetryFrameTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/TelemetryFrameTrace.swift; sourceTree = "<group>"; };
 		D10000CE /* TelemetryExporter+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+Capture.swift"; sourceTree = "<group>"; };
 		D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+ReceiveQuality.swift"; sourceTree = "<group>"; };
@@ -895,6 +897,7 @@
 				D10000C6 /* TelemetrySessionReport.swift */,
 				D10000C8 /* TelemetrySnapshot.swift */,
 				D10000CA /* TelemetryExporter+RenderNDJSON.swift */,
+				DEC0DE202609221800000001 /* TelemetryExporter+RenderNDJSONLink.swift */,
 				D10000CC /* TelemetryFrameTrace.swift */,
 				D10000CE /* TelemetryExporter+Capture.swift */,
 				ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */,
@@ -1349,6 +1352,7 @@
 				D10000C7 /* TelemetrySessionReport.swift in Sources */,
 				D10000C9 /* TelemetrySnapshot.swift in Sources */,
 				D10000CB /* TelemetryExporter+RenderNDJSON.swift in Sources */,
+				DEC0DE202609221800000002 /* TelemetryExporter+RenderNDJSONLink.swift in Sources */,
 				D10000CD /* TelemetryFrameTrace.swift in Sources */,
 				D10000CF /* TelemetryExporter+Capture.swift in Sources */,
 				ABCD20260609000000001502 /* TelemetryExporter+CaptureSections.swift in Sources */,

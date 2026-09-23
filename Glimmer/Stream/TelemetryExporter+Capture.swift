@@ -334,9 +334,6 @@ extension TelemetryExporter {
             snap.packetGapMaxUs = gap.maxUs
         }
         if let fec = counters.fecHealth {
-            snap.fecReorderHoldMs = fec.reorderHoldMs
-            snap.fecHeadroomLevel = fec.headroomLevel
-            snap.fecLossLevel = fec.lossLevel
             snap.fecPercentage = fec.fecPercentage
             snap.fecParityMargin = fec.parityMargin
         }
@@ -344,12 +341,21 @@ extension TelemetryExporter {
             snap.awdlSuppressing = awdl.suppressing
             snap.awdlReSuppressTotal = awdl.reSuppressTotal
         }
+        // Datagrams the kernel dropped at a full UDP receive buffer this tick (any
+        // socket): nonzero during a Wi-Fi blackout means SO_RCVBUF, not the air.
+        let fullSock = Self.udpFullSockTotal()
+        if let fullSock, let prev = Self.captureBaselines.udpFullSockTotal {
+            snap.udpFullSockDelta = UInt64(fullSock &- prev)
+        }
+        Self.captureBaselines.udpFullSockTotal = fullSock
         if let reorder = counters.reorderDisplacement {
             snap.reorderDispMaxMs = reorder.maxMs
             snap.reorderDispMaxPackets = reorder.maxPackets
             snap.reorderDispHoldMs = reorder.holdMs
         }
         snap.reorderHoldExceededTotal = counters.reorderHoldExceededTotal.value
+        snap.reorderHoldTakenTotal = RtpVideoQueue.reorderHoldTakenTotal.value
+        snap.reorderHoldRescuedTotal = RtpVideoQueue.reorderHoldRescuedTotal.value
         snap.reorderDisplacementMsHist = FrameTimingTracker.shared?.reorderDisplacementMs.snapshotValue()
         snap.reorderDisplacementPacketsHist = FrameTimingTracker.shared?.reorderDisplacementPackets.snapshotValue()
         // Refresh the live RTT gauge the per-frame glass-to-glass computation
@@ -441,6 +447,15 @@ extension TelemetryExporter {
         prevOutOfOrderTotal = outOfOrderTotal
         prevDuplicateTotal = duplicateTotal
         prevStaleFrameRepeatTotal = staleRepeatTotal
+    }
+
+    /// System-wide `udps_fullsock` from net.inet.udp.stats: datagrams not delivered
+    /// because the socket's receive buffer was full. nil if the sysctl fails.
+    static func udpFullSockTotal() -> UInt32? {
+        var stats = udpstat()
+        var size = MemoryLayout<udpstat>.size
+        guard sysctlbyname("net.inet.udp.stats", &stats, &size, nil, 0) == 0 else { return nil }
+        return stats.udps_fullsock
     }
 
     /// Derive the P1 per-second receive-quality RATES from this tick's monotonic

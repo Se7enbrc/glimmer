@@ -230,13 +230,12 @@ extension TelemetryRenderer {
     ) {
         builder.add("recv_jitter_ms", snap.recvJitterMs)
         builder.add("fec_recovery_rate", snap.fecRecoveryRate)
-        builder.add("fec_reorder_hold_ms", snap.fecReorderHoldMs)
-        builder.add("fec_headroom_level", snap.fecHeadroomLevel.map(Double.init))
-        builder.add("fec_loss_level", snap.fecLossLevel.map(Double.init))
         builder.add("fec_percentage", snap.fecPercentage.map(Double.init))
         builder.add("fec_parity_margin", snap.fecParityMargin.map(Double.init))
         builder.add("reorder_disp_max_ms", snap.reorderDispMaxMs)
         builder.add("reorder_hold_exceeded", Double(snap.reorderHoldExceededTotal))
+        builder.addCount("reorder_hold_taken_total", snap.reorderHoldTakenTotal)
+        builder.addCount("reorder_hold_rescued_total", snap.reorderHoldRescuedTotal)
         builder.add("pkts_per_s", snap.packetsPerSecond)
         // FRACTIONAL ms (high-res local clock): emit the Double with decimals via
         // `add` (jsonNumber → %.3f) instead of truncating to Int, so a sub-ms RTT
@@ -390,44 +389,7 @@ extension TelemetryRenderer {
         builder.addCount("bookmark_total", snap.bookmarkTotal)
     }
 
-    /// LINK fields: the stream ROUTE pair first, then the Wi-Fi radio (signal
-    /// 3). Two truths, deliberately distinct keys:
-    ///   * stream_link / stream_if - the interface the stream's packets
-    ///     actually traverse (StreamRouteProbe). THE field that gates the
-    ///     env-signal layer; "wired" here with wifi_link:"wifi" below is the
-    ///     normal docked-laptop case, not a contradiction.
-    ///   * wifi_* - the ASSOCIATED RADIO's state, whether or not the stream
-    ///     rides it (a wired session still reads wifi_link:"wifi" on every
-    ///     row, truthfully - about the radio). Kept as-is for continuity.
-    /// Radio physics + ssid/band only when associated; addString skips nil.
-    private static func ndjsonLink(
-        _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
-    ) {
-        if let routeSnapshot = extras.streamRoute {
-            builder.addString("stream_link", routeSnapshot.linkLabel)
-            builder.addString("stream_if", routeSnapshot.interfaceName)
-        }
-        // ENV-SIGNAL state + the conditional-keepalive judge fields -
-        // they ride the link section because the link IS their evidence.
-        // Transitions additionally get their own `event:"env_state"` row with
-        // the full evidence vector (see EnvSignalController).
-        builder.addInt("env_state", extras.envStateOrdinal)
-        builder.addString("env_state_label", extras.envStateLabel)
-        builder.addCount("env_state_changes_total", extras.envStateChangesTotal)
-        builder.add("keepalive_interval_ms", extras.keepaliveIntervalMs)
-        builder.addCount("pings_sent_video_total", extras.videoPingsSentTotal)
-        builder.addCount("pings_sent_audio_total", extras.audioPingsSentTotal)
-        builder.add("pings_video_per_s", extras.videoPingsPerSecond)
-        builder.add("pings_audio_per_s", extras.audioPingsPerSecond)
-        guard let wifi = snap.wifi else { return }
-        builder.addString("wifi_link", wifi.linkState.label)
-        builder.addInt("wifi_rssi_dbm", wifi.rssiDbm)
-        builder.add("wifi_tx_rate_mbps", wifi.txRateMbps)
-        builder.addInt("wifi_noise_dbm", wifi.noiseDbm)
-        builder.addString("wifi_ssid", wifi.ssid)
-        builder.addInt("wifi_channel", wifi.channel)
-        builder.addString("wifi_band", wifi.band)
-    }
+    // The LINK section (`ndjsonLink`) lives in TelemetryExporter+RenderNDJSONLink.swift.
 
     /// Per-stage latency NDJSON fields: p50/p95/p99 derived from the histogram
     /// buckets for a quick tail (the Prometheus side ships raw _bucket/_sum/_count
