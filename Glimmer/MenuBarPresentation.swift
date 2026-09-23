@@ -115,9 +115,10 @@ enum MenuBarPresentation {
         return gameController + rawHID.filter { !owned.contains($0.name) }
     }
 
-    /// The takeover question's first line; the running app will quit.
+    /// The takeover question's first line; the running app will quit. Only
+    /// the "another app" fallback is capitalized, real names pass through.
     static func takeoverMessage(app: String, pc: String) -> String {
-        app.prefix(1).uppercased() + app.dropFirst() + " is running on \(pc)."
+        (app == "another app" ? "Another app" : app) + " is running on \(pc)."
     }
 
     /// The mode line under the stream card's header, in the launcher's wording.

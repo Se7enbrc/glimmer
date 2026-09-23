@@ -90,6 +90,8 @@ struct MenuBarPresentationTests {
         #expect(MenuBarPresentation.modeLine(width: 1920, height: 1080, fps: 60, hdr: false) == "1920 × 1080 · 60 Hz")
         #expect(MenuBarPresentation.takeoverMessage(app: "Elden Ring", pc: "Tower") == "Elden Ring is running on Tower.")
         #expect(MenuBarPresentation.takeoverMessage(app: "another app", pc: "Tower") == "Another app is running on Tower.")
+        #expect(MenuBarPresentation.takeoverMessage(app: "iRacing", pc: "Tower") == "iRacing is running on Tower.")
+        #expect(MenuBarPresentation.takeoverMessage(app: "eFootball", pc: "Tower") == "eFootball is running on Tower.")
     }
 
     @Test func metricsUseWhatArrivesAndDashTheRest() {
