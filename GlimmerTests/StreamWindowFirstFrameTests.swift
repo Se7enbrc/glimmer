@@ -13,10 +13,25 @@ import Testing
 @MainActor
 struct StreamWindowFirstFrameTests {
 
-    @Test func waitingForTheFirstFramePassesClicksThrough() {
+    /// A failing connect leaves the pointer free for the launcher's Cancel: the
+    /// invisible window cannot capture it before the first frame.
+    @Test func waitingForTheFirstFrameLeavesThePointerFree() {
         let stream = StreamWindow()
         stream.awaitingFirstFrameFadeIn = true
-        #expect(stream.window.ignoresMouseEvents)
+        let forwarder = InputForwarder()
+        forwarder.attach(to: stream.window)
+        defer { forwarder.exitCapturedMode() }
+        forwarder.enterCapturedMode()
+        #expect(!forwarder.isMouseCaptured)
+    }
+
+    /// A Cmd-Tab away belongs to the full-screen cover. Leaving the cover for
+    /// the mini player forgets it, so the way back arms the key backstop again.
+    @Test func leavingTheCoverForgetsACmdTabAway() {
+        let stream = StreamWindow()
+        stream.userBackgrounded = true
+        stream.retireFullScreenCover()
+        #expect(!stream.userBackgrounded)
     }
 
     @Test func aFirstFrameAfterCloseTakesNothing() {
