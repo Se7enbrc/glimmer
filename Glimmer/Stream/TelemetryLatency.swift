@@ -147,11 +147,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     let cruiseGainMove = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
     let cruiseGainDrag = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
 
-    /// REORDER-DISPLACEMENT distributions: how late reordered packets arrive,
-    /// in ms and in sequence slots. Fed only on the rare out-of-order branch
-    /// (~46/session on the reference wifi night). Bounds concentrate where the
-    /// invariant lives: the reorder hold is a fixed 24ms, Block-Ack releases land
-    /// single-digit ms. `_packets` bounds are counts, not ms.
+    /// REORDER-DISPLACEMENT: how late reordered packets arrive, in ms and sequence
+    /// slots (the rare out-of-order branch). Bounds cluster under the fixed 24ms hold
+    /// and single-digit-ms Block-Ack releases; `_packets` bounds are counts.
     static let reorderDispMsBounds: [Double] = [
         0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96
     ]

@@ -192,8 +192,8 @@ extension TelemetryCounters {
             FrameTimingTracker.shared?.armResumePresentTag()
         }
     }
-    /// Current present-suppression state. Read by the exporter on its 1Hz queue
-    /// (never the hot path).
+    /// Current present-suppression state. Read by the exporter on its 1Hz queue, and
+    /// once per assembled frame by the latency tracker (telemetry on only).
     var presentSuppressed: Bool {
         os_unfair_lock_lock(presentSuppressedLock); defer { os_unfair_lock_unlock(presentSuppressedLock) }
         return presentSuppressedValue
@@ -207,8 +207,8 @@ extension TelemetryCounters {
         decodeGatedValue = gated
         os_unfair_lock_unlock(decodeGatedLock)
     }
-    /// Current decode-gate state. Read by the exporter on its 1Hz queue (never
-    /// the hot path).
+    /// Current decode-gate state. Read by the exporter on its 1Hz queue, and once
+    /// per assembled frame by the latency tracker (telemetry on only).
     var decodeGated: Bool {
         os_unfair_lock_lock(decodeGatedLock); defer { os_unfair_lock_unlock(decodeGatedLock) }
         return decodeGatedValue
