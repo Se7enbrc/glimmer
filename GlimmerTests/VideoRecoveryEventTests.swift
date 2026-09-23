@@ -72,11 +72,9 @@ struct VideoRecoveryEventTests {
         #expect(number(answered, "round_trip_ms") == 14)
     }
 
-    @Test func onlyAGapPastOneHundredMillisecondsGetsARow() throws {
-        #expect(RtpVideoQueue.gapEventFields(gapUs: 99_000, atUs: 1_000_000, lastSeq: 1, nextSeq: 2) == nil)
-        let fields = try #require(RtpVideoQueue.gapEventFields(
+    @Test func gapRowCarriesTheGapAndTheSequenceNumbersEitherSide() throws {
+        let row = try object(RtpVideoQueue.gapEventFields(
             gapUs: 358_000, atUs: 1_000_000, lastSeq: 65_535, nextSeq: 3))
-        let row = try object(fields)
         #expect(row["event"] as? String == "video_gap")
         #expect(number(row, "gap_ms") == 358)
         #expect(number(row, "t_ns") == 1_000_000_000)
