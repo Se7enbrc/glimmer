@@ -1,48 +1,9 @@
 //
 //  ControllerHaptics.swift
 //
-//  Host controller feedback → GameController actuation: body rumble
-//  (SS_RUMBLE_DATA 0x010b), trigger rumble (SS_RUMBLE_TRIGGERS 0x5500), and
-//  the DualSense light bar (SET_RGB_LED 0x5502 → GCDeviceLight).
-//
-//  We advertise LI_CCAP_RUMBLE for every attached pad (ControllerForwarder),
-//  so the host sends per-game rumble at up to ~135 events/s during combat.
-//  This actuator keeps that promise via the GameController framework ONLY
-//  (project scope: GCController haptics, no raw-HID rumble):
-//
-//    * ONE CHHapticEngine + ONE infinite continuous-event player per motor
-//      locality, created lazily on the first NONZERO rumble and kept for the
-//      pad's lifetime. Level changes are CHHapticDynamicParameter intensity
-//      updates on the long-lived player - at 135/s, rebuilding players would
-//      churn the haptics server for no benefit.
-//    * Latest-wins delivery: the enet receive thread only deposits the newest
-//      (low, high) pair per pad and returns; a dedicated serial queue drains
-//      it. Rumble is pure latest-state - a backlog of stale intensities is
-//      worse than skipping straight to the newest - and the control channel's
-//      ACK path must never block on Core Haptics.
-//    * Every engine call is failable and QUIET (Diag.info, never warnings):
-//      engines stop/reset on their own (controller power management, system
-//      reclaim) and the recovery is always the same - drop the channel and
-//      lazily rebuild on the next nonzero event. Dynamic, recovering, never a
-//      permanent give-up.
-//    * No stuck motors, ever: (0,0) from the host idles the players; stream
-//      teardown (EnetControlChannel.onTeardown), controller detach
-//      (ControllerForwarder), and app deactivation each park the motors at
-//      zero and stop the engines, because once those edges pass nobody is
-//      left to deliver the host's own "motors off".
-//
-//  THREADING: everything below runs on the private serial `queue` except the
-//  lock-guarded pending map (written from the enet receive thread). The
-//  GameController docs put no main-thread requirement on GCDeviceHaptics /
-//  CHHapticEngine (unlike the GCController.controllers() registry, which the
-//  forwarder keeps main-only); Core Haptics player/engine calls are
-//  thread-safe, so a background serial queue keeps ~135/s of updates off the
-//  main thread entirely.
-//
-//  TOPIC SPLIT: the actuation layer (motor→locality plans, engine/player
-//  channels, per-locality sharpness, per-pad state types) lives in
-//  ControllerHaptics+Actuation.swift; this file keeps the inboxes, gates,
-//  and registration (file-length budget).
+//  PC feedback through GameController only: rumble (0x010b), trigger rumble (0x5500) and the
+//  DualSense light bar (0x5502), one lazy engine per motor, latest-wins, parked on every teardown.
+//  THREADING: GameController haptics and light calls are thread-safe, so the work runs on `queue`.
 //
 
 import AppKit

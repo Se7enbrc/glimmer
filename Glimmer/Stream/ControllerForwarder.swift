@@ -132,13 +132,14 @@ extension InputForwarder {
         // Determine controller type from GameController metadata. macOS doesn't
         // expose a clean type enum, so we infer from product category strings.
         let kind = controllerType(for: gamepad)
-        var caps: UInt16 = UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS) | UInt16(StreamProtocol.LI_CCAP_RUMBLE)
-        // Trigger rumble is gated on the probed hardware (unlike body rumble,
-        // advertised unconditionally): advertising it for a pad without
-        // trigger localities would invite host traffic we can only drop.
-        if let localities = gamepad.haptics?.supportedLocalities,
-           localities.contains(.leftTrigger), localities.contains(.rightTrigger) {
-            caps |= UInt16(StreamProtocol.LI_CCAP_TRIGGER_RUMBLE)
+        var caps = UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS)
+        // ControllerHaptics plays rumble through `haptics` alone, so a pad without it
+        // gets none; trigger rumble also needs both trigger localities.
+        if let localities = gamepad.haptics?.supportedLocalities {
+            caps |= UInt16(StreamProtocol.LI_CCAP_RUMBLE)
+            if localities.contains(.leftTrigger), localities.contains(.rightTrigger) {
+                caps |= UInt16(StreamProtocol.LI_CCAP_TRIGGER_RUMBLE)
+            }
         }
         // Motion caps come from the sampler's per-sensor probe (accel/gyro
         // gated separately), which also maps the slot for the host's 0x5501
@@ -159,11 +160,6 @@ extension InputForwarder {
         if let ex = gamepad.extendedGamepad, touchpadElements(of: ex) != nil {
             caps |= UInt16(StreamProtocol.LI_CCAP_TOUCHPAD)
         }
-
-        // Build supportedButtonFlags by checking which inputs the controller
-        // actually exposes. This is the same logic moonlight-qt uses to give
-        // the host a hint about what kind of virtual controller to emulate.
-        let buttons = supportedButtonMask(for: gamepad)
 
         // Create/Share (`buttonOptions`) is bound to a macOS system gesture -
         // measured on macOS 26 for the DualSense (isBoundToSystemGesture == true;
@@ -216,6 +212,11 @@ extension InputForwarder {
             DualSenseHID.shared.retain()
         }
 
+        // Build supportedButtonFlags by checking which inputs the controller
+        // actually exposes. This is the same logic moonlight-qt uses to give
+        // the host a hint about what kind of virtual controller to emulate.
+        let buttons = supportedButtonMask(for: gamepad, forwardsMute: useHID)
+
         let state = AttachedController(
             slot: slot, kind: kind, capabilities: caps,
             supportedButtonFlags: buttons, controller: gamepad,
@@ -224,11 +225,8 @@ extension InputForwarder {
         attachedControllers[ObjectIdentifier(gamepad)] = state
         dualSenseRouting.register(slot: slot, controller: ObjectIdentifier(gamepad))
 
-        // Make this slot addressable by inbound host rumble (control 0x010b):
-        // we advertise LI_CCAP_RUMBLE unconditionally above, so the actuator
-        // must be able to resolve every slot we hand out. Unconditional on
-        // purpose - ControllerHaptics degrades quietly if the pad turns out to
-        // expose no haptics, and registration alone never spins a motor.
+        // Make the slot addressable by the PC's rumble and light bar events. Registration
+        // alone never spins a motor, and a pad without haptics simply drops rumble.
         ControllerHaptics.shared.register(slot: slot, controller: gamepad)
 
         // Controller metadata is non-sensitive; build the detail once and log
@@ -389,7 +387,8 @@ extension InputForwarder {
         }
     }
 
-    func supportedButtonMask(for gamepad: GCController) -> UInt32 {
+    /// `forwardsMute`: a DualSense whose raw-HID reader is live, so its Mute reaches the PC.
+    func supportedButtonMask(for gamepad: GCController, forwardsMute: Bool) -> UInt32 {
         guard let ex = gamepad.extendedGamepad else { return 0 }
         var b: Int32 = 0
         // Always-present face/shoulder/dpad/menu on extended gamepads.
@@ -402,13 +401,9 @@ extension InputForwarder {
         if ex.buttonOptions != nil { b |= StreamProtocol.BACK_FLAG }
         if ex.buttonHome    != nil { b |= StreamProtocol.SPECIAL_FLAG }
         if touchpadElements(of: ex) != nil { b |= StreamProtocol.TOUCHPAD_FLAG }
-        // Xbox Series Share/Capture button. GameController surfaces it as
-        // `GCXboxGamepad.buttonShare` (macOS 12+); GCExtendedGamepad has no
-        // equivalent, so it's a downcast probe like the touchpad above. The
-        // DualSense Mute already rides MISC_FLAG via the raw-HID path, and
-        // moonlight-qt maps Xbox Share to the same misc/touchpad-button slot -
-        // a spare host button no other pad button claims.
-        if xboxShareButton(of: ex) != nil { b |= StreamProtocol.MISC_FLAG }
+        // Xbox Share (a GCXboxGamepad probe) and DualSense Mute both ride MISC_FLAG,
+        // the spare button moonlight-qt maps Share to (see pressedButtonFlags).
+        if xboxShareButton(of: ex) != nil || forwardsMute { b |= StreamProtocol.MISC_FLAG }
         return UInt32(bitPattern: b)
     }
 
