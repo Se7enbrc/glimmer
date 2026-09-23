@@ -77,12 +77,14 @@ struct WakeOnLANTests {
         #expect(outcome.failureReason == nil)
     }
 
-    /// Declined, turned off or not yet answered: the notice would never show, so
+    /// Declined, not yet answered or set to None: the notice would never show, so
     /// Wake and Connect opens the stream as it did before notifications.
     @Test func aWakeFromAnotherAppNotifiesOnlyWhenTheNoticeCanShow() {
-        #expect(WakeNotifier.shows(.authorized))
-        #expect(WakeNotifier.shows(.provisional))
-        #expect(!WakeNotifier.shows(.denied))
-        #expect(!WakeNotifier.shows(.notDetermined))
+        #expect(WakeNotifier.shows(.authorized, style: .banner))
+        #expect(WakeNotifier.shows(.authorized, style: .alert))
+        #expect(!WakeNotifier.shows(.authorized, style: .none))
+        #expect(!WakeNotifier.shows(.provisional, style: .banner))
+        #expect(!WakeNotifier.shows(.denied, style: .banner))
+        #expect(!WakeNotifier.shows(.notDetermined, style: .banner))
     }
 }

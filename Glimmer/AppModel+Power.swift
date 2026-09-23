@@ -154,13 +154,15 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    /// Notifications are allowed; declined, off or not yet answered is a no.
+    /// Notifications are allowed with a visible style; declined, not yet answered or
+    /// set to None in System Settings is a no.
     static func canPost() async -> Bool {
-        shows(await UNUserNotificationCenter.current().notificationSettings().authorizationStatus)
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        return shows(settings.authorizationStatus, style: settings.alertStyle)
     }
 
-    nonisolated static func shows(_ status: UNAuthorizationStatus) -> Bool {
-        status == .authorized || status == .provisional
+    nonisolated static func shows(_ status: UNAuthorizationStatus, style: UNAlertStyle) -> Bool {
+        status == .authorized && style != .none
     }
 
     func postAwake(_ host: Host) {
@@ -200,10 +202,10 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
         completionHandler()
     }
 
-    /// Clicking an awake notification itself also connects; a failure's body click
-    /// only brings Glimmer forward.
+    /// Clicking an awake notification itself also connects; a failure's body click, or
+    /// any click on a notice left over once a stream is up, only brings Glimmer forward.
     private func respond(action: String, category: String, hostID: String?) {
-        guard let model, let host = model.hosts.first(where: { $0.id == hostID }) else { return }
+        guard let model, !model.isStreaming, let host = model.hosts.first(where: { $0.id == hostID }) else { return }
         let connect = action == Self.connectAction
             || (category == Self.awakeCategory && action == UNNotificationDefaultActionIdentifier)
         guard connect || action == Self.tryAgainAction else { return }
