@@ -51,19 +51,13 @@ struct PCsPane: View {
                     }
                 }
 
-                HStack(spacing: 10) {
-                    Button {
-                        initialPairAddress = ""
-                        showPairSheet = true
-                    } label: {
-                        Label("Pair a PC", systemImage: "plus.circle.fill")
-                    }
-                    .buttonStyle(StreamButtonStyle())
-                    Button("Refresh paired PCs") {
-                        model.loadHosts()
-                    }
-                    .buttonStyle(.glass)
+                Button {
+                    initialPairAddress = ""
+                    showPairSheet = true
+                } label: {
+                    Label("Pair a PC…", systemImage: "plus.circle.fill")
                 }
+                .buttonStyle(StreamButtonStyle())
                 .padding(.top, 4)
             }
             .padding(20)
@@ -96,13 +90,22 @@ struct PCTile: View {
                 Button {
                     model.selectHost(host)
                 } label: {
-                    Image(systemName: host.id == model.selectedHost?.id ? "star.fill" : "star")
+                    Image(systemName: isDefault ? "star.fill" : "star")
                         .symbolRenderingMode(.hierarchical)
                         .contentTransition(.symbolEffect(.replace))
-                        .foregroundStyle(host.id == model.selectedHost?.id ? Color.yellow : .secondary)
+                        .foregroundStyle(isDefault ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Make default")
+                .help(isDefault ? "The default PC" : "Make this the default PC")
+                .accessibilityLabel("Default PC")
+                .accessibilityAddTraits(isDefault ? .isSelected : [])
+                // The right-click menu's items, visible so per-PC settings are
+                // discoverable without knowing to right-click.
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
+                    .hostMenuButton(host)
+                    .help("Settings and actions for this PC")
+                    .accessibilityLabel("Actions for \(host.displayName)")
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -152,16 +155,18 @@ struct PCTile: View {
             // white stroke.
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(
-                    host.id == model.selectedHost?.id
+                    isDefault
                         ? Color.accentColor.opacity(0.85)
                         : Color.clear,
                     lineWidth: 2
                 )
         }
-        // Shared right-click affordance (Rename / Codec / Unpair).
-        // Right-click is the canonical path; same menu on the launcher hero.
+        // Shared right-click menu, the same items as the visible button above
+        // and the launcher hero's menu.
         .hostContextMenu(host)
     }
+
+    private var isDefault: Bool { host.id == model.selectedHost?.id }
 
     private var monogram: String {
         let name = host.displayName
