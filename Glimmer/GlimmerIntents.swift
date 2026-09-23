@@ -166,7 +166,7 @@ enum PCIntentError: Error, CustomLocalizedStringResourceConvertible {
         case .notSent: "Glimmer couldn't send the wake packets. Check that this Mac is on the network."
         case let .noApp(app, pc): "\(pc) has no app named \(app)."
         case .wakeOff(let pc): "Wake on LAN is off for \(pc)."
-        case .noAddress(let pc): "Glimmer doesn't know the network address of \(pc) yet. Connect to it once while it's on."
+        case .noAddress(let pc): "Glimmer doesn't have the MAC address of \(pc) yet. Select it in Glimmer once while it's on."
         case .noAnswer(let pc):
             "\(pc) didn't answer. Wake on LAN works on your home network; over Tailscale it can't reach the PC."
         case .unreachable(let pc): "Couldn't reach \(pc)."
