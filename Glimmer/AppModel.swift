@@ -152,13 +152,9 @@ final class AppModel {
     /// chip in the stream UI.
     var nativeHDRActive: Bool = false
 
-    /// Brief "Stream ended" toast on the launcher. Flipped on whenever a
-    /// stream session ends cleanly (regardless of whether the user quit
-    /// via hotkey, the host disconnected, or an error occurred); the
-    /// ContentView toast auto-dismisses after ~2s by clearing this back
-    /// to false on its own timer. Lives here so any view in the launcher
-    /// can react to it - the stream window itself fades independently
-    /// (see StreamWindow.close()).
+    /// The launcher's brief "Stream ended" toast: set by the teardown for a quit, a
+    /// PC-side end or a failure, never a cancelled connect, and cleared by the
+    /// ContentView toast's own timer. The stream window fades on its own.
     var streamEndedToastVisible: Bool = false
 
     /// Receipt for the most recently ENDED session - nil when the last

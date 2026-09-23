@@ -1,10 +1,9 @@
 //
 //  StreamSignalTests.swift
 //
-//  The in-stream signals: banner pills (width clamp, the leave hint a stuck
-//  pill earns, VoiceOver announcements), the leave-hint budget, the codes a
-//  video-less bring-up ends with and their toasts, and the stats HUD's
-//  non-color emphasis.
+//  The in-stream signals: banner pills (width clamp, the leave hint, VoiceOver), the leave-hint
+//  budget, the codes a video-less bring-up or a lost link ends with and their toasts, and the stats
+//  HUD's non-color emphasis.
 //
 
 import AppKit

@@ -1,16 +1,9 @@
 //
 //  AudioDecoder+Resampler.swift
 //
-//  The DRIFT-TRACKING RESAMPLER: the varispeed PI loop that repays the standing
-//  host↔Mac clock offset, plus the per-device skew memory that seeds it
-//  pre-converged. Split out of AudioDecoder+CushionMemory.swift - same idiom as
-//  the FramePacer split, to keep that file under the length limit. It sat there
-//  because it guards the same cushion the loss floor does, but it is its own
-//  mechanism (a rate loop, not a depth policy) with its own UserDefaults bucket
-//  ("host|device UID", not "host|link"), so it reads cleaner as a sibling. The
-//  stored PI state stays on the class (stored properties can't live in
-//  extensions); see the property docs in AudioDecoder.swift for the locking
-//  rationale.
+//  The DRIFT-TRACKING RESAMPLER: the varispeed PI loop that repays the host↔Mac clock offset,
+//  and the skew memory, keyed "host|device UID", that seeds it pre-converged. Its PI state
+//  lives on the class; AudioDecoder.swift documents the locking.
 //
 
 import AVFoundation

@@ -166,17 +166,9 @@ extension VideoDecoder {
     /// async blocks run in strict submission order - param-set rebuilds and the
     /// frames that follow them stay correctly sequenced; nothing is reordered.
     ///
-    /// RETURN VALUE - with the decode now async, the synchronous return can no
-    /// longer reflect VT decode success (that's known only later, in the output
-    /// callback). It returns DR_OK in the steady path. DR_NEED_IDR (the
-    /// depacketizer's flush-to-IDR) comes from three places:
-    ///   * decode-backlog SUSTAINED stall (transient bursts are absorbed; only a
-    ///     genuine stall drops the new frame - see `reserveDecodeSlot`),
-    ///   * the post-gate resync (`.resyncToIdr`),
-    ///   * a VT decode failure - the output callback or an inline reject arms
-    ///     the resync latch, and the NEXT frame returns DR_NEED_IDR.
-    /// Parameter-set rebuild / session-create and sample-build failures still
-    /// request a bare IDR via the thread-safe `backend?.requestIdrFrame()`.
+    /// RETURN VALUE: DR_OK in the steady path (VT's verdict comes later). DR_NEED_IDR comes from a SUSTAINED
+    /// backlog stall (`reserveDecodeSlot`), the post-gate `.resyncToIdr`, or the frame after a VT failure armed
+    /// the resync latch. Param-set and sample-build failures ask `backend?.requestIdrFrame()` for a bare IDR.
     nonisolated func decodeAssembledFrame(
         pictureData: Data, newSps: Data?, newPps: Data?, newVps: Data?,
         isIDR: Bool, rtpTimestamp: UInt32, totalLength: Int32

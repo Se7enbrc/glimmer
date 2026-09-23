@@ -1,10 +1,9 @@
 //
 //  AdaptiveRecoveryTests.swift
 //
-//  Video decode recovery and the adaptive controllers: the env-signal window
-//  classifier and its published decision, the RTP queue's fixed reorder hold
-//  and datagram clock, and the decoder's resync latch, stall escalation and
-//  reconnect-while-hidden gate.
+//  Video decode recovery and the adaptive controllers: the env-signal classifier and its decision,
+//  the RTP queue's fixed reorder hold and datagram clock, and the decoder's resync latch, stall
+//  escalation and reconnect-while-hidden gate.
 //
 
 import Foundation

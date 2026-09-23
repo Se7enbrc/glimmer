@@ -1,21 +1,9 @@
 //
 //  AppModel+HostRoute.swift
 //
-//  Always-on route classification for the SELECTED host - feeds the quiet
-//  bolt / Wi-Fi glyph on the launcher's readiness chip ("Ready · 12 ms ⚡").
-//
-//  DELIBERATELY not the engine's `StreamRouteProbe`: that probe is
-//  constructed by the opt-in telemetry exporter (gate-on only) and must stay
-//  removable with it - nothing UI-facing may depend on it. This monitor rides
-//  pure Network.framework instead: one connected UDP NWConnection to the host
-//  (connecting a UDP socket sends NOTHING - it only asks the kernel to bind a
-//  route), whose NWPath reports the egress interface class for THAT
-//  destination. Path updates are pushed on every route-table event
-//  (dock/undock, VPN up, Wi-Fi join), so the glyph flips live with no timers.
-//  Idle cost: one parked socket and zero traffic; a Wi-Fi route adds a 1 Hz
-//  PHY-rate read on the monitor's utility queue, never the main thread.
-//  Unlike the exporter probe we tolerate hostnames here - Network.framework
-//  resolves asynchronously off the main thread.
+//  The route class toward the selected PC (the readiness chip's bolt or Wi-Fi glyph): one silent,
+//  connected UDP NWConnection whose path updates on every route change. Not the telemetry-only
+//  StreamRouteProbe; a Wi-Fi route adds a 1 Hz PHY-rate read off the main thread.
 //
 
 import Foundation

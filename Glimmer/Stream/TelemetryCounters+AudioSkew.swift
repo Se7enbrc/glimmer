@@ -45,17 +45,9 @@ import os
 /// between the two clock families means even seconds of arrival clumping on
 /// a jittery link cannot mis-snap the estimate.
 ///
-/// EPOCH HONESTY: RTP timestamps carry no shared epoch (each stream starts at
-/// an arbitrary offset), so both sides are measured from a PAIR-ANCHOR latched
-/// at the first CLEAN derive tick (both notes fresh, audio playing, video out of
-/// recovery). The host-side video-vs-audio capture offset at the anchor instant
-/// (≈ the video pipeline e2e, single-digit ms) rides along as a constant bias -
-/// the trend and the steps are the signal, the absolute is approximate. The anchor pair drops
-/// whenever either stream goes stale (>2s - present-suppressed/AFK windows,
-/// session teardown) or the sanity bound trips (an RTP discontinuity), and
-/// re-latches at the next clean tick - counted in `rebaseTotal`, so a
-/// mid-session re-baseline is never a silent step. Never a permanent give-up:
-/// every dark state self-heals at the first clean tick after both streams resume.
+/// EPOCH HONESTY: RTP has no shared epoch, so both sides count from a pair anchor latched at the first
+/// CLEAN tick (notes fresh, audio playing, video out of recovery); the capture offset is a small bias.
+/// A stale side (>2s) or the sanity bound drops it, and the next clean tick re-latches (`rebaseTotal`).
 ///
 /// Self-locked (the `AudioTtfContext` idiom); the per-write cost is one clock
 /// read + an unfair lock + two stores at ≤240Hz video / 200Hz audio - the same

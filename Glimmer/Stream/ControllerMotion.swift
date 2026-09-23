@@ -29,12 +29,9 @@
 //  reports it, duplicate-suppressed and capped at the host rate (MotionRateGate).
 //  Every sample rides the InputBatcher's 1ms latest-wins merge like all input.
 //
-//  ZERO WORK WHEN OFF: registration stores only a weak pad ref - no handler
-//  and no sensorsActive flip until the host's first nonzero 0x5501.
-//  Disable is host rate=0, pad detach, or stream teardown; each drops the
-//  handler, and halting an ACTIVE gyro also sends one (0,0,0) null sample -
-//  the special value ControlStream.c blesses for exactly this client-side
-//  halt, so the host's virtual pad can't hold a stale rotation forever.
+//  ZERO WORK WHEN OFF: only a weak pad ref until the host's first nonzero 0x5501. Host rate 0, pad
+//  detach or teardown drops the handler; halting an ACTIVE gyro also sends one (0,0,0) sample, the
+//  client halt ControlStream.c blesses, so the host's virtual pad can't hold a stale rotation.
 //
 //  THREADING: all mutable state is MainActor-confined (GameController's home
 //  isolation in this codebase - the forwarder treats the framework as

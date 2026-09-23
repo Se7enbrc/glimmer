@@ -1,14 +1,9 @@
 //
 //  TelemetryCounters+Lifecycle.swift
 //
-//  The LIFECYCLE of the always-live counters: the unfair-lock allocation and
-//  teardown the singleton's init/deinit run, the per-session reset at a
-//  session's first connect, and the narrower one an in-place reconnect takes.
-//  Split out of TelemetryCounters.swift (pure move, same file-split idiom as the
-//  rest of the telemetry rig) to keep that file under the length limit; see it
-//  for the storage these manage and for which fields deliberately survive a
-//  reset (the route-change count, the P2 state, the audio-TTF
-//  last-stream-end stamp, and the thread-lifetime RT gauge).
+//  The LIFECYCLE of the always-live counters: the singleton's unfair-lock setup and teardown, the
+//  reset at a session's first connect, and the narrower one a reconnect takes. TelemetryCounters.swift
+//  holds the storage and says which fields deliberately survive a reset.
 //
 
 import Foundation
