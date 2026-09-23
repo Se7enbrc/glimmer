@@ -4,15 +4,15 @@
 //  PIN-based pairing handshake with a GameStream host (GFE or Sunshine).
 //
 //  Ported from moonlight-qt's app/backend/nvpairingmanager.{cpp,h} (GPLv3; see
-//  CREDITS.md). The protocol is a five-round-trip dance over plain HTTP plus a
-//  final HTTPS liveness check; each round mixes AES-128-ECB symmetric crypto
+//  CREDITS.md). The protocol is four rounds over plain HTTP plus a final HTTPS
+//  pairchallenge liveness check; each round mixes AES-128-ECB symmetric crypto
 //  (keyed off the PIN the user types into the host UI) with RSA signatures over our
 //  long-lived client cert. If any step deviates by a single byte the host
 //  silently rejects us, so the comments below are unusually thorough -
 //  this is the kind of code where "it didn't work" debug sessions are
 //  measured in hours.
 //
-//  All hex on the wire is uppercase. All AES operations use 16-byte blocks
+//  All hex on the wire is lowercase. All AES operations use 16-byte blocks
 //  with padding explicitly disabled - moonlight's protocol is raw ECB on
 //  pre-sized buffers, not the higher-level CBC/CTR shapes you'd expect.
 //
@@ -57,7 +57,7 @@ public actor PairingClient {
 
     // MARK: - Pairing flow
     //
-    // The flow has five HTTP rounds plus a final HTTPS challenge. Each round
+    // The flow has four HTTP rounds plus a final HTTPS challenge. Each round
     // is a one-shot GET with all parameters in the query string; there's no
     // session state on the host side beyond what we tell it on each call.
 
@@ -275,10 +275,8 @@ public actor PairingClient {
         //
         // If the host's cert ever rotates (Sunshine reinstall, OS reset)
         // the user lands on the `NetworkClient.fetchServerInfo` pin-mismatch
-        // error which directs them to Settings → PCs → ... → "Trust new cert
-        // and re-pair". That action wipes the pin and reopens the
-        // PairSheet - the next successful run through this function
-        // overwrites the persisted PEM with the new one.
+        // error, which tells them to pair again - the next successful run
+        // through this function overwrites the persisted PEM with the new one.
         persistPinnedCert(serverCertPEM: serverCertPEM)
 
         log.info("Pairing succeeded for \(self.server.address, privacy: .public)")
@@ -295,17 +293,25 @@ public actor PairingClient {
         clientCertBytes: Data,
         signpostID: OSSignpostID
     ) async throws -> String {
-        let getCertResp = try await pairRound(
-            stepLabel: "getservercert",
-            signpostID: signpostID,
-            query: [
-                "phrase": "getservercert",
-                "salt": salt.hex(),
-                "clientcert": clientCertBytes.hex()
-            ],
-            usePaired: false,
-            failureMessage: "getservercert: host did not return paired=1"
-        )
+        // The host holds this reply until someone types the PIN on the PC.
+        let deadline = Date().addingTimeInterval(NetworkClient.pinEntryTimeout)
+        let getCertResp: XMLNode
+        do {
+            getCertResp = try await pairRound(
+                stepLabel: "getservercert",
+                signpostID: signpostID,
+                query: [
+                    "phrase": "getservercert",
+                    "salt": salt.hex(),
+                    "clientcert": clientCertBytes.hex()
+                ],
+                usePaired: false,
+                timeout: NetworkClient.pinEntryTimeout,
+                failureMessage: "getservercert: host did not return paired=1"
+            )
+        } catch {
+            throw Self.pinEntryError(error, deadline: deadline)
+        }
         guard let plainCertHex = Self.xmlString(getCertResp, tag: "plaincert"),
               !plainCertHex.isEmpty,
               let serverCertBytes = Data(hex: plainCertHex) else {
@@ -320,6 +326,14 @@ public actor PairingClient {
             throw StreamError.pairingFailed("plaincert was not valid UTF-8 PEM")
         }
         return serverCertPEM
+    }
+
+    /// A getservercert round that dies at its deadline means nobody typed the
+    /// PIN in time. Report that, not the transport's own timeout wording; a
+    /// cancel or an earlier failure passes through unchanged.
+    static func pinEntryError(_ error: Error, deadline: Date, now: Date = Date()) -> Error {
+        guard !(error is CancellationError), now.timeIntervalSince(deadline) > -1 else { return error }
+        return PairingFailure.timedOut
     }
 
     /// Decode + decrypt the host's step-3 challenge response, split out of
@@ -359,6 +373,7 @@ public actor PairingClient {
         signpostID: OSSignpostID,
         query: [String: String],
         usePaired: Bool,
+        timeout: TimeInterval = NetworkClient.pairTimeout,
         failureMessage: String
     ) async throws -> XMLNode {
         OSSignposter.pairing.emitEvent(
@@ -371,7 +386,7 @@ public actor PairingClient {
             path: "pair",
             query: fullQuery,
             usePaired: usePaired,
-            timeout: NetworkClient.pairTimeout
+            timeout: timeout
         )
         try Self.verifyResponseStatus(response)
         guard Self.xmlString(response, tag: "paired") == "1" else {
@@ -530,11 +545,8 @@ public actor PairingClient {
             log.error("No host uniqueId on ServerInfo at pairing-success - cannot persist pin; cert will need re-pairing on next launch")
             return
         }
-        // SECURITY: persist into the file-backed
-        // PinnedCertStore. Atomic mode-0600 write; the same-UID-
-        // process write surface that UserDefaults exposed (cfprefsd
-        // is shared) goes away because the file is in our
-        // Application Support container with owner-only perms.
+        // Atomic mode-0600 write into PinnedCertStore. That keeps other users
+        // out; a same-UID process can still rewrite it (see SECURITY.md).
         do {
             try PinnedCertStore.store(pem: serverCertPEM,
                                       forHostID: self.server.uniqueId)

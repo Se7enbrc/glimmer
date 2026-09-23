@@ -77,7 +77,7 @@ extension NetworkClient {
                                                          usePaired: false,
                                                          timeout: 3),
                        (try? Self.verifyStatus(probe)) != nil {
-                        throw Self.classifyPairedPathFailure(detail, hostName: server.address)
+                        throw Self.classifyPairedPathFailure(detail, hostName: server.serverName)
                     }
                     throw StreamError.hostUnreachable(detail)
                 }
@@ -116,7 +116,7 @@ extension NetworkClient {
     ///   * "TLS handshake ..." - Sunshine rejects unknown client certs at the
     ///     handshake, so this is the other face of "not paired".
     ///   * "pinned host cert mismatch" / "host presented no certificate" -
-    ///     the HOST's cert changed: the trust chip, not the pair sheet.
+    ///     the HOST's cert changed: pairing again trusts the new one.
     ///   * anything else - honest generic: up on plain HTTP, broken on HTTPS.
     static func classifyPairedPathFailure(_ detail: String, hostName: String) -> StreamError {
         let name = hostName.isEmpty ? "The PC" : hostName
@@ -134,8 +134,7 @@ extension NetworkClient {
         }
         if detail.contains("cert mismatch") || detail.contains("no certificate") {
             return .hostUnreachable(
-                "This PC's certificate changed. Click its amber \"Trust needed\" chip "
-                + "in the main window to trust it and pair again."
+                "\(name)'s certificate changed. Choose Pair Again… for it to trust the new one."
             )
         }
         return .hostUnreachable(
@@ -148,7 +147,7 @@ extension NetworkClient {
     /// Sunshine returns the same shape as GFE 3.x for compatibility, with one
     /// or two extras. Each field falls through to its existing value when the
     /// host omits the tag, so partial responses still hydrate cleanly.
-    private func hydrateServerInfo(from xml: XMLNode, fetchedOverPaired: Bool) {
+    func hydrateServerInfo(from xml: XMLNode, fetchedOverPaired: Bool) {
         if let name = xml.string(forChild: "hostname"), !name.isEmpty {
             server.serverName = name
         }
@@ -182,16 +181,10 @@ extension NetworkClient {
         if let port = xml.int(forChild: "HttpsPort"), port > 0 {
             server.httpsPort = port
         }
-        if let pairFlag = xml.int(forChild: "PairStatus") {
-            server.pairStatus = (pairFlag == 1) ? .paired : .unpaired
-        }
-        // Successful mutual-TLS handshake is itself proof of pairing - the host
-        // wouldn't have accepted our client cert if our identity weren't in
-        // its allowlist. Some Sunshine builds omit <PairStatus> from the HTTPS
-        // response (or return 0 even when paired); don't be fooled.
-        if fetchedOverPaired {
-            server.pairStatus = .paired
-        }
+        // Only a pinned mutual-TLS round proves pairing. <PairStatus> is ignored:
+        // over plain HTTP anyone on the LAN can write it (Sunshine always sends
+        // 0 there), and some Sunshine builds omit it or send 0 over HTTPS.
+        server.pairStatus = fetchedOverPaired ? .paired : .unpaired
         if let maxLuma = xml.int(forChild: "MaxLumaPixelsHEVC") {
             server.maxLumaPixelsHEVC = maxLuma
         }
@@ -205,27 +198,9 @@ extension NetworkClient {
         if let active = xml.int(forChild: "currentgame") {
             server.currentGameID = active
         }
-        // Sunshine exposes the host certificate inline so a fresh client can
-        // surface the cert hash to the user before pairing. GFE doesn't
-        // include it; in that case the cert only becomes visible during
-        // the pairing handshake (via /pair's plaincert blob).
-        //
-        // SECURITY (C2): we DO NOT auto-bind a pin here on a previously
-        // unpinned host. That used to be the path a same-LAN attacker
-        // could ride to silently pin their own cert as the host's. The
-        // real pin gets set by Pairing.swift's `runPairingFlow` once the
-        // user has typed a PIN that the *real* host can prove it knows -
-        // the host's plaincert at that point is authenticated by the RSA
-        // signature step. Only THEN is the cert worth pinning.
-        //
-        // We still expose the host cert opportunistically on ServerInfo so
-        // a future "show fingerprint to user" UI has something to render -
-        // but it does not become a pin until pairing succeeds.
-        if server.serverCertPEM == nil {
-            if let pemFromXML = xml.string(forChild: "PlainCert"), !pemFromXML.isEmpty {
-                server.serverCertPEM = pemFromXML
-            }
-        }
+        // SECURITY (C2): <PlainCert> is never read. `serverCertPEM` IS the pin,
+        // so copying an unauthenticated cert into it pinned whoever answered.
+        // Only Pairing.swift's RSA-verified handshake sets the pin.
     }
 
     // MARK: - Endpoint: /applist

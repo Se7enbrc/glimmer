@@ -405,11 +405,8 @@ final class AppModel {
     var pairingAttempt: PairingAttempt?
 
     /// Typed phase of the in-flight pairing handshake. Drives the PairSheet
-    /// banner colour, spinner, and result text. `pairingMessage` is the
-    /// String-typed read shim for UI code that hasn't migrated.
+    /// banner icon, spinner, and result text.
     var pairingPhase: PairingPhase = .idle
-
-    // `pairingMessage` (the String shim over `pairingPhase`) lives in AppModel+Pairing.swift.
 
     // Persisted stream config - held here so the UI's "Your next stream"
     // summary stays truthful without depending on moonlight-qt's UserDefaults

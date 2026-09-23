@@ -40,6 +40,12 @@ extension NetworkClient {
                     usePaired: Bool,
                     timeout: TimeInterval) async throws -> XMLNode {
 
+        // SECURITY: TLS without a pin would hand /launch's input key to any
+        // certificate. The pin only comes from a finished PIN handshake.
+        if usePaired && server.serverCertPEM == nil {
+            let name = server.serverName.isEmpty ? "The PC" : server.serverName
+            throw StreamError.pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… for it.")
+        }
         try await ensureIdentityLoaded()
         try StreamAttempt.checkDeadline(requestDeadline)
 
@@ -159,12 +165,13 @@ extension NetworkClient {
     public static let controlTimeout: TimeInterval = 5
     static let launchTimeout: TimeInterval = 20
     static let resumeTimeout: TimeInterval = 20
-    /// Pairing requests block on host-side state that's gated on a HUMAN typing
-    /// the PIN into the host's pairing page - so the snappy 5s control timeout
-    /// is far too short (the request fires the moment the code is shown, then
-    /// waits for the user to read + type it). Moonlight uses a similarly long
-    /// pairing window. 60s is comfortably human-scale.
+    /// The pairing rounds after the PIN is in. They answer quickly, but a slow
+    /// host still gets more slack than the 5 s control timeout.
     static let pairTimeout: TimeInterval = 60
+    /// getservercert waits while a person finds Sunshine's web page, gets past
+    /// its certificate warning and types the PIN. Moonlight never times it out;
+    /// ours is finite so a vanished PC can't hang a task behind a closed sheet.
+    static let pinEntryTimeout: TimeInterval = 300
 
     /// The literal `uniqueid` value sent to GFE hosts. Must match moonlight-qt
     /// exactly - see comment in `rawRequest`.

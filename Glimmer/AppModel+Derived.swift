@@ -10,8 +10,6 @@ import Foundation
 
 extension AppModel {
 
-    var pairingInFlight: Bool { pairingAttempt != nil }
-
     /// The row set the overlay renders, resolved against the current
     /// preset: custom mode reads `statsOverlayCustomRows`, the curated
     /// presets resolve to their static sets in `StatsOverlayDefaults`.

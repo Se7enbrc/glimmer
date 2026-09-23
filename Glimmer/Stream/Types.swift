@@ -398,21 +398,9 @@ public struct ServerInfo: Sendable {
     public var address: String                  // hostname or IP, no port
     public var httpPort: Int = 47989
     public var httpsPort: Int = 47984
-    /// Host's public cert, PEM-encoded. Sources, in order of trust:
-    ///   1. The pairing handshake (`Pairing.swift`, `plaincert` blob,
-    ///      authenticated by RSA-verifying the host's signature over our
-    ///      challenge). This is the only path that produces a *pinned*
-    ///      cert.
-    ///   2. The persisted pin from a prior pairing
-    ///      (`glimmer.pinnedCert.<uniqueId>` in UserDefaults), seeded in
-    ///      via `AppModel.nativeServerInfo`. Same trust level as
-    ///      (1) because that's how it landed in storage.
-    ///   3. A `<PlainCert>` value picked up during an unpaired
-    ///      /serverinfo call. INFORMATIONAL ONLY - not bound as a pin.
-    ///      Suitable for UI display ("here's the host's fingerprint -
-    ///      compare to the one on your host machine") but never trusted
-    ///      to authenticate a subsequent TLS handshake. See C2 in the
-    ///      security audit.
+    /// Host's cert (PEM), which is the TLS pin. Set only by the RSA-verified PIN
+    /// handshake or from `PinnedCertStore` via `AppModel.nativeServerInfo`;
+    /// /serverinfo never sets it (C2), so nil means not paired.
     public var serverCertPEM: String?
     public var uniqueId: String                 // GUID identifying this host
     public var serverName: String               // friendly name from /serverinfo

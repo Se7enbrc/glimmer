@@ -382,7 +382,7 @@ extension AppModel {
         var moved: String?
         // Every change to the list re-checks it, so a PC still booting gets another try.
         search: for await found in results {
-            for address in Set(found.map(\.host)) where address != saved && IPv4Address(address) != nil {
+            for address in Set(found.hosts.map(\.host)) where address != saved && IPv4Address(address) != nil {
                 probe.address = address
                 let client = NetworkClient(server: probe)
                 let answer = try? await client.fetchServerInfo()

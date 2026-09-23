@@ -194,4 +194,60 @@ struct PairingCryptoTests {
         // RSA-2048 self-signed: the cert signature BIT STRING is 256 bytes.
         #expect(s1.count == 256)
     }
+
+    // MARK: - First contact can't pair or pin (SECURITY C2)
+
+    private static let spoofedServerInfo = Data("""
+        <root status_code="200"><hostname>TOWER</hostname><uniqueid>host-1</uniqueid>
+        <PairStatus>1</PairStatus><PlainCert>-----BEGIN CERTIFICATE-----AAAA</PlainCert></root>
+        """.utf8)
+
+    /// Any LAN device answering port 47989 writes this XML. A saved PC's info
+    /// starts `.paired`, so the reply must knock it back, not confirm it.
+    @Test func plainHTTPServerInfoNeitherPairsNorPins() async throws {
+        var seed = ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER")
+        seed.pairStatus = .paired
+        let client = NetworkClient(server: seed)
+        await client.hydrateServerInfo(from: try XMLTreeBuilder.parse(data: Self.spoofedServerInfo),
+                                       fetchedOverPaired: false)
+        #expect(await client.server.pairStatus == .unpaired)
+        #expect(await client.pinnedServerCertPEM() == nil)
+    }
+
+    /// Over pinned mutual TLS the handshake itself is the proof, whatever the body says.
+    @Test func pinnedHTTPSServerInfoIsPaired() async throws {
+        let client = NetworkClient(server: ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER"))
+        let xml = try XMLTreeBuilder.parse(data: Data(#"<root status_code="200"><PairStatus>0</PairStatus></root>"#.utf8))
+        await client.hydrateServerInfo(from: xml, fetchedOverPaired: true)
+        #expect(await client.server.pairStatus == .paired)
+    }
+
+    /// TLS with no pin would send /launch's input key to any certificate, so it
+    /// is refused up front, before any connection is attempted.
+    @Test func httpsWithoutAPinIsRefused() async {
+        let client = NetworkClient(server: ServerInfo(address: "192.0.2.10", uniqueId: "host-1", serverName: "TOWER"))
+        let error = await #expect(throws: StreamError.self) {
+            _ = try await client.request(path: "applist", query: [:], usePaired: true)
+        }
+        guard case .pairingFailed = error else {
+            Issue.record("expected pairingFailed, got \(String(describing: error))")
+            return
+        }
+    }
+
+    // MARK: - PIN entry timeout
+
+    @Test func getservercertDyingAtItsDeadlineIsATimeout() {
+        let deadline = Date()
+        let late = PairingClient.pinEntryError(
+            StreamError.launchFailed("The host didn't respond in time."), deadline: deadline, now: deadline)
+        #expect(late as? PairingFailure == .timedOut)
+        // A refusal a minute in is the host, not the person, and keeps its cause.
+        let early = PairingClient.pinEntryError(
+            StreamError.hostUnreachable("refused"), deadline: deadline, now: deadline.addingTimeInterval(-60))
+        #expect(early is StreamError)
+        // Closing the sheet is never reported as a timeout.
+        let cancelled = PairingClient.pinEntryError(CancellationError(), deadline: deadline, now: deadline)
+        #expect(cancelled is CancellationError)
+    }
 }

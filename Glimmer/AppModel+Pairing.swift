@@ -27,19 +27,6 @@ extension AppModel {
         maybeOfferHIDPermission()
     }
 
-    /// String-typed read shim for UI code that hasn't migrated to
-    /// switching on `pairingPhase`. Existing `.contains("✓")` checks keep
-    /// working. Writers go through `pairingPhase`.
-    var pairingMessage: String? {
-        switch pairingPhase {
-        case .idle:                  return nil
-        case .awaitingPin(let text): return text
-        case .verifying(let text):   return text
-        case .success(let text):     return text
-        case .failure(let text):     return text
-        }
-    }
-
     // MARK: Pairing
 
     /// One launchable app captured from the host's /applist right after pairing.
@@ -83,6 +70,8 @@ extension AppModel {
         return String(format: "%04d", pinValue)
     }
 
+    /// Opens a pairing session for the sheet. The launcher's poller stays
+    /// paused until `cancelPairing`, so `pair` itself never touches polling.
     func beginPairing(address: String) -> PairingAttempt {
         let attempt = PairingAttempt(address: address)
         pairingAttempt = attempt
@@ -92,9 +81,11 @@ extension AppModel {
         return attempt
     }
 
+    /// Ends the sheet's session (Back, Cancel or close) and resumes polling,
+    /// unless a newer attempt from another sheet has taken over.
     func cancelPairing(_ attempt: PairingAttempt) {
-        guard pairingAttempt == attempt else { return }
-        pairingAttempt = nil
+        if pairingAttempt == attempt { pairingAttempt = nil }
+        guard pairingAttempt == nil else { return }
         pairingPhase = .idle
         restartHostStatusPolling()
     }
@@ -105,26 +96,41 @@ extension AppModel {
         }
     }
 
+    /// A hostname or IP literal the control transport can dial: no scheme,
+    /// port, path or `%zone`. `normalizedPCAddress` cleans a paste into this.
+    nonisolated static func isValidPCAddress(_ address: String) -> Bool {
+        let pattern = #"^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$"#
+        return address.count <= 253 && address.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// Cuts a typed or pasted entry down to its address, so Sunshine's own URL
+    /// "https://192.168.1.10:47990/pin" becomes "192.168.1.10" and
+    /// "[2001:db8::5]:47989" becomes "2001:db8::5". nil when that isn't dialable.
+    nonisolated static func normalizedPCAddress(_ input: String) -> String? {
+        var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let scheme = text.range(of: "://") { text = String(text[scheme.upperBound...]) }
+        text = String(text.prefix { !"/?#".contains($0) })
+        if text.hasPrefix("["), let close = text.firstIndex(of: "]") {
+            text = String(text[text.index(after: text.startIndex)..<close])
+        } else if text.count(where: { $0 == ":" }) == 1 {
+            text = String(text.prefix { $0 != ":" })
+        }
+        return isValidPCAddress(text) ? text : nil
+    }
+
     func pair(attempt: PairingAttempt, pin: String) async -> Host? {
         guard (try? checkPairing(attempt)) != nil else { return nil }
-        defer {
-            if pairingAttempt == attempt {
-                pairingAttempt = nil
-                restartHostStatusPolling()
-            }
-        }
+        defer { if pairingAttempt == attempt { pairingAttempt = nil } }
         let address = attempt.address
-        let pattern = #"^[A-Za-z0-9]([A-Za-z0-9._:-]*[A-Za-z0-9])?$"#
-        guard address.range(of: pattern, options: .regularExpression) != nil,
-              address.count <= 253, !address.hasPrefix("-") else {
-            pairingPhase = .failure("Hostname looks invalid. Use a name like tower.local or an IP.")
+        guard Self.isValidPCAddress(address) else {
+            pairingPhase = .failure(.invalidAddress)
             return nil
         }
         guard pin.count == 4, pin.allSatisfy({ $0.isNumber }) else {
-            pairingPhase = .failure("PIN must be 4 digits.")
+            pairingPhase = .failure(.rejected)
             return nil
         }
-        pairingPhase = .awaitingPin("Pairing… enter \(pin) on \(address).")
+        pairingPhase = .connecting
         let info = ServerInfo(address: address, uniqueId: address, serverName: address)
         let network = NetworkClient(server: info)
         let fetched: ServerInfo
@@ -136,17 +142,14 @@ extension AppModel {
             let reason = error.localizedDescription
             log.error("Pairing: unreachable \(address, privacy: .private) - \(reason, privacy: .private)")
             Diag.error("Pairing: host unreachable", "Pairing")
-            pairingPhase = .failure("Couldn't reach \(address). Make sure it's on and on this network.")
+            pairingPhase = .failure(.unreachable)
             return nil
         }
         do {
-            pairingPhase = .verifying("Pairing… enter \(pin) on \(address).")
-            let paired: ServerInfo
-            if fetched.pairStatus == .paired {
-                paired = fetched
-            } else {
-                paired = try await PairingClient(network: network, server: fetched).pair(pin: pin)
-            }
+            pairingPhase = .awaitingPin
+            // Always the full handshake: this /serverinfo came over plain HTTP,
+            // so nothing in it proves the PC already trusts this Mac.
+            let paired = try await PairingClient(network: network, server: fetched).pair(pin: pin)
             try checkPairing(attempt)
             guard paired.uniqueId == fetched.uniqueId else { throw CancellationError() }
             let apps = await pairingApps(server: paired)
@@ -157,21 +160,22 @@ extension AppModel {
                 address: address, serverCertPEM: paired.serverCertPEM,
                 appVersion: paired.appVersion, gfeVersion: paired.gfeVersion,
                 apps: apps, macAddress: paired.macAddress)
-            pairingPhase = .success("Paired with \(address) ✓")
+            pairingPhase = .success
             Diag.notice("Pairing succeeded", "Pairing")
             return hosts.first { $0.id == paired.uniqueId }
         } catch {
             guard (try? checkPairing(attempt)) != nil else { return nil }
-            // One uniform message: the cause (wrong PIN, signature, status)
-            // stays in the private log so nothing leaks over a shoulder (#10).
+            // A timeout says so; every other cause (wrong PIN, signature, status)
+            // is one `.rejected`, detail in the private log only (#10).
             log.error(
                 """
                 Pairing failed for host=\(address, privacy: .private(mask: .hash)): \
                 \(error.localizedDescription, privacy: .private)
                 """
             )
-            Diag.error("Pairing failed", "Pairing")
-            pairingPhase = .failure("Pairing failed. Try again.")
+            let failure = error as? PairingFailure ?? .rejected
+            Diag.error(failure == .timedOut ? "Pairing timed out waiting for the PIN" : "Pairing failed", "Pairing")
+            pairingPhase = .failure(failure)
             return nil
         }
     }
@@ -184,13 +188,11 @@ extension AppModel {
         return [PairedApp(id: 881448767, name: "Desktop", hdr: false, hidden: false)]
     }
 
-    /// Future: currently uncalled. Safari's self-signed-cert dead-end
-    /// makes the host's web UI a worse pairing path than Glimmer's
-    /// in-app flow, but the URL shape is centralised here so a future
-    /// "show me what the host sees" affordance or embedded WKWebView
-    /// helper has one canonical address to dial.
-    func openSunshineWebUI(forHost host: String) {
-        if let url = URL(string: "https://\(host):47990") {
+    /// Sunshine's PIN page in this Mac's browser, for a headless PC. Sunshine
+    /// serves it over HTTPS on 47990 with its own self-signed certificate.
+    func openSunshinePINPage(forHost host: String) {
+        let literal = host.contains(":") ? "[\(host)]" : host
+        if let url = URL(string: "https://\(literal):47990/pin") {
             NSWorkspace.shared.open(url)
         }
     }

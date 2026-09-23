@@ -106,11 +106,21 @@ final class PairedPathFailureClassificationTests: XCTestCase {
         XCTAssertTrue(text.contains("Pair Again…"))
     }
 
-    func testHostCertChangePointsAtTrustChip() {
+    /// The poller's "Trust needed" state and the stream banner both key off
+    /// "cert" in this copy, so it must survive any rewording.
+    func testHostCertChangePointsAtPairAgain() {
         guard case .hostUnreachable(let text) = classify("pinned host cert mismatch") else {
             return XCTFail("expected hostUnreachable")
         }
-        XCTAssertTrue(text.contains("Trust needed"))
+        XCTAssertTrue(text.contains("Pair Again…"))
+        XCTAssertTrue(text.contains("cert"))
+    }
+
+    func testNoCopyUsesASpacedDash() {
+        for detail in ["connect to x:47984 failed", "Host requires pairing", "TLS handshake failed",
+                       "pinned host cert mismatch", "something else"] {
+            XCTAssertFalse("\(classify(detail))".contains(" - "), detail)
+        }
     }
 
     func testEmptyHostNameFallsBackToThePC() {
@@ -133,5 +143,41 @@ struct PairingFailureBannerTests {
         #expect(kept.hasPrefix("Den PC no longer recognizes this Mac."))
         let rejected = AppModel.connectFailureBanner(for: StreamError.pairingRejected, hostName: "Den PC")
         #expect(rejected.hasPrefix("Couldn't pair with Den PC.") && rejected.contains("Pair Again…"))
+    }
+}
+
+// MARK: - Addresses the pair sheet accepts and discovery saves
+
+struct PCAddressTests {
+
+    /// The likeliest paste is Sunshine's own web UI URL; it comes down to the address.
+    @Test func pastedURLsAndPortsReduceToTheAddress() {
+        #expect(AppModel.normalizedPCAddress("https://192.168.1.10:47990/pin") == "192.168.1.10")
+        #expect(AppModel.normalizedPCAddress("  tower.local:47989 \n") == "tower.local")
+        #expect(AppModel.normalizedPCAddress("[2001:db8::5]:47989") == "2001:db8::5")
+        #expect(AppModel.normalizedPCAddress("2001:db8::5") == "2001:db8::5")
+    }
+
+    @Test func undialableEntriesAreRejected() {
+        #expect(AppModel.normalizedPCAddress("") == nil)
+        #expect(AppModel.normalizedPCAddress("my gaming pc") == nil)
+        #expect(AppModel.normalizedPCAddress("-tower") == nil)
+        // A zone names a Mac interface; it breaks the moment the Mac changes network.
+        #expect(AppModel.normalizedPCAddress("fe80::1%en0") == nil)
+    }
+
+    @Test func discoveryNeverSavesAZoneScopedAddress() {
+        #expect(HostDiscovery.canonicalHost("192.0.2.10%en0", ipv6: false) == "192.0.2.10")
+        #expect(HostDiscovery.canonicalHost("2001:db8::5%en0", ipv6: true) == "2001:db8::5")
+        #expect(HostDiscovery.canonicalHost("fe80::1%en0", ipv6: true) == nil)
+    }
+
+    /// A refused Local Network permission must read as "denied", not "no PCs".
+    @Test func deniedLocalNetworkIsRecognized() {
+        let denied = NWError.dns(DNSServiceErrorType(kDNSServiceErr_PolicyDenied))
+        #expect(HostDiscovery.isPolicyDenied(.waiting(denied)))
+        #expect(HostDiscovery.isPolicyDenied(.failed(denied)))
+        #expect(!HostDiscovery.isPolicyDenied(.ready))
+        #expect(!HostDiscovery.isPolicyDenied(.waiting(.posix(.ENETDOWN))))
     }
 }

@@ -13,19 +13,33 @@ import Foundation
 // MARK: - PairingPhase
 
 /// Lifecycle of an in-flight pairing handshake with a Sunshine/GFE host.
-/// Drives the PairSheet's spinner, PIN field, and result banner.
-///
-/// Each non-`idle` case carries the localized status text we display while
-/// in that phase - old call sites read this through the `pairingMessage`
-/// computed shim on `AppModel` (kept for back-compat during the
-/// gradual UI migration). New call sites should switch on the phase
-/// directly.
+/// Drives the PairSheet's spinner and result banner; the view words each case.
 enum PairingPhase: Equatable {
     case idle
-    case awaitingPin(String)
-    case verifying(String)
-    case success(String)
-    case failure(String)
+    case connecting     // reaching the PC's /serverinfo
+    case awaitingPin    // handshake open, waiting for the code on the PC
+    case success
+    case failure(PairingFailure)
+}
+
+/// Why a pairing attempt ended. Every protocol rejection (wrong PIN, bad host
+/// signature, PC busy pairing someone else) shares `.rejected` and its wording.
+enum PairingFailure: Error, Equatable {
+    case invalidAddress
+    case unreachable
+    case timedOut
+    case rejected
+
+    static let addressHint = "Enter a PC name like tower.local or an IP address like 192.168.1.10."
+
+    func message(pc: String) -> String {
+        switch self {
+        case .invalidAddress: return Self.addressHint
+        case .unreachable: return "Couldn't reach \(pc). Make sure it's awake and on the same network."
+        case .timedOut: return "The code wasn't entered on \(pc) in time. Choose Try Again to get a new code."
+        case .rejected: return "\(pc) didn't accept the pairing. Choose Try Again to get a new code."
+        }
+    }
 }
 
 // MARK: - StreamPhase
