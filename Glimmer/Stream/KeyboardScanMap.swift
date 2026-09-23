@@ -174,8 +174,9 @@ private let carbonToVKScanCode: [Int: VKScanCode] = [
 /// On an ISO keyboard macOS reports the key left of 1 as Section and the key
 /// right of left Shift as Grave, the reverse of their ANSI positions. Swap them
 /// back, as SDL and moonlight do, so each lands on the PC key in its place.
-func vkScanCode(forCarbonKeyCode kc: Int, isISOKeyboard: Bool = isISOKeyboardLayout()) -> VKScanCode? {
-    let swapsISOKeys = isISOKeyboard && (kc == kVK_ISO_Section || kc == kVK_ANSI_Grave)
+func vkScanCode(forCarbonKeyCode kc: Int,
+                isISOKeyboard: @autoclosure () -> Bool = isISOKeyboardLayout()) -> VKScanCode? {
+    let swapsISOKeys = (kc == kVK_ISO_Section || kc == kVK_ANSI_Grave) && isISOKeyboard()
     return carbonToVKScanCode[swapsISOKeys ? kVK_ISO_Section + kVK_ANSI_Grave - kc : kc]
 }
 

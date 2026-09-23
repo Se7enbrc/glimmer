@@ -5,8 +5,7 @@
 //  over the carbonToVKScanCode table: Carbon kVK_* keyCode -> Windows VK_*
 //  scancode. A regression here mis-drives the host's keyboard, so we pin a
 //  representative span (letters, digits, modifiers, arrows, function keys,
-//  numpad, punctuation, ISO and JIS keys) plus the "unmapped returns nil"
-//  contract.
+//  numpad, punctuation, ISO, JIS) plus the "unmapped returns nil" contract.
 //
 
 import Carbon.HIToolbox
