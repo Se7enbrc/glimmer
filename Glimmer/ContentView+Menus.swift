@@ -78,7 +78,8 @@ private struct HostContextMenu: ViewModifier {
         }
         // Pre-filled so it lands on the PIN step; pairing re-pins the PC's certificate.
         .sheet(isPresented: $showPairAgain) {
-            PairSheet(initialAddress: host.localAddress ?? host.manualAddress ?? "").environment(model)
+            PairSheet(initialAddress: host.localAddress ?? host.manualAddress ?? "", initialName: host.displayName)
+                .environment(model)
         }
     }
 

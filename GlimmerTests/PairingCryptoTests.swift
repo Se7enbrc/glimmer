@@ -250,4 +250,15 @@ struct PairingCryptoTests {
         let cancelled = PairingClient.pinEntryError(CancellationError(), deadline: deadline, now: deadline)
         #expect(cancelled is CancellationError)
     }
+
+    /// The sheet words every outcome from this: each names the PC, and a timeout
+    /// reads differently from a refusal so nobody retypes a code that was right.
+    @Test func pairingFailureMessagesNameThePC() {
+        for failure in [PairingFailure.unreachable, .timedOut, .rejected] {
+            #expect(failure.message(pc: "TOWER").contains("TOWER"))
+            #expect(!failure.message(pc: "TOWER").contains(" - "))
+        }
+        #expect(PairingFailure.timedOut.message(pc: "TOWER") != PairingFailure.rejected.message(pc: "TOWER"))
+        #expect(PairingFailure.invalidAddress.message(pc: "TOWER") == PairingFailure.addressHint)
+    }
 }

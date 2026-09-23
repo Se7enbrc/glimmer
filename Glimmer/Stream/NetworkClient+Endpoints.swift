@@ -134,7 +134,7 @@ extension NetworkClient {
         }
         if detail.contains("cert mismatch") || detail.contains("no certificate") {
             return .hostUnreachable(
-                "\(name)'s certificate changed. Choose Pair Again… for it to trust the new one."
+                "\(name)'s certificate changed. To trust it, choose Pair Again… from the PC's ⋯ menu."
             )
         }
         return .hostUnreachable(

@@ -44,7 +44,7 @@ extension NetworkClient {
         // certificate. The pin only comes from a finished PIN handshake.
         if usePaired && server.serverCertPEM == nil {
             let name = server.serverName.isEmpty ? "The PC" : server.serverName
-            throw StreamError.pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… for it.")
+            throw StreamError.pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
         }
         try await ensureIdentityLoaded()
         try StreamAttempt.checkDeadline(requestDeadline)
