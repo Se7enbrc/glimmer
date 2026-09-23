@@ -308,9 +308,11 @@ public struct VideoFormats: OptionSet, Sendable {
         let av1M10 = out.contains(.av1Main10)
         let av1444 = out.contains(.av1High10_444)
         let raw = String(out.rawValue, radix: 16)
-        log.info(
-            // swiftlint:disable:next line_length
-            "VT capability probe: H264=\(h264, privacy: .public) HEVC=\(hevc, privacy: .public) HEVCMain10=\(hevcM10, privacy: .public) HEVC444=\(hevc444, privacy: .public) AV1=\(av1, privacy: .public) AV1Main10=\(av1M10, privacy: .public) AV1_444=\(av1444, privacy: .public) raw=0x\(raw, privacy: .public)"
+        log.info("""
+            VT capability probe: H264=\(h264, privacy: .public) HEVC=\(hevc, privacy: .public) \
+            HEVCMain10=\(hevcM10, privacy: .public) HEVC444=\(hevc444, privacy: .public) AV1=\(av1, privacy: .public) \
+            AV1Main10=\(av1M10, privacy: .public) AV1_444=\(av1444, privacy: .public) raw=0x\(raw, privacy: .public)
+            """
         )
         return out
     }
