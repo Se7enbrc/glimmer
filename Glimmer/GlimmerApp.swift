@@ -118,9 +118,6 @@ struct GlimmerApp: App {
                 // 584 here did. A floor equal to the content leaves nothing to
                 // drag.
                 .frame(minWidth: 680)
-                // Liquid Glass: on macOS 26 `.regularMaterial` resolves to
-                // the system material; future SDKs may expose a dedicated
-                // `.glassBackground` shape style for window containers.
                 .containerBackground(.regularMaterial, for: .window)
         }
         .windowStyle(.hiddenTitleBar)
@@ -187,6 +184,7 @@ struct GlimmerApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Hand-off slot set by `GlimmerApp.init` so AppDelegate can reach the
     /// manager before any SwiftUI view body runs.
@@ -202,10 +200,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
 
     /// NSWindow open/close observers wired in applicationWillFinishLaunching
-    /// to toggle `NSApp.activationPolicy` between `.regular` (Dock icon
-    /// visible) when the main window is open and `.accessory` (no Dock
-    /// icon) when only the menu bar is alive. Tracked so deinit can detach.
+    /// that keep `NSApp.activationPolicy` in step (see `activationPolicy`).
+    /// Tracked so deinit can detach.
     private var windowVisibilityObservers: [NSObjectProtocol] = []
+
+    /// A Dock icon and Cmd-Tab entry while there's something to come back to:
+    /// the launcher, Settings or a stream. The menu bar panel and alerts don't
+    /// count, or the icon would flicker every time one opens.
+    nonisolated static func activationPolicy(
+        visibleWindowIDs: [String], streaming: Bool
+    ) -> NSApplication.ActivationPolicy {
+        let anchored = visibleWindowIDs.contains { $0 == "main" || $0 == "com_apple_SwiftUI_Settings_window" }
+        return streaming || anchored ? .regular : .accessory
+    }
+
+    func refreshActivationPolicy() {
+        let visible = NSApp.windows.filter(\.isVisible).compactMap { $0.identifier?.rawValue }
+        let policy = Self.activationPolicy(visibleWindowIDs: visible, streaming: model?.isStreaming == true)
+        if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Version + build + commit on the FIRST log line, so any pasted log
@@ -232,6 +245,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.model = mgr
             mgr.attach(appDelegate: self)
             Task { await mgr.bootstrap() }
+            // A stream started from the menu bar needs the Dock icon; its end
+            // may leave nothing to come back to. The first value is launch state.
+            Task { [weak self] in
+                for await _ in Observations({ mgr.isStreaming }).dropFirst() {
+                    self?.refreshActivationPolicy()
+                }
+            }
         }
 
         // Login-launched? Start as `.accessory` so the Dock icon never
@@ -244,21 +264,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let nc = NotificationCenter.default
-        // Re-evaluate activation policy on any becomeKey / willClose. We
-        // don't read `note.object` because Swift 6 strict concurrency
-        // refuses to send the non-Sendable Notification across the
-        // assumeIsolated boundary; instead we look up the main window's
-        // current visibility from NSApp.windows on each tick.
-        let recheck: @Sendable () -> Void = {
+        // Re-evaluate activation policy on any becomeKey / willClose, from
+        // NSApp.windows rather than `note.object` (not Sendable). willClose fires
+        // while the window is still listed, so look one runloop tick later.
+        let recheck: @Sendable () -> Void = { [weak self] in
             MainActor.assumeIsolated {
-                // willClose fires while the window is still in NSApp.windows,
-                // so defer one runloop tick to see the post-close state.
-                DispatchQueue.main.async {
-                    let mainOpen = NSApp.windows.contains {
-                        $0.identifier?.rawValue == "main" && $0.isVisible
-                    }
-                    NSApp.setActivationPolicy(mainOpen ? .regular : .accessory)
-                }
+                DispatchQueue.main.async { [weak self] in self?.refreshActivationPolicy() }
             }
         }
         windowVisibilityObservers.append(nc.addObserver(
@@ -279,7 +290,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (the user didn't open it; the daily scheduled check covers that session).
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !launchedAtLogin else { return }
-        UpdaterController.shared.updater.checkForUpdatesInBackground()
+        // Sparkle's own scheduled check may already be running; asking again
+        // then only logs a fault.
+        let updater = UpdaterController.shared.updater
+        if !updater.sessionInProgress { updater.checkForUpdatesInBackground() }
     }
     #endif
 
