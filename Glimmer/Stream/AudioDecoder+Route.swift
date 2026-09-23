@@ -19,9 +19,13 @@ extension AudioDecoder {
 
     // MARK: - Audio OUTPUT route (under-run attribution breadcrumbs)
 
+    /// Hex identity of this instance for the lifecycle lines, so a decoder
+    /// that outlives its session is traceable in the log.
+    var logID: String { String(UInt(bitPattern: ObjectIdentifier(self)), radix: 16) }
+
     /// Install the default-output-device listener + seed the route cache. Called
     /// once from `initDecoderCore` with `stateLock` held (after the engine is up);
-    /// idempotent via the block handle. WHY a listener instead of sampling at the
+    /// idempotent via the token. WHY a listener instead of sampling at the
     /// under-run: route reads are blocking HAL IPC - putting one on the completion
     /// thread (or the 200Hz decode path) would risk the very stalls the cushion
     /// absorbs. The listener pays that cost on its own utility queue, only when
@@ -30,7 +34,7 @@ extension AudioDecoder {
     /// under-run cascades were missing (a BT detach lands here seconds before the
     /// drains it triggers).
     func installAudioRouteListener() {
-        guard routeListenerBlock == nil else { return }
+        guard routeListenerToken == nil else { return }
         let route = Self.sampleAudioRoute()
         audioMeterLock.lock()
         audioRouteCache = route
@@ -50,10 +54,11 @@ extension AudioDecoder {
                 Diag.notice("audio route changed: \(previous) → \(fresh)", "Stream")
             }
         }
-        let status = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block)
-        if status == noErr {
-            routeListenerBlock = block
+        var status: OSStatus = noErr
+        routeListenerToken = gl_audio_listener_add(
+            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block, &status)
+        if routeListenerToken != nil {
+            Diag.notice("audio route listener installed (decoder \(logID))", "Stream")
         } else {
             Diag.notice(
                 "audio route listener install failed (OSStatus \(status)) - "
@@ -62,15 +67,16 @@ extension AudioDecoder {
         }
     }
 
-    /// Remove the route listener (the HAL requires the same address/queue/block
-    /// triple). Called from `shutdown()` with `stateLock` held; safe when the
-    /// install failed or never ran.
+    /// Remove the route listener with the exact block the HAL holds (the token).
+    /// Called from `shutdown()` with `stateLock` held; safe when the install
+    /// failed or never ran.
     func removeAudioRouteListener() {
-        guard let block = routeListenerBlock else { return }
-        routeListenerBlock = nil
+        guard let token = routeListenerToken else { return }
+        routeListenerToken = nil
         var addr = Self.defaultOutputDeviceAddress
-        AudioObjectRemovePropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block)
+        let status = gl_audio_listener_remove(
+            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, token)
+        Diag.notice("audio route listener removed (decoder \(logID), OSStatus \(status))", "Stream")
     }
 
     /// The HAL address of the system default OUTPUT device - AVAudioEngine's

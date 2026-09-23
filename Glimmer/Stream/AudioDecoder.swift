@@ -18,7 +18,6 @@
 
 import Foundation
 import AVFoundation
-import CoreAudio
 import os
 public final class AudioDecoder: @unchecked Sendable {
     // The opus + AVAudioEngine CORE state. Non-private (default internal): the
@@ -409,12 +408,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `audioMeterLock`.
     var lastUnderrunNoticeNanos: UInt64 = 0
     var underrunNoticesSuppressed: UInt64 = 0
-    /// Default-output-device listener block (held so `shutdown()` can remove it -
-    /// the HAL requires the same address/queue/block triple) and the utility
-    /// queue it fires on. Lifecycle-guarded by `stateLock` (installed at init,
-    /// removed at shutdown); the block body touches only `audioMeterLock` state
-    /// and Diag, so it can never contend the decode/teardown path.
-    var routeListenerBlock: AudioObjectPropertyListenerBlock?
+    /// Default-output-device listener token (the exact block the HAL holds, which
+    /// `shutdown()` must hand back) and its utility queue. Token guarded by
+    /// `stateLock`; the block touches only `audioMeterLock` state and Diag.
+    var routeListenerToken: Any?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
     /// Bounded retry counter for an engine restart that threw because the new
     /// output device wasn't ready that instant (route handoff). stateLock-guarded.
@@ -461,4 +458,9 @@ public final class AudioDecoder: @unchecked Sendable {
     var pendingFecGap = false
 
     public init() {}
+
+    // Lifecycle canary: every session's decoder should log this after it ends.
+    deinit {
+        Diag.notice("audio decoder \(logID) released", "Stream.Audio")
+    }
 }

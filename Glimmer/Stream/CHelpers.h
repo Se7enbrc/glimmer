@@ -195,6 +195,29 @@ static inline BOOL gl_objc_try(void (NS_NOESCAPE ^ _Nonnull block)(void)) {
         return NO;
     }
 }
+
+// MARK: - CoreAudio property listener with a stable block identity
+// Swift bridges a closure to a NEW block on every call, so a Swift-side remove
+// never matches the added block (yet returns noErr) and the listener leaks.
+// Copy once here; the returned block is the token the remove must be given.
+#import <CoreAudio/CoreAudio.h>
+static inline id _Nullable gl_audio_listener_add(AudioObjectID object,
+                                                 const AudioObjectPropertyAddress * _Nonnull address,
+                                                 dispatch_queue_t _Nullable queue,
+                                                 AudioObjectPropertyListenerBlock _Nonnull block,
+                                                 OSStatus * _Nonnull status) {
+    AudioObjectPropertyListenerBlock held = [block copy];
+    *status = AudioObjectAddPropertyListenerBlock(object, address, queue, held);
+    return *status == noErr ? held : nil;
+}
+
+static inline OSStatus gl_audio_listener_remove(AudioObjectID object,
+                                                const AudioObjectPropertyAddress * _Nonnull address,
+                                                dispatch_queue_t _Nullable queue,
+                                                id _Nonnull token) {
+    return AudioObjectRemovePropertyListenerBlock(object, address, queue,
+                                                  (AudioObjectPropertyListenerBlock)token);
+}
 #endif
 
 // MARK: - Global mouse pointer-acceleration (relative-aim linearization)
