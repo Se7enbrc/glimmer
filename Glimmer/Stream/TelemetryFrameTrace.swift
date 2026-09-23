@@ -41,19 +41,18 @@ final class FrameTraceWriter: @unchecked Sendable {
     /// losing the stalest is the right tradeoff) and is logged once.
     private static let maxPendingLines = 10_000
 
-    /// SIZE-CAPPED ROLLOVER (C2): past `maxFileBytes` a fresh `-<n>` segment opens;
-    /// the session keeps its first (connect, first IDR, pacer lock-in) plus the
-    /// newest `maxTraceFiles - 1`. 96MB × 4 ≈ 384MB ceiling.
+    /// SIZE-CAPPED ROLLOVER (C2): past `maxFileBytes` a fresh `-<n>` segment opens; a session keeps
+    /// its first (connect, first IDR, pacer lock-in) plus the newest `maxTraceFiles - 1` (≈384MB).
+    /// The next connect's byte sweep trims this session last, oldest `-<n>` first.
     private static let maxFileBytes: UInt64 = 96 * 1024 * 1024
     static let maxTraceFiles = 4
 
     private let flushQueue = DispatchQueue(label: "io.ugfugl.Glimmer.telemetry.frames", qos: .utility)
     private var fileHandle: FileHandle?
     private var flushTimer: DispatchSourceTimer?
-    /// Rollover state (flushQueue-confined): the Logs dir + this session's ISO
-    /// stamp (so segments share a prefix), the running byte count of the current
-    /// segment, the next segment index, and the segment files written this session
-    /// (oldest-first, for `trimSegments`).
+    /// Rollover state (flushQueue-confined): the Logs dir, this session's ISO stamp (the segments'
+    /// shared prefix), the current segment's byte count, the next segment index, and this session's
+    /// segment files oldest-first (for `trimSegments`).
     private var logDir: URL?
     private var isoStamp = ""
     private var bytesWritten: UInt64 = 0

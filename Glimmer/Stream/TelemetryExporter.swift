@@ -360,12 +360,11 @@ final class TelemetryExporter: @unchecked Sendable {
         }
     }
 
-    /// Prune the Glimmer Logs dir: the age limit for every family, then (when
-    /// `enforceBudget`) the byte budget over traces first, then 1Hz NDJSON,
-    /// oldest-first. Diag logs + receipts are tiny and only ever age out.
+    /// Prune the Glimmer Logs dir: age for every family, then (if `enforceBudget`) bytes over
+    /// traces + 1Hz NDJSON, the latest session last. Diag logs + receipts only ever age out.
     static func sweepLogsDirectory(_ dir: URL, log: Logger, enforceBudget: Bool = true) {
         let fm = FileManager.default
-        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+        let keys: [URLResourceKey] = [.creationDateKey, .contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
         guard let entries = try? fm.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return }
         // Our own log families only - never delete a foreign file.
@@ -373,12 +372,13 @@ final class TelemetryExporter: @unchecked Sendable {
             let name = url.lastPathComponent
             return name.hasPrefix("telemetry-") || name.hasPrefix("glimmer-")
         }
-        struct Entry { let url: URL; let modified: Date; let size: UInt64 }
+        struct Entry { let url: URL; let created: Date; let modified: Date; let size: UInt64 }
         var files: [Entry] = []
         for url in ours {
             guard let values = try? url.resourceValues(forKeys: Set(keys)),
                   values.isRegularFile == true else { continue }
             files.append(Entry(url: url,
+                               created: values.creationDate ?? .distantPast,
                                modified: values.contentModificationDate ?? .distantPast,
                                size: UInt64(values.fileSize ?? 0)))
         }
@@ -393,14 +393,22 @@ final class TelemetryExporter: @unchecked Sendable {
                 survivors.append(entry)
             }
         }
-        // (2) BYTE-BUDGET prune over the bulky families: traces first, then
-        // 1Hz NDJSON, oldest-first within each.
+        // (2) BYTE-BUDGET prune over the bulky families, latest session last. Within
+        // each group: rollover segments, then base segments, then 1Hz, oldest-first.
         let bulky = survivors.filter {
             let name = $0.url.lastPathComponent
             return !name.hasPrefix("glimmer-") && !name.hasPrefix("telemetry-session-")
         }
+        let family = { (entry: Entry) -> Int in
+            let name = entry.url.lastPathComponent
+            guard name.hasPrefix("telemetry-frames-") else { return 2 }
+            return name.contains("Z-") ? 0 : 1
+        }
+        // The latest session is whatever was created at or after its 1Hz file,
+        // which `start()` creates before the trace.
+        let latestStart = bulky.filter { family($0) == 2 }.map(\.created).max() ?? .distantFuture
         let rank = { (entry: Entry) in
-            (entry.url.lastPathComponent.hasPrefix("telemetry-frames-") ? 0 : 1, entry.modified)
+            (entry.created >= latestStart ? 1 : 0, family(entry), entry.modified)
         }
         var total = bulky.reduce(UInt64(0)) { $0 &+ $1.size }
         if enforceBudget && total > logsByteBudget {
