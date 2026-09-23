@@ -26,6 +26,8 @@ enum WakeOutcome: Equatable {
 extension AppModel {
     private static var wakeTask: Task<Void, Never>?
     static let wakeBudgetSeconds: Double = 90
+    /// The launcher and `glimmer wake` both say this when a wake gets no answer.
+    static let wakeNoAnswerHint = "Wake on LAN works on your home network; over Tailscale it can't reach the PC."
 
     /// The PC opted in and Sunshine has told us its network address.
     func canWake(_ host: Host) -> Bool {

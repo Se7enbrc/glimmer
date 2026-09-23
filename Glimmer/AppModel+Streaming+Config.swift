@@ -170,15 +170,19 @@ extension AppModel {
         "Stream \(heroTargetAppName)"
     }
 
+    /// The hero target as an app on the selected PC, falling back like the
+    /// Default action does. `glimmer stream <pc>` launches the same one.
+    var heroTargetApp: LibraryApp? {
+        guard let host = selectedHost else { return nil }
+        return host.apps.first { $0.name == heroTargetAppName }
+            ?? host.apps.first { $0.name == "Desktop" }
+            ?? host.apps.first
+    }
+
     /// Launch the hero target (the primary click / Return-key action).
     func streamHeroApp() {
-        guard let host = selectedHost else { return }
-        if let name = resumableAppName,
-           let app = host.apps.first(where: { $0.name == name }) {
-            requestStream(app: app, on: host)
-        } else {
-            streamDefaultApp()
-        }
+        guard let host = selectedHost, let app = heroTargetApp else { return }
+        requestStream(app: app, on: host)
     }
 
     /// Bridge our published quality settings into the engine's StreamConfig.

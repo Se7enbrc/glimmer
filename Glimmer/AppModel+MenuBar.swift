@@ -82,10 +82,10 @@ extension AppModel {
         Task { [weak self] in await self?.nativeSession?.toggleMiniPlayer() }
     }
 
-    func stopStreamFromMenu() {
+    func stopStreamFromMenu(source: String = "the menu bar") {
         guard let session = nativeSession, !menuStopInProgress else { return }
         menuStopInProgress = true
-        Diag.notice("Stop Streaming from the menu bar", "Stream")
+        Diag.notice("Stop Streaming from \(source)", "Stream")
         Task { await session.stop() }
     }
 
