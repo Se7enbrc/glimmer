@@ -51,10 +51,9 @@ extension RtpAudioReceiver {
         }
     }
 
-    /// AES-128-CBC decrypt one audio payload (AudioStream.c:178-219). IV =
-    /// BE32(avRiKeyId &+ seq) in iv[0..3], iv[4..15] = 0. Key = remoteInputAesKey.
-    /// The host pads with PKCS7 (Sunshine's cbc_t), which is stripped here so
-    /// opus never sees the pad bytes. Returns nil on failure.
+    /// AES-128-CBC decrypt one audio payload (AudioStream.c:178-219) with remoteInputAesKey
+    /// and IV = BE32(avRiKeyId &+ seq) plus 12 zero bytes. Strips the host's PKCS7 padding
+    /// (Sunshine's cbc_t) so opus never sees it. Returns nil on failure.
     func decryptCbc(_ ciphertext: [UInt8], sequenceNumber seq: UInt16) -> [UInt8]? {
         guard aesKey.count == 16, !ciphertext.isEmpty else { return nil }
 

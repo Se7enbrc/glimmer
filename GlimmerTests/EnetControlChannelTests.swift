@@ -131,17 +131,38 @@ struct EnetControlChannelTests {
 
     @Test func repeatRfiWaitsOutTheSpacingThenSends() throws {
         let (channel, _) = try Self.makeChannel()
+        let spacing = EnetControlChannel.recoveryMinSpacingMs
         channel.invalidateReferenceFrames(from: 10, to: 12)
         #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
         #expect(Self.urgentRelSeq(channel) == 1)
 
         // A second loss inside the spacing is held, and the loop wakes when it's due.
         channel.invalidateReferenceFrames(from: 13, to: 14)
+        channel.lastRfiSentMs = channel.serviceTimeMs
         let wait = channel.drainPendingRecoveryRequests()
-        #expect(wait >= 1 && wait <= EnetControlChannel.rfiMinSpacingMs)
+        #expect(wait >= 1 && wait <= spacing)
         #expect(Self.urgentRelSeq(channel) == 1)
 
-        channel.lastRfiSentMs = channel.serviceTimeMs &- EnetControlChannel.rfiMinSpacingMs
+        channel.lastRfiSentMs = channel.serviceTimeMs &- spacing
+        #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
+        #expect(Self.urgentRelSeq(channel) == 2)
+    }
+
+    @Test func repeatIdrWaitsOutTheSpacingThenSends() throws {
+        let (channel, _) = try Self.makeChannel()
+        let spacing = EnetControlChannel.recoveryMinSpacingMs
+        channel.requestIdrFrame()
+        #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
+        #expect(Self.urgentRelSeq(channel) == 1)
+
+        // The next failed frame's IDR inside the spacing is held until it's due.
+        channel.requestIdrFrame()
+        channel.lastIdrSentMs = channel.serviceTimeMs
+        let wait = channel.drainPendingRecoveryRequests()
+        #expect(wait >= 1 && wait <= spacing)
+        #expect(Self.urgentRelSeq(channel) == 1)
+
+        channel.lastIdrSentMs = channel.serviceTimeMs &- spacing
         #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
         #expect(Self.urgentRelSeq(channel) == 2)
     }
@@ -151,6 +172,7 @@ struct EnetControlChannelTests {
         channel.invalidateReferenceFrames(from: 10, to: 12)
         _ = channel.drainPendingRecoveryRequests()
         channel.invalidateReferenceFrames(from: 13, to: 14)
+        channel.lastRfiSentMs = channel.serviceTimeMs
         _ = channel.drainPendingRecoveryRequests() // held by the spacing
         channel.requestIdrFrame()
         #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)

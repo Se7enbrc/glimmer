@@ -140,11 +140,9 @@ extension EnetControlChannel {
             sendEnetPing()
         }
 
-        // Drain coalesced IDR/RFI requests: at most ONE REQUEST_IDR (or one
-        // RFI) per drain, no matter how many failed frames asked for one since
-        // the last. This is moonlight's requestIdrFrameFunc dedicated drain
-        // (ControlStream.c:1624-1640): a request wakes the loop, so it leaves
-        // at once, and the per-failed-frame IDR storm stays one per loss event.
+        // Drain coalesced IDR/RFI requests (moonlight's requestIdrFrameFunc): a request
+        // wakes the loop and leaves at once, and repeats of each kind stay 20 ms apart,
+        // so a per-failed-frame IDR storm sends no more than the old tick did.
         state.nextWaitMs = drainPendingRecoveryRequests()
 
         // Reliable retransmits (covers both ping types + IDR/RFI/LTR).
@@ -167,23 +165,9 @@ extension EnetControlChannel {
         return true
     }
 
-    /// The persistent control loop NativeBackend runs after establishAndStart()
-    /// returns "connected". Sustains the session by emitting BOTH keepalives:
-    ///   (A) the app-level periodic ping (encrypted 0x0200) every 100ms - the
-    ///       Sunshine stream keepalive that keeps video flowing; and
-    ///   (B) the transport-level ENet PING (0x85, ch 0xFF) every 500ms of no
-    ///       send - keeps the host's ENet peer from timing out.
-    /// It also drives checkRetransmit() so reliable sends (including the pings)
-    /// get ACKed/resent. Inbound datagrams continue to be handled by the
-    /// existing receive loop (onDatagram). Bounded 20ms tick; cancellable via
-    /// interrupt().
-    ///
-    /// SYNCHRONOUS variant - run on a DEDICATED Thread (qos .userInteractive) by
-    /// NativeBackend, NOT on the Swift cooperative pool. The 20ms tick is a
-    /// blocking semaphore wait so the loop that must emit ACKs/keepalives cannot be
-    /// de-prioritized or starved behind high-QoS main-thread input - the moonlight
-    /// LossStats + ControlRecv dedicated-thread guarantee. An IDR/RFI request
-    /// signals `recoveryWake` to end the wait early.
+    /// The persistent post-connect loop, on NativeBackend's DEDICATED Thread (not the pool):
+    /// ticks controlLoopTick, then blocks on `recoveryWake` (an IDR/RFI request ends the wait
+    /// early), so keepalives and ACKs never starve behind main-thread input. Ends on interrupt().
     func runControlLoopSync() {
         var state = startControlLoop()
         while !interrupted.isSet {

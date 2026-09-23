@@ -196,15 +196,16 @@ final class EnetControlChannel: @unchecked Sendable {
     // 890,891,892... "decoder requested IDR" storm that amplifies loss.
     //
     // `requestIdrFrame()` and `invalidateReferenceFrames(from:to:)` SET state
-    // here (under stateLock) and wake the control loop, whose drain sends AT
-    // MOST ONE REQUEST_IDR (or RFI) per loss event.
+    // here (under stateLock) and wake the control loop, whose drain sends one
+    // REQUEST_IDR or RFI at a time, repeats spaced `recoveryMinSpacingMs` apart.
 
     /// Wakes the control loop the moment a request goes idle→pending, so an
     /// IDR/RFI leaves now instead of on the next 20ms tick. Edge-signaled only,
     /// so its count never builds up past a couple of spare wakes.
     let recoveryWake = DispatchSemaphore(value: 0)
-    /// serviceTimeMs of the last wire RFI; repeats keep the old tick's spacing.
-    /// Control-loop thread only.
+    /// serviceTimeMs of the last wire IDR and RFI; repeats of each keep the old
+    /// tick's spacing. Control-loop thread only.
+    var lastIdrSentMs: UInt32?
     var lastRfiSentMs: UInt32?
 
     /// Level-triggered "an IDR is needed" flag (mirrors PltSetEvent on

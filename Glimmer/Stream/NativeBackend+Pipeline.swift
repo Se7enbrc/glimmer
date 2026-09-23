@@ -190,15 +190,9 @@ extension NativeBackend {
         }
         events.stageComplete("video stream initialization")
 
-        // Kick off the persistent ENet control loop (keepalives) on a DEDICATED
-        // elevated-QoS Thread - NOT the Swift cooperative pool. The loop that must
-        // emit ACKs/keepalives to keep the host's ENet peer alive cannot be allowed
-        // to starve behind high-QoS main-thread controller input (the cooperative
-        // pool is capped at ~CPU-count threads and these Tasks ran at default QoS).
-        // This is moonlight's dedicated LossStats/ControlRecv pthread guarantee; the
-        // loop's tick is a blocking Thread.sleep (runControlLoopSync) so it never
-        // depends on pool availability. The Thread holds no strong ref to self and
-        // exits when the channel is interrupted/disconnected.
+        // The ENet control loop gets a DEDICATED userInteractive Thread, not the pool:
+        // its tick is a blocking semaphore wait (runControlLoopSync) that an IDR/RFI
+        // request ends early. No strong ref to self; exits on interrupt or disconnect.
         let controlThread = Thread { [weak enet] in
             enet?.runControlLoopSync()
         }
