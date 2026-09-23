@@ -242,9 +242,9 @@ public actor StreamSession {
     static let recoverableTerminationCodes: Set<Int32> = [
         Int32(bitPattern: 0x80030023), Int32(bitPattern: 0x80030013)
     ]
-    /// Our OWN ENet dead-peer self-terminate (ackSilence cutoff → onTerminated(-1)).
-    /// Recoverable ONLY after live state (the radio-doze / link-blip case); a -1
-    /// before live is a failed connect and falls through to honest teardown.
+    /// Our OWN ENet dead-peer code (declarePeerDead): ACK silence, a failed control socket or receive,
+    /// or a host ENet DISCONNECT. Recoverable ONLY after live state (link loss or blip); a -1 before
+    /// live is a failed connect and falls through to honest teardown.
     static let deadPeerTerminationCode: Int32 = -1
     /// Bound the reconnect episode: at most this many attempts...
     static let reconnectAttemptCap = 5

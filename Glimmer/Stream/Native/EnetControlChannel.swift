@@ -186,18 +186,8 @@ final class EnetControlChannel: @unchecked Sendable {
     var negotiatedChannelCount: UInt32 = Enet.ctrlChannelCount
 
     // MARK: - IDR / RFI request coalescing (ControlStream.c idrFrameRequiredEvent)
-    //
-    // moonlight funnels EVERY LiRequestIdrFrame() into a level-triggered event
-    // (idrFrameRequiredEvent) drained by ONE dedicated thread (requestIdrFrameFunc,
-    // ControlStream.c:1624-1640): N sets between two drains collapse into ONE wire
-    // REQUEST_IDR, and a pending IDR flushes any queued RFIs (LiRequestIdrFrame
-    // ControlStream.c:415-422 → freeBasicLbqList(referenceFrameControlQueue)).
-    // Without this, every failed frame fires its own reliable wire IDR - the
-    // 890,891,892... "decoder requested IDR" storm that amplifies loss.
-    //
-    // `requestIdrFrame()` and `invalidateReferenceFrames(from:to:)` SET state
-    // here (under stateLock) and wake the control loop, whose drain sends one
-    // REQUEST_IDR or RFI at a time, repeats spaced `recoveryMinSpacingMs` apart.
+    // Like moonlight's requestIdrFrameFunc (ControlStream.c:1624-1640), requests only set state here and
+    // wake the control loop, whose drain turns a per-failed-frame storm into one wire REQUEST_IDR or RFI.
 
     /// Wakes the control loop the moment a request goes idle→pending, so an
     /// IDR/RFI leaves now instead of on the next 20ms tick. Edge-signaled only,

@@ -155,18 +155,9 @@ enum SdpScan {
 
 // MARK: - SDP builder (ANNOUNCE payload)
 
-/// Builds the SDP blob for the control ANNOUNCE, faithful to
-/// getSdpPayloadForStreamConfig (header + ordered attributes + tail).
-///
-/// Reference-frame invalidation (RFI) is advertised when BOTH the host
-/// supports it (DESCRIBE SDP `x-nv-video[0].refPicInvalidation`) AND our
-/// decoder supports it for the negotiated codec (the sink's CAPABILITY_*
-/// bits) - see `referenceFrameInvalidationActive`. That gate drives
-/// maxNumReferenceFrames (0 = host may keep older good refs for an RFI
-/// recovery; 1 = single ref ⇒ every loss recovery is a full IDR). YUV444 and
-/// the codec block follow the negotiated format; control-V2 and audio
-/// encryption follow what the host supports (RtspClient.computeEncryptionEnabled),
-/// and video stays plaintext.
+/// The control ANNOUNCE's SDP, faithful to moonlight's getSdpPayloadForStreamConfig. RFI is advertised only when
+/// the host and our decoder both support it (`referenceFrameInvalidationActive`); the codec block follows the
+/// negotiated format, and control-V2 and audio encryption follow the host (video stays plaintext).
 struct SdpBuilder {
     let config: BackendStreamConfig
     let videoPort: UInt16

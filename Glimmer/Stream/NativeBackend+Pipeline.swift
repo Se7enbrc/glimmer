@@ -269,22 +269,9 @@ extension NativeBackend {
         }
     }
 
-    /// FAST-START (mid-handshake, at SETUP-audio): construct the RtpAudioReceiver
-    /// and start ONLY the burst-ping side (socket open + ping thread) so the host
-    /// has our ping - and our return UDP port - in hand by PLAY. This is the
-    /// ordering fix for the ~2min audio-cold-start: moonlight opens the audio
-    /// socket + starts the ping thread the instant SETUP-audio is parsed
-    /// (notifyAudioPortNegotiationComplete), because Sunshine won't aim audio at us
-    /// (and GFE 3.22 won't even reply to PLAY) until it has received a ping.
-    ///
-    /// audioPort, pingPayload and audioEncryption are settled by now;
-    /// opus/packetDuration use the fixed defaults (they're never mutated by later
-    /// handshake steps). The recv side + decoder init happen later in
-    /// startAudioReceive() on the SAME receiver.
-    ///
-    /// Best-effort: a ping failure logs but does NOT abort the handshake (audio is
-    /// non-fatal). The receiver is stored so a later-stage failure tears it down
-    /// (run()'s catch → tearDownAudio).
+    /// FAST-START at SETUP-audio, like moonlight's notifyAudioPortNegotiationComplete: build the receiver and
+    /// start only its ping, so Sunshine has our ping and return port by PLAY. Best-effort (audio is non-fatal);
+    /// startAudioReceive() later brings up the SAME receiver's recv side, and run()'s catch tears it down.
     func startAudioPing(
         audioPort: UInt16, pingPayload: [UInt8], audioEncryption: Bool,
         config: BackendStreamConfig, server: BackendServerInfo, host: NWEndpoint.Host

@@ -1,12 +1,9 @@
 //
 //  RtpAudioReceiver+Decrypt.swift
 //
-//  The decode hand-off: strip the 12-byte RTP header and hand the opus bytes
-//  to the sink, with the AES-128-CBC path (on whenever the host offers
-//  SS_ENC_AUDIO) and its CommonCrypto helper. Split out of
-//  RtpAudioReceiver.swift - pure move, the FramePacer split idiom -
-//  to keep that file under the length limit; the aesKey/avRiKeyId material
-//  stays declared on the receiver.
+//  The decode hand-off: strip the 12-byte RTP header and hand the opus bytes to the sink,
+//  AES-128-CBC decrypted whenever the host offered SS_ENC_AUDIO. Split out of
+//  RtpAudioReceiver.swift, which keeps the aesKey/avRiKeyId material.
 //
 
 import Foundation

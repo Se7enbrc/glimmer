@@ -23,10 +23,9 @@
 //  start sending video until it receives a ping - this is the most likely fix
 //  for the frame watchdog firing on the native path today.
 //
-//  RECEIVE (VideoStream.c:85-236): for our SDP (encEnabled=0 ⇒ SS_ENC_VIDEO
-//  unset) video is PLAINTEXT - NO decryption. Drop runt packets (< 12 bytes),
-//  hand the rest to RtpVideoQueue which host-byteswaps the RTP header, runs FEC,
-//  and feeds the depacketizer → VideoSink.
+//  RECEIVE (VideoStream.c:85-236): we never enable SS_ENC_VIDEO, so video is PLAINTEXT. Drop runt
+//  packets (< 12 bytes) and hand the rest to RtpVideoQueue, which host-byteswaps the RTP header, runs
+//  FEC and feeds the depacketizer → VideoSink.
 //
 //  Teardown is bounded: the recv loop blocks in recvfrom with a 100ms SO_RCVTIMEO
 //  so it polls `interrupted` and exits within 100ms; stop() also close()s the fd,
@@ -151,7 +150,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// already listening when the first ping goes out.
     func start() async throws {
         if encrypted {
-            // Defensive: our negotiated SDP has encEnabled=0. We do not yet
+            // Defensive: we never enable SS_ENC_VIDEO (computeEncryptionEnabled). We do not yet
             // implement the AES-GCM ENC_VIDEO_HEADER path; fail loudly rather
             // than silently AES-fail every packet.
             Diag.error("NativeVideo SS_ENC_VIDEO set but native video decrypt "

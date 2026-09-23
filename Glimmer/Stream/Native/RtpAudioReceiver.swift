@@ -23,14 +23,9 @@
 //  won't aim audio at us until it has received a ping - so ping + receive MUST
 //  share one socket.
 //
-//  RECEIVE (AudioStream.c:239-383): drop runt packets (< 12 bytes); byteswap
-//  the RTP header BE→host; feed the queue; dispatch the queue result to the
-//  decoder. Where the C drops a fixed first-500ms of audio (GFE buffers samples
-//  before the client is ready), we run a backlog-aware startup gate instead -
-//  Sunshine paces audio live from seq ~0, so the fixed drop cost half a second
-//  of LIVE audio per session (see the gate state docs below). Audio is AES-CBC
-//  encrypted whenever the host supports it (SS_ENC_AUDIO), decrypted at the
-//  decode hand-off.
+//  RECEIVE (AudioStream.c:239-383): drop runts (< 12 bytes), byteswap the RTP header, feed the queue and
+//  decode, AES-CBC decrypting first when SS_ENC_AUDIO is on. A backlog-aware startup gate replaces the C's
+//  fixed 500ms drop, which cost live audio because Sunshine paces audio from seq ~0 (see the gate docs).
 //
 //  Teardown is bounded: recvfrom blocks with a 100ms SO_RCVTIMEO so the loop
 //  polls `interrupted` and exits within 100ms; stop() also close()s the fd, which
@@ -290,19 +285,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// retrying regardless (it never gives up).
     static let audioPendingProbeSeconds = 3.0
 
-    /// - Parameters:
-    ///   - host: the host IP (from RTSP), IP literal expected.
-    ///   - audioPort: the negotiated SETUP-audio server port (fallback 48000).
-    ///   - pingPayload: 16 raw bytes from X-SS-Ping-Payload, or empty for legacy.
-    ///   - appVersionQuad: parsed host version [major, minor, patch, build].
-    ///   - audioPacketDuration: AudioPacketDuration in ms (5 default).
-    ///   - opusConfig: the negotiated OPUS_MULTISTREAM config (samplesPerFrame is
-    ///     expected to already be 48 * audioPacketDuration).
-    ///   - audioConfig: GFE/Sunshine channel-layout code (STREAM_CFG audio config).
-    ///   - audioEncryption: true iff we enabled AES-CBC audio (SS_ENC_AUDIO).
-    ///   - aesKey: remoteInputAesKey (16 bytes). Unused when not encrypting.
-    ///   - aesIvId: remoteInputAesIv (first 4 bytes seed the per-packet IV).
-    ///   - sink: the decode/playback sink.
+    /// `host` is an IP literal from RTSP, `audioPort` SETUP-audio's (fallback 48000), `pingPayload` X-SS-Ping-Payload's
+    /// 16 bytes (empty for legacy GFE); `opusConfig.samplesPerFrame` is 48 × `audioPacketDuration` ms. `aesKey` and
+    /// `aesIvId` (remoteInputAesKey/Iv, whose first 4 bytes seed the IV) are used only when `audioEncryption` is on.
     init(host: NWEndpoint.Host,
          audioPort: UInt16,
          pingPayload: [UInt8],

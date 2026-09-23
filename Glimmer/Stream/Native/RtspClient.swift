@@ -128,13 +128,9 @@ final class RtspClient: @unchecked Sendable {
     /// Outbound GCM sequence number (pre-incremented per sealed message from 1).
     var encryptionSeq: UInt32 = 0
 
-    /// Invoked the instant SETUP-audio is parsed (audioPort + audioPingPayload
-    /// known, audio encryption settled at DESCRIBE), BEFORE SETUP video /
-    /// ANNOUNCE / PLAY. The pipeline uses this to
-    /// open the audio socket + start the burst ping mid-handshake, mirroring
-    /// moonlight's notifyAudioPortNegotiationComplete() - Sunshine won't aim audio
-    /// at us (and GFE 3.22 won't even reply to PLAY) until it has seen a ping.
-    /// Synchronous so the ping is provably running before the handshake proceeds.
+    /// Fired synchronously once SETUP-audio is parsed (encryption settled at DESCRIBE), before SETUP video,
+    /// ANNOUNCE and PLAY, so the audio ping is running first: moonlight's notifyAudioPortNegotiationComplete(),
+    /// since Sunshine won't aim audio at us (and GFE 3.22 won't answer PLAY) until it has seen a ping.
     var onAudioPortNegotiated: ((_ audioPort: UInt16, _ pingPayload: [UInt8], _ audioEncryption: Bool) -> Void)?
 
     /// Cancellation flag flipped by the orchestrator on interrupt.

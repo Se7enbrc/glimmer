@@ -233,14 +233,9 @@ extension EnetControlChannel {
     // EnetControlChannel+ControlMessages.swift, split out to keep this file
     // under the length limit.
 
-    /// Decrypt + dispatch one inbound host control payload (the inner bytes of a
-    /// SEND_RELIABLE). Every host control message on the encrypted stream is the
-    /// envelope type 0x0001 → crypto.open() yields [type LE][len LE][payload].
-    /// Dispatch on the inner type: TERMINATION → onTerminated; HDR → onHdrMode
-    /// (transition-gated); RUMBLE → onRumble; TRIGGER RUMBLE → onRumbleTriggers;
-    /// RGB LED → onSetRgbLed; MOTION ENABLE → onSetMotionEvent; unknown →
-    /// count + once-per-type log + continue (NOT bail). Mirrors
-    /// controlReceiveThreadFunc. Returns whether the payload authenticated.
+    /// Decrypt and dispatch one SEND_RELIABLE control payload (envelope 0x0001, [type LE][len LE][payload]),
+    /// mirroring controlReceiveThreadFunc: TERMINATION goes through declarePeerDead, the rest to their
+    /// callbacks, unknown types are counted. Returns whether the payload authenticated.
     func handleInboundControl(_ bytes: [UInt8]) -> Bool {
         guard bytes.count >= 2 else { return rejectInboundControl("runt, \(bytes.count) bytes") }
         let envelopeType = UInt16(bytes[0]) | (UInt16(bytes[1]) << 8)

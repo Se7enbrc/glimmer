@@ -1,11 +1,9 @@
 //
 //  VideoDepacketizer.swift
 //
-//  The Swift-native depacketizer: turns the in-order, FEC-reconstructed RTP
-//  video packets that RtpVideoQueue produces into complete access units
-//  (DecodeUnit value types) and hands them to the injected VideoSink. Ports
-//  VideoDepacketizer.c (processRtpPayload + reassembleFrame), scoped to the AV1
-//  path our live host negotiates (AV1, encEnabled=0).
+//  The Swift-native depacketizer: turns RtpVideoQueue's in-order, FEC-reconstructed RTP packets into
+//  complete access units (DecodeUnit) for the injected VideoSink. Ports VideoDepacketizer.c
+//  (processRtpPayload + reassembleFrame), scoped to the plaintext AV1 path our live host negotiates.
 //
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
