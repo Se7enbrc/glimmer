@@ -238,9 +238,6 @@ extension EnetControlChannel {
     /// handle_verify_connect (protocol.c:948-1008). Validate connectID +
     /// throttle params; learn outgoingPeerID + session ids; mark connected.
     func handleVerifyConnect(_ reader: inout ByteReader) {
-        // ENet acts on VERIFY_CONNECT only while connecting; a late or forged one
-        // must not flip `disconnected` behind declarePeerDead's back.
-        if withState({ connected }) { return }
         guard let vcOutgoingPeerID = reader.u16BE(),
               let vcIncomingSession = reader.u8(),
               let vcOutgoingSession = reader.u8(),
@@ -256,6 +253,10 @@ extension EnetControlChannel {
             Diag.error("ENet VERIFY_CONNECT truncated", Self.logCategory)
             return
         }
+        // ENet acts on VERIFY_CONNECT only while connecting; a late or forged one
+        // must not flip `disconnected` behind declarePeerDead's back. Checked after
+        // the body is read so the commands coalesced behind it still parse.
+        if withState({ connected }) { return }
 
         // Strict validation - any mismatch zombies the peer in the C code.
         if channelCount < 1 || channelCount > 255

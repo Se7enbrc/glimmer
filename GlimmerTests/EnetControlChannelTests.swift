@@ -94,6 +94,17 @@ struct EnetControlChannelTests {
         #expect(codes.values == [Self.hostCode])
     }
 
+    @Test func lateVerifyConnectKeepsTheCommandsBehindIt() throws {
+        let (channel, codes) = try Self.makeChannel()
+        channel.withState { channel.connected = true }
+        // A VERIFY_CONNECT retransmitted after connect (40-byte body), then a TERMINATION.
+        let verifyConnect = [Enet.cmdVerifyConnect | Enet.flagAcknowledge, Enet.peerChannelID, 0, 1]
+            + [UInt8](repeating: 0, count: 40)
+        let datagram = Self.reliable(relSeq: 1, try Self.termination(seq: 0))
+        channel.onDatagram(Array(datagram[..<4]) + verifyConnect + datagram[4...])
+        #expect(codes.values == [Self.hostCode])
+    }
+
     @Test func ackSilenceCutoffThenLateTerminationFiresOnce() throws {
         let (channel, codes) = try Self.makeChannel()
         var state = channel.startControlLoop() // sends a ping, so a reliable is outstanding
