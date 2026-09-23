@@ -170,10 +170,11 @@ request that has no pin to check (search for `SECURITY (C2)` in
 **Failure path.** Any deviation throws `StreamError.pairingFailed` with a
 specific message at `.private` log privacy. The caller sees a uniform "pairing
 failed" - the specific cause (wrong PIN, MITM detected, host mid-pair with
-someone else) is recoverable from logs under our subsystem, not from the UI. We
-send `/unpair` after a failure to clear the host's "Already pairing" state for
-retry. The one cause the UI does name is a PIN nobody entered within five
-minutes, since that reveals nothing about the handshake.
+someone else) is recoverable from logs under our subsystem, not from the UI. The
+causes the UI does name reveal nothing about the handshake: a PIN nobody entered
+in time (our five-minute wait, or Sunshine's status 408), and a PC busy with
+another open pairing request (409 or 503). Sunshine has no `/unpair` route, so
+an open request ends only when it completes, fails or expires.
 
 ## Pinning
 
