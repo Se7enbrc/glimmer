@@ -131,4 +131,18 @@ struct ControllerQuitChordTests {
         #expect(InputForwarder.chordSatisfied(.custom, custom: [.mute, .touchpad], held: [.mute, .touchpad, .l1]))
         #expect(!InputForwarder.chordSatisfied(.custom, custom: [.mute, .touchpad], held: [.mute]))
     }
+
+    // MARK: - Raw-HID dependency
+
+    @Test func onlyCreateOrMuteChordsNeedRawHID() {
+        #expect(InputForwarder.needsRawHIDCenterButtons(chord: .startSelectL1R1, custom: []))
+        for preset: ControllerQuitChord in [.none, .l1r1, .l1r1l2r2, .l3r3] {
+            #expect(!InputForwarder.needsRawHIDCenterButtons(chord: preset, custom: [.create, .mute]), "\(preset)")
+        }
+        #expect(InputForwarder.needsRawHIDCenterButtons(chord: .custom, custom: [.l1, .create]))
+        #expect(InputForwarder.needsRawHIDCenterButtons(chord: .custom, custom: [.mute]))
+        // Options and PS have GameController fallbacks (Menu and Home).
+        #expect(!InputForwarder.needsRawHIDCenterButtons(chord: .custom, custom: [.options, .ps, .r1]))
+        #expect(!InputForwarder.needsRawHIDCenterButtons(chord: .custom, custom: []))
+    }
 }

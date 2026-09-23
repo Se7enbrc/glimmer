@@ -192,8 +192,9 @@ extension InputForwarder {
         // centre buttons, so a quit chord that needs them silently never fires
         // (the diagnosed regression - invisible because the open state only logged
         // at INFO). Surface it once, plainly, so the fix is obvious.
-        if isDualSense, !useHID, quitChordNeedsRawHIDCenterButtons(),
-           !Self.warnedQuitChordNeedsRawHID {
+        if isDualSense, !useHID, !Self.warnedQuitChordNeedsRawHID,
+           Self.needsRawHIDCenterButtons(chord: controllerQuitChordProvider(),
+                                         custom: customControllerChordProvider()) {
             Self.warnedQuitChordNeedsRawHID = true
             Diag.notice("Quit chord needs DualSense centre buttons (Create/Mute) that require "
                 + "raw-HID, but raw-HID controller support is OFF - the chord will NOT fire on "
