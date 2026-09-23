@@ -171,9 +171,11 @@ extension StreamSession {
         didLogDecodeOnlyStall = true
         // .public privacy so this lands in `log show` without --info - the
         // user reproducing "black screen, no error" needs this line.
-        log.error(
-            // swiftlint:disable:next line_length
-            "bytes received but no decoded output: decodeIdle=\(decodeIdle, privacy: .public)s receiveIdle=\(receiveIdle, privacy: .public)s (host is sending data we cannot decode - corrupt bitstream, missing IDR, or codec mismatch)"
+        log.error("""
+            bytes received but no decoded output: decodeIdle=\(decodeIdle, privacy: .public)s \
+            receiveIdle=\(receiveIdle, privacy: .public)s (host is sending data we cannot decode - corrupt bitstream, missing IDR, \
+            or codec mismatch)
+            """
         )
         // Mirror into the in-app LogStore so the decode-only stall is visible in
         // Troubleshooting → Logs (which reads only Diag.*).
@@ -257,9 +259,11 @@ extension StreamSession {
             }
             if !didLogWatchdogHold {
                 didLogWatchdogHold = true
-                log.notice(
-                    // swiftlint:disable:next line_length
-                    "Frame watchdog: no decoded frame in \(decodeIdleSeconds)s but control link is alive (ACK \(health.sinceLastAckMs, privacy: .public)ms ago) - holding, not tearing down (host likely paused video for a sign-in/desktop transition); requesting IDRs until it resumes"
+                log.notice("""
+                    Frame watchdog: no decoded frame in \(decodeIdleSeconds)s but control link is alive (ACK \
+                    \(health.sinceLastAckMs, privacy: .public)ms ago) - holding, not tearing down (host likely paused video for a \
+                    sign-in/desktop transition); requesting IDRs until it resumes
+                    """
                 )
                 Diag.notice(
                     "Video stalled \(Int(decodeIdleSeconds))s but the connection is "
@@ -274,9 +278,10 @@ extension StreamSession {
         let receiveDesc = receiveIdleSeconds.isFinite
             ? "\(receiveIdleSeconds)s"
             : "never"
-        log.error(
-            // swiftlint:disable:next line_length
-            "Frame watchdog tripped - no decoded frame in \(decodeIdleSeconds)s (last byte reception \(receiveDesc, privacy: .public)); tearing down"
+        log.error("""
+            Frame watchdog tripped - no decoded frame in \(decodeIdleSeconds)s (last byte reception \
+            \(receiveDesc, privacy: .public)); tearing down
+            """
         )
         // Also surface to the in-app LogStore (the user's Troubleshooting → Logs
         // view reads ONLY Diag.*, not os.Logger), so a watchdog-triggered stop
