@@ -75,16 +75,6 @@ final class StatsCollector: @unchecked Sendable {
     // (`now - windowStart >= minWindowSeconds`), so the reported FPS is the
     // average over the last ~1s sampling window even when the overlay reads at
     // 4 Hz - same shape as moonlight-qt's `STATS_INTERVAL` accumulators.
-    /// Wall-clock of the last frame the native backend's receive thread
-    /// handed us. Reception != decode: a host sending packets we can't
-    /// decode (corrupted bitstream, missing IDR, AV1-on-no-AV1-hardware)
-    /// is invisible to a reception-gated watchdog, so StreamSession's
-    /// watchdog gates on `lastDecodedFrameTime`. This field lives on so
-    /// the watchdog can distinguish "host silent" (no reception either)
-    /// from "host sending but we can't decode" (reception fine, decode
-    /// silent) and pick the right recovery (teardown vs. IDR-request).
-    /// 0 means we haven't received our first frame yet.
-    var lastReceivedFrameTime: CFAbsoluteTime = 0
     /// Wall-clock of the last frame VT successfully produced a CVPixelBuffer
     /// for. Set from the VT output callback on the success path.
     /// 0 means we haven't decoded our first frame yet.
@@ -255,7 +245,6 @@ final class StatsCollector: @unchecked Sendable {
         decoderDroppedFrames = 0
         renderedFrames = 0
         receivedBytes = 0
-        lastReceivedFrameTime = 0
         lastDecodedFrameTime = 0
         lastPresentTime = 0
         windowStart = CACurrentMediaTime()

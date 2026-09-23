@@ -8,10 +8,10 @@
 //  session. There is no client→host bitrate request wired for this Sunshine
 //  profile - FEC% is host-driven per frame, and the per-frame FEC-status
 //  feedback moonlight uses collides on the wire with IDX_SET_RGB_LED and is
-//  deliberately never sent (see FecHeadroomController). The rate is set once, in
-//  the SDP, at ANNOUNCE. So the ONLY way to change it is to build a new SDP -
-//  i.e. reconnect. That is not a workaround for a missing message; it is the
-//  mechanism the protocol actually offers.
+//  deliberately never sent (see EnetControlChannel.queueFrameFecStatus). The
+//  rate is set once, in the SDP, at ANNOUNCE. So the ONLY way to change it is
+//  to build a new SDP - i.e. reconnect. That is not a workaround for a missing
+//  message; it is the mechanism the protocol actually offers.
 //
 //  THE HOLE THIS FILLS: the frame watchdog's HOLD-IF-ALIVE branch is correct for
 //  the case it was written for - the host paused its encoder (Windows sign-in →

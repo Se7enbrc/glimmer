@@ -142,7 +142,7 @@ extension RtpVideoQueue {
         let isParity = !Self.isBefore16(seq, bufferFirstParitySequenceNumber)
         let entry = Entry(bytes: bytes, length: rtp.length, seq: seq, ts: timestamp,
                           ssrc: rtp.ssrc, header: rtp.header, isParity: isParity)
-        if !queuePacket(entry) {
+        if !queuePacket(entry, isFecRecovery: false) {
             return .rejected
         }
 
@@ -193,8 +193,9 @@ extension RtpVideoQueue {
            currentFrameNumber != frameIndex,
            deferredDatagram == nil,
            isFecRecoveryStillPossible(),
-           receiveTimeUs &- bufferFirstRecvTimeUs < reorderWindowUs {
+           receiveTimeUs &- bufferFirstRecvTimeUs < Self.reorderWindowUs {
             deferredDatagram = (rtp.bytes, receiveTimeUs)
+            Self.reorderHoldTakenTotal.increment()
             return .finished(.queued)
         }
 
@@ -329,6 +330,7 @@ extension RtpVideoQueue {
             // never reorder frames into the depacketizer; we only delayed the
             // loss DECISION). Replay drives addPacket re-entrantly, but the
             // one-deep slot is cleared first so depth is bounded to 1.
+            if deferredDatagram != nil { Self.reorderHoldRescuedTotal.increment() }
             replayDeferredDatagram()
         }
     }
@@ -363,14 +365,14 @@ extension RtpVideoQueue {
     /// the unmodified loss path declares the (genuinely lost) current frame.
     func flushDeferredIfWindowElapsed(nowUs: UInt64) {
         guard deferredDatagram != nil else { return }
-        if nowUs &- bufferFirstRecvTimeUs >= reorderWindowUs {
+        if nowUs &- bufferFirstRecvTimeUs >= Self.reorderWindowUs {
             replayDeferredDatagram()
         }
     }
 
     // MARK: - queuePacket (c:111-182)
 
-    func queuePacket(_ newEntry: Entry) -> Bool {
+    func queuePacket(_ newEntry: Entry, isFecRecovery: Bool) -> Bool {
         if useFastQueuePath && newEntry.sequenceNumber == nextContiguousSequenceNumber {
             nextContiguousSequenceNumber = Self.u16(Int(newEntry.sequenceNumber) + 1)
         } else {
@@ -379,11 +381,13 @@ extension RtpVideoQueue {
             // AFTER the new entry's seq means this packet arrived late/out of
             // order. Latch receivedOosData so the cross-frame reorder hold turns
             // on for this (reordering) link (RtpVideoQueue.c:139-141,162-170).
+            // A shard FEC rebuilt sits behind its parity by construction and
+            // says nothing about the wire, so it never latches (as upstream).
             for entry in pending {
                 if entry.sequenceNumber == newEntry.sequenceNumber {
                     return false
                 }
-                if Self.isBefore16(newEntry.sequenceNumber, entry.sequenceNumber) {
+                if !isFecRecovery, Self.isBefore16(newEntry.sequenceNumber, entry.sequenceNumber) {
                     receivedOosData = true
                     lastOosPresentationUs = newEntry.presentationTimeUs
                 }

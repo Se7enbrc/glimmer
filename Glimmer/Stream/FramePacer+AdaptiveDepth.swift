@@ -72,8 +72,8 @@ extension FramePacer {
     ///
     /// RECONCILER ON, *after it has published a decision*: the desired depth comes
     /// from the UNIFIED jitter→headroom decision EnvSignalController publishes - `targetDepth +
-    /// headroomLevel` - so the pacer and the FEC reorder-hold walk off ONE shared
-    /// level instead of each reading `recvJitterMs` independently. headroomLevel 0
+    /// headroomLevel` - so the pacer walks off the ONE shared level instead of
+    /// reading `recvJitterMs` on its own. headroomLevel 0
     /// (clear / jitter under the dead-zone) → depth 1 (REST), each level up → +1
     /// depth, capped at `maxTargetDepth`. Only the TARGET changes; the grow/decay
     /// rate-limiter and the depth-1 floor below are untouched (they are the

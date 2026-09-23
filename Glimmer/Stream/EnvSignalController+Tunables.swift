@@ -3,7 +3,7 @@
 //
 //  The env-signal layer's VOCABULARY and DIALS: the reconciler kill-switch,
 //  the link-class + state enums (whose ordinals/rawValues are the wire and
-//  persistence labels), the FecHeadroomController contract numbers the
+//  persistence labels), the window and jitter/loss thresholds the
 //  sustained/hysteresis guarantees are expressed in, the reconciler decision
 //  mapping constants, and the conditional-keepalive cadence dials. Split out
 //  of EnvSignalController.swift (pure move) to keep each unit under the
@@ -23,12 +23,11 @@ extension EnvSignalController {
 
     /// When TRUE (the default) the unified LINK RECONCILER is live: this
     /// controller publishes ONE jitter→headroom decision (`headroomLevel` +
-    /// `smoothedJitterMs`) and both jitter-racing actuators - the FramePacer
-    /// adaptive depth and the FecHeadroomController reorder-hold - CONSUME it
-    /// instead of each reading `TelemetryCounters.recvJitterMs` independently.
+    /// `smoothedJitterMs`) and the FramePacer adaptive depth CONSUMES it
+    /// instead of reading `TelemetryCounters.recvJitterMs` on its own.
     ///
-    /// When FALSE both actuators fall back to their CURRENT self-deciding
-    /// behavior, unchanged - the old code paths stay reachable behind this flag,
+    /// When FALSE the pacer falls back to its CURRENT self-deciding
+    /// behavior, unchanged - the old code path stays reachable behind this flag,
     /// so the build compiles to "identical to today" with the flag off. A simple
     /// process-global flag, read on the actuators' own ticks. A compile-time
     /// constant (`let`): there is no runtime writer, so the A/B is a flip-and-
@@ -68,10 +67,10 @@ extension EnvSignalController {
         }
     }
 
-    // MARK: - Tunables (the FecHeadroomController contract numbers)
+    // MARK: - Tunables (the sustained/hysteresis contract numbers)
 
     /// Capture ticks folded into one evidence window (~2s at the exporter's
-    /// 1Hz - the same window size the FEC headroom controller trends on).
+    /// 1Hz - the same cadence as the RTP receive-metrics window).
     static let ticksPerWindow = 2
     /// Consecutive evidence windows before an escalation when the run carried
     /// CO-GAP evidence (~6s) - actual delivery impact earns the faster entry.
@@ -84,7 +83,7 @@ extension EnvSignalController {
     /// bleeds out smoothly and can never flap around a noisy boundary.
     static let quietWindowsPerStepDown = 15
     /// Minimum windows between ANY two level changes (the final anti-flap
-    /// floor, same role as FecHeadroomController.minDwellWindows).
+    /// floor on top of the asymmetric run counters).
     static let minDwellWindows = 2
     /// Escalate radio threshold: RSSI at or below session-p50 minus this many
     /// dB counts as degraded. Relax needs to clear a SMALLER deficit - the
@@ -101,29 +100,32 @@ extension EnvSignalController {
     /// session can never escalate off an unwarmed percentile.
     static let radioBaselineMinSamples = 60
 
+    // MARK: - Jitter/loss window thresholds
+
+    /// A window is jitter-degraded at or past any escalate line and jitter-quiet
+    /// only under all three relax lines; the gap between them is the dead band
+    /// that keeps a value on the boundary from flapping.
+    static let jitterEscalateMs = 8.0
+    static let jitterRelaxMs = 4.0
+    static let outOfOrderEscalate: UInt64 = 6
+    static let outOfOrderRelax: UInt64 = 2
+    static let retransmitEscalate: UInt64 = 4
+    static let retransmitRelax: UInt64 = 1
+
     // MARK: - Reconciler decision tunables
 
-    /// Maximum published headroom level. Matches FecHeadroomController.maxLevel
-    /// (3 = (48ms − 24ms) / 8ms) so a clean link→0 and full escalation→3 maps
-    /// one-to-one onto the FEC reorder-hold steps; the pacer depth maps
-    /// `targetDepth + level`, capped at `maxTargetDepth` (level 3 → depth 4,
-    /// under the depth-5 cap). The reconciler can never publish a level the FEC
-    /// actuator's `maxHoldUs` cap or the pacer's `maxTargetDepth` cap couldn't
-    /// already reach on its own.
-    static let maxHeadroomLevel = FecHeadroomController.maxLevel
-    /// Per-jitter-ms-of-excess that buys one headroom level, mirroring the FEC
-    /// soft `jitterEscalateMs` ladder: jitter at/under `headroomJitterDeadZoneMs`
-    /// → level 0 (REST); each `headroomJitterMsPerLevel` of excess above it adds
-    /// one level. Bridges the OBSERVE jitter trend into the shared level both
-    /// actuators consume.
-    static let headroomJitterDeadZoneMs = FecHeadroomController.jitterRelaxMs
-    static let headroomJitterMsPerLevel = FecHeadroomController.stepUs == 0 ? 8.0
-        : Double(FecHeadroomController.stepUs) / 1_000.0
-    /// EWMA weight smoothing the per-window recv-jitter that drives the published
-    /// headroom - copied from FecHeadroomController.jitterBaseEwmaWeight so the
-    /// FEC actuator's jitter-scaled base is byte-identical whether it consumes
-    /// the published value or (flag off) smooths its own.
-    static let jitterBaseEwmaWeight = FecHeadroomController.jitterBaseEwmaWeight
+    /// Maximum published headroom level. The pacer depth maps `targetDepth +
+    /// level`, capped at `maxTargetDepth` (level 3 → depth 4, under the depth-5
+    /// cap), so the reconciler can never ask for more than the cap allows.
+    static let maxHeadroomLevel = 3
+    /// Jitter at/under `headroomJitterDeadZoneMs` → level 0 (REST); each
+    /// `headroomJitterMsPerLevel` of excess above it adds one level. Bridges the
+    /// jitter trend into the shared level the consumers read.
+    static let headroomJitterDeadZoneMs = jitterRelaxMs
+    static let headroomJitterMsPerLevel = 8.0
+    /// EWMA weight smoothing the per-window recv-jitter behind the published
+    /// headroom, so one noisy window can't yank the level.
+    static let jitterBaseEwmaWeight = 0.3
 
     // MARK: - Keepalive cadence dials
 

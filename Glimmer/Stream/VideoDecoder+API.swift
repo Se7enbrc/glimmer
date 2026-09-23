@@ -112,8 +112,10 @@ extension VideoDecoder {
         statsCollector.secondsSinceLastDecodedFrame()
     }
 
+    /// Reads the video DATAGRAM clock, not assembled frames: frames shredded by
+    /// loss die in the depacketizer's recovery gate, and reception is still alive.
     public nonisolated func secondsSinceLastReceivedFrame() -> Double {
-        statsCollector.secondsSinceLastReceivedFrame()
+        RtpVideoQueue.secondsSinceLastDatagram()
     }
 
     /// Seconds since a frame last reached the renderer (the MODE-AGNOSTIC present

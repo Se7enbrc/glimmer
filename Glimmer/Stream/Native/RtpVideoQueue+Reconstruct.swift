@@ -184,7 +184,7 @@ extension RtpVideoQueue {
         let recoveredEntry = Entry(
             bytes: recovered, length: packetSize + dataOffset, seq: recoveredSeq,
             ts: ts, ssrc: ssrc, header: header, isParity: false)
-        _ = queuePacket(recoveredEntry)
+        _ = queuePacket(recoveredEntry, isFecRecovery: true)
     }
 
     // MARK: - stageCompleteFecBlock (c:465-524)

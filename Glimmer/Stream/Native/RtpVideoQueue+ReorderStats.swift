@@ -49,10 +49,10 @@ extension RtpVideoQueue {
         }
         if dispMs > reorderDispSessionMaxMs { reorderDispSessionMaxMs = dispMs }
         if dispPackets > reorderDispSessionMaxPackets { reorderDispSessionMaxPackets = dispPackets }
-        // THE INVARIANT: a reorder displaced past the live hold outlived its
+        // THE INVARIANT: a reorder displaced past the hold outlived its
         // release window (it was promoted to pre-FEC loss). Always-live counter;
         // the only reorder signal worth alerting on.
-        let holdMs = Double(reorderWindowUs) / 1000.0
+        let holdMs = Double(Self.reorderWindowUs) / 1000.0
         if dispMs > holdMs {
             TelemetryCounters.shared.reorderHoldExceededTotal.increment()
         }
@@ -64,13 +64,13 @@ extension RtpVideoQueue {
     }
 
     /// Flush the displacement gauge alongside the per-window FEC health publish
-    /// (maybeLogMetrics, ~2s cadence). Session-lifetime maxes + the live hold,
+    /// (maybeLogMetrics, ~2s cadence). Session-lifetime maxes + the hold,
     /// so the exporter can emit the margin without touching this thread.
     func publishReorderDisplacementGauge() {
         TelemetryCounters.shared.setReorderDisplacement(
             TelemetryCounters.ReorderDisplacementSnapshot(
                 maxMs: reorderDispSessionMaxMs,
                 maxPackets: reorderDispSessionMaxPackets,
-                holdMs: Double(reorderWindowUs) / 1000.0))
+                holdMs: Double(Self.reorderWindowUs) / 1000.0))
     }
 }

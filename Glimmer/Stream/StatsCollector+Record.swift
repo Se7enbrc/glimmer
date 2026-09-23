@@ -22,7 +22,6 @@ extension StatsCollector {
         defer { os_unfair_lock_unlock(&lock) }
         receivedFrames &+= 1
         totalReceived &+= 1
-        lastReceivedFrameTime = CACurrentMediaTime()
         if bytes > 0 {
             receivedBytes &+= UInt64(bytes)
             // Telemetry frame-size + type window accumulators - cheap integer adds
@@ -41,15 +40,6 @@ extension StatsCollector {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         lastDecodedFrameTime = CACurrentMediaTime()
-    }
-
-    /// Seconds since the last frame was received from the network, or
-    /// `Double.infinity` if we've never received one.
-    func secondsSinceLastReceivedFrame() -> Double {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
-        guard lastReceivedFrameTime > 0 else { return .infinity }
-        return CACurrentMediaTime() - lastReceivedFrameTime
     }
 
     /// Seconds since VT successfully decoded a frame, or `Double.infinity`

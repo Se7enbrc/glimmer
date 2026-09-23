@@ -5,8 +5,7 @@
 //  link-condition state machine fed once per telemetry capture tick (~1Hz)
 //  with the stream ROUTE (StreamRouteProbe - the honest stream_link, re-probed
 //  on every NWPathMonitor change), the associated-radio physics (RSSI / PHY
-//  tx-rate), and the per-socket gap-event counters. It models the in-repo
-//  FecHeadroomController safety contract:
+//  tx-rate), and the per-socket gap-event counters. Its safety contract:
 //
 //   1. SUSTAINED: escalation needs CONSECUTIVE ~2s evidence windows - co-gap
 //      evidence needs 3 (~6s), pure-radio evidence needs 5 (~10s; a radio sag
@@ -40,8 +39,8 @@
 //  event with the evidence vector + a Diag NOTICE on every transition), and
 //  moves TWO dials - the conditional keepalive cadence (#1 below) and, with
 //  `reconcilerEnabled`, the unified jitter→headroom decision consumed by the
-//  FramePacer adaptive depth and the FEC reorder-hold. Anything further stays
-//  dark; see "Future actuations".
+//  FramePacer adaptive depth. Anything further stays dark; see "Future
+//  actuations".
 //
 //  LIVE ACTUATION #1 - CONDITIONAL KEEPALIVE (`steadyPingInterval()`):
 //  75ms steady ping cadence only when stream_link == wifi AND (input-idle OR
@@ -79,7 +78,7 @@ final class EnvSignalController: @unchecked Sendable {
     static let cat = "EnvSignal"
 
     // The reconciler kill-switch, the `LinkClass` / `EnvState` vocabulary,
-    // the FecHeadroomController contract numbers, the reconciler decision
+    // the window thresholds, the reconciler decision
     // mapping constants and the keepalive cadence dials live in
     // EnvSignalController+Tunables.swift - moved there to keep THIS file
     // under the length limit.
@@ -108,29 +107,21 @@ final class EnvSignalController: @unchecked Sendable {
 
     // MARK: - Published reconciler decision (lock-guarded)
     //
-    // The single jitter→headroom decision both actuators PULL on their own
-    // ticks. Computed in the reconcile phase at window close (`reconcileLocked`)
-    // and published behind THIS controller's `lock` - the same pattern as
+    // The single jitter→headroom decision the pacer (and the audio cushion's
+    // seed) PULL on their own ticks. Computed in the reconcile phase at window
+    // close and published behind THIS controller's `lock` - the same pattern as
     // `stateValue`/`streamLinkValue`. Each consumer reads these with one short
-    // lock on its own thread, under its OWN existing lock, and never calls back
-    // into this controller. The `generation` counter lets a consumer no-op when
-    // the decision is unchanged, so the hot RTP receive thread takes the lock
-    // only to compare a `UInt64` on the common (unchanged) path.
+    // lock on its own thread and never calls back into this controller. The
+    // `generation` counter lets a consumer no-op when the decision is unchanged
+    // (one locked `UInt64` compare); generation 0 means nothing is published.
 
-    /// Desired headroom level (0...`Self.maxHeadroomLevel`). 0 = clear / jitter
-    /// under the dead-zone - the REST decision: FEC reorder-hold at its 24ms
-    /// base, pacer adaptive depth at 1 (byte-identical to no-reconciler). Each
-    /// level up = +1 FEC step (8ms) + 1 pacer depth, capped at FEC 48ms / the
-    /// mapped depth. Forced to 0 whenever the link state is CLEAR (which a wired
-    /// route pins), so a clean WIRED link publishes REST. Module-internal
-    /// (not private), with the two fields below, so the reconcile phase in
-    /// EnvSignalController+Evidence.swift can publish them under `lock`.
+    /// Desired headroom level (0...`maxHeadroomLevel`), +1 pacer depth per level.
+    /// 0 is REST (depth 1, as with no reconciler), forced while the state is CLEAR,
+    /// which a wired route pins. Internal so the Evidence reconcile can publish it.
     var headroomLevelValue = 0
     /// EWMA-smoothed recv-jitter (ms) that drives the published headroom (weight
-    /// `Self.jitterBaseEwmaWeight`, copied from FecHeadroomController so the
-    /// jitter-scaled FEC base is byte-identical when consumed). Published so the
-    /// FEC actuator can scale its base off the SAME smoothed value both used to
-    /// read independently.
+    /// `Self.jitterBaseEwmaWeight`). Published so the audio cushion can seed off
+    /// the same smoothed value.
     var smoothedJitterMsValue: Double = 0
     /// Monotonic decision generation, bumped on every reconcile that CHANGES the
     /// published level or smoothed jitter. A consumer caches the last generation
@@ -302,6 +293,8 @@ final class EnvSignalController: @unchecked Sendable {
     /// Previous-tick gap-counter totals (nil until the first tick arms them,
     /// so pre-session residue can never count as window evidence).
     var prevGapTotals: GapTotals?
+    /// Previous-tick video datagram clock; a newer stamp means video arrived.
+    var prevDatagramUs: UInt64?
 
     /// The window being accumulated (tick fold) + the run/dwell counters.
     var ticksInWindow = 0
@@ -310,19 +303,26 @@ final class EnvSignalController: @unchecked Sendable {
     /// True iff any window in the CURRENT degraded run carried co-gap
     /// evidence - selects the 3-window entry over the 5-window radio-only one.
     var runHadCoGap = false
+    /// True iff any window in the current run showed a radio sag; with
+    /// `runHadCoGap` it names the evidence behind a CAUTION entry.
+    var runHadRadioSag = false
     var severeRun = 0
     var quietRun = 0
     var windowsSinceChange = Int.max
     /// EWMA of the per-window recv-jitter (ms) driving the published headroom's
     /// smoothed jitter - exporter-queue-confined like the rest of the evidence
     /// state; copied into the lock-guarded `smoothedJitterMsValue` at reconcile.
-    /// 0 until the first window (the FEC base then stays at its clean floor).
+    /// 0 until the first window.
     var reconcileSmoothedJitterMs: Double = 0
 
     /// One evidence window's facts - kept whole so a state transition can
     /// emit the exact vector that caused it (the post-hoc judge needs the
     /// evidence, not just the verdict).
     struct WindowEvidence {
+        /// A video datagram arrived during the window. A dead stream's window
+        /// (sleep, undock) carries no link evidence: its retransmits are the
+        /// control channel knocking on a closed door.
+        var videoArrived = false
         var netGap50: UInt64 = 0
         var audioGap50: UInt64 = 0
         var netGap100: UInt64 = 0
@@ -335,32 +335,26 @@ final class EnvSignalController: @unchecked Sendable {
         var rssiP50: Int?
         var txP95: Double?
         var radioArmed = false
-        // JITTER evidence: the worst recv-jitter (ms) seen across
-        // the window's ticks (live gauge, max-folded), plus the window-summed
-        // out-of-order + ENet-retransmit deltas. Folded delta-snapshotted like
-        // the gap counters so the state classifier captures the jitter racer the
-        // FecHeadroomController already tuned thresholds for - not just co-gap /
-        // radio. Worst-jitter (max) keeps it conservative toward detection; the
-        // sustained-run requirement keeps a single noisy window from escalating.
+        // JITTER evidence: the worst recv-jitter (ms) across the window's ticks
+        // (live gauge, max-folded) plus the window-summed out-of-order + ENet
+        // retransmit deltas, folded delta-snapshotted like the gap counters.
         var maxJitterMs: Double = 0
         var outOfOrder: UInt64 = 0
         var retransmit: UInt64 = 0
         var coGap50: Bool { netGap50 > 0 && audioGap50 > 0 }
         var coGap100: Bool { netGap100 > 0 && audioGap100 > 0 }
-        /// Jitter/loss escalate predicate - FecHeadroomController's already-tuned
-        /// soft thresholds (jitter ≥8ms, ooo ≥6, retx ≥4).
+        /// Jitter/loss escalate predicate (jitter ≥8ms, ooo ≥6, retx ≥4).
         var jitterDegraded: Bool {
-            maxJitterMs >= FecHeadroomController.jitterEscalateMs
-                || outOfOrder >= UInt64(FecHeadroomController.oooEscalate)
-                || retransmit >= UInt64(FecHeadroomController.retransmitEscalate)
+            maxJitterMs >= EnvSignalController.jitterEscalateMs
+                || outOfOrder >= EnvSignalController.outOfOrderEscalate
+                || retransmit >= EnvSignalController.retransmitEscalate
         }
-        /// Jitter/loss relax predicate - ALL three under FEC's lower relax lines
-        /// (jitter ≤4ms, ooo ≤2, retx ≤1). The gap to `jitterDegraded` is the
-        /// dead band that prevents flapping.
+        /// Jitter/loss relax predicate - ALL three under the relax lines (jitter
+        /// ≤4ms, ooo ≤2, retx ≤1); the gap to `jitterDegraded` is the dead band.
         var jitterQuiet: Bool {
-            maxJitterMs <= FecHeadroomController.jitterRelaxMs
-                && outOfOrder <= UInt64(FecHeadroomController.oooRelax)
-                && retransmit <= UInt64(FecHeadroomController.retransmitRelax)
+            maxJitterMs <= EnvSignalController.jitterRelaxMs
+                && outOfOrder <= EnvSignalController.outOfOrderRelax
+                && retransmit <= EnvSignalController.retransmitRelax
         }
     }
 
