@@ -142,6 +142,7 @@ release:
 # Glimmer scheme's BuildAction builds ONLY the app, so `make app`/`make dist`
 # are unaffected; only `xcodebuild test` pulls in the GlimmerTests target.
 test:
+	@scripts/generate-build-info.sh
 	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) OPENSSL_PREFIX=$(OPENSSL_PREFIX) OPUS_PREFIX=$(OPUS_PREFIX) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
