@@ -23,13 +23,21 @@ enum WakeOutcome: Equatable {
     }
 }
 
+extension AppModel.WakeFailureReason {
+    /// Under Wake and Connect after a failed wake, in the launcher and the menu bar.
+    var line: String {
+        switch self {
+        case .couldNotSend: "Couldn't send the wake signal. Check this Mac's network."
+        case .noAnswer: "No answer. \(AppModel.wakeNoAnswerHint)"
+        }
+    }
+}
+
 extension AppModel {
     private static var wakeTask: Task<Void, Never>?
     static let wakeBudgetSeconds: Double = 90
     /// The launcher and `glimmer wake` both say this when a wake gets no answer.
     static let wakeNoAnswerHint = "Wake on LAN works on your home network; over Tailscale it can't reach the PC."
-    /// Under Wake and Connect once a wake got no answer, in the launcher and the menu bar.
-    static let wakeNoAnswerLine = "No answer. \(wakeNoAnswerHint)"
 
     /// The PC opted in and Sunshine has told us its network address.
     func canWake(_ host: Host) -> Bool {
@@ -175,7 +183,7 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     func postFailed(_ host: Host, reason: AppModel.WakeFailureReason) {
         let body = switch reason {
-        case .couldNotSend: "Couldn't send the wake signal. Check this Mac's network."
+        case .couldNotSend: reason.line
         case .noAnswer: "No answer within \(Int(AppModel.wakeBudgetSeconds)) seconds. "
             + "Wake on LAN works on your home network, not over Tailscale."
         }

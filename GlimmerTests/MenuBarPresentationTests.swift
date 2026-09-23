@@ -60,6 +60,12 @@ struct MenuBarPresentationTests {
         #expect(!action(.streaming).allowsRetry)
     }
 
+    @Test func aFailedWakeSaysWhy() {
+        #expect(AppModel.WakeFailureReason.couldNotSend.line == "Couldn't send the wake signal. Check this Mac's network.")
+        #expect(AppModel.WakeFailureReason.noAnswer.line.hasPrefix("No answer."))
+        #expect(!AppModel.WakeFailureReason.couldNotSend.line.contains("Tailscale"))
+    }
+
     @Test func thePCReadsAsItDoesInTheLauncher() {
         let now = Date()
         func chip(_ state: HostLiveStatus.State, age: TimeInterval = 0) -> ChipPresentation {

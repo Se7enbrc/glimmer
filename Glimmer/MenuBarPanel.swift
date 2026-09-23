@@ -245,8 +245,8 @@ struct MenuBarPanel: View {
             }
         case .wake:
             prominentButton("Wake and Connect", systemImage: "power") { model.wakeHost(host, thenConnect: true) }
-            if model.wakeFailedHostID == host.id {
-                Text(AppModel.wakeNoAnswerLine)
+            if model.wakeFailedHostID == host.id, let reason = model.wakeFailureReason {
+                Text(reason.line)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

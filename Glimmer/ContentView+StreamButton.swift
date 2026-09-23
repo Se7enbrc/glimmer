@@ -175,10 +175,11 @@ struct StreamButton: View {
                         Text("Wake and Connect")
                             .font(.system(size: 17, weight: .semibold))
                             .contentTransition(.opacity)
-                        // A wake that got no answer: one plain sentence with the
-                        // real limits. A cancelled wake shows nothing.
-                        if let host = model.selectedHost, model.wakeFailedHostID == host.id {
-                            Text(AppModel.wakeNoAnswerLine)
+                        // A failed wake: one plain sentence with the real limits.
+                        // A cancelled wake shows nothing.
+                        if let host = model.selectedHost, model.wakeFailedHostID == host.id,
+                           let reason = model.wakeFailureReason {
+                            Text(reason.line)
                                 .font(.system(size: 11, weight: .regular))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
