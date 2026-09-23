@@ -2,22 +2,55 @@
 
 ## 2026.9.7 - Unreleased
 
-A stuck stream always shows the way out, ⌘ shortcuts and paste reach the PC, and
-video and audio recover on their own.
+A command line and Shortcuts actions, safer pairing, a way out of every stuck
+stream, ⌘ shortcuts and paste that reach the PC, and video and audio that
+recover on their own.
+
+Glimmer now has a command line. With the app linked as `glimmer`, you can run
+`glimmer pair`, `glimmer list`, `glimmer wake`, `glimmer quit` and
+`glimmer stream`, and each one reports its result in the exit code: 0 success, 1
+failure, 2 usage, 3 unreachable, 4 not paired. Homebrew installs now get the
+`glimmer` command. Existing installs pick it up with
+`brew upgrade --greedy glimmer` (or `brew reinstall --cask glimmer`), because
+the app updates itself outside Homebrew.
+
+`glimmer stream <pc> [<app>]` checks the PC from the terminal, then starts the
+stream in the one running Glimmer app, at the same bitrate a launcher click
+would ask for. `--wait`, `--exit-after-first-frame` and `--json` connect timings
+are there for scripts, and `--force` quits whatever the PC is already running.
+`glimmer quit <pc>` ends the app running on a PC without streaming into it. If
+this Mac is streaming from that PC, the stream stops cleanly instead of
+reconnecting and relaunching the game.
+
+Glimmer also has Shortcuts actions: Stream from PC, Wake PC and Quit App on PC.
+You can use them in automations, and Spotlight and Siri offer "Stream … in
+Glimmer" and "Wake … with Glimmer" for each paired PC, with its name filled in.
+Stream from PC takes an optional app name, matched without regard to case or
+accents. Left empty, it streams the app the Stream button shows, and it checks
+the PC first so it picks the app the PC is running. Wake PC waits until the PC
+is ready to stream; if the PC doesn't answer, it says so and gives the same
+Tailscale hint as the launcher. Quit App on PC quits the app running on a PC,
+and if this Mac is streaming from that PC, the stream ends the same way Stop
+Streaming ends it.
 
 More of macOS 27. If you set the controller Home button to defer to the app in
 System Settings › Game Controllers, the PS button now works as Guide on the PC;
 with the default setting, the Game Overlay behaves as before. Glimmer also asks
 macOS which controllers it handles itself, so a generic controller from Sony,
 Microsoft, Nintendo or Apple that macOS doesn't support now works, and a
-supported controller is no longer read twice.
+supported controller is no longer read twice. The toolbar's PC picker and the
+menu bar's PCs submenu mark the current PC again, menu bar rows highlight under
+the pointer, and the round footer buttons keep their glass edge and hover state.
 
 In full screen, shake-to-find is off and, on macOS 27, so are Hot Corners.
 
 VoiceOver announces in-stream banners when they appear or change, and in
 Settings › PCs it reads the default star as "Default PC" and says when it is
 selected. With Differentiate Without Color on, warning and critical values in
-Stream stats also turn semibold.
+Stream stats also turn semibold. In the menu bar panel, VoiceOver reads each
+chart as a summary of the last minute, with Audio Graph and a per-second data
+table, each big number reads as one element, for example "Bandwidth, 62 Mbps",
+and card headers show up in the rotor.
 
 A stream that never shows video now ends with a reason of its own: no video
 arrived, or video arrived but couldn't be decoded. The generic "ended
@@ -39,15 +72,49 @@ while it connects is respected: Glimmer no longer pulls you back 1.5 seconds
 later, and a stream that ends just after its first frame no longer leaves the
 launcher without a menu bar or Dock.
 
+Connecting is quicker and easier to call off. Connects and in-place reconnects
+are about 50 ms faster, and the first frame no longer waits for audio setup.
+Cancel or Quit during the connection handshake takes effect immediately instead
+of locking out new streams for up to 30 seconds. Esc cancels a connection that
+hasn't started streaming yet; once the stream is live, Esc goes to the game as
+before, including during a reconnect.
+
+Streams end the way you meant. Quitting the game on your PC, pressing Force Stop
+in Sunshine, or another device taking over now ends the stream cleanly, and
+Glimmer no longer relaunches the app or takes the session back. Quitting a
+stream over a dead connection closes the stream window and brings back the
+pointer right away, instead of leaving a frozen frame on screen for up to 5
+seconds. Keys and modifiers you are still holding when you quit are released on
+the PC before the connection closes.
+
+Reconnects hold up. A stream that drops just before the Mac goes to sleep now
+reconnects on wake instead of ending as unexpected, because the 30 second
+reconnect window only counts time the Mac is awake. Unplugging a dock or
+Ethernet mid-stream starts the reconnect right away instead of freezing for
+about 10 seconds.
+
 Streams over a VPN, and streams started before Glimmer has worked out the route
 to the PC, now ask for the same bitrate as in 2026.9.5. The Wi-Fi 1.5x boost
 applies only when the route really is Wi-Fi, where the check on the radio's link
-rate can still trim it.
+rate can still trim it. A reconnect after a route change or a wake asks for the
+bitrate that fits the current connection, never more than an earlier quality
+drop allowed, and Stream stats shows the new rate.
 
 Video recovers by itself. After a decode error Glimmer waits for the next
 keyframe instead of feeding broken frames to the decoder, and a decode session
 that stops producing frames is rebuilt within a few seconds. Before, the stream
-could sit on "Holding…" until you reconnected.
+could sit on "Holding…" until you reconnected. Requests for a fresh keyframe or
+recovery frame after packet loss now leave at once instead of waiting up to 20
+ms.
+
+Pacing settles faster after a network hiccup. At 120 fps on a 120 Hz display,
+the stream no longer carries about five frames of extra latency for half a
+second afterwards: the catch-up burst is only held to play through when the
+stream runs slower than the display and spare refreshes can drain it. The stall
+watchdog no longer mistakes the burst of frames at the end of a network drought
+for a frozen picture, which removes needless self-heals and recovery steps after
+Wi-Fi gaps. When the frame-rate assist is covering for a throttled display, it
+no longer hands the renderer a second frame inside the same refresh.
 
 If the stream reconnects while its window is hidden, for example after the Mac
 sleeps and wakes, Glimmer stops decoding video again after 2 seconds. Before, it
@@ -60,7 +127,8 @@ hold on.
 
 On remote connections, the bitrate downshift now counts arriving packets rather
 than whole frames when it decides whether reception is still alive, so it
-responds when the path can't carry the bitrate.
+responds when the path can't carry the bitrate. Its banner now reads "Weak
+connection. Lowering quality to N Mbps…".
 
 On Wi-Fi, Glimmer no longer stalls for about 13 ms every second to read the
 radio's link rate. The read runs in the background now, which removes a
@@ -80,20 +148,31 @@ settles on the real clock difference. Each output device's correction is
 remembered separately, so switching speakers no longer starts the next stream
 with the wrong one.
 
+Mute this Mac while streaming is now Play sound on the PC, and does just that:
+the PC keeps the game's sound and only the stream is silent on the Mac. It no
+longer changes the Mac's system volume or silences other apps, and flipping it
+mid-stream changes nothing until your next stream.
+
 Coming back from the mini player re-centres the cursor when it was left on
 another display, so clicks can't land outside the stream.
 
 A daily update check no longer shows its alert over a live stream or takes focus
 from the game. The alert waits until the stream ends. Checks you start yourself,
-and checks made when no stream is running, behave as before.
+and checks made when no stream is running, behave as before. The updater is now
+Sparkle 2.10.0: the update window comes to the front when you check for updates
+from the menu bar while the main window is closed, and the installer moves the
+downloaded archive more safely. Glimmer no longer logs an update-check fault at
+launch when the daily check is already running.
 
 Fixes a crash when a stream's frame index wrapped past zero.
 
 Whole wheel notches. A trackpad or Magic Mouse scrolls in fractions of a notch,
 and a game that counts whole notches ignores fractions. Glimmer now adds them up
-and sends whole notches; a mouse wheel is untouched. With telemetry on, every
-wheel event is in the trace with what macOS delivered and what was sent, so a
-wheel that a game ignores can be shown to have reached the PC.
+and sends whole notches. A mouse wheel's scroll goes to the PC exactly as macOS
+reports it, so small wheel movements are no longer lost or carried into the next
+scroll. With telemetry on, every wheel event is in the trace with what macOS
+delivered and what was sent, so a wheel that a game ignores can be shown to have
+reached the PC.
 
 Gyro and motion aiming reach the PC as soon as the controller reports them,
 instead of being polled on a fixed timer. Samples arrive evenly spaced and up to
@@ -104,11 +183,29 @@ time the controller reconnects: any answer quiets it for that controller until
 Glimmer relaunches. Granting access from Glimmer's own prompt now turns on Extra
 DualSense buttons right away, with no relaunch. You only need to relaunch after
 turning the switch on by hand in System Settings, and the instructions now say
-so.
+so. The "use this controller" prompt for an unrecognized gamepad has a Don't Ask
+Again option, and both DualSense prompts, in the launcher and in Settings, now
+read "Turn on Extra DualSense buttons?" with a Turn On button.
 
 "Use ⌘ shortcuts inside the game" now does what it says. While the stream has
 the pointer, ⌘-Tab, ⌘-Space, ⌘Q and the rest go to the PC instead of the Mac,
-and ⌘-Tab no longer opens the Start menu on the PC.
+and ⌘-Tab no longer opens the Start menu on the PC. If macOS Zoom's shortcuts
+are turned off, ⌥⌘8, ⌥⌘= and ⌥⌘- reach the PC too.
+
+More of the keyboard reaches the PC. On UK and other ISO Mac keyboards, the key
+left of 1 and the key next to left Shift now type the right characters. A PC
+keyboard's Insert, Print Screen, Scroll Lock, Pause and Menu keys get through,
+so Win+Print Screen and Game Bar captures work, and as in Moonlight, the F13,
+F14 and F15 keys on Apple keyboards send Print Screen, Scroll Lock and Pause.
+Japanese keyboards can type ¥, ろ and the keypad comma, and
+the 英数 and かな keys reach the PC.
+
+Keys stay in step with the PC. Caps Lock on the PC follows the Mac every time
+you press it, and games that bind Caps Lock no longer see it held down. A Shift
+or Ctrl held through a reconnect or sleep works with the next key, and a key
+released while reconnecting no longer stays stuck. Glimmer's own shortcuts,
+including Stop Streaming (⌃⌥Q), now work on Russian, Greek, Hebrew, Arabic and
+other non-Latin keyboard layouts.
 
 Paste into the PC as text. Edit › Paste, ⌘V (whenever ⌘ stays with the Mac) or
 ⌃⌥⇧V types the Mac clipboard on the PC as characters, so passwords, links, codes
@@ -118,6 +215,100 @@ HDR has its own switch in Settings › Quality, on by default, and it applies to
 every preset, so you can pick SDR and still use Native Retina or HiDPI. The
 choice is now real: turning it off makes the PC send SDR. The "Your next stream"
 summary shows HDR only when HDR is on and the display can show it.
+
+Pairing is easier to follow. The pairing sheet names the PC instead of showing
+its IP address, including when you choose Pair Again… for a saved PC. It tells
+you to open Sunshine's web page and choose PIN, and can open that page on this
+Mac. It waits up to five minutes for the code, a timeout gets its own message
+separate from a rejected code, and Try Again appears only after a failure and
+gives you a new code. Pairing a new PC no longer closes the sheet the instant
+the PIN is accepted, so the checkmark and "Stream now" screen show as intended.
+
+Adding a PC is more forgiving. You can paste Sunshine's web address into the
+address field: the scheme, port and path are removed, and Continue stays off
+until the address is valid. Discovery prefers a PC's IPv4 address and no longer
+lists link-local addresses that stop working when the Mac changes networks. If
+macOS has blocked Local Network access, the PC chooser says so and has a button
+that opens the setting, and if the search finds nothing, it links to the PC
+setup guide.
+
+A device on your network can no longer skip pairing or plant its own
+certificate. Glimmer ignores the pair status and certificate in a plain-HTTP
+reply, always runs the PIN handshake, and refuses secure requests to a PC that
+has no pinned certificate. A reply with an empty length header no longer crashes
+Glimmer, and control replies are capped at 4 MiB and stopped at their deadline,
+so a slow or oversized reply can't tie up the app.
+
+Stream audio is now encrypted whenever the PC offers it, which Sunshine does by
+default. A PC set to require encrypted video now gets a clear message instead of
+a misleading "Couldn't reach". The security notes now describe what the app
+does: audio is encrypted whenever the PC offers it, video is not, and any
+process running as you can read the pairing key.
+
+Glimmer keeps up with your PCs. Games added or renamed in Sunshine show up
+without pairing again: Glimmer refreshes a PC's app list when it first reaches
+the PC after you switch to Glimmer, and again when the PC runs an app Glimmer
+hasn't seen. When a PC gets a new address on your network, Glimmer finds it
+again and confirms it's the same PC before saving the new address; before, it
+showed as Asleep for good. A PC that also answers on a second network interface
+keeps the address it was paired at. While the launcher window is closed, Glimmer
+checks the PC every 20 seconds instead of every 10.
+
+Wake on LAN also sends to Sunshine's streaming ports, as Moonlight does. When a
+wake fails, the launcher and the menu bar say why in one line that fits, either
+no answer from the PC or "Couldn't send the wake signal. Check this Mac's
+network.", and hovering over it shows the Wake on LAN limits. A wake that
+couldn't be sent no longer blames Tailscale, and says so at once instead of
+after 90 seconds. While Glimmer waits, the Stream button reads Stop Waiting, and
+stopping a wake and clicking Wake and Connect again while the first is still
+sending no longer loses the waiting state. If you switch to another app while a
+PC wakes, Glimmer posts a notification with Connect or Try Again instead of
+opening the stream over that app. If Glimmer's notifications are off or set to
+None, the stream opens as before.
+
+The launcher's PC card tells the truth again. The readiness chip (Asleep, Trust
+needed, Ready with round-trip time) is back after going missing in 2026.9.5, and
+its re-pair control for a changed certificate is now a real button that keyboard
+and VoiceOver can reach. For a PC busy with an app, the chip shows the app's
+name and "running" (or "App running" when the app isn't in Glimmer's list) in a
+neutral color instead of a blue "Streaming", since the PC can't tell whether
+anyone is watching. Unpairing the selected PC shows the next PC's status
+straight away, and the footer's PC-version note and the chip no longer show a
+removed PC's details. Switching PCs from the menu bar with the launcher closed
+uses that PC's own wired or Wi-Fi bitrate.
+
+A failed connection offers the matching fix: Wake and Connect when the PC is
+genuinely unreachable and Wake on LAN is set up for it, Pair Again… for a
+pairing or certificate problem, including a PC whose certificate changed, and
+Try Again otherwise. Starting a stream that would end a running app on the PC
+now asks with the app and PC in the title, says the app will quit and offers one
+destructive Quit and Stream button, instead of a generic "Take over the stream?"
+that implied an unexplained resume. During a reconnect, the Stream button and
+the menu bar read "Reconnecting to" the PC on one line until the stream is back,
+instead of switching to "Connecting to" as soon as the reconnect began. While
+the stream is in the background, the Stream button's tooltip says it shows the
+stream window, and the app items in its right-click menu keep their icons.
+
+While a PC is running an app, the PC menu has a new item that quits it, named
+for the app and the PC. If the PC refuses, the message is the same one
+`glimmer quit` prints. You can't unpair or re-pair the PC you're streaming from.
+When the PC hasn't reported a network address, the Wake on LAN switch says so in
+its title, and the unpair message names the PC.
+
+The menu bar panel matches the launcher. Its PC card uses the same status pill
+(Ready, Asleep, Trust needed, Checking… and the rest), and its button follows
+the PC: Wake and Connect for a sleeping PC, Waking… with Stop Waiting, Pair
+Again… for a PC whose certificate changed, and Stream otherwise. Pair a PC… and
+Pair Again… open the pair sheet in the main window. While a stream reconnects
+the panel offers Stop Streaming, not Cancel Connection, and the attention card
+offers Try Again only when a launch could work and can be dismissed. The
+Controller card lists every pad the Mac sees, including raw-HID pads and pads
+with no battery reading (shown as Connected), and shows charging for each pad.
+The bandwidth chart is scaled to the bitrate the session actually asked for, and
+the frames chart to the session's frame rate.
+
+A stream started from the menu bar, or Settings opened from the gear, now gets a
+Dock icon and a ⌘-Tab entry, so you can switch back to it after switching away.
 
 Each PC tile in Settings › PCs has a ⋯ button with the same Rename, Codec, Wake
 on LAN and Unpair items as its right-click menu. The Refresh paired PCs button
@@ -138,8 +329,7 @@ in the menu bar only.
 
 Settings say what the app does, in one set of names: Stop Streaming for the
 shortcut and the controller chord, Stream stats for the overlay, PC instead of
-host, and Title Case buttons. The mute footnote says the Mac's volume goes down
-rather than the sound moving to the PC.
+host, and Title Case buttons.
 
 Glimmer no longer deletes login-keychain items labelled "Imported Private Key"
 on first launch. That is the default label macOS gives many imported
@@ -209,7 +399,9 @@ the newest four.
 
 Input trace lines are no longer built when telemetry is off, and gyro and
 accelerometer trace lines are capped at 20 per second per sensor. What is sent
-to the PC is unchanged.
+to the PC is unchanged. With telemetry on, a ⌃B bookmark now also lands in the
+per-frame trace, on the same clock as the input rows, so you can read what was
+sent just before it.
 
 Package power no longer reads 0 W on ticks where the energy counters hadn't
 updated, and the main thread has its own line in the per-thread CPU data instead
@@ -217,6 +409,17 @@ of being counted under "unnamed". The launcher's PC reachability check no longer
 logs an "already cancelled" network fault every 10 seconds. Turning diagnostics
 off after a session no longer leaves the adaptive jitter buffer stuck at that
 session's last level until relaunch.
+
+The README has a Command line section with the exit codes and a table comparing
+Glimmer's commands to Moonlight's. It also says any HID gamepad works and calls
+the controller chord Hold-to-stop. The profiling guide covers which input rows
+the frame trace holds and which are only sampled, the actual log retention rule
+(a 14-day age limit at launch and a 300 MB budget at each diagnostics session),
+a recipe for capturing short Wi-Fi freezes, and a table of the defaults that
+have no Settings row. The architecture notes cover the command-line entry point,
+the raw-HID gamepad path, the DualSense side channel and the video queue's
+one-packet reorder hold, and the contributing guide's build line now matches
+`make app`.
 
 ## 2026.9.6 - 2026-09-20
 
