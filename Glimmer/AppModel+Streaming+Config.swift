@@ -158,7 +158,8 @@ extension AppModel {
     /// and the route's cap.
     nonisolated static func wireBitrateKbps(dial: Int, codecMultiplier: Double, boost: Double, capKbps: Int) -> Int {
         let scaled = Double(dial) * codecMultiplier * boost
-        return min(max(5_000, Int(scaled.rounded())), capKbps)
+        let clamped = min(scaled, Double(capKbps))
+        return min(max(5_000, Int(clamped.rounded())), capKbps)
     }
 
     // MARK: Streaming

@@ -13,6 +13,12 @@ import Testing
 @MainActor
 struct StatsOverlayVisibilityTests {
 
+    @Test func batteryCacheExpiresAfterTenSeconds() {
+        #expect(MacSystemStats.batteryCacheIsStale(sampledAt: nil, now: 0))
+        #expect(!MacSystemStats.batteryCacheIsStale(sampledAt: 5, now: 14.999))
+        #expect(MacSystemStats.batteryCacheIsStale(sampledAt: 5, now: 15))
+    }
+
     /// Born hidden, and says so.
     @Test func startsHidden() {
         let overlay = StatsOverlayLayer()
@@ -34,24 +40,24 @@ struct StatsOverlayVisibilityTests {
     }
 
     /// A hide completion that a later show overtook must not hide the panel.
-    @Test func staleHideCompletionDoesNotHideAReshownPanel() async {
+    @Test func staleHideCompletionDoesNotHideAReshownPanel() {
         let overlay = StatsOverlayLayer()
         overlay.setVisible(true)
         overlay.setVisible(false)
+        let staleGeneration = overlay.visibilityGeneration
         overlay.setVisible(true)
-        // Let CoreAnimation run the hide's completion block.
-        try? await Task.sleep(for: .milliseconds(300))
+        overlay.finishHide(generation: staleGeneration)
         #expect(overlay.isVisible)
         #expect(overlay.layer.isHidden == false)
     }
 
-    /// The plain toggle path still hides for real once the fade is done.
-    @Test func hideLandsAfterTheFade() async {
+    /// The current hide completion hides the layer.
+    @Test func currentHideCompletionHidesTheLayer() {
         let overlay = StatsOverlayLayer()
         overlay.setVisible(true)
         overlay.setVisible(false)
+        overlay.finishHide(generation: overlay.visibilityGeneration)
         #expect(overlay.isVisible == false)
-        try? await Task.sleep(for: .milliseconds(300))
         #expect(overlay.layer.isHidden)
     }
 }

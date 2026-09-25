@@ -59,6 +59,7 @@ struct HIDGamepadMapping: Sendable {
     }
 
     let guid: String
+    let identity: GameControllerDB.Identity?
     let name: String
     var bindings: [String: Input]
     var isHeuristic = false
@@ -80,8 +81,9 @@ struct HIDGamepadMapping: Sendable {
 
     init?(line: String) {
         let fields = line.split(separator: ",", omittingEmptySubsequences: true).map(String.init)
-        guard fields.count >= 3, GameControllerDB.identity(fields[0]) != nil else { return nil }
+        guard fields.count >= 3, let identity = GameControllerDB.identity(fields[0]) else { return nil }
         guid = fields[0]
+        self.identity = identity
         name = fields[1]
         bindings = [:]
         for field in fields.dropFirst(2) {
@@ -95,6 +97,7 @@ struct HIDGamepadMapping: Sendable {
 
     init(name: String, bindings: [String: Input]) {
         guid = ""
+        identity = nil
         self.name = name
         self.bindings = bindings
         isHeuristic = true
@@ -144,7 +147,7 @@ struct HIDGamepadMapping: Sendable {
 }
 
 enum GameControllerDB {
-    struct Identity: Equatable {
+    struct Identity: Equatable, Sendable {
         let bus: UInt16
         let vendor: UInt16
         let product: UInt16
@@ -176,7 +179,7 @@ enum GameControllerDB {
     static func lookup(vendor: UInt16, product: UInt16, version: UInt16, bus: UInt16 = 0x03,
                        entries: [HIDGamepadMapping] = mappings) -> HIDGamepadMapping? {
         let candidates = entries.compactMap { entry -> (HIDGamepadMapping, Identity)? in
-            guard let id = identity(entry.guid), id.vendor == vendor, id.product == product else { return nil }
+            guard let id = entry.identity, id.vendor == vendor, id.product == product else { return nil }
             return (entry, id)
         }
         let preferences: [(Identity) -> Bool] = [

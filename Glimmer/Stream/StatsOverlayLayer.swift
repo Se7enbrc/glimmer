@@ -283,7 +283,7 @@ public final class StatsOverlayLayer {
 
     /// Bumped per `setVisible` call so a hide's completion knows whether a show
     /// overtook it mid-fade; a stale completion must not hide a re-shown panel.
-    private var visibilityGeneration = 0
+    private(set) var visibilityGeneration = 0
 
     /// Show or hide the overlay. Uses a 120 ms crossfade so a hotkey-driven
     /// toggle feels snappy without being abrupt, matching the design spec.
@@ -299,12 +299,16 @@ public final class StatsOverlayLayer {
             layer.opacity = 1.0
         } else {
             CATransaction.setCompletionBlock { [weak self] in
-                guard let self, self.visibilityGeneration == generation else { return }
-                self.layer.isHidden = true
+                self?.finishHide(generation: generation)
             }
             layer.opacity = 0.0
         }
         CATransaction.commit()
+    }
+
+    func finishHide(generation: Int) {
+        guard visibilityGeneration == generation else { return }
+        layer.isHidden = true
     }
 
     // MARK: Layout ------------------------------------------------------

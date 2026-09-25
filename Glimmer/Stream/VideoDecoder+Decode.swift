@@ -67,11 +67,9 @@ extension VideoDecoder {
     nonisolated func handleStart() {
         log.info("Stream starting")
         isStreaming = true
-        // Stats: zero out the counters so the very first reading the overlay
-        // shows reflects "this session", not residue from a previous stream
-        // (the VideoDecoder is one-shot, but the collector's reset() is also
-        // what initializes the EMA's "have we seen a frame yet" state).
-        statsCollector.reset()
+        // A reconnect reuses this decoder, so keep session totals while
+        // clearing the new connection's windows and decode state.
+        statsCollector.resetForConnection()
         // Configure the display layer's colorspace + EDR engagement ONCE
         // at stream start, based on the negotiated stream format. The
         // AVSampleBufferDisplayLayer takes care of pacing internally - no
@@ -120,17 +118,13 @@ extension VideoDecoder {
 
     // MARK: - Submit
 
-    /// One frame's worth of decode inputs, captured on the receive thread and
-    /// carried into the async decode block as a single value (keeps the helper
-    /// signatures small and the closure capture explicit). `needsParamRebuild`
-    /// is computed up front on the receive thread because it reads
-    /// `decompressionSession`.
+    /// One frame's decode inputs, captured on the receive thread and carried into the async
+    /// decode block as a single value.
     struct PendingDecode {
         let pictureData: Data
         let newSps: Data?
         let newPps: Data?
         let newVps: Data?
-        let needsParamRebuild: Bool
         let isIDR: Bool
         let rtpTimestamp: UInt32
         let totalLength: Int32
@@ -145,30 +139,9 @@ extension VideoDecoder {
         var forceSessionRecreate: Bool = false
     }
 
-    /// Shared decode core, reached by the Swift-native VideoSink path
-    /// (`submitDecodeUnit(_:)`). It takes the already-walked parameter sets
-    /// + concatenated picture data and runs the param-rebuild → sample-build →
-    /// VT decode pipeline on the serial `decodeQueue`. Keeping this one method
-    /// authoritative lets the native backend run a single, well-tested VT
-    /// state-machine (serial-queue serialization, format-desc rebuild on IDR,
-    /// AVCC conversion for H.264/HEVC, raw OBU for AV1) without duplicating it.
-    /// Mirrors VideoDepacketizer.c reassembleFrame → submitDecodeUnit
-    /// semantics.
-    ///
-    /// THREADING - the whole VT pipeline (param rebuild, sample build, decode
-    /// submit) is dispatched to `decodeQueue` ASYNCHRONOUSLY. The caller is
-    /// the native backend's receive/depacketize thread, and it must NEVER block on
-    /// VideoToolbox: if it did, recvfrom would stall behind VT, the kernel
-    /// socket buffer would back up, and frames would be serviced in bursts (the
-    /// exact 4K240 chug this fix removes). This matches moonlight-common-c's
-    /// dedicated decoder thread pulling from a queue fed by the receive thread
-    /// (VideoStream.c VideoRecv/VideoDec). Because `decodeQueue` is SERIAL, the
-    /// async blocks run in strict submission order - param-set rebuilds and the
-    /// frames that follow them stay correctly sequenced; nothing is reordered.
-    ///
-    /// RETURN VALUE: DR_OK in the steady path (VT's verdict comes later). DR_NEED_IDR comes from a SUSTAINED
-    /// backlog stall (`reserveDecodeSlot`), the post-gate `.resyncToIdr`, or the frame after a VT failure armed
-    /// the resync latch. Param-set and sample-build failures ask `backend?.requestIdrFrame()` for a bare IDR.
+    /// Receive-thread half of decode: gate, reserve a backlog slot, then hand the frame to the serial
+    /// `decodeQueue` so recvfrom never waits on VideoToolbox. Returns DR_OK unless a sustained stall, a
+    /// post-gate P-frame or an armed resync latch needs the depacketizer to wait for an IDR.
     nonisolated func decodeAssembledFrame(
         pictureData: Data, newSps: Data?, newPps: Data?, newVps: Data?,
         isIDR: Bool, rtpTimestamp: UInt32, totalLength: Int32
@@ -267,18 +240,9 @@ extension VideoDecoder {
             return StreamProtocol.DR_NEED_IDR
         }
 
-        // If this is an IDR for H.264/HEVC, the parameter sets just changed
-        // (or appeared for the first time). Tear down the existing session
-        // and rebuild from the new parameter sets.
-        let needsParamRebuild =
-            (newSps != nil) || (newPps != nil) || (newVps != nil)
-            || (decompressionSession == nil && isIDR)
-            || forceSessionRecreate
-
         let pending = PendingDecode(
             pictureData: pictureData, newSps: newSps, newPps: newPps, newVps: newVps,
-            needsParamRebuild: needsParamRebuild, isIDR: isIDR,
-            rtpTimestamp: rtpTimestamp, totalLength: totalLength, epoch: epoch,
+            isIDR: isIDR, rtpTimestamp: rtpTimestamp, totalLength: totalLength, epoch: epoch,
             forceSessionRecreate: forceSessionRecreate)
 
         decodeQueue.async { [self] in
@@ -297,41 +261,29 @@ extension VideoDecoder {
         return StreamProtocol.DR_OK
     }
 
-    /// The VT half of the decode pipeline, run on the serial `decodeQueue`:
-    /// param-set rebuild (when needed) → sample build → async VT submit. Split
-    /// out of `decodeAssembledFrame` so the receive-thread half (backlog gate +
-    /// dispatch) stays small. Each early-out releases the in-flight slot the
-    /// caller reserved and routes the need-IDR signal asynchronously via
-    /// `backend?.requestIdrFrame()` - the same thread-safe IDR route the VT
-    /// output callback / renderer-failed path use. The success path's slot is
-    /// released later by the VT output callback (`releaseInFlightDecode`), which
-    /// fires exactly once per accepted submit.
+    /// The decode-queue half: param-set rebuild when needed, sample build, async VT submit. Each early
+    /// out frees the caller's slot and arms the resync latch; an accepted submit's slot is released by
+    /// the VT output callback.
     private nonisolated func runDecodeOnQueue(_ pending: PendingDecode) {
+        // New parameter sets, a forced recreate, or an IDR with no live session rebuilds. Decided
+        // here, not on the receive thread, because this queue owns `decompressionSession`.
+        let needsParamRebuild = pending.newSps != nil || pending.newPps != nil || pending.newVps != nil
+            || pending.forceSessionRecreate || (decompressionSession == nil && pending.isIDR)
         let format = streamVideoFormat
         let pictureData = pending.pictureData
 
-        if pending.needsParamRebuild,
+        if needsParamRebuild,
            !rebuildParamSetsAndSession(
                 newSps: pending.newSps, newPps: pending.newPps, newVps: pending.newVps,
                 format: format, pictureData: pictureData,
                 forceRecreate: pending.forceSessionRecreate) {
-            // Param-rebuild / session-create failed: this frame never reaches
-            // VT, so release its in-flight slot, credit a decoder-side discard
-            // (it never reaches recordDecodeComplete), and request an IDR.
-            releaseInFlightDecode()
-            statsCollector.recordDecoderDiscard()
-            log.error("Decode param/session setup failed - requesting IDR")
-            OSSignposter.decode.emitEvent("IDRRequested", "trigger=param_rebuild_failed")
-            backend?.requestIdrFrame()
+            abandonUndecodedFrame(pending, failure: "Decode param/session setup failed",
+                                  trigger: "param_rebuild_failed")
             return
         }
 
         guard formatDescription != nil, let session = decompressionSession else {
-            releaseInFlightDecode()
-            statsCollector.recordDecoderDiscard()
-            log.error("Decode session missing - requesting IDR")
-            OSSignposter.decode.emitEvent("IDRRequested", "trigger=no_session")
-            backend?.requestIdrFrame()
+            abandonUndecodedFrame(pending, failure: "Decode session missing", trigger: "no_session")
             return
         }
 
@@ -357,20 +309,28 @@ extension VideoDecoder {
         }
 
         guard let sample = preparedSample else {
-            releaseInFlightDecode()
-            statsCollector.recordDecoderDiscard()
-            log.error("Sample-buffer build failed - requesting IDR")
-            OSSignposter.decode.emitEvent("IDRRequested", "trigger=sample_build_failed")
-            backend?.requestIdrFrame()
+            abandonUndecodedFrame(pending, failure: "Sample-buffer build failed", trigger: "sample_build_failed")
             return
         }
 
         submitSampleToVT(session: session, sample: sample, pending: pending)
     }
 
+    /// Abandon a frame that never reached VT: free its slot, count the discard, and arm the resync so
+    /// the next P-frame asks for one IDR instead of every frame sending its own request.
+    private nonisolated func abandonUndecodedFrame(
+        _ pending: PendingDecode, failure: StaticString, trigger: StaticString
+    ) {
+        releaseInFlightDecode()
+        statsCollector.recordDecoderDiscard()
+        guard armResyncAfterDecodeError(epoch: pending.epoch) else { return }
+        log.error("\(failure, privacy: .public) - resyncing to the next IDR")
+        OSSignposter.decode.emitEvent("IDRRequested", "trigger=\(trigger, privacy: .public)")
+    }
+
     /// Apply newly-arrived parameter sets and (re)build the format description +
     /// decompression session for the negotiated codec. Runs on the decode queue.
-    /// Returns true on success; false means the caller should request an IDR.
+    /// Returns true on success; on false the caller abandons the frame and arms the resync.
     private nonisolated func rebuildParamSetsAndSession(
         newSps: Data?, newPps: Data?, newVps: Data?, format: Int32, pictureData: Data,
         forceRecreate: Bool = false
@@ -527,6 +487,9 @@ extension VideoDecoder {
                     abandonedState,
                     "outcome=abandoned status=\(decodeStatus, privacy: .public)")
             }
+            // A dead session rejects every later frame, recovery IDRs included, and the byte-equal
+            // param-set shortcut would keep it: drop it so the next IDR builds a fresh one.
+            if decodeStatus == kVTInvalidSessionErr { tearDownDecompressionSession() }
             // The frame never decoded, so later P-frames would reference a hole:
             // resync through the depacketizer's wait-for-IDR, not a bare request.
             noteVtDecodeFailure(epoch: pending.epoch, status: decodeStatus)

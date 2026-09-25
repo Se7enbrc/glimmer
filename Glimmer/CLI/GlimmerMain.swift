@@ -3,9 +3,10 @@
 //
 //  The process entry point. Run as `glimmer`, or with a bare word in argv[1],
 //  it's the command line; anything else (no arguments, --launched-at-login,
-//  -psn_*, -NS*, Xcode and test arguments) starts the app exactly as before.
+//  -psn_*, -NS*, Xcode and test arguments) starts the app; hosted tests skip its launch.
 //
 
+import AppKit
 import Darwin
 import Foundation
 
@@ -15,6 +16,12 @@ enum GlimmerMain {
     static func main() {
         reexecIfSymlinked()
         guard GlimmerCLI.isInvocation(CommandLine.arguments) else {
+            // The test host shares the app's defaults domain and must not run its launch.
+            if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+                GlimmerApp.registerDefaults()
+                NSApplication.shared.run()
+                return
+            }
             GlimmerApp.main()
             return
         }

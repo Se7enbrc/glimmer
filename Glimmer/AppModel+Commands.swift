@@ -8,6 +8,31 @@
 
 import AppKit
 import Foundation
+import Observation
+
+@MainActor
+final class CommandStreamEnd {
+    private(set) var ended = false
+    private var detail: String?
+    private var continuation: CheckedContinuation<String?, Never>?
+
+    init(model: AppModel) {
+        withObservationTracking { _ = model.isStreaming } onChange: { [weak self, weak model] in
+            MainActor.assumeIsolated {
+                guard let self, let model else { return }
+                self.detail = model.commandSessionDetail()
+                self.ended = true
+                self.continuation?.resume(returning: self.detail)
+                self.continuation = nil
+            }
+        }
+    }
+
+    func wait() async -> String? {
+        if ended { return detail }
+        return await withCheckedContinuation { continuation = $0 }
+    }
+}
 
 /// Plain string dictionaries keyed by a request id, posted with immediate
 /// delivery so an inactive app still hears them. No URL scheme on purpose:
@@ -193,21 +218,27 @@ extension AppModel {
 
     /// "live" at the first decoded frame (with the connect timings), then
     /// "ended" with the failure text, if any, once the session is gone.
-    private func reportCommandSession(_ id: String) {
+    func reportCommandSession(_ id: String) {
+        let end = CommandStreamEnd(model: self)
         Task { @MainActor in
-            var sentLive = false
-            while isStreaming {
-                if !sentLive, ConnectTimingTelemetry.shared.clickToFirstFrameMs != nil {
-                    sentLive = true
+            while !end.ended {
+                if ConnectTimingTelemetry.shared.clickToFirstFrameMs != nil {
                     replyToCommand(id, CommandChannel.Event.live, extra: Self.connectTimings())
+                    let detail = await end.wait()
+                    replyToCommand(id, CommandChannel.Event.ended, detail)
+                    return
                 }
-                try? await Task.sleep(for: .milliseconds(sentLive ? 1000 : 100))
+                try? await Task.sleep(for: .milliseconds(100))
             }
-            let busy = pendingTakeover.map {
-                "\($0.host.displayName) is busy. Choose Quit and Stream in Glimmer, or run again with --force."
-            }
-            replyToCommand(id, CommandChannel.Event.ended, nativeStreamError ?? busy)
+            replyToCommand(id, CommandChannel.Event.ended, await end.wait())
         }
+    }
+
+    fileprivate func commandSessionDetail() -> String? {
+        let busy = pendingTakeover.map {
+            "\($0.host.displayName) is busy. Choose Quit and Stream in Glimmer, or run again with --force."
+        }
+        return nativeStreamError ?? busy
     }
 
     /// Click to first frame and the launch legs, in whole milliseconds.

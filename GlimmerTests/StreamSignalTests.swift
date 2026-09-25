@@ -2,8 +2,8 @@
 //  StreamSignalTests.swift
 //
 //  The in-stream signals: banner pills (width clamp, the leave hint, VoiceOver), the leave-hint
-//  budget, the codes a video-less bring-up or a lost link ends with and their toasts, and the stats
-//  HUD's non-color emphasis.
+//  budget, the watchdog's idle clock, the codes a video-less bring-up or a lost link ends with,
+//  their toasts, and the stats HUD's non-color emphasis.
 //
 
 import AppKit
@@ -150,6 +150,54 @@ struct StreamSignalTests {
 
     // MARK: Watchdog end codes
 
+    @Test func hiddenStreamLetsTheDisplaySleep() {
+        let visible = StreamSession.sessionActivityOptions(hidden: false)
+        let hidden = StreamSession.sessionActivityOptions(hidden: true)
+        #expect(visible == [
+            .userInitiated, .latencyCritical,
+            .idleDisplaySleepDisabled, .idleSystemSleepDisabled
+        ])
+        #expect(!hidden.contains(.idleDisplaySleepDisabled))
+        #expect(hidden.contains(.latencyCritical))
+        #expect(hidden.contains(.idleSystemSleepDisabled))
+    }
+
+    @Test func backgroundBeforeDecoderAdoptionReleasesDisplayAssertion() async {
+        let decoder = VideoDecoder()
+        decoder.setPresentSuppressed(true)
+        let session = StreamSession()
+        let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder)
+        #expect(!beforeAdoption)
+        #expect(afterAdoption)
+        decoder.teardown()
+    }
+
+    @Test func resettingStallLatchesClearsEveryLatch() async {
+        let session = StreamSession()
+        await session.setStallLatchesForTesting()
+        await session.resetStallLatches()
+        #expect(!session.didLogDecodeOnlyStall)
+        #expect(!session.didAttemptStallRecovery)
+        #expect(!session.didLogWatchdogHold)
+        #expect(await !session.didLogDownshiftDecision)
+    }
+
+    @Test func rendererFailureRecoveryCoalescesQueuedHops() async {
+        let decoder = VideoDecoder()
+
+        #expect(decoder.recoverPresentPathFromRenderQueue(reason: "renderer_failed"))
+        #expect(!decoder.recoverPresentPathFromRenderQueue(reason: "renderer_failed"))
+
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+
+        #expect(decoder.recoverPresentPathFromRenderQueue(reason: "renderer_failed"))
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
     /// moonlight-common-c's codes: -100 when no video ever arrived, -101 when
     /// it arrived but never decoded. A stall after video flowed stays -1.
     @Test func aStreamThatNeverShowedVideoSaysWhy() {
@@ -189,5 +237,33 @@ struct StreamSignalTests {
         #expect(weight(.neutral, true) == regular)
         #expect(weight(.critical, false) == regular)
         #expect(StatsOverlayLayer.valueFont(for: .critical, differentiateWithoutColor: true).isFixedPitch)
+    }
+}
+
+private extension StreamSession {
+    func setStallLatchesForTesting() {
+        didLogDecodeOnlyStall = true
+        didAttemptStallRecovery = true
+        didLogWatchdogHold = true
+        didLogDownshiftDecision = true
+    }
+}
+
+extension StreamSession {
+    func checkEarlyBackgroundAdoption(_ decoder: VideoDecoder) -> (Bool, Bool) {
+        isStreaming = true
+        powerAssertion = ProcessInfo.processInfo.beginActivity(
+            options: Self.sessionActivityOptions(hidden: false),
+            reason: "Testing stream visibility")
+        defer {
+            if let powerAssertion { ProcessInfo.processInfo.endActivity(powerAssertion) }
+            powerAssertion = nil
+            videoDecoder = nil
+            isStreaming = false
+        }
+        refreshPowerAssertion()
+        let beforeAdoption = powerAssertionHidden
+        adoptVideoDecoder(decoder)
+        return (beforeAdoption, powerAssertionHidden)
     }
 }

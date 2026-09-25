@@ -12,6 +12,25 @@ import Network
 import Darwin
 
 enum UdpPinger {
+    struct SendFailureStreak {
+        enum Edge: Equatable {
+            case failed
+            case recovered(Int)
+        }
+
+        private(set) var failures = 0
+
+        mutating func note(sent: Int) -> Edge? {
+            guard sent < 0 else {
+                guard failures > 0 else { return nil }
+                defer { failures = 0 }
+                return .recovered(failures)
+            }
+            failures += 1
+            return failures == 1 ? .failed : nil
+        }
+    }
+
     // STEADY-STATE stream-time keepalive cadence: 500ms -> 75ms, a deliberate
     // client-only deviation from upstream (moonlight-common-c pings every
     // 500ms) to defeat Wi-Fi NIC power-save doze.
@@ -74,22 +93,9 @@ enum UdpPinger {
         return out
     }
 
-    /// Resolve a host STRING to an IP-literal `NWEndpoint.Host`, ONCE, at
-    /// connection start (issue #70). An IPv4/IPv6 literal passes through with
-    /// no DNS at all; a hostname is resolved via getaddrinfo - the SAME
-    /// resolver (and system address ordering) the TCP/control paths in
-    /// CHelpers already use - so every channel of a session targets the same
-    /// address and family, and split-horizon DNS can never send video to a
-    /// different host than control. Returns nil when the name does not
-    /// resolve; the caller fails the connection with a resolution error
-    /// instead of the old late, misleading per-receiver socket failure.
-    ///
-    /// WHY resolve-once-here and not inside `makeSockaddr`: DNS belongs at
-    /// the connection edge, not on a path called during socket setup (the
-    /// WiFiTelemetry no-DNS discipline). Before this, `.name` hosts sailed
-    /// through RTSP and ENet control (getaddrinfo in CHelpers) and then died
-    /// at both RTP receivers - a 100%-reproducible "CONNECTED then instant
-    /// video failure" when a host was added by hostname/FQDN.
+    /// Resolve once at connection start so every channel dials the same literal (issue #70).
+    /// Prefer IPv4 like gl_tcp_connect because Sunshine binds IPv4 by default.
+    /// Returns nil when the name does not resolve.
     static func resolveHost(_ address: String) -> NWEndpoint.Host? {
         // Literal fast path: NWEndpoint.Host's parser yields .ipv4/.ipv6 for
         // literals, .name for everything else.
@@ -110,24 +116,29 @@ enum UdpPinger {
             return nil
         }
         defer { freeaddrinfo(first) }
-        // Walk in returned order (system policy - the choice gl_tcp_connect
-        // makes by taking the head) and adopt the first usable family.
-        var info: UnsafeMutablePointer<addrinfo>? = first
-        while let cur = info {
-            if cur.pointee.ai_family == AF_INET, let sa = cur.pointee.ai_addr,
-               Int(cur.pointee.ai_addrlen) >= MemoryLayout<sockaddr_in>.size {
-                var sin = sockaddr_in()
-                memcpy(&sin, sa, MemoryLayout<sockaddr_in>.size)
-                let bytes = withUnsafeBytes(of: sin.sin_addr) { Data($0) }
-                if let v4 = IPv4Address(bytes) { return .ipv4(v4) }
-            } else if cur.pointee.ai_family == AF_INET6, let sa = cur.pointee.ai_addr,
-                      Int(cur.pointee.ai_addrlen) >= MemoryLayout<sockaddr_in6>.size {
-                var sin6 = sockaddr_in6()
-                memcpy(&sin6, sa, MemoryLayout<sockaddr_in6>.size)
-                let bytes = withUnsafeBytes(of: sin6.sin6_addr) { Data($0) }
-                if let v6 = IPv6Address(bytes) { return .ipv6(v6) }
+        for family in [AF_INET, AF_INET6] {
+            var info: UnsafeMutablePointer<addrinfo>? = first
+            while let cur = info {
+                if cur.pointee.ai_family == family, let host = literal(from: cur.pointee) { return host }
+                info = cur.pointee.ai_next
             }
-            info = cur.pointee.ai_next
+        }
+        return nil
+    }
+
+    private static func literal(from entry: addrinfo) -> NWEndpoint.Host? {
+        if entry.ai_family == AF_INET, let sa = entry.ai_addr,
+           Int(entry.ai_addrlen) >= MemoryLayout<sockaddr_in>.size {
+            var sin = sockaddr_in()
+            memcpy(&sin, sa, MemoryLayout<sockaddr_in>.size)
+            let bytes = withUnsafeBytes(of: sin.sin_addr) { Data($0) }
+            if let v4 = IPv4Address(bytes) { return .ipv4(v4) }
+        } else if entry.ai_family == AF_INET6, let sa = entry.ai_addr,
+                  Int(entry.ai_addrlen) >= MemoryLayout<sockaddr_in6>.size {
+            var sin6 = sockaddr_in6()
+            memcpy(&sin6, sa, MemoryLayout<sockaddr_in6>.size)
+            let bytes = withUnsafeBytes(of: sin6.sin6_addr) { Data($0) }
+            if let v6 = IPv6Address(bytes) { return .ipv6(v6) }
         }
         return nil
     }

@@ -35,6 +35,7 @@ extension EnetControlChannel {
 
     func onDatagram(_ bytes: [UInt8]) {
         guard bytes.count >= 2 else { return }
+        defer { releaseStaleInboundGaps() }
         var reader = ByteReader(bytes)
         guard let rawPeerID = reader.u16BE() else { return }
         let flags = rawPeerID & (Enet.headerFlagCompressed | Enet.headerFlagSentTime)
@@ -70,17 +71,8 @@ extension EnetControlChannel {
         }
     }
 
-    /// Per-socket GAP-EVENT accumulation - the ENet leg of the 20/50/100ms
-    /// family (cumulative: a 100ms gap counts in all three). Completes the
-    /// video/audio/ENet trio that makes "all sockets gapped together" (NIC
-    /// doze) vs "one path stalled" a single NDJSON-row query instead of a
-    /// three-source manual cross-correlation.
-    ///
-    /// Dispatch one ENet command parsed off the inbound datagram. Returns true
-    /// to keep parsing subsequent coalesced commands, false to stop parsing this
-    /// datagram (truncated body, unknown command, or DISCONNECT). Split out of
-    /// `onDatagram` so each unit stays focused; the per-command behaviour -
-    /// body-length advance, ACK emission, and dispatch - is unchanged.
+    /// Handle one command off the datagram; false stops parsing it on a truncated
+    /// body, unknown command, or DISCONNECT. True reads the next coalesced command.
     private func handleEnetCommand(
         command: UInt8,
         commandByte: UInt8,
@@ -108,56 +100,59 @@ extension EnetControlChannel {
             ackIfRequested(commandByte, channelID: channelID, relSeq: relSeq,
                            flags: flags, sentTime: sentTime)
         case Enet.cmdSendReliable:
-            // The host delivers control payloads as SEND_RELIABLE. Parse the
-            // u16 dataLength + inline bytes (advancing the reader correctly
-            // so multi-command datagrams stay in sync), ACK it, then decrypt
-            // + dispatch. This is the path the old `default: return` silently
-            // dropped - the literal "onDatagram bails on unknown commands".
             guard let dataLength = reader.u16BE(),
-                  let inner = reader.take(Int(dataLength)) else {
-                return false // truncated; can't safely continue parsing
-            }
-            // ACK UNCONDITIONALLY - including stale/duplicates. Real enet
-            // returns a dummy command for a discarded duplicate precisely so
-            // it still gets ACKed (enet_peer_queue_incoming_command's
-            // discardCommand path); withholding the ACK would keep the host
-            // retransmitting until its peer timeout.
+                  let inner = reader.take(Int(dataLength)) else { return false }
+            // ACK unconditionally, duplicates included, as real ENet does in
+            // enet_peer_queue_incoming_command's discardCommand path; withholding
+            // an ACK keeps the PC retransmitting until its peer timeout.
             ackIfRequested(commandByte, channelID: channelID, relSeq: relSeq,
                            flags: flags, sentTime: sentTime)
-            // Per-channel staleness gate (see lastDispatchedInboundRelSeq):
-            // dispatch only a STRICTLY-NEWER reliable seq. A host retransmit
-            // (lost client ACK) or UDP reorder of an already-superseded
-            // command - the rumble(x,y) that would land after motors-off and
-            // latch the pad buzzing - is dropped here instead of dispatched.
-            guard Self.reliableSeqIsNewer(relSeq,
-                                          than: lastDispatchedInboundRelSeq[channelID] ?? 0) else {
-                if !loggedFirstStaleReliableDrop {
-                    loggedFirstStaleReliableDrop = true
-                    Diag.info("ENet dropped stale/duplicate inbound reliable "
-                        + "(ch \(channelID) relSeq \(relSeq), last dispatched "
-                        + "\(lastDispatchedInboundRelSeq[channelID] ?? 0)); "
-                        + "ACKed, not re-dispatched - first sighting this session",
-                        Self.logCategory)
-                }
-                return true
-            }
-            // Advance only past an authenticated payload: one forged packet at
-            // last + 0x7FFF would otherwise mark the next 32k genuine ones stale.
-            if handleInboundControl(inner) {
-                lastDispatchedInboundRelSeq[channelID] = relSeq
-            }
+            acceptInboundReliable(inner, channelID: channelID, relSeq: relSeq)
         default:
-            // Remaining commands carry a body we don't act on but MUST consume
-            // exactly so multi-command datagrams stay in sync - a RELIABLE
-            // command (e.g. a retransmitted HDR) is often coalesced AFTER one of
-            // these, and dropping it stalls the host's reliable backlog (~6s peer
-            // timeout). `skipCommandBody` advances past the body or, for a truly
-            // unknown command / truncation, signals stop.
+            // Consume unused bodies exactly: a reliable command (say, retransmitted HDR)
+            // often follows, and losing it stalls the PC's reliable backlog. A fragment
+            // can't be authenticated, so it takes no turn; control messages never fragment.
             guard skipCommandBody(command: command, reader: &reader) else { return false }
             ackIfRequested(commandByte, channelID: channelID, relSeq: relSeq,
                            flags: flags, sentTime: sentTime)
         }
         return true
+    }
+
+    /// Drop duplicates, already ACKed; authenticate everything else before it can
+    /// hold or move the channel cursor.
+    private func acceptInboundReliable(_ bytes: [UInt8], channelID: UInt8, relSeq: UInt16) {
+        let order = inboundOrder[channelID] ?? EnetInboundOrder()
+        if order.isDuplicate(relSeq) {
+            if !loggedFirstDuplicateReliable {
+                loggedFirstDuplicateReliable = true
+                Diag.info("ENet dropped duplicate inbound reliable (ch \(channelID) "
+                    + "relSeq \(relSeq), next \(order.next)); ACKed, first sighting this session", Self.logCategory)
+            }
+            return
+        }
+        guard let inner = openInboundControl(bytes) else { return }
+        let result = inboundOrder[channelID, default: EnetInboundOrder()]
+            .accept(relSeq, payload: inner, nowMs: serviceTimeMs)
+        dispatchInboundDue(result, channelID: channelID, reason: "hold full")
+    }
+
+    private func releaseStaleInboundGaps() {
+        for (channelID, order) in inboundOrder where !order.held.isEmpty {
+            let result = inboundOrder[channelID, default: EnetInboundOrder()]
+                .releaseStaleGap(nowMs: serviceTimeMs)
+            dispatchInboundDue(result, channelID: channelID, reason: "gap timed out")
+        }
+    }
+
+    private func dispatchInboundDue(_ result: (due: [[UInt8]], skipped: Int),
+                                    channelID: UInt8, reason: String) {
+        if result.skipped > 0, !loggedFirstInboundGapSkip {
+            loggedFirstInboundGapSkip = true
+            Diag.notice("ENet inbound reliable gap skipped (ch \(channelID), \(result.skipped) seqs, "
+                + "\(reason)); first sighting this session", Self.logCategory)
+        }
+        for inner in result.due { handleInboundControl(inner) }
     }
 
     /// Advance `reader` past the body of a known fixed/variable-length ENet
@@ -233,24 +228,32 @@ extension EnetControlChannel {
     // EnetControlChannel+ControlMessages.swift, split out to keep this file
     // under the length limit.
 
-    /// Decrypt and dispatch one SEND_RELIABLE control payload (envelope 0x0001, [type LE][len LE][payload]),
-    /// mirroring controlReceiveThreadFunc: TERMINATION goes through declarePeerDead, the rest to their
-    /// callbacks, unknown types are counted. Returns whether the payload authenticated.
-    func handleInboundControl(_ bytes: [UInt8]) -> Bool {
-        guard bytes.count >= 2 else { return rejectInboundControl("runt, \(bytes.count) bytes") }
+    /// Authenticate a control payload (envelope 0x0001), returning its inner
+    /// [type LE][len LE][payload], or nil after counting the rejection.
+    /// Changes no ordering state, so rejected packets cannot move the cursor.
+    private func openInboundControl(_ bytes: [UInt8]) -> [UInt8]? {
+        guard bytes.count >= 2 else {
+            rejectInboundControl("runt, \(bytes.count) bytes")
+            return nil
+        }
         let envelopeType = UInt16(bytes[0]) | (UInt16(bytes[1]) << 8)
         guard envelopeType == 0x0001 else {
-            return rejectInboundControl("non-encrypted type 0x\(String(envelopeType, radix: 16))")
+            rejectInboundControl("non-encrypted type 0x\(String(envelopeType, radix: 16))")
+            return nil
         }
-
-        let inner: [UInt8]
         do {
-            inner = try crypto.open(bytes)
+            return try crypto.open(bytes)
         } catch {
-            return rejectInboundControl("decrypt failed: \(error, privacy: .private)")
+            rejectInboundControl("decrypt failed: \(error, privacy: .private)")
+            return nil
         }
+    }
+
+    /// Mirror controlReceiveThreadFunc: TERMINATION goes through declarePeerDead,
+    /// the rest to their callbacks, with unknown types counted.
+    func handleInboundControl(_ inner: [UInt8]) {
         // inner = [type LE][payloadLength LE][payload]
-        guard inner.count >= 4 else { return true }
+        guard inner.count >= 4 else { return }
         let innerType = UInt16(inner[0]) | (UInt16(inner[1]) << 8)
         let payloadLen = Int(inner[2]) | (Int(inner[3]) << 8)
         let payload = (inner.count >= 4 + payloadLen) ? Array(inner[4..<(4 + payloadLen)]) : Array(inner[4...])
@@ -308,13 +311,11 @@ extension EnetControlChannel {
                     + "ignoring + suppressing further occurrences of this type", Self.logCategory)
             }
         }
-        return true
     }
 
     /// Count an inbound control payload that failed authentication; only the
     /// first per session is logged, the total rides logIgnoredControlTotals.
-    /// Always returns false, so callers can `return` it.
-    private func rejectInboundControl(_ why: DiagMessage) -> Bool {
+    private func rejectInboundControl(_ why: DiagMessage) {
         let first = withState { () -> Bool in
             rejectedInboundControl += 1
             return rejectedInboundControl == 1
@@ -323,7 +324,6 @@ extension EnetControlChannel {
             Diag.error("ENet rejected inbound control (\(why)); counting further rejections quietly",
                        Self.logCategory)
         }
-        return false
     }
 
     /// Parse a TERMINATION payload (ControlStream.c:1305-1342). Extended form

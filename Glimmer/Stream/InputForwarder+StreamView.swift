@@ -56,8 +56,8 @@ extension InputForwarder: StreamInputViewDelegate {
         // just EAT a keystroke the host should have seen. Letting it fall through
         // to the normal forward path below means ⌃B reaches the host like any
         // other key when there's no live telemetry to bookmark into.
-        if !event.isARepeat, onBookmarkHotkey != nil, TelemetryGate.isEnabled,
-           bookmarkHotkeyProvider().matches(event: event, modifiers: mods) {
+        if !event.isARepeat, onBookmarkHotkey != nil,
+           bookmarkHotkeyProvider().matches(event: event, modifiers: mods), TelemetryGate.isEnabled {
             log.info("Bookmark hotkey detected - invoking onBookmarkHotkey")
             onBookmarkHotkey?()
             return
@@ -210,16 +210,9 @@ extension InputForwarder: StreamInputViewDelegate {
             return
         }
 
-        // Coalesce queued mouseMoved events the way moonlight-qt does it
-        // (SDL_PeepEvents drains all pending SDL_MOUSEMOTION events and
-        // sums xrel/yrel into a single LiSendMouseMoveEvent). Without this
-        // the host receives one mouse event per macOS NSEvent - at ~120Hz
-        // on ProMotion that's ~120 acceleration decisions per second
-        // applied to tiny deltas, which feels twitchy / over-accelerated
-        // compared to moonlight-qt's behaviour (host accel applied once
-        // per coalesced batch). NSEvent doesn't expose SDL_PeepEvents
-        // directly, but `nextEvent(matching:until:inMode:dequeue:)` with
-        // `until: .distantPast` gives us the same drain-the-queue idiom.
+        // Coalescing matches moonlight-qt's single acceleration decision per
+        // batch. Stop at the queue's first non-motion event so input order
+        // stays intact across clicks and key presses.
         let initialDeltas = mouseDelta(from: event)
         var accumDx = initialDeltas.dx
         var accumDy = initialDeltas.dy
@@ -230,25 +223,25 @@ extension InputForwarder: StreamInputViewDelegate {
         // Drags route through this handler too (StreamInputView forwards all
         // *MouseDragged here) - include them in the coalesce mask so a drag
         // batches identically to free motion instead of one-event-per-NSEvent.
-        let motionMask: NSEvent.EventTypeMask = [
-            .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged
-        ]
-        while let queued = window?.nextEvent(matching: motionMask,
-                                             until: Date.distantPast,
-                                             inMode: .eventTracking,
-                                             dequeue: true) {
-            let delta = mouseDelta(from: queued)
-            accumDx += delta.dx
-            accumDy += delta.dy
-            batchTimestamp = queued.timestamp
-        }
+        MouseMotionDrain.drain(
+            peek: { window?.nextEvent(matching: .any, until: .distantPast,
+                                      inMode: .eventTracking, dequeue: false) },
+            dequeue: { window?.nextEvent(matching: MouseMotionDrain.mask, until: .distantPast,
+                                         inMode: .eventTracking, dequeue: true) },
+            consume: { queued in
+                let delta = mouseDelta(from: queued)
+                accumDx += delta.dx
+                accumDy += delta.dy
+                batchTimestamp = queued.timestamp
+            }
+        )
 
         // DRAG-DELTA compensation, only while raw aim has linearised the pointer:
         // that mode damps dragged deltas vs free motion (owner-measured, macOS 27).
         // With acceleration untouched, drags already match moves. 1.0 disables.
         let isDragBatch = event.type != .mouseMoved
         if isDragBatch && savedLinearScaling != nil {
-            let scale = CruiseTraversal.dragDeltaScale
+            let scale = cruiseTuning.dragDeltaScale
             if scale != 1.0 {
                 accumDx *= scale
                 accumDy *= scale
@@ -265,7 +258,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // and accumDx/Dy are unchanged, so the residual path below runs
         // byte-for-byte as it does today.
         let now = batchTimestamp
-        if CruiseTraversal.isEnabled, cruiseGMax > 1.0 {
+        if cruiseGMax > 1.0 {
             let dt = now - lastMoveTimestamp
             var velocity: Double = 0
             if dt > 0 && dt <= 0.1 {
@@ -288,7 +281,7 @@ extension InputForwarder: StreamInputViewDelegate {
                 cruiseTimeAccum = 0
             }
             let g = CruiseTraversal.gain(velocity: velocity, dt: dt, gMax: cruiseGMax,
-                                         vKnee: CruiseTraversal.vKnee, vFull: CruiseTraversal.vFull)
+                                         vKnee: cruiseTuning.vKnee, vFull: cruiseTuning.vFull)
             // Cruise forensics (telemetry-on only): velocity + gain
             // distributions split MOVE vs DRAG - the data a drag-specific band
             // tune needs (menu drag-pans vs held-button aim share this path).
@@ -452,10 +445,11 @@ extension InputForwarder: StreamInputViewDelegate {
             tracker.traceWriter.append(
                 "{\"session\":\"\(tracker.sessionId)\",\"event\":\"input_scroll\","
                 + "\"precise\":\(precise),"
-                + "\"dy\":\(tracker.jsonNumber(Double(event.scrollingDeltaY))),\"dx\":\(tracker.jsonNumber(Double(event.scrollingDeltaX))),"
+                + "\"dy\":\(TelemetryRenderer.jsonNumber(Double(event.scrollingDeltaY))),"
+                + "\"dx\":\(TelemetryRenderer.jsonNumber(Double(event.scrollingDeltaX))),"
                 + "\"units_y\":\(y),\"sent_y\":\(sendY),\"sent_x\":\(sendX),"
                 + "\"phase\":\(event.phase.rawValue),\"momentum\":\(event.momentumPhase.rawValue),"
-                + "\"t_ms\":\(tracker.jsonNumber(nowMs))}")
+                + "\"t_ms\":\(TelemetryRenderer.jsonNumber(nowMs))}")
         }
         if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
             scrollQuantizer.reset()
@@ -475,6 +469,19 @@ extension InputForwarder: StreamInputViewDelegate {
             default: return StreamProtocol.BUTTON_MIDDLE
             }
         default: return StreamProtocol.BUTTON_LEFT
+        }
+    }
+}
+
+enum MouseMotionDrain {
+    static let mask: NSEvent.EventTypeMask = [
+        .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged
+    ]
+
+    static func drain(peek: () -> NSEvent?, dequeue: () -> NSEvent?, consume: (NSEvent) -> Void) {
+        while let head = peek(), mask.contains(NSEvent.EventTypeMask(type: head.type)),
+              let event = dequeue() {
+            consume(event)
         }
     }
 }

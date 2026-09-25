@@ -8,6 +8,7 @@
 import Foundation
 import CommonCrypto
 import CryptoKit
+import Darwin
 
 // MARK: - Cert fingerprint helper
 //
@@ -186,9 +187,10 @@ public enum PinnedCertStore {
                                                    isDirectory: false)
     }
 
-    /// Atomic-write a PEM at mode 0600, verify the bits via stat(2),
-    /// remove partial on failure. Mirrors `FileIdentityStore.write`.
-    private static func writePEM(_ pem: String, forHostID hostID: String) throws {
+    /// Validate a temporary 0600 file before replacing a saved pin.
+    /// A failed permission check must leave the old pin intact.
+    static func writePEM(_ pem: String, forHostID hostID: String,
+                         verify: (URL) throws -> Void = verifyPermissions) throws {
         let fm = FileManager.default
         let dir = try directoryURL()
         try fm.createDirectory(at: dir,
@@ -197,17 +199,24 @@ public enum PinnedCertStore {
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
 
         let url = try fileURL(for: hostID)
-        try Data(pem.utf8).write(to: url, options: [.atomic])
-        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let prepared = dir.appendingPathComponent(".\(UUID().uuidString).pem")
+        defer { try? fm.removeItem(at: prepared) }
+        try Data(pem.utf8).write(to: prepared, options: [.atomic])
+        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: prepared.path)
+        try verify(prepared)
+        guard rename(prepared.path, url.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+    }
 
+    private static func verifyPermissions(_ url: URL) throws {
+        let fm = FileManager.default
         let attrs = try fm.attributesOfItem(atPath: url.path)
         guard let mode = attrs[.posixPermissions] as? NSNumber else {
-            try? fm.removeItem(at: url)
             throw StreamError.crypto("PinnedCertStore: missing POSIX permissions for \(url.lastPathComponent)")
         }
         let permBits = mode.uint16Value & 0o777
         guard permBits == 0o600 else {
-            try? fm.removeItem(at: url)
             let modeOctal = String(permBits, radix: 8)
             throw StreamError.crypto(
                 "PinnedCertStore: refused to keep \(url.lastPathComponent) with mode \(modeOctal) (expected 600)")

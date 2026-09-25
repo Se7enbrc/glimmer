@@ -32,6 +32,12 @@ extension StreamSession {
         return receiveIdleSeconds.isFinite ? noVideoFrameTerminationCode : noVideoTrafficTerminationCode
     }
 
+    /// Only a gate lift since this connection's arm can shorten decode silence.
+    /// An older lift belongs to the previous connection.
+    static func watchdogDecodeIdle(sinceDecoded: Double, sinceGateLift: Double, sinceArm: Double) -> Double {
+        min(sinceDecoded, sinceGateLift <= sinceArm ? sinceGateLift : .infinity)
+    }
+
     /// Install the frame-arrival watchdog. Polls every 1s on the main run
     /// loop; gates on `VideoDecoder.secondsSinceLastDecodedFrame()` so a
     /// host sending us packets we can't decode (corrupt bitstream, missing
@@ -59,32 +65,15 @@ extension StreamSession {
                 // terminate while the window is hidden still reaches the hard
                 // trip below on the normal post-gate envelope.
                 if dec.decodeGated { return }
-                // After a gate lifts, secondsSinceLastDecodedFrame() still
-                // carries the whole gated span - a 60s gate reads as 60s of
-                // idle at the very next 1Hz tick, past frameWatchdogTimeout,
-                // tearing the session down before the ~12ms resync IDR can
-                // decode. Floor the idle clock at the gate-OFF edge instead
-                // (infinity when no gate ever engaged, so min() is identity):
-                // the watchdog re-arms honestly FROM the resume - a post-gate
-                // IDR that genuinely never decodes still soft-trips 3s and
-                // hard-trips 10s after refocus, exactly the normal envelope.
-                let decodeIdle = min(
-                    dec.secondsSinceLastDecodedFrame(),
-                    dec.secondsSinceDecodeGateLifted())
-                // .infinity means we've never decoded a frame. The bare
-                // `return` here used to make EVERY trip below structurally
-                // blind to a bring-up that hangs before frame one - black
-                // screen until manual cancel - even though frameWatchdogTimeout
-                // is documented as moonlight's FIRST_FRAME_TIMEOUT_SEC. Give
-                // the pre-first-frame window its own envelope from the arm
-                // instant (audit 2026-08-17): past the same timeout with
-                // nothing EVER decoded, run the hard trip. The ENet-alive hold
-                // deliberately does NOT apply to this case - a host that never
-                // delivered frame ONE on a healthy control link is a broken
-                // bring-up, not a paused sign-in desktop.
+                guard let self else { return }
+                let sinceArm = CACurrentMediaTime() - self.frameWatchdogArmedAt
+                let decodeIdle = StreamSession.watchdogDecodeIdle(
+                    sinceDecoded: dec.secondsSinceLastDecodedFrame(),
+                    sinceGateLift: dec.secondsSinceDecodeGateLifted(),
+                    sinceArm: sinceArm)
                 guard decodeIdle.isFinite else {
-                    guard let self else { return }
-                    let sinceArm = CACurrentMediaTime() - self.frameWatchdogArmedAt
+                    // Nothing decoded yet: moonlight's FIRST_FRAME_TIMEOUT_SEC runs from the arm
+                    // instant, exempt from the ENet-alive hold (a broken bring-up, not a paused desktop).
                     if self.frameWatchdogArmedAt > 0,
                        sinceArm > StreamSession.frameWatchdogTimeout {
                         let receiveIdle = dec.secondsSinceLastReceivedFrame()
@@ -106,7 +95,6 @@ extension StreamSession {
                 if decodeIdle > StreamSession.decodeOnlyStallThreshold,
                    receiveIdle.isFinite,
                    receiveIdle < StreamSession.decodeOnlyStallThreshold {
-                    guard let self else { return }
                     Task { [weak self] in
                         await self?.handleDecodeOnlyStall(
                             decodeIdle: decodeIdle, receiveIdle: receiveIdle)
@@ -114,7 +102,6 @@ extension StreamSession {
                 } else if decodeIdle < StreamSession.decodeOnlyStallThreshold {
                     // Decode healthy this tick - clear the latch so a
                     // future stall logs a fresh diagnostic.
-                    guard let self else { return }
                     Task { [weak self] in await self?.clearDecodeOnlyStallLatch() }
                 }
 
@@ -130,7 +117,6 @@ extension StreamSession {
                 // so video resumes promptly once the desktop returns. If frames
                 // resume, decodeIdle drops and the latch clears.
                 if decodeIdle > StreamSession.decodeStallRecoveryThreshold {
-                    guard let self else { return }
                     Task { [weak self] in await self?.attemptDecodeStallRecovery(decodeIdle: decodeIdle) }
                 }
 
@@ -147,7 +133,6 @@ extension StreamSession {
                 // 10s is just as broken as silent-everything from the
                 // user's point of view.
                 guard decodeIdle > StreamSession.frameWatchdogTimeout else { return }
-                guard let self else { return }
                 Task { [weak self] in
                     guard let self else { return }
                     await self.handleWatchdogTimeout(
@@ -188,13 +173,18 @@ extension StreamSession {
     /// Clear the stall latches when decode resumes, so a later stall logs a
     /// fresh diagnostic and re-attempts recovery.
     fileprivate func clearDecodeOnlyStallLatch() async {
+        resetStallLatches()
+        // The reconnect episode owns its banner until it resumes or gives up.
+        guard !isReconnecting else { return }
+        let winForHide = window
+        await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
+    }
+
+    func resetStallLatches() {
         didLogDecodeOnlyStall = false
         didAttemptStallRecovery = false
         didLogWatchdogHold = false
         didLogDownshiftDecision = false
-        // Video resumed - drop the hold banner (no-op if it was never shown).
-        let winForHide = window
-        await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
     }
 
     /// Active stall recovery: request an IDR to prompt the host to resume

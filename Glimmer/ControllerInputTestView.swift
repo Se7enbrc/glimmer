@@ -10,23 +10,18 @@ import AppKit
 import GameController
 import SwiftUI
 
-/// Drives a live view of connected controllers. macOS's GameController
-/// framework only refreshes an element's polled value once an app has
-/// registered a value-changed handler on that controller - passive polling
-/// reads nothing (which is why this test showed a controller but no button
-/// reaction). This monitor registers a lightweight handler that bumps
-/// `revision` to refresh the SwiftUI view, and tears it down on disappear. It
-/// refuses to engage while a stream is live so it can't steal the
-/// StreamSession's input handlers.
+/// Registers a value-changed handler so GameController refreshes polled values.
+/// It refuses to engage during a stream because StreamSession owns those handlers.
 @MainActor @Observable
 final class ControllerMonitor {
     private(set) var revision = 0
     /// Live count of GameController value-changed callbacks - the diagnostic
     /// for "does GameController deliver input to us in this context at all?"
-    private(set) var gcEventCount = 0
+    @ObservationIgnored private(set) var gcEventCount = 0
     private var observers: [NSObjectProtocol] = []
     private var engaged: [ObjectIdentifier: GCController] = [:]
     private var hidRetained = false
+    private var priorBackgroundMonitoring = false
     private let isStreaming: () -> Bool
 
     init(isStreaming: @escaping () -> Bool) { self.isStreaming = isStreaming }
@@ -37,6 +32,7 @@ final class ControllerMonitor {
         // Receive controller input even though the Settings window - not a
         // game window - is key. Without this, GameController appears to deliver
         // nothing to a non-game foreground context (GC events stay 0).
+        priorBackgroundMonitoring = GCController.shouldMonitorBackgroundEvents
         GCController.shouldMonitorBackgroundEvents = true
         let nc = NotificationCenter.default
         for name in [NSNotification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
@@ -74,7 +70,6 @@ final class ControllerMonitor {
                 MainActor.assumeIsolated {
                     DualSenseRouting.shared.gc(pad: pad)
                     self?.gcEventCount &+= 1
-                    self?.revision &+= 1
                 }
             }
             engaged[id] = controller
@@ -84,6 +79,7 @@ final class ControllerMonitor {
 
     func stop() {
         HIDGamepadManager.shared.release()
+        GCController.shouldMonitorBackgroundEvents = priorBackgroundMonitoring
         // A stream that started meanwhile owns these slots now; leave them to it.
         if !isStreaming() {
             for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
@@ -92,11 +88,19 @@ final class ControllerMonitor {
         engaged.removeAll()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
-        GCController.stopWirelessControllerDiscovery()
+        ControllerDiscovery.stopIfIdle(isStreaming: isStreaming()) {
+            GCController.stopWirelessControllerDiscovery()
+        }
         if hidRetained {
             DualSenseHID.shared.release()
             hidRetained = false
         }
+    }
+}
+
+enum ControllerDiscovery {
+    static func stopIfIdle(isStreaming: Bool, stop: () -> Void) {
+        if !isStreaming { stop() }
     }
 }
 

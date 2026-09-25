@@ -21,4 +21,23 @@ struct AudioPendingProbeTests {
         }
         #expect(schedule == [3, 30, 630, 1230, 1830])
     }
+
+    @Test func hostIdleStopsAtConnectInsteadOfIncludingAudioStartup() {
+        let context = AudioTtfContext()
+        context.markStreamEnd(now: 1000)
+        context.resetForNewSession(now: 1010)
+
+        let record = context.latchClassifying(pingToRtpMs: 78_000, startup: "paced", now: 1088)
+
+        #expect(record.hostIdleSeconds == 10)
+    }
+
+    @Test func hostIdleIsOmittedWithoutAPriorStreamEnd() {
+        let context = AudioTtfContext()
+        context.resetForNewSession(now: 1010)
+
+        let record = context.latchClassifying(pingToRtpMs: 78_000, startup: "paced", now: 1088)
+
+        #expect(record.hostIdleSeconds == nil)
+    }
 }

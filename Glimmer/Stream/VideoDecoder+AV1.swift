@@ -128,6 +128,7 @@ extension VideoDecoder {
         _ reader: inout BitReader) -> UInt32? {
         guard let timingInfoPresent = reader.read(1) else { return nil }
         var decoderModelInfoPresent: UInt32 = 0
+        var bufferDelayLength = 0
         if timingInfoPresent == 1 {
             // timing_info(): num_units_in_display_tick(32),
             // time_scale(32), equal_picture_interval(1),
@@ -142,10 +143,11 @@ extension VideoDecoder {
             guard let dmip = reader.read(1) else { return nil }
             decoderModelInfoPresent = dmip
             if dmip == 1 {
-                // decoder_model_info(): 5 + 32 + 10 + 5 = 52 bits
-                _ = reader.read(5)
+                // decoder_model_info(): 5 + 32 + 5 + 5 = 47 bits
+                guard let bufferDelayLengthMinus1 = reader.read(5) else { return nil }
+                bufferDelayLength = Int(bufferDelayLengthMinus1) + 1
                 _ = reader.read(32)
-                _ = reader.read(10)
+                _ = reader.read(5)
                 _ = reader.read(5)
             }
         }
@@ -156,6 +158,7 @@ extension VideoDecoder {
             &reader,
             opCount: opCount,
             decoderModelInfoPresent: decoderModelInfoPresent,
+            bufferDelayLength: bufferDelayLength,
             initialDisplayDelayPresent: initialDisplayDelayPresent)
     }
 
@@ -166,6 +169,7 @@ extension VideoDecoder {
         _ reader: inout BitReader,
         opCount: Int,
         decoderModelInfoPresent: UInt32,
+        bufferDelayLength: Int,
         initialDisplayDelayPresent: UInt32) -> UInt32? {
         var seqTier0: UInt32 = 0
         for op in 0..<opCount {
@@ -178,11 +182,10 @@ extension VideoDecoder {
             if decoderModelInfoPresent == 1 {
                 guard let dmpFlag = reader.read(1) else { return nil }
                 if dmpFlag == 1 {
-                    // operating_parameters_info(): bitrate_minus_1 +
-                    // buffer_size_minus_1 + cbr_flag
-                    guard reader.readUvlc() != nil else { return nil }
-                    guard reader.readUvlc() != nil else { return nil }
-                    _ = reader.read(1)
+                    // operating_parameters_info(): two delays use the declared width.
+                    guard reader.read(bufferDelayLength) != nil else { return nil }
+                    guard reader.read(bufferDelayLength) != nil else { return nil }
+                    guard reader.read(1) != nil else { return nil }
                 }
             }
             if initialDisplayDelayPresent == 1 {

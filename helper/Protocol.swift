@@ -1,7 +1,7 @@
 import Foundation
 
 @objc public protocol GlimmerHelperProtocol {
-    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping (Bool) -> Void)
+    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping @Sendable (Bool) -> Void)
     func currentStatus(reply: @escaping (Bool, Date?) -> Void)
     func ping(reply: @escaping (String) -> Void)
     /// How many times macOS re-raised awdl0 this stream (the contention/whack-a-mole rate).

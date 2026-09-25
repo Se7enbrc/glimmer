@@ -1,20 +1,86 @@
-//
-//  ReedSolomonTests.swift
-//
-//  Erasure round-trip coverage for the GF(256) Reed-Solomon decoders:
-//   - ReedSolomon (generated Cauchy matrix, the VIDEO FEC path), and
-//   - AudioFecDecoder (Nvidia's fixed RS(4,2) hardcoded matrix, the AUDIO path).
-//
-//  Strategy: build known data shards, ENCODE parity with the SAME matrix the
-//  decoder uses (Cauchy `INV[(ps+i)^j]` for video, the hardcoded matrix for
-//  audio), erase up to `ps` data shards, decode, and assert the recovered bytes
-//  equal the originals. Also pins GF256 field identities and the init? guards.
-//
+// Independent field arithmetic pins wire compatibility for video and audio FEC.
+// Round trips also exercise shard mutation and erasure geometry.
 
 import Testing
 @testable import Glimmer
 
 struct ReedSolomonTests {
+
+    private static func referenceMultiply(_ lhs: UInt8, _ rhs: UInt8) -> UInt8 {
+        var multiplicand = UInt16(lhs)
+        var multiplier = rhs
+        var product: UInt16 = 0
+        for _ in 0..<8 {
+            if multiplier & 1 != 0 { product ^= multiplicand }
+            multiplier >>= 1
+            multiplicand <<= 1
+            if multiplicand & 0x100 != 0 { multiplicand ^= 0x11D }
+        }
+        return UInt8(product)
+    }
+
+    private static let referenceInverse: [UInt8] = (0..<256).map { value in
+        guard value != 0 else { return 0 }
+        return (1...255).map { UInt8($0) }.first { referenceMultiply(UInt8(value), $0) == 1 } ?? 0
+    }
+
+    @Test func fieldKnownAnswers() {
+        #expect(GF256.exp[8] == 0x1D)
+        #expect(GF256.mul(0x80, 0x02) == 0x1D)
+        #expect(GF256.mul(0x87, 0x02) == 0x13)
+        #expect(GF256.inv[2] == 0x8E)
+        for lhs in 0..<256 {
+            for rhs in 0..<256 {
+                #expect(GF256.mul(UInt8(lhs), UInt8(rhs)) == Self.referenceMultiply(UInt8(lhs), UInt8(rhs)))
+            }
+        }
+    }
+
+    @Test func cauchyKnownAnswer() throws {
+        let data: [[UInt8]] = [[0, 1, 0x80, 0x87], [0xFF, 2, 0x1D, 0x13], [0x55, 0xAA, 0, 0xFF]]
+        let parity: [[UInt8]] = [[0x07, 0xDF, 0x4B, 0xC1], [0xE0, 0xD7, 0x0B, 0xC9]]
+        #expect(Self.cauchyParity(data: data, ds: 3, ps: 2, bs: 4) == parity)
+        let decoder = try #require(ReedSolomon(dataShards: 3, parityShards: 2))
+        var shards = [[UInt8](repeating: 0, count: 4), data[1], [UInt8](repeating: 0, count: 4)] + parity
+        #expect(decoder.decode(shards: &shards, marks: [true, false, true, false, false], bs: 4))
+        #expect(Array(shards.prefix(3)) == data)
+    }
+
+    @Test(arguments: [0, 1, 15, 16, 17, 1408, 1413])
+    func decodeEveryCoefficient(bs: Int) throws {
+        let data = makeDataShards(ds: 2, bs: bs)
+        for value in 0..<256 {
+            let coefficient = UInt8(value)
+            let matrices: [[UInt8]] = value == 0 ? [[0, 1]] : [[coefficient, 1], [1, coefficient]]
+            for matrix in matrices {
+                let decoder = try #require(ReedSolomon(matrix: matrix, dataShards: 2, parityShards: 1))
+                let parity = (0..<bs).map {
+                    Self.referenceMultiply(matrix[0], data[0][$0]) ^ Self.referenceMultiply(matrix[1], data[1][$0])
+                }
+                var shards = [data[0], [UInt8](repeating: 0xEE, count: bs), parity]
+                #expect(decoder.decode(shards: &shards, marks: [false, true, false], bs: bs))
+                #expect(Array(shards.prefix(2)) == data)
+                #expect(shards[2] == parity)
+            }
+        }
+    }
+
+    @Test(arguments: [1408, 1413])
+    func decodeRecoversElevenErasures(bs: Int) throws {
+        let ds = 71, ps = 15
+        let decoder = try #require(ReedSolomon(dataShards: ds, parityShards: ps))
+        let data = makeDataShards(ds: ds, bs: bs)
+        let parity = Self.cauchyParity(data: data, ds: ds, ps: ps, bs: bs)
+        var shards = data + parity
+        var marks = [Bool](repeating: false, count: ds + ps)
+        for index in [0, 2, 9, 16, 23, 30, 37, 44, 51, 62, 70] {
+            shards[index] = [UInt8](repeating: 0xEE, count: bs)
+            marks[index] = true
+        }
+        #expect(decoder.decode(shards: &shards, marks: marks, bs: bs))
+        #expect(Array(shards.prefix(ds)) == data)
+        #expect(Array(shards.suffix(ps)) == parity)
+    }
 
     // MARK: - GF256 field sanity (the tables are load-bearing constants)
 
@@ -52,10 +118,10 @@ struct ReedSolomonTests {
         var parity = [[UInt8]](repeating: [UInt8](repeating: 0, count: bs), count: ps)
         for j in 0..<ps {
             for i in 0..<ds {
-                let coeff = GF256.inv[(ps + i) ^ j]
+                let coeff = referenceInverse[(ps + i) ^ j]
                 if coeff == 0 { continue }
                 for b in 0..<bs {
-                    parity[j][b] ^= GF256.mul(coeff, data[i][b])
+                    parity[j][b] ^= referenceMultiply(coeff, data[i][b])
                 }
             }
         }
@@ -181,7 +247,7 @@ struct ReedSolomonTests {
                 let coeff = Self.audioParity[row * 4 + col]
                 if coeff == 0 { continue }
                 for b in 0..<blockSize {
-                    parity[row][b] ^= GF256.mul(coeff, data[col][b])
+                    parity[row][b] ^= Self.referenceMultiply(coeff, data[col][b])
                 }
             }
         }

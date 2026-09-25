@@ -6,10 +6,86 @@
 //
 
 import Foundation
+import QuartzCore
 import Testing
+import os
 @testable import Glimmer
 
 struct TelemetryRowTests {
+
+    @Test func jsonNumbersKeepThreeDecimalPlaces() {
+        let cases: [(Double, String)] = [
+            (0.5, "0.500"), (1.049, "1.049"), (-0.5, "-0.500"),
+            (-1.25, "-1.250"), (12, "12"),
+            (100_000_000_000_000.5, "100000000000000.500"),
+            (1e16, String(format: "%.3f", 1e16))
+        ]
+        for (value, expected) in cases {
+            #expect(TelemetryRenderer.jsonNumber(value) == expected)
+        }
+    }
+
+    @Test func oldDropExpiresWhileNewFrameRemains() {
+        let old = FrameTimingTracker.Timing(frameIndex: 1, receiveNanos: 1,
+            assembleNanos: 1_000_000_000, frameBytes: 0, isIDR: false,
+            hostEncodeMs: 0, assembledHidden: false)
+        let new = FrameTimingTracker.Timing(frameIndex: 2, receiveNanos: 4_000_000_000,
+            assembleNanos: 4_000_000_000, frameBytes: 0, isIDR: false,
+            hostEncodeMs: 0, assembledHidden: false)
+        #expect(FrameTimingTracker.expiredDropCount(order: [1, 2], timings: [1: old, 2: new],
+                                                    nowNanos: 4_000_000_000) == 1)
+    }
+
+    @Test func shutdownDropsOnlyExpiredFrames() {
+        let tracker = FrameTimingTracker(sessionId: "test")
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1,
+                                receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
+        tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2,
+                                receiveNanos: 2_000_000_000, assembleNanos: 2_000_000_000)
+
+        #expect(tracker.flushRemainingDrops(nowNanos: 3_500_000_000) == 1)
+        #expect(tracker.flushRemainingDrops(nowNanos: 3_500_000_000) == 0)
+        #expect(tracker.flushRemainingDrops(nowNanos: 4_500_000_000) == 1)
+    }
+
+    @Test func audioCushionRenderersUseTheCapturedValues() throws {
+        var extras = TelemetrySnapshot.Extras()
+        extras.audioCushionFloorMs = 17
+        extras.audioCushionSeedMs = 43
+
+        var snap = TelemetrySnapshot()
+        snap.audio = AudioSnapshot()
+        let prom = TelemetryRenderer.prometheus(snap, extras: extras)
+        let ndjson = TelemetryRenderer.ndjson(snap, extras: extras)
+        let row = try #require(try JSONSerialization.jsonObject(with: Data(ndjson.utf8)) as? [String: Any])
+
+        #expect(prom.contains("glimmer_audio_cushion_floor_ms") && prom.contains(" 17\n"))
+        #expect(prom.contains("glimmer_audio_cushion_seed_ms") && prom.contains(" 43\n"))
+        #expect((row["audio_cushion_floor_ms"] as? NSNumber)?.doubleValue == 17)
+        #expect((row["audio_cushion_seed_ms"] as? NSNumber)?.doubleValue == 43)
+    }
+
+    @Test func telemetryConnectionSlotsRejectAndRecoverCapacity() {
+        let connections = (0..<9).map { _ in NSObject() }
+        var slots = TelemetryConnectionSlots()
+        for connection in connections.prefix(8) {
+            let reserved = slots.reserve(ObjectIdentifier(connection))
+            #expect(reserved)
+        }
+        #expect(slots.count == 8)
+        let ninthReserved = slots.reserve(ObjectIdentifier(connections[8]))
+        #expect(!ninthReserved)
+
+        slots.release(ObjectIdentifier(connections[0]))
+        let reusedAfterFinish = slots.reserve(ObjectIdentifier(connections[8]))
+        #expect(reusedAfterFinish)
+        #expect(slots.count == 8)
+
+        slots.release(ObjectIdentifier(connections[1]))
+        let reusedAfterExpiry = slots.reserve(ObjectIdentifier(connections[0]))
+        #expect(reusedAfterExpiry)
+        #expect(slots.count == 8)
+    }
 
     // MARK: - NDJSON row
 
@@ -58,13 +134,27 @@ struct TelemetryRowTests {
 
     // MARK: - Host cadence (StatsCollector)
 
+    @Test @MainActor func stallRecreateDrainsPendingDecodeSubmits() async {
+        let decoder = VideoDecoder()
+        for _ in 0..<5 {
+            let state = OSSignposter.decode.beginInterval("DecodeFrame")
+            decoder.statsCollector.recordDecodeSubmit(intervalState: state)
+        }
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        decoder.releaseInFlightDecode(vtFailed: true)
+
+        #expect(decoder.reserveDecodeSlot(isIDR: true) == .reservedForStallRecreate)
+        await decoder.decodeQueue.drainForTest()
+        #expect(decoder.statsCollector.submitFifo.isEmpty)
+    }
+
     @Test func bunchedHostFramesCountAsUnevenPairs() throws {
         // A ~60 fps game delivering frames in pairs: 28 ms, then 5 ms, repeated.
         let bunched = StatsCollector()
         var pts: UInt64 = 1_000_000
         for index in 0..<60 {
             pts += index.isMultiple(of: 2) ? 5_000 : 28_000
-            bunched.recordReceivedFrame(bytes: 1_000, ptsUs: pts)
+            bunched.recordReceivedFrame(bytes: 1_000, ptsUs: pts, frameNumber: Int32(index))
         }
         let cadence = try #require(bunched.snapshot().hostCadence)
         #expect(cadence.unevenPairs == 58)
@@ -75,15 +165,93 @@ struct TelemetryRowTests {
         pts = 1_000_000
         for index in 0..<60 {
             pts += index == 30 ? 16_667 : 8_333
-            steady.recordReceivedFrame(bytes: 1_000, ptsUs: pts)
+            steady.recordReceivedFrame(bytes: 1_000, ptsUs: pts, frameNumber: Int32(index))
         }
         #expect(steady.snapshot().hostCadence?.unevenPairs == 0)
     }
 
+    @Test func missingNetworkFramesDoNotBecomeHostCadence() throws {
+        let stats = StatsCollector()
+        for frame in 0..<4 {
+            stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000 + UInt64(frame) * 8_333,
+                                      frameNumber: Int32(frame))
+        }
+        stats.recordPresent(cadenceErrorMs: 0, hostPTSSeconds: 1.025,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+
+        for frame in 7..<11 {
+            stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000 + UInt64(frame) * 8_333,
+                                      frameNumber: Int32(frame))
+        }
+        stats.recordPresent(cadenceErrorMs: 25, hostPTSSeconds: 1.058331,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+
+        let cadence = try #require(stats.snapshot().hostCadence)
+        #expect(cadence.unevenPairs == 0)
+        #expect(cadence.intervalP95Ms < 9)
+        #expect(cadence.lateByHostPercent == 0)
+    }
+
+    @Test func queuedPresentBeforeNetworkGapDoesNotConsumeItsAttribution() throws {
+        let stats = StatsCollector()
+        for frame in 1...3 {
+            stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000 + UInt64(frame) * 8_333,
+                                      frameNumber: Int32(frame))
+        }
+        stats.recordPresent(cadenceErrorMs: 0, hostPTSSeconds: 1.016666,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_058_331, frameNumber: 7)
+        stats.recordPresent(cadenceErrorMs: 0, hostPTSSeconds: 1.024999,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+        stats.recordPresent(cadenceErrorMs: 25, hostPTSSeconds: 1.058331,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+
+        let cadence = try #require(stats.snapshot().hostCadence)
+        #expect(cadence.lateByHostPercent == 0)
+    }
+
+    @Test func networkGapsStayBoundedWithoutPresents() throws {
+        let stats = StatsCollector()
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000, frameNumber: 0)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_008_333, frameNumber: 1)
+        for frame in 1...2_000 {
+            stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000 + UInt64(frame) * 28_000,
+                                      frameNumber: Int32(frame * 2 + 1))
+        }
+        #expect(stats.pendingNetworkGapCount == StatsCollector.networkGapCapacity)
+        #expect(stats.pendingNetworkGapPtsSeconds.count == StatsCollector.networkGapCapacity)
+
+        stats.recordPresent(cadenceErrorMs: 0, hostPTSSeconds: 56.972,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+        stats.recordPresent(cadenceErrorMs: 25, hostPTSSeconds: 57.0,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+        let cadence = try #require(stats.snapshot().hostCadence)
+        #expect(cadence.lateByHostPercent == 0)
+        #expect(stats.pendingNetworkGapCount == 0)
+    }
+
+    @Test func backwardPtsClearsPendingNetworkGaps() throws {
+        let stats = StatsCollector()
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 9_900_000, frameNumber: 0)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 10_000_000, frameNumber: 2)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000, frameNumber: 3)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_008_333, frameNumber: 4)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_028_000, frameNumber: 6)
+        #expect(stats.pendingNetworkGapCount == 1)
+
+        stats.recordPresent(cadenceErrorMs: 0, hostPTSSeconds: 1.0,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+        stats.recordPresent(cadenceErrorMs: 25, hostPTSSeconds: 1.028,
+                            streamIntervalMs: 8.333, refreshMs: 8.333)
+        let cadence = try #require(stats.snapshot().hostCadence)
+        #expect(cadence.lateByHostPercent == 0)
+        #expect(stats.pendingNetworkGapCount == 0)
+    }
+
     @Test func latePresentsAreChargedToTheHostOnlyWhenItsTimingExplainsThem() throws {
         let stats = StatsCollector()
-        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000)
-        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_008_333)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000, frameNumber: 0)
+        stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_008_333, frameNumber: 1)
         func present(errorMs: Double, pts: Double) {
             stats.recordPresent(cadenceErrorMs: errorMs, hostPTSSeconds: pts,
                                 streamIntervalMs: 8.333, refreshMs: 8.333)
@@ -100,7 +268,8 @@ struct TelemetryRowTests {
         // A steady 120 fps host on a 120 Hz display; the pacer trims one frame.
         let stats = StatsCollector()
         for frame in 0..<4 {
-            stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000 + UInt64(frame) * 8_333)
+            stats.recordReceivedFrame(bytes: 1_000, ptsUs: 1_000_000 + UInt64(frame) * 8_333,
+                                      frameNumber: Int32(frame))
         }
         func present(errorMs: Double, pts: Double) {
             stats.recordPresent(cadenceErrorMs: errorMs, hostPTSSeconds: pts,
@@ -151,6 +320,7 @@ struct TelemetryRowTests {
         let lines = tracker.dropStubLines(evicted, hiddenNow: false, evictMs: 5)
         #expect(lines.count == 1)
         #expect(lines.first?.contains("\"frame\":2,") == true)
+        #expect(lines.first?.contains("\"t_assemble_ms\":0.000,") == true)
         #expect(tracker.dropStubLines(evicted, hiddenNow: true, evictMs: 5).isEmpty)
     }
 

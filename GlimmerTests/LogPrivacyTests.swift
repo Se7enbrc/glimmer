@@ -75,6 +75,9 @@ struct DiagMessageTests {
         let plain: DiagMessage = "rejected (\("runt" as DiagMessage))"
         #expect(plain.text == "rejected (runt)")
         #expect(plain.systemLogText == plain.text)
+        let whole: DiagMessage = "reason \(plain, privacy: .private)"
+        #expect(whole.text == "reason rejected (runt)")
+        #expect(whole.systemLogText == "reason <private>")
     }
 
     @Test func viewerKeepsTheFullText() {

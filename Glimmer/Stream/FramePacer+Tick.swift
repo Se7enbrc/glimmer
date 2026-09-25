@@ -186,17 +186,8 @@ extension FramePacer {
                 "fromHz=\(changedFromHz, privacy: .public) toHz=\(changedToHz, privacy: .public)")
         }
 
-        // Floor re-apply: the present-callback floor is seeded at install from
-        // the CONFIGURED fps, but the true cadence is learned from PTS deltas
-        // once frames flow (a configured-vs-actual mismatch, or a mid-stream fps
-        // change like 60→120). It touches the link + NSView, both main-affine, so
-        // it CANNOT run on the tick thread - HOP it to the main actor. The hop is
-        // THROTTLED to ~10Hz (tick-thread-confined timestamp) so a 120-240Hz tick
-        // doesn't flood the main queue with the steady-state no-op check; the real
-        // re-pin rate is ~0.5/s, far under the throttle, and the method's own
-        // hysteresis decides whether to actually rewrite the range, so nothing is
-        // missed. On the `.main` fallback this is already a main-actor context;
-        // the async hop is harmless there too.
+        // Re-apply checks touch the link and NSView, so hop to main, at most
+        // ~10 Hz: the floor re-pin it gates is ~0.5/s. The `.main` fallback can hop too.
         let sinceReapply = hostNow - Self.lastReapplyHopHostTime
         if !Self.lastReapplyHopHostTime.isFinite || sinceReapply >= Self.reapplyHopMinInterval {
             Self.lastReapplyHopHostTime = hostNow
@@ -214,10 +205,7 @@ extension FramePacer {
         }
     }
 
-    /// Min seconds between main-actor `reapplyPreferredRangeIfNeeded` hops, and
-    /// the last hop's host time (tick-thread confined, like
-    /// `lastTickTargetTimestamp`). Throttles the per-tick main hop to ~10Hz - the
-    /// floor re-pin it gates is ~0.5/s, so no real re-pin is delayed meaningfully.
+    /// Min seconds between main-actor re-apply hops; timestamp is tick-thread confined.
     static let reapplyHopMinInterval: CFTimeInterval = 0.1
     nonisolated(unsafe) static var lastReapplyHopHostTime: CFTimeInterval = .nan
 

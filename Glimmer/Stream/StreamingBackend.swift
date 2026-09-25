@@ -208,7 +208,7 @@ public struct OpusConfig: Sendable {
 /// Flattened HDR10 static metadata. Primaries normalized to 50000, luminance
 /// in nits / 1-10000 nit. The native engine fills it from the host's SDP HDR
 /// mastering metadata.
-public struct HdrMetadata: Sendable {
+public struct HdrMetadata: Sendable, Equatable {
     public var displayPrimariesRX, displayPrimariesRY: UInt16
     public var displayPrimariesGX, displayPrimariesGY: UInt16
     public var displayPrimariesBX, displayPrimariesBY: UInt16

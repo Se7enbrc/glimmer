@@ -131,9 +131,6 @@ public struct StreamStatsSnapshot: Sendable {
     /// vsync, sampled at the display's tick rate. 1-2 is the healthy target;
     /// a sustained 3 means we're riding the cap (latency creeping up).
     public var pacingQueueDepth: Int?
-    /// Peak pacing-queue depth over the sampling window - surfaces a transient
-    /// build the live gauge would miss.
-    public var pacingQueueDepthMax: Int?
     /// Average magnitude of present-vs-PTS cadence error this window, in ms.
     /// The headline smoothness number: how far each present landed from the
     /// ideal grid. Near zero = buttery; growth = judder.
@@ -345,12 +342,9 @@ public struct StreamStatsSnapshot: Sendable {
                 health: decodeTimeHealth(avgDecodeTimeMs, targetFps: targetFps),
                 section: .pipeline)
         case .hostProcessing:
-            // "Host encode", NOT "latency": this is the HOST's capture+encode
-            // time (Sunshine `frameHostProcessingLatency`), e.g. ~60ms with a
-            // two-pass AV1 encode at high fps. It is server-side and must never
-            // be read as our client/pipeline latency (the separate "Latency"
-            // row is RTT; our pipeline e2e is ~6ms). Labelling it "PC encode"
-            // removes the misread that the engine regressed.
+            // "PC encode", not "latency": the PC's capture and encode time
+            // (Sunshine's frameHostProcessingLatency), which must never read as
+            // this Mac's pipeline latency; the "Latency" row is the round trip.
             return StatsRow(
                 kind: .hostProcessing, label: "PC encode",
                 value: formatHostProcessingLatency(),

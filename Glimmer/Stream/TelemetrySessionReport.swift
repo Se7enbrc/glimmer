@@ -58,11 +58,11 @@ struct SessionReport {
         var top: [String] = []
         top.append("\"schema\":\"glimmer.session_report.v1\"")
         top.append("\"session\":\"\(sessionId)\"")
-        top.append("\"client\":\"\(client)\"")
-        top.append("\"host\":\"\(host)\"")
+        top.append("\"client\":\"\(TelemetryRenderer.jsonStringEscape(client))\"")
+        top.append("\"host\":\"\(TelemetryRenderer.jsonStringEscape(host))\"")
         top.append("\"generated\":\"\(generatedISO8601)\"")
         top.append("\"build\":{\"commit\":\"\(buildCommit)\",\"date\":\"\(buildDate)\"}")
-        top.append("\"duration_s\":\(num(durationSeconds))")
+        top.append("\"duration_s\":\(TelemetryRenderer.jsonNumber(durationSeconds))")
         top.append("\"ticks\":\(aggregate.tickCount)")
         // GATE-AWARE segmentation: per-segment second counts first, so
         // every headline below reads against its denominator. `fps`/`latency`/
@@ -125,9 +125,9 @@ struct SessionReport {
     private func fpsObject(active: Bool) -> String {
         func stat(_ name: String, _ stat: SessionAggregate.Stat) -> String? {
             var parts: [String] = []
-            if let value = stat.min { parts.append("\"min\":\(num(value))") }
-            if let value = stat.avg { parts.append("\"avg\":\(num(value))") }
-            if let value = stat.max { parts.append("\"max\":\(num(value))") }
+            if let value = stat.min { parts.append("\"min\":\(TelemetryRenderer.jsonNumber(value))") }
+            if let value = stat.avg { parts.append("\"avg\":\(TelemetryRenderer.jsonNumber(value))") }
+            if let value = stat.max { parts.append("\"max\":\(TelemetryRenderer.jsonNumber(value))") }
             guard !parts.isEmpty else { return nil }
             return "\"\(name)\":{" + parts.joined(separator: ",") + "}"
         }
@@ -154,13 +154,13 @@ struct SessionReport {
             guard stage.hasObservations else { return nil }
             var parts: [String] = []
             if let value = TelemetryRenderer.histogramQuantile(0.50, stage: stage) {
-                parts.append("\"p50_ms\":\(num(value))")
+                parts.append("\"p50_ms\":\(TelemetryRenderer.jsonNumber(value))")
             }
             if let value = TelemetryRenderer.histogramQuantile(0.95, stage: stage) {
-                parts.append("\"p95_ms\":\(num(value))")
+                parts.append("\"p95_ms\":\(TelemetryRenderer.jsonNumber(value))")
             }
             if let value = TelemetryRenderer.histogramQuantile(0.99, stage: stage) {
-                parts.append("\"p99_ms\":\(num(value))")
+                parts.append("\"p99_ms\":\(TelemetryRenderer.jsonNumber(value))")
             }
             parts.append("\"count\":\(stage.observationCount)")
             return "\"\(name)\":{" + parts.joined(separator: ",") + "}"
@@ -190,8 +190,8 @@ struct SessionReport {
     private func reorderDisplacementObject() -> String {
         var parts: [String] = []
         if let disp = counters.reorderDisplacement {
-            parts.append("\"hold_ms\":\(num(disp.holdMs))")
-            parts.append("\"max_ms\":\(num(disp.maxMs))")
+            parts.append("\"hold_ms\":\(TelemetryRenderer.jsonNumber(disp.holdMs))")
+            parts.append("\"max_ms\":\(TelemetryRenderer.jsonNumber(disp.maxMs))")
             parts.append("\"max_packets\":\(disp.maxPackets)")
         }
         parts.append("\"hold_exceeded\":\(counters.reorderHoldExceededTotal.value)")
@@ -199,10 +199,10 @@ struct SessionReport {
            stage.hasObservations {
             parts.append("\"count\":\(stage.observationCount)")
             if let value = TelemetryRenderer.histogramQuantile(0.50, stage: stage) {
-                parts.append("\"p50_ms\":\(num(value))")
+                parts.append("\"p50_ms\":\(TelemetryRenderer.jsonNumber(value))")
             }
             if let value = TelemetryRenderer.histogramQuantile(0.999, stage: stage) {
-                parts.append("\"p999_ms\":\(num(value))")
+                parts.append("\"p999_ms\":\(TelemetryRenderer.jsonNumber(value))")
             }
         }
         return "{" + parts.joined(separator: ",") + "}"
@@ -223,7 +223,7 @@ struct SessionReport {
     private func handshakeLegs(_ breakdown: HandshakeBreakdown) -> [String] {
         var parts: [String] = []
         func add(_ key: String, _ value: Double?) {
-            if let value, value.isFinite { parts.append("\"\(key)\":\(num(value))") }
+            if let value, value.isFinite { parts.append("\"\(key)\":\(TelemetryRenderer.jsonNumber(value))") }
         }
         add("rtsp_ms", breakdown.rtspMs)
         add("control_setup_ms", breakdown.controlSetupMs)
@@ -249,7 +249,7 @@ struct SessionReport {
             "\"idr_round_trip_matched\":\(counters.idrRoundTripMatchedTotal.value)"
         ]
         if let last = counters.p2.lastIdrRoundTripMs {
-            parts.append("\"idr_round_trip_last_ms\":\(num(last))")
+            parts.append("\"idr_round_trip_last_ms\":\(TelemetryRenderer.jsonNumber(last))")
         }
         return "{" + parts.joined(separator: ",") + "}"
     }
@@ -265,11 +265,11 @@ struct SessionReport {
             return "{\"never\":true,\"pings\":\(EnvSignalController.shared.audioPingsSentTotal.value)}"
         }
         var parts: [String] = []
-        if let ttfMs { parts.append("\"ttf_ms\":\(num(ttfMs))") }
+        if let ttfMs { parts.append("\"ttf_ms\":\(TelemetryRenderer.jsonNumber(ttfMs))") }
         if let record = latched {
             parts.append("\"ttf_class\":\"\(record.ttfClass)\"")
-            if let ping = record.pingToRtpMs { parts.append("\"ping_to_rtp_ms\":\(num(ping))") }
-            if let idle = record.hostIdleSeconds { parts.append("\"host_idle_s\":\(num(idle))") }
+            if let ping = record.pingToRtpMs { parts.append("\"ping_to_rtp_ms\":\(TelemetryRenderer.jsonNumber(ping))") }
+            if let idle = record.hostIdleSeconds { parts.append("\"host_idle_s\":\(TelemetryRenderer.jsonNumber(idle))") }
             if let startup = record.startup { parts.append("\"startup\":\"\(startup)\"") }
         }
         return "{" + parts.joined(separator: ",") + "}"
@@ -284,12 +284,12 @@ struct SessionReport {
         guard let skew = AudioVideoSkewStore.shared.sessionSummary() else { return "{}" }
         let parts: [String] = [
             "\"samples\":\(skew.samples)",
-            "\"min\":\(num(skew.minMs))",
-            "\"avg\":\(num(skew.avgMs))",
-            "\"p50\":\(num(skew.p50Ms))",
-            "\"p95\":\(num(skew.p95Ms))",
-            "\"p99\":\(num(skew.p99Ms))",
-            "\"max\":\(num(skew.maxMs))",
+            "\"min\":\(TelemetryRenderer.jsonNumber(skew.minMs))",
+            "\"avg\":\(TelemetryRenderer.jsonNumber(skew.avgMs))",
+            "\"p50\":\(TelemetryRenderer.jsonNumber(skew.p50Ms))",
+            "\"p95\":\(TelemetryRenderer.jsonNumber(skew.p95Ms))",
+            "\"p99\":\(TelemetryRenderer.jsonNumber(skew.p99Ms))",
+            "\"max\":\(TelemetryRenderer.jsonNumber(skew.maxMs))",
             "\"rebases\":\(skew.rebases)"
         ]
         return "{" + parts.joined(separator: ",") + "}"
@@ -304,12 +304,12 @@ struct SessionReport {
         guard let skew = AudioVideoSkewStore.shared.clockSkewSessionSummary() else { return "{}" }
         let parts: [String] = [
             "\"samples\":\(skew.samples)",
-            "\"min\":\(num(skew.minMs))",
-            "\"avg\":\(num(skew.avgMs))",
-            "\"p50\":\(num(skew.p50Ms))",
-            "\"p95\":\(num(skew.p95Ms))",
-            "\"p99\":\(num(skew.p99Ms))",
-            "\"max\":\(num(skew.maxMs))"
+            "\"min\":\(TelemetryRenderer.jsonNumber(skew.minMs))",
+            "\"avg\":\(TelemetryRenderer.jsonNumber(skew.avgMs))",
+            "\"p50\":\(TelemetryRenderer.jsonNumber(skew.p50Ms))",
+            "\"p95\":\(TelemetryRenderer.jsonNumber(skew.p95Ms))",
+            "\"p99\":\(TelemetryRenderer.jsonNumber(skew.p99Ms))",
+            "\"max\":\(TelemetryRenderer.jsonNumber(skew.maxMs))"
         ]
         return "{" + parts.joined(separator: ",") + "}"
     }
@@ -425,8 +425,8 @@ struct SessionReport {
             segment: SessionAggregate.TickSegment? = nil
         ) {
             guard let value else { return }
-            var inner = "\"value_ms\":\(num(value))"
-            if let at { inner += ",\"at_t_connect_s\":\(num(at))" }
+            var inner = "\"value_ms\":\(TelemetryRenderer.jsonNumber(value))"
+            if let at { inner += ",\"at_t_connect_s\":\(TelemetryRenderer.jsonNumber(at))" }
             if let segment { inner += ",\"segment\":\"\(segment.rawValue)\"" }
             parts.append("\"\(key)\":{\(inner)}")
         }
@@ -441,14 +441,5 @@ struct SessionReport {
               at: aggregate.worstGlassToGlassP95RawAtSeconds,
               segment: aggregate.worstGlassToGlassP95RawSegment)
         return "{" + parts.joined(separator: ",") + "}"
-    }
-
-    /// Same integer/decimal discipline as the NDJSON/Prometheus renderers so the
-    /// report reads consistently and no NDJSON reader chokes on exponent form.
-    private func num(_ value: Double) -> String {
-        if value == value.rounded() && abs(value) < 1e15 {
-            return String(Int64(value))
-        }
-        return String(format: "%.3f", value)
     }
 }

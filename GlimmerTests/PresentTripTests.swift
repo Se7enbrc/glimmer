@@ -12,6 +12,25 @@ import Testing
 
 struct PresentTripTests {
 
+    @Test func presentMetricNoticesStallsAndMinuteHeartbeat() {
+        let threshold = StreamSession.presentStallThreshold
+        func notices(
+            tick: Double = 0, release: Double = 0, present: Double = 0,
+            decode: Double = 0, elapsed: Double = 0
+        ) -> Bool {
+            StreamSession.presentMetricNeedsNotice(
+                sinceTick: tick, sinceRelease: release, sincePresent: present,
+                decodeIdle: decode, sinceNotice: elapsed)
+        }
+        #expect(!notices(tick: 0.01, release: 0.01, present: 0.01,
+                         decode: 0.01, elapsed: 59.9))
+        #expect(notices(tick: StreamSession.presentLinkDeadThreshold))
+        #expect(notices(release: threshold))
+        #expect(notices(present: threshold))
+        #expect(notices(decode: threshold))
+        #expect(notices(elapsed: 60))
+    }
+
     /// THE wedge shape: depth 0, zero releases, deep reject streak - the trip
     /// must open (and carry the rendererRejecting classification so the ladder
     /// selects the flush medicine, the proven cure for the latched renderer).

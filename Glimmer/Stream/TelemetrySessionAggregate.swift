@@ -77,8 +77,7 @@ struct SessionAggregate {
     var decodedFpsRaw = Stat()
     var renderedFpsRaw = Stat()
 
-    /// Peak pacing-queue depth seen across the whole session (the deepest the
-    /// jitter buffer ever rode) - a latency-creep tell the live gauge misses.
+    /// Peak of the 1 Hz pacing-depth samples, a sustained buffer-build signal.
     var peakPacingDepth: Int = 0
 
     // ---- Worst single 1s windows (the transient that defined the run) ----
@@ -213,19 +212,22 @@ struct SessionAggregate {
                 worstPresentCadenceErrorAtSeconds = snap.sinceConnectSeconds
             }
         }
-        // Worst glass-to-glass: use the per-tick p95 from the histogram so a
-        // single bad second stands out (the cumulative session p95 would smear
-        // it). Cheap - the histogram snapshot is already on the snapshot.
-        if let histograms = snap.latencyHistograms,
-           let p95 = TelemetryRenderer.histogramQuantile(0.95, stage: histograms.glassToGlass) {
-            if p95 > (worstGlassToGlassP95RawMs ?? -1) {
-                worstGlassToGlassP95RawMs = p95
-                worstGlassToGlassP95RawAtSeconds = snap.sinceConnectSeconds
-                worstGlassToGlassP95RawSegment = segment
-            }
-            if isActive, p95 > (worstGlassToGlassP95Ms ?? -1) {
-                worstGlassToGlassP95Ms = p95
-                worstGlassToGlassP95AtSeconds = snap.sinceConnectSeconds
+        // Slice the cumulative histogram so one bad second is not hidden by
+        // earlier good frames. foldLatency advances the baseline after this.
+        if let histograms = snap.latencyHistograms {
+            let tick = prevLatencyCumulative.map {
+                LatencyRollingWindow.difference(histograms, minus: $0)
+            } ?? histograms
+            if let p95 = TelemetryRenderer.histogramQuantile(0.95, stage: tick.glassToGlass) {
+                if p95 > (worstGlassToGlassP95RawMs ?? -1) {
+                    worstGlassToGlassP95RawMs = p95
+                    worstGlassToGlassP95RawAtSeconds = snap.sinceConnectSeconds
+                    worstGlassToGlassP95RawSegment = segment
+                }
+                if isActive, p95 > (worstGlassToGlassP95Ms ?? -1) {
+                    worstGlassToGlassP95Ms = p95
+                    worstGlassToGlassP95AtSeconds = snap.sinceConnectSeconds
+                }
             }
         }
     }

@@ -51,6 +51,11 @@ struct WiredBitrateTests {
         #expect(AppModel.wireBitrateKbps(dial: 1_000, codecMultiplier: 0.8, boost: 1, capKbps: 300_000) == 5_000)
     }
 
+    @Test func capIsAppliedBeforeConvertingLargeBoosts() {
+        #expect(AppModel.wireBitrateKbps(dial: 300_000, codecMultiplier: 1, boost: .infinity, capKbps: 500_000) == 500_000)
+        #expect(AppModel.wireBitrateKbps(dial: 300_000, codecMultiplier: 1, boost: 1e14, capKbps: 500_000) == 500_000)
+    }
+
     @Test func wiFiRadioGateCapsTheAskAtAShareOfThePhyRate() {
         #expect(StreamPathMTU.wifiAskKbps(ask: 271_200, phyRateMbps: 1152) == 271_200)
         #expect(StreamPathMTU.wifiAskKbps(ask: 271_200, phyRateMbps: nil) == 271_200)

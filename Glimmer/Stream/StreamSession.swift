@@ -135,40 +135,17 @@ public actor StreamSession {
     // concurrency from rejecting the cross-isolation write.
     nonisolated(unsafe) var statsOverlayTimer: Timer?
 
-    /// 1 Hz watchdog. Gates on `VideoDecoder.secondsSinceLastDecodedFrame()`
-    /// - "did the user see a frame?" - NOT byte reception. A host sending
-    /// packets we can't decode (corrupt bitstream, missing IDR, AV1-on-
-    /// no-AV1-hardware) is the user-reported "black screen, no error"
-    /// case; a reception-gated watchdog would silently keep the session
-    /// alive because bytes are arriving.
-    ///
-    /// Two thresholds:
-    ///   - frameWatchdogTimeout: decode silent for this long → log + tear
-    ///     down (connection is dead from the user's point of view).
-    ///   - decodeOnlyStallThreshold: decode silent but reception healthy
-    ///     → log a public-privacy diagnostic so the "no frames" symptom
-    ///     surfaces in the unified log before teardown.
-    ///
-    /// The protocol's own keepalive can take 10-30s to declare a dead
-    /// connection; this fast-paths "host crashed / network dropped /
-    /// Sunshine restarted" so the user gets back to the launcher quickly.
-    ///
-    /// Same `nonisolated(unsafe)` invariant as `statsOverlayTimer`: the
-    /// timer is allocated and invalidated on the main thread only; the
-    /// actor schedules those touches via `await MainActor.run { ... }`.
+    /// 1 Hz watchdog gated on decoded frames, not bytes, so video the Mac can't decode ends in an error, not a black screen.
+    /// Recovery starts at 2s; past 10s, recent ACKs defer teardown while recovery continues, and remote paths may downshift.
+    /// Main thread only; the actor schedules mutations through `MainActor.run`.
     nonisolated(unsafe) var frameWatchdogTimer: Timer?
-    /// Monotonic instant (`CACurrentMediaTime`) the frame watchdog armed - the
-    /// idle reference for the PRE-FIRST-FRAME envelope (audit 2026-08-17: idle
-    /// reads ∞ until the first decoded frame, so a bring-up that hung before
-    /// frame one was invisible to every trip - black screen until manual
-    /// cancel, despite the comment below saying the timeout was MEANT to be
-    /// moonlight's FIRST_FRAME_TIMEOUT). Written on the main thread in
-    /// startFrameWatchdog, read by the timer closure on the same thread.
+    /// `CACurrentMediaTime` the first-frame envelope runs from, re-stamped by
+    /// each silent reconnect. Main thread only: written by startFrameWatchdog and
+    /// the reconnect's MainActor hop, read by the watchdog's timer closure.
     nonisolated(unsafe) var frameWatchdogArmedAt: Double = 0
-    /// Matches moonlight-common-c's `FIRST_FRAME_TIMEOUT_SEC` in
-    /// VideoStream.c. We reuse the value mid-stream as well: if decode has
-    /// been silent for this long, the host is presumed gone or the bit-
-    /// stream is unrecoverable, either way we tear down.
+    /// Matches moonlight-common-c's `FIRST_FRAME_TIMEOUT_SEC` in VideoStream.c.
+    /// The first frame gets no ACK grace; mid-stream, recent ACKs defer teardown
+    /// while recovery continues and remote paths may downshift.
     static let frameWatchdogTimeout: Double = 10.0
     /// "Reception healthy, decode silent" - at this threshold we log a
     /// public-privacy diagnostic line so the user-visible "black screen"
@@ -332,9 +309,8 @@ public actor StreamSession {
     /// invalidated on the main thread only; the actor schedules those touches
     /// via `await MainActor.run`.
     nonisolated(unsafe) var presentWatchdogTimer: Timer?
-    /// 2 Hz NOTICE-level instrumentation timer: logs the present/decode-path
-    /// liveness (pacer tick rate, last-release age, queue depth, decode-output
-    /// rate) so a recurrence of the freeze is pinpointed from the log alone.
+    /// Two-second metric timer forwards jitter and records present-path stalls;
+    /// healthy ticks stay at debug level between minute heartbeats.
     nonisolated(unsafe) var presentMetricTimer: Timer?
     /// Opt-in telemetry exporter (all-interfaces /metrics + NDJSON); nil unless
     /// enabled. See StreamSession+Telemetry.swift for gating + safety.
@@ -368,53 +344,33 @@ public actor StreamSession {
     /// ticks (a re-priming CADisplayLink advances totalTicks → no false trip).
     nonisolated(unsafe) var lastWatchdogTotalTicks: UInt64 = 0
     nonisolated(unsafe) var sawLinkSilentLastTick = false
-    /// Pacer tick/release counts + time at the previous metric tick, so the 2 Hz
-    /// instrumentation derives per-second rates.
+    /// Pacer tick/release counts and time from the previous two-second metric
+    /// tick derive per-second rates.
     nonisolated(unsafe) var prevMetricTotalTicks: UInt64 = 0
     nonisolated(unsafe) var prevMetricTotalReleases: UInt64 = 0
     nonisolated(unsafe) var prevMetricTime: CFAbsoluteTime = 0
+    /// Only the MainActor timer reads and writes this slot; the actor schedules
+    /// its setup via MainActor.run, as with presentMetricTimer.
+    nonisolated(unsafe) var lastPresentMetricNoticeTime: CFAbsoluteTime = 0
 
     // Event emission: the continuation lives on the StreamBridgeContext so
     // C-thread callbacks can yield directly (FIFO, no actor hop, ordering
     // preserved). The actor reads through `bridge?.eventContinuation` for the
     // few sites that need to yield (frame-watchdog timeout, finish on stop).
 
-    // OSSignpost interval state for the connection-flow timing. We open
-    // this right before startConnection and close it from
-    // `handleConnectionEdge(.connectionEstablished)` - the first stable-
-    // connection callback. If the connection fails before that callback fires,
-    // the `stop()` teardown path closes it with an outcome=aborted message so
-    // the Instruments timeline never shows a runaway-open interval.
+    // `stop()` closes an aborted connection-flow interval when connection
+    // setup fails before `nativeConnectionEstablished()`, keeping the
+    // Instruments timeline from showing it as still open.
     var connectFlowState: OSSignpostIntervalState?
     let connectFlowSignpostID = OSSignposter.network.makeSignpostID()
 
-    // Power-management + App-Nap-suppression assertion held for the lifetime of
-    // a session. Two distinct jobs, both via the one `beginActivity` token:
-    //
-    //  1) KEEP-AWAKE - `.idleDisplaySleepDisabled` + `.idleSystemSleepDisabled`
-    //     keep the Mac (and its display) from dimming/sleeping mid-stream. A game
-    //     stream is video the user is watching, but to the OS there's no LOCAL
-    //     input/HID activity, so without these the screen dims and sleeps minutes
-    //     into a controller-only session.
-    //
-    //  2) DEFEAT APP NAP - this is the part the two `*SleepDisabled` flags do NOT
-    //     do. Per Apple's NSActivityOptions semantics, App Nap is only suppressed
-    //     by `.userInitiated` (or `.background` + `.latencyCritical`); the sleep
-    //     flags alone keep the screen lit while STILL permitting App Nap to
-    //     throttle our timers / run-loop / QoS the moment the stream window is
-    //     unfocused, occluded, or on a second display. That throttling slows the
-    //     main-run-loop pacing tick (FramePacer.handleTick) so frames back up
-    //     faster than they present → backlog overflow → spurious IDR/RFI on a
-    //     stream that's perfectly healthy. We add `.userInitiated` to opt the
-    //     process out of App Nap and `.latencyCritical` to mark this as the
-    //     real-time video work it is, so background / second-monitor streaming
-    //     stays at full decode/pace/present priority.
-    //
-    // `ProcessInfo.beginActivity` is Apple's recommended high-level API (it wraps
-    // IOPMAssertion); the returned token must be handed back to `endActivity`
-    // exactly once, which `stop()` does. Held as `any` because the concrete type
-    // is opaque.
+    // Controller input does not reset display idle time, so a visible stream
+    // needs an assertion. Hidden streams still keep system sleep and App Nap
+    // off so pacing and audio survive without a reconnect on wake.
+
+    // End each opaque token once, including when visibility swaps it.
     var powerAssertion: (any NSObjectProtocol)?
+    var powerAssertionHidden = false
 
     // State. `isStreaming` is written from StreamSession+Lifecycle (teardown) and
     // StreamSession+Callbacks, so it is module-internal rather than private(set);
@@ -429,7 +385,9 @@ public actor StreamSession {
     var takeoverAuthorized = false
     var ownsHostSession = false
     var hostSessionClientID: String?
+    var hostSessionAppID: Int?
     var launchTask: Task<LaunchResponse, Error>?
+    var pendingLaunch: Task<LaunchResponse, Error>?
 
     /// - Parameter backend: the streaming engine. Defaults to the Swift-native
     ///   engine, the only implementation.

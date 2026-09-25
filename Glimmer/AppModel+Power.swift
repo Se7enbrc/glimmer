@@ -36,6 +36,7 @@ extension AppModel.WakeFailureReason {
 
 extension AppModel {
     private static var wakeTask: Task<Void, Never>?
+    static let wakeReadinessTimeout = NetworkClient.controlTimeout
     static let wakeBudgetSeconds: Double = 90
     /// Every surface adds this when a wake gets no answer.
     nonisolated static let wakeNoAnswerHint = "Wake on LAN works on your home network; over Tailscale it can't reach the PC."
@@ -131,28 +132,28 @@ extension AppModel {
         restartHostStatusPolling()
     }
 
-    /// Sunshine's /serverinfo every 3 s until it answers or the budget ends; this polls
-    /// the app, not the power state. mDNS runs alongside in case the PC came back on a
-    /// new DHCP address, and each try dials the latest saved address.
+    /// Pinned /serverinfo until Sunshine answers or the budget ends. mDNS runs alongside
+    /// in case the PC came back on a new DHCP address; each try dials the latest saved address.
     private func waitForSunshine(host: Host, budgetSeconds: Double) async -> Bool {
         let search = Task { await healAddress(of: host, within: budgetSeconds) }
         defer { search.cancel() }
         let deadline = Date().addingTimeInterval(budgetSeconds)
         while Date() < deadline {
             let current = hosts.first { $0.id == host.id } ?? host
-            let client = NetworkClient(server: nativeServerInfo(for: current))
-            let answered = (try? await client.fetchServerInfo()) != nil
+            let info = nativeServerInfo(for: current)
+            let client = NetworkClient(server: info)
+            let answered = (try? await client.fetchServerInfo(timeout: Self.wakeReadinessTimeout,
+                                                               diagnosePinnedFailure: false)) != nil
             await client.shutdown()
             if answered { return true }
-            do { try await Task.sleep(for: .seconds(3)) } catch { return false }
+            do { try await Task.sleep(for: .seconds(1)) } catch { return false }
         }
         return false
     }
 }
 
 /// Reports a wake while another app is in front, so a stream never opens over it.
-/// Becomes the notification center's delegate on first use; Connect and Try Again
-/// come back through here.
+/// Routes Connect and Try Again actions back to the app model.
 @MainActor
 final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = WakeNotifier()
@@ -162,12 +163,9 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
     private static let connectAction = "wake.connect"
     private static let tryAgainAction = "wake.tryAgain"
 
-    /// Runs on the Wake and Connect click, so any permission prompt follows it.
-    func prepare(for model: AppModel, host: Host) {
+    func attach(_ model: AppModel) {
         self.model = model
         let center = UNUserNotificationCenter.current()
-        center.removeDeliveredNotifications(withIdentifiers: [Self.identifier(host)])
-        guard center.delegate !== self else { return }
         center.delegate = self
         center.setNotificationCategories([
             UNNotificationCategory(identifier: Self.awakeCategory, actions: [
@@ -177,6 +175,13 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
                 UNNotificationAction(identifier: Self.tryAgainAction, title: "Try Again", options: .foreground)
             ], intentIdentifiers: [])
         ])
+    }
+
+    /// Runs on the Wake and Connect click, so any permission prompt follows it.
+    func prepare(for model: AppModel, host: Host) {
+        attach(model)
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [Self.identifier(host)])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
@@ -223,17 +228,30 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
         let content = response.notification.request.content
         let category = content.categoryIdentifier
         let hostID = content.userInfo["hostID"] as? String
-        Task { @MainActor in self.respond(action: action, category: category, hostID: hostID) }
+        Task { @MainActor in
+            guard let model = self.model else { return }
+            await routeResponse(action: action, category: category, hostID: hostID, model: model,
+                                bootstrap: model.startBootstrap()) { host, connect in
+                self.dispatch(host: host, connect: connect, model: model)
+            }
+        }
         completionHandler()
     }
 
-    /// Clicking an awake notification itself also connects; a failure's body click, or
-    /// any click on a notice left over once a stream is up, only brings Glimmer forward.
-    private func respond(action: String, category: String, hostID: String?) {
-        guard let model, !model.isStreaming, let host = model.hosts.first(where: { $0.id == hostID }) else { return }
+    /// Awake body clicks connect; a failed notice's body click or any click while
+    /// streaming only brings Glimmer forward.
+    func routeResponse(action: String, category: String, hostID: String?, model: AppModel,
+                       bootstrap: Task<Void, Never>, dispatch: (Host, Bool) -> Void) async {
+        await bootstrap.value
+        guard !model.isStreaming, let host = model.hosts.first(where: { $0.id == hostID }) else { return }
+        // Awake notices connect on a body click; failed notices retry only by action.
         let connect = action == Self.connectAction
             || (category == Self.awakeCategory && action == UNNotificationDefaultActionIdentifier)
         guard connect || action == Self.tryAgainAction else { return }
+        dispatch(host, connect)
+    }
+
+    private func dispatch(host: Host, connect: Bool, model: AppModel) {
         if model.selectedHost?.id != host.id { model.selectHost(host) }
         if connect { model.streamHeroApp() } else { model.wakeHost(host, thenConnect: true) }
     }

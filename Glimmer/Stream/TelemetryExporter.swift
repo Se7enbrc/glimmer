@@ -48,6 +48,7 @@
 import Foundation
 import Network
 import os
+import Darwin
 
 // MARK: - Gating
 
@@ -57,7 +58,7 @@ enum TelemetryGate {
     /// True iff telemetry should run. Either the UserDefaults flag or the env
     /// var enables it; default OFF. Read at session start only.
     static var isEnabled: Bool {
-        if ProcessInfo.processInfo.environment["GLIMMER_TELEMETRY"] == "1" {
+        if getenv("GLIMMER_TELEMETRY").map({ String(cString: $0) }) == "1" {
             return true
         }
         return UserDefaults.standard.bool(forKey: "telemetryEnabled")
@@ -69,6 +70,22 @@ enum TelemetryGate {
 // (not gated) and shared across the engine, so they are kept in their own unit.
 
 // MARK: - Exporter
+
+struct TelemetryConnectionSlots {
+    static let limit = 8
+    private var identifiers: Set<ObjectIdentifier> = []
+
+    mutating func reserve(_ identifier: ObjectIdentifier) -> Bool {
+        guard identifiers.count < Self.limit else { return false }
+        return identifiers.insert(identifier).inserted
+    }
+
+    mutating func release(_ identifier: ObjectIdentifier) {
+        identifiers.remove(identifier)
+    }
+
+    var count: Int { identifiers.count }
+}
 
 /// Owns the all-interfaces HTTP server + NDJSON writer + 1Hz capture timer for one
 /// streaming session. Created (only) when the gate is on; torn down on stream
@@ -143,6 +160,7 @@ final class TelemetryExporter: @unchecked Sendable {
     /// to be reachable ONLY from inside the receive completion, so a never-
     /// sending peer leaked its NWConnection + FD forever. `workQueue`-confined.
     private var openConnections: [ObjectIdentifier: NWConnection] = [:]
+    private var connectionSlots = TelemetryConnectionSlots()
     var captureTimer: DispatchSourceTimer?
     // Module-internal (not private) so the NDJSON sink in
     // TelemetryExporter+Sinks.swift owns open/append/close across the split.
@@ -154,12 +172,8 @@ final class TelemetryExporter: @unchecked Sendable {
     let serverLabel: String
     let connectInstant = DispatchTime.now()
 
-    /// Last rendered Prometheus body, served to any `GET /metrics`. Replaced each
-    /// capture tick so a scrape always sees fresh-within-1s numbers without us
-    /// having to capture on the scrape thread. Written on `workQueue` by the
-    /// capture path (see TelemetryExporter+Capture.swift); read on the same queue
-    /// by the HTTP handler.
-    var latestPrometheus: String = "# no sample yet\n"
+    /// Last capture inputs for on-demand Prometheus rendering, confined to `workQueue`.
+    var latestSample: (TelemetrySnapshot, TelemetrySnapshot.Extras)?
 
     /// Previous-tick monotonic totals + wall-clock, so the capture derives the
     /// per-second rates (pkts/s, input events/s, flush/s) from deltas. Confined to
@@ -321,6 +335,7 @@ final class TelemetryExporter: @unchecked Sendable {
             // whose receive completion will never fire) - no FD outlives stop.
             for connection in self.openConnections.values { connection.cancel() }
             self.openConnections.removeAll()
+            self.connectionSlots = TelemetryConnectionSlots()
             // Stop the DISPLAY sampler's main-queue timer (idempotent).
             self.display.stop()
             // Stop the route probe's path monitor (idempotent).
@@ -490,6 +505,7 @@ final class TelemetryExporter: @unchecked Sendable {
     /// peers never fire the receive completion); closes funnel through `finishConnection`.
     private func handleConnection(_ connection: NWConnection) {
         let key = ObjectIdentifier(connection)
+        guard connectionSlots.reserve(key) else { connection.cancel(); return }
         openConnections[key] = connection
         connection.start(queue: workQueue)
         // Receive deadline: still tracked after this long ⇒ swept. The closure
@@ -504,7 +520,9 @@ final class TelemetryExporter: @unchecked Sendable {
             let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
             let response: String
             if request.hasPrefix("GET /metrics") {
-                let body = self.latestPrometheus
+                let body = self.latestSample.map {
+                    TelemetryRenderer.prometheus($0.0, extras: $0.1)
+                } ?? "# no sample yet\n"
                 response = "HTTP/1.1 200 OK\r\n"
                     + "Content-Type: text/plain; version=0.0.4; charset=utf-8\r\n"
                     + "Content-Length: \(body.utf8.count)\r\n"
@@ -529,7 +547,9 @@ final class TelemetryExporter: @unchecked Sendable {
     /// Cancel + untrack one accepted connection. On `workQueue` (every caller
     /// already is). Idempotent - a double finish is a map miss + harmless cancel.
     private func finishConnection(_ connection: NWConnection) {
-        openConnections.removeValue(forKey: ObjectIdentifier(connection))
+        let key = ObjectIdentifier(connection)
+        openConnections.removeValue(forKey: key)
+        connectionSlots.release(key)
         connection.cancel()
     }
 

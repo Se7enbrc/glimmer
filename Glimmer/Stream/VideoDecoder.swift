@@ -76,17 +76,9 @@
 //      by flushing and rebuilding the format description - without this,
 //      macOS 14+ silently stops rendering after the first decode error.
 //
-//  Threading model
-//  ---------------
-//   * setup/start/stop/cleanup/submitDecodeUnit fire on the native backend's
-//     receive threads. We never block them.
-//   * Bitstream → CMSampleBuffer happens inline in submitDecodeUnit.
-//   * The VTDecompressionSession outputs on the decode dispatch queue.
-//     That callback builds the CMSampleBuffer and enqueues it directly on
-//     the AVSampleBufferDisplayLayer - no display-link, no mailbox, no
-//     render queue. AVSampleBufferDisplayLayer owns the v-sync pacing.
-//   * Display-layer mutations (colorspace, wantsEDR, flush) happen on the
-//     main actor.
+//  Threading: receive threads hand units to `decodeQueue` and never block; VT's callback
+//  thread wraps decoded frames for the FramePacer, which presents on vsync; display-layer
+//  mutations (colorspace, wantsEDR, flush) run on the main actor.
 
 import AppKit
 import AVFoundation
@@ -134,16 +126,9 @@ public final class VideoDecoder {
         }
     }
 
-    /// Whether the host has signalled HDR mode via LiSetHdrMode. False by
-    /// default - driven by `setHDR(enabled:)` from CONNECTION_LISTENER_CALLBACKS.
-    ///
-    /// `nonisolated(unsafe)` because the VT output callback reads this from
-    /// the decode queue when deciding the untagged-bitstream fallback
-    /// colorspace. Writes happen on the main actor from setHDR(); reads
-    /// elsewhere are eventually-consistent, which is correct - when HDR
-    /// flips on, the next-frame fallback may briefly attach BT.2020 instead
-    /// of PQ before catching up, and that's visually indistinguishable.
-    /// A Bool load/store is naturally atomic on every supported arch.
+    /// Whether the PC signalled HDR mode. Written by `setHDR(enabled:)` and teardown, read by the VT
+    /// output callback for the untagged fallback colorspace: a one-frame-stale Bool is harmless, and
+    /// its load and store are atomic on every supported architecture.
     nonisolated(unsafe) internal var hdrEnabled: Bool = false
 
     /// Whether HDR is *actually* active end-to-end: host said yes, stream is
@@ -182,32 +167,9 @@ public final class VideoDecoder {
 
     // MARK: - Internal state
     //
-    // A note on `nonisolated(unsafe)` below - read once, then trust the
-    // serialization contract.
-    //
-    // VideoDecoder is `@MainActor`-isolated at the class level so the
-    // attach/teardown path has clean main-actor semantics. But the native
-    // backend hands us decode units on its own receive threads, and the
-    // VideoToolbox session output callback fires on the dispatch queue we hand
-    // it (decodeQueue). Those code paths can never go through the actor -
-    // they're either receive-thread boundaries that can't suspend or hot paths
-    // where suspending would tank latency.
-    //
-    // We bridge the two worlds with:
-    //   * `decodeQueue.sync` for VT state (decompressionSession, format
-    //     description, parameter sets, codec/stream parameters).
-    //   * The native backend's per-stream callback serialization
-    //     guarantee for streamWidth/Height/VideoFormat/Fps (set in
-    //     handleSetup before handleStart fires, read by submit later).
-    //
-    // `displayLayer` is touched from the main actor on attach/teardown and
-    // from the decode queue on enqueue. `enqueue` is documented as safe to
-    // call from any thread in Apple's AVFoundation header, so cross-thread
-    // access is by design (Apple uses an internal lock).
-    //
-    // `isStreaming` is the only true cross-thread atomic - set on main,
-    // read on every worker thread to short-circuit teardown races. A bool
-    // load is naturally atomic on every supported architecture.
+    // Main-actor isolated, but the receive thread, the decode queue and VT's own output thread
+    // reach this state too: VT session state stays on the decode queue, and references another
+    // thread can swap mid-stream sit behind a lock.
 
     let log: Logger
 
@@ -216,10 +178,8 @@ public final class VideoDecoder {
     nonisolated let negotiatedBitrateKbps = Atomic<Int>(0)
     /// Live audio-config display label surfaced in the overlay; see setActiveAudioConfigLabel.
     var activeAudioConfigLabel: String?
-    /// Per-frame stats counters. Touched from the moonlight receive thread, the VT
-    /// decode queue, and the main actor; `@unchecked Sendable` over an internal
-    /// `os_unfair_lock`, so it crosses isolation boundaries safely. `nonisolated`
-    /// so the static VT callback closure can record from the decode queue.
+    /// Per-frame stats counters, recorded from the receive thread, the decode queue, VT's output
+    /// thread and the main actor. `@unchecked Sendable` over an internal `os_unfair_lock`.
     nonisolated let statsCollector = StatsCollector()
 
     // The streaming engine: set at stream start and re-pointed by setBackend on a
@@ -233,11 +193,9 @@ public final class VideoDecoder {
         set { backendLock.lock(); defer { backendLock.unlock() }; _backend = newValue }
     }
 
-    // Display layer. Set on the main actor before stream start, dropped on
-    // teardown. The decode queue reads it from the VT output callback;
-    // The layer/renderer slot: enqueue is thread-safe, the reference write is
-    // not, so an NSLock (the layer is not Sendable) guards load/store. Hot
-    // sites snapshot into a local; writes happen on MainActor only.
+    // The display layer and its renderer, set on the main actor and read from VT's output thread and
+    // the pacer. Enqueue is thread-safe but the reference write is not, so an NSLock (the layer is not
+    // Sendable) guards load and store; hot sites snapshot into a local.
     let displayLayerLock = NSLock()
     nonisolated(unsafe) var _displayLayer: AVSampleBufferDisplayLayer?
     // The layer's renderer, captured with the layer: it is safe off-main, but
@@ -270,17 +228,14 @@ public final class VideoDecoder {
     // can never dereference a deallocating VideoDecoder.
     nonisolated(unsafe) var outputCallbackRefcon: Unmanaged<VideoDecoder>?
 
-    // The HDR-extended format description, built lazily by augmenting
-    // `formatDescription` with kCMFormatDescriptionExtension_MasteringDisplay-
-    // ColorVolume and ContentLightLevelInfo extensions. We use this for
-    // enqueue when HDR is active and the host has provided metadata;
-    // otherwise we enqueue with the plain `formatDescription`.
-    //
-    // Cached because building it is non-trivial (CMFormatDescription is
-    // immutable, so we have to copy the original's extensions dict and
-    // re-create the description). Invalidated whenever formatDescription
-    // changes or the HDR metadata snapshot changes.
-    nonisolated(unsafe) var cachedHDRFormatDescription: CMVideoFormatDescription?
+    // The HDR-tagged format description the VT output thread builds from a decoded frame and reuses
+    // while frames still match it. The decode queue clears it on a format or HDR change, so the slot is
+    // locked: a racing load and release could over-release it.
+    nonisolated let hdrFormatBox = OSAllocatedUnfairLock<CMVideoFormatDescription?>(initialState: nil)
+    nonisolated var cachedHDRFormatDescription: CMVideoFormatDescription? {
+        get { hdrFormatBox.withLock { $0 } }
+        set { hdrFormatBox.withLock { $0 = newValue } }
+    }
 
     // Stream parameters from setup().
     nonisolated(unsafe) var streamWidth: Int32 = 0
@@ -425,6 +380,8 @@ public final class VideoDecoder {
     // keyframe (the reference chain is intact).
     nonisolated(unsafe) var consecutiveBackpressureDrops: Int = 0
 
+    nonisolated let presentRecoveryPending = Atomic<Bool>(false)
+
     /// Consecutive decode-backlog overflows - how long the backlog has sat in
     /// the over-the-nominal-bound zone. A burst of late-then-clustered frames
     /// over the VPN can momentarily fill the in-flight bound; that burst is
@@ -442,16 +399,10 @@ public final class VideoDecoder {
     /// the one already held there.
     nonisolated(unsafe) var consecutiveBacklogOverflow: Int = 0
 
-    /// The display-clock frame pacer. Sits between the VT decode callback and
-    /// the AVSampleBufferDisplayLayer's renderer: decoded frames are submitted
-    /// into its jitter buffer and released one-per-due-vsync by a CADisplayLink
-    /// bound to the stream window's screen. Created in `attach(to:)` on the
-    /// main actor, started once the window is on screen, torn down in
-    /// `teardown()`. `nonisolated(unsafe)` for the same single-writer-on-main /
-    /// read-on-decode-queue discipline as the rest of this file's VT-callback-
-    /// touched state - `submit` is called from the decode queue, the renderer
-    /// reference inside the pacer is itself lock-guarded.
-    nonisolated(unsafe) var framePacer: FramePacer?
+    /// The display-clock frame pacer, built on the main actor by `startPacing` and dropped on teardown
+    /// or a pacing give-up. VT's output thread reads it per frame, so the slot is locked: an unlocked
+    /// load racing main's release could retain a freed pacer.
+    nonisolated let framePacerBox = OSAllocatedUnfairLock<FramePacer?>(initialState: nil)
 
     /// The view whose screen the pacer's CADisplayLink binds to, remembered from
     /// `startPacing` so the present-watchdog's give-up → re-enable path can

@@ -40,9 +40,9 @@ enum HostCodecPreference: String, CaseIterable, Identifiable {
         case .auto:
             return probed
         case .hevc:
-            return probed.subtracting([.av1, .av1Main10])
+            return probed.subtracting(.anyAV1)
         case .h264:
-            return probed.subtracting([.av1, .av1Main10, .hevc, .hevcMain10])
+            return probed.subtracting(.anyAV1.union(.anyHEVC))
         }
     }
 

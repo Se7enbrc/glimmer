@@ -1,12 +1,4 @@
-//
-//  TerminationGateTests.swift
-//
-//  Covers the quit-time rule for a live stream: the reply defers while a
-//  session is up, a prompt stop completes inside the bound, and a stop that
-//  never returns is abandoned AT the bound rather than pinning the quit.
-//  The AppKit side (applicationShouldTerminate's reply call) is deliberately
-//  not exercised; the gate is the pure part.
-//
+// A hung stop must not pin quit; the AppKit reply callback itself is not exercised.
 
 import AppKit
 import Testing
@@ -31,15 +23,20 @@ struct TerminationGateTests {
     }
 
     @Test func aHungStopIsAbandonedAtTheBound() async {
-        let hang = HangingOperation()
-        let start = ContinuousClock.now
-        let finished = await TerminationGate.runBounded(seconds: 0.2) { await hang.wait() }
-        let elapsed = ContinuousClock.now - start
-        #expect(!finished)
-        // Returned at the bound - not at the operation's (never) completion.
-        #expect(elapsed >= .milliseconds(150))
-        #expect(elapsed < .seconds(2))
-        await hang.release()
+        await Task(priority: .high) {
+            let hang = HangingOperation()
+            let started = ContinuousClock.now
+            let finished = await TerminationGate.runBounded(seconds: 0.2) {
+                await hang.wait()
+            }
+            let returned = ContinuousClock.now
+            // The operation only ends when released below, so returning while it still
+            // waits proves the bound won; an upper wall-clock limit would only time the pool.
+            #expect(!finished)
+            #expect(returned - started >= .milliseconds(150))
+            #expect(await hang.isWaiting)
+            await hang.release()
+        }.value
     }
 }
 
@@ -49,6 +46,7 @@ struct TerminationGateTests {
 private actor HangingOperation {
     private var waiter: CheckedContinuation<Void, Never>?
     private var released = false
+    var isWaiting: Bool { waiter != nil && !released }
 
     func wait() async {
         if released { return }

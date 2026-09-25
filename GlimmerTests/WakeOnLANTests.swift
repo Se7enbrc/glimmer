@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 import Testing
 import UserNotifications
 @testable import Glimmer
@@ -64,11 +65,14 @@ struct WakeOnLANTests {
     }
 
     @MainActor @Test func aWakeThatSendsNothingStopsAtOnce() async {
-        let started = Date()
-        let outcome = await AppModel().sendWakeAndWait(tower(mac: "aa:bb:cc:dd:ee:ff"), waitSeconds: 90) { _, _ in 0 }
+        let started = OSAllocatedUnfairLock(initialState: ContinuousClock.now)
+        let outcome = await AppModel().sendWakeAndWait(tower(mac: "aa:bb:cc:dd:ee:ff"), waitSeconds: 90) { _, _ in
+            started.withLock { $0 = .now }
+            return 0
+        }
         #expect(outcome == .couldNotSend)
         #expect(outcome.failureReason == .couldNotSend)
-        #expect(Date().timeIntervalSince(started) < 5)
+        #expect(ContinuousClock.now - started.withLock { $0 } < .seconds(5))
     }
 
     @MainActor @Test func aPCWithoutAMacIsNotWoken() async {
@@ -86,5 +90,33 @@ struct WakeOnLANTests {
         #expect(!WakeNotifier.shows(.provisional, style: .banner))
         #expect(!WakeNotifier.shows(.denied, style: .banner))
         #expect(!WakeNotifier.shows(.notDetermined, style: .banner))
+    }
+
+    @MainActor @Test func wakeReadinessUsesTheFullControlRequestTimeout() {
+        #expect(AppModel.wakeReadinessTimeout == NetworkClient.controlTimeout)
+        #expect(AppModel.wakeReadinessTimeout > 1)
+    }
+
+    @MainActor @Test func connectResponseSelectsAndDispatchesHostLoadedDuringBootstrap() async {
+        let model = AppModel()
+        let host = Glimmer.Host(id: "requested", name: "Requested", customName: nil, localAddress: nil,
+                                manualAddress: nil,
+                                apps: [LibraryApp(id: 1, name: "Desktop", hdr: false, hidden: false)],
+                                lastConnected: nil, serverCertPEM: "pin", appVersion: nil, macAddress: nil)
+        let bootstrap = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(20))
+            model.hosts = [host]
+        }
+
+        var dispatched: (Glimmer.Host, Bool)?
+        await WakeNotifier.shared.routeResponse(action: "wake.connect", category: "wake.awake",
+                                                hostID: host.id, model: model, bootstrap: bootstrap) { host, connect in
+            dispatched = (host, connect)
+        }
+
+        #expect(dispatched?.0.id == host.id)
+        #expect(dispatched?.1 == true)
+        #expect(model.selectedHost == nil)
+        #expect(model.lastLaunchAttempt == nil)
     }
 }

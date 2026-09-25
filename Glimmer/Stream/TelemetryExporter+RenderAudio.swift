@@ -145,12 +145,12 @@ extension TelemetryRenderer {
                      + "converged. The loop steering buffer fill - the direct view of the "
                      + "corrector vs the video-side-noisy av_skew.",
                      audio.resamplerPpm)
-        let cushionFloorMs = AudioCushionTelemetry.shared.floorMs
+        let cushionFloorMs = extras.audioCushionFloorMs
         builder.emit("glimmer_audio_cushion_floor_ms",
                      "Learned audio cushion LOSS FLOOR, ms (EWMA of the target at each under-run; "
                      + "decay never steps below floor + one step). Absent until learned.",
                      cushionFloorMs > 0 ? cushionFloorMs : nil)
-        let cushionSeedMs = AudioCushionTelemetry.shared.seedMs
+        let cushionSeedMs = extras.audioCushionSeedMs
         builder.emit("glimmer_audio_cushion_seed_ms",
                      "Audio cushion COLD-START seed target, ms (the t=0 playout cushion chosen "
                      + "before the grow ratchet runs). Jitter-aware on a fresh no-memory link: "

@@ -76,13 +76,6 @@ final class RtpVideoQueue {
     let depacketizer: VideoDepacketizer
     let packetSize: Int
 
-    /// Best-effort sink for per-frame FEC status (Sunshine SS_FRAME_FEC_PTYPE).
-    /// Called from reportFinalFrameFecStatus() at the SAME three call sites as
-    /// moonlight (FEC recovery needed; frame/block abandoned). The receiver
-    /// (EnetControlChannel) queues + sends it UNRELIABLE on the next ping tick.
-    /// nil on construction → no-op (e.g. unit tests / receivers without control).
-    var frameFecStatusSink: ((FrameFecStatus) -> Void)?
-
     // Queue state (mirrors RTP_VIDEO_QUEUE). `internal` where the reconstruct
     // extension also reads/writes them (see the visibility note at the top).
     var currentFrameNumber: UInt32 = 1
@@ -96,13 +89,11 @@ final class RtpVideoQueue {
     var bufferFirstParitySequenceNumber: UInt16 = 0
     var bufferHighestSequenceNumber: UInt16 = 0
     var nextContiguousSequenceNumber: UInt16 = 0
-    var receivedHighestSequenceNumber: UInt16 = 0
     var bufferDataPackets = 0
     var bufferParityPackets = 0
     var fecPercentage = 0
     var receivedDataPackets = 0
     var receivedParityPackets = 0
-    var missingPackets = 0
     var useFastQueuePath = true
     var reportedLostFrame = false
     var bufferFirstRecvTimeUs: UInt64 = 0

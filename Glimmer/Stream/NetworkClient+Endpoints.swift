@@ -37,7 +37,9 @@ extension NetworkClient {
     //                              friction, the alternative is "the on-path
     //                              attacker rotates it for them".
 
-    public func fetchServerInfo() async throws -> ServerInfo {
+    public func fetchServerInfo(requiredUniqueId: String? = nil,
+                                timeout: TimeInterval = NetworkClient.controlTimeout,
+                                diagnosePinnedFailure: Bool = true) async throws -> ServerInfo {
         try await ensureIdentityLoaded()
 
         var xml: XMLNode
@@ -52,7 +54,7 @@ extension NetworkClient {
                                            query: [:],
                                            extraQuery: nil,
                                            usePaired: true,
-                                           timeout: Self.controlTimeout)
+                                           timeout: timeout)
                 try Self.verifyStatus(xml)
                 fetchedOverPaired = true
             } catch let err as StreamError {
@@ -63,6 +65,9 @@ extension NetworkClient {
                     if Self.isCertChange(detail) {
                         throw Self.classifyPairedPathFailure(detail, hostName: server.serverName)
                     }
+                    // Pairing has no saved identity to diagnose yet; preserve
+                    // the pinned failure without another plain-HTTP request.
+                    if requiredUniqueId != nil || !diagnosePinnedFailure { throw err }
                     // Disambiguate before blaming the network: a READ-ONLY
                     // plain-HTTP probe (the pin is NEVER rebound from it -
                     // the C2 contract above stands). It answers exactly one
@@ -100,12 +105,24 @@ extension NetworkClient {
                                        query: [:],
                                        extraQuery: nil,
                                        usePaired: false,
-                                       timeout: Self.controlTimeout)
+                                       timeout: timeout)
             try Self.verifyStatus(xml)
         }
 
+        if let requiredUniqueId {
+            guard fetchedOverPaired, Self.matchesPairingIdentity(xml, expected: requiredUniqueId) else {
+                throw StreamError.pairingRejected
+            }
+        }
         hydrateServerInfo(from: xml, fetchedOverPaired: fetchedOverPaired)
         return server
+    }
+
+    /// Pairing must read the identity in the pinned reply itself; hydration
+    /// preserves the earlier plain-HTTP value when this tag is absent.
+    static func matchesPairingIdentity(_ xml: XMLNode, expected: String) -> Bool {
+        guard let uniqueId = xml.string(forChild: "uniqueid"), !uniqueId.isEmpty else { return false }
+        return uniqueId == expected
     }
 
     /// Map a paired-path (HTTPS) failure, once plain HTTP proved the host up, by ControlTransport's `detail`:
@@ -175,7 +192,7 @@ extension NetworkClient {
         if let state = xml.string(forChild: "state") {
             server.isRealGFE = state.contains("MJOLNIR")
         }
-        if let port = xml.int(forChild: "HttpsPort"), port > 0 {
+        if let port = xml.int(forChild: "HttpsPort"), (1...65535).contains(port) {
             server.httpsPort = port
         }
         // Only a pinned mutual-TLS round proves pairing. <PairStatus> is ignored:

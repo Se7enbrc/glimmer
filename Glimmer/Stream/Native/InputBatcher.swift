@@ -166,13 +166,15 @@ final class InputBatcher: @unchecked Sendable {
     // MARK: - High-rate merged producers
 
     /// LiSendMouseMoveEvent (InputStream.c:707-771): ADD into the running delta
-    /// and mark dirty; do NOT send. The next flush() sends the accumulated total.
+    /// and mark dirty; a timer flush or ordering barrier sends the total.
     func accumulateMouseMove(dx: Int16, dy: Int16) -> Int32 {
         guard enet != nil else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
             guard let self else { return }
+            // Send the earlier absolute position before relative motion can move from it.
+            if self.absMouseDirty { self.flushAbsoluteMouse(tracker: FrameTimingTracker.shared) }
             if !self.relMouseDirty { self.relMouseStamp = DispatchTime.now() }
             self.relMouseDX += Int(dx)
             self.relMouseDY += Int(dy)
@@ -188,6 +190,8 @@ final class InputBatcher: @unchecked Sendable {
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
             guard let self else { return }
+            // Send the earlier relative motion before an absolute grab overwrites it.
+            if self.relMouseDirty { self.flushRelativeMouse(tracker: FrameTimingTracker.shared) }
             // Latest-only: keep the oldest stamp (set on the clean→dirty edge);
             // a superseding sample discards its own newer stamp.
             if !self.absMouseDirty { self.absMouseStamp = DispatchTime.now() }
@@ -340,50 +344,27 @@ final class InputBatcher: @unchecked Sendable {
 
     // MARK: - Flush (timer tick) - runs on `queue`
 
-    /// Timer entry point. Identical body to flushLocked(); kept separate so the
-    /// pass-through path can flush inline without re-entering the timer handler.
-    private func flush() {
-        flushLocked()
+    private var hasPendingState: Bool {
+        relMouseDirty || absMouseDirty || motionDirtyCount > 0 || controllers.contains { $0.dirty }
     }
 
-    /// Drain all dirty merged state to the wire, in a stable order. MUST be called
-    /// on `queue`.
-    ///
-    /// BACKPRESSURE: skip the merged-state drains this tick and leave them dirty
-    /// whenever EITHER backpressure signal is asserted:
-    ///   - `sendBacklogged`: the LOCAL outbound send count is over the cap (the
-    ///     radio is draining slowly) - keys on NWConnection send-completion.
-    ///   - `reliableBacklogged`: the count of un-ACKed reliable commands is over
-    ///     the cap, i.e. the HOST has stopped draining our reliable backlog. This
-    ///     is the mouse-spin fix: `sendBacklogged` alone drains fast even under
-    ///     loss (it's local send-completion, not host ACK), so it never reflects
-    ///     the host falling behind. Without this gate, reliable mouse-move commands
-    ///     pile into a HOL-blocked reliable stream that the host later burst-applies
-    ///     - the "view spins until it recovers" failure. This mirrors moonlight's
-    ///     10ms ack-wait (sendMessageEnet, ControlStream.c:787-789).
-    /// The state is latest-only - the running mouse delta keeps accumulating and
-    /// the controller/abs-mouse/motion slots keep their newest values - so the next
-    /// tick sends the freshest merged state instead of backing up the wire ahead of
-    /// inbound ACK processing. Edge pass-through events (keyboard/buttons/scroll/
-    /// arrival/touch) are NOT gated by either signal - they are discrete, not
-    /// latest-state, so they must not drop.
-    private func flushLocked() {
-        guard let enet else { return }
+    /// Timer tick. Idle ticks return before reading either backlog signal; while one is up,
+    /// merged state waits dirty and latest-only for a clear tick. The reliableBacklogged
+    /// gate is the mouse-spin fix, mirroring moonlight's ack-wait (ControlStream.c:787-789).
+    private func flush() {
+        guard hasPendingState, let enet else { return }
         if enet.sendBacklogged || enet.reliableBacklogged {
-            // Telemetry: attribute the backpressure skip to which signal fired
-            // (the input p99 tail). Counter only - no behavior change.
             countBackpressureSkip(enet)
             return
         }
+        flushLocked()
+    }
 
-        // Telemetry: count a flush only when this tick actually drains dirty
-        // merged state to the wire (not the no-op ticks that dominate an idle
-        // stream). One cheap check off the per-packet path.
-        let drainedSomething = relMouseDirty || absMouseDirty
-            || motionDirtyCount > 0 || controllers.contains { $0.dirty }
-        if drainedSomething {
-            TelemetryCounters.shared.inputBatchFlushTotal.increment()
-        }
+    /// Drain dirty merged state without a gate so an edge cannot overtake earlier state,
+    /// even under backpressure. MUST run on `queue`.
+    private func flushLocked() {
+        guard hasPendingState, let enet else { return }
+        TelemetryCounters.shared.inputBatchFlushTotal.increment()
 
         // Client queue→wire age: observe the OLDEST unflushed entry per drained
         // slot. Tracker is nil when telemetry is off (gate), so it's one optional
@@ -392,47 +373,10 @@ final class InputBatcher: @unchecked Sendable {
         let latencyTracker = FrameTimingTracker.shared
         let drainNow = latencyTracker != nil ? DispatchTime.now() : nil
 
-        // (1) Relative mouse: send the accumulated delta, splitting into Int16
-        //     chunks exactly like InputStream.c:379-422.
-        if relMouseDirty {
-            trace(latencyTracker, "\"event\":\"input_mouse\",\"dx\":\(relMouseDX),\"dy\":\(relMouseDY)")
-            while relMouseDX != 0 || relMouseDY != 0 {
-                let chunkX: Int16
-                if relMouseDX < Int(Int16.min) {
-                    chunkX = Int16.min; relMouseDX -= Int(Int16.min)
-                } else if relMouseDX > Int(Int16.max) {
-                    chunkX = Int16.max; relMouseDX -= Int(Int16.max)
-                } else {
-                    chunkX = Int16(relMouseDX); relMouseDX = 0
-                }
-
-                let chunkY: Int16
-                if relMouseDY < Int(Int16.min) {
-                    chunkY = Int16.min; relMouseDY -= Int(Int16.min)
-                } else if relMouseDY > Int(Int16.max) {
-                    chunkY = Int16.max; relMouseDY -= Int(Int16.max)
-                } else {
-                    chunkY = Int16(relMouseDY); relMouseDY = 0
-                }
-
-                _ = enet.sendInputPacket(
-                    InputEncoder.mouseMove(dx: chunkX, dy: chunkY),
-                    channel: Enet.ctrlChannelMouse)
-            }
-            relMouseDirty = false
-            observeInputAge(from: relMouseStamp, to: drainNow, tracker: latencyTracker, deliverMs: 0)
-        }
-
-        // (2) Absolute mouse: latest-only.
-        if absMouseDirty {
-            trace(latencyTracker, "\"event\":\"input_mouse_abs\",\"x\":\(absMouseX),\"y\":\(absMouseY)")
-            _ = enet.sendInputPacket(
-                InputEncoder.mousePosition(x: absMouseX, y: absMouseY,
-                                           refW: absMouseRefW, refH: absMouseRefH),
-                channel: Enet.ctrlChannelMouse)
-            absMouseDirty = false
-            observeInputAge(from: absMouseStamp, to: drainNow, tracker: latencyTracker, deliverMs: 0)
-        }
+        // (1)+(2) Mouse: relative and absolute are never dirty together, because a
+        //     switch between them drains the other kind first.
+        if relMouseDirty { flushRelativeMouse(tracker: latencyTracker) }
+        if absMouseDirty { flushAbsoluteMouse(tracker: latencyTracker) }
 
         // (3) Controllers: latest state per dirty slot.
         for slot in controllers.indices where controllers[slot].dirty {
@@ -461,12 +405,12 @@ final class InputBatcher: @unchecked Sendable {
                 // else → UNRELIABLE.
                 let isGyroNull = motionType == UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
                     && s.x == 0 && s.y == 0 && s.z == 0
-                traceMotion(idx, isGyroNull: isGyroNull, tracker: latencyTracker, now: drainNow)
                 if isGyroNull {
                     _ = enet.sendInputPacket(plaintext, channel: channel)
                 } else {
                     _ = enet.sendInputPacketUnreliable(plaintext, channel: channel)
                 }
+                traceMotion(idx, isGyroNull: isGyroNull, tracker: latencyTracker, now: drainNow)
                 // Motion is not user input: its age feeds the histogram but never
                 // stands in for the last input's legs (deliverMs nil).
                 observeInputAge(from: motionStates[idx].stamp, to: drainNow, tracker: latencyTracker,
@@ -497,8 +441,8 @@ final class InputBatcher: @unchecked Sendable {
         motionStates[idx].lastTraceNanos = now.uptimeNanoseconds
         let sample = motionStates[idx]
         trace(tracker, "\"event\":\"input_motion\",\"slot\":\(idx / Self.motionTypeCount),"
-            + "\"type\":\(idx % Self.motionTypeCount + 1),\"x\":\(tracker.jsonNumber(Double(sample.x))),"
-            + "\"y\":\(tracker.jsonNumber(Double(sample.y))),\"z\":\(tracker.jsonNumber(Double(sample.z)))")
+            + "\"type\":\(idx % Self.motionTypeCount + 1),\"x\":\(TelemetryRenderer.jsonNumber(Double(sample.x))),"
+            + "\"y\":\(TelemetryRenderer.jsonNumber(Double(sample.y))),\"z\":\(TelemetryRenderer.jsonNumber(Double(sample.z)))")
     }
 
     /// Whether this sensor's sample gets an input_motion trace line: at most one
@@ -536,7 +480,56 @@ final class InputBatcher: @unchecked Sendable {
         guard let tracker else { return }
         let nowMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
         tracker.traceWriter.append(
-            "{\"session\":\"\(tracker.sessionId)\",\(fields()),\"t_ms\":\(tracker.jsonNumber(nowMs))}")
+            "{\"session\":\"\(tracker.sessionId)\",\(fields()),\"t_ms\":\(TelemetryRenderer.jsonNumber(nowMs))}")
+    }
+
+    /// Send the accumulated delta in Int16 chunks (InputStream.c:379-422) and clear it.
+    /// MUST run on `queue`: the timer drain and the mode-change drain both land here.
+    private func flushRelativeMouse(tracker: FrameTimingTracker?) {
+        guard let enet else { return }
+        let dx = relMouseDX
+        let dy = relMouseDY
+        while relMouseDX != 0 || relMouseDY != 0 {
+            let chunkX: Int16
+            if relMouseDX < Int(Int16.min) {
+                chunkX = Int16.min; relMouseDX -= Int(Int16.min)
+            } else if relMouseDX > Int(Int16.max) {
+                chunkX = Int16.max; relMouseDX -= Int(Int16.max)
+            } else {
+                chunkX = Int16(relMouseDX); relMouseDX = 0
+            }
+
+            let chunkY: Int16
+            if relMouseDY < Int(Int16.min) {
+                chunkY = Int16.min; relMouseDY -= Int(Int16.min)
+            } else if relMouseDY > Int(Int16.max) {
+                chunkY = Int16.max; relMouseDY -= Int(Int16.max)
+            } else {
+                chunkY = Int16(relMouseDY); relMouseDY = 0
+            }
+
+            _ = enet.sendInputPacket(
+                InputEncoder.mouseMove(dx: chunkX, dy: chunkY),
+                channel: Enet.ctrlChannelMouse)
+        }
+        relMouseDirty = false
+        observeInputAge(from: relMouseStamp, to: tracker != nil ? DispatchTime.now() : nil,
+                        tracker: tracker, deliverMs: 0)
+        trace(tracker, "\"event\":\"input_mouse\",\"dx\":\(dx),\"dy\":\(dy)")
+    }
+
+    /// Send the latest absolute position and clear it. MUST run on `queue`: the
+    /// timer drain and the mode-change drain both land here.
+    private func flushAbsoluteMouse(tracker: FrameTimingTracker?) {
+        guard let enet else { return }
+        _ = enet.sendInputPacket(
+            InputEncoder.mousePosition(x: absMouseX, y: absMouseY,
+                                       refW: absMouseRefW, refH: absMouseRefH),
+            channel: Enet.ctrlChannelMouse)
+        absMouseDirty = false
+        observeInputAge(from: absMouseStamp, to: tracker != nil ? DispatchTime.now() : nil,
+                        tracker: tracker, deliverMs: 0)
+        trace(tracker, "\"event\":\"input_mouse_abs\",\"x\":\(absMouseX),\"y\":\(absMouseY)")
     }
 
     /// Send the latest pending multiController for `slot` and clear its dirty flag.
@@ -546,15 +539,15 @@ final class InputBatcher: @unchecked Sendable {
         guard let enet else { return }
         let pending = controllers[slot]
         let analog = pending.analog
-        trace(tracker, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
-            + "\"lx\":\(analog.leftStickX),\"ly\":\(analog.leftStickY),\"rx\":\(analog.rightStickX),"
-            + "\"ry\":\(analog.rightStickY),\"lt\":\(analog.leftTrigger),\"rt\":\(analog.rightTrigger)")
         _ = enet.sendInputPacket(
             InputEncoder.multiController(num: pending.num, mask: pending.mask,
                                         buttons: pending.buttons, analog: pending.analog),
             channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot))
         observeInputAge(from: pending.stamp, to: tracker != nil ? DispatchTime.now() : nil,
                         tracker: tracker, deliverMs: pending.deliverMs)
+        trace(tracker, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
+            + "\"lx\":\(analog.leftStickX),\"ly\":\(analog.leftStickY),\"rx\":\(analog.rightStickX),"
+            + "\"ry\":\(analog.rightStickY),\"lt\":\(analog.leftTrigger),\"rt\":\(analog.rightTrigger)")
         controllers[slot].dirty = false
     }
 }

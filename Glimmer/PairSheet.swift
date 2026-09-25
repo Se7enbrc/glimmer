@@ -346,13 +346,13 @@ private struct HostChooser: View {
         .task {
             // Stream discovered hosts until the view goes away. HostDiscovery
             // is an actor; start() is actor-isolated so we await it, then
-            // consume the AsyncStream it returns.
-            let stream = await HostDiscovery.shared.start()
-            for await update in stream {
+            // consume the stream for this run.
+            let session = await HostDiscovery.shared.start()
+            for await update in session.stream {
                 found = update.hosts
                 denied = update.denied
             }
-            await HostDiscovery.shared.stop()
+            await HostDiscovery.shared.stop(run: session.run)
         }
         // Bonjour-hostile-network nudge: after ~7s with nothing found and the
         // user not already in the manual field, surface the fallback path.

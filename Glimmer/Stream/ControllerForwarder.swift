@@ -323,8 +323,12 @@ extension InputForwarder {
     /// .stop() runs this after stopConnection(), so there is no live
     /// connection to tell.
     func releaseAttachedControllers() {
+        // A pad connecting while stop waits on the PC must not retake the HID
+        // retain and haptics, motion, or battery slots this walk releases.
+        removeGamepadObservers()
         releaseHIDControllers()
         for state in attachedControllers.values {
+            state.controller?.extendedGamepad?.valueChangedHandler = nil
             dualSenseRouting.unregister(slot: state.slot)
             ControllerHaptics.shared.unregister(slot: state.slot)
             ControllerMotion.shared.unregister(slot: state.slot)
@@ -338,6 +342,12 @@ extension InputForwarder {
         touchpadStates.removeAll()
         gamepadMask = 0
         announcedControllers.removeAll()
+    }
+
+    func removeGamepadObservers() {
+        let center = NotificationCenter.default
+        if let observer = connectObserver { center.removeObserver(observer); connectObserver = nil }
+        if let observer = disconnectObserver { center.removeObserver(observer); disconnectObserver = nil }
     }
 
     func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
@@ -360,8 +370,7 @@ extension InputForwarder {
     func sendControllerRemoval(slot: UInt8) {
         let rc = backend?.sendMultiController(
             num: Int16(slot), mask: Int16(bitPattern: gamepadMask & ~(UInt16(1) << slot)), buttons: 0,
-            analog: GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-                                  leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
+            analog: Self.neutralControllerAnalog
         ) ?? -2
         record("LiSendMultiControllerEvent(removal)", rc)
     }
@@ -475,16 +484,18 @@ extension InputForwarder {
     func installInputHandlers(for state: AttachedController) {
         guard let gamepad = state.controller else { return }
         let slot = state.slot
+        let routesHID = state.retainedHID
         // GameController invokes this on the main queue; assume MainActor so
         // Swift 6 strict concurrency is satisfied.
         gamepad.extendedGamepad?.valueChangedHandler = { [weak self] (pad, _) in
-            // Stamp handler-entry FIRST (measurement-only): the batcher takes this
-            // to observe the pre-hop main-thread deliver→enqueue leg. No work moves.
-            InputDeliverStamp.shared.stamp(
-                slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.dualSenseRouting.gc(pad: pad)
+                // The batcher takes this handler-entry stamp for its deliver leg.
+                // Only stamp while ready, or the next push reads stale latency.
+                if self.isReady {
+                    InputDeliverStamp.shared.stamp(slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
+                }
+                if routesHID { self.dualSenseRouting.gc(pad: pad) }
                 self.sendGamepadUpdate(pad: pad, slot: slot)
             }
         }

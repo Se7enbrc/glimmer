@@ -166,4 +166,27 @@ struct HostsStoreTests {
         #expect(model.hostLiveStatus == status)
         #expect(model.hostStatusTask == poll)
     }
+
+    @MainActor @Test func pairingKeepsThePollPausedUntilCancelled() {
+        let model = AppModel()
+        defer { model.hostStatusTask?.cancel() }
+        model.selectedHost = Self.host("tower", address: "192.0.2.10")
+        let attempt = model.beginPairing(address: "192.0.2.1")
+        model.restartHostStatusPolling()
+        #expect(model.hostStatusTask == nil)
+        model.cancelPairing(attempt)
+        #expect(model.hostStatusTask != nil)
+    }
+
+    @MainActor @Test func aWakePausesOnlyItsOwnPCPoll() {
+        let model = AppModel()
+        defer { model.hostStatusTask?.cancel() }
+        model.selectedHost = Self.host("tower", address: "192.0.2.10")
+        model.wakingHostID = "tower"
+        model.restartHostStatusPolling()
+        #expect(model.hostStatusTask == nil)
+        model.wakingHostID = "den"
+        model.restartHostStatusPolling()
+        #expect(model.hostStatusTask != nil)
+    }
 }

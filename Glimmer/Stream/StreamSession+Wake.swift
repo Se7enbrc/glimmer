@@ -32,12 +32,6 @@ extension StreamSession {
             guard let self else { return }
             Task { await self.handleSystemWake() }
         })
-        wakeObservers.append(wsnc.addObserver(
-            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task { await self.handleSystemWillSleep() }
-        })
     }
 
     /// Remove the sleep/wake observers and cancel any in-flight probe. Called from
@@ -48,14 +42,6 @@ extension StreamSession {
         wakeObservers.removeAll()
         wakeProbeTask?.cancel()
         wakeProbeTask = nil
-    }
-
-    /// On willSleep, stamp the session wake-suspect so a disconnect that surfaces
-    /// across the nap with no more specific cause is attributed to system sleep
-    /// (the latch keeps the FIRST concrete reason, so a host terminate still wins).
-    func handleSystemWillSleep() async {
-        guard isStreaming, !stopInProgress else { return }
-        noteTelemetryDisconnect(.systemSleep)
     }
 
     /// On wake: if the session is live and idle of any teardown/episode, count the
@@ -108,12 +94,14 @@ extension StreamSession {
         // that as a stale link too (reconnect is recoverable) rather than silently
         // giving up the probe.
         guard let health = backend.enetHealth() else {
+            TelemetryCounters.shared.p2.setDisconnectReason(.systemSleep)
             await handleHostTerminate(code: Self.deadPeerTerminationCode)
             return
         }
         if UInt64(health.sinceLastAckMs) >= budgetMs {
             Diag.notice("Wake probe: no ACK in \(health.sinceLastAckMs)ms (budget "
                 + "\(budgetMs)ms) - link is stale, reconnecting in place.", "Stream")
+            TelemetryCounters.shared.p2.setDisconnectReason(.systemSleep)
             await handleHostTerminate(code: Self.deadPeerTerminationCode)
         }
     }

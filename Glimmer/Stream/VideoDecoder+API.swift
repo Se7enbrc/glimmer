@@ -343,18 +343,6 @@ extension VideoDecoder {
         }
     }
 
-    /// Force a re-fetch of `LiGetHdrMetadata` and rebuild the format
-    /// description on the next frame. Useful when the host signals a
-    /// metadata refresh (e.g. the user drags the game window between two
-    /// HDR displays of different peak luminance).
-    public func refreshHDRMetadata() {
-        guard hdrEnabled else { return }
-        refreshHDRMetadataFromHost()
-        decodeQueue.async { [weak self] in
-            self?.cachedHDRFormatDescription = nil
-        }
-    }
-
     /// Attach the OS display layer this decoder enqueues sample buffers
     /// onto. Must be called from the main actor before the stream starts so
     /// that the layer exists by the time `setup()` runs on a moonlight

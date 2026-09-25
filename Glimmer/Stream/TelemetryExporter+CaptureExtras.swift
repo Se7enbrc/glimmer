@@ -54,6 +54,8 @@ extension TelemetryExporter {
         // the snapshot's; this sidecar is where post-snapshot fields live).
         extras.audioPlayoutTargetMs = audioState?.playoutTargetMs
         extras.audioCushionMaxMs = audioState?.cushionMaxMs
+        extras.audioCushionFloorMs = AudioCushionTelemetry.shared.floorMs
+        extras.audioCushionSeedMs = AudioCushionTelemetry.shared.seedMs
         extras.audioUnderrunDeadairTotal = counters.audioUnderrunDeadairTotal.value
         // Checked first so a session with the raw HID path off never builds its manager.
         extras.dualSenseHidReportsPerSecond = DualSenseHID.isEnabled ? DualSenseHID.shared.reportsPerSecond : nil
@@ -222,6 +224,8 @@ extension TelemetrySnapshot {
         var audioPlayoutTargetMs: Double?
         /// The cushion cap for the resolved link (`AudioState.cushionMaxMs`).
         var audioCushionMaxMs: Double?
+        var audioCushionFloorMs: Double = 0
+        var audioCushionSeedMs: Double = 0
         /// Under-runs after a gap longer than that cap: also in the under-run total,
         /// but no cushion could have bridged them, so they never grow it.
         var audioUnderrunDeadairTotal: UInt64 = 0

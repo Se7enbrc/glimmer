@@ -118,7 +118,7 @@ enum TelemetryRenderer {
         mutating func emit(_ name: String, _ help: String, _ value: Double?) {
             guard let value, value.isFinite else { return }
             out += "# HELP \(name) \(help)\n# TYPE \(name) gauge\n"
-            out += "\(name)\(labels) \(format(value))\n"
+            out += "\(name)\(labels) \(TelemetryRenderer.jsonNumber(value))\n"
         }
         mutating func emitCounter(_ name: String, _ help: String, _ value: UInt64) {
             out += "# HELP \(name) \(help)\n# TYPE \(name) counter\n"
@@ -153,10 +153,10 @@ enum TelemetryRenderer {
             // the composite glass-to-glass / input-to-photon stages).
             let prefix = String(labels.dropLast())  // drop trailing '}'
             for (index, bound) in stage.boundsMs.enumerated() where index < stage.buckets.count {
-                out += "\(name)_bucket\(prefix),le=\"\(format(bound))\"} \(stage.buckets[index])\n"
+                out += "\(name)_bucket\(prefix),le=\"\(TelemetryRenderer.jsonNumber(bound))\"} \(stage.buckets[index])\n"
             }
             out += "\(name)_bucket\(prefix),le=\"+Inf\"} \(stage.observationCount)\n"
-            out += "\(name)_sum\(labels) \(format(stage.sumMs))\n"
+            out += "\(name)_sum\(labels) \(TelemetryRenderer.jsonNumber(stage.sumMs))\n"
             out += "\(name)_count\(labels) \(stage.observationCount)\n"
         }
 
@@ -181,7 +181,7 @@ enum TelemetryRenderer {
             out += "# HELP \(name) \(help)\n# TYPE \(name) gauge\n"
             var pairs = sharedPairs
             for (key, label) in extra { pairs += ",\(key)=\"\(escape(label))\"" }
-            out += "\(name){\(pairs)} \(format(value))\n"
+            out += "\(name){\(pairs)} \(TelemetryRenderer.jsonNumber(value))\n"
         }
 
         /// Escape a label VALUE per the Prometheus text exposition format.
@@ -222,15 +222,5 @@ enum TelemetryRenderer {
         // Past the last finite bound: clamp to the top bound (the +Inf bucket has
         // no upper edge to interpolate toward).
         return stage.boundsMs.last
-    }
-
-    /// Prometheus wants plain decimals, not Swift's exponent form for large/small
-    /// values, and integers without a trailing ".0" where possible. Two decimals
-    /// is plenty for a diagnostic gauge.
-    private static func format(_ value: Double) -> String {
-        if value == value.rounded() && abs(value) < 1e15 {
-            return String(Int64(value))
-        }
-        return String(format: "%.3f", value)
     }
 }

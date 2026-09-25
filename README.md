@@ -76,9 +76,9 @@ approval under Login Items & Extensions. If it reports `rejected by BTM`, run
 `glimmer` is the app itself, run from a terminal: it pairs, lists, wakes and
 quits headless, and hands a stream to the app so it gets its window. Stream
 settings come from Glimmer's Settings. `glimmer help` is the full reference.
-Installed from the `.dmg`, run
-`/Applications/Glimmer.app/Contents/MacOS/Glimmer` with the same commands, or
-link that path as `glimmer` on your `PATH`.
+Installed from the `.dmg`, choose Glimmer › Install Command Line Tool… once and
+macOS asks for an administrator password to link `glimmer` into
+`/usr/local/bin`.
 
 ```bash
 glimmer pair 192.0.2.10          # prints the PIN to enter in Sunshine
@@ -91,7 +91,7 @@ Coming from moonlight-qt:
 | moonlight-qt                         | Glimmer                               | Difference                                     |
 | ------------------------------------ | ------------------------------------- | ---------------------------------------------- |
 | `moonlight pair <host> [--pin NNNN]` | `glimmer pair <address> [--pin NNNN]` | None.                                          |
-| `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list` alone lists the paired PCs.     |
+| `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list [--csv]` lists the paired PCs.   |
 | `moonlight stream <host> <app> ...`  | `glimmer stream <pc> [<app>]`         | The app is optional; see below.                |
 | `moonlight quit <host>`              | `glimmer quit <pc>`                   | None.                                          |
 |                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer. |

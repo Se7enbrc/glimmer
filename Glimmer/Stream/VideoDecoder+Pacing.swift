@@ -20,6 +20,19 @@ import os
 
 extension VideoDecoder {
 
+    nonisolated var framePacer: FramePacer? {
+        get { framePacerBox.withLock { $0 } }
+        set {
+            // Destruction stops the tick thread, which must never run under the slot lock.
+            let previous = framePacerBox.withLock { pacer in
+                let previous = pacer
+                pacer = newValue
+                return previous
+            }
+            withExtendedLifetime(previous) {}
+        }
+    }
+
     // MARK: - Frame pacer bring-up + control surface
 
     /// Stand up the display-clock frame pacer and bind its CADisplayLink to
@@ -231,16 +244,19 @@ extension VideoDecoder {
         backend?.requestIdrFrame()
     }
 
-    /// Renderer-FAILED recovery reachable from the pacer/decode queue (NOT the
-    /// main actor) - the inline `presentFrame` failed-status branch. Hops to the
-    /// main actor to run the full `recoverPresentPath` (which may rebuild the
-    /// layer). The hop is fine: a failed renderer is already dropping frames, so
-    /// the one-runloop deferral to rebuild costs nothing and avoids touching
-    /// AppKit off the main actor.
-    nonisolated func recoverPresentPathFromRenderQueue(reason: String) {
+    /// Coalesces renderer-failure frames into one main-actor recovery.
+    /// A failed renderer already drops frames, so deferring one run loop costs
+    /// nothing and keeps layer rebuilding on the main actor.
+    nonisolated func recoverPresentPathFromRenderQueue(reason: String) -> Bool {
+        guard !presentRecoveryPending.exchange(true, ordering: .acquiringAndReleasing) else { return false }
         DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated { self?.recoverPresentPath(reason: reason) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.recoverPresentPath(reason: reason)
+                self.presentRecoveryPending.store(false, ordering: .releasing)
+            }
         }
+        return true
     }
 
     // The governor-repaint hook (`repaintFrameForGovernor` - the stats-silent
@@ -269,42 +285,26 @@ extension VideoDecoder {
         // a local so it can't be released mid-enqueue.
         guard isStreaming, let renderer = sampleBufferRenderer else { return false }
 
-        // ---- Renderer via the macOS 15+ AVSampleBufferVideoRenderer path.
-        //
-        // On macOS 15+, calling `enqueueSampleBuffer:` (and the matching
-        // flush/status/error) directly on the AVSampleBufferDisplayLayer
-        // is deprecated. The replacement is `layer.sampleBufferRenderer`
-        // (AVSampleBufferVideoRenderer), which is explicitly safe to drive
-        // from a background thread - exactly the pacer's serial queue here.
-        //
-        // If the renderer's status latched to `.failed` (bad sample, an HDR
-        // mid-stream toggle, or other decoder glitch), it silently stops
-        // rendering further enqueued samples until we call `flush()`.
-        // moonlight-qt handles the equivalent on older macOS by pushing
-        // SDL_RENDER_DEVICE_RESET and recreating the decoder. We do it
-        // cheaper: flush + request an IDR via the backend, and let VT pick
-        // up where it left off.
+        // Drive the macOS 15+ renderer from this background queue; the layer API is deprecated.
+        // A latched failure stops rendering until flushed, and rebuilding must stay on main.
         if renderer.status == .failed {
-            log.warning(
-                "AVSampleBufferDisplayLayer renderer FAILED; self-healing (error=\(String(describing: renderer.error)))")
-            // Surface the "I lost a frame to the OS" moment as a discrete
-            // event so a profile run can spot the recovery amongst the
-            // per-frame intervals.
+            // Rebuild a hard-failed renderer because flush cannot clear its
+            // latched state; defer AppKit work and repaint from the next IDR.
             let failure = renderer.error as NSError?
-            OSSignposter.render.emitEvent(
-                "RendererFailed",
-                """
-                domain=\(failure?.domain ?? "none", privacy: .public) code=\(failure?.code ?? 0, privacy: .public) \
-                error=\(String(describing: renderer.error), privacy: .private)
-                """)
-            // Route to the MODE-AGNOSTIC self-heal: flush, and if the renderer
-            // has HARD-failed (a bare flush won't clear it - the 4K240
-            // HDR wedge), REBUILD the layer so the present path can't latch
-            // failed forever (the old behaviour: flush-noop → IDR → return false
-            // every frame, decode healthy, screen frozen, no escalation). The
-            // recovery hops to the main actor to touch AppKit; we drop THIS
-            // frame and the next keyframe lands on the recovered layer.
-            recoverPresentPathFromRenderQueue(reason: "renderer_failed")
+            let errorDescription = String(describing: renderer.error)
+            if recoverPresentPathFromRenderQueue(reason: "renderer_failed") {
+                log.warning(
+                    """
+                    AVSampleBufferDisplayLayer renderer FAILED; self-healing \
+                    (error=\(errorDescription, privacy: .private))
+                    """)
+                OSSignposter.render.emitEvent(
+                    "RendererFailed",
+                    """
+                    domain=\(failure?.domain ?? "none", privacy: .public) code=\(failure?.code ?? 0, privacy: .public) \
+                    error=\(errorDescription, privacy: .private)
+                    """)
+            }
             return false
         }
 

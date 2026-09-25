@@ -9,6 +9,13 @@
 import Foundation
 import os
 
+extension Array where Element == String {
+    mutating func trimOldestOverflow(maxCount: Int) {
+        guard count > maxCount else { return }
+        removeFirst(count - maxCount / 2)
+    }
+}
+
 /// Severity for the in-app troubleshooting log. Ordered so the viewer's level
 /// filter can do `entry.level >= threshold`.
 enum LogLevel: Int, Comparable, Sendable, CaseIterable {
@@ -182,10 +189,11 @@ struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
             text += rendered
         }
 
-        /// A nested line keeps its own private values instead of rendering as a struct dump.
-        mutating func appendInterpolation(_ message: DiagMessage) {
-            if redacted == nil, message.redacted != nil { redacted = text }
-            redacted? += message.systemLogText
+        /// A nested line keeps its own private values, or goes private whole, instead
+        /// of rendering as a struct dump.
+        mutating func appendInterpolation(_ message: DiagMessage, privacy: DiagPrivacy = .public) {
+            if redacted == nil, privacy == .private || message.redacted != nil { redacted = text }
+            redacted? += privacy == .private ? "<private>" : message.systemLogText
             text += message.text
         }
     }
@@ -277,6 +285,13 @@ final class SessionLogFileSink: @unchecked Sendable {
     private func open() {
         flushQueue.async { [weak self] in
             guard let self else { return }
+            let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
+            timer.schedule(deadline: .now() + Self.flushInterval, repeating: Self.flushInterval,
+                           leeway: .milliseconds(50))
+            timer.setEventHandler { [weak self] in self?.flush() }
+            self.flushTimer = timer
+            timer.resume()
+
             let dir = TelemetryExporter.logsDirectory
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -299,12 +314,6 @@ final class SessionLogFileSink: @unchecked Sendable {
                 self.log.error("Diag file sink: could not open file: \(error.localizedDescription, privacy: .private)")
                 return
             }
-            let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
-            timer.schedule(deadline: .now() + Self.flushInterval, repeating: Self.flushInterval,
-                           leeway: .milliseconds(50))
-            timer.setEventHandler { [weak self] in self?.flush() }
-            self.flushTimer = timer
-            timer.resume()
         }
     }
 
@@ -332,7 +341,7 @@ final class SessionLogFileSink: @unchecked Sendable {
         os_unfair_lock_lock(bufferLock)
         pending.append(line)
         if pending.count > Self.maxPendingLines {
-            pending.removeFirst(pending.count - Self.maxPendingLines)
+            pending.trimOldestOverflow(maxCount: Self.maxPendingLines)
             droppedOverflow = true
         }
         os_unfair_lock_unlock(bufferLock)

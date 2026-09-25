@@ -14,6 +14,19 @@ struct SessionReceiptTests {
 
     private static let msNanos: UInt64 = 1_000_000
 
+    @Test func receiptEscapesPCAndClientNames() throws {
+        let host = "Gaming \"PC\"\\"
+        let client = "Mac\nStudio"
+        let report = SessionReport(
+            sessionId: "test", client: client, host: host, buildCommit: "c", buildDate: "d",
+            generatedISO8601: "2026-09-22T00:00:00Z", durationSeconds: 1,
+            aggregate: SessionAggregate(), histograms: nil, counters: TelemetryCounters())
+        let json = try #require(try JSONSerialization.jsonObject(with: Data(report.renderJSON().utf8))
+                                as? [String: Any])
+        #expect(json["host"] as? String == host)
+        #expect(json["client"] as? String == client)
+    }
+
     private func receipt(_ counters: TelemetryCounters) throws -> [String: Any] {
         let report = SessionReport(
             sessionId: "test", client: "mac", host: "pc", buildCommit: "c", buildDate: "d",

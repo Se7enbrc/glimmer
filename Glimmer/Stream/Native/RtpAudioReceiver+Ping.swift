@@ -31,13 +31,14 @@ extension RtpAudioReceiver {
     func startPingLoop() {
         EnvSignalController.shared.noteAudioPingLoopStart()
         let burstUntil = Date().addingTimeInterval(Self.burstDurationSec)
+        let sock = fd
         let thread = Thread { [weak self] in
             // 0 = "never pinged" - the first post-burst wake always sends.
             var lastPingNanos: UInt64 = 0
             while let self, !self.interrupted.isSet {
                 // Burst for the first ~2s, then settle to the steady keepalive.
                 if Date() < burstUntil {
-                    self.sendPing()
+                    self.sendPing(sock: sock)
                     lastPingNanos = DispatchTime.now().uptimeNanoseconds
                     Thread.sleep(forTimeInterval: Self.burstIntervalSec)
                     continue
@@ -45,7 +46,7 @@ extension RtpAudioReceiver {
                 let interval = EnvSignalController.shared.steadyPingInterval()
                 let now = DispatchTime.now().uptimeNanoseconds
                 if now &- lastPingNanos >= EnvSignalController.dueNanos(for: interval) {
-                    self.sendPing()
+                    self.sendPing(sock: sock)
                     lastPingNanos = now
                 }
                 Thread.sleep(forTimeInterval: Self.steadyIntervalSec)
@@ -57,14 +58,14 @@ extension RtpAudioReceiver {
         thread.start()
     }
 
-    private func sendPing() {
-        guard fd >= 0 else { return }
+    private func sendPing(sock: Int32) {
+        guard sock >= 0 else { return }
         pingCount &+= 1
         let datagram = UdpPinger.datagram(payload: pingPayload, sequence: pingCount)
         let sent = datagram.withUnsafeBytes { raw in
             withUnsafePointer(to: &destAddr) { sp in
                 sp.withMemoryRebound(to: sockaddr.self, capacity: 1) { sap in
-                    sendto(fd, raw.baseAddress, raw.count, 0, sap, destAddrLen)
+                    sendto(sock, raw.baseAddress, raw.count, 0, sap, destAddrLen)
                 }
             }
         }
@@ -74,17 +75,16 @@ extension RtpAudioReceiver {
         // story. Log on the STREAK EDGES only (first failure + recovery), never
         // per packet, so a dead route can't flood the diagnostic ring at the
         // burst cadence. UDP sendto is all-or-error, so <0 is the failure test.
-        if sent < 0 {
-            let err = errno
-            pingSendFailureStreak += 1
-            if pingSendFailureStreak == 1 {
-                Diag.warn("NativeAudio ping sendto failed errno \(err) - the host may not be "
-                    + "receiving our audio keepalive (will keep trying)", Self.cat)
-            }
-        } else if pingSendFailureStreak > 0 {
-            Diag.notice("NativeAudio ping sendto recovered after \(pingSendFailureStreak) "
-                + "failed send\(pingSendFailureStreak == 1 ? "" : "s")", Self.cat)
-            pingSendFailureStreak = 0
+        let err = errno
+        switch pingSendFailureStreak.note(sent: sent) {
+        case .failed:
+            Diag.warn("NativeAudio ping sendto failed errno \(err) - the host may not be "
+                + "receiving our audio keepalive (will keep trying)", Self.cat)
+        case .recovered(let failures):
+            Diag.notice("NativeAudio ping sendto recovered after \(failures) "
+                + "failed send\(failures == 1 ? "" : "s")", Self.cat)
+        case nil:
+            break
         }
         // Publish the metric counters for the recv thread (time-to-first-packet).
         pingsSent.store(UInt64(pingCount))

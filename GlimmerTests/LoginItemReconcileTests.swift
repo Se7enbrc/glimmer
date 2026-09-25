@@ -11,10 +11,21 @@ import Testing
 
 struct LoginItemReconcileTests {
 
+    private enum RegistrationError: Error {
+        case rejected
+    }
+
     private let build = "/Applications/Glimmer.app#2026.9.7"
 
     private func action(_ status: SMAppService.Status, registered: String?) -> LoginItemManager.Reconcile {
         LoginItemManager.reconcileAction(status: status, registeredBuild: registered, currentBuild: build)
+    }
+
+    @Test func registeredIncludesPendingApproval() {
+        #expect(LoginItemManager.isRegistered(.requiresApproval))
+        #expect(LoginItemManager.isRegistered(.enabled))
+        #expect(!LoginItemManager.isRegistered(.notRegistered))
+        #expect(!LoginItemManager.isRegistered(.notFound))
     }
 
     @Test func enabledOrAwaitingApprovalIsLeftAlone() {
@@ -35,5 +46,27 @@ struct LoginItemReconcileTests {
 
     @Test func noRecordFromAnOlderBuildReRegisters() {
         #expect(action(.notRegistered, registered: nil) == .reregister)
+    }
+
+    @Test func failedRegistrationRetriesWithoutTurningOffIntent() throws {
+        let suiteName = "LoginItemReconcileTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: "launchAtLogin")
+        defaults.set(build, forKey: "loginItemRegisteredBuild")
+
+        do {
+            try register { throw RegistrationError.rejected }
+        } catch {
+            LoginItemManager.registrationFailed(error, defaults: defaults)
+        }
+
+        #expect(defaults.bool(forKey: "launchAtLogin"))
+        #expect(defaults.string(forKey: "loginItemRegisteredBuild") == nil)
+        #expect(action(.notRegistered, registered: defaults.string(forKey: "loginItemRegisteredBuild")) == .reregister)
+    }
+
+    private func register(_ operation: () throws -> Void) throws {
+        try operation()
     }
 }

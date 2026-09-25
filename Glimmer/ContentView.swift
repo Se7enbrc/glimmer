@@ -32,6 +32,8 @@ struct MainWindow: View {
                 ConnectSurface()
             }
         }
+        .onAppear { model.setHIDDiscovery(true, for: .launcher) }
+        .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
         .sheet(isPresented: $showPair) {
             PairSheet().environment(model)
         }
@@ -72,9 +74,8 @@ struct MainWindow: View {
         .task {
             guard !awdlPromptChecked else { return }
             awdlPromptChecked = true
-            // Let hosts load + the window settle before deciding - checking
-            // hosts.isEmpty immediately on appear raced the async host load,
-            // so the prompt never fired.
+            // Let the window and route settle before deciding whether the
+            // Wi-Fi helper offer applies.
             try? await Task.sleep(for: .seconds(1.0))
             AWDLHelperManager.shared.refresh()
             // Parking awdl0 only smooths Wi-Fi; on a confirmed wired route it's

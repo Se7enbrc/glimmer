@@ -92,19 +92,26 @@ extension NetworkClient {
             clientKeyPEM: usePaired ? clientKeyPEM : nil,
             pinnedCertPEM: usePaired ? server.serverCertPEM : nil)
         let requestTarget = target
+        let operation: @Sendable () async throws -> ControlTransport.Response = {
+            try await ControlTransport.get(
+                host: address, port: port, target: requestTarget,
+                userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
+                tls: usePaired, credential: credential,
+                timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+        }
         let resp: ControlTransport.Response
         do {
-            resp = try await StreamAttempt.run(until: deadline) {
-                try await ControlTransport.get(
-                    host: address, port: port, target: requestTarget,
-                    userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
-                    tls: usePaired, credential: credential,
-                    timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+            // Preserve /launch's reply for ownership and late-success cleanup.
+            // Teardown bounds its own wait; a racing timer here could lose the reply.
+            if path == "launch" {
+                resp = try await operation()
+            } else {
+                resp = try await StreamAttempt.run(until: deadline, operation: operation)
+                try StreamAttempt.checkDeadline(requestDeadline)
             }
         } catch {
             throw Self.requestError(error, requestDeadline: requestDeadline)
         }
-        try StreamAttempt.checkDeadline(requestDeadline)
 
         // GameStream puts protocol errors in the body XML with HTTP 200, so a
         // non-2xx is transport-level breakage (e.g. a 401 from a reverse proxy).
@@ -154,6 +161,11 @@ extension NetworkClient {
     }
 
     // MARK: - Codec mode decoding
+
+    /// Preserves the /serverinfo uint32 mask's bit pattern for RTSP checks.
+    static func backendCodecModeMask(_ raw: Int) -> Int32 {
+        Int32(truncatingIfNeeded: raw)
+    }
 
     /// Sunshine/GFE pack supported codecs into ServerCodecModeSupport as a
     /// bitfield. The values aren't documented anywhere except the moonlight

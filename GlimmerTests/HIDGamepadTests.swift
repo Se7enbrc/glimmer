@@ -1,8 +1,39 @@
+import AppKit
 import Foundation
+import GameController
 import Testing
 @testable import Glimmer
 
 struct HIDGamepadTests {
+    @MainActor
+    @Test func shortcutCaptureEndsAndPassesThroughEventsFromAnotherWindow() {
+        let captureWindow = NSWindow()
+        let otherWindow = NSWindow()
+        #expect(ShortcutCaptureEvent.disposition(eventWindow: otherWindow, captureWindow: captureWindow)
+                == .endAndPassThrough)
+        #expect(ShortcutCaptureEvent.disposition(eventWindow: captureWindow, captureWindow: captureWindow)
+                == .capture)
+    }
+
+    @Test func controllerDiscoveryStaysRunningDuringStreaming() {
+        var stopped = false
+        ControllerDiscovery.stopIfIdle(isStreaming: true) { stopped = true }
+        #expect(!stopped)
+        ControllerDiscovery.stopIfIdle(isStreaming: false) { stopped = true }
+        #expect(stopped)
+    }
+
+    @MainActor
+    @Test func controllerMonitorRestoresBackgroundMonitoring() {
+        let prior = GCController.shouldMonitorBackgroundEvents
+        defer { GCController.shouldMonitorBackgroundEvents = prior }
+        GCController.shouldMonitorBackgroundEvents = false
+        let monitor = ControllerMonitor(isStreaming: { false })
+        monitor.start()
+        monitor.stop()
+        #expect(GCController.shouldMonitorBackgroundEvents == false)
+    }
+
     @Test func ultimate2CMapping() throws {
         let mapping = try #require(GameControllerDB.lookup(vendor: 0x2DC8, product: 0x301B, version: 1))
         #expect(mapping.name == "8BitDo Ultimate 2C")
@@ -18,7 +49,9 @@ struct HIDGamepadTests {
     }
 
     @Test func guidLookupIgnoresBusCRCAndFallsBackOnVersion() throws {
-        let old = try #require(HIDGamepadMapping(line: "03000000c82d00001b30000001000000,Old,a:b0,"))
+        let line = "03000000c82d00001b30000001000000,Old,a:b0,"
+        let old = try #require(HIDGamepadMapping(line: line))
+        #expect(old.identity == GameControllerDB.identity(old.guid))
         let new = try #require(HIDGamepadMapping(line: "03000000c82d00001b30000002000000,New,a:b1,"))
         #expect(GameControllerDB.lookup(guid: "0500abcdc82d00001b30000002000000", entries: [old, new])?.name == "New")
         #expect(GameControllerDB.lookup(guid: "0500ffffc82d00001b30000099000000", entries: [old, new])?.name == "Old")
@@ -113,6 +146,7 @@ struct HIDGamepadTests {
         elements.append(.init(cookie: 40, page: 1, usage: 0x39, kind: .hat))
         let mapping = HIDGamepadMapping.heuristic(elements: elements)
         #expect(mapping.isHeuristic)
+        #expect(mapping.identity == nil)
         #expect(mapping.bindings["righty"] == .axis(5, half: 0, inverted: false))
         #expect(mapping.bindings["lefttrigger"] == .axis(3, half: 0, inverted: false))
         #expect(mapping.bindings["righttrigger"] == .axis(4, half: 0, inverted: false))

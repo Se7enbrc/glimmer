@@ -11,6 +11,53 @@ import Testing
 
 struct VideoRecoveryEventTests {
 
+    private final class RoundTripDelegate: VideoDepacketizerDelegate {
+        var matches: [Double] = []
+
+        func depacketizerDidAssembleFrame(_ unit: DecodeUnit) {
+            guard unit.frameType == VideoDepacketizer.FRAME_TYPE_IDR,
+                  let ms = TelemetryCounters.shared.p2.resolveIdrArrival(
+                    TelemetryCounters.monotonicNowNanos()) else { return }
+            matches.append(ms)
+        }
+
+        func depacketizerDetectedFrameLoss(from: Int, to: Int) {}
+        func depacketizerNeedsIdr() {}
+        func depacketizerReceivedKeyFrame(frameNumber: Int) {}
+    }
+
+    @Test func rfiRecoveryLeavesExplicitIdrRequestForTheIdr() {
+        let tracker = FrameTimingTracker(sessionId: "test")
+        FrameTimingTracker.installForTesting(tracker)
+        TelemetryCounters.shared.p2.reset()
+        defer {
+            FrameTimingTracker.installForTesting(nil)
+            TelemetryCounters.shared.p2.reset()
+        }
+
+        let delegate = RoundTripDelegate()
+        let depacketizer = VideoDepacketizer(delegate: delegate,
+            negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_MASK_AV1, colorSpace: 0)
+        func send(frame: UInt32, type: UInt8) {
+            depacketizer.process(VideoDepacketizer.CompletedPacket(
+                frameIndex: frame, flags: 0x07, extraFlags: 0,
+                fecCurrentBlock: 0, fecLastBlock: 0, streamPacketIndex: (frame &- 1) << 8,
+                rtpTimestamp: frame, presentationTimeUs: UInt64(frame) * 8_333,
+                receiveTimeUs: UInt64(frame) * 8_333,
+                payload: [1, 0, 0, type, 9, 0, 0, 0, 0xAA]))
+        }
+
+        send(frame: 1, type: 2)
+        depacketizer.waitingForRefInvalFrame = true
+        TelemetryCounters.shared.p2.stampIdrRequest(TelemetryCounters.monotonicNowNanos())
+        send(frame: 2, type: 4)
+        #expect(delegate.matches.isEmpty)
+        #expect(TelemetryCounters.shared.p2.lastIdrRoundTripMs == nil)
+        send(frame: 3, type: 2)
+        #expect(delegate.matches.count == 1)
+        #expect(TelemetryCounters.shared.p2.resolveIdrArrival(TelemetryCounters.monotonicNowNanos()) == nil)
+    }
+
     private func object(_ fields: [String]) throws -> [String: Any] {
         let data = Data(("{" + fields.joined(separator: ",") + "}").utf8)
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])

@@ -85,8 +85,7 @@ enum CtrlV2 {
     static let ltrFrameAck: UInt16 = 0x0350          // SS_LTR_FRAME_ACK_PTYPE
     static let periodicPing: UInt16 = 0x0200         // Loss Stats / keepalive
     // NOTE: no frameFecStatus type. SS_FRAME_FEC_PTYPE (0x5502) collides with
-    // Sunshine's IDX_SET_RGB_LED, and Glimmer never sends per-frame FEC status
-    // (see EnetControlChannel.queueFrameFecStatus), so the constant is omitted.
+    // Sunshine's IDX_SET_RGB_LED, so Glimmer cannot send per-frame FEC status.
     static let termination: UInt16 = 0x0109          // extended termination
     /// Controller rumble - packetTypesGen7Enc[IDX_RUMBLE_DATA]. Dispatched by
     /// handleInboundControl → handleRumbleData → onRumble → ControllerHaptics
@@ -214,29 +213,6 @@ struct ByteReader {
     }
 }
 
-// MARK: - SS_FRAME_FEC_STATUS (Video.h:57-70)
-
-/// Per-frame FEC status produced by the video FEC path (RtpVideoQueue's
-/// reportFinalFrameFecStatus) as each FEC block completes or is abandoned, and
-/// handed to the FEC status sink. Glimmer does NOT transmit it: moonlight only
-/// sends FEC status on actual loss, and its Sunshine wire type (0x5502) collides
-/// with IDX_SET_RGB_LED - so EnetControlChannel.queueFrameFecStatus is a no-op.
-/// The type is retained because the video FEC path constructs and routes it; the
-/// fields mirror the C struct (Video.h, "fields are big-endian" on the wire).
-struct FrameFecStatus {
-    var frameIndex: UInt32
-    var highestReceivedSequenceNumber: UInt16
-    var nextContiguousSequenceNumber: UInt16
-    var missingPacketsBeforeHighestReceived: UInt16
-    var totalDataPackets: UInt16
-    var totalParityPackets: UInt16
-    var receivedDataPackets: UInt16
-    var receivedParityPackets: UInt16
-    var fecPercentage: UInt8
-    var multiFecBlockIndex: UInt8
-    var multiFecBlockCount: UInt8
-}
-
 // MARK: - Reliable command tracking
 
 struct SentReliable {
@@ -252,4 +228,53 @@ struct SentReliable {
     /// forever. Set once at append; never updated on resend.
     var firstSentAtMs: UInt32
     var attempts: Int
+}
+
+/// ENet's in-order delivery (enet_peer_queue_incoming_command) holds authenticated
+/// messages behind missing reliables; bounded recovery ensures a gap never wedges
+/// control delivery for the rest of the session.
+struct EnetInboundOrder {
+    // Rumble runs about 135/s, so 256 is about two seconds; the 1 s gap clock normally decides first.
+    static let maxHeld = 256
+    static let maxGapMs: UInt32 = 1000
+    var next: UInt16 = 1
+    private(set) var held: [UInt16: [UInt8]] = [:]
+    var gapStartedMs: UInt32 = 0
+
+    func isDuplicate(_ seq: UInt16) -> Bool {
+        held[seq] != nil || (seq != next && !EnetControlChannel.reliableSeqIsNewer(seq, than: next))
+    }
+
+    mutating func accept(_ seq: UInt16, payload: [UInt8], nowMs: UInt32) -> (due: [[UInt8]], skipped: Int) {
+        if seq == next {
+            next &+= 1
+            return ([payload] + drain(nowMs: nowMs), 0)
+        }
+        if held.isEmpty { gapStartedMs = nowMs }
+        held[seq] = payload
+        return held.count >= Self.maxHeld ? skipGap(nowMs: nowMs) : ([], 0)
+    }
+
+    mutating func releaseStaleGap(nowMs: UInt32) -> (due: [[UInt8]], skipped: Int) {
+        guard !held.isEmpty,
+              EnetControlChannel.msSince(gapStartedMs, now: nowMs) > Self.maxGapMs else { return ([], 0) }
+        return skipGap(nowMs: nowMs)
+    }
+
+    private mutating func skipGap(nowMs: UInt32) -> (due: [[UInt8]], skipped: Int) {
+        guard let first = held.keys.min(by: { ($0 &- next) < ($1 &- next) }) else { return ([], 0) }
+        let skipped = Int(first &- next)
+        next = first
+        return (drain(nowMs: nowMs), skipped)
+    }
+
+    private mutating func drain(nowMs: UInt32) -> [[UInt8]] {
+        var due: [[UInt8]] = []
+        while let payload = held.removeValue(forKey: next) {
+            due.append(payload)
+            next &+= 1
+        }
+        if !held.isEmpty { gapStartedMs = nowMs }
+        return due
+    }
 }

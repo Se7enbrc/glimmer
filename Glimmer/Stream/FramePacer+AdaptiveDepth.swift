@@ -209,10 +209,29 @@ extension FramePacer {
     /// median == the interval - byte-identical to the prior behavior.
     func skipRobustInterval(_ values: [Double]) -> Double {
         guard !values.isEmpty else { return streamFrameIntervalSeconds }
-        let sorted = values.sorted()
-        let idx = min(sorted.count - 1,
-                      Int(Double(sorted.count) * FramePacer.cadencePercentile))
-        return sorted[idx]
+        let idx = min(values.count - 1,
+                      Int(Double(values.count) * FramePacer.cadencePercentile))
+        return values[idx]
+    }
+
+    static func insertCadenceDelta(_ delta: Double, into sorted: inout [Double]) {
+        var lower = 0
+        var upper = sorted.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if sorted[middle] < delta { lower = middle + 1 } else { upper = middle }
+        }
+        sorted.insert(delta, at: lower)
+    }
+
+    static func removeCadenceDelta(_ delta: Double, from sorted: inout [Double]) {
+        var lower = 0
+        var upper = sorted.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if sorted[middle] < delta { lower = middle + 1 } else { upper = middle }
+        }
+        if lower < sorted.count, sorted[lower] == delta { sorted.remove(at: lower) }
     }
 
     /// True while recovering from a real delivery GAP - a recent empty-tick streak,

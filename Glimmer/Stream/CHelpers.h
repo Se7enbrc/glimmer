@@ -9,6 +9,8 @@
 #define Glimmer_Stream_CHelpers_h
 
 #include <stdint.h>
+#include <arm_neon.h>
+#include <time.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -22,6 +24,44 @@
 #include <openssl/bio.h>
 #include <openssl/pkcs12.h>
 #include <openssl/ssl.h>
+
+// MARK: - GF(256) shard arithmetic
+// Split-nibble tables keep field multiplication in registers while recovery
+// runs on the receive thread. The tail handles unpadded audio and video shards.
+static inline void gl_gf256_mul_add(uint8_t * _Nonnull dst, const uint8_t * _Nonnull src,
+                                    size_t n, const uint8_t * _Nonnull lo, const uint8_t * _Nonnull hi) {
+    uint8x16_t low = vld1q_u8(lo);
+    uint8x16_t high = vld1q_u8(hi);
+    uint8x16_t mask = vdupq_n_u8(15);
+    size_t i = 0;
+    for (; n - i >= 16; i += 16) {
+        uint8x16_t value = vld1q_u8(src + i);
+        uint8x16_t product = veorq_u8(vqtbl1q_u8(low, vandq_u8(value, mask)),
+                                     vqtbl1q_u8(high, vshrq_n_u8(value, 4)));
+        vst1q_u8(dst + i, veorq_u8(vld1q_u8(dst + i), product));
+    }
+    for (; i < n; i++) {
+        uint8_t value = src[i];
+        dst[i] ^= lo[value & 15] ^ hi[value >> 4];
+    }
+}
+
+static inline void gl_gf256_mul(uint8_t * _Nonnull dst, size_t n,
+                                const uint8_t * _Nonnull lo, const uint8_t * _Nonnull hi) {
+    uint8x16_t low = vld1q_u8(lo);
+    uint8x16_t high = vld1q_u8(hi);
+    uint8x16_t mask = vdupq_n_u8(15);
+    size_t i = 0;
+    for (; n - i >= 16; i += 16) {
+        uint8x16_t value = vld1q_u8(dst + i);
+        vst1q_u8(dst + i, veorq_u8(vqtbl1q_u8(low, vandq_u8(value, mask)),
+                                  vqtbl1q_u8(high, vshrq_n_u8(value, 4))));
+    }
+    for (; i < n; i++) {
+        uint8_t value = dst[i];
+        dst[i] = lo[value & 15] ^ hi[value >> 4];
+    }
+}
 
 // MARK: - Batched UDP receive (recvmsg_x)
 // `recvmsg_x` is Darwin's batched datagram receive (the macOS analogue of
@@ -134,13 +174,41 @@ cleanup:
 }
 
 // MARK: - TCP connect with timeout (control channel)
-// Plain connect() has no timeout knob, so a dead host would hang the control
-// request until the OS default (~75s). We do a non-blocking connect + poll so it
-// fails fast. On success the socket is returned in BLOCKING mode with
-// SO_RCVTIMEO/SO_SNDTIMEO set to the same deadline, so the TLS handshake and HTTP
-// read/write that follow on this fd inherit the bound. Returns the fd, or -1.
-// `host` may be a hostname or a numeric IP; `port` is the decimal string.
+
+static inline int64_t gl_monotonic_ms(void) {
+    return (int64_t)(clock_gettime_nsec_np(CLOCK_MONOTONIC) / 1000000);
+}
+
+// Connect one address, polling only until the shared deadline.
+// Returns the connected non-blocking fd or -1.
+static inline int gl_tcp_connect_address(const struct addrinfo * _Nonnull ai, int64_t deadline) {
+    int fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+    if (fd < 0) return -1;
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+    int fl = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+    int rc = connect(fd, ai->ai_addr, ai->ai_addrlen);
+    int connect_errno = errno;
+    if (rc == 0) return fd;
+    if (rc < 0 && connect_errno == EINPROGRESS) {
+        int64_t remaining_ms = deadline - gl_monotonic_ms();
+        struct pollfd pfd = { .fd = fd, .events = POLLOUT, .revents = 0 };
+        if (remaining_ms > 0 && poll(&pfd, 1, (int)remaining_ms) > 0 && (pfd.revents & POLLOUT)) {
+            int soerr = 0;
+            socklen_t slen = sizeof(soerr);
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &slen) == 0 && soerr == 0) return fd;
+        }
+    }
+    close(fd);
+    return -1;
+}
+
+// Non-blocking connect, IPv4 first (Sunshine binds IPv4 by default), within one deadline.
+// Returns a blocking SO_NOSIGPIPE fd or -1. Its timeouts are the full budget, only a backstop:
+// the caller cancels the request, shutting the socket down, at its own deadline.
 static inline int gl_tcp_connect(const char * _Nonnull host, const char * _Nonnull port, int timeout_ms) {
+    int64_t deadline = gl_monotonic_ms() + timeout_ms;
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -150,29 +218,15 @@ static inline int gl_tcp_connect(const char * _Nonnull host, const char * _Nonnu
     if (getaddrinfo(host, port, &hints, &res) != 0 || !res) return -1;
 
     int fd = -1;
-    for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
-        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-        if (fd < 0) continue;
-        int fl = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, fl | O_NONBLOCK);
-        int rc = connect(fd, ai->ai_addr, ai->ai_addrlen);
-        if (rc == 0) goto connected;
-        if (rc < 0 && errno == EINPROGRESS) {
-            struct pollfd pfd = { .fd = fd, .events = POLLOUT, .revents = 0 };
-            if (poll(&pfd, 1, timeout_ms) > 0 && (pfd.revents & POLLOUT)) {
-                int soerr = 0;
-                socklen_t slen = sizeof(soerr);
-                if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &slen) == 0 && soerr == 0) goto connected;
-            }
+    for (int pass = 0; pass < 2 && fd < 0 && gl_monotonic_ms() < deadline; pass++) {
+        for (struct addrinfo *ai = res; ai && gl_monotonic_ms() < deadline; ai = ai->ai_next) {
+            if ((ai->ai_family == AF_INET) != (pass == 0)) continue;
+            fd = gl_tcp_connect_address(ai, deadline);
+            if (fd >= 0) break;
         }
-        close(fd);
-        fd = -1;
     }
     freeaddrinfo(res);
-    return -1;
-
-connected:
-    freeaddrinfo(res);
+    if (fd < 0) return -1;
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
     struct timeval tv = { .tv_sec = timeout_ms / 1000, .tv_usec = (timeout_ms % 1000) * 1000 };
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));

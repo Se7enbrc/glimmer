@@ -76,6 +76,131 @@ struct FramePacerTests {
         #expect(!FramePacer.tickOwnsScanout(now: 100, scanout: .nan))
     }
 
+    @Test func dueGateRecoversFromTimebaseJumps() throws {
+        let pacer = try makePacer(fps: 120, queued: 1)
+        pacer.lastPresentMediaTime = 1_000
+        os_unfair_lock_lock(&pacer.lock)
+        let result = pacer.dequeueDueFrameLocked(
+            targetTimestamp: 5, vsyncInterval: 1.0 / 120, effectiveTarget: 1)
+        os_unfair_lock_unlock(&pacer.lock)
+        #expect(result.toPresent != nil)
+        #expect(pacer.lastPresentMediaTime == 5)
+
+        let overdue = try makePacer(fps: 120, queued: 1)
+        overdue.lastPresentMediaTime = 0
+        os_unfair_lock_lock(&overdue.lock)
+        let overdueResult = overdue.dequeueDueFrameLocked(
+            targetTimestamp: 2, vsyncInterval: 1.0 / 120, effectiveTarget: 1)
+        os_unfair_lock_unlock(&overdue.lock)
+        #expect(overdueResult.toPresent != nil)
+    }
+
+    @Test func dueGateHoldsOnlyAfterCadenceLocks() throws {
+        let interval = 1.0 / 120
+        let pacer = try makePacer(fps: 120, queued: 1)
+        pacer.lastPresentMediaTime = 0
+        pacer.adaptiveDepth.adaptiveTargetDepth = 2
+        pacer.liveness.releaseCount = 31
+        os_unfair_lock_lock(&pacer.lock)
+        let held = pacer.dequeueDueFrameLocked(
+            targetTimestamp: interval - interval / 4, vsyncInterval: interval / 2,
+            effectiveTarget: 2)
+        os_unfair_lock_unlock(&pacer.lock)
+        #expect(held.toPresent == nil)
+        #expect(held.heldForGrowth)
+
+        let startup = try makePacer(fps: 120, queued: 1)
+        startup.lastPresentMediaTime = 0
+        startup.adaptiveDepth.adaptiveTargetDepth = 2
+        startup.liveness.releaseCount = 10
+        os_unfair_lock_lock(&startup.lock)
+        let released = startup.dequeueDueFrameLocked(
+            targetTimestamp: interval - interval / 4, vsyncInterval: interval / 2,
+            effectiveTarget: 2)
+        os_unfair_lock_unlock(&startup.lock)
+        #expect(released.toPresent != nil)
+    }
+
+    @Test func dueGateForcesBacklogAboveTrimSlack() throws {
+        let pacer = try makePacer(fps: 120, queued: 4)
+        pacer.lastPresentMediaTime = 0
+        os_unfair_lock_lock(&pacer.lock)
+        let result = pacer.dequeueDueFrameLocked(
+            targetTimestamp: 0.001, vsyncInterval: 1.0 / 120, effectiveTarget: 2)
+        os_unfair_lock_unlock(&pacer.lock)
+        #expect(result.toPresent != nil)
+        #expect(result.forcedOverTarget)
+    }
+
+    @Test func adaptiveDepthUsesSelfDecidePath() {
+        let pacer = FramePacer(stats: StatsCollector(), configuredFps: 120)
+        #expect(pacer.adaptiveDepth.reconciledDecisionGeneration == 0)
+        os_unfair_lock_lock(&pacer.lock)
+        pacer.adaptiveDepth.measuredJitterMs = 0.09
+        #expect(pacer.justifiedDepthLocked() == 1)
+        pacer.adaptiveDepth.measuredJitterMs = 22
+        #expect(pacer.justifiedDepthLocked() == 4)
+        pacer.adaptiveDepth.adaptiveTargetDepth = 1
+        pacer.bumpTargetForJitterLocked()
+        #expect(pacer.adaptiveDepth.adaptiveTargetDepth == 2)
+
+        pacer.adaptiveDepth.measuredJitterMs = 0
+        pacer.adaptiveDepth.adaptiveTargetDepth = 3
+        pacer.adaptiveDepth.lastTargetShrinkTime = CFAbsoluteTimeGetCurrent() - 0.1
+        #expect(pacer.decayTargetLocked() == 3)
+        pacer.adaptiveDepth.lastTargetShrinkTime = CFAbsoluteTimeGetCurrent() - 0.3
+        #expect(pacer.decayTargetLocked() == 2)
+        os_unfair_lock_unlock(&pacer.lock)
+
+        #expect(pacer.skipRobustInterval([
+            1.0 / 120, 1.0 / 120, 1.0 / 120, 1.0 / 120, 1.0 / 120, 1.0 / 120,
+            1.0 / 60, 1.0 / 60
+        ]) == 1.0 / 120)
+    }
+
+    @Test func cadenceWindowMirrorMatchesSortedReference() {
+        var window: [Double] = []
+        var sorted: [Double] = []
+        window.reserveCapacity(65)
+        sorted.reserveCapacity(65)
+        var state: UInt64 = 0x9E3779B97F4A7C15
+        for _ in 0..<1_000 {
+            state = state &* 6_364_136_223_846_793_005 &+ 1
+            let delta = Double(state % 100_000) / 1_000_000
+            window.append(delta)
+            FramePacer.insertCadenceDelta(delta, into: &sorted)
+            if window.count > 64 {
+                let evicted = window.removeFirst()
+                FramePacer.removeCadenceDelta(evicted, from: &sorted)
+            }
+            let reference = window.sorted()
+            let index = min(reference.count - 1,
+                            Int(Double(reference.count) * FramePacer.cadencePercentile))
+            #expect(sorted[index] == reference[index])
+        }
+        let gaps = Array(repeating: 1.0 / 120, count: 6) + [1.0 / 60, 1.0 / 60]
+        var gapSorted: [Double] = []
+        for delta in gaps { FramePacer.insertCadenceDelta(delta, into: &gapSorted) }
+        #expect(gapSorted[Int(Double(gapSorted.count) * FramePacer.cadencePercentile)] == 1.0 / 120)
+    }
+
+    @Test func backwardsPTSAppendsInQueueOrder() throws {
+        let pacer = try makePacer(fps: 120, queued: 0)
+        pacer.tickDeficit.warmingUp = false
+        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 4_294_971_000, timescale: 90_000))
+        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 900, timescale: 90_000))
+        #expect(pacer.queue.map(\.hostPTSSeconds) == [47_721.9, 0.01])
+    }
+
+    @Test func reorderedPTSAfterResetStaysInNewEpoch() throws {
+        let pacer = try makePacer(fps: 120, queued: 0)
+        pacer.tickDeficit.warmingUp = false
+        for seconds in [47_721.8, 0.02, 0.01] {
+            try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(seconds: seconds, preferredTimescale: 90_000))
+        }
+        #expect(pacer.queue.map(\.hostPTSSeconds) == [47_721.8, 0.01, 0.02])
+    }
+
     /// The watchdog's non-empty clock starts on the empty → non-empty submit,
     /// keeps running through submits that find frames queued (a wedge with
     /// frames still arriving), and reads 0 once the queue drains.

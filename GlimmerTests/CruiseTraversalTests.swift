@@ -8,6 +8,7 @@
 //  fully inert at every velocity.
 //
 
+import Foundation
 import Testing
 @testable import Glimmer
 
@@ -27,6 +28,55 @@ struct CruiseTraversalTests {
         #expect(gMax4K == 2.0)                                    // 3840/1920
         #expect(CruiseTraversal.gMax(forStreamWidth: 2560) == 2560.0 / 1920.0)  // ~1.33
         #expect(CruiseTraversal.gMax(forStreamWidth: 1920) == 1.0)
+    }
+
+    @Test func tuningUsesDefaultsAndClampsValues() throws {
+        let suiteName = "CruiseTraversalTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let fallback = CruiseTraversal.Tuning.current(defaults)
+        #expect(fallback.enabled == false)
+        #expect(fallback.vKnee == CruiseTraversal.defaultVKnee)
+        #expect(fallback.vFull == CruiseTraversal.defaultVFull)
+        #expect(fallback.dragDeltaScale == CruiseTraversal.defaultDragDeltaScale)
+
+        defaults.set(2_000.0, forKey: CruiseTraversal.vKneeDefaultsKey)
+        defaults.set(1_000.0, forKey: CruiseTraversal.vFullDefaultsKey)
+        defaults.set(9.0, forKey: CruiseTraversal.dragDeltaScaleDefaultsKey)
+        let tuned = CruiseTraversal.Tuning.current(defaults)
+        #expect(tuned.vKnee == 2_000.0)
+        #expect(tuned.vFull == 2_001.0)
+        #expect(tuned.dragDeltaScale == 3.0)
+
+        defaults.set(0.1, forKey: CruiseTraversal.dragDeltaScaleDefaultsKey)
+        #expect(CruiseTraversal.Tuning.current(defaults).dragDeltaScale == 0.5)
+    }
+
+    @Test @MainActor func tuningStaysFixedAcrossReconnect() throws {
+        let suiteName = "CruiseTraversalReconnect-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(true, forKey: CruiseTraversal.enabledDefaultsKey)
+        defaults.set(1_200.0, forKey: CruiseTraversal.vKneeDefaultsKey)
+        let existing = InputForwarder(cruiseTuning: CruiseTraversal.Tuning.current(defaults))
+        defer { existing.detach() }
+        CruiseTraversal.configure(existing, streamWidth: 3840)
+
+        defaults.set(false, forKey: CruiseTraversal.enabledDefaultsKey)
+        defaults.set(2_000.0, forKey: CruiseTraversal.vKneeDefaultsKey)
+        CruiseTraversal.configure(existing, streamWidth: 2560)
+        let reconnected = InputForwarder(cruiseTuning: CruiseTraversal.Tuning.current(defaults))
+        defer { reconnected.detach() }
+        CruiseTraversal.configure(reconnected, streamWidth: 2560)
+
+        #expect(existing.cruiseTuning.enabled)
+        #expect(existing.cruiseTuning.vKnee == 1_200.0)
+        #expect(existing.cruiseGMax == 2560.0 / 1920.0)
+        #expect(!reconnected.cruiseTuning.enabled)
+        #expect(reconnected.cruiseTuning.vKnee == 2_000.0)
+        #expect(reconnected.cruiseGMax == 1.0)
     }
 
     @Test func identityAtAndBelowKnee() {

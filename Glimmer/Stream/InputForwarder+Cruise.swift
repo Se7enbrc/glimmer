@@ -19,15 +19,13 @@ import Foundation
 // MARK: - Cruise traversal-boost gain
 
 /// Pure gain function + constants for the resolution-compensated traversal boost.
-/// `gMax` is DERIVED from the stream width (never user-dialed); the knee/full
-/// velocities are HIDDEN UserDefaults tunables with no UI surface - the owner
-/// wants zero user-facing controls, so this is "magic only".
+/// `gMax` is derived from stream width; tuning is read once per stream.
 enum CruiseTraversal {
     /// Master gate. HIDDEN, default-TRUE (registered in GlimmerApp beside the
     /// other input defaults) - an escape hatch for purists, with no Settings row.
     static let enabledDefaultsKey = "cruiseTraversalEnabled"
     /// HIDDEN tune knobs (a standing tune-grant); NOT surfaced in UI. Velocities
-    /// are in raw HID counts/sec. Read once per gain call so a live `defaults
+    /// are in raw HID counts/sec. Read once per stream so a live `defaults
     /// write` takes effect on the next stream without a rebuild.
     static let vKneeDefaultsKey = "cruiseVKnee"
     static let vFullDefaultsKey = "cruiseVFull"
@@ -48,33 +46,36 @@ enum CruiseTraversal {
 
     /// DRAG-DELTA compensation, applied only while raw aim is engaged: that mode
     /// damped *MouseDragged deltas to ~0.6-0.7x of free motion (owner-measured,
-    /// macOS 27 beta). Hidden live-read tunable; 1.0 disables; clamped.
+    /// macOS 27 beta). Hidden per-stream tuning; 1.0 disables; clamped.
     static let dragDeltaScaleDefaultsKey = "cruiseDragDeltaScale"
     static let defaultDragDeltaScale: Double = 1.35
-    static var dragDeltaScale: Double {
-        let scale = UserDefaults.standard.double(forKey: dragDeltaScaleDefaultsKey)
-        return scale > 0 ? min(max(scale, 0.5), 3.0) : defaultDragDeltaScale
-    }
+    struct Tuning {
+        let enabled: Bool
+        let vKnee: Double
+        let vFull: Double
+        let dragDeltaScale: Double
 
-    /// Whether the feature is on (default true).
-    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: enabledDefaultsKey) }
-
-    /// `vKnee` / `vFull` from defaults, falling back to the constants above when a
-    /// key is absent or non-positive. `vFull` is floored just above `vKnee` so the
-    /// smoothstep denominator can never be zero/negative.
-    static var vKnee: Double {
-        let knee = UserDefaults.standard.double(forKey: vKneeDefaultsKey)
-        return knee > 0 ? knee : defaultVKnee
-    }
-    static var vFull: Double {
-        let full = UserDefaults.standard.double(forKey: vFullDefaultsKey)
-        return full > vKnee ? full : max(defaultVFull, vKnee + 1)
+        static func current(_ defaults: UserDefaults = .standard) -> Tuning {
+            let kneeValue = defaults.double(forKey: vKneeDefaultsKey)
+            let knee = kneeValue > 0 ? kneeValue : defaultVKnee
+            let fullValue = defaults.double(forKey: vFullDefaultsKey)
+            let full = fullValue > knee ? fullValue : max(defaultVFull, knee + 1)
+            let scaleValue = defaults.double(forKey: dragDeltaScaleDefaultsKey)
+            let scale = scaleValue > 0 ? min(max(scaleValue, 0.5), 3.0) : defaultDragDeltaScale
+            return Tuning(enabled: defaults.bool(forKey: enabledDefaultsKey), vKnee: knee,
+                          vFull: full, dragDeltaScale: scale)
+        }
     }
 
     /// Resolution-derived ceiling for the boost. Clamped to >=1.0 so <=1080p is
     /// provably inert (gMax==1.0 ⇒ gain is 1.0 at every velocity).
     static func gMax(forStreamWidth width: Int) -> Double {
         max(1.0, Double(width) / referenceWidth)
+    }
+
+    @MainActor
+    static func configure(_ forwarder: InputForwarder, streamWidth: Int) {
+        forwarder.cruiseGMax = forwarder.cruiseTuning.enabled ? gMax(forStreamWidth: streamWidth) : 1.0
     }
 
     /// The pure gain. `velocity` is the batch speed (counts/sec); `dt` is the
@@ -88,6 +89,7 @@ enum CruiseTraversal {
         if dt <= 0 || dt > 0.1 { return 1.0 }   // stale/post-gap dt -> identity
         if velocity <= vKnee { return 1.0 }      // sacred aim band, unscaled
         if velocity >= vFull { return gMax }
+        // Flooring vFull above vKnee keeps the smoothstep denominator positive.
         let ramp = (velocity - vKnee) / (vFull - vKnee)
         let s = ramp * ramp * (3 - 2 * ramp)     // smoothstep, C1 at both ends
         return 1.0 + (gMax - 1.0) * s

@@ -12,49 +12,19 @@ import os
 extension StreamSession {
     // MARK: - Connection edges
 
-    /// Actor-isolated side effects for connection-edge events. The event has
-    /// already been yielded to the stream by `NativeConnectionEvents` - this
-    /// handles state that must be touched on the actor (signpost-interval close)
-    /// or hopped to MainActor (InputForwarder gate flip).
-    ///
-    /// The input uplink only accepts packets after the connection is
-    /// established (send* returns -2 otherwise), so the InputForwarder buffers
-    /// its state and starts forwarding only when we tell it via `setReady(true)`.
-    fileprivate func handleConnectionEdge(_ event: StreamEvent) {
-        switch event {
-        case .connectionEstablished:
-            // Ground truth that we reached a LIVE state - gates the silent
-            // reconnect (a terminate before this is a failed connect, not a
-            // recoverable interruption). Fires again on every reconnect; never
-            // reset until a full stop().
-            reachedLiveState = true
-            let inp = input
-            // FIFO main-queue hop (NOT Task{}, which has no inter-task ordering): a
-            // terminate's setReady(false) must not reorder ahead of this establish
-            // and leave input stuck disabled after a reconnect.
-            DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(true) } }
-            if let state = connectFlowState {
-                OSSignposter.network.endInterval(
-                    "ConnectFlow", state, "outcome=established")
-                connectFlowState = nil
-            }
-        case .connectionTerminated:
-            let inp = input
-            DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
-        default:
-            break
-        }
-    }
-
-    /// Native-engine connection-edge hooks. The NativeConnectionEvents adapter
-    /// yields the StreamEvents the consumer + event stream observe, then calls
-    /// these to run the actor-isolated side effects (the InputForwarder-ready
-    /// flip and the ConnectFlow signpost close) through `handleConnectionEdge`.
+    /// The input uplink only accepts packets after connection, so the input
+    /// forwarder buffers state until `setReady(true)` allows packets through.
     func nativeConnectionEstablished() {
-        handleConnectionEdge(.connectionEstablished)
-    }
-
-    func nativeConnectionTerminated() {
-        handleConnectionEdge(.connectionTerminated(errorCode: 0))
+        // Ground truth that we reached a LIVE state; only a full stop resets it.
+        reachedLiveState = true
+        let inp = input
+        // FIFO main-queue hop (NOT Task{}) keeps a terminate's setReady(false)
+        // from reordering ahead of establish and leaving input disabled.
+        DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(true) } }
+        if let state = connectFlowState {
+            OSSignposter.network.endInterval(
+                "ConnectFlow", state, "outcome=established")
+            connectFlowState = nil
+        }
     }
 }

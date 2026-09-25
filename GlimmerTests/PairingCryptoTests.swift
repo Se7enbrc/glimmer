@@ -212,6 +212,21 @@ struct PairingCryptoTests {
         #expect(await client.server.pairStatus == .paired)
     }
 
+    @Test func outOfRangeHTTPSPortKeepsPriorValue() async throws {
+        var server = ServerInfo(address: "", uniqueId: "", serverName: "")
+        server.httpsPort = 443
+        let client = NetworkClient(server: server)
+        let xml = try XMLTreeBuilder.parse(data: Data(#"<root status_code="200"><HttpsPort>70000</HttpsPort></root>"#.utf8))
+        await client.hydrateServerInfo(from: xml, fetchedOverPaired: false)
+        #expect(await client.server.httpsPort == 443)
+    }
+
+    @Test func backendCodecModeMaskPreservesBit31AndCodecBits() {
+        let raw = Int(bitPattern: UInt(0x8001_0201))
+        let mask = NetworkClient.backendCodecModeMask(raw)
+        #expect(UInt32(bitPattern: mask) == 0x8001_0201)
+    }
+
     /// GameStream is told apart by its `<state>`, not by `GfeVersion`, which Sunshine sends too.
     @Test func gameStreamIsToldApartByItsState() async throws {
         func isGameStream(_ body: String) async throws -> Bool {
@@ -279,5 +294,24 @@ struct PairingCryptoTests {
         }
         #expect(PairingFailure.timedOut.message(pc: "TOWER") != PairingFailure.rejected.message(pc: "TOWER"))
         #expect(PairingFailure.invalidAddress.message(pc: "TOWER") == PairingFailure.addressHint)
+    }
+}
+
+struct PinnedCertStoreTests {
+
+    @Test func failedValidationKeepsPreviousPin() throws {
+        let hostID = "pin-replacement-\(UUID().uuidString)"
+        defer { PinnedCertStore.delete(forHostID: hostID) }
+        try PinnedCertStore.store(pem: "old certificate", forHostID: hostID)
+
+        do {
+            try PinnedCertStore.writePEM("new certificate", forHostID: hostID) { prepared in
+                #expect(try String(contentsOf: prepared, encoding: .utf8) == "new certificate")
+                throw CocoaError(.fileReadNoPermission)
+            }
+            Issue.record("Expected prepared pin validation to fail")
+        } catch {
+            #expect(PinnedCertStore.load(forHostID: hostID) == "old certificate")
+        }
     }
 }

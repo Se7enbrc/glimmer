@@ -287,11 +287,13 @@ final class RtspClient: @unchecked Sendable {
     func oneShot(_ bytes: Data) async throws -> Data {
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.noDelay = true
+        tcpOptions.connectionTimeout = 5
         let params = NWParameters(tls: nil, tcp: tcpOptions)
         guard let nwPort = NWEndpoint.Port(rawValue: rtspPort) else {
             throw RtspError.transportFailure("invalid RTSP port \(rtspPort)")
         }
         let connection = NWConnection(host: host, port: nwPort, using: params)
+        defer { connection.cancel() }
         setActiveConnection(connection)
         defer { setActiveConnection(nil) }
         // An interrupt() that landed before the store above had nothing to cancel.
@@ -303,7 +305,6 @@ final class RtspClient: @unchecked Sendable {
             let resumed = ManagedAtomicFlag()
             connection.stateUpdateHandler = { state in
                 guard let verdict = Self.connectVerdict(state), resumed.testAndSet() else { return }
-                if case .waiting = state { connection.cancel() }
                 cont.resume(with: verdict)
             }
             connection.start(queue: queue)
@@ -326,12 +327,10 @@ final class RtspClient: @unchecked Sendable {
             let (chunk, isComplete) = try await receiveChunk(connection)
             if let chunk { accumulated.append(chunk) }
             guard accumulated.count <= Self.maxResponseBytes else {
-                connection.cancel()
                 throw RtspError.responseTooLarge(accumulated.count)
             }
             if isComplete { break }
         }
-        connection.cancel()
         return accumulated
     }
 

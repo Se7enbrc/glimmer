@@ -60,7 +60,7 @@ struct GlimmerApp: App {
     /// reaches EXISTING users, where a hard-coded `false` fallback only ever
     /// reached fresh installs.
     @MainActor
-    private static func registerDefaults() {
+    static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
             // Default-ON prefs. disableMouseAccelWhileStreaming linearizes the
             // system pointer acceleration while the stream window is focused so
@@ -154,6 +154,9 @@ struct GlimmerApp: App {
                 CheckForUpdatesView(updater: UpdaterController.shared.updater)
             }
             #endif
+            CommandGroup(after: .appSettings) {
+                Button("Install Command Line Tool…") { CommandLineToolInstaller.install() }
+            }
         }
 
         Settings {
@@ -239,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let mgr = Self.boundManager {
             self.model = mgr
+            WakeNotifier.shared.attach(mgr)
             mgr.attach(appDelegate: self)
             mgr.startBootstrap()
             GlimmerShortcuts.trackPCs(of: mgr)
@@ -313,7 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .terminateNow
         }
         Task { @MainActor in
-            let bound = TerminationGate.stopBoundSeconds
+            let bound = session.terminationStopBoundSeconds
             let finished = await TerminationGate.runBounded(seconds: bound) { await session.stop() }
             Diag.notice(finished
                 ? "Quit: stream stopped and the host session cancelled"

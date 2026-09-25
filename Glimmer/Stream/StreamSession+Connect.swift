@@ -141,7 +141,7 @@ extension StreamSession {
             rtspSessionUrl: launch.sessionURL,
             // RAW SCM_* bitmask from /serverinfo - see the landmine note in
             // StreamProtocol.SCM_*.
-            serverCodecModeRaw: Int32(serverInfo.serverCodecModeRaw))
+            serverCodecModeRaw: NetworkClient.backendCodecModeMask(serverInfo.serverCodecModeRaw))
 
         // Open the `ConnectFlow` interval right before startConnection so the
         // timeline captures the full handshake (RTSP negotiation + control
@@ -166,19 +166,15 @@ extension StreamSession {
         telemetryServerName = serverInfo.serverName.isEmpty ? serverInfo.address : serverInfo.serverName
         anchorTelemetryConnectStart(hostAddress: serverInfo.address)
 
-        // Wire the native engine's Swift sinks. The VideoDecoder is injected as
-        // a `VideoSink` (its methods are nonisolated, so the native receive
-        // thread can call them directly) and the AudioDecoder as a
-        // `NativeAudioSink` (the receiver pings + receives audio on one socket
-        // and feeds opus bytes here).
-        backend.attachVideoSink(setup.2)
-        backend.attachAudioSink(audioDecoder)
-
         do {
-            // Async connect: await the bridge rather than block this actor, so a
-            // hanging host can't freeze stop/cancel/telemetry (bounded by the 30s
-            // cap). Cancelling this task interrupts the in-flight connect.
+            // Wiring awaited the main actor; stop may have finished meanwhile.
+            // Check before attaching sinks so teardown cannot regain the decoder.
             try checkAttempt(deadline: deadline)
+            backend.attachVideoSink(setup.2)
+            backend.attachAudioSink(audioDecoder)
+
+            // Await the bridge so stop stays responsive during a hanging connect.
+            // Cancelling this task interrupts the in-flight connection.
             let connectingBackend = backend
             if let deadline {
                 try await StreamAttempt.run(until: deadline) {

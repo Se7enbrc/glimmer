@@ -189,12 +189,6 @@ extension AppModel {
         return min(max(kbps, 5_000), Self.maxBitrateKbps)
     }
 
-    /// Public surface for the UI: what bitrate would the Moonlight formula
-    /// recommend for the given res/fps? Used as the suggested cap in Custom mode.
-    func suggestedBitrateMbps(width: Int, height: Int, fps: Int) -> Int {
-        bitrateKbps(width: width, height: height, fps: fps, preset: .matchDisplay) / 1000
-    }
-
     // MARK: - Codec-aware budget
 
     /// Discount on the H.264-anchored `bitrateKbps` budget for the intended top

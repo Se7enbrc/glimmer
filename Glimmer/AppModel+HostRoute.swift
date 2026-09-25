@@ -11,9 +11,9 @@ import Network
 import SwiftUI
 import Observation
 
-/// Live wired/Wi-Fi classification of the kernel route toward one host.
-/// Owned by `AppModel` (see `hostRoute`), re-pointed via `refreshHostRoute()`
-/// whenever the selected host's address changes.
+/// Live wired/Wi-Fi classification of the kernel route toward the PC. Owned by
+/// `AppModel` (see `hostRoute`), re-pointed via `refreshHostRoute()` on an address
+/// change, and moved to a better interface on its own when one appears.
 @MainActor
 @Observable
 final class HostRouteMonitor {
@@ -88,22 +88,30 @@ final class HostRouteMonitor {
     }
 
     @ObservationIgnored private var connection: NWConnection?
-    /// Bumped on every retarget; stale path callbacks (from a connection we
+    /// Bumped on every retarget; stale callbacks (from a connection we
     /// already cancelled) compare against it and drop their result, so a
     /// quick host switch can't paint the old host's route onto the new chip.
     @ObservationIgnored private var generation = 0
+    /// Failed sockets in a row since the last ready one set the retry back-off.
+    @ObservationIgnored private var failures = 0
     @ObservationIgnored private let queue = DispatchQueue(
         label: "io.ugfugl.Glimmer.ui.hostRoute", qos: .utility)
 
     /// Point the monitor at a new destination (nil tears down to `.unknown`).
-    /// Cancels any previous socket first; NWConnection releases its handlers
-    /// on cancel, so the retained-handler cycle is broken deterministically.
     func monitor(address: String?) {
+        routeClass = .unknown
+        setPhySampling(false)
+        failures = 0
+        connect(to: address)
+    }
+
+    /// Swaps in a fresh socket without clearing the route class, so retargets use
+    /// normal path transitions without a flash to unknown or lost PHY median.
+    /// NWConnection releases its handlers on cancel, breaking the retained cycle.
+    private func connect(to address: String?) {
         connection?.cancel()
         connection = nil
         generation += 1
-        routeClass = .unknown
-        setPhySampling(false)
         guard let address, !address.isEmpty else { return }
 
         // The port is irrelevant to route selection (only the destination
@@ -121,8 +129,43 @@ final class HostRouteMonitor {
                 self.routeClass = fresh
             }
         }
+        conn.betterPathUpdateHandler = { [weak self] better in
+            guard better else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.generation == gen else { return }
+                Diag.info("A better route to the PC appeared; following it", "Host")
+                self.connect(to: address)
+            }
+        }
+        conn.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready:
+                Task { @MainActor [weak self] in
+                    guard let self, self.generation == gen else { return }
+                    self.failures = 0
+                }
+            case .failed(let error):
+                Task { @MainActor [weak self] in
+                    guard let self, self.generation == gen else { return }
+                    let delay = Self.retryDelay(afterFailures: self.failures)
+                    self.failures += 1
+                    Diag.notice(
+                        "Route check to the PC failed: \(error, privacy: .private). Retrying in \(delay) s", "Host")
+                    try? await Task.sleep(for: .seconds(delay))
+                    guard self.generation == gen else { return }
+                    self.connect(to: address)
+                }
+            default:
+                break
+            }
+        }
         conn.start(queue: queue)
         connection = conn
+    }
+
+    /// Failing sockets back off to a minute instead of spinning, but keep retrying.
+    nonisolated static func retryDelay(afterFailures failures: Int) -> Int {
+        1 << min(failures, 6)
     }
 
     /// NWPath → route class. Tunnel is checked FIRST: a host reached through

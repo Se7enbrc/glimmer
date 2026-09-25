@@ -1,20 +1,6 @@
 //
 //  RtpVideoQueue+Reconstruct.swift
-//
-//  The Reed-Solomon reconstruct + FEC-staging + submit/emit half of the RTP video
-//  queue state machine, split out of RtpVideoQueue.swift to keep each file under
-//  the SwiftLint length limit. Ports RtpVideoQueue.c reconstructFrame (FEC decode
-//  + recovered-shard re-queue), stageCompleteFecBlock (in-order DATA staging),
-//  submitCompletedFrame/emit (hand to the depacketizer), and
-//  reportFinalFrameFecStatus (the per-frame QoS feedback Sunshine wants).
-//
-//  These run on the SAME single receive thread as the add path in
-//  RtpVideoQueue.swift - the split is purely textual (a Swift extension can only
-//  reach non-private members, which is why the queue's touched state is `internal`
-//  rather than `private`; see the visibility note atop RtpVideoQueue.swift). No
-//  isolation, ordering, or locking contract changes.
-//
-
+//  FEC reconstruction and frame submission on the single RTP receive thread.
 import Foundation
 
 extension RtpVideoQueue {
@@ -112,9 +98,7 @@ extension RtpVideoQueue {
         return (shards, marks)
     }
 
-    /// Note that the current frame needed Reed-Solomon recovery: latch the metric,
-    /// log the recovery (first one at notice level), and emit the per-frame FEC
-    /// status the host's QoS eval expects (RtpVideoQueue.c:331-345).
+    /// Latch and log Reed-Solomon recovery for the periodic recovery metric.
     private func logFecRecovery() {
         // This frame needed Reed-Solomon recovery - count it once for the
         // periodic FEC-recovery-rate metric (latched; tallied at submit time).
@@ -131,10 +115,6 @@ extension RtpVideoQueue {
             Diag.info("NativeVideo FEC recovery: \(recovered) shards, frame \(currentFrameNumber) "
                 + "block \(multiFecCurrentBlockNumber)", Self.cat)
         }
-
-        // Report the final FEC status if we needed to perform a recovery
-        // (RtpVideoQueue.c:344-345).
-        reportFinalFrameFecStatus()
     }
 
     /// Rebuild the RTP+NV header on one recovered DATA shard (slot `index`) and
@@ -259,32 +239,5 @@ extension RtpVideoQueue {
             receiveTimeUs: entry.receiveTimeUs,
             payload: payload)
         depacketizer.process(pkt)
-    }
-
-    // MARK: - reportFinalFrameFecStatus (RtpVideoQueue.c:92-108)
-
-    /// Build the per-frame FEC status from the current queue state and hand it to
-    /// the sink (= connectionSendFrameFecStatus). Byte-for-byte field parity with
-    /// reportFinalFrameFecStatus(): every value is taken from the live queue
-    /// counters at the moment of the call. The serializer (FrameFecStatus
-    /// .wireBytes) applies the big-endian wire order the C struct uses.
-    ///
-    /// multiFecBlockCount = multiFecLastBlockNumber + 1 (the C casts the +1 to
-    /// u8). multiFecBlockIndex = multiFecCurrentBlockNumber.
-    func reportFinalFrameFecStatus() {
-        guard let sink = frameFecStatusSink else { return }
-        let status = FrameFecStatus(
-            frameIndex: currentFrameNumber,
-            highestReceivedSequenceNumber: receivedHighestSequenceNumber,
-            nextContiguousSequenceNumber: nextContiguousSequenceNumber,
-            missingPacketsBeforeHighestReceived: Self.u16(missingPackets),
-            totalDataPackets: Self.u16(bufferDataPackets),
-            totalParityPackets: Self.u16(bufferParityPackets),
-            receivedDataPackets: Self.u16(receivedDataPackets),
-            receivedParityPackets: Self.u16(receivedParityPackets),
-            fecPercentage: UInt8(truncatingIfNeeded: fecPercentage),
-            multiFecBlockIndex: multiFecCurrentBlockNumber,
-            multiFecBlockCount: multiFecLastBlockNumber &+ 1)
-        sink(status)
     }
 }

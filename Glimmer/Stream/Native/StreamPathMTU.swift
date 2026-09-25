@@ -207,7 +207,10 @@ final class RttSampler: @unchecked Sendable {
     /// Freeze the pre-launch boundary: everything sampled after this rides the
     /// host's game launch and is kept for diagnosis only.
     func markLaunch() {
-        lock.lock(); preLaunchCount = samples.count; lock.unlock()
+        lock.lock()
+        preLaunchCount = samples.count
+        if samples.count >= Self.minPreLaunchSamples { stopped = true }
+        lock.unlock()
     }
 
     /// Stop sampling and return the distribution the gate should band on: the

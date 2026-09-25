@@ -10,6 +10,7 @@ import CommonCrypto
 import CryptoKit
 import Foundation
 import Network
+import os
 import Testing
 @testable import Glimmer
 
@@ -202,6 +203,113 @@ struct RtspClientTests {
         func decodeAndPlay(_ opus: [UInt8]) {}
         func decodeAndPlayPLC() {}
         func cleanup() {}
+    }
+
+    private final class RecordingAudioSink: NativeAudioSink, @unchecked Sendable {
+        // Every mutable field is read or written while holding this lock.
+        private let lock = NSLock()
+        private var packets: [[UInt8]] = []
+        private var cleanups = 0
+
+        func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 { 0 }
+        func decodeAndPlay(_ opus: [UInt8]) { lock.lock(); packets.append(opus); lock.unlock() }
+        func decodeAndPlayPLC() {}
+        func cleanup() { lock.lock(); cleanups += 1; lock.unlock() }
+        func recordedPackets() -> [[UInt8]] { lock.lock(); defer { lock.unlock() }; return packets }
+        func cleanupCount() -> Int { lock.lock(); defer { lock.unlock() }; return cleanups }
+    }
+
+    private static func audioDatagram(type: UInt8, sequence: UInt16, timestamp: UInt32,
+                                      payload: [UInt8]) -> [UInt8] {
+        [0x80, type, UInt8(sequence >> 8), UInt8(truncatingIfNeeded: sequence),
+         UInt8(timestamp >> 24), UInt8(timestamp >> 16), UInt8(timestamp >> 8),
+         UInt8(truncatingIfNeeded: timestamp), 0, 0, 0, 1] + payload
+    }
+
+    @Test func filledAudioReorderGapDrainsReadyPackets() {
+        let sink = RecordingAudioSink()
+        let receiver = RtpAudioReceiver(
+            host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
+            opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+            audioEncryption: false, aesKey: [], aesIvId: [], sink: sink)
+        let fec = Self.audioDatagram(type: RtpAudioQueue.payloadTypeFec, sequence: 0, timestamp: 0,
+                                     payload: [0, RtpAudioQueue.payloadTypeAudio, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+        receiver.handleDatagram(fec, count: fec.count)
+        for sequence: UInt16 in [4, 6, 5] {
+            let payload = [UInt8](repeating: UInt8(sequence), count: 8)
+            let packet = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: sequence,
+                                            timestamp: UInt32(sequence) * 5, payload: payload)
+            receiver.handleDatagram(packet, count: packet.count)
+        }
+        #expect(sink.recordedPackets() == [
+            [UInt8](repeating: 4, count: 8), [UInt8](repeating: 5, count: 8),
+            [UInt8](repeating: 6, count: 8)
+        ])
+    }
+
+    private final class BlockingAudioSink: NativeAudioSink, @unchecked Sendable {
+        // The semaphores coordinate initialization; cleanup count is lock-guarded.
+        private let lock = NSLock()
+        let initializationStarted = DispatchSemaphore(value: 0)
+        let finishInitialization = DispatchSemaphore(value: 0)
+        private var cleanups = 0
+
+        func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
+            initializationStarted.signal()
+            finishInitialization.wait()
+            return 0
+        }
+        func decodeAndPlay(_ opus: [UInt8]) {}
+        func decodeAndPlayPLC() {}
+        func cleanup() { lock.lock(); cleanups += 1; lock.unlock() }
+        func cleanupCount() -> Int { lock.lock(); defer { lock.unlock() }; return cleanups }
+    }
+
+    @Test func stoppingDuringAudioInitializationCleansUp() async throws {
+        try await Task(priority: .high) {
+            let sink = BlockingAudioSink()
+            let receiver = RtpAudioReceiver(
+                host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
+                opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+                audioEncryption: false, aesKey: [], aesIvId: [], sink: sink)
+            let startupDone = DispatchSemaphore(value: 0)
+            let startup = Task {
+                try await onTestThread {
+                    defer { startupDone.signal() }
+                    try receiver.startReceive()
+                }
+            }
+            defer { sink.finishInitialization.signal() }
+            #expect(await sink.initializationStarted.waitAsync(for: .seconds(2)) == .success)
+
+            let stopThread = OSAllocatedUnfairLock<thread_act_t>(initialState: 0)
+            let stopStarted = DispatchSemaphore(value: 0)
+            let stopDone = DispatchSemaphore(value: 0)
+            let stop = Task {
+                try await onTestThread {
+                    stopThread.withLock { $0 = pthread_mach_thread_np(pthread_self()) }
+                    stopStarted.signal()
+                    receiver.stop()
+                    stopDone.signal()
+                }
+            }
+            #expect(await stopStarted.waitAsync(for: .seconds(2)) == .success)
+            #expect(await threadParks(stopThread.withLock { $0 }, within: .seconds(2)))
+            // Stop must wait for initialization to publish the sink before cleaning it up.
+            #expect(await stopDone.waitAsync(for: .milliseconds(50)) == .timedOut)
+            sink.finishInitialization.signal()
+            try #require(await startupDone.waitAsync(for: .seconds(2)) == .success)
+            try #require(await stopDone.waitAsync(for: .seconds(2)) == .success)
+            try await startup.value
+            try await stop.value
+            #expect(receiver.initialized == false)
+            #expect(receiver.fd == -1)
+            #expect(sink.cleanupCount() == 1)
+            receiver.stop()
+            #expect(receiver.initialized == false)
+            #expect(receiver.fd == -1)
+            #expect(sink.cleanupCount() == 1)
+        }.value
     }
 
     /// The host side: AES-128-CBC with PKCS7 padding and IV = BE32(keyId + seq).
