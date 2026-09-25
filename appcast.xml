@@ -6,6 +6,27 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.9.8</title>
+      <description><![CDATA[
+<p>Steadier reconnects, a Cancel that also quits the game it started, lighter video decoding, and an installer for the command line tool.</p>
+<p>A stream that reconnects on its own after a network drop or sleep no longer ends a moment later with a no-video or firewall error, and the Reconnecting banner stays up until the connection resumes. Frames rebuilt after packet loss reach the screen sooner, a stalled display recovers without flashing an old frame, and audio comes back on its own if your speakers or headphones weren't ready when the stream started.</p>
+<p>Cancelling while Glimmer connects now quits the game it started on the PC, so the next stream no longer asks you to take over your own session. Cancelling just as a stream connects no longer leaves a connection running in the background, and each stream frees its memory when it ends. Glimmer no longer quits unexpectedly when the connection to the PC drops at the wrong moment.</p>
+<p>H.264 and HEVC streams use less CPU per frame, most noticeably at 4K and high frame rates. A click made during fast mouse movement is no longer sent after movement that came later.</p>
+<p>Gyro aiming no longer stops responding after about five minutes of play. The light bar and player lights catch up when you return to a stream that changed them while you were away. Generic controllers no longer keep Glimmer busy when no stream is running, and Glimmer stops listening to them while its window and menu are closed. Opening the controller test in Settings no longer lets a stream in the background receive controller input, and recording a shortcut no longer swallows typing in other Glimmer windows.</p>
+<p>If the PC's firewall blocks port 48010, Glimmer says so in about 10 seconds instead of failing with a generic error after 30. Pairing keeps a PC's saved identity when it's interrupted, and PCs found on the network no longer drop out of the pairing list while it's open. Wake and Connect starts the stream sooner once the PC is ready, and Connect in a wake notification works after Glimmer has quit.</p>
+<p>A stream hidden behind other windows no longer keeps your Mac's display awake, and AirDrop and Continuity come back promptly after a stream ends. Updates no longer download while you're streaming; Glimmer checks again when the stream ends. Turning off Open at login also removes a login item still waiting for approval, and a failed registration no longer switches the setting off.</p>
+<p>With diagnostics on, the session log records how each stream ended, the session summary finds the worst second more accurately and keeps drop and byte totals across reconnects, and a PC name with quotation marks no longer breaks it. <code>glimmer stream --wait</code> reports its own stream's result even when another starts right away.</p>
+<p>Glimmer › Install Command Line Tool… puts the <code>glimmer</code> command on your PATH for copies installed from the disk image. It asks for an administrator password once, and says so if Homebrew already installed the command.</p>
+<p><code>glimmer list --csv</code> now prints the paired PCs as CSV, with a Name, Address and Status header. Before, the flag only changed the list of a PC's apps.</p>
+<p>The About pane now describes Sunshine as the game-streaming server on your PC and Moonlight as the client that inspired Glimmer.</p>
+]]></description>
+      <pubDate>Fri, 25 Sep 2026 19:52:45 GMT</pubDate>
+      <sparkle:version>20260925</sparkle:version>
+      <sparkle:shortVersionString>2026.9.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.9.8/Glimmer-2026.9.8.zip" type="application/octet-stream" sparkle:edSignature="f2nzvcS2CH3wVVua6OwC258SrwTEtvf97aVseuFk4k5A9FyEphTy4d5GJi1+KioiF+0kQcOfDZ46H/F/KvnMAw==" length="8997200" />
+    </item>
+    <item>
       <title>2026.9.7</title>
       <description><![CDATA[
 <p>A command line and Shortcuts actions, safer pairing, streams from PCs that require encryption, a way out of every stuck stream, ⌘ shortcuts and paste that reach the PC, and video and audio that recover on their own.</p>
