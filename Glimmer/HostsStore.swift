@@ -227,7 +227,9 @@ extension AppModel {
     /// its slot on a re-pair and appending one otherwise. `apps` come from /applist.
     func saveHost(uuid: String, hostname: String, address: String,
                   serverCertPEM: String?, appVersion: String?,
-                  apps: [PairedApp], macAddress: String? = nil) {
+                  apps: [PairedApp], macAddress: String? = nil) throws {
+        // Commit the file pin first so a failed write cannot leave a conflicting hint.
+        if let pem = serverCertPEM { try PinnedCertStore.store(pem: pem, forHostID: uuid) }
         let defaults = UserDefaults.standard
         let prefix = "hosts.\(saveSlot(for: uuid, defaults: defaults))"
         defaults.set(hostname, forKey: "\(prefix).hostname")
@@ -247,10 +249,6 @@ extension AppModel {
         }
 
         Self.writeApps(apps, prefix: prefix, defaults: defaults)
-
-        // Pin the cert under the canonical uuid key too (belt-and-braces; the
-        // pairing flow already file-store-pins, but keep them in lockstep).
-        if let pem = serverCertPEM { try? PinnedCertStore.store(pem: pem, forHostID: uuid) }
 
         loadHosts()
     }
@@ -368,14 +366,14 @@ extension AppModel {
         let saved = probe.address
         guard probe.serverCertPEM != nil, Self.canHealAddress(saved) else { return false }
         let discovery = HostDiscovery(ipv4Only: true)
-        let results = await discovery.start()
+        let session = await discovery.start()
         let deadline = Task {
             try? await Task.sleep(for: .seconds(seconds))
             await discovery.stop()
         }
         var moved: String?
         // Every change to the list re-checks it, so a PC still booting gets another try.
-        search: for await found in results {
+        search: for await found in session.stream {
             for address in Set(found.hosts.map(\.host)) where address != saved && IPv4Address(address) != nil {
                 probe.address = address
                 let client = NetworkClient(server: probe)

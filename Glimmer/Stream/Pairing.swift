@@ -155,36 +155,9 @@ public actor PairingClient {
             serverResponseHash: parsed.serverResponseHash
         )
 
-        // ---------------------------------------------------------------
-        // IN-MEMORY PIN ONLY - DO NOT PERSIST YET.
-        //
-        // We've now (a) RSA-verified the host's signature over a value
-        // we picked, which proves the host holds the private key matching
-        // `serverCertPEM`, and (b) confirmed the user typed the right
-        // PIN, which proves we're talking to a host that knew the PIN
-        // out-of-band. Steps 6 and 7 need the cert pinned at the
-        // NetworkClient layer to even attempt TLS, so we have to set the
-        // in-memory pin here.
-        //
-        // SECURITY: the PERSISTED pin (PinnedCertStore.store(...))
-        // does NOT happen here. It happens AFTER step 7
-        // (HTTPS pairchallenge) returns paired=1 - at which point the
-        // host has proven, over a TLS handshake gated by THIS exact
-        // cert, that it can speak the moonlight protocol with our
-        // client cert in its allowlist. If a mid-handshake hijacker
-        // somehow makes it through (a) and (b) but fails to complete
-        // step 6 or step 7, we throw and never persist; the bogus pin
-        // dies with the NetworkClient at process scope. Earlier shapes
-        // of this code persisted the pin right here at step 5, which
-        // meant a mid-pair MITM that survived (a) + (b) but couldn't
-        // complete the HTTPS round-trip still got pinned permanently.
-        // That's the bug we are closing.
-        //
-        // Critically, this is the ONLY place the in-memory pin gets
-        // installed. `NetworkClient.fetchServerInfo` no longer
-        // auto-pins; the earlier behaviour (silent re-bind on TLS
-        // error) is C2.
-        // ---------------------------------------------------------------
+        // The signature and PIN proof allow an in-memory pin for steps 6 and 7.
+        // Save it only after the pinned HTTPS challenge and identity check succeed.
+        // This is the only in-memory pin write; /serverinfo cannot silently rebind it.
         await network.setPinnedHostCert(pem: serverCertPEM)
 
         try await completeClientPairing(
@@ -197,11 +170,6 @@ public actor PairingClient {
         // Success - persist into the ServerInfo we hand back.
         server.serverCertPEM = serverCertPEM
         server.pairStatus = .paired
-
-        // SECURITY: persist the pin (public PEM, keyed by host uniqueId) only here, AFTER step 7's pinned
-        // pairchallenge returned paired=1; earlier lets a hijacker who fails step 6/7 leave a pin behind.
-        // A rotated host cert hits fetchServerInfo's pin-mismatch error; the next pairing overwrites it.
-        persistPinnedCert(serverCertPEM: serverCertPEM)
 
         log.info("Pairing succeeded for \(self.server.address, privacy: .private)")
         pairingOutcome = "success"
@@ -439,40 +407,6 @@ public actor PairingClient {
                 """
             )
             throw StreamError.pairingRejected
-        }
-    }
-
-    /// Commit the verified host cert to the file-backed pin store.
-    ///
-    /// SECURITY: the caller invokes this ONLY at the very bottom of
-    /// `runPairingFlow`, after step 7 (HTTPS pairchallenge) has confirmed
-    /// paired=1 over a TLS handshake gated by the in-memory pin set at step 5.
-    /// A storage failure must NOT abort an otherwise-successful pair: the cert
-    /// is already good for this process (it lives in memory on NetworkClient);
-    /// only the next-launch pin is lost, so we log loudly and continue.
-    private func persistPinnedCert(serverCertPEM: String) {
-        guard !self.server.uniqueId.isEmpty else {
-            log.error("No host uniqueId on ServerInfo at pairing-success - cannot persist pin; cert will need re-pairing on next launch")
-            return
-        }
-        // Atomic mode-0600 write into PinnedCertStore. That keeps other users
-        // out; a same-UID process can still rewrite it (see SECURITY.md).
-        do {
-            try PinnedCertStore.store(pem: serverCertPEM,
-                                      forHostID: self.server.uniqueId)
-            log.info("Persisted pinned host cert (file-store) for host id=\(self.server.uniqueId, privacy: .private)")
-        } catch {
-            // Storage failure should not abort a successful pair -
-            // the cert is still good for THIS process (it's in
-            // memory on NetworkClient), the user just won't be
-            // pinned on the next launch. Log loudly so the failure
-            // doesn't go silent.
-            log.error(
-                """
-                Failed to persist pinned host cert for \(self.server.uniqueId, privacy: .private): \
-                \(String(describing: error), privacy: .private)
-                """
-            )
         }
     }
 }

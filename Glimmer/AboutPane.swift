@@ -101,9 +101,9 @@ struct AboutPane: View {
                 }
             }
             Section("Projects we like") {
-                Text("Built for Sunshine, the open-source app that streams games from "
-                    + "your PC. Glimmer speaks the Moonlight protocol, which carries "
-                    + "NVIDIA GameStream forward, and the transport is ported from "
+                Text("Built for Sunshine, the open-source game-streaming server that runs on "
+                    + "your PC. Glimmer talks to it over the same RTSP-based protocol as Moonlight, "
+                    + "the client that inspired it, and the transport is ported from "
                     + "moonlight-common-c, with respect. Full credits in CREDITS.md.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)

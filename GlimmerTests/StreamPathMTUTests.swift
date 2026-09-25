@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Network
 import Testing
 @testable import Glimmer
 
@@ -416,53 +417,100 @@ struct StreamPathMTUTests {
 
     /// One LAN handshake used to end the burst, so a single sample decided the
     /// wired withdrawal. Every sample is taken now.
-    @Test func reconnectBurstTakesEverySampleOnALan() throws {
+    @Test func reconnectBurstTakesEverySampleOnALan() async throws {
         let port = try #require(LoopbackPort(listening: true))
-        let probe = StreamPathMTU.probe(host: "127.0.0.1", rttPort: port.port)
+        let portNumber = port.port
+        let probe = try await onTestThread { StreamPathMTU.probe(host: "127.0.0.1", rttPort: portNumber) }
         #expect(probe.rtt?.count == 3)
     }
 
     @Test func fullWindowReleasesLaunchWithoutWaitingOutTheCap() async throws {
-        let port = try #require(LoopbackPort(listening: true))
-        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
-        let start = ContinuousClock.now
+        try await Task(priority: .high) {
+            let port = try #require(LoopbackPort(listening: true))
+            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
+            let start = ContinuousClock.now
+            await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
+            #expect(ContinuousClock.now - start < .seconds(5))
+            sampler.markLaunch()
+            #expect(sampler.usesPreLaunchWindow)
+            #expect((sampler.harvest()?.count ?? 0) >= RttSampler.minPreLaunchSamples)
+        }.value
+    }
+
+    @Test func fullPreLaunchWindowStopsFurtherProbes() async throws {
+        let listener = try NWListener(using: .tcp, on: .any)
+        let accepted = AcceptedRttConnections()
+        let queue = DispatchQueue(label: "StreamPathMTUTests.listener")
+        listener.newConnectionHandler = { connection in
+            accepted.keep(connection)
+            connection.start(queue: queue)
+        }
+        let port: UInt16 = try await withCheckedThrowingContinuation { continuation in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(returning: listener.port?.rawValue ?? 0)
+                case .failed(let error):
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(throwing: error)
+                default:
+                    break
+                }
+            }
+            listener.start(queue: queue)
+        }
+        defer { accepted.cancelAll(); listener.cancel() }
+
+        let sampler = RttSampler(host: "127.0.0.1", port: port)
         await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
-        #expect(ContinuousClock.now - start < .seconds(5))
         sampler.markLaunch()
-        #expect(sampler.usesPreLaunchWindow)
-        #expect((sampler.harvest()?.count ?? 0) >= RttSampler.minPreLaunchSamples)
+        // Let accepts for completed pre-launch handshakes reach the listener.
+        try await Task.sleep(for: .milliseconds(300))
+        let countAfterPendingAccepts = accepted.count
+        try await Task.sleep(for: .milliseconds(300))
+
+        #expect(accepted.count <= countAfterPendingAccepts + 1)
+        let harvestedCount = sampler.harvest()?.count ?? 0
+        #expect(harvestedCount >= RttSampler.minPreLaunchSamples)
     }
 
     @Test func unreachablePortWaitsOnlyToTheCap() async throws {
-        let port = try #require(LoopbackPort(listening: false))
-        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
-        let start = ContinuousClock.now
-        await sampler.awaitPreLaunchWindow(maxWaitMs: 150)
-        let waited = ContinuousClock.now - start
-        #expect(waited >= .milliseconds(100) && waited < .seconds(5))
-        #expect(sampler.harvest() == nil)
+        try await Task(priority: .high) {
+            let port = try #require(LoopbackPort(listening: false))
+            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
+            let start = ContinuousClock.now
+            await sampler.awaitPreLaunchWindow(maxWaitMs: 150)
+            let waited = ContinuousClock.now - start
+            #expect(waited >= .milliseconds(100) && waited < .seconds(5))
+            #expect(sampler.harvest() == nil)
+        }.value
     }
 
     /// A PC that refuses every handshake used to keep the loop sampling for the
     /// life of the process. Out of attempts, it stops and lets launch go.
     @Test func refusedPortStopsAfterItsAttempts() async throws {
-        let port = try #require(LoopbackPort(listening: false))
-        let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 2)
-        let start = ContinuousClock.now
-        await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000)
-        #expect(ContinuousClock.now - start < .seconds(5))
-        #expect(sampler.harvest() == nil)
+        try await Task(priority: .high) {
+            let port = try #require(LoopbackPort(listening: false))
+            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 2)
+            let start = ContinuousClock.now
+            await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000)
+            #expect(ContinuousClock.now - start < .seconds(5))
+            #expect(sampler.harvest() == nil)
+        }.value
     }
 
     @Test func harvestReleasesAWaitingLaunch() async throws {
-        let port = try #require(LoopbackPort(listening: false))
-        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
-        let start = ContinuousClock.now
-        let waiting = Task { await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000) }
-        try await Task.sleep(for: .milliseconds(50))
-        _ = sampler.harvest()
-        await waiting.value
-        #expect(ContinuousClock.now - start < .seconds(5))
+        try await Task(priority: .high) {
+            let port = try #require(LoopbackPort(listening: false))
+            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
+            let waiting = Task { await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000) }
+            try await Task.sleep(for: .milliseconds(50))
+            let start = ContinuousClock.now
+            _ = sampler.harvest()
+            await waiting.value
+            #expect(ContinuousClock.now - start < .seconds(5))
+        }.value
     }
 
     /// Every exit from the connect path harvests, so the harvest must end the
@@ -479,9 +527,26 @@ struct StreamPathMTUTests {
     }
 }
 
-/// A loopback TCP port for the RTT probes. Listening, the kernel completes each
+/// Connections the test listener accepted; every access goes through `lock`.
+private final class AcceptedRttConnections: @unchecked Sendable {
+    // The lock guards every access to the connection array.
+    private let lock = NSLock()
+    private var connections: [NWConnection] = []
+
+    var count: Int { lock.withLock { connections.count } }
+
+    func keep(_ connection: NWConnection) {
+        lock.withLock { connections.append(connection) }
+    }
+
+    func cancelAll() {
+        lock.withLock { connections.forEach { $0.cancel() } }
+    }
+}
+
+/// A loopback TCP port for socket tests. Listening, the kernel completes each
 /// handshake from the backlog with nothing accepting; bound only, it refuses.
-private final class LoopbackPort {
+final class LoopbackPort {
     let fd: Int32
     let port: UInt16
 

@@ -167,7 +167,8 @@ enum ResourceTelemetry {
             guard let sample = sampleOne(thread: threads[index]) else { continue }
             // Keep a thread if it's drawing measurable CPU, OR it's one of our
             // named hot-path threads (so its QoS stays auditable even when idle).
-            let named = sample.name.hasPrefix("io.ugfugl.Glimmer") || sample.name.hasPrefix("Glimmer.")
+            let named = sample.name == "main" || sample.name.hasPrefix("io.ugfugl.Glimmer")
+                || sample.name.hasPrefix("Glimmer.")
             guard sample.cpuPercent >= cpuFloorPercent || named else { continue }
             if sample.name.isEmpty {
                 unnamedCpu += sample.cpuPercent
@@ -186,20 +187,45 @@ enum ResourceTelemetry {
         return samples
     }
 
+    /// This flavor is private to xnu, absent from the SDK; its payload is
+    /// `qos_tier` then `tier_importance`, two `integer_t` values.
+    private static let THREAD_QOS_POLICY: thread_policy_flavor_t = 9
+
+    /// `qos_class_t` raw values indexed by xnu's `THREAD_QOS_*` tier,
+    /// the unit the labels and `QoSAudit` read.
+    private static let qosClassesByTier: [UInt32] = [
+        QOS_CLASS_UNSPECIFIED.rawValue,
+        0x05, // Maintenance is private in the SDK.
+        QOS_CLASS_BACKGROUND.rawValue,
+        QOS_CLASS_UTILITY.rawValue,
+        QOS_CLASS_DEFAULT.rawValue,
+        QOS_CLASS_USER_INITIATED.rawValue,
+        QOS_CLASS_USER_INTERACTIVE.rawValue
+    ]
+
+    /// The main thread never exits, so its pthread_t is the one safe to read
+    /// from another thread.
+    private static let mainThreadID: UInt64 = {
+        var id: UInt64 = 0
+        pthread_threadid_np(pthread_main_thread_np(), &id)
+        return id
+    }()
+
     /// Read one thread's CPU% + name + tid + QoS. nil if the thread is the idle
-    /// thread or its basic-info read failed.
-    private static func sampleOne(thread: thread_t) -> ThreadResourceSample? {
-        let basicInfoCount = mach_msg_type_number_t(
-            MemoryLayout<thread_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
-        var basic = thread_basic_info()
-        var count = basicInfoCount
-        let result = withUnsafeMutablePointer(to: &basic) {
+    /// thread or its extended-info read failed.
+    static func sampleOne(thread: thread_t) -> ThreadResourceSample? {
+        // The caller's send right keeps the Mach port valid; dead threads fail cleanly.
+        // Another thread's pthread_t can be freed mid-read when that thread exits.
+        var info = thread_extended_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<thread_extended_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                thread_info(thread, thread_flavor_t(THREAD_BASIC_INFO), $0, &count)
+                thread_info(thread, thread_flavor_t(THREAD_EXTENDED_INFO), $0, &count)
             }
         }
-        guard result == KERN_SUCCESS, (basic.flags & TH_FLAGS_IDLE) == 0 else { return nil }
-        let cpuPercent = Double(basic.cpu_usage) / Double(TH_USAGE_SCALE) * 100.0
+        guard result == KERN_SUCCESS, (info.pth_flags & TH_FLAGS_IDLE) == 0 else { return nil }
+        let cpuPercent = Double(info.pth_cpu_usage) / Double(TH_USAGE_SCALE) * 100.0
 
         // Kernel thread id (stable per-thread label).
         var tid: UInt64 = 0
@@ -214,34 +240,36 @@ enum ResourceTelemetry {
         }
         if identResult == KERN_SUCCESS { tid = ident.thread_id }
 
-        // Name + QoS via the pthread that backs this Mach thread.
-        var name = ""
-        var qos = 0
-        if let pthread = pthread_from_mach_thread_np(thread) {
-            var nameBuffer = [CChar](repeating: 0, count: 64)
-            if pthread_getname_np(pthread, &nameBuffer, nameBuffer.count) == 0 {
-                // TRIM AT THE FIRST NUL before conversion. `String(validating:)`
-                // consumes the WHOLE 64-byte buffer (embedded NULs are valid
-                // UTF-8), so every name carried its NUL padding: an unnamed
-                // thread rendered as 64 \u0000 escapes - ~1.5KB of pure noise
-                // per NDJSON row across 24 threads - and the never-empty result
-                // meant the `tid-<id>` fallback could not fire. Truncating at
-                // the terminator restores both the real names (P/E-core
-                // visibility, the field's whole point) and the fallback.
-                let trimmed = Array(nameBuffer.prefix(while: { $0 != 0 }))
-                name = String(validating: trimmed, as: UTF8.self) ?? ""
-            }
-            // The main thread has no pthread name; label it so its cost (UI,
-            // GameController, motion timers) isn't folded into "unnamed".
-            if pthread_equal(pthread, pthread_main_thread_np()) != 0 { name = "main" }
-            var qosClass = qos_class_t(rawValue: 0)
-            var relativePriority: Int32 = 0
-            if pthread_get_qos_class_np(pthread, &qosClass, &relativePriority) == 0 {
-                qos = Int(qosClass.rawValue)
-            }
+        // String(validating:) preserves NUL padding, bloating telemetry and hiding
+        // empty names from the unnamed fallback. Trim at the first terminator.
+        var name = withUnsafeBytes(of: info.pth_name) {
+            String(validating: $0.prefix(while: { $0 != 0 }), as: UTF8.self) ?? ""
         }
+        // The main thread has no pthread name; label it so its cost (UI,
+        // GameController, motion timers) isn't folded into "unnamed".
+        if tid != 0, tid == mainThreadID { name = "main" }
+        // Applying a Mach scheduling policy resets the QoS tier to unspecified;
+        // real-time and fixed-priority threads outrank every QoS tier.
+        let qos = info.pth_policy != POLICY_TIMESHARE
+            ? Int(QOS_CLASS_USER_INTERACTIVE.rawValue) : sampleQoS(thread: thread)
         return ThreadResourceSample(
             name: name, tid: tid, cpuPercent: cpuPercent, qos: qos, qosLabel: qosLabel(qos))
+    }
+
+    /// The QoS the thread asked for, as a `qos_class_t` raw value;
+    /// 0 when the read fails.
+    private static func sampleQoS(thread: thread_t) -> Int {
+        var policy: (qos_tier: integer_t, tier_importance: integer_t) = (0, 0)
+        var count: mach_msg_type_number_t = 2
+        var getDefault: boolean_t = 0
+        let result = withUnsafeMutablePointer(to: &policy) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 2) {
+                thread_policy_get(thread, THREAD_QOS_POLICY, $0, &count, &getDefault)
+            }
+        }
+        guard result == KERN_SUCCESS, count == 2,
+              qosClassesByTier.indices.contains(Int(policy.qos_tier)) else { return 0 }
+        return Int(qosClassesByTier[Int(policy.qos_tier)])
     }
 
     /// Integer_t count needed to cover ALL of `task_vm_info.phys_footprint` (a

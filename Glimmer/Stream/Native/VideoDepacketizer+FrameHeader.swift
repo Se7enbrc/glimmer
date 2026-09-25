@@ -40,9 +40,6 @@ extension VideoDepacketizer {
             if waitingForRefInvalFrame {
                 waitingForRefInvalFrame = false
                 waitingForNextSuccessfulFrame = false
-                // P2 IDR/RFI ROUND-TRIP: this recovery frame resolves an RFI
-                // request (the IDR path resolves in the receiver via unit.isIDR).
-                frameIsRfiRecovery = true
             }
         case 104:   // Sunshine hardcoded header
             break

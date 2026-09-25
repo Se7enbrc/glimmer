@@ -133,15 +133,104 @@ struct GlimmerCLITests {
         #expect(GlimmerCLI.pairFailureMessage(.gameStream, pc: "x") == AppModel.needsSunshineMessage("x"))
     }
 
+    @Test func installerFindsAnExistingLinkAndOnlyLinksAnInstalledCopy() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Distinct names: the default volume is case-insensitive, so Glimmer == glimmer.
+        let binary = dir.appendingPathComponent("app-binary").path
+        FileManager.default.createFile(atPath: binary, contents: Data())
+        let link = dir.appendingPathComponent("link").path
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: binary)
+        #expect(CommandLineToolInstaller.existingLink(to: binary, among: ["/nonexistent/glimmer", link]) == link)
+        #expect(CommandLineToolInstaller.existingLink(to: binary, among: ["/nonexistent/glimmer"]) == nil)
+        #expect(CommandLineToolInstaller.isInApplications("/Applications/Glimmer.app", home: "/Users/a"))
+        #expect(CommandLineToolInstaller.isInApplications("/Users/a/Applications/Glimmer.app", home: "/Users/a"))
+        #expect(!CommandLineToolInstaller.isInApplications("/Volumes/Glimmer/Glimmer.app", home: "/Users/a"))
+        let script = CommandLineToolInstaller.linkScript(to: "/Applications/It's \"G\".app/Glimmer")
+        #expect(script == "do shell script \"mkdir -p /usr/local/bin && ln -sf '/Applications/It'\\\\''s \\\"G\\\".app/Glimmer' "
+            + "/usr/local/bin/glimmer\" with administrator privileges")
+    }
+
     @Test func csvQuotesNamesSoCommasAndQuotesSurvive() {
         let app = HostApp(id: 42, name: "Halo, \"Infinite\"", hdrCapable: true, hidden: false)
         #expect(GlimmerCLI.csvRow(app) == "\"Halo, \"\"Infinite\"\"\",42,true,false")
         #expect(GlimmerCLI.csvHeader.hasPrefix("Name,ID,HDR Support"))
+        #expect(GlimmerCLI.csvField("Den, \"PC\"") == "\"Den, \"\"PC\"\"\"")
+        #expect(GlimmerCLI.pcCSVHeader == "Name,Address,Status")
     }
 
     @Test func jsonLineHasNumericTimingsAndNoRequestID() {
         let line = GlimmerCLI.jsonLine(["id": "req", "event": "live", "launch_path_ms": "812", "detail": "ok"])
         #expect(line == #"{"detail":"ok","event":"live","launch_path_ms":812}"#)
+    }
+
+    @MainActor @Test func aCommandWaitEndsWhenTheNextStreamStartsImmediately() async {
+        let model = AppModel()
+        model.isStreaming = true
+        var started = false
+        var finished = false
+        let waiter = Task { @MainActor in
+            started = true
+            _ = await model.waitForStreamChange()
+            finished = true
+        }
+        await waitUntil { started }
+        model.isStreaming = false
+        model.isStreaming = true
+        await waitUntil { finished }
+        #expect(finished)
+        if finished { await waiter.value }
+    }
+
+    @MainActor @Test func aCommandWaitKeepsTheCompletedStreamsFailureAfterAnImmediateRestart() async {
+        let model = AppModel()
+        model.isStreaming = true
+        var started = false
+        var detail: String?
+        var finished = false
+        let waiter = Task { @MainActor in
+            started = true
+            detail = await model.waitForStreamChange()
+            finished = true
+        }
+        await waitUntil { started }
+        model.nativeStreamError = "The first stream ended unexpectedly."
+        model.isStreaming = false
+        model.isStreaming = true
+        model.nativeStreamError = nil
+        await waitUntil { finished }
+        #expect(finished)
+        #expect(detail == "The first stream ended unexpectedly.")
+        if finished { await waiter.value }
+    }
+
+    @MainActor @Test func aCommandReporterEndsBeforeTheFirstFrameWhenAnotherStreamStarts() async {
+        let model = AppModel()
+        let timing = ConnectTimingTelemetry.shared
+        timing.resetForNewSession()
+        defer { timing.resetForNewSession() }
+        model.isStreaming = true
+        let replies = CommandReplies()
+        let id = UUID().uuidString
+        replies.requestID = id
+        model.reportCommandSession(id)
+        model.nativeStreamError = "The first stream ended unexpectedly."
+        model.isStreaming = false
+        model.isStreaming = true
+        model.nativeStreamError = nil
+        // The reply crosses distnoted; this limit only keeps a lost reply from hanging the test.
+        let deadline = ContinuousClock.now + .seconds(10)
+        let reply = await replies.next(giveUp: { ContinuousClock.now >= deadline })
+        #expect(reply?[CommandChannel.Key.event] == CommandChannel.Event.ended)
+        #expect(reply?[CommandChannel.Key.detail] == "The first stream ended unexpectedly.")
+    }
+
+    @MainActor private func waitUntil(_ condition: () -> Bool) async {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     @Test func aSymlinkedExecutableResolvesToItsRealPath() throws {
@@ -156,5 +245,11 @@ struct GlimmerCLITests {
         let realBinary = GlimmerMain.realPathIfDifferent(binary.path) ?? binary.path
         #expect(GlimmerMain.realPathIfDifferent(link.path) == realBinary)
         #expect(GlimmerMain.realPathIfDifferent(realBinary) == nil)
+    }
+}
+
+@MainActor private extension AppModel {
+    func waitForStreamChange() async -> String? {
+        await CommandStreamEnd(model: self).wait()
     }
 }

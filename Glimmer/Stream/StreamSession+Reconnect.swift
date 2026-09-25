@@ -22,6 +22,7 @@
 //
 
 import Foundation
+import QuartzCore
 import os
 
 extension StreamSession {
@@ -32,10 +33,10 @@ extension StreamSession {
     func handleHostTerminate(code: Int32) async {
         // The uplink is dead the instant the host closed - pause input so we
         // don't spew sends at a gone backend. It re-arms on the next
-        // `.connectionEstablished` (handleConnectionEdge → setReady(true)).
+        // `.connectionEstablished` (nativeConnectionEstablished → setReady(true)).
         let inp = input
         // FIFO main-queue hop (NOT Task{}) so this pause can't reorder ahead of the
-        // reconnect's setReady(true) - see handleConnectionEdge.
+        // reconnect's setReady(true) - see nativeConnectionEstablished.
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
 
         // Nothing to recover if the user is already tearing down, or we're not
@@ -188,6 +189,9 @@ extension StreamSession {
                 break
             }
             if resumed {
+                // The new connection's stats read as never decoded, so its
+                // first-frame allowance starts here instead of at session start.
+                await MainActor.run { self.frameWatchdogArmedAt = CACurrentMediaTime() }
                 isReconnecting = false
                 reconnectAttempts = 0
                 // Count the genuine reconnect HERE. The established-edge inference
@@ -202,9 +206,7 @@ extension StreamSession {
                 await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
                 Diag.notice("reconnected - stream resumed in place", "Stream")
                 // Re-arm the stall latches so a later stall logs/recovers fresh.
-                didLogDecodeOnlyStall = false
-                didAttemptStallRecovery = false
-                didLogWatchdogHold = false
+                resetStallLatches()
                 return
             }
         }
@@ -262,7 +264,7 @@ extension StreamSession {
             // Re-derive the Cruise ceiling: reconnect reuses the forwarder and
             // never re-runs StartSetup, so a mid-session resolution change would
             // otherwise keep a stale gMax.
-            inp.cruiseGMax = CruiseTraversal.gMax(forStreamWidth: config.width)
+            CruiseTraversal.configure(inp, streamWidth: config.width)
             // Same reasoning for the absolute pointer's reference frame: a
             // reconnect at a new resolution would otherwise keep mapping
             // window points onto the old stream's pixel grid.

@@ -241,27 +241,28 @@ struct StreamCryptoTests {
     /// One FEC block's worth: packetSize 1392 less the header, plus the 16-byte RTP header room.
     private static let rtpPacket = (0..<1376).map { UInt8(truncatingIfNeeded: $0 &* 31) }
 
-    private static func open(_ datagram: [UInt8], currentFrame: UInt32 = 1,
-                             with decryptor: VideoDecryptor) -> [UInt8]? {
-        datagram.withUnsafeBytes { decryptor.open($0, currentFrame: currentFrame) }
+    private static func open(_ datagram: [UInt8], with decryptor: VideoDecryptor) -> [UInt8]? {
+        datagram.withUnsafeBytes { decryptor.open($0) }
     }
 
     @Test func encryptedVideoOpensToTheRtpPacket() throws {
         let decryptor = try #require(VideoDecryptor(key: Self.key16))
         let datagram = try Self.hostSealVideo(Self.rtpPacket, frame: 9, counter: 0x0102_0304_0506)
         #expect(datagram.count == 1392 + 16)  // the same wire size as the plaintext stream
-        #expect(Self.open(datagram, currentFrame: 9, with: decryptor) == Self.rtpPacket)
+        #expect(Self.open(datagram, with: decryptor) == Self.rtpPacket)
     }
 
-    @Test func videoFrameNumberIsLittleEndianAndPassedFramesAreSkipped() throws {
+    @Test func videoPassedAndUnnumberedFramesStillOpen() throws {
         let decryptor = try #require(VideoDecryptor(key: Self.key16))
         let frame: UInt32 = 0x0102_0304
-        let datagram = try Self.hostSealVideo(Self.rtpPacket, frame: frame, counter: 1)
-        #expect(Self.open(datagram, currentFrame: frame + 1, with: decryptor) == nil)
-        #expect(Self.open(datagram, currentFrame: frame, with: decryptor) == Self.rtpPacket)
-        // Zero means the PC didn't number it, so it is never skipped.
-        let unnumbered = try Self.hostSealVideo(Self.rtpPacket, frame: 0, counter: 2)
-        #expect(Self.open(unnumbered, currentFrame: frame, with: decryptor) == Self.rtpPacket)
+        let newer = try Self.hostSealVideo(Self.rtpPacket, frame: frame + 1, counter: 1)
+        #expect(Self.open(newer, with: decryptor) == Self.rtpPacket)
+        let datagram = try Self.hostSealVideo(Self.rtpPacket, frame: frame, counter: 2)
+        // Trailing parity of a completed frame must still reach the RTP queue's receive-quality accounting.
+        #expect(Self.open(datagram, with: decryptor) == Self.rtpPacket)
+        // Unnumbered packets also reach the queue.
+        let unnumbered = try Self.hostSealVideo(Self.rtpPacket, frame: 0, counter: 3)
+        #expect(Self.open(unnumbered, with: decryptor) == Self.rtpPacket)
     }
 
     @Test func tamperedVideoIsDroppedAndTheNextPacketStillOpens() throws {

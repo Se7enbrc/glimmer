@@ -320,6 +320,8 @@ extension ControllerHaptics {
     /// Park a pad's motors at zero and stop its engines. Idempotent and quiet
     /// when there is nothing to stop.
     func teardown(pad: PadHaptics, slot: UInt8, why: String) {
+        // A later trigger or close-time write must not replay the last rumble.
+        mirrorRumbleToHID(pad: pad, lowFreq: 0, highFreq: 0)
         pad.announcedActive = false
         pad.announcedTriggersActive = false
         pad.announcedLightActive = false

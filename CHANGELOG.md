@@ -1,5 +1,64 @@
 # Changelog
 
+## 2026.9.8 - Unreleased
+
+Steadier reconnects, a Cancel that also quits the game it started, lighter video
+decoding, and an installer for the command line tool.
+
+A stream that reconnects on its own after a network drop or sleep no longer ends
+a moment later with a no-video or firewall error, and the Reconnecting banner
+stays up until the connection resumes. Frames rebuilt after packet loss reach
+the screen sooner, a stalled display recovers without flashing an old frame, and
+audio comes back on its own if your speakers or headphones weren't ready when
+the stream started.
+
+Cancelling while Glimmer connects now quits the game it started on the PC, so
+the next stream no longer asks you to take over your own session. Cancelling
+just as a stream connects no longer leaves a connection running in the
+background, and each stream frees its memory when it ends. Glimmer no longer
+quits unexpectedly when the connection to the PC drops at the wrong moment.
+
+H.264 and HEVC streams use less CPU per frame, most noticeably at 4K and high
+frame rates. A click made during fast mouse movement is no longer sent after
+movement that came later.
+
+Gyro aiming no longer stops responding after about five minutes of play. The
+light bar and player lights catch up when you return to a stream that changed
+them while you were away. Generic controllers no longer keep Glimmer busy when
+no stream is running, and Glimmer stops listening to them while its window and
+menu are closed. Opening the controller test in Settings no longer lets a stream
+in the background receive controller input, and recording a shortcut no longer
+swallows typing in other Glimmer windows.
+
+If the PC's firewall blocks port 48010, Glimmer says so in about 10 seconds
+instead of failing with a generic error after 30. Pairing keeps a PC's saved
+identity when it's interrupted, and PCs found on the network no longer drop out
+of the pairing list while it's open. Wake and Connect starts the stream sooner
+once the PC is ready, and Connect in a wake notification works after Glimmer has
+quit.
+
+A stream hidden behind other windows no longer keeps your Mac's display awake,
+and AirDrop and Continuity come back promptly after a stream ends. Updates no
+longer download while you're streaming; Glimmer checks again when the stream
+ends. Turning off Open at login also removes a login item still waiting for
+approval, and a failed registration no longer switches the setting off.
+
+With diagnostics on, the session log records how each stream ended, the session
+summary finds the worst second more accurately and keeps drop and byte totals
+across reconnects, and a PC name with quotation marks no longer breaks it.
+`glimmer stream --wait` reports its own stream's result even when another starts
+right away.
+
+Glimmer › Install Command Line Tool… puts the `glimmer` command on your PATH for
+copies installed from the disk image. It asks for an administrator password
+once, and says so if Homebrew already installed the command.
+
+`glimmer list --csv` now prints the paired PCs as CSV, with a Name, Address and
+Status header. Before, the flag only changed the list of a PC's apps.
+
+The About pane now describes Sunshine as the game-streaming server on your PC
+and Moonlight as the client that inspired Glimmer.
+
 ## 2026.9.7 - 2026-09-23
 
 A command line and Shortcuts actions, safer pairing, streams from PCs that

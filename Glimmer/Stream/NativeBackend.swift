@@ -68,7 +68,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     /// Inject the audio sink (the AudioDecoder). Set-once before startConnection.
     public func attachAudioSink(_ sink: NativeAudioSink) {
-        withState { audioSink = sink }
+        _ = adoptWhileConnecting { audioSink = sink }
     }
 
     /// The Swift-native video sink (the VideoDecoder, wired as a VideoSink).
@@ -78,7 +78,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     /// Inject the video sink (the VideoDecoder). Set-once before startConnection.
     public func attachVideoSink(_ sink: VideoSink) {
-        withState { videoSink = sink }
+        _ = adoptWhileConnecting { videoSink = sink }
     }
 
     /// Scoped lock helper - `NSLock.lock()/unlock()` are unavailable from async
@@ -87,6 +87,16 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     func withState<T>(_ body: () -> T) -> T {
         stateLock.lock(); defer { stateLock.unlock() }
         return body()
+    }
+
+    /// Adoption and the stop snapshot share a lock, so every published resource
+    /// belongs to teardown. Rejected resources must never be started.
+    func adoptWhileConnecting(_ body: () -> Void) -> Bool {
+        withState {
+            guard !interrupted else { return false }
+            body()
+            return true
+        }
     }
 
     public init() {}
@@ -210,6 +220,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     public func stopConnection() {
         Diag.info("native backend: stopConnection", Self.logCategory)
         stateLock.lock()
+        interrupted = true
         let enet = enetChannel
         let rtsp = rtspClient
         let receiver = videoReceiver
@@ -220,7 +231,8 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         rtspClient = nil
         videoReceiver = nil
         audioReceiver = nil
-        // A backend that outlives its session must not keep the decoder's engine alive.
+        // Release both sinks: the video decoder also holds this backend.
+        videoSink = nil
         audioSink = nil
         inputBatcher = nil
         inputReady = false

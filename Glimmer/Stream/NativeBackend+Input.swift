@@ -39,12 +39,9 @@ extension NativeBackend {
 
     // MARK: - Input uplink (InputEncoder → EnetControlChannel.sendInputPacket)
     //
-    // Each method builds the plaintext NV_INPUT_HEADER+body with InputEncoder
-    // (pure bytes) and seals/sends it over the encrypted control stream on the
-    // input class's channel (keyboard 0x02, mouse/scroll/hscroll 0x03, text 0x06, gamepad
-    // 0x10 + num%16). Return contract matches LiSend*: -2 when the input stream
-    // isn't ready (mirrors InputStream.c's `initialized` guard), 0 on a queued
-    // send, -1 on a seal/send failure. InputForwarder.record() tolerates -2.
+    // InputEncoder builds plaintext input bytes for the encrypted control stream.
+    // Upstream channels: keyboard 0x02, mouse 0x03, text 0x06, gamepad 0x10 + num%16.
+    // LiSend* returns -2 before ready, 0 when queued, or LI_ERR_UNSUPPORTED.
 
     static let inputNotReady: Int32 = -2
 

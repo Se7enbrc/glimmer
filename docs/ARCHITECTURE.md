@@ -187,12 +187,13 @@ UI lights up live.
 8. **Install timers** - four on the main run loop: the stats-overlay refresh,
    the 1 Hz frame watchdog, the present-path watchdog, and the present-metric
    sampler (`StreamSession+Watchdog.swift`, `+PresentMetric.swift`). The frame
-   watchdog (`frameWatchdogTimeout` = 10s, matching upstream moonlight's
-   `FIRST_FRAME_TIMEOUT_SEC`) tears the session down if decode stops, because
-   the protocol's own dead-peer detection can take longer to declare a dead
-   connection. The watchdogs are suppression- and gating-aware: a hidden window
-   legitimately stops presenting, so they read the decode gate too (see
-   `VideoDecoder` decode gating).
+   watchdog starts recovery after 2s. At `frameWatchdogTimeout` = 10s (matching
+   upstream moonlight's `FIRST_FRAME_TIMEOUT_SEC`), mid-stream it holds while
+   ENet ACKs are recent and downshifts only on remote paths; first-frame timeout
+   bypasses that hold. Otherwise it tears down if decode stops. The watchdogs
+   are suppression- and gating-aware: a hidden window legitimately stops
+   presenting, so they read the decode gate too (see `VideoDecoder` decode
+   gating).
 
 Teardown (`stop()`) is re-entrant by design - any two of {quit hotkey,
 `connectionTerminated` callback, `AsyncStream.onTermination`, `startConnection`

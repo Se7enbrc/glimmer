@@ -63,12 +63,8 @@ extension StreamSession {
     /// not need a one-way latch to direct enqueue. A transient drought costs one
     /// restore cycle and the buttery pacing returns on its own.
     static let presentPacingReenableHealthySeconds: Double = 5.0
-    /// Direct-path present-stall trip: in direct (no-pacer) mode, decode is
-    /// healthy (recordDecodedFrame advancing) but nothing has reached the
-    /// renderer for this long. Same window as the paced present-stall trip - a
-    /// real screen freeze the watchdog must self-heal regardless of mode. This is
-    /// the detector the direct path was missing (the proximate cause of the
-    /// "fps_rendered=0 for 17s, no recovery" freeze).
+    /// Direct-path trip when decode advances but nothing reaches the renderer.
+    /// Its threshold is longer than the paced trip; both recover a screen freeze.
     static let directPresentStallThreshold: Double = 0.4
     // The TICK-DEFICIT trip thresholds (`tickDeficitTripSeconds`,
     // `tickDeficitReleaseRatio`) live in StreamSession+PresentTrip.swift with

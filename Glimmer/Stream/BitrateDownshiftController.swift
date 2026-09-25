@@ -1,55 +1,6 @@
 //
 //  BitrateDownshiftController.swift
-//
-//  MID-SESSION BITRATE DOWNSHIFT: the only rate adaptation this protocol
-//  profile permits.
-//
-//  WHY A RECONNECT AND NOT A MESSAGE: the rate is set once, in the SDP at ANNOUNCE, and this profile
-//  has no client→host bitrate request (the FEC-status feedback collides with IDX_SET_RGB_LED and is
-//  never sent, see EnetControlChannel.queueFrameFecStatus). A new SDP, so a reconnect, is the mechanism.
-//
-//  THE HOLE THIS FILLS: the frame watchdog's HOLD-IF-ALIVE branch is correct for
-//  the case it was written for - the host paused its encoder (Windows sign-in →
-//  secure desktop) while its control loop keeps ACKing, so tearing down would
-//  kill the session just as the desktop returns. It holds and re-requests an IDR
-//  every tick. But that hold is UNBOUNDED, and for a different failure it is
-//  unproductive forever: when the path cannot carry the negotiated bitrate,
-//  frames arrive and none survive FEC, so every IDR we ask for is itself shredded
-//  on the way in. A captured tunnel session sat in exactly this state for 15
-//  straight minutes - bits arriving at 13-32 fps, ZERO decoded frames, ~2500
-//  RFI/min - because nothing in the loop could lower the rate that was the
-//  actual problem. This controller is the escalation tier that ends that hold.
-//
-//  SIGNATURE IT KEYS ON (deliberately narrow): reception healthy + decode silent.
-//  That is `receiveIdle` small (bits ARE arriving, so the link is not dead - a
-//  dead link is ENet dead-peer detection's job) AND `decodeIdle` large (none of
-//  them are usable). The watchdog already computes both, and already folds the
-//  decode GATE into decodeIdle via
-//  `min(secondsSinceLastDecodedFrame, secondsSinceDecodeGateLifted)` - so a
-//  hidden window, which legitimately decodes nothing, can never trip this.
-//
-//  SAFETY CONTRACT:
-//   1. REMOTE ONLY. A LAN that cannot carry its own negotiated rate is a
-//      different fault (bad cable, duplex mismatch, a host that is overcommitted)
-//      and lowering the ask would mask it. Gated on the resolved remoteness from
-//      StreamPathMTU, not a guess.
-//   2. BOUNDED. `maxDownshifts` per session, hard stop. It can walk the rate
-//      down, never into a hole - and never below `floorKbps`.
-//   3. CANNOT OSCILLATE. There is no automatic UPshift. Recovering the original
-//      quality needs a new session, which is the honest contract: we cannot
-//      measure headroom we are not using, so "try higher again" would be a guess
-//      that costs another reconnect to walk back. One-way, by construction.
-//   4. COOLDOWN. After a downshift, `cooldownSeconds` must pass before another
-//      is considered - long enough for the reconnect to complete and the new
-//      rate to actually be exercised, so we never stack two downshifts on one
-//      episode's evidence.
-//   5. NO-OP WHEN CLEAN. A session that never stalls never touches this; the
-//      controller holds its initial state and costs one comparison per watchdog
-//      tick.
-//
-//  THREADING: owned by StreamSession and touched only from the session actor
-//  (the watchdog's per-tick hop). A value type with no shared state.
-//
+//  Bitrate is set in SDP; 0x5502 collides with IDX_SET_RGB_LED, so recovery needs reconnect.
 
 import Foundation
 
@@ -60,11 +11,9 @@ struct BitrateDownshiftController: Sendable {
 
     // MARK: - Policy
 
-    /// How many downshifts one session may perform. Two steps at `stepFactor`
-    /// walk a rate to ~36% of the original, which spans the gap between "a
-    /// tunnel that is a bit tight" and "a tunnel carrying a fifth of the ask".
-    /// Past that the link is not a bitrate problem and another reconnect is just
-    /// churn the user pays for.
+    /// Two `stepFactor` steps reach ~36% of the ask, from a slightly tight tunnel to one carrying a fifth;
+    /// more steps would only churn reconnects. No automatic upshift: unused headroom can't be measured,
+    /// and guessing risks repeated reconnects.
     static let maxDownshifts = 2
 
     /// Multiplier per step. 0.6 is a decisive cut, not a nibble - a 10-15% trim
@@ -78,9 +27,8 @@ struct BitrateDownshiftController: Sendable {
     static let floorKbps = 10_000
 
     /// How long the decode-only stall must persist before the FIRST downshift.
-    /// Comfortably past `decodeStallRecoveryThreshold` (2s) so the cheap fix -
-    /// the IDR nudge, which resolves the host-paused-encoder case - gets a full
-    /// chance first. Only once IDRs have plainly failed is the rate implicated.
+    /// IDRs can resolve a paused encoder, but cannot repair an overloaded path:
+    /// repeated requests only send more frames into the same bottleneck.
     static let stallSecondsBeforeDownshift: Double = 20.0
 
     /// Quiet window after a downshift before another may be considered. Covers
@@ -103,7 +51,7 @@ struct BitrateDownshiftController: Sendable {
     enum Decision: Equatable, Sendable {
         /// Downshift now, to this advertised bitrate (kbps).
         case downshift(toKbps: Int)
-        /// Not a remote path - a LAN that cannot carry its rate is a different fault.
+        /// LAN overload points to a local fault; downshifting would mask it.
         case notRemote
         /// The stall has not persisted long enough to implicate the bitrate.
         case tooEarly

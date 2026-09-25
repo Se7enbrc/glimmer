@@ -61,6 +61,8 @@ extension StreamSession {
         stopCause = nil
         ownsHostSession = false
         isStreaming = true
+        // Capture launch and teardown even when Cancel prevents the backend handshake.
+        SessionLogFileSink.startIfEnabled(enabled: TelemetryGate.isEnabled)
 
         // Capture the inputs a SILENT RECONNECT needs to rebuild the connection
         // in place (see StreamSession+Reconnect.swift): the original server (for
@@ -92,13 +94,6 @@ extension StreamSession {
         // --- 1) Pair or verify pairing ---------------------------------
         let network = NetworkClient(server: server)
         self.network = network
-        // Drop the orphaned NetworkClient on any exit where stop() can't own it
-        // (a pre-bridge throw from the serverinfo fetch, the pairing check, or
-        // launchWithBusyRecovery below). shutdown() is a no-op now - the control
-        // channel is per-request - so this is just lifecycle symmetry, and the
-        // belt-and-braces overlap with stop() on the success / backend-failure
-        // paths is harmless.
-        defer { if !startHandedOff { shutdownOrphanedNetwork() } }
         // Sample latency from the click, on a host that is still idle. The gate
         // bands on the samples taken before /launch: once the game starts and
         // the display switches, handshakes read 3-7x the path's true RTT.
@@ -131,6 +126,7 @@ extension StreamSession {
         // panel). The stats overlay (⌃⌥S) reports the actual delivered
         // FPS once frames flow.
         await logStreamConfig(backendConfig)
+        try checkAttempt()
 
         // --- 4) Set up the window + decoder + input (MainActor) BEFORE the
         // connection so the decoder's VideoSink has an
@@ -151,6 +147,11 @@ extension StreamSession {
             onBackgroundedChanged: onBackgroundedChanged,
             onMiniPlayerChanged: onMiniPlayerChanged,
             onCancelConnect: onCancelConnect))
+        // Stop may finish while the MainActor builds these, before it can see them.
+        if isTearingDown {
+            await discardStoppedSetup(setup)
+            throw CancellationError()
+        }
 
         // --- 4a) Build + publish the session bridge (see publishBridge): weak
         // refs to every subsystem + self so a torn-down subsystem just makes its
@@ -222,24 +223,18 @@ extension StreamSession {
 
     // MARK: Start helpers
 
-    /// Begin the session-long keep-awake / anti-App-Nap activity, stored in
-    /// `powerAssertion` for `stop()` (or start()'s failure defer) to end.
-    /// `.userInitiated` + `.latencyCritical` are the options that actually
-    /// defeat App Nap throttling while unfocused / on a second display; the
-    /// two `*SleepDisabled` flags keep the screen lit for controller-only
-    /// sessions (see the field doc on `powerAssertion` for the full rationale).
+    /// Keep the Mac and visible display awake during connection; stop() or
+    /// start()'s failure defer ends the token.
     private func beginPowerAssertion() {
+        powerAssertionHidden = false
         powerAssertion = ProcessInfo.processInfo.beginActivity(
-            options: [
-                .userInitiated, .latencyCritical,
-                .idleDisplaySleepDisabled, .idleSystemSleepDisabled
-            ],
+            options: Self.sessionActivityOptions(hidden: false),
             reason: "Glimmer is streaming")
     }
 
     /// Step 1 of start(): fetch /serverinfo, stamp its launch sub-leg, log the handshake line, and
     /// refuse a GameStream or unpaired PC, named as the user knows it. A throw unwinds through
-    /// start()'s power-assertion and orphaned-network defers.
+    /// start()'s power-assertion defer; the caller then awaits stop() for network cleanup.
     private func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
         let serverinfoStart = Date()
@@ -271,8 +266,24 @@ extension StreamSession {
             buildMs: Date().timeIntervalSince(buildStart) * 1000.0)
         self.window = setup.0
         self.input = setup.1
-        self.videoDecoder = setup.2
+        adoptVideoDecoder(setup.2)
         return setup
+    }
+
+    func adoptVideoDecoder(_ decoder: VideoDecoder) {
+        videoDecoder = decoder
+        refreshPowerAssertion()
+    }
+
+    private func discardStoppedSetup(_ setup: (StreamWindow, InputForwarder, VideoDecoder)) async {
+        await MainActor.run {
+            setup.1.detach()
+            setup.2.teardown()
+            setup.0.close()
+        }
+        self.window = nil
+        self.input = nil
+        self.videoDecoder = nil
     }
 
     /// Release the bridge's +1 retain on the throw-without-stop path (start()'s
@@ -290,19 +301,6 @@ extension StreamSession {
         self.bridgePtr = nil
         self.bridge = nil
         self.isStreaming = false
-    }
-
-    /// Shut down + drop the per-session NetworkClient when no stop() owns it
-    /// (the pre-bridge throw paths in start() - see the defer there). No-op
-    /// when stop() already ran: it shuts the client down and nils the field.
-    /// NetworkClient is an actor and this helper runs from a synchronous
-    /// `defer`, so the shutdown hops into a detached task. Fire-and-forget is
-    /// correct: the client is ORPHANED (no consumer can reach it once the
-    /// field is nil'd synchronously below), and shutdown() is a no-op now anyway.
-    private func shutdownOrphanedNetwork() {
-        guard let net = network else { return }
-        network = nil
-        Task.detached { await net.shutdown() }
     }
 
     /// Build the session bridge (weak refs to every subsystem + self so a

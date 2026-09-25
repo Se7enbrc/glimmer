@@ -32,14 +32,14 @@ final class IOReportSamplerLifetimeTests: XCTestCase {
     /// hardware/OS dependent, so the assertion is on the contract, not the
     /// values: the tick immediately after a reset is a baseline (cluster
     /// counts start over).
-    func testRepeatedSessionCyclesDoNotCrash() throws {
+    func testRepeatedSessionCyclesDoNotCrash() async throws {
         guard let sampler = IOReportSampler.shared else {
             throw XCTSkip("IOReport unavailable on this host")
         }
         for _ in 0..<3 {
             sampler.beginSession()
             _ = sampler.sample()          // baseline tick
-            usleep(20_000)                // give the counters a real window
+            try await Task.sleep(for: .milliseconds(20)) // give the counters a real window
             _ = sampler.sample()          // first delta tick
         }
         sampler.beginSession()            // leave a fresh baseline behind

@@ -83,29 +83,27 @@ struct EnvSignalEvidenceTests {
 @Suite(.serialized)
 struct RtpVideoQueueRecoveryTests {
 
-    private final class NoopDelegate: VideoDepacketizerDelegate {
-        func depacketizerDidAssembleFrame(_ unit: DecodeUnit) {}
-        func depacketizerDetectedFrameLoss(from: Int, to: Int) {}
-        func depacketizerNeedsIdr() {}
-        func depacketizerReceivedKeyFrame(frameNumber: Int) {}
-    }
+    private let delegate = RecordingDepacketizerDelegate()
 
-    private let delegate = NoopDelegate()
-
-    private func makeQueue() -> RtpVideoQueue {
+    private func makeQueue(av1: Bool = false) -> RtpVideoQueue {
         let depacketizer = VideoDepacketizer(delegate: delegate,
-                                             negotiatedVideoFormat: StreamProtocol.VIDEO_FORMAT_H265,
+                                             negotiatedVideoFormat: av1
+                                                ? StreamProtocol.VIDEO_FORMAT_AV1_MAIN8
+                                                : StreamProtocol.VIDEO_FORMAT_H265,
                                              colorSpace: 0)
         return RtpVideoQueue(depacketizer: depacketizer, packetSize: 64)
     }
 
     /// One data shard of a two-data, one-parity frame (fecPercentage 50).
-    private func datagram(seq: UInt16, frame: UInt32, fecIndex: UInt32, flags: UInt8) -> [UInt8] {
+    private func datagram(seq: UInt16, frame: UInt32, fecIndex: UInt32, flags: UInt8,
+                          dataCount: UInt32 = 2, fecPercent: UInt32 = 50,
+                          timestamp: UInt32 = 0) -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: 16 + 16 + 8)
         bytes[0] = RtpVideoQueue.FLAG_EXTENSION
         bytes[2] = UInt8(seq >> 8)
         bytes[3] = UInt8(seq & 0xFF)
-        let fecInfo: UInt32 = (2 << 22) | (fecIndex << 12) | (50 << 4)
+        for byte in 0..<4 { bytes[4 + byte] = UInt8(truncatingIfNeeded: timestamp >> (24 - byte * 8)) }
+        let fecInfo: UInt32 = (dataCount << 22) | (fecIndex << 12) | (fecPercent << 4)
         for byte in 0..<4 {
             bytes[16 + 4 + byte] = UInt8((frame >> (8 * UInt32(byte))) & 0xFF)
             bytes[16 + 12 + byte] = UInt8((fecInfo >> (8 * UInt32(byte))) & 0xFF)
@@ -148,18 +146,21 @@ struct RtpVideoQueueRecoveryTests {
         #expect(queue.receivedOosData)
     }
 
-    /// Writes the RTP and NV fields Sunshine stamps on every shard after encoding:
-    /// shard `index` of block 0 of 2 in frame 1, three data shards at 50% FEC.
-    private func stampShard(_ shard: inout [UInt8], index: Int) {
+    /// Stamp each shard after parity encoding, as Sunshine does on the wire.
+    private func stampShard(_ shard: inout [UInt8], index: Int, block: UInt8 = 0,
+                            lastBlock: UInt8 = 1, seq: UInt16? = nil,
+                            dataCount: Int = 3, fecPercent: Int = 50, spi: Int? = nil) {
         shard[0] = RtpVideoQueue.FLAG_EXTENSION
-        shard[2] = 0
-        shard[3] = UInt8(index)
-        let fecInfo = UInt32(index << 12 | 3 << 22 | 50 << 4)
+        let sequence = seq ?? UInt16(index)
+        shard[2] = UInt8(sequence >> 8)
+        shard[3] = UInt8(truncatingIfNeeded: sequence)
+        if let spi { shard[16 + 1] = UInt8(truncatingIfNeeded: spi) }
+        let fecInfo = UInt32(index << 12 | dataCount << 22 | fecPercent << 4)
         for byte in 0..<4 {
             shard[16 + 4 + byte] = byte == 0 ? 1 : 0
             shard[16 + 12 + byte] = UInt8(truncatingIfNeeded: fecInfo >> (8 * byte))
         }
-        shard[16 + 11] = 1 << 6
+        shard[16 + 11] = ((lastBlock << 2) | block) << 4
     }
 
     /// A PC that caps the packet size sends shards shorter than the 80 bytes asked for.
@@ -185,6 +186,134 @@ struct RtpVideoQueueRecoveryTests {
         #expect(rebuilt.length == shardSize)
         #expect(rebuilt.bytes[16 + 8] == data[1][16 + 8])
         #expect(rebuilt.bytes[32..<rebuilt.length] == data[1][32...])
+    }
+
+    private func twoBlockShards(firstSeq: UInt16 = 0, frame: UInt32 = 1) -> [[UInt8]] {
+        var shards: [[UInt8]] = []
+        for block in 0..<2 {
+            var data = [[UInt8]](repeating: [UInt8](repeating: 0, count: 40), count: 2)
+            for index in 0..<2 {
+                let ordinal = block * 2 + index
+                stampShard(&data[index], index: index, block: UInt8(block),
+                           seq: firstSeq &+ UInt16(block * 3 + index), dataCount: 2, spi: ordinal)
+                data[index][16 + 4] = UInt8(truncatingIfNeeded: frame)
+                data[index][16 + 8] = (ordinal == 0 ? RtpVideoQueue.FLAG_SOF : 0)
+                    | (index == 1 ? RtpVideoQueue.FLAG_EOF : 0)
+                    | RtpVideoQueue.FLAG_CONTAINS_PIC_DATA
+                data[index][32] = UInt8(0x40 + ordinal)
+            }
+            if block == 0 {
+                data[0][32...39] = [1, 0, 0, 2, 1, 0, 0, 0]
+            }
+            var parity = ReedSolomonTests.cauchyParity(data: data, ds: 2, ps: 1, bs: 40)[0]
+            stampShard(&parity, index: 2, block: UInt8(block),
+                       seq: firstSeq &+ UInt16(block * 3 + 2), dataCount: 2)
+            shards.append(contentsOf: data + [parity])
+        }
+        return shards
+    }
+
+    @Test func completeTwoBlockFrameEmitsInOrder() throws {
+        let queue = makeQueue(av1: true)
+        let shards = twoBlockShards()
+        for index in [0, 1, 3, 4] { queue.addRawDatagram(shards[index], receiveTimeUs: 1_000) }
+        let unit = try #require(delegate.units.first)
+        #expect(delegate.units.count == 1)
+        #expect(unit.buffers.first?.data == Data(shards[1][32...] + shards[3][32...] + [0x43]))
+        #expect(queue.currentFrameNumber == 2)
+    }
+
+    @Test func recoveredShardInSecondBlockCompletesFrame() throws {
+        let shards = twoBlockShards()
+        let probe = makeQueue(av1: true)
+        for index in [0, 1, 3] { probe.addRawDatagram(shards[index], receiveTimeUs: 1_000) }
+        let parity = RtpVideoQueue.Entry(bytes: shards[5], length: shards[5].count,
+                                         seq: 5, ts: 0, ssrc: 0,
+                                         header: shards[5][0], isParity: true)
+        probe.pending.append(parity)
+        #expect(probe.reconstructFrame() == 0)
+        let rebuilt = try #require(probe.pending.first { $0.sequenceNumber == 4 })
+        #expect(rebuilt.bytes[16 + 11] == 0x50)
+
+        let queue = makeQueue(av1: true)
+        for index in [0, 1, 3, 5] { queue.addRawDatagram(shards[index], receiveTimeUs: 1_000) }
+        let unit = try #require(delegate.units.first)
+        #expect(delegate.units.count == 1)
+        #expect(unit.buffers.first?.data == Data(shards[1][32...] + shards[3][32...] + [0x43]))
+        #expect(queue.currentFrameNumber == 2)
+    }
+
+    @Test func shortFirstBlockDropsFrameOnSecondBlock() {
+        let queue = makeQueue(av1: true)
+        queue.depacketizer.process(VideoDepacketizer.CompletedPacket(
+            frameIndex: 1, flags: 0x07, extraFlags: 0, fecCurrentBlock: 0, fecLastBlock: 0,
+            streamPacketIndex: 0, rtpTimestamp: 0, presentationTimeUs: 1_000,
+            receiveTimeUs: 1_000, payload: [1, 0, 0, 2, 9, 0, 0, 0, 0x31]))
+        queue.currentFrameNumber = 2
+        let shards = twoBlockShards(frame: 2)
+        queue.addRawDatagram(shards[0], receiveTimeUs: 1_000)
+        queue.addRawDatagram(shards[3], receiveTimeUs: 2_000)
+        #expect(delegate.losses.map(\.to) == [2])
+        #expect(queue.currentFrameNumber == 3)
+        #expect(queue.completed.isEmpty)
+    }
+
+    @Test func holdIsRefusedWhenDeficitExceedsParity() {
+        let queue = makeQueue()
+        queue.receivedOosData = true
+        queue.addRawDatagram(datagram(seq: 0, frame: 1, fecIndex: 0,
+                                      flags: RtpVideoQueue.FLAG_SOF, dataCount: 4, fecPercent: 25),
+                             receiveTimeUs: 1_000)
+        queue.addRawDatagram(datagram(seq: 5, frame: 2, fecIndex: 0,
+                                      flags: RtpVideoQueue.FLAG_SOF, dataCount: 4, fecPercent: 25),
+                             receiveTimeUs: 2_000)
+        #expect(queue.deferredDatagram == nil)
+        #expect(queue.currentFrameNumber == 2)
+    }
+
+    @Test func holdIsRefusedWithoutParity() {
+        let queue = makeQueue()
+        queue.receivedOosData = true
+        queue.addRawDatagram(datagram(seq: 0, frame: 1, fecIndex: 0,
+                                      flags: RtpVideoQueue.FLAG_SOF, fecPercent: 0), receiveTimeUs: 1_000)
+        queue.addRawDatagram(datagram(seq: 2, frame: 2, fecIndex: 0,
+                                      flags: RtpVideoQueue.FLAG_SOF, fecPercent: 0), receiveTimeUs: 2_000)
+        #expect(queue.deferredDatagram == nil)
+        #expect(queue.currentFrameNumber == 2)
+    }
+
+    @Test func oosCooldownStaysLatchedAcrossTimestampWrap() {
+        let queue = makeQueue()
+        queue.receivedOosData = true
+        queue.lastOosPresentationUs = (UInt64(UInt32.max - 100) * 1000) / 90
+        queue.addRawDatagram(datagram(seq: 0, frame: 1, fecIndex: 0,
+                                      flags: RtpVideoQueue.FLAG_SOF, timestamp: UInt32.max - 10),
+                             receiveTimeUs: 1_000)
+        queue.addRawDatagram(datagram(seq: 1, frame: 1, fecIndex: 1,
+                                      flags: RtpVideoQueue.FLAG_EOF, timestamp: 5),
+                             receiveTimeUs: 2_000)
+        #expect(queue.receivedOosData)
+    }
+
+    @Test func fecRebuildCrossesSequenceWrapInOrder() throws {
+        let queue = makeQueue(av1: true)
+        queue.nextContiguousSequenceNumber = 0xFFFE
+        var data = [[UInt8]](repeating: [UInt8](repeating: 0, count: 40), count: 3)
+        for index in 0..<3 {
+            stampShard(&data[index], index: index, lastBlock: 0,
+                       seq: 0xFFFE &+ UInt16(index), spi: index)
+            data[index][16 + 8] = (index == 0 ? RtpVideoQueue.FLAG_SOF : 0)
+                | (index == 2 ? RtpVideoQueue.FLAG_EOF : 0)
+                | RtpVideoQueue.FLAG_CONTAINS_PIC_DATA
+            data[index][32] = UInt8(0x51 + index)
+        }
+        data[0][32...39] = [1, 0, 0, 2, 8, 0, 0, 0]
+        var parity = ReedSolomonTests.cauchyParity(data: data, ds: 3, ps: 2, bs: 40)[0]
+        stampShard(&parity, index: 3, lastBlock: 0, seq: 1)
+        for shard in [data[0], data[2], parity] { queue.addRawDatagram(shard, receiveTimeUs: 1_000) }
+        let unit = try #require(delegate.units.first)
+        #expect(unit.buffers.first?.data == Data(data[1][32...] + data[2][32...]))
+        #expect(queue.currentFrameNumber == 2)
     }
 
     /// Reception is alive while datagrams arrive, even when no frame survives
@@ -218,7 +347,7 @@ struct RtpVideoQueueRecoveryTests {
 @MainActor
 struct VideoDecoderRecoveryTests {
 
-    /// A decoder mid-stream (no VT session: fed frames fail setup quietly).
+    /// A decoder mid-stream with no VT session and format 0: any fed frame fails setup and arms the resync.
     private func streamingDecoder() -> VideoDecoder {
         let decoder = VideoDecoder()
         decoder.isStreaming = true
@@ -234,21 +363,21 @@ struct VideoDecoderRecoveryTests {
     /// frame an IDR has since superseded is stale and changes nothing.
     @Test func decodeFailureResyncsOnceAndIgnoresStaleEpochs() {
         let decoder = streamingDecoder()
-        #expect(submit(decoder, idr: false) == StreamProtocol.DR_OK)
-        #expect(submit(decoder, idr: true) == StreamProtocol.DR_OK)
+        #expect(decoder.decodeGateDisposition(isIDR: false) == .feed(epoch: 0))
+        #expect(decoder.decodeGateDisposition(isIDR: true) == .feed(epoch: 1))
         decoder.noteVtDecodeFailure(epoch: 0, status: -12909)
-        #expect(submit(decoder, idr: false) == StreamProtocol.DR_OK)
+        #expect(decoder.decodeGateDisposition(isIDR: false) == .feed(epoch: 1))
         decoder.noteVtDecodeFailure(epoch: 1, status: -12909)
-        #expect(submit(decoder, idr: false) == StreamProtocol.DR_NEED_IDR)
-        #expect(submit(decoder, idr: false) == StreamProtocol.DR_OK)
+        #expect(decoder.decodeGateDisposition(isIDR: false) == .resyncToIdr)
+        #expect(decoder.decodeGateDisposition(isIDR: false) == .feed(epoch: 1))
     }
 
     /// An IDR arriving after a failure feeds straight through and clears it.
     @Test func idrAfterFailureFeeds() {
         let decoder = streamingDecoder()
         decoder.noteVtDecodeFailure(epoch: 0, status: -12911)
-        #expect(submit(decoder, idr: true) == StreamProtocol.DR_OK)
-        #expect(submit(decoder, idr: false) == StreamProtocol.DR_OK)
+        #expect(decoder.decodeGateDisposition(isIDR: true) == .feed(epoch: 1))
+        #expect(decoder.decodeGateDisposition(isIDR: false) == .feed(epoch: 1))
     }
 
     /// After stop, a failure (VT flushing on teardown) arms nothing.
@@ -256,6 +385,16 @@ struct VideoDecoderRecoveryTests {
         let decoder = VideoDecoder()
         decoder.noteVtDecodeFailure(epoch: 0, status: -12903)
         decoder.isStreaming = true
+        #expect(decoder.decodeGateDisposition(isIDR: false) == .feed(epoch: 0))
+    }
+
+    /// A decode session that can't be built resyncs through one DR_NEED_IDR on the next P-frame,
+    /// not a bare keyframe request for every frame.
+    @Test func sessionSetupFailureResyncsOnce() async {
+        let decoder = streamingDecoder()
+        #expect(submit(decoder, idr: true) == StreamProtocol.DR_OK)
+        await decoder.decodeQueue.drainForTest()
+        #expect(submit(decoder, idr: false) == StreamProtocol.DR_NEED_IDR)
         #expect(submit(decoder, idr: false) == StreamProtocol.DR_OK)
     }
 
@@ -281,6 +420,30 @@ struct VideoDecoderRecoveryTests {
         decoder._decodeGateLiftedAtNanos = DispatchTime.now().uptimeNanoseconds
         decoder.presentSuppressedLock.unlock()
         #expect(decoder.reserveDecodeSlot(isIDR: true) == .reserved)
+    }
+
+    @Test func drainingDecoderAbsorbsBurstPastNominalBound() {
+        let decoder = VideoDecoder()
+        decoder.inFlightDecodes = decoder.maxInFlightDecodes
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime()
+        #expect(decoder.reserveDecodeSlot(isIDR: false) == .reserved)
+        #expect(decoder.inFlightDecodeBacklog() == decoder.maxInFlightDecodes + 1)
+    }
+
+    @Test func darkDecoderDropsAtNominalBound() {
+        let decoder = VideoDecoder()
+        decoder.inFlightDecodes = decoder.maxInFlightDecodes
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 0.2
+        #expect(decoder.reserveDecodeSlot(isIDR: false) == .dropAndFlush)
+        #expect(decoder.inFlightDecodeBacklog() == decoder.maxInFlightDecodes)
+    }
+
+    @Test func hardCeilingDropsEvenWhileDecoderDrains() {
+        let decoder = VideoDecoder()
+        decoder.inFlightDecodes = decoder.maxInFlightDecodeCeiling
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime()
+        #expect(decoder.reserveDecodeSlot(isIDR: false) == .dropAndFlush)
+        #expect(decoder.inFlightDecodeBacklog() == decoder.maxInFlightDecodeCeiling)
     }
 
     /// Sleep/wake with the window hidden: the reconnect's stop clears an engaged

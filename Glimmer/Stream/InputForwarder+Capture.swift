@@ -88,21 +88,20 @@ extension InputForwarder {
             object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                // Release the cursor AND raise all held input when focus
-                // leaves. The physical key-up goes to whatever now owns focus
-                // (Cmd-Tab target, an app stealing foreground), so without the
-                // raise the host keeps a held W pressed and the game walks
-                // forever. A key still physically held on refocus stays lost
-                // until re-pressed - predictable, and what upstream clients do.
-                self?.raiseAllHeldInputs(reason: "focus loss")
-                self?.exitCapturedMode()
-                // Window mode: losing the window is not the user asking for
-                // the pointer back, it is them leaving. Clear the hover-grab
-                // latch so coming BACK to the stream grabs again - which is
-                // what returning to a game means. Inert in full screen.
-                self?.noteHoverCaptureEvent(.windowResignedKey)
+                self?.windowResignedKey()
             }
         }
+    }
+
+    func windowResignedKey() {
+        // The physical key-up goes to the newly focused app, so release held
+        // input here. Esc's key-up may be lost too, making its timer unsafe.
+        raiseAllHeldInputs(reason: "focus loss")
+        neutralizeControllers()
+        exitCapturedMode()
+        cancelEscapeHold()
+        // Focus loss clears suppression so returning under the pointer captures again.
+        noteHoverCaptureEvent(.windowResignedKey)
     }
 
     func removeFocusObservers() {

@@ -18,6 +18,22 @@ import os
 
 extension StreamSession {
 
+    static func sessionActivityOptions(hidden: Bool) -> ProcessInfo.ActivityOptions {
+        let options: ProcessInfo.ActivityOptions = [.userInitiated, .latencyCritical]
+        return hidden ? options : options.union([.idleDisplaySleepDisabled, .idleSystemSleepDisabled])
+    }
+
+    func refreshPowerAssertion() {
+        guard isStreaming, !stopInProgress, let token = powerAssertion else { return }
+        let hidden = videoDecoder?.presentSuppressed ?? false
+        guard hidden != powerAssertionHidden else { return }
+        ProcessInfo.processInfo.endActivity(token)
+        powerAssertion = ProcessInfo.processInfo.beginActivity(
+            options: Self.sessionActivityOptions(hidden: hidden),
+            reason: "Glimmer is streaming")
+        powerAssertionHidden = hidden
+    }
+
     /// The collected inputs `buildStreamSubsystems` needs: the negotiated config,
     /// the initial stats-overlay state, the live hotkey/chord provider closures,
     /// and the optional backgrounded callback. Bundled into one value type so the
@@ -97,15 +113,12 @@ extension StreamSession {
         win.streamPixelSize = CGSize(width: config.width, height: config.height)
         let dec = VideoDecoder()
         dec.attach(to: win.displayLayer)
-        // Route the window's backgrounded/foregrounded signal to BOTH
-        // the caller (launcher "Back to stream" CTA) AND the decoder's
-        // present-suppression state. The decoder uses it to stop
-        // misreading the intentional non-present backlog as packet loss
-        // (no IDR/RFI spam while unfocused) and to flush+resync on
-        // refocus. Wrapping here keeps the single source of truth - the
-        // window's key/occlusion observers - driving both consumers.
-        win.onBackgroundedChanged = { [weak dec] backgrounded in
+        // Suppression prevents intentional presentation backlog from requesting
+        // IDR/RFI while hidden and resynchronizes the decoder on return.
+        // The same visibility edge updates power and the caller's return state.
+        win.onBackgroundedChanged = { [weak self, weak dec] backgrounded in
             dec?.setPresentSuppressed(backgrounded)
+            Task { [weak self] in await self?.refreshPowerAssertion() }
             onBackgroundedChanged?(backgrounded)
         }
         let inp = InputForwarder()
@@ -171,6 +184,9 @@ extension StreamSession {
         win.onScreenChanged = { [weak dec] in
             dec?.pacingScreenDidChange()
         }
+        win.onDisplaysWoke = { [weak dec] in
+            dec?.pacingRebuildLink(reason: "display_wake")
+        }
         // Present-path last-resort self-heal: when the renderer
         // hard-latches `.status == .failed` and a flush won't clear it,
         // the decoder asks for a fresh AVSampleBufferDisplayLayer -
@@ -191,7 +207,7 @@ extension StreamSession {
         // stops working mid-game, etc.).
         inp.captureSysKeys = config.captureSysKeys
         // Cruise ceiling is derived from the stream width (4K→2.0, 1080p→1.0 inert).
-        inp.cruiseGMax = CruiseTraversal.gMax(forStreamWidth: config.width)
+        CruiseTraversal.configure(inp, streamWidth: config.width)
         // Window mode: the pointer is grabbed into relative capture while it
         // is over the window, and is a normal Mac pointer mirrored onto the
         // host as absolute positions the rest of the time. The window hides +

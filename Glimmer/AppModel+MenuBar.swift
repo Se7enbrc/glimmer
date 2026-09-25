@@ -74,6 +74,7 @@ extension AppModel {
     /// Refresh Connection Details about once a second while the menu is open.
     func startMenuBarRefresh() {
         stopMenuBarRefresh()
+        setHIDDiscovery(true, for: .menuBar)
         refreshMenuBarDetails()
         if isStreaming, let session = nativeSession { Task { await session.setCursorHidden(false) } }
         menuRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -84,6 +85,7 @@ extension AppModel {
     func stopMenuBarRefresh() {
         menuRefreshTimer?.invalidate()
         menuRefreshTimer = nil
+        setHIDDiscovery(false, for: .menuBar)
     }
 
     private func refreshMenuBarDetails() {
@@ -137,5 +139,11 @@ extension AppModel {
 
     var mainWindowVisible: Bool {
         NSApp.windows.contains { $0.identifier?.rawValue == "main" && $0.isVisible }
+    }
+
+    /// Some of the launcher can be seen. `isVisible` stays true behind a sleeping
+    /// display, a locked screen or on another Space, where nobody sees the chip.
+    var mainWindowOnScreen: Bool {
+        NSApp.windows.contains { $0.identifier?.rawValue == "main" && $0.occlusionState.contains(.visible) }
     }
 }

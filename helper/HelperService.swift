@@ -28,7 +28,7 @@ final class HelperService: NSObject, NSXPCListenerDelegate, GlimmerHelperProtoco
 
     // MARK: GlimmerHelperProtocol
 
-    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping (Bool) -> Void) {
+    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping @Sendable (Bool) -> Void) {
         // Defensively bound the reason string so even a verified peer can't
         // fill the log with megabytes of garbage.
         let bounded = String(reason.prefix(128)).replacingOccurrences(of: "\n", with: " ")
@@ -41,8 +41,12 @@ final class HelperService: NSObject, NSXPCListenerDelegate, GlimmerHelperProtoco
         suppressor.setSuppressing(down, reason: bounded)
         // Park: report verified state so the app's `suppressing` flag can't
         // claim a still-up radio (the heartbeat reconfirms as the async down
-        // lands). Release just acks - restore success isn't the signal.
-        reply(down ? !suppressor.isInterfaceUp() : true)
+        // lands).
+        if down {
+            reply(!suppressor.isInterfaceUp())
+        } else {
+            suppressor.afterPendingChanges { reply(true) }
+        }
     }
 
     func currentStatus(reply: @escaping (Bool, Date?) -> Void) {

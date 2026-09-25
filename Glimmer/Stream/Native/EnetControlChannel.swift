@@ -232,26 +232,15 @@ final class EnetControlChannel: @unchecked Sendable {
     /// ring if a game re-arms the trigger effect at frame rate.
     var loggedFirstAdaptiveTriggers = false
 
-    /// Per-channel HIGHEST-DISPATCHED inbound reliable sequence number - the
-    /// receive-side half of ENet's per-channel reliable bookkeeping this subset
-    /// was missing. The host sends ALL control messages (rumble, triggers, LED,
-    /// motion, HDR, termination) as SEND_RELIABLE on channel 0 and relies on
-    /// real enet's ordered, exactly-once delivery; without this map a host
-    /// retransmission (lost client ACK) or UDP reordering dispatched stale
-    /// state AFTER its supersessor - e.g. a retransmitted rumble(x,y) landing
-    /// after the burst-ending motors-off and latching the pad buzzing until
-    /// the next host event. Every current consumer is latest-wins, so "ACK
-    /// everything, dispatch only strictly-newer" (drop stale/duplicate) is the
-    /// correct subset - we delay no message and never give up, we only refuse
-    /// to resurrect superseded state. Confined to `queue` (the receive
-    /// callback chain, the sole inbound-dispatch context), so no lock.
-    var lastDispatchedInboundRelSeq: [UInt8: UInt16] = [:]
+    /// The PC sends every control message on channel 0, so a lost message's
+    /// retransmit must land before its successors (ENet's in-order delivery).
+    /// Confined to `queue`, the receive chain, so no lock.
+    var inboundOrder: [UInt8: EnetInboundOrder] = [:]
 
-    /// First stale/duplicate inbound-reliable drop breadcrumb latch (the
-    /// loggedFirstRumble discipline): one INFO sighting per session proves the
-    /// dedup gate fired on a real retransmit/reorder; per-event logging could
-    /// flood under sustained loss. Confined to `queue`, so no lock.
-    var loggedFirstStaleReliableDrop = false
+    /// Duplicate and gap-skip breadcrumbs fire once per session to avoid floods.
+    /// Confined to `queue`, so no lock.
+    var loggedFirstDuplicateReliable = false
+    var loggedFirstInboundGapSkip = false
 
     /// First "reliable received in a datagram WITHOUT the SENT_TIME header flag"
     /// breadcrumb latch. We now ACK these (we used to silently skip the ACK,
@@ -347,18 +336,14 @@ final class EnetControlChannel: @unchecked Sendable {
         localSentByToken[token] = now
     }
 
-    /// Reliable-stream health, the same three numbers the 1Hz control-loop
-    /// snapshot logs (sentReliable depth + oldest-unacked age + since-last-ack):
-    /// the host-timeout fingerprint is `sentReliable` climbing while
-    /// `oldestUnackedMs` / `sinceLastAckMs` cross ~5s right before a stall, so
-    /// surfacing them to the telemetry exporter makes the INITIAL-CONNECTION and
-    /// pre-stall phases visible. One lock-guarded read so the trio is mutually
-    /// consistent. Cheap - three integer reads under the existing stateLock.
+    /// The 1 Hz snapshot's three numbers: sentReliable climbing while oldest-unacked
+    /// and since-last-ack ages cross about 5 s is the PC-timeout fingerprint.
+    /// One lock hold keeps the trio consistent.
     func health() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32) {
-        let now = serviceTimeMs
-        return withState {
-            let oldest = sentReliable.map { now &- $0.firstSentAtMs }.max() ?? 0
-            return (sentReliable.count, oldest, now &- lastAckRecvMs)
+        withState {
+            let now = serviceTimeMs
+            let oldest = sentReliable.map { Self.msSince($0.firstSentAtMs, now: now) }.max() ?? 0
+            return (sentReliable.count, oldest, Self.msSince(lastAckRecvMs, now: now))
         }
     }
 
@@ -389,7 +374,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// DISCONNECT, ACK silence, or a failed socket. Wired by NativeBackend to
     /// connectionTerminated + teardown.
     var onTerminated: ((Int32) -> Void)?
-    /// Fired (on CHANGE only) when the host signals HDR mode (0x010e).
+    /// Fired when HDR mode or enabled metadata changes, so the decoder stays current.
     var onHdrMode: ((Bool) -> Void)?
     /// Fired for EVERY host SS_RUMBLE_DATA (0x010b): (controllerNumber,
     /// lowFreqMotor, highFreqMotor), raw 0...65535 wire units - (0,0) means
@@ -435,8 +420,8 @@ final class EnetControlChannel: @unchecked Sendable {
     /// arrive once the channel is dead, so without this a stream ending
     /// mid-rumble leaves a pad buzzing until its battery dies.
     var onTeardown: (() -> Void)?
-    /// Last HDR enable state, so we only fire onHdrMode + log on transitions
-    /// (the host re-announces HDR ~10×/s).
+    /// Cached mode and metadata suppress identical HDR re-announcements; either
+    /// changing must notify the decoder through onHdrMode.
     var lastHdrEnabled: Bool?
     /// Latest SS_HDR_METADATA parsed from a 0x010e message (lock-guarded), so
     /// NativeBackend.hdrMetadata() can hand the decoder the MDCV/CLL blobs.
@@ -555,20 +540,6 @@ final class EnetControlChannel: @unchecked Sendable {
         takeConnection()?.cancel()
         logIgnoredControlTotals()
         fireTeardownOnce()
-    }
-
-    // MARK: - Per-frame FEC status (Sunshine SS_FRAME_FEC_PTYPE feedback)
-
-    /// Sink for per-frame FEC status reports produced by the video FEC path
-    /// (RtpVideoQueue → VideoRtpReceiver). Intentionally a no-op: moonlight only
-    /// sends FEC status on actual loss/abandonment, and the Sunshine wire type for
-    /// it (0x5502) COLLIDES with IDX_SET_RGB_LED - sending it would be misread by
-    /// the host - so Glimmer never emits it. The session keepalive is the periodic
-    /// ping + transport PING (see the control loop), which is what keeps video
-    /// flowing. Kept (rather than removed) because NativeBackend wires it as the
-    /// FEC status sink; must NEVER block the calling video thread.
-    func queueFrameFecStatus(_ status: FrameFecStatus) {
-        _ = status
     }
 }
 

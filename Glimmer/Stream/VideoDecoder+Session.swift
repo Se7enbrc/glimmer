@@ -56,16 +56,9 @@ extension VideoDecoder {
             kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder as String: true
         ]
 
-        // Hand the VT output callback a *retained* reference to self via the
-        // refcon. The callback fires asynchronously on the decode queue and
-        // resolves the decoder with `takeUnretainedValue()`. A passUnretained
-        // refcon would let a decode-in-flight callback dereference a
-        // deallocating VideoDecoder if the last strong ref dropped between
-        // submit and output - the `isolated deinit` backstop invalidates the
-        // session WITHOUT draining async frames, so that race is reachable.
-        // The +1 retain keeps the decoder alive for as long as the session
-        // that holds the refcon lives; it is balanced by
-        // `releaseOutputCallbackRefcon()` at every session-invalidation site.
+        // Hand VT a retained self as the refcon: the callback runs on VT's own thread, possibly after the
+        // last other reference is gone, and the deinit backstop doesn't drain async frames.
+        // `releaseOutputCallbackRefcon()` balances it at every session-invalidation site.
         let refcon = Unmanaged.passRetained(self)
         var callback = VTDecompressionOutputCallbackRecord(
             decompressionOutputCallback: VideoDecoder.decompressionOutputCallback,
@@ -244,28 +237,9 @@ extension VideoDecoder {
             }
         }
 
-    /// Called on the decode queue when VT produces a CVPixelBuffer.
-    /// Wraps the pixel buffer in a CMSampleBuffer and SUBMITS it to the frame
-    /// pacer (`FramePacer`), which holds it in a bounded hostPTS-ordered jitter
-    /// buffer and releases it to the AVSampleBufferDisplayLayer's renderer on
-    /// the display's true vsync via a CADisplayLink - so network-arrival jitter
-    /// no longer maps 1:1 onto screen time. (We used to call renderer.enqueue
-    /// inline here, the instant VT decoded, which is the micro-stutter this
-    /// pass removes.) There is no Metal render pass on our side; the OS still
-    /// owns the final v-sync present once the pacer hands a frame off.
-    ///
-    /// `hostPTS` is the host's capture-clock presentation timestamp,
-    /// recovered from `du.rtpTimestamp` (90kHz units) via VT's PTS
-    /// propagation through the input sample's timing info. We stamp the
-    /// output CMSampleBuffer's PTS with it so the layer can make stale-
-    /// frame drop decisions in the host's clock - under stutter (renderer
-    /// blocked, OS-side compositor falling behind, host bitrate spike) the
-    /// layer sees PTSes from before the stall and drops them cleanly when
-    /// it resumes, rather than catching up frame-by-frame and never
-    /// recovering. Previously this used `mach_absolute_time()` on our own
-    /// clock, which left every PTS monotonically advancing regardless of
-    /// host-side timing and gave the layer no signal to detect "this frame
-    /// is stale, skip it."
+    /// Runs on VT's output thread for each decoded pixel buffer: tags it, wraps it in a CMSampleBuffer
+    /// stamped with the PC's capture-clock `hostPTS` (so the layer drops stale frames in the PC's
+    /// clock), and hands it to the frame pacer, or presents it directly while pacing is down.
     nonisolated func enqueueDecodedFrame(
         _ pixelBuffer: CVPixelBuffer, hostPTS: CMTime
     ) {

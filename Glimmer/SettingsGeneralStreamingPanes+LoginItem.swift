@@ -27,6 +27,15 @@ enum LoginItemManager {
         minimized ? SMAppService.loginItem(identifier: helperBundleID) : SMAppService.mainApp
     }
 
+    static func isRegistered(_ status: SMAppService.Status) -> Bool {
+        status == .enabled || status == .requiresApproval
+    }
+
+    static func registrationFailed(_ error: Error, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: registeredBuildKey)
+        Diag.error("login item registration FAILED: \(error.localizedDescription, privacy: .private)", "LoginItem")
+    }
+
     /// This copy of the app, as far as a login-item registration cares.
     private static func currentBuild() -> String {
         "\(Bundle.main.bundlePath)#\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "")"
@@ -57,25 +66,25 @@ enum LoginItemManager {
         let mainApp = SMAppService.mainApp
         do {
             guard launchAtLogin else {
-                if helper.status == .enabled { try helper.unregister() }
-                if mainApp.status == .enabled { try mainApp.unregister() }
+                if isRegistered(helper.status) { try helper.unregister() }
+                if isRegistered(mainApp.status) { try mainApp.unregister() }
                 UserDefaults.standard.removeObject(forKey: registeredBuildKey)
                 Diag.info("login item disabled", "LoginItem")
                 return .notRegistered
             }
             if minimized {
-                if mainApp.status == .enabled { try mainApp.unregister() }
+                if isRegistered(mainApp.status) { try mainApp.unregister() }
                 try helper.register()
                 Diag.notice("login item registered (helper) → \(statusLabel(helper.status))", "LoginItem")
             } else {
-                if helper.status == .enabled { try helper.unregister() }
+                if isRegistered(helper.status) { try helper.unregister() }
                 try mainApp.register()
                 Diag.notice("login item registered (main app) → \(statusLabel(mainApp.status))", "LoginItem")
             }
             UserDefaults.standard.set(currentBuild(), forKey: registeredBuildKey)
             return activeService(minimized: minimized).status
         } catch {
-            Diag.error("login item registration FAILED: \(error.localizedDescription, privacy: .private)", "LoginItem")
+            registrationFailed(error)
             return .notFound
         }
     }

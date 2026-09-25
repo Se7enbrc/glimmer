@@ -432,12 +432,16 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `stateLock`; the block touches only `audioMeterLock` state and Diag.
     var routeListenerToken: Any?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
-    /// Bounded retry counter for an engine restart that threw because the new
-    /// output device wasn't ready that instant (route handoff). stateLock-guarded.
-    /// Non-private with its ceiling: the retry ladder lives in
-    /// AudioDecoder+Engine.swift.
+    /// Bounded retry counter for transient route handoffs; guarded by stateLock.
+    /// Internal because the ladder lives in AudioDecoder+Engine.swift.
     var engineRestartRetries = 0
+    /// Invalidates queued retries across shutdown and re-init; guarded by stateLock.
+    var engineRestartGeneration: UInt64 = 0
     static let maxEngineRestartRetries = 5
+    /// Delay failed prime-edge retries so packets cannot repeat HAL starts.
+    /// Guarded by stateLock; reset for each session.
+    var primeEdgeRetryAtNanos: UInt64 = 0
+    var primeEdgeFailureStreak = false
 
     /// `AVAudioEngineConfigurationChange` observer token (held so `shutdown()`
     /// can remove it). On a mid-stream output-device/format change AVAudioEngine

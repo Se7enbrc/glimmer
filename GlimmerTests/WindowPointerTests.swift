@@ -8,11 +8,63 @@
 //  no clock.
 //
 
+import AppKit
 import CoreGraphics
 import Testing
 @testable import Glimmer
 
 struct WindowPointerTests {
+
+    // MARK: Motion queue ordering
+
+    @Test func motionDrainStopsAtButtonAndKeyEvents() throws {
+        let moved = try #require(mouseEvent(.mouseMoved))
+        let dragged = try #require(mouseEvent(.leftMouseDragged))
+        let down = try #require(mouseEvent(.leftMouseDown))
+        let keyDown = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                       timestamp: 0, windowNumber: 0, context: nil,
+                                       characters: "a", charactersIgnoringModifiers: "a", isARepeat: false,
+                                       keyCode: 0))
+
+        for boundary in [down, keyDown] {
+            var queue = [moved, dragged, boundary, moved]
+            var drained: [NSEvent] = []
+            MouseMotionDrain.drain(
+                peek: { queue.first },
+                dequeue: { queue.isEmpty ? nil : queue.removeFirst() },
+                consume: { drained.append($0) }
+            )
+            #expect(drained.map(\.type) == [NSEvent.EventType.mouseMoved, .leftMouseDragged])
+            #expect(queue.map(\.type) == [boundary.type, .mouseMoved])
+        }
+    }
+
+    @Test func motionDrainStopsWhenButtonOrKeyIsAtTheHead() throws {
+        let moved = try #require(mouseEvent(.mouseMoved))
+        let down = try #require(mouseEvent(.leftMouseDown))
+        let keyDown = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                       timestamp: 0, windowNumber: 0, context: nil,
+                                       characters: "a", charactersIgnoringModifiers: "a", isARepeat: false,
+                                       keyCode: 0))
+
+        for boundary in [down, keyDown] {
+            var queue = [boundary, moved]
+            var drained: [NSEvent] = []
+            MouseMotionDrain.drain(
+                peek: { queue.first },
+                dequeue: { queue.isEmpty ? nil : queue.removeFirst() },
+                consume: { drained.append($0) }
+            )
+            #expect(drained.isEmpty)
+            #expect(queue.map(\.type) == [boundary.type, .mouseMoved])
+        }
+    }
+
+    private func mouseEvent(_ type: NSEvent.EventType) -> NSEvent? {
+        NSEvent.mouseEvent(with: type, location: .zero, modifierFlags: [], timestamp: 0,
+                           windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1,
+                           pressure: 0)
+    }
 
     // MARK: Pointer mapping - the happy 1:1 case
 
@@ -333,6 +385,16 @@ struct WindowPointerTests {
     @Test func escHoldIsAboutASecond() {
         #expect(EscapeHold.holdSeconds == 1.0)
         #expect(EscapeHold.keyCode == 53)   // kVK_Escape
+    }
+
+    @MainActor
+    @Test func resigningKeyCancelsAnArmedEscapeHold() {
+        let forwarder = InputForwarder()
+        forwarder.escapeHoldTask = Task {}
+
+        forwarder.windowResignedKey()
+
+        #expect(forwarder.escapeHoldTask.map { _ in true } == nil)
     }
 
     // MARK: Capture hint budget

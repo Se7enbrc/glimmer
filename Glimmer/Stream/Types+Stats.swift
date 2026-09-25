@@ -51,7 +51,7 @@ public struct StatsRow: Sendable, Equatable {
     }
 
     public let kind: Kind
-    /// Short, sentence-case label rendered on the left. "Host", "Latency",
+    /// Short, sentence-case label rendered on the left. "PC", "Latency",
     /// "Drop rate" - not full prose. SF Pro Text in the overlay.
     public let label: String
     /// Pre-formatted value string ("59.9 FPS", "12 ms ±3", "0.00 %",

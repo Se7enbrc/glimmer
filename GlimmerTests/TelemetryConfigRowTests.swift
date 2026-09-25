@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import QuartzCore
 import Testing
 @testable import Glimmer
 
@@ -107,5 +108,51 @@ struct TelemetryConfigRowTests {
             with: Data(report.renderJSON().utf8)) as? [String: Any])
         let events = try #require(receipt["events"] as? [String: Any])
         #expect(number(events, "audio_underrun_deadair") == 2)
+    }
+
+    @Test func worstGlassToGlassSecondUsesOnlyThatTicksObservations() {
+        let histograms = LatencyHistograms()
+        var aggregate = SessionAggregate()
+        for _ in 0..<2_000 { histograms.glassToGlass.observe(10) }
+        var snap = TelemetrySnapshot()
+        snap.sinceConnectSeconds = 11
+        snap.latencyHistograms = histograms.snapshot()
+        aggregate.accumulate(snap, segment: .active)
+        aggregate.foldLatency(histograms.snapshot(), active: true)
+
+        for _ in 0..<100 { histograms.glassToGlass.observe(45) }
+        snap.sinceConnectSeconds = 12
+        snap.latencyHistograms = histograms.snapshot()
+        aggregate.accumulate(snap, segment: .active)
+        #expect((aggregate.worstGlassToGlassP95Ms ?? 0) > 40)
+        #expect(aggregate.worstGlassToGlassP95AtSeconds == 12)
+    }
+
+    @Test func endToEndHistogramResolvesTheThirtyEightMillisecondTail() {
+        let histograms = LatencyHistograms()
+        for _ in 0..<1_000 { histograms.endToEnd.observe(38) }
+        let p95 = TelemetryRenderer.histogramQuantile(0.95, stage: histograms.snapshot().endToEnd)
+        #expect((p95 ?? .infinity) <= 40)
+    }
+
+    @Test func connectionResetKeepsSessionTotalsAndStartsAnEmptyWindow() {
+        let stats = StatsCollector()
+        for _ in 0..<3 { stats.recordPresentationLateDrop() }
+        for frame in 0..<10 { stats.recordReceivedFrame(bytes: 1_000, frameNumber: Int32(frame)) }
+        stats.recordDecoderDiscard()
+        stats.recordRendererBackpressureDrop()
+        stats.recordPresentationGap()
+
+        stats.resetForConnection()
+        #expect(stats.presentationLateDropCount() == 3)
+        #expect(stats.presentationGapCount() == 1)
+        #expect(stats.decoderDropCount() == 1)
+        #expect(stats.backpressureDropCount() == 1)
+        #expect(stats.receivedBytes == 10_000)
+        stats.windowStart = CACurrentMediaTime() - 1
+        let snap = stats.snapshot(minWindowSeconds: 0)
+        #expect(snap.measuredBitrateMbps == 0)
+        #expect(snap.receivedFps == 0)
+        #expect(snap.decoderDroppedPercent == 10)
     }
 }

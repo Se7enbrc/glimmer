@@ -87,7 +87,9 @@ final class ControllerBattery: @unchecked Sendable {
         // A re-attach can reuse a slot before detach bookkeeping settles;
         // drop any stale entry so the swap can't inherit its suppression.
         unregister(slot: slot)
-        guard controller.battery != nil else {
+        // The live raw-HID reader makes `battery` read nil; report() reads its level instead.
+        guard controller.battery != nil
+            || (controller.extendedGamepad is GCDualSenseGamepad && DualSenseHID.shared.isActive) else {
             // Bounded by attach frequency. A declined probe used to be fully
             // silent, making "no reports all session" unadjudicable: nil here
             // (flaky BT battery exposure) vs every send failing. With this

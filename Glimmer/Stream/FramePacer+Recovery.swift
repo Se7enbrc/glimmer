@@ -340,19 +340,20 @@ extension FramePacer {
         return depth
     }
 
-    /// Last-resort drain when the LINK itself is dead (no ticks arriving), so
-    /// `forceReleaseNextTick` can't help - there will be no "next tick". Pushes
-    /// the freshest queued frame straight through `willPresent`, bypassing the
-    /// due gate, off the pacing queue. Keeps the screen alive while the link is
-    /// rebuilt. Returns true if a frame was pushed.
-    @discardableResult
-    func drainHeadDirectly(reason: String) -> Bool {
+    /// When ticks stop, bypass the due gate on the pacing queue so recovery
+    /// cannot race a deficit beat's renderer enqueue. Keep the freshest frame
+    /// visible while the link rebuilds.
+    func drainHeadDirectly(reason: String) {
+        pacingQueue.async { [weak self] in self?.drainHeadDirectlyOnQueue(reason: reason) }
+    }
+
+    private func drainHeadDirectlyOnQueue(reason: String) {
         var freshest: Entry?
         var stale: [CMSampleBuffer] = []
         os_unfair_lock_lock(&lock)
         guard running, !queue.isEmpty else {
             os_unfair_lock_unlock(&lock)
-            return false
+            return
         }
         // Present the FRESHEST frame (queue tail, hostPTS-ordered) and discard
         // the rest - a real-time stream wants the newest pixels, not a backlog.
@@ -375,20 +376,17 @@ extension FramePacer {
             "FramePacer self-heal: direct-drain freshest frame (\(reason)) discarded=\(stale.count)",
             "Stream.Pacer")
         OSSignposter.render.emitEvent("PacerDirectDrain", "discarded=\(stale.count, privacy: .public)")
-        guard let entry = freshest, let willPresent else { return false }
+        guard let entry = freshest, let willPresent else { return }
         let presented = willPresent(entry.sampleBuffer)
         if presented {
-            // A drained frame IS a successful present - it must reset the
-            // reject streak (the consecutive-only invariant the ladder's
-            // 8-streak jitter-proofing rests on) and stamp the freshness
-            // bookkeeping, same as every other present site.
+            // Reset the consecutive reject streak and freshness clocks on success,
+            // so the watchdog cannot escalate from failures this drain recovered.
             noteFramePresented(entry.sampleBuffer)
         } else {
             // Even the watchdog's direct drain died at the renderer - strong
             // confirmation for the reject-streak verdict (noteGateReleaseRejected).
             noteGateReleaseRejected()
         }
-        return presented
     }
 
     /// Collapse the FIFO to ONLY its freshest frame WITHOUT presenting anything.

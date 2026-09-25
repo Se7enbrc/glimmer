@@ -20,6 +20,14 @@ import XCTest
 
 struct HostResolutionTests {
 
+    @Test func pingSendFailureStreakReportsOnlyEdges() {
+        var streak = UdpPinger.SendFailureStreak()
+        #expect(streak.note(sent: -1) == .failed)
+        #expect(streak.note(sent: -1) == nil)
+        #expect(streak.note(sent: 20) == .recovered(2))
+        #expect(streak.note(sent: 20) == nil)
+    }
+
     /// An IPv4 literal must pass through as-is - the fast path, no resolver.
     @Test func ipv4LiteralPassesThrough() {
         let host = UdpPinger.resolveHost("172.20.20.50")
@@ -39,17 +47,9 @@ struct HostResolutionTests {
         }
     }
 
-    /// THE bug shape: a resolvable NAME must come back as an IP literal - the
-    /// exact input class that used to reach makeSockaddr as .name and die.
-    /// localhost resolves via /etc/hosts (offline-safe, deterministic).
-    @Test func resolvableNameBecomesIPLiteral() {
-        let host = UdpPinger.resolveHost("localhost")
-        switch host {
-        case .ipv4, .ipv6:
-            break // either family is correct - system ordering decides
-        default:
-            Issue.record("localhost did not resolve to an IP literal: \(String(describing: host))")
-        }
+    /// Prefer IPv4 like the control connection; localhost resolves offline.
+    @Test func resolvableNamePrefersIPv4() {
+        #expect(UdpPinger.resolveHost("localhost") == .ipv4(.loopback))
     }
 
     /// The resolved literal must be accepted by makeSockaddr - the full chain
@@ -194,5 +194,90 @@ struct PCAddressTests {
         #expect(HostDiscovery.isPolicyDenied(.failed(denied)))
         #expect(!HostDiscovery.isPolicyDenied(.ready))
         #expect(!HostDiscovery.isPolicyDenied(.waiting(.posix(.ENETDOWN))))
+    }
+}
+
+struct DiscoveryBookkeepingTests {
+
+    @Test func anotherBrowserKeepsServiceLive() async {
+        let discovery = HostDiscovery()
+        let endpoint = NWEndpoint.service(name: "PC", type: "_nvstream._tcp", domain: "local", interface: nil)
+        let resolver = NWConnection(to: endpoint, using: .tcp)
+        let resolved = HostDiscovery.Discovered(id: "PC", displayName: "PC", host: "192.0.2.1", port: 47989)
+        let first = await discovery.reconcileResults(["PC": endpoint], type: "_nvstream._tcp", run: 0)
+        #expect(first["PC"] == endpoint)
+        await discovery.retainResolver(resolver, for: "PC")
+        await discovery.recordResolved(resolved)
+        _ = await discovery.reconcileResults([:], type: "_nvstream-tcp._tcp", run: 0)
+        #expect(await discovery.resolvers["PC"] === resolver)
+        #expect(await discovery.seen["PC"] == resolved)
+        _ = await discovery.reconcileResults([:], type: "_nvstream._tcp", run: 0)
+        #expect(await discovery.resolvers["PC"] == nil)
+        #expect(await discovery.seen["PC"] == nil)
+    }
+
+    @Test func unresolvedServiceRetriesOnBrowserUpdate() async {
+        let discovery = HostDiscovery()
+        let endpoint = NWEndpoint.service(name: "PC", type: "_nvstream._tcp", domain: "local", interface: nil)
+        let services = ["PC": endpoint]
+        let first = await discovery.reconcileResults(services, type: "_nvstream._tcp", run: 0)
+        #expect(first["PC"] == endpoint)
+        // No resolver remains after terminal failure; the next update must request one again.
+        let second = await discovery.reconcileResults(services, type: "_nvstream._tcp", run: 0)
+        #expect(second["PC"] == endpoint)
+    }
+
+    @Test func earlierConsumerCannotStopNewRun() async {
+        let discovery = HostDiscovery()
+        let first = await discovery.start()
+        let second = await discovery.start()
+        await discovery.stop(run: first.run)
+        let endpoint = NWEndpoint.service(name: "PC", type: "_nvstream._tcp", domain: "local", interface: nil)
+        let pending = await discovery.reconcileResults(["PC": endpoint], type: "_nvstream._tcp", run: second.run)
+        #expect(pending["PC"] == endpoint)
+        await discovery.stop(run: second.run)
+    }
+
+    @Test func stoppedRunIgnoresLateBrowserResults() async {
+        let discovery = HostDiscovery()
+        await discovery.stop()
+        let endpoint = NWEndpoint.service(name: "PC", type: "_nvstream._tcp", domain: "local", interface: nil)
+        let pending = await discovery.reconcileResults(["PC": endpoint], type: "_nvstream._tcp", run: 0)
+        #expect(pending.isEmpty)
+        #expect(await discovery.liveNames.isEmpty)
+    }
+}
+
+struct ServerInfoPortTests {
+
+    @Test func outOfRangeHTTPSPortKeepsDefault() async throws {
+        let server = ServerInfo(address: "192.0.2.1", uniqueId: "x", serverName: "x")
+        let client = NetworkClient(server: server)
+        let xml = try XMLTreeBuilder.parse(data: Data(
+            #"<root status_code="200"><HttpsPort>70000</HttpsPort></root>"#.utf8
+        ))
+        await client.hydrateServerInfo(from: xml, fetchedOverPaired: true)
+        #expect(await client.server.httpsPort == 47984)
+    }
+}
+
+struct PairingIdentityTests {
+
+    @Test(arguments: [
+        "",
+        "<uniqueid></uniqueid>",
+        "<uniqueid>different</uniqueid>"
+    ]) func pinnedReplyMustSupplyMatchingIdentity(_ body: String) throws {
+        let xml = try XMLTreeBuilder.parse(data: Data(
+            "<root status_code=\"200\">\(body)</root>".utf8
+        ))
+        #expect(!NetworkClient.matchesPairingIdentity(xml, expected: "saved"))
+    }
+
+    @Test func pinnedReplyAcceptsMatchingIdentity() throws {
+        let xml = try XMLTreeBuilder.parse(data: Data(
+            #"<root status_code="200"><uniqueid>saved</uniqueid></root>"#.utf8
+        ))
+        #expect(NetworkClient.matchesPairingIdentity(xml, expected: "saved"))
     }
 }

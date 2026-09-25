@@ -74,6 +74,13 @@ final class FrameTraceWriter: @unchecked Sendable {
     func start(isoStamp: String) {
         flushQueue.async { [weak self] in
             guard let self else { return }
+            let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
+            timer.schedule(deadline: .now() + Self.flushInterval, repeating: Self.flushInterval,
+                           leeway: .milliseconds(50))
+            timer.setEventHandler { [weak self] in self?.flush() }
+            self.flushTimer = timer
+            timer.resume()
+
             let dir = TelemetryExporter.logsDirectory
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -83,21 +90,15 @@ final class FrameTraceWriter: @unchecked Sendable {
             }
             self.logDir = dir
             self.isoStamp = isoStamp
-            guard self.openSegment() else { return }
-            let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
-            timer.schedule(deadline: .now() + Self.flushInterval, repeating: Self.flushInterval,
-                           leeway: .milliseconds(50))
-            timer.setEventHandler { [weak self] in self?.flush() }
-            self.flushTimer = timer
-            timer.resume()
+            self.openSegment()
         }
     }
 
     /// Open the next trace SEGMENT (`telemetry-frames-<iso>.ndjson` for the first,
     /// `-<n>.ndjson` after a rollover), reset the byte count, and `trimSegments`.
-    /// flushQueue-only. Returns false (and logs) if the file can't be opened.
-    private func openSegment() -> Bool {
-        guard let dir = logDir else { return false }
+    /// flushQueue-only. Logs if the file can't be opened.
+    private func openSegment() {
+        guard let dir = logDir else { return }
         let suffix = rolloverIndex == 0 ? "" : "-\(rolloverIndex)"
         let url = dir.appendingPathComponent("telemetry-frames-\(isoStamp)\(suffix).ndjson")
         FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -105,7 +106,7 @@ final class FrameTraceWriter: @unchecked Sendable {
             fileHandle = try FileHandle(forWritingTo: url)
         } catch {
             log.error("Telemetry frames: could not open file: \(error.localizedDescription, privacy: .private)")
-            return false
+            return
         }
         log.notice("Telemetry per-frame trace → \(url.path, privacy: .public)")
         bytesWritten = 0
@@ -114,7 +115,6 @@ final class FrameTraceWriter: @unchecked Sendable {
         for stale in Self.trimSegments(&segmentURLs) {
             try? FileManager.default.removeItem(at: stale)
         }
-        return true
     }
 
     /// Trim this session's segments (oldest-first) to `maxTraceFiles`, keeping
@@ -130,7 +130,7 @@ final class FrameTraceWriter: @unchecked Sendable {
     private func rollover() {
         try? fileHandle?.close()
         fileHandle = nil
-        _ = openSegment()
+        openSegment()
     }
 
     /// Stop the timer, flush whatever is pending, close the file. Synchronous so
@@ -152,7 +152,7 @@ final class FrameTraceWriter: @unchecked Sendable {
         os_unfair_lock_lock(bufferLock)
         pending.append(line)
         if pending.count > Self.maxPendingLines {
-            pending.removeFirst(pending.count - Self.maxPendingLines)
+            pending.trimOldestOverflow(maxCount: Self.maxPendingLines)
             droppedOverflow = true
         }
         os_unfair_lock_unlock(bufferLock)

@@ -330,64 +330,96 @@ struct FuzzTests {
 
     @Test func fuzzReedSolomonVideoDecode() {
         var rng = SplitMix64(seed: 0xF3C_F3C_F3C_0006)
+        var recoveryCases = 0
         for _ in 0..<kIterations {
+            let recoveryInput = rng.int(2) == 0
             // Random but plausible geometry; also deliberately malformed sets.
             let ds = 1 + rng.int(20)
             let ps = 1 + rng.int(8)
             guard let rs = ReedSolomon(dataShards: ds, parityShards: ps) else { continue }
             let total = ds + ps
-            let bs = rng.int(64)
+            let bs = recoveryInput ? 1 + rng.int(63) : rng.int(64)
             // Build a shard array whose COUNT may NOT match what decode expects -
             // the malformed surface (too few / too many shards).
             let shardCount: Int
-            switch rng.int(4) {
-            case 0: shardCount = total                 // correct
-            case 1: shardCount = rng.int(total + 1)    // too few
-            case 2: shardCount = total + rng.int(8)    // too many
-            default: shardCount = max(1, rng.int(total + 4))
+            if recoveryInput || rng.int(4) != 0 {
+                shardCount = total
+            } else {
+                switch rng.int(3) {
+                case 0: shardCount = rng.int(total + 1)
+                case 1: shardCount = total + rng.int(8)
+                default: shardCount = max(1, rng.int(total + 4))
+                }
             }
             var rawShards = [[UInt8]]()
+            let raggedShards = !recoveryInput && rng.int(4) == 0
             for _ in 0..<shardCount {
                 // Random length pre-normalization (so the pad/clamp paths are
                 // exercised), then normalized to `bs` exactly as the ingest does.
-                let len = rng.int(max(bs, 1) + 4)
+                let len = raggedShards ? rng.int(max(bs, 1) + 4) : bs
                 rawShards.append((0..<len).map { _ in rng.byte() })
             }
             var shards = rawShards   // ragged on purpose: decode must reject, not trap
             // marks: length may mismatch total; values random bool.
-            let markCount = rng.int(total + 4)
-            let marks = (0..<markCount).map { _ in rng.int(2) == 0 }
+            let markCount = rng.int(4) == 0 ? rng.int(total + 4) : total
+            let marks = recoveryInput
+                ? (0..<total).map { $0 == 0 }
+                : (0..<markCount).map { _ in rng.int(2) == 0 }
+            let missingData = marks.prefix(ds).filter { $0 }.count
+            let survivingParity = marks.dropFirst(ds).filter { !$0 }.count
+            let decoded = rs.decode(shards: &shards, marks: marks, bs: bs)
+            if bs > 0, shards.count >= total, marks.count >= total,
+               shards.allSatisfy({ $0.count >= bs }), missingData > 0,
+               survivingParity >= missingData, decoded {
+                recoveryCases += 1
+            }
             // Contract: returns true/false, never traps - even when shards/marks
             // are the wrong COUNT or the mark pattern is adversarial.
-            _ = rs.decode(shards: &shards, marks: marks, bs: bs)
         }
+        #expect(recoveryCases > kIterations / 4)
     }
 
     @Test func fuzzReedSolomonAudioDecode() {
         var rng = SplitMix64(seed: 0xA0D_10_F3C0_0007)
+        var recoveryCases = 0
         for _ in 0..<kIterations {
+            let recoveryInput = rng.int(2) == 0
             let dec = AudioFecDecoder()
-            let bs = rng.int(80)
+            let bs = recoveryInput ? 1 + rng.int(79) : rng.int(80)
             // Audio decoder is fixed RS(4,2) -> expects 6 shards / 6 marks; feed
             // wrong COUNTS (the production caller normalizes per-shard length the
             // same way buildShards does, so lengths are normalized here too).
             let shardCount: Int
-            switch rng.int(4) {
-            case 0: shardCount = 6
-            case 1: shardCount = rng.int(7)
-            case 2: shardCount = 6 + rng.int(6)
-            default: shardCount = max(1, rng.int(10))
+            if recoveryInput || rng.int(4) != 0 {
+                shardCount = 6
+            } else {
+                switch rng.int(3) {
+                case 0: shardCount = rng.int(7)
+                case 1: shardCount = 6 + rng.int(6)
+                default: shardCount = max(1, rng.int(10))
+                }
             }
             var rawShards = [[UInt8]]()
+            let raggedShards = !recoveryInput && rng.int(4) == 0
             for _ in 0..<shardCount {
-                let len = rng.int(max(bs, 1) + 4)
+                let len = raggedShards ? rng.int(max(bs, 1) + 4) : bs
                 rawShards.append((0..<len).map { _ in rng.byte() })
             }
             var shards = rawShards   // ragged on purpose: decode must reject, not trap
-            let markCount = rng.int(10)
-            let marks = (0..<markCount).map { _ in rng.byte() }   // 0 / non-zero
-            _ = dec.decode(shards: &shards, marks: marks, blockSize: bs)
+            let markCount = recoveryInput ? 6 : (rng.int(4) == 0 ? rng.int(10) : 6)
+            let marks = recoveryInput
+                ? [1, 0, 0, 0, 0, 0]
+                : (0..<markCount).map { _ in rng.byte() }   // 0 / non-zero
+            let missingData = marks.prefix(4).filter { $0 != 0 }.count
+            let survivingParity = marks.dropFirst(4).filter { $0 == 0 }.count
+            let decoded = dec.decode(shards: &shards, marks: marks, blockSize: bs)
+            if bs > 0, shards.count >= 6, marks.count >= 6,
+               shards.allSatisfy({ $0.count >= bs }), missingData > 0,
+               survivingParity >= missingData, decoded {
+                recoveryCases += 1
+            }
         }
+        #expect(recoveryCases > kIterations / 4)
     }
 
     // ============================================================

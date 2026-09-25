@@ -95,6 +95,9 @@ final class DualSenseHID: @unchecked Sendable {
     /// Per-device merged OUTPUT state; a trigger write re-sends that pad's
     /// lightbar and rumble so they are never clobbered to zero.
     private var outputStates: [UnsafeMutableRawPointer: DualSenseOutputState] = [:]
+    /// At most one queued write per pad: each write sends the latest merged state. No dedup
+    /// against the last write, since gamecontrollerd writes its own reports to the pad.
+    private var writePending: Set<UnsafeMutableRawPointer> = []
     /// Latch so the "SetReport refused" breadcrumb logs once, not per write
     /// (host re-arms triggers can arrive at frame rate).
     private var loggedWriteFailure = false
@@ -210,7 +213,7 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     private func stop() {
-        resetTriggersBeforeClose()
+        parkOutputBeforeClose()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, nil, nil)
         // Closing the manager leaves the per-device report callbacks registered;
@@ -229,6 +232,7 @@ final class DualSenseHID: @unchecked Sendable {
         deviceStates.removeAll()
         reportCountLocked = 0
         outputStates.removeAll()
+        writePending.removeAll()
         lock.unlock()
         for device in removed { DualSenseRouting.shared.disconnectDevice(device) }
         log.info("DualSense HID closed")
@@ -305,9 +309,9 @@ final class DualSenseHID: @unchecked Sendable {
         me.decode(device: sender, reportID: reportID, report: report, length: length)
     }
 
-    /// Per-report entry from the IOKit callback: the pure decode lives in
-    /// DualSenseHID+Decode.swift; this half owns the lock, the change edge,
-    /// and the main-queue hop to `onChange`.
+    /// Per-report entry from the IOKit callback; the pure decode is in DualSenseHID+Decode.swift.
+    /// This half owns the lock and the change edge, delivered to `onChange` synchronously so a
+    /// press and its release drained in one callout both reach the forwarder.
     private func decode(device: UnsafeMutableRawPointer, reportID: UInt32,
                         report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
         guard let decoded = Self.decodeInputReport(
@@ -324,7 +328,7 @@ final class DualSenseHID: @unchecked Sendable {
         lock.unlock()
         let key = UInt(bitPattern: device)
         if !pressed.isEmpty { DualSenseRouting.shared.hid(device: key, pressed: pressed, at: time) }
-        if changed { notifyChange(key) }
+        if changed { MainActor.assumeIsolated { onChange?(key) } }
     }
 
     private func notifyChange(_ device: DualSenseDeviceKey) {
@@ -370,16 +374,13 @@ final class DualSenseHID: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Park the triggers to neutral and re-emit, called from stop() while the
-    /// device is still open. Best-effort - a refused write is fine, the pad
-    /// loses power on disconnect anyway.
-    private func resetTriggersBeforeClose() {
+    /// Called from stop() while the pads are still open: park rumble and triggers to neutral
+    /// so the last report cannot restart the motors. Best-effort; a refused write is fine.
+    private func parkOutputBeforeClose() {
         lock.lock()
-        let devices = outputStates.keys.map { UInt(bitPattern: $0) }
-        for key in outputStates.keys {
-            outputStates[key]?.leftTrigger = [UInt8](repeating: 0, count: 11)
-            outputStates[key]?.rightTrigger = [UInt8](repeating: 0, count: 11)
-        }
+        let keys = Array(outputStates.keys)
+        let devices = keys.map { UInt(bitPattern: $0) }
+        for key in keys { outputStates[key] = DualSenseOutputState() }
         lock.unlock()
         writeQueue.sync {
             for device in devices { self.writeCurrentOutput(device: device) }
@@ -398,12 +399,18 @@ final class DualSenseHID: @unchecked Sendable {
     }
 
     private func scheduleWrite(device: DualSenseDeviceKey) {
+        guard let key = UnsafeMutableRawPointer(bitPattern: device) else { return }
+        lock.lock()
+        let inserted = writePending.insert(key).inserted
+        lock.unlock()
+        guard inserted else { return }
         writeQueue.async { [weak self] in self?.writeCurrentOutput(device: device) }
     }
 
     private func writeCurrentOutput(device: DualSenseDeviceKey) {
         guard let key = UnsafeMutableRawPointer(bitPattern: device) else { return }
         lock.lock()
+        writePending.remove(key)
         let state = outputStates[key]
         let entry = writeDevices[key]
         lock.unlock()

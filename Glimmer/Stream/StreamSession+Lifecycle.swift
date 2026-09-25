@@ -98,18 +98,10 @@ extension StreamSession {
         // the user sees, shut audio, /cancel, then release the bridge. Its refs
         // are weak, so the order is about being well-behaved, not UAF safety.
 
-        // 0. Stop the stats-overlay timer FIRST and hide the overlay layer
-        //    so it doesn't linger visually while teardown runs (without
-        //    this the user sees overlay numbers sitting on screen during
-        //    the window-close beat). The timer's RTT-estimate read is also
-        //    only safe while the connection is up.
-        //
-        // Capture `window` into a local so the MainActor.run closure
-        // doesn't reach into the actor's isolated state - Swift 6 strict
-        // concurrency rejects `self.window` from a non-actor closure even
-        // when the closure hops to MainActor.
+        // 0. Hide the overlay before closing; stop timers before their RTT reads
+        // outlive the connection. Snapshot actor-owned UI refs for MainActor.run.
         let winForOverlay = self.window
-        let inp = input
+        let inputForQuiesce = input
         await MainActor.run {
             self.statsOverlayTimer?.invalidate()
             self.statsOverlayTimer = nil
@@ -122,8 +114,8 @@ extension StreamSession {
             winForOverlay?.statsOverlay.setVisible(false)
             // Key-ups go out while the uplink is still live; once not ready, a
             // quit chord's late modifier releases send nothing into a closed link.
-            inp?.raiseAllHeldInputs(reason: "stream teardown")
-            inp?.setReady(false)
+            inputForQuiesce?.raiseAllHeldInputs(reason: "stream teardown")
+            inputForQuiesce?.setReady(false)
         }
 
         // 1. Tell the backend to bring down the connection. Synchronous;
@@ -136,6 +128,8 @@ extension StreamSession {
         //    frozen full-screen frame and a hidden pointer while /cancel waits.
         let dec = videoDecoder
         let win = window
+        // Setup may have adopted input while the timer teardown was suspended.
+        let inp = input
         await MainActor.run {
             inp?.detach()
             dec?.teardown()
@@ -149,12 +143,13 @@ extension StreamSession {
         //    receive thread, so no final sample can race it.
         audioDecoder.shutdown()
 
-        // 4. Tell the host the session is over so the next /launch isn't blocked
-        //    by an orphan session. Awaited, so it can't race that /launch, and
-        //    bounded, so an unreachable host costs `stopCancelSeconds` at most.
-        if let net = network {
-            await net.setRequestDeadline(Date().addingTimeInterval(Self.stopCancelSeconds))
-            if ownsHostSession { try? await net.cancel() }
+        // 4. Briefly wait for ownership, then cancel. A late successful launch
+        //    gets its own cleanup without holding the launcher open.
+        let net = network
+        await settlePendingLaunch {
+            if let net { await Self.cancelOwnedSession(net) }
+        }
+        if let net {
             // shutdown() is a no-op now (the control channel is per-request) -
             // kept for symmetry with the rest of the teardown.
             await net.shutdown()
@@ -162,6 +157,9 @@ extension StreamSession {
         ownsHostSession = false
         hostSessionClientID = nil
         network = nil
+
+        // Close after teardown so the session log records backend, audio and /cancel outcomes.
+        SessionLogFileSink.stop()
 
         // 5. Release the bridge. The bridge held weak refs to everything so
         //    nil'ing our own field doesn't drop the retain - the
@@ -195,6 +193,16 @@ extension StreamSession {
         stopInProgress = false
     }
 
+    private static func cancelOwnedSession(_ network: NetworkClient) async {
+        await network.setRequestDeadline(Date().addingTimeInterval(stopCancelSeconds))
+        do {
+            try await network.cancel()
+            Diag.notice("Teardown /cancel succeeded", "Stream")
+        } catch {
+            Diag.notice("Teardown /cancel failed: \(error, privacy: .private)", "Stream")
+        }
+    }
+
     public func interrupt() async {
         guard isStreaming else { return }
         backend.interruptConnection()  // was LiInterruptConnection()
@@ -225,14 +233,15 @@ extension StreamSession {
         }
     }
 
-    private func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
+    func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
-        let owner = isReconnecting && ownsHostSession && info.currentGameID == reconnectAppID
-            ? hostSessionClientID : nil
+        let owner = ownsHostSession && info.currentGameID == hostSessionAppID ? hostSessionClientID : nil
         if StreamAttempt.requiresTakeover(
             occupied: info.currentGameID != 0 || info.isBusy,
             owner: owner, client: client, authorized: takeoverAuthorized) {
+            ownsHostSession = false
+            hostSessionClientID = nil
             throw TakeoverRequired(appID: info.currentGameID)
         }
     }
@@ -240,15 +249,79 @@ extension StreamSession {
     private func launchHost(
         network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date
     ) async throws -> LaunchResponse {
+        let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
         let start = Date()
         defer { ConnectTimingTelemetry.shared.recordLaunchLeg(launchMs: Date().timeIntervalSince(start) * 1000) }
-        let response = try await network.launch(appID: appID, config: config)
-        try checkAttempt(deadline: deadline)
-        ownsHostSession = true
-        hostSessionClientID = await network.clientUniqueID
+        let response = try await launchAndRecordOwnership(client: client, appID: appID) {
+            try await network.launch(appID: appID, config: config)
+        }
         try checkAttempt(deadline: deadline)
         return response
+    }
+
+    func launchAndRecordOwnership(
+        client: String?, appID: Int, operation: @escaping @Sendable () async throws -> LaunchResponse
+    ) async throws -> LaunchResponse {
+        // Keep the response alive after cancellation so a late success can be
+        // cleaned up. Only its current waiter may change launch ownership.
+        Self.launchEpoch.withLock { $0 += 1 }
+        ownsHostSession = true
+        hostSessionClientID = client
+        hostSessionAppID = appID
+        let task = Task { try await operation() }
+        pendingLaunch = task
+        defer { if pendingLaunch == task { pendingLaunch = nil } }
+        return try await consumeLaunch(task)
+    }
+
+    private func consumeLaunch(_ task: Task<LaunchResponse, Error>) async throws -> LaunchResponse {
+        do {
+            return try await task.value
+        } catch {
+            if pendingLaunch == task, !Self.retainsLaunchOwnership(after: error) {
+                ownsHostSession = false
+                hostSessionClientID = nil
+            }
+            throw error
+        }
+    }
+
+    /// Each launch builds a fresh session, so this count is process-wide: a late
+    /// /cancel from a released session must not end a launch that started after it.
+    static let launchEpoch = OSAllocatedUnfairLock(initialState: 0)
+
+    func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
+        let task = pendingLaunch
+        let epoch = Self.launchEpoch.withLock { $0 }
+        let settled: Bool
+        if let task {
+            settled = await TerminationGate.runBounded(seconds: Self.stopCancelSeconds) {
+                _ = try? await self.consumeLaunch(task)
+            }
+        } else {
+            settled = true
+        }
+        if ownsHostSession { await cancel() }
+        if let task, !settled {
+            // The first /cancel can arrive before prep commands finish. Cancel again on a
+            // late success, unless a newer launch has started and now owns the PC.
+            Task.detached {
+                guard case .success = await task.result,
+                      Self.launchEpoch.withLock({ $0 }) == epoch else { return }
+                await cancel()
+            }
+        }
+    }
+
+    nonisolated var terminationStopBoundSeconds: TimeInterval {
+        // Allow the short ownership wait and /cancel, never the launch timeout.
+        Self.stopCancelSeconds + TerminationGate.stopBoundSeconds
+    }
+
+    static func retainsLaunchOwnership(after error: Error) -> Bool {
+        if case .hostRefused = error as? StreamError { return false }
+        return true
     }
 
     private func cancelThenLaunch(

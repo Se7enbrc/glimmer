@@ -7,6 +7,7 @@
 //  place.
 
 import CoreMedia
+import Darwin
 import Foundation
 import VideoToolbox
 
@@ -217,6 +218,8 @@ extension VideoDecoder {
             var nalStart = -1
             var i = 0
             while i < count {
+                guard let hit = memchr(base + i, 0, count - i) else { break }
+                i = UnsafeRawPointer(base).distance(to: UnsafeRawPointer(hit))
                 let scLen = startCodeLength(at: i, base: base, count: count)
                 if scLen > 0 {
                     if nalStart >= 0, i > nalStart {
@@ -278,9 +281,8 @@ extension VideoDecoder {
     ) -> CMSampleBuffer? {
         guard let formatDesc = formatDescription else { return nil }
 
-        // Wrap rawData in a CMBlockBuffer. We copy because moonlight will
-        // reuse its buffers after submitDecodeUnit returns; sharing memory
-        // here would be a use-after-free hazard.
+        // VideoToolbox may retain the sample beyond this call, so its block
+        // memory must own a copy of the frame bytes.
         var blockBuffer: CMBlockBuffer?
         var status = CMBlockBufferCreateWithMemoryBlock(
             allocator: kCFAllocatorDefault,

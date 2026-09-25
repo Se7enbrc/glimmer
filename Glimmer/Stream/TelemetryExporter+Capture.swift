@@ -20,7 +20,6 @@
 //
 
 import Foundation
-import IOKit.ps
 
 extension TelemetryExporter {
 
@@ -41,9 +40,8 @@ extension TelemetryExporter {
         timer.resume()
     }
 
-    /// Build one snapshot from the live sources, render both forms, store the
-    /// Prometheus body for the HTTP path, and append the NDJSON line. On
-    /// `workQueue`.
+    /// Build one snapshot from live sources, retain it for HTTP scrapes, and
+    /// append the NDJSON line. On `workQueue`.
     private func capture() {
         let now = DispatchTime.now()
         let stats = source.videoStats()
@@ -142,7 +140,7 @@ extension TelemetryExporter {
         // audio and corruption per-second rates permanently unemitted.
         prevCaptureTime = now
 
-        latestPrometheus = TelemetryRenderer.prometheus(snap, extras: extras)
+        latestSample = (snap, extras)
         appendNDJSON(TelemetryRenderer.ndjson(snap, extras: extras))
     }
 
@@ -277,8 +275,7 @@ extension TelemetryExporter {
         // correlation labels for governor tick-throttle (the ~106-ticks-on-
         // 120fps chug): if on_battery predicts it reliably, padding can be
         // pre-armed at session start instead of waiting for the measured sag.
-        let powerSource = IOPSGetProvidingPowerSourceType(nil)?.takeRetainedValue() as String?
-        snap.onBattery = powerSource == kIOPMBatteryPowerKey
+        snap.onBattery = snap.resource?.onBattery ?? false
         snap.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
         // Build attribution (signal 5a): the compile-time git SHA + build date.

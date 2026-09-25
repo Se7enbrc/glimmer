@@ -18,14 +18,29 @@ enum ControlTransport {
 
     final class RequestLifetime: Sendable {
         let deadline: Date
-        private let cancelled = OSAllocatedUnfairLock(initialState: false)
+        private struct State {
+            var cancelled = false
+            var fd: Int32?
+        }
+        private let state = OSAllocatedUnfairLock(initialState: State())
 
         init(timeout: TimeInterval) { deadline = Date().addingTimeInterval(timeout) }
 
-        func cancel() { cancelled.withLock { $0 = true } }
+        /// Shut down the attached socket so blocked SSL_connect or read wakes now, not at SO_RCVTIMEO.
+        /// detach() runs before close so cancellation never shuts down a reused fd number.
+        func cancel() {
+            state.withLock {
+                $0.cancelled = true
+                if let fd = $0.fd { shutdown(fd, SHUT_RDWR) }
+            }
+        }
+
+        func attach(_ fd: Int32) { state.withLock { $0.fd = fd } }
+        func detach() { state.withLock { $0.fd = nil } }
+        var isCancelled: Bool { state.withLock { $0.cancelled } }
 
         func check() throws {
-            if cancelled.withLock({ $0 }) { throw CancellationError() }
+            if isCancelled { throw CancellationError() }
             if Date() >= deadline { throw StreamError.hostUnreachable("Control request timed out.") }
         }
     }
@@ -77,7 +92,8 @@ enum ControlTransport {
                             host: host, port: port, target: target, userAgent: userAgent,
                             tls: tls, credential: credential, lifetime: lifetime))
                     } catch {
-                        cont.resume(throwing: error)
+                        // Cancellation's shutdown surfaces as EOF; report cancellation, not a failed handshake or malformed reply.
+                        cont.resume(throwing: lifetime.isCancelled ? CancellationError() : error)
                     }
                 }
             }
@@ -94,12 +110,14 @@ enum ControlTransport {
                                         credential: TLSCredential,
                                         lifetime: RequestLifetime) throws -> Response {
         try lifetime.check()
-        let timeoutMs = Int32(max(0.001, lifetime.deadline.timeIntervalSinceNow) * 1000)
+        // Round up so the socket backstop cannot expire before the request deadline.
+        let timeoutMs = Int32((max(0.001, lifetime.deadline.timeIntervalSinceNow) * 1000).rounded(.up))
         let fd = gl_tcp_connect(host, String(port), timeoutMs)
         guard fd >= 0 else {
             throw StreamError.hostUnreachable("connect to \(host):\(port) failed or timed out")
         }
-        defer { close(fd) }
+        lifetime.attach(fd)
+        defer { lifetime.detach(); close(fd) }
         try lifetime.check()
 
         // Build the request bytes once - same for the TLS and plaintext paths.

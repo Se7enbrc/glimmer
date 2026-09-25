@@ -19,6 +19,29 @@ import GameController
 /// serial queue. `@unchecked Sendable`: the pending map is NSLock-guarded and
 /// all other mutable state is confined to `queue`.
 final class ControllerHaptics: @unchecked Sendable {
+    typealias Rumble = (low: UInt16, high: UInt16)
+    typealias TriggerRumble = (left: UInt16, right: UInt16)
+    typealias LightColor = (red: UInt8, green: UInt8, blue: UInt8)
+
+    struct PendingDrain {
+        var rumble: [UInt8: Rumble]
+        var submittedAt: [UInt8: UInt64]
+        var triggers: [UInt8: TriggerRumble]
+        var lights: [UInt8: LightColor]
+        var playerLEDs: [UInt8: UInt8]
+        var gameControllerSlots: Set<UInt8>
+        var suspended: Bool
+        var quiesced: Bool
+    }
+
+    struct DrainActions {
+        var light: (UInt8, LightColor) -> Void
+        var playerLEDs: (UInt8, UInt8) -> Void
+        var hidRumble: ([UInt8: Rumble], [UInt8: UInt64]) -> Void
+        var rumble: (UInt8, Rumble) -> Void
+        var triggers: (UInt8, TriggerRumble) -> Void
+    }
+
     static let shared = ControllerHaptics()
     static let logCategory = "Controller"
 
@@ -274,6 +297,8 @@ final class ControllerHaptics: @unchecked Sendable {
     // MARK: - Actuation (haptics queue)
 
     private func drainPending() {
+        // Empty every inbox before either gate so stale updates cannot replay
+        // after resume or teardown.
         lock.lock()
         let pending = pendingBySlot
         let submittedAt = pendingHIDRumbleTimes
@@ -287,25 +312,34 @@ final class ControllerHaptics: @unchecked Sendable {
         pendingPlayerLedsBySlot.removeAll(keepingCapacity: true)
         drainScheduled = false
         lock.unlock()
-        // Gates AFTER the take: the inboxes must always drain to empty so a
-        // stale nonzero pair (or color) can never sit waiting for a gate to
-        // lift and then fire into a session that no longer wants it.
-        guard !suspended, !quiesced else { return }
-        DispatchQueue.main.async {
-            HIDGamepadManager.shared.enqueueRumble(pending, submittedAt: submittedAt)
+        let drain = PendingDrain(rumble: pending, submittedAt: submittedAt, triggers: pendingTriggers,
+                                 lights: pendingLight, playerLEDs: pendingPlayerLeds,
+                                 gameControllerSlots: Set(pads.keys), suspended: suspended, quiesced: quiesced)
+        let actions = DrainActions(
+            light: { self.applyLight(slot: $0, red: $1.red, green: $1.green, blue: $1.blue) },
+            playerLEDs: { self.applyPlayerLEDs(slot: $0, solidMask: $1) },
+            hidRumble: { rumble, times in
+                DispatchQueue.main.async {
+                    HIDGamepadManager.shared.enqueueRumble(rumble, submittedAt: times)
+                }
+            },
+            rumble: { self.apply(slot: $0, lowFreq: $1.low, highFreq: $1.high) },
+            triggers: { self.applyTriggers(slot: $0, left: $1.left, right: $1.right) })
+        Self.processDrain(drain, actions: actions)
+    }
+
+    static func processDrain(_ drain: PendingDrain, actions: DrainActions) {
+        guard !drain.quiesced else { return }
+        for (slot, color) in drain.lights { actions.light(slot, color) }
+        for (slot, mask) in drain.playerLEDs { actions.playerLEDs(slot, mask) }
+        guard !drain.suspended else { return }
+        let hidRumble = drain.rumble.filter { !drain.gameControllerSlots.contains($0.key) }
+        if !hidRumble.isEmpty {
+            let hidTimes = drain.submittedAt.filter { hidRumble[$0.key] != nil }
+            actions.hidRumble(hidRumble, hidTimes)
         }
-        for (slot, motors) in pending {
-            apply(slot: slot, lowFreq: motors.low, highFreq: motors.high)
-        }
-        for (slot, motors) in pendingTriggers {
-            applyTriggers(slot: slot, left: motors.left, right: motors.right)
-        }
-        for (slot, color) in pendingLight {
-            applyLight(slot: slot, red: color.red, green: color.green, blue: color.blue)
-        }
-        for (slot, mask) in pendingPlayerLeds {
-            applyPlayerLEDs(slot: slot, solidMask: mask)
-        }
+        for (slot, motors) in drain.rumble { actions.rumble(slot, motors) }
+        for (slot, motors) in drain.triggers { actions.triggers(slot, motors) }
     }
 
     // (apply / applyTriggers / applyLight, the locality plans, the engine

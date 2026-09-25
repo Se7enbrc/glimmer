@@ -7,6 +7,7 @@ final class HIDGamepadManager {
     static let shared = HIDGamepadManager()
     private let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
     private var clients = 0
+    private var readers = 0
     private(set) var devices: [UInt64: HIDGamepadDevice] = [:]
     private var ownershipObserver: NSObjectProtocol?
     var onAttach: ((HIDGamepadDevice) -> Void)?
@@ -25,8 +26,12 @@ final class HIDGamepadManager {
     /// GameController does not own is actually present, never at stream start.
     static var accessGranted: Bool { IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted }
 
-    func retain() {
+    func retain(reading: Bool = true) {
         clients += 1
+        if reading {
+            readers += 1
+            if readers == 1 { for pad in devices.values { pad.startReading() } }
+        }
         guard clients == 1 else { return }
         let matches = [4, 5, 8].map { [kIOHIDDeviceUsagePageKey: 1, kIOHIDDeviceUsageKey: $0] }
         IOHIDManagerSetDeviceMatchingMultiple(manager, matches as CFArray)
@@ -41,8 +46,12 @@ final class HIDGamepadManager {
         ) { [weak self] _ in MainActor.assumeIsolated { self?.recheckOwnership() } }
     }
 
-    func release() {
+    func release(reading: Bool = true) {
         guard clients > 0 else { return }
+        if reading {
+            readers -= 1
+            if readers == 0 { for pad in devices.values { pad.stopReading() } }
+        }
         clients -= 1
         guard clients == 0 else { return }
         if let ownershipObserver { NotificationCenter.default.removeObserver(ownershipObserver) }
@@ -137,6 +146,7 @@ final class HIDGamepadManager {
         guard pad.open() else { return }
         devices[id] = pad
         pad.onReport = { [weak self] pad in self?.onReport?(pad) }
+        if readers > 0 { pad.startReading() }
         Diag.notice("HID attached: \(pad.name) \(pad.hardwareID) \(pad.transport) registry=\(id) "
             + "mapping=\(pad.mappingSource)", "Controller")
         onAttach?(pad)
@@ -163,7 +173,7 @@ final class HIDGamepadManager {
         return ((IOHIDManagerCopyDevices(probe) as NSSet?)?.count ?? 0) > 0
     }
 
-    /// After a grant: re-open every pad so reports flow without a relaunch.
+    /// After a grant, reopen pads so active readers resume without a relaunch.
     func reopenAll() {
         for pad in devices.values where !pad.reopen() {
             Diag.notice("HID reopen failed: \(pad.name) \(pad.hardwareID)", "Controller")

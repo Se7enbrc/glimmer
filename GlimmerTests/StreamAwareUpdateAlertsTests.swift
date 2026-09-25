@@ -28,6 +28,67 @@ struct StreamAwareUpdateAlertsTests {
         #expect(!alerts.standardUserDriverShouldHandleShowingScheduledUpdate(.empty(), andInImmediateFocus: true))
     }
 
+    @Test func backgroundChecksWaitForTheStreamToEnd() async {
+        let app = FakeApp(isStreaming: true)
+        let alerts = app.makeAlerts()
+        #expect(throws: NSError.self) { try alerts.mayPerform(.updatesInBackground) }
+        #expect(app.backgroundChecks == 0)
+
+        app.isStreaming = false
+        await waitUntil { app.backgroundChecks > 0 }
+        #expect(app.backgroundChecks == 1)
+
+        app.isStreaming = true
+        app.isStreaming = false
+        await settle()
+        #expect(app.backgroundChecks == 1)
+    }
+
+    @Test func backgroundCheckRetriesWhenSparkleBecomesIdle() async {
+        let app = FakeApp(isStreaming: true)
+        let alerts = app.makeAlerts()
+        alerts.availabilityDidChange(false)
+        #expect(throws: NSError.self) { try alerts.mayPerform(.updatesInBackground) }
+
+        app.isStreaming = false
+        await settle()
+        #expect(app.backgroundChecks == 0)
+
+        alerts.availabilityDidChange(true)
+        await waitUntil { app.backgroundChecks > 0 }
+        #expect(app.backgroundChecks == 1)
+        app.isStreaming = true
+        app.isStreaming = false
+        await settle()
+        #expect(app.backgroundChecks == 1)
+    }
+
+    @Test func availabilityRetryWaitsForSparkleSchedulingToFinish() async {
+        let app = FakeApp(isStreaming: true)
+        let alerts = app.makeAlerts()
+        alerts.availabilityDidChange(false)
+        #expect(throws: NSError.self) { try alerts.mayPerform(.updatesInBackground) }
+
+        app.isStreaming = false
+        alerts.availabilityDidChange(true)
+        #expect(app.backgroundChecks == 0)
+
+        await waitUntil { app.backgroundChecks > 0 }
+        #expect(app.backgroundChecks == 1)
+    }
+
+    @Test func manualCheckDuringStreamCancelsPendingBackgroundCheck() async {
+        let app = FakeApp(isStreaming: true)
+        let alerts = app.makeAlerts()
+        #expect(throws: NSError.self) { try alerts.mayPerform(.updatesInBackground) }
+
+        #expect(throws: Never.self) { try alerts.mayPerform(.updates) }
+        app.isStreaming = false
+        await settle()
+
+        #expect(app.backgroundChecks == 0)
+    }
+
     @Test func heldAlertComesForwardOnceWhenTheStreamEnds() async {
         let app = FakeApp(isStreaming: true)
         let alerts = app.makeAlerts()
@@ -81,13 +142,15 @@ struct StreamAwareUpdateAlertsTests {
 private final class FakeApp {
     var isStreaming: Bool
     var updatesShown = 0
+    var backgroundChecks = 0
 
     init(isStreaming: Bool) { self.isStreaming = isStreaming }
 
     func makeAlerts() -> StreamAwareUpdateAlerts {
         StreamAwareUpdateAlerts(
             isStreaming: { self.isStreaming },
-            showUpdate: { self.updatesShown += 1 })
+            showUpdate: { self.updatesShown += 1 },
+            checkInBackground: { self.backgroundChecks += 1 })
     }
 }
 

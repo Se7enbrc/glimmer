@@ -21,14 +21,18 @@
 //  it) with VideoDecryptor, and hand the rest to RtpVideoQueue, which host-byteswaps the RTP header,
 //  runs FEC and feeds the depacketizer → VideoSink.
 //
-//  Teardown is bounded: the recv loop blocks in recvfrom with a 100ms SO_RCVTIMEO
-//  so it polls `interrupted` and exits within 100ms; stop() also close()s the fd,
-//  which unblocks any in-flight recvfrom immediately. The ping Task is cancellable.
+//  Teardown is bounded: stop() only raises the stop flag. The receive loop polls it every 100ms
+//  (SO_RCVTIMEO) and the ping thread every 75ms; each holds the receiver while it uses the fd,
+//  so deinit closes it once, after both have exited.
 
 import Foundation
 import Network
 import Darwin
+import Synchronization
 
+// fd and destination are written once before threads start; RTP queue, depacketizer and receive
+// latches belong to the receive thread, ping counters to the ping thread, and the stop flag is atomic.
+// The failure callback is configured before start and captured before dispatch.
 final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     static let cat = "NativeVideo"
 
@@ -49,11 +53,6 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// Called when the depacketizer detects frame loss (RFI window). Wired to
     /// the ENet control loop by NativeBackend.
     let invalidateReferenceFrames: (_ from: Int, _ to: Int) -> Void
-    /// Called per-frame as FEC blocks complete-with-recovery or are abandoned
-    /// (= moonlight's connectionSendFrameFecStatus). Wired to the ENet control
-    /// loop's bounded FEC-status queue by NativeBackend. Best-effort.
-    private let sendFrameFecStatus: (FrameFecStatus) -> Void
-
     /// Dedicated high-priority queue for the RTP receive loop. `.userInteractive`
     /// so recvfrom is never starved behind default-QoS work while the host fires
     /// ~14k pkts/s at 4K240 - matching moonlight-common-c's dedicated
@@ -70,15 +69,18 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     /// Precomputed destination (host:videoPort) for the ping sendto.
     private var destAddr = sockaddr_storage()
     private var destAddrLen: socklen_t = 0
-    private var pingThread: Thread?
-    private let interrupted = ManagedAtomicFlag()
+    private let interrupted = Atomic<Bool>(false)
+    /// Set before start so a fatal receive error can end the connection instead of leaving frozen video.
+    var onReceiveFailed: (@Sendable () -> Void)?
 
     private var rtpQueue: RtpVideoQueue!
     private var depacketizer: VideoDepacketizer!
 
     // Diagnostics latches.
     private var loggedFirstPacket = false
+    private var loggedReceivePressure = false
     private var pingCount: UInt32 = 0
+    private var pingSendFailureStreak = UdpPinger.SendFailureStreak()
     /// The open RFI loss episode, if any (receive thread only; +Recovery).
     var lossEpisode = VideoLossEpisode()
 
@@ -103,8 +105,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
          colorSpace: Int32,
          sink: VideoSink,
          requestIdr: @escaping () -> Void,
-         invalidateReferenceFrames: @escaping (_ from: Int, _ to: Int) -> Void,
-         sendFrameFecStatus: @escaping (FrameFecStatus) -> Void) {
+         invalidateReferenceFrames: @escaping (_ from: Int, _ to: Int) -> Void) {
         self.host = host
         self.videoPort = videoPort
         self.pingPayload = pingPayload
@@ -115,16 +116,12 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         self.sink = sink
         self.requestIdr = requestIdr
         self.invalidateReferenceFrames = invalidateReferenceFrames
-        self.sendFrameFecStatus = sendFrameFecStatus
 
         self.depacketizer = VideoDepacketizer(
             delegate: self,
             negotiatedVideoFormat: negotiatedVideoFormat,
             colorSpace: colorSpace)
         self.rtpQueue = RtpVideoQueue(depacketizer: depacketizer, packetSize: packetSize)
-        // Route per-frame FEC status from the queue's reportFinalFrameFecStatus()
-        // call sites out to the ENet control loop (Sunshine SS_FRAME_FEC_PTYPE).
-        self.rtpQueue.frameFecStatusSink = sendFrameFecStatus
     }
 
     private var encrypted: Bool {
@@ -146,9 +143,13 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     }
 
     func stop() {
-        interrupted.set()
-        pingThread = nil // the dedicated ping thread exits on the interrupted flag
-        if fd >= 0 { close(fd); fd = -1 } // unblocks the in-flight recvfrom
+        interrupted.store(true, ordering: .relaxed)
+    }
+
+    /// The only close: both loops hold `self` while they use the fd and exit within 100ms of stop(),
+    /// so the last release comes after both and never touches a reused descriptor number.
+    deinit {
+        if fd >= 0 { close(fd) }
     }
 
     // MARK: - Socket
@@ -263,6 +264,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         let sock = fd
         let bufSize = packetSize + 64
         let videoKey = encrypted ? aesKey : nil
+        let onReceiveFailed = onReceiveFailed
         recvQueue.async { [weak self] in
             // Name the thread this loop OWNS for the session: the blocking
             // recv loop occupies one worker until teardown, so this is an
@@ -291,43 +293,61 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             let lengths = UnsafeMutablePointer<Int32>.allocate(capacity: cap)
             defer { storage.deallocate(); lengths.deallocate() }
             var batched = true
-            while let self, !self.interrupted.isSet {
+            var receiveFailed = false
+            while let self, !self.interrupted.load(ordering: .relaxed) {
+                let count: Int
                 if batched {
-                    let n = gl_recvmsg_x_batch(sock, storage, Int32(stride), Int32(cap), lengths)
-                    if n > 0 {
-                        for i in 0..<Int(n) {
+                    count = Int(gl_recvmsg_x_batch(sock, storage, Int32(stride), Int32(cap), lengths))
+                    if count > 0 {
+                        for i in 0..<count {
+                            guard !self.interrupted.load(ordering: .relaxed) else { break }
                             // Clamp to stride: a bad length (never observed, but a
                             // private-API misread would be) must not read OOB.
                             let len = min(Int(lengths[i]), stride)
                             guard len > 0 else { continue }
                             self.receive(storage + i * stride, count: len, decryptor: decryptor)
                         }
-                    } else if n < 0 {
-                        let err = errno
-                        if err == EAGAIN || err == EWOULDBLOCK || err == EINTR { continue } // poll timeout
-                        if err == ENOSYS {
-                            // Batched receive not implemented on this kernel - drop
-                            // to the per-datagram path for the rest of the session.
-                            Diag.notice("recvmsg_x unavailable (ENOSYS) - falling back to recvfrom", Self.cat)
-                            batched = false
-                            continue
-                        }
-                        break // socket closed (stop) or fatal
                     }
                 } else {
-                    // Fallback: one recvfrom per datagram. Same SO_RCVTIMEO-driven
-                    // EAGAIN cancellation as the batched path; close(fd) unblocks it.
-                    let len = recvfrom(sock, storage, stride, 0, nil, nil)
-                    if len > 0 {
-                        self.receive(storage, count: min(len, stride), decryptor: decryptor)
-                    } else if len < 0 {
-                        let err = errno
-                        if err == EAGAIN || err == EWOULDBLOCK || err == EINTR { continue }
-                        break
+                    // Fallback: one recvfrom per datagram, polling the stop flag on the same 100ms timeout.
+                    count = recvfrom(sock, storage, stride, 0, nil, nil)
+                    if count > 0, !self.interrupted.load(ordering: .relaxed) {
+                        self.receive(storage, count: min(count, stride), decryptor: decryptor)
                     }
                 }
+                if count < 0 {
+                    let err = errno
+                    guard !self.interrupted.load(ordering: .relaxed) else { break }
+                    if self.shouldContinueReceiving(after: err, batched: &batched) { continue }
+                    receiveFailed = true
+                    break
+                }
             }
+            if receiveFailed { onReceiveFailed?() }
         }
+    }
+
+    /// Returning false ends the receive loop. A poll timeout also serves as the idle tick that expires
+    /// the reorder hold, so deferred packets are flushed here.
+    private func shouldContinueReceiving(after err: Int32, batched: inout Bool) -> Bool {
+        switch err {
+        case EAGAIN, EWOULDBLOCK, EINTR:
+            rtpQueue.flushDeferredIfWindowElapsed(nowUs: DispatchTime.now().uptimeNanoseconds / 1000)
+        case ENOSYS where batched:
+            Diag.notice("recvmsg_x unavailable (ENOSYS) - falling back to recvfrom", Self.cat)
+            batched = false
+        case ENOBUFS, ENOMEM:
+            if !loggedReceivePressure {
+                loggedReceivePressure = true
+                Diag.warn("NativeVideo receive buffer pressure errno \(err) (will keep trying)", Self.cat)
+            }
+            // These fail at once instead of waiting out SO_RCVTIMEO, so pause before retrying.
+            usleep(1_000)
+        default:
+            Diag.error("NativeVideo receive failed errno \(err) - ending the connection", Self.cat)
+            return false
+        }
+        return true
     }
 
     /// Copies one datagram out of the socket buffer, opening it on the way when video is encrypted.
@@ -337,7 +357,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             return
         }
         let datagram = UnsafeRawBufferPointer(start: bytes, count: count)
-        guard let packet = decryptor.open(datagram, currentFrame: rtpQueue.currentFrameNumber) else { return }
+        guard let packet = decryptor.open(datagram) else { return }
         handleDatagram(packet)
     }
 
@@ -369,26 +389,16 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     // MARK: - Ping loop (steady keepalive, dedicated thread)
 
-    /// Dedicated OS thread - NOT the Swift cooperative pool - so the keepalive
-    /// can never be starved. Sunshine times out the whole session (~5s) if these
-    /// pings stop, so this MUST keep firing under any load. Mirrors moonlight's
-    /// VideoPingThreadProc dedicated pthread (VideoStream.c:55-81). The cadence
-    /// is CONDITIONAL (EnvSignalController.steadyPingInterval): 75ms - the
-    /// Wi-Fi-doze keepalive, WHY/VERDICT/COST on UdpPinger's dial - on a
-    /// wifi/unknown stream route while input-idle or under link caution; 500ms
-    /// (upstream's rate) on a confirmed-wired route or active-input clear wifi
-    /// play. The thread always WAKES at the fast quantum (exactly the
-    /// pre-conditional wake rate, so the thread cost is unchanged) and gates
-    /// the SEND on the live interval: a cadence flip (idle onset, route
-    /// change) takes effect within one quantum, and protocol safety never
-    /// rides the slow path - even relaxed is 20x inside the 10s ping timeout.
+    /// Own thread, so pool starvation can't stop pings and trip Sunshine's session timeout (10s by default).
+    /// 75ms keeps Wi-Fi awake; 500ms (upstream's) needs a fresh route: wired, or active Wi-Fi play on a clear link past warm-up.
+    /// Wakes at the fast quantum and gates sends on the live interval, so a cadence change applies within one wake.
     private func startPingLoop() {
         EnvSignalController.shared.noteVideoPingLoopStart()
         let thread = Thread { [weak self] in
             // 0 = "never pinged", so the first wake always sends (the
             // pre-conditional first-iteration behavior).
             var lastPingNanos: UInt64 = 0
-            while let self, !self.interrupted.isSet {
+            while let self, !self.interrupted.load(ordering: .relaxed) {
                 let interval = EnvSignalController.shared.steadyPingInterval()
                 let now = DispatchTime.now().uptimeNanoseconds
                 if now &- lastPingNanos >= EnvSignalController.dueNanos(for: interval) {
@@ -400,24 +410,34 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         }
         thread.name = "Glimmer.videoPing"
         thread.qualityOfService = .userInitiated
-        pingThread = thread
         thread.start()
     }
 
     private func sendPing() {
-        guard fd >= 0 else { return }
         pingCount &+= 1
         let datagram = UdpPinger.datagram(payload: pingPayload, sequence: pingCount)
-        _ = datagram.withUnsafeBytes { raw in
+        let sent = datagram.withUnsafeBytes { raw in
             withUnsafePointer(to: &destAddr) { sp in
                 sp.withMemoryRebound(to: sockaddr.self, capacity: 1) { sap in
                     sendto(fd, raw.baseAddress, raw.count, 0, sap, destAddrLen)
                 }
             }
         }
-        // pings_sent (the keepalive cadence judge): counts datagrams handed
-        // to sendto - the counter whose absence made the 75ms experiment
-        // unjudgeable from data. Always-live integer add at ≤13.3Hz.
+        let err = errno
+        switch pingSendFailureStreak.note(sent: sent) {
+        case .failed:
+            Diag.warn("NativeVideo ping sendto failed errno \(err) - the PC may not be "
+                + "receiving our video keepalive (will keep trying)", Self.cat)
+        case .recovered(let failures):
+            Diag.notice("NativeVideo ping sendto recovered after \(failures) "
+                + "failed send\(failures == 1 ? "" : "s")", Self.cat)
+        case nil:
+            break
+        }
+        if sent < 0 {
+            return
+        }
+        // pings_sent counts datagrams the kernel accepted, so local send failures cannot inflate it.
         EnvSignalController.shared.videoPingsSentTotal.increment()
         if pingCount == 1 {
             Diag.notice("NativeVideo first video ping sent → \(host, privacy: .private):\(videoPort) (seq=\(pingCount))", Self.cat)

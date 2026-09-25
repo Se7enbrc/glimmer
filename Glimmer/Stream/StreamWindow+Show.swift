@@ -374,13 +374,9 @@ extension StreamWindow {
                 self.reassertCursorHiddenIfNeeded()
             }
         })
-        // Display wake. The link can silently stop across a display sleep on
-        // the external panel and is never rebuilt by either notification above
-        // (no screen swap, no parameter change on wake in some configs). The
-        // workspace screens-did-wake notification is the reliable signal.
-        // Lives on NSWorkspace.shared.notificationCenter, NOT the default
-        // center - a common gotcha. Tracked in `workspaceObservers` so close()
-        // removes it from the right center.
+        // Wake can stop the link without changing the screen signature.
+        // The workspace center carries the reliable wake signal, and close()
+        // removes this observer from that same center.
         let wsnc = NSWorkspace.shared.notificationCenter
         workspaceObservers.append(wsnc.addObserver(
             forName: NSWorkspace.screensDidWakeNotification,
@@ -390,7 +386,7 @@ extension StreamWindow {
             MainActor.assumeIsolated {
                 guard let self, !self.didClose else { return }
                 self.log.info("Displays woke - rebinding pacer link")
-                self.onScreenChanged?()
+                self.onDisplaysWoke?()
                 // Display sleep-wake re-shows the cursor behind the latch too;
                 // re-assert the hide (no-op unless we're the desired-hidden owner
                 // and the OS re-showed it).

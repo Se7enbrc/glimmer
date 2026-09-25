@@ -15,18 +15,12 @@ import GameController
 
 extension InputForwarder {
 
-    /// Returns true when the configured `ControllerQuitChord` is fully held on
-    /// this gamepad. ONE definition of "held" for every chord and every button:
-    /// `heldControllerButtons`, which ORs GameController with the DualSense
-    /// raw-HID bits for each button the raw report carries - the centre buttons
-    /// AND both shoulders. The previous predicate spliced raw-HID Options/Create
-    /// onto GameController's L1/R1, two sources that disagree in time and that
-    /// GameController can withhold around a bound system gesture, so a chord the
-    /// user was physically holding could read as not-held. Triggers are digital
-    /// here (any pull ≥ 50% counts) so the user doesn't have to slam them.
-    func matchesControllerQuitChord(pad: GCExtendedGamepad) -> Bool {
+    /// True when the configured chord is fully held. One definition of "held" for every chord and
+    /// button: GameController ORed with the DualSense raw-HID bits (centre buttons and both
+    /// shoulders), since the two disagree in time. Triggers count at a 50% pull.
+    func matchesControllerQuitChord(pad: GCExtendedGamepad, buttons: Int32) -> Bool {
         guard controllerQuitChordProvider() != .none else { return false }
-        let state = quitChordState(pad: pad)
+        let state = quitChordState(buttons: buttons, pad: pad)
         return matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
                                           rightTrigger: state.analog.rightTrigger)
     }
@@ -40,8 +34,12 @@ extension InputForwarder {
     }
 
     func quitChordState(pad: GCExtendedGamepad) -> (buttons: Int32, analog: GamepadAnalog) {
+        quitChordState(buttons: pressedButtonFlags(pad: pad), pad: pad)
+    }
+
+    func quitChordState(buttons: Int32, pad: GCExtendedGamepad) -> (buttons: Int32, analog: GamepadAnalog) {
         // Xbox Share was never a GC quit-chord Mute button; preserve that distinction.
-        var buttons = pressedButtonFlags(pad: pad) & ~StreamProtocol.MISC_FLAG
+        var buttons = buttons & ~StreamProtocol.MISC_FLAG
         let hid = dualSenseButtons(pad: pad)
         // Preserve the raw shoulder/centre fallbacks used by the existing GC chord recorder.
         let extras: [(Bool, Int32)] = [(hid.l1, StreamProtocol.LB_FLAG), (hid.r1, StreamProtocol.RB_FLAG),

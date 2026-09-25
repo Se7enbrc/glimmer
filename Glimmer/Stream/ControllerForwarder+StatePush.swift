@@ -63,19 +63,15 @@ extension InputForwarder {
     @discardableResult
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
         guard isReady else { return false }
+        let buttons = pressedButtonFlags(pad: pad)
 
-        // Controller-side quit chord - fires the same `onQuitHotkey` the
-        // keyboard chord uses, but only after the chord stays held through
-        // the dwell window (the Settings label promises "HOLD to leave the
-        // stream"; firing on the first coincident frame meant any in-game
-        // moment where the chord buttons momentarily overlapped - e.g. both
-        // shoulders with the .l1r1 option - killed the session instantly).
-        // Checked BEFORE building the bitmask we forward to the host so the
-        // chord-holding frames don't get sent through (the host would
-        // otherwise see L1+R1+L2+R2 in a game and act on it for the whole
-        // hold). Dwell machinery: ControllerForwarder+QuitChord.swift.
-        if matchesControllerQuitChord(pad: pad) {
+        // The chord ends the stream only after the hold dwell (ControllerForwarder+QuitChord.swift),
+        // so an in-game overlap can't. Frames holding it stay off the PC, or the game would act on
+        // those buttons for the whole hold.
+        if matchesControllerQuitChord(pad: pad, buttons: buttons) {
             armQuitChordDwell(pad: pad, slot: slot)
+            // No frame is enqueued, so its stamp must not age into the next push.
+            _ = InputDeliverStamp.shared.take(slot: Int(slot))
             return false
         }
         // Released before the dwell elapsed (or never held): an in-game
@@ -84,8 +80,6 @@ extension InputForwarder {
         if quitChordDwellSlot == slot {
             cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad)
         }
-
-        let buttons = pressedButtonFlags(pad: pad)
 
         let lt = UInt8((pad.leftTrigger.value  * 255).rounded().clamped(to: 0...255))
         let rt = UInt8((pad.rightTrigger.value * 255).rounded().clamped(to: 0...255))
@@ -152,6 +146,30 @@ extension InputForwarder {
             if hid.mute { buttons |= StreamProtocol.MISC_FLAG }
         }
         return buttons
+    }
+
+    // MARK: - Focus loss
+
+    /// The all-zero analog state a removal and a focus-loss release both send.
+    static let neutralControllerAnalog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
+                                                       leftStickX: 0, leftStickY: 0,
+                                                       rightStickX: 0, rightStickY: 0)
+
+    /// GameController stops delivering once the app is in the background, so a held stick or
+    /// trigger would stay held on the PC. resyncControllers restores live state on refocus;
+    /// generic HID pads keep delivering, so they are left alone.
+    func neutralizeControllers() {
+        guard isReady else { return }
+        for state in attachedControllers.values {
+            let rc = backend?.sendMultiController(
+                num: Int16(state.slot), mask: Int16(bitPattern: gamepadMask),
+                buttons: 0, analog: Self.neutralControllerAnalog
+            ) ?? -2
+            record("LiSendMultiControllerEvent(focus loss)", rc)
+        }
+        if !attachedControllers.isEmpty {
+            Diag.info("input: released \(attachedControllers.count) controller(s) on focus loss", "Stream")
+        }
     }
 }
 

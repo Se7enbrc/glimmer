@@ -1,42 +1,6 @@
-//
-//  StatsCollector.swift
-//
-//  Thread-safe counters for the in-stream stats overlay. Owned by
-//  `VideoDecoder` for the lifetime of one streaming session.
-//
-//  Touched from three thread contexts during normal operation:
-//    * The native backend's receive thread, via `recordReceivedFrame` - once
-//      per submitDecodeUnit, before VT touches anything.
-//    * VT decode dispatch queue, via `recordDecodeSubmit` /
-//      `recordDecodeComplete` / `recordDecodeAbandoned` /
-//      `recordRendererEnqueue`. Submit and complete fire in lock-step on the
-//      same queue (we serialize decode on a single queue with ThreadCount=1),
-//      so the submit-time FIFO doesn't need an external lock for ordering -
-//      just for the cross-thread snapshot read.
-//    * The FramePacer's dedicated serial queue, via `recordPacingDepth` (once
-//      per display vsync, 60-240 Hz) / `recordPresent` (once per released
-//      frame) / `recordPresentationLateDrop` (on overflow + trim). The same
-//      lock serializes these against the snapshot read.
-//    * Main actor, via `snapshot(minWindowSeconds:)` / `reset()` - at 4 Hz
-//      from the overlay timer. The FPS averaging window is DECOUPLED from that
-//      tick: `snapshot(minWindowSeconds:)` only slides + recomputes the
-//      window-relative fields once `minWindowSeconds` (~1s) of data has
-//      accumulated, serving the cached last-good average on the in-between
-//      ticks (see the cache block + the window-complete gate in snapshot()).
-//      A literal 500ms window was too tight at 60Hz - single-frame boundary
-//      effects pushed the displayed FPS by ±2fps; the ~1s window smooths to
-//      ±1fps on a steady stream while the live latency gauges still refresh
-//      every 4 Hz tick. The telemetry exporter calls it with the default
-//      `minWindowSeconds == 0`, preserving the original reset-every-read
-//      window on its own cadence.
-//
-//  All shared mutable state is protected by a single os_unfair_lock. The hot
-//  paths only hold it for a handful of integer/double updates per frame -
-//  well under a microsecond - which at 240 FPS is nowhere near a contention
-//  risk and orders of magnitude under any frame-pacing budget. Using a lock
-//  rather than atomics here is the right tradeoff: the decode-time EMA and
-//  submit FIFO need consistent multi-field updates, and a single lock is
-//  simpler than juggling several `OSAtomic*` calls.
+// One session's overlay counters across connections: receive, decode and pacing write under one
+// short lock, and the overlay (cached ~1s FPS windows, so 60Hz doesn't swing) and exporter read.
+// Exporter reads use fresh windows; live latency gauges refresh on every read.
 
 import Foundation
 import QuartzCore
@@ -142,19 +106,23 @@ final class StatsCollector: @unchecked Sendable {
     /// Host-cadence window state, under `lock`: last received PTS and delta, the
     /// window's deltas (capped) and uneven pairs, last presented PTS, host-late count.
     var lastReceivedPtsUs: UInt64 = 0
+    var lastReceivedFrameNumber: Int32?
     var lastHostDeltaMs = 0.0
     var windowHostDeltasMs: [Double] = []
     static let hostDeltaWindowCap = 1_024
     var windowHostUnevenPairs: UInt64 = 0
     var lastPresentedPtsSeconds = Double.nan
     var hostTimedLatePresents: UInt64 = 0
-    /// A client-side drop (pacer, renderer, decoder) since the last present: that
-    /// present's PTS delta spans the skipped frame, so it is never charged to the host.
+    /// Client drops affect the next present; network gaps affect the present
+    /// that reaches each first surviving PTS, even when older frames are queued.
     var clientSkipSinceLastPresent = false
+    static let networkGapCapacity = 256
+    var pendingNetworkGapPtsSeconds: [Double] = []
+    var pendingNetworkGapHead = 0
+    var pendingNetworkGapCount = 0
 
-    // Total-frame counters since reset(), retained so the "frames dropped by
-    // decoder" percentage is over the whole stream, not just the current
-    // sampling window. Cheap and gives the user a more stable number.
+    // Session totals keep the decoder-drop percentage stable across windows
+    // and reconnects.
     var totalReceived: UInt64 = 0
     var totalDecoderDropped: UInt64 = 0
     /// Frames the renderer refused (isReadyForMoreMediaData=false) and we
@@ -225,10 +193,6 @@ final class StatsCollector: @unchecked Sendable {
     /// last-sample is representative. Live, surfaced every snapshot (NOT
     /// window-reset).
     var lastPacingDepth: Int = 0
-    /// Peak pacing depth this window - surfaces a transient build the
-    /// last-sample gauge would miss. Reset on each COMPLETED window (so it now
-    /// tracks the peak across the full ~1s slice, not a sub-window read).
-    var maxPacingDepth: Int = 0
 
     // Host-side capture + encode latency, as reported in each DECODE_UNIT's
     // `frameHostProcessingLatency` (1/10 ms units; 0 == no measurement).
@@ -256,34 +220,34 @@ final class StatsCollector: @unchecked Sendable {
 
     var lock = os_unfair_lock_s()
 
-    func reset() {
-        // Drain any open signpost intervals before clearing the FIFO; without
-        // this, a reset() between recordDecodeSubmit and recordDecodeComplete
-        // would leak every still-open DecodeFrame interval.
+    func dropPendingDecodeSubmits() {
+        // Close abandoned intervals so a session replacement or reset cannot
+        // leave DecodeFrame spans open indefinitely.
         var leftover: [OSSignpostIntervalState] = []
         os_unfair_lock_lock(&lock)
         leftover.reserveCapacity(submitFifo.count)
         for entry in submitFifo { leftover.append(entry.state) }
         submitFifo.removeAll(keepingCapacity: true)
+        os_unfair_lock_unlock(&lock)
+        for state in leftover {
+            OSSignposter.decode.endInterval(
+                "DecodeFrame", state, "outcome=dropped")
+        }
+    }
+
+    func resetForConnection() {
+        dropPendingDecodeSubmits()
+        os_unfair_lock_lock(&lock)
         decodeTimeEmaSeconds = nil
-        receivedFrames = 0
-        decodedFrames = 0
         decoderDroppedFrames = 0
-        renderedFrames = 0
-        receivedBytes = 0
         lastDecodedFrameTime = 0
         lastPresentTime = 0
         windowStart = CACurrentMediaTime()
-        windowStartReceivedFrames = 0
-        windowStartDecodedFrames = 0
-        windowStartRenderedFrames = 0
-        windowStartReceivedBytes = 0
+        windowStartReceivedFrames = receivedFrames
+        windowStartDecodedFrames = decodedFrames
+        windowStartRenderedFrames = renderedFrames
+        windowStartReceivedBytes = receivedBytes
         windowCache = nil
-        totalReceived = 0
-        totalDecoderDropped = 0
-        rendererBackpressureDrops = 0
-        presentationLateDrops = 0
-        presentationGaps = 0
         gapBaselineTime = 0
         gapBaselineReceived = 0
         gapJudgingExcluded = false
@@ -293,21 +257,18 @@ final class StatsCollector: @unchecked Sendable {
         presentCadenceSamples = 0
         presentCadenceErrorMsMax = 0
         lastPacingDepth = 0
-        maxPacingDepth = 0
         minHostProcessingLatency = 0
         maxHostProcessingLatency = 0
         totalHostProcessingLatency = 0
         framesWithHostProcessingLatency = 0
         windowFrameBytesSum = 0; windowFrameCount = 0
         windowMaxFrameBytes = 0; windowIdrFrameCount = 0
-        lastReceivedPtsUs = 0; lastHostDeltaMs = 0
+        lastReceivedPtsUs = 0; lastReceivedFrameNumber = nil; lastHostDeltaMs = 0
         windowHostDeltasMs.removeAll(keepingCapacity: true); windowHostUnevenPairs = 0
         lastPresentedPtsSeconds = .nan; hostTimedLatePresents = 0; clientSkipSinceLastPresent = false
+        pendingNetworkGapPtsSeconds.removeAll(keepingCapacity: true)
+        pendingNetworkGapHead = 0; pendingNetworkGapCount = 0
         os_unfair_lock_unlock(&lock)
-        for state in leftover {
-            OSSignposter.decode.endInterval(
-                "DecodeFrame", state, "outcome=reset")
-        }
     }
 
     /// Snapshot the collector for the overlay / telemetry.
@@ -372,7 +333,6 @@ final class StatsCollector: @unchecked Sendable {
         // Pacing depth is a live "how deep is the buffer right now" gauge,
         // sampled once per link tick (60-240 Hz, far above the overlay read).
         snap.pacingQueueDepth = lastPacingDepth
-        snap.pacingQueueDepthMax = maxPacingDepth
         snap.presentationLateDrops = presentationLateDrops
         snap.presentationGaps = presentationGaps
 
@@ -444,7 +404,6 @@ final class StatsCollector: @unchecked Sendable {
         presentCadenceErrorMsSum = 0
         presentCadenceSamples = 0
         presentCadenceErrorMsMax = 0
-        maxPacingDepth = 0
         windowHostDeltasMs.removeAll(keepingCapacity: true)
         windowHostUnevenPairs = 0
         hostTimedLatePresents = 0

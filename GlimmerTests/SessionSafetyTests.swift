@@ -1,8 +1,85 @@
 import Foundation
+import os
 import Testing
 @testable import Glimmer
 
 struct SessionSafetyTests {
+    @Test func stoppedBackendReleasesTheVideoSink() {
+        weak var releasedBackend: NativeBackend?
+        weak var released: StubVideoSink?
+        do {
+            let backend = NativeBackend()
+            releasedBackend = backend
+            do {
+                let sink = StubVideoSink(backend: backend)
+                released = sink
+                backend.attachVideoSink(sink)
+            }
+            #expect(released != nil)
+            backend.stopConnection()
+            #expect(released == nil)
+        }
+        #expect(releasedBackend == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func stoppedBackendRejectsLateSinks(interruptOnly: Bool) {
+        let backend = NativeBackend()
+        if interruptOnly { backend.interruptConnection() } else { backend.stopConnection() }
+        weak var video: StubVideoSink?
+        weak var audio: AudioDecoder?
+        do {
+            let videoSink = StubVideoSink()
+            let audioSink = AudioDecoder()
+            video = videoSink
+            audio = audioSink
+            backend.attachVideoSink(videoSink)
+            backend.attachAudioSink(audioSink)
+        }
+        #expect(video == nil)
+        #expect(audio == nil)
+    }
+
+    @Test func stoppingBackendInterruptsConnect() {
+        let backend = NativeBackend()
+        #expect(!backend.checkInterrupted())
+        backend.stopConnection()
+        #expect(backend.checkInterrupted())
+        #expect(!backend.adoptWhileConnecting { Issue.record("Stopped backend published startup state") })
+    }
+
+    @Test(arguments: [false, true])
+    func stopDuringVideoStartupCleansTheSink(duringSetup: Bool) async throws {
+        let backend = NativeBackend()
+        let sink = StubVideoSink(onSetup: { if duringSetup { backend.stopConnection() } },
+                                 onStart: { if !duringSetup { backend.stopConnection() } })
+        backend.attachVideoSink(sink)
+        let config = BackendStreamConfig(
+            width: 1920, height: 1080, fps: 60, bitrate: 20000, packetSize: 1392,
+            streamingRemotely: 0, audioConfiguration: 0, supportedVideoFormats: 1,
+            clientRefreshRateX100: 6000, colorSpace: 0, colorRange: 0, encryptionFlags: 0,
+            remoteInputAesKey: [UInt8](repeating: 0, count: 16), remoteInputAesIv: [])
+        let handshake = RtspHandshakeResult(
+            audioPort: 0, videoPort: 0, controlPort: 0, controlConnectData: 0,
+            sessionId: "", negotiatedVideoFormat: 1, encryptionFeaturesSupported: 0,
+            encryptionFeaturesEnabled: 0, referenceFrameInvalidationSupported: false)
+        let enet = EnetControlChannel(host: .ipv4(.loopback), port: 0,
+                                      controlConnectData: 0, crypto: try ControlCrypto(rikey: config.remoteInputAesKey))
+        backend.withState { backend.enetChannel = enet }
+        do {
+            try await backend.startVideoStage(handshake: handshake, config: config,
+                                              host: .ipv4(.loopback), events: NativeConnectionEvents())
+            Issue.record("Stopped video startup succeeded")
+        } catch {
+            guard case .interrupted = error as? EnetError else {
+                Issue.record("Expected interruption, got \(error)")
+                return
+            }
+        }
+        #expect(!sink.running.withLock { $0 })
+        #expect(backend.withState { backend.videoReceiver == nil && backend.videoSink == nil })
+    }
+
     @Test func hdrSnapshotsNeverMixBlobs() async {
         let store = HDRMetadataStore()
         await withTaskGroup(of: Void.self) { group in
@@ -77,6 +154,83 @@ struct SessionSafetyTests {
         #expect(throws: CancellationError.self) { try lifetime.check() }
     }
 
+    /// Cancellation must promptly wake a blocked control read and close the peer connection.
+    @Test func cancelClosesBlockedControlRequest() async throws {
+        try await Task(priority: .high) {
+            let port = try #require(LoopbackPort(listening: true))
+            let portNumber = Int(port.port)
+            let requestFinished = ManagedAtomicFlag()
+            let task = Task {
+                defer { requestFinished.set() }
+                do {
+                    _ = try await ControlTransport.get(
+                        host: "127.0.0.1", port: portNumber, target: "/serverinfo", userAgent: "GlimmerTests",
+                        tls: false, credential: .init(clientCertPEM: nil, clientKeyPEM: nil, pinnedCertPEM: nil),
+                        timeout: 10)
+                    Issue.record("Cancelled control request returned a response")
+                } catch {
+                    let finishedAt = ContinuousClock.now
+                    #expect(error is CancellationError)
+                    return finishedAt
+                }
+                return ContinuousClock.now
+            }
+            defer { task.cancel() }
+            let listener = port.fd
+            let peer = try await acceptControlConnection(on: listener, requestFinished: requestFinished)
+            defer { close(peer) }
+            let cancelledAt = ContinuousClock.now
+            task.cancel()
+            // Only has to beat the request's 10s timeout; a tighter limit would time a busy test pool.
+            #expect(await task.value - cancelledAt < .seconds(5))
+            #expect(try await onTestThread { controlPeerReachesEOF(peer, before: cancelledAt + .seconds(5)) })
+        }.value
+    }
+
+    /// A stalled control read must report the deadline's timeout, not an early socket error.
+    @Test func stalledControlReadReportsTheTimeout() async throws {
+        for _ in 0..<8 {
+            let port = try #require(LoopbackPort(listening: true))
+            let portNumber = Int(port.port)
+            let deadline = Date().addingTimeInterval(0.03)
+            do {
+                _ = try await StreamAttempt.run(until: deadline) {
+                    try await ControlTransport.get(
+                        host: "127.0.0.1", port: portNumber, target: "/serverinfo", userAgent: "GlimmerTests",
+                        tls: false, credential: .init(clientCertPEM: nil, clientKeyPEM: nil, pinnedCertPEM: nil),
+                        timeout: max(0.001, deadline.timeIntervalSinceNow))
+                }
+                Issue.record("Stalled control request returned a response")
+            } catch StreamError.hostTimedOut {
+                continue
+            } catch {
+                Issue.record("Stalled control request reported \(error) instead of a timeout")
+            }
+        }
+    }
+
+    /// Control sockets must suppress SIGPIPE so a closed peer cannot terminate the app.
+    @Test func controlSocketSuppressesSIGPIPE() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let portNumber = String(port.port)
+        let fd = try await onTestThread { gl_tcp_connect("127.0.0.1", portNumber, 1000) }
+        try #require(fd >= 0)
+        defer { close(fd) }
+        var enabled: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        #expect(getsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, &length) == 0)
+        #expect(enabled != 0)
+    }
+
+    /// A hostname must reach an IPv4-only listener even when it also resolves to IPv6.
+    @Test func localhostReachesAnIPv4OnlyListener() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let portNumber = String(port.port)
+        let fd = try await onTestThread { gl_tcp_connect("localhost", portNumber, 2000) }
+        try #require(fd >= 0)
+        close(fd)
+    }
+
     @Test func quitWaitsForOverlappingStop() async {
         let teardown = SharedTeardown()
         let entered = SafetyTestGate()
@@ -122,26 +276,45 @@ struct SessionSafetyTests {
     }
 
     @Test func deadlineBoundsUncooperativeRequestAndPreventsNextLeg() async {
-        let release = SafetyTestGate()
-        let unwound = SafetyTestGate()
-        let entered = SafetyTestGate()
-        let mutations = SafetyTestCounter()
-        let start = Date()
-        do {
-            try await StreamAttempt.run(until: start.addingTimeInterval(0.02)) {
+        await Task(priority: .high) {
+            let release = SafetyTestGate()
+            let unwound = SafetyTestGate()
+            let entered = SafetyTestGate()
+            let mutations = SafetyTestCounter()
+            let waiting = ManagedAtomicFlag()
+            // The request is running before the deadline is armed, and 300ms leaves the
+            // operation time to start under load, so the timeout interrupts real work.
+            let request = Task {
                 await entered.open()
                 await release.wait()
-                defer { Task { await unwound.open() } }
-                try Task.checkCancellation()
-                await mutations.increment()
             }
-            Issue.record("Request outlived its deadline")
-        } catch {
-            #expect(Date().timeIntervalSince(start) < 1)
-        }
-        await release.open()
-        if await entered.isOpen { await unwound.wait() }
-        #expect(await mutations.value == 0)
+            await entered.wait()
+            let started = ContinuousClock.now
+            do {
+                try await StreamAttempt.run(until: Date().addingTimeInterval(0.3)) {
+                    waiting.set()
+                    defer { Task { await unwound.open() } }
+                    await request.value
+                    try Task.checkCancellation()
+                    await mutations.increment()
+                }
+                Issue.record("Request outlived its deadline")
+            } catch StreamError.hostTimedOut {
+                // The request can't finish until released, so this limit only catches a hang.
+                let returned = ContinuousClock.now
+                #expect(returned - started < .seconds(5))
+                #expect(waiting.isSet)
+                #expect(await entered.isOpen)
+                #expect(await !release.isOpen)
+                #expect(await !unwound.isOpen)
+            } catch {
+                Issue.record("Expected the deadline timeout, got \(error)")
+            }
+            await release.open()
+            await request.value
+            if waiting.isSet { await unwound.wait() }
+            #expect(await mutations.value == 0)
+        }.value
     }
 
     @Test func expiredDeadlineDoesNotStartAnotherRequest() async {
@@ -297,7 +470,7 @@ struct SessionSafetyTests {
     }
 }
 
-private actor SafetyTestGate {
+actor SafetyTestGate {
     private(set) var isOpen = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
@@ -313,7 +486,32 @@ private actor SafetyTestGate {
     }
 }
 
-private actor SafetyTestCounter {
+actor SafetyTestCounter {
     private(set) var value = 0
     func increment() { value += 1 }
+}
+
+private final class StubVideoSink: VideoSink {
+    let backend: NativeBackend?
+    let running = OSAllocatedUnfairLock(initialState: false)
+    let onSetup: @Sendable () -> Void
+    let onStart: @Sendable () -> Void
+    var capabilities: Int32 { 0 }
+    init(backend: NativeBackend? = nil,
+         onSetup: @escaping @Sendable () -> Void = {}, onStart: @escaping @Sendable () -> Void = {}) {
+        self.backend = backend
+        self.onSetup = onSetup
+        self.onStart = onStart
+    }
+    func setup(videoFormat: Int32, width: Int32, height: Int32, redrawRate: Int32) -> Int32 {
+        onSetup()
+        return 0
+    }
+    func start() {
+        onStart()
+        running.withLock { $0 = true }
+    }
+    func stop() { running.withLock { $0 = false } }
+    func cleanup() {}
+    func submitDecodeUnit(_ unit: DecodeUnit) -> Int32 { StreamProtocol.DR_OK }
 }

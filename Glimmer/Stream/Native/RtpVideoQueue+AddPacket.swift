@@ -1,22 +1,6 @@
 //
 //  RtpVideoQueue+AddPacket.swift
-//
-//  The RtpvAddPacket reassembly half of the RTP video queue state machine, split
-//  out of RtpVideoQueue.swift to keep each file under the SwiftLint length limit.
-//  Ports RtpVideoQueue.c RtpvAddPacket: window/duplicate rejection, the bounded
-//  cross-frame reorder hold, the new-frame / new-FEC-block transition
-//  (unrecoverable-frame reporting + drop, then per-frame buffer-window reset), the
-//  per-packet missing/received counting, and queuePacket (the duplicate/out-of-
-//  sequence detector that latches receivedOosData).
-//
-//  These run on the SAME single receive thread as the parse entry point and the
-//  reconstruct half (RtpVideoQueue.swift / RtpVideoQueue+Reconstruct.swift) - the
-//  split is purely textual (a Swift extension can only reach non-private members,
-//  which is why the queue's touched state is `internal` rather than `private`; see
-//  the visibility note atop RtpVideoQueue.swift). No isolation, ordering, locking,
-//  or behavioral contract changes.
-//
-
+//  RTP packet assembly on the single receive thread shared with reconstruction.
 import Foundation
 
 extension RtpVideoQueue {
@@ -144,7 +128,11 @@ extension RtpVideoQueue {
             return .rejected
         }
 
-        updateReceiveCounts(seq: seq)
+        if isParity {
+            receivedParityPackets += 1
+        } else {
+            receivedDataPackets += 1
+        }
 
         // Try to reconstruct + submit the frame.
         if reconstructFrame() == 0 {
@@ -198,11 +186,6 @@ extension RtpVideoQueue {
         }
 
         if !pending.isEmpty {
-            // Report the final status of the FEC queue before dropping this
-            // frame (RtpVideoQueue.c:596-597) - the per-frame reception
-            // feedback Sunshine's QoS eval needs.
-            reportFinalFrameFecStatus()
-
             // Handle multi-FEC mid-frame block loss.
             if multiFecLastBlockNumber != 0 {
                 Diag.warn("NativeVideo unrecoverable frame \(currentFrameNumber) "
@@ -228,9 +211,6 @@ extension RtpVideoQueue {
 
         let expectedFecBlock: UInt8 = (currentFrameNumber == frameIndex) ? multiFecCurrentBlockNumber : 0
         if fields.fecCurrentBlockNumber != expectedFecBlock {
-            // Report the final status of the FEC queue before dropping this
-            // frame (RtpVideoQueue.c:640-641).
-            reportFinalFrameFecStatus()
             Diag.warn("NativeVideo unrecoverable frame \(frameIndex): lost FEC blocks "
                 + "\(expectedFecBlock + 1)..\(fields.fecCurrentBlockNumber)", Self.cat)
             TelemetryCounters.shared.unrecoverableFrameTotal.increment()
@@ -277,8 +257,6 @@ extension RtpVideoQueue {
         nextContiguousSequenceNumber = bufferLowestSequenceNumber
         receivedDataPackets = 0
         receivedParityPackets = 0
-        receivedHighestSequenceNumber = 0
-        missingPackets = 0
         useFastQueuePath = true
         reportedLostFrame = false
         bufferDataPackets = Int((fecInfo & 0xFFC00000) >> 22)
@@ -288,26 +266,6 @@ extension RtpVideoQueue {
         bufferHighestSequenceNumber = Self.u16(Int(bufferFirstParitySequenceNumber) + bufferParityPackets - 1)
         multiFecCurrentBlockNumber = fields.fecCurrentBlockNumber
         multiFecLastBlockNumber = (fields.multiFecBlocks >> 6) & 0x3
-    }
-
-    /// Fold one freshly queued packet into the missing/received counters
-    /// (RtpVideoQueue.c:771-792). `seq` is the packet's host-order sequence number.
-    private func updateReceiveCounts(seq: UInt16) {
-        if pending.count == 1 {
-            missingPackets += Int(Self.u16(Int(seq) - Int(bufferLowestSequenceNumber)))
-            receivedHighestSequenceNumber = seq
-        } else if Self.isBefore16(receivedHighestSequenceNumber, seq) {
-            missingPackets += Int(Self.u16(Int(seq) - Int(receivedHighestSequenceNumber) - 1))
-            receivedHighestSequenceNumber = seq
-        } else if missingPackets > 0 {
-            missingPackets -= 1
-        }
-
-        if Self.isBefore16(seq, bufferFirstParitySequenceNumber) {
-            receivedDataPackets += 1
-        } else {
-            receivedParityPackets += 1
-        }
     }
 
     /// A reconstruct succeeded: stage the complete FEC block, then either advance

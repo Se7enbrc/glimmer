@@ -208,6 +208,9 @@ public final class StreamWindow {
     /// would pace to the wrong refresh.
     public var onScreenChanged: (@MainActor () -> Void)?
 
+    /// Called when displays wake, even if the screen signature is unchanged.
+    public var onDisplaysWoke: (@MainActor () -> Void)?
+
     /// Set by show(), cleared by the first-frame fade-in. Until then the window
     /// is invisible and passes clicks through to the launcher's Cancel, and it
     /// takes neither the pointer nor the menu bar.

@@ -22,6 +22,63 @@ struct AnnexBToAVCCTests {
             | Int(data[offset + 2]) << 8 | Int(data[offset + 3])
     }
 
+    private func referenceConversion(_ input: Data) -> Data {
+        let bytes = Array(input)
+        var spans: [(Int, Int)] = []
+        var nalStart = -1
+        var index = 0
+        while index < bytes.count {
+            let length: Int
+            if index + 3 < bytes.count, bytes[index...index + 3].elementsEqual([0, 0, 0, 1]) {
+                length = 4
+            } else if index + 2 < bytes.count, bytes[index...index + 2].elementsEqual([0, 0, 1]) {
+                length = 3
+            } else {
+                length = 0
+            }
+            if length > 0 {
+                if nalStart >= 0, index > nalStart {
+                    spans.append((nalStart, index - nalStart))
+                }
+                index += length
+                nalStart = index
+            } else {
+                index += 1
+            }
+        }
+        if nalStart >= 0, bytes.count > nalStart {
+            spans.append((nalStart, bytes.count - nalStart))
+        }
+
+        var output = Data()
+        for (start, length) in spans {
+            var prefix = UInt32(length).bigEndian
+            withUnsafeBytes(of: &prefix) { output.append(contentsOf: $0) }
+            output.append(contentsOf: bytes[start..<start + length])
+        }
+        return output
+    }
+
+    @Test func zeroByteScanMatchesPerByteReference() {
+        let decoder = VideoDecoder()
+        #expect(decoder.convertAnnexBToAVCC(Data([0, 0, 0, 0, 1, 0x65]))
+            == referenceConversion(Data([0, 0, 0, 0, 1, 0x65])))
+
+        let alphabet: [UInt8] = [0, 1, 3, 0x65, 0xFF]
+        var state: UInt32 = 0x41C64E6D
+        for _ in 0..<5_000 {
+            state = state &* 1_103_515_245 &+ 12_345
+            let length = Int((state >> 16) % 513)
+            var bytes: [UInt8] = []
+            for _ in 0..<length {
+                state = state &* 1_103_515_245 &+ 12_345
+                bytes.append(alphabet[Int((state >> 16) % UInt32(alphabet.count))])
+            }
+            let input = Data(bytes)
+            #expect(decoder.convertAnnexBToAVCC(input) == referenceConversion(input))
+        }
+    }
+
     @Test func singleNalFourByteStartCode() {
         let decoder = VideoDecoder()
         let input = Data([0, 0, 0, 1, 0x65, 0xAA, 0xBB])

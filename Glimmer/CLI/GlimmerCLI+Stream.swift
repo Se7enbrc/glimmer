@@ -42,6 +42,7 @@ extension GlimmerCLI {
             guard confirmTakeover(pc: host.displayName, occupant: occupant, app: app.name) else { return Exit.failed }
             takeover = true
         }
+        model.hostRoute.monitor(address: nil)
         return await handOff(app: app, host: host, takeover: takeover, command: command)
     }
 

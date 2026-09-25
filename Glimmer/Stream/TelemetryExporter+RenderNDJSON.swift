@@ -164,9 +164,9 @@ extension TelemetryRenderer {
         // The live learned LOSS FLOOR under the playout target (the decay
         // limit-cycle fix) - absent until first learned, so a floor-held
         // target is legible against the evidence holding it.
-        let cushionFloorMs = AudioCushionTelemetry.shared.floorMs
+        let cushionFloorMs = extras.audioCushionFloorMs
         builder.add("audio_cushion_floor_ms", cushionFloorMs > 0 ? cushionFloorMs : nil)
-        let cushionSeedMs = AudioCushionTelemetry.shared.seedMs
+        let cushionSeedMs = extras.audioCushionSeedMs
         builder.add("audio_cushion_seed_ms", cushionSeedMs > 0 ? cushionSeedMs : nil)
         builder.add("audio_first_packet_ms", audio.firstPacketMs)
     }
@@ -512,7 +512,15 @@ extension TelemetryRenderer {
         if value == value.rounded() && abs(value) < 1e15 {
             return String(Int64(value))
         }
-        return String(format: "%.3f", value)
+        // Scaling large doubles loses fractional bits before rounding.
+        guard value.isFinite, abs(value) < 1e12 else {
+            return String(format: "%.3f", value)
+        }
+        let scaled = Int64((abs(value) * 1_000).rounded())
+        let fraction = scaled % 1_000
+        let padding = fraction < 10 ? "00" : fraction < 100 ? "0" : ""
+        let sign = value < 0 && scaled != 0 ? "-" : ""
+        return "\(sign)\(scaled / 1_000).\(padding)\(fraction)"
     }
 }
 

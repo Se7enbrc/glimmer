@@ -30,10 +30,6 @@ extension FramePacer {
     /// Returns immediately - the actual present happens on the next due vsync.
     func submit(_ sampleBuffer: CMSampleBuffer, hostPTS: CMTime) {
         let ptsSeconds = hostPTS.isValid ? CMTimeGetSeconds(hostPTS) : Double.nan
-        let entry = Entry(
-            sampleBuffer: sampleBuffer,
-            hostPTSSeconds: ptsSeconds)
-
         var droppedStale: CMSampleBuffer?
         var suppressedDisplaced: CMSampleBuffer?
         os_unfair_lock_lock(&lock)
@@ -41,6 +37,10 @@ extension FramePacer {
             os_unfair_lock_unlock(&lock)
             return
         }
+        let isPTSDiscontinuity = ptsSeconds.isFinite && lastSubmittedPTSSeconds.isFinite
+            && ptsSeconds < lastSubmittedPTSSeconds - 1.0
+        if isPTSDiscontinuity { ptsEpoch &+= 1 }
+        let entry = Entry(sampleBuffer: sampleBuffer, hostPTSSeconds: ptsSeconds, ptsEpoch: ptsEpoch)
 
         // Learn the stream's frame interval from consecutive PTS deltas. The
         // lower-quartile (skip-robust) estimate over a short window holds the true
@@ -53,12 +53,16 @@ extension FramePacer {
             // (>1s = a stall, not a cadence sample) so the estimate stays clean.
             if delta > 0, delta < 1.0 {
                 ptsDeltas.append(delta)
-                if ptsDeltas.count > 64 { ptsDeltas.removeFirst() }
+                Self.insertCadenceDelta(delta, into: &sortedPtsDeltas)
+                if ptsDeltas.count > 64 {
+                    let evicted = ptsDeltas.removeFirst()
+                    Self.removeCadenceDelta(evicted, from: &sortedPtsDeltas)
+                }
                 // Hold the configured-fps seed for the first few deltas - a lone
                 // startup gap must not yank the cadence off the negotiated rate.
                 if ptsDeltas.count >= FramePacer.minCadenceRefineSamples {
                     streamFrameIntervalSeconds =
-                        FramePacer.clampFrameInterval(skipRobustInterval(ptsDeltas))
+                        FramePacer.clampFrameInterval(skipRobustInterval(sortedPtsDeltas))
                 }
             }
         }
@@ -66,13 +70,9 @@ extension FramePacer {
             lastSubmittedPTSSeconds = ptsSeconds
         }
 
-        // NOTE: the adaptive target is NO LONGER driven from submit() - the old
-        // wall-clock submit-spacing jitter estimator lived here and is deleted.
-        // Submit spacing on a clean link is dominated by VT/FEC drain unevenness,
-        // not network jitter, so it falsely pinned the target at the cap on a
-        // 0.09ms link and wedged the present path. Grow/decay now key off the
-        // MEASURED RFC-3550 reorder jitter, refreshed on the tick path
-        // (decayTargetLocked) from TelemetryCounters.recvJitterMs.
+        // Submit spacing includes VT/FEC drain unevenness, so using it as network
+        // jitter pinned depth on clean links and wedged presenting. Growth/decay
+        // use measured RFC-3550 jitter until the reconciler publishes its decision.
 
         // WARM HANDOVER: a re-enabled pacer keeps presenting DIRECT - bypassing
         // the queue entirely - until its rebuilt CADisplayLink proves a healthy
@@ -94,14 +94,10 @@ extension FramePacer {
         // a post-drought burst restarts the clock instead of reading as a stall.
         if queue.isEmpty { liveness.queueNonEmptySince = CFAbsoluteTimeGetCurrent() }
 
-        // Insert in hostPTS order. Common case (in-order arrival) is an append;
-        // the search walks back from the tail so a single reorder is cheap.
+        // Insert by epoch, then hostPTS. The common in-order case appends;
+        // the search walks back from the tail for cheap small reorders.
         if ptsSeconds.isFinite {
-            var insertAt = queue.count
-            while insertAt > 0, queue[insertAt - 1].hostPTSSeconds > ptsSeconds {
-                insertAt -= 1
-            }
-            queue.insert(entry, at: insertAt)
+            Self.insert(entry, into: &queue)
         } else {
             // PTS-less frame (older Sunshine / defensive path) - can't pace it,
             // so just append; the cadence gate falls back to wall-clock.
@@ -150,6 +146,18 @@ extension FramePacer {
                 "PacerOverflowDrop",
                 "depth=\(FramePacer.maxQueuedFrames, privacy: .public)")
         }
+    }
+
+    static func insert(_ entry: Entry, into queue: inout [Entry]) {
+        var insertAt = queue.count
+        while insertAt > 0, queue[insertAt - 1].ptsEpoch > entry.ptsEpoch {
+            insertAt -= 1
+        }
+        while insertAt > 0, queue[insertAt - 1].ptsEpoch == entry.ptsEpoch,
+              queue[insertAt - 1].hostPTSSeconds > entry.hostPTSSeconds {
+            insertAt -= 1
+        }
+        queue.insert(entry, at: insertAt)
     }
 
     // MARK: - Suppression flag (suppression edges)

@@ -57,18 +57,16 @@ extension NativeBackend {
             try await performControlStage(handshake: handshake, config: config,
                                           host: host, events: events)
 
-            // --- Connected. Bring up native video receive + keepalive loop. ---
-            // Flip inputReady here (the InputStream.c `initialized` analogue): the
-            // control stream is now up, so send* can seal + send input packets.
-            // Spin up the input batcher (InputStream.c's input thread) on the same
-            // edge so all send* coalesce through it.
-            withState {
+            // Control is up: input can seal/send, and the batcher coalesces send*.
+            // Like InputStream.c's initialized edge, both become ready together;
+            // a stop that already took its snapshot must not revive either.
+            guard adoptWhileConnecting({
                 didConnect = true
                 inputReady = true
                 if let enet = enetChannel {
                     inputBatcher = InputBatcher(enet: enet)
                 }
-            }
+            }) else { throw EnetError.interrupted }
             Diag.notice("native backend: CONNECTED (RTSP + ENet control + START_A/B complete). "
                 + "Native input uplink ready. Starting native video receive.", Self.logCategory)
 
@@ -85,11 +83,17 @@ extension NativeBackend {
             throw error
         }
 
-        events.connectionStarted()
+        try publishConnectionStarted { events.connectionStarted() }
 
         // startConnection() returns here (success); the control loop + video
         // receive run in detached tasks until stop()/interrupt(). This mirrors
         // LiStartConnection returning 0 while the engine's threads keep running.
+    }
+
+    func publishConnectionStarted(_ publish: () -> Void) throws {
+        // Publish success under the stop latch so cancellation cannot win
+        // between the final check and the connection-established event.
+        guard adoptWhileConnecting(publish) else { throw EnetError.interrupted }
     }
 
     /// Tear down + drop the audio receiver (idempotent). Used on a handshake/
@@ -122,30 +126,16 @@ extension NativeBackend {
             throw StreamError.sessionFailed(-1)
         }
 
-        // Wire the host TERMINATION → connectionTerminated + teardown.
-        enet.onTerminated = { [weak self] code in
-            Diag.error("native backend: host terminated session (code \(code))", Self.logCategory)
-            events.connectionTerminated(code: code)
-            self?.stopConnection()
+        wireVideoControl(enet: enet, events: events)
+        guard wireControllerFeedback(enet: enet, events: events) else { throw EnetError.interrupted }
+        if checkInterrupted() {
+            enet.interrupt()
+            throw EnetError.interrupted
         }
-
-        // Wire host HDR-mode (control 0x010e) → the decoder's HDR engagement.
-        // Without this the 10-bit HDR stream renders as washed-out SDR. setHDR
-        // pulls the mastering metadata back via backend.hdrMetadata() (our
-        // enetChannel's).
-        enet.onHdrMode = { [weak self] enabled in
-            guard let self,
-                  let decoder = self.withState({ self.videoSink }) as? VideoDecoder else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { decoder.setHDR(enabled: enabled) } }
-        }
-
-        // Controller feedback (rumble / triggers / LED / motion enable) is one
-        // cohesive wiring unit; split out so this stage body stays inside the
-        // size cap as the protocol surface grows.
-        wireControllerFeedback(enet: enet, events: events)
 
         // Decoder setup() BEFORE first frame, then start() once.
         let videoFormat = handshake.negotiatedVideoFormat
+        if checkInterrupted() { throw EnetError.interrupted }
         let setupResult = sink.setup(
             videoFormat: videoFormat, width: config.width, height: config.height,
             redrawRate: config.fps)
@@ -156,26 +146,19 @@ extension NativeBackend {
         }
         sink.start()
 
-        let receiver = VideoRtpReceiver(
-            host: host,
-            videoPort: handshake.videoPort,
-            pingPayload: handshake.videoPingPayload,
-            packetSize: VideoDecryptor.packetSize(
-                Int(config.packetSize), encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled),
-            bitrateKbps: Int(config.bitrate),
-            negotiatedVideoFormat: videoFormat,
-            encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled,
-            aesKey: config.remoteInputAesKey,
-            colorSpace: config.colorSpace,
-            sink: sink,
-            requestIdr: { [weak enet] in enet?.requestIdrFrame() },
-            invalidateReferenceFrames: { [weak enet] from, to in
-                enet?.invalidateReferenceFrames(from: from, to: to)
-            },
-            sendFrameFecStatus: { [weak enet] status in
-                enet?.queueFrameFecStatus(status)
-            })
-        withState { videoReceiver = receiver }
+        let receiver = makeVideoReceiver(handshake: handshake, config: config, host: host, sink: sink, enet: enet)
+        receiver.onReceiveFailed = { [weak self] in
+            events.connectionTerminated(code: -1)
+            self?.stopConnection()
+        }
+        guard adoptWhileConnecting({ videoReceiver = receiver }) else {
+            // Stop may have cleaned this sink before setup/start finished.
+            // Until adoption succeeds, this stage owns the final cleanup.
+            sink.stop()
+            sink.cleanup()
+            events.stageFailed("video stream initialization", code: -4)
+            throw EnetError.interrupted
+        }
 
         do {
             try await receiver.start()
@@ -197,40 +180,72 @@ extension NativeBackend {
         controlThread.start()
     }
 
-    /// Wire the host's controller-feedback control messages into the actuator
-    /// and the motion sampler, and arm both singletons' stream gates. Pure
-    /// move out of startVideoStage (size cap); behavior unchanged.
-    private func wireControllerFeedback(enet: EnetControlChannel, events: NativeConnectionEvents) {
-        // Wire host rumble (control 0x010b) → ConnectionEvents.rumble → the
-        // GameController haptics actuator, the same shape as the HDR path
-        // in startVideoStage. The enet receive thread only forwards the trio;
-        // the actuator does its own latest-wins hop onto a serial queue so the
-        // control channel can never block on Core Haptics. streamActivated()
-        // lifts the actuator's quiesce gate (armed at init and on every stream
-        // teardown) - without it a late event from a PREVIOUS session could
-        // re-spin motors with no host left to send the (0,0) clear.
-        ControllerHaptics.shared.streamActivated()
+    private func wireVideoControl(enet: EnetControlChannel, events: NativeConnectionEvents) {
+        // Wire the host TERMINATION → connectionTerminated + teardown.
+        enet.onTerminated = { [weak self] code in
+            Diag.error("native backend: host terminated session (code \(code))", Self.logCategory)
+            events.connectionTerminated(code: code)
+            self?.stopConnection()
+        }
+
+        // HDR engagement pulls mastering metadata through this channel;
+        // without it a 10-bit stream renders as washed-out SDR.
+        enet.onHdrMode = { [weak self] enabled in
+            guard let self,
+                  let decoder = self.withState({ self.videoSink }) as? VideoDecoder else { return }
+            DispatchQueue.main.async { MainActor.assumeIsolated { decoder.setHDR(enabled: enabled) } }
+        }
+    }
+
+    private func makeVideoReceiver(
+        handshake: RtspHandshakeResult, config: BackendStreamConfig,
+        host: NWEndpoint.Host, sink: VideoSink, enet: EnetControlChannel
+    ) -> VideoRtpReceiver {
+        VideoRtpReceiver(
+            host: host,
+            videoPort: handshake.videoPort,
+            pingPayload: handshake.videoPingPayload,
+            packetSize: VideoDecryptor.packetSize(
+                Int(config.packetSize), encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled),
+            bitrateKbps: Int(config.bitrate),
+            negotiatedVideoFormat: handshake.negotiatedVideoFormat,
+            encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled,
+            aesKey: config.remoteInputAesKey,
+            colorSpace: config.colorSpace,
+            sink: sink,
+            requestIdr: { [weak enet] in enet?.requestIdrFrame() },
+            invalidateReferenceFrames: { [weak enet] from, to in
+                enet?.invalidateReferenceFrames(from: from, to: to)
+            })
+    }
+
+    /// Publish teardown and enqueue activation under the stop latch, so a
+    /// stopped channel cannot miss its cleanup or activate controller state.
+    func wireControllerFeedback(enet: EnetControlChannel, events: NativeConnectionEvents) -> Bool {
+        adoptWhileConnecting {
+            installControllerFeedback(enet: enet, events: events)
+            ControllerHaptics.shared.streamActivated()
+            ControllerMotion.shared.streamActivated(backend: self)
+        }
+    }
+
+    private func installControllerFeedback(enet: EnetControlChannel, events: NativeConnectionEvents) {
+        // Activation hops through main before reaching the haptics queue.
+        // Teardown must take the same route so quiescing always follows it.
+        // Motion already uses one main-queue hop for both lifecycle edges.
+        enet.onTeardown = {
+            DispatchQueue.main.async {
+                ControllerHaptics.shared.stopAll(reason: "stream teardown")
+            }
+            ControllerMotion.shared.stopAll(reason: "stream teardown")
+        }
+        // Feedback stays off the receive thread; actuators coalesce updates.
+        // Teardown parks motors and motion because a dead PC cannot clear them.
         enet.onRumble = { controllerNumber, lowFreq, highFreq in
             events.rumble(controller: controllerNumber, lowFreq: lowFreq, highFreq: highFreq)
         }
-        // No stuck motors, no ghost sampling: whatever ends this control
-        // channel (user stop, watchdog teardown, host TERMINATION - all
-        // funnel into the channel's interrupt()/close() pair, which fires
-        // this at most once) parks every pad at (0,0), tears the haptic
-        // engines down, and halts motion sampling. The host's own "motors
-        // off" / "reporting off" events can't arrive on a dead channel.
-        enet.onTeardown = {
-            ControllerHaptics.shared.stopAll(reason: "stream teardown")
-            ControllerMotion.shared.stopAll(reason: "stream teardown")
-        }
-        // The other two in-protocol controller-feedback messages ride the same
-        // shape as rumble: the receive thread only forwards values, and the
-        // actuator does its own latest-wins hop. Both arrive only for pads
-        // whose advertised caps invited them (ControllerForwarder gates
-        // LI_CCAP_TRIGGER_RUMBLE on probed trigger localities and
-        // LI_CCAP_RGB_LED on gamepad.light), and both are parked by the same
-        // stopAll/teardown path above (trigger motors at zero; the light bar
-        // needs no parking - it is lit hardware state, not motion).
+        // Advertised caps gate trigger rumble and RGB LED feedback; trigger
+        // motors share rumble's teardown, while the light needs no parking.
         enet.onRumbleTriggers = { controllerNumber, left, right in
             events.rumbleTriggers(controller: controllerNumber, left: left, right: right)
         }
@@ -240,24 +255,14 @@ extension NativeBackend {
         enet.onSetPlayerLeds = { controllerNumber, solid, flashing in
             events.setPlayerLEDs(controller: controllerNumber, solid: solid, flashing: flashing)
         }
-        // Motion (0x5501) closes the loop the LI_CCAP_ACCEL/GYRO caps open:
-        // the host asks for sensor reports at a rate, the sampler reads
-        // GCMotion on main, and the samples ride the EXISTING input batcher
-        // back up (sendControllerMotion). The receive thread only forwards
-        // the trio; ControllerMotion hops to main itself. streamActivated
-        // arms the sampler's uplink - the same quiesce discipline as the
-        // haptics actuator's streamActivated above.
-        ControllerMotion.shared.streamActivated(backend: self)
+        // Motion reports use the existing input batcher; the sampler hops to
+        // main and its uplink is armed only while this stream can still start.
         enet.onSetMotionEvent = { controllerNumber, motionType, reportRateHz in
             events.setMotionEventState(controller: controllerNumber,
                                        motionType: motionType, reportRateHz: reportRateHz)
         }
-        // Adaptive triggers (0x5503) ride the same shape: the receive thread
-        // only forwards the mode + params; DualSenseHID does its IOKit OUTPUT
-        // report write off-thread on its own serial path. Only DualSense pads
-        // receive this (Sunshine extension). Parked by the same teardown path
-        // above - DualSenseHID resets the trigger blocks to "off" on the final
-        // release(), so a stream ending mid-effect can't strand a stiff trigger.
+        // Adaptive triggers use DualSense HID off-thread. Final HID release
+        // resets the effect so a stream ending cannot strand a stiff trigger.
         enet.onSetAdaptiveTriggers = { controllerNumber, eventFlags, typeLeft, typeRight, left, right in
             events.setAdaptiveTriggers(controller: controllerNumber, eventFlags: eventFlags,
                                        typeLeft: typeLeft, typeRight: typeRight,
@@ -288,7 +293,7 @@ extension NativeBackend {
             aesKey: config.remoteInputAesKey,
             aesIvId: config.remoteInputAesIv,
             sink: sink)
-        withState { audioReceiver = receiver }
+        guard adoptWhileConnecting({ audioReceiver = receiver }) else { return }
         do {
             try receiver.startPing()
         } catch {
@@ -367,7 +372,10 @@ extension NativeBackend {
                                  audioEncryption: audioEncryption, opusConfig: opus,
                                  config: config, host: host)
         }
-        withState { rtspClient = rtsp }
+        guard adoptWhileConnecting({ rtspClient = rtsp }) else {
+            events.stageFailed("RTSP handshake", code: -4)
+            throw EnetError.interrupted
+        }
 
         let handshake: RtspHandshakeResult
         do {
@@ -415,7 +423,10 @@ extension NativeBackend {
             port: handshake.controlPort,
             controlConnectData: handshake.controlConnectData,
             crypto: crypto)
-        withState { enetChannel = enet }
+        guard adoptWhileConnecting({ enetChannel = enet }) else {
+            events.stageFailed("control stream initialization", code: -4)
+            throw EnetError.interrupted
+        }
 
         do {
             try await enet.establishAndStart(

@@ -336,6 +336,7 @@ public final class InputForwarder {
     /// derived ceiling, set at start and re-set on a reconnect resolution change.
     var lastMoveTimestamp: TimeInterval = 0
     var cruiseGMax: Double = 1.0
+    let cruiseTuning: CruiseTraversal.Tuning
     /// WINDOWED velocity estimator feeding the Cruise gate: exponentially
     /// weighted Σdistance/Σtime over a ~30ms window. Robust BY CONSTRUCTION to
     /// variable event-delivery cadence - a device-rate 1ms batch contributes
@@ -442,55 +443,33 @@ public final class InputForwarder {
     var didBecomeKeyObserver: NSObjectProtocol?
     var didResignKeyObserver: NSObjectProtocol?
 
-    public init() {
+    public convenience init() {
+        self.init(cruiseTuning: CruiseTraversal.Tuning.current())
+    }
+
+    init(cruiseTuning: CruiseTraversal.Tuning) {
+        self.cruiseTuning = cruiseTuning
         setupGamepadObservers()
     }
 
     isolated deinit {
-        // GCController observers retain self via closure; release here.
-        // `isolated deinit` keeps us on MainActor (the class's isolation) so
-        // we can safely touch MainActor-isolated stored observer tokens; without
-        // it, Swift 6's default nonisolated deinit refuses to read them.
-        if let observer = connectObserver { NotificationCenter.default.removeObserver(observer) }
-        if let observer = disconnectObserver { NotificationCenter.default.removeObserver(observer) }
+        // `isolated` so the MainActor observer tokens are readable here: the backstop for a
+        // forwarder freed without detach().
+        removeGamepadObservers()
     }
 
     // MARK: - LiSend wrappers with diagnostic logging
-    //
-    // Every LiSend* call returns int. Common return values we care about:
-    //   0   → enqueued
-    //  -1   → packet allocation failed (input queue full)
-    //  -2   → input stream not initialized (called before connectionStarted)
-    //  -5501 (LI_ERR_UNSUPPORTED) → host doesn't support this entry point
-    // We log on first non-zero return per code so a transient backpressure
-    // burst doesn't drown the log, but persistent failures stay visible.
+
+    // Native sends return 0, -2 before the input stream starts, or
+    // LI_ERR_UNSUPPORTED when the host lacks the entry point.
+    // Log the first non-zero return per code so transient failures stay quiet.
 
     private var loggedFailureCodes: Set<Int32> = []
-
-    /// Count of input events the host's queue rejected with -1 (packet
-    /// allocation failed under backpressure). A climbing value during heavy
-    /// simultaneous key/stick input is the signature of the host draining
-    /// slower than we send - i.e. the only path by which n-key rollover can
-    /// drop a key. Not fatal (the next event re-establishes state), but
-    /// counted so the loss isn't silent. We deliberately do NOT retry/sleep
-    /// in this hot path: blocking the GameController/NSEvent callback to
-    /// re-send a full queue would jank input far worse than the rare drop.
-    private(set) var droppedInputEvents: Int = 0
 
     // Internal so the ControllerForwarder extension can call `record` from
     // ControllerForwarder.swift to log non-zero LiSend* return codes.
     func record(_ name: StaticString, _ rc: Int32) {
         guard rc != 0 else { return }
-        if rc == -1 {
-            // Backpressure, not a protocol error. Count every drop; log once
-            // at warning so a burst doesn't flood the unified log.
-            droppedInputEvents += 1
-            if !loggedFailureCodes.contains(rc) {
-                loggedFailureCodes.insert(rc)
-                log.warning("\(name, privacy: .public): host input queue full (-1), event dropped; further drops in droppedInputEvents")
-            }
-            return
-        }
         if !loggedFailureCodes.contains(rc) {
             loggedFailureCodes.insert(rc)
             log.error("\(name, privacy: .public) returned \(rc) (first occurrence)")

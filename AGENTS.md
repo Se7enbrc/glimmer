@@ -128,6 +128,9 @@ These are settled. A pull request is not the place to reopen them.
   emoji, no exclamation marks, no jargon a player wouldn't use.
 - The machine is "the PC" or its name, never "host" or "server", in anything a
   person reads.
+- Sunshine is the server application on the PC. Moonlight is a separate client
+  that inspired Glimmer, not a host and not the protocol's name. The protocol is
+  Sunshine's RTSP-based one.
 - `…` is one character. A command that needs more input before it finishes ends
   with it (Pair a PC…, Rename…); one that only opens a window does not.
   Quotation marks are curly (“ ”); apostrophes stay straight.

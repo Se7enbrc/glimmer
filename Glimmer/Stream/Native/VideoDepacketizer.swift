@@ -109,17 +109,13 @@ final class VideoDepacketizer {
 
     // Per-frame accumulation.
     var frameType: Int32 = VideoDepacketizer.FRAME_TYPE_PFRAME
-    /// True iff THIS frame is a host post-invalidation RECOVERY frame (type 4/5)
-    /// that cleared an outstanding RFI wait - the frame that resolves an RFI
-    /// round-trip (signal: IDR-RTT). Set in parseFrameHeader, read + cleared in
-    /// reassembleFrame. Telemetry-only; does not affect decode behavior.
-    var frameIsRfiRecovery = false
     var frameHostProcessingLatency: UInt16 = 0
     var lastPacketPayloadLength: UInt16 = 0
     private var firstPacketReceiveTimeUs: UInt64 = 0
     private var firstPacketPresentationTimeUs: UInt64 = 0
     private var firstPacketRtpTimestamp: UInt32 = 0
     private var nalChain = Data()
+    private var lastFrameBytes = 0
 
     // Diagnostics latches.
     private var loggedFirstFrame = false
@@ -284,7 +280,7 @@ final class VideoDepacketizer {
 
         decodingFrame = true
         frameType = Self.FRAME_TYPE_PFRAME
-        frameIsRfiRecovery = false
+        nalChain.reserveCapacity(lastFrameBytes + lastFrameBytes / 4)
         firstPacketReceiveTimeUs = pkt.receiveTimeUs
 
         // Synthesize a PTS base if the host doesn't send one (c:833-844).
@@ -363,6 +359,7 @@ final class VideoDepacketizer {
             idrFrameProcessed = true
         } else {
             ft = Self.FRAME_TYPE_PFRAME
+            lastFrameBytes = Int(fullLength)
         }
 
         // hdrActive/colorspace pass-through is CORRECT here, not a gap: on
@@ -406,21 +403,6 @@ final class VideoDepacketizer {
             Diag.notice("NativeVideo first complete frame assembled "
                 + "(frame \(frameIndex), type=\(ft), \(fullLength) bytes)", Self.cat)
         }
-
-        // P2 IDR/RFI ROUND-TRIP (signal: IDR-RTT): an RFI request is resolved by a
-        // host post-invalidation RECOVERY frame (type 4/5), which is forwarded as a
-        // P-frame - so it's not caught by the receiver's IDR-path resolve. Resolve
-        // it here for the recovery case only (IDR resolves in the receiver via
-        // unit.isIDR), gate-on so it pairs with the gate-on arm and costs nothing
-        // off. An unsolicited recovery (no request pending) resolves to nil.
-        if frameIsRfiRecovery, ft != Self.FRAME_TYPE_IDR,
-           let tracker = FrameTimingTracker.shared,
-           let roundTripMs = TelemetryCounters.shared.p2.resolveIdrArrival(
-                TelemetryCounters.monotonicNowNanos()) {
-            TelemetryCounters.shared.idrRoundTripMatchedTotal.increment()
-            tracker.recordIdrRoundTrip(frameIndex: unit.frameNumber, roundTripMs: roundTripMs)
-        }
-        frameIsRfiRecovery = false
 
         // Clear NAL state before the (possibly re-entrant) submit.
         nalChain = Data()

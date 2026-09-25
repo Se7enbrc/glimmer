@@ -127,6 +127,18 @@ struct LogSweepTests {
 
 struct FrameTraceRolloverTests {
 
+    @Test func overflowDropsOldestHalfInOneTrim() {
+        let limit = 10_000
+        var pending = (0..<limit).map(String.init)
+        pending.append("newest")
+
+        pending.trimOldestOverflow(maxCount: limit)
+
+        #expect(pending.count == limit / 2)
+        #expect(pending.first == String(limit / 2 + 1))
+        #expect(pending.last == "newest")
+    }
+
     /// Long sessions keep the first segment (connect, first IDR, pacer
     /// lock-in) plus the newest ones; the middle segments are what go.
     @Test func rolloverKeepsTheConnectSegment() {

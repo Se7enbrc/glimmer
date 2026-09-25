@@ -1,8 +1,9 @@
 //
 //  StreamHDRTests.swift
 //
-//  The HDR choice: off takes every 10-bit format out of the offer (so the PC
-//  encodes SDR), and the spec tag promises HDR only on a display that can show it.
+//  What this Mac offers the PC: HDR off takes out every 10-bit format (so the PC
+//  encodes SDR), a PC's codec choice takes out whole codec families, and the spec
+//  tag promises HDR only on a display that can show it.
 //
 
 import Testing
@@ -26,6 +27,23 @@ struct StreamHDRTests {
     @Test func hdrOffKeepsTheCodecAndItsBitrateDiscount() {
         #expect(AppModel.videoFormats(probed, hdr: false).topCodec == .av1)
         #expect(AppModel.videoFormats([.h264, .hevc, .hevcMain10], hdr: false).topCodec == .hevc)
+    }
+
+    @Test func hevcPreferenceRemovesEveryAV1Profile() {
+        let offered = HostCodecPreference.hevc.apply(to: probed)
+        #expect(offered == [.h264, .hevc, .hevcMain10, .hevcRext8_444, .hevcRext10_444])
+        #expect(offered.topCodec == .hevc)
+        #expect(AppModel.videoFormats(offered, hdr: false) == [.h264, .hevc, .hevcRext8_444])
+    }
+
+    @Test func h264PreferenceRemovesEveryHEVCAndAV1Profile() {
+        let offered = HostCodecPreference.h264.apply(to: probed)
+        #expect(offered == [.h264])
+        #expect(AppModel.videoFormats(offered, hdr: false) == [.h264])
+    }
+
+    @Test func automaticPreferenceKeepsEveryProbedFormat() {
+        #expect(HostCodecPreference.auto.apply(to: probed) == probed)
     }
 
     @Test func tagNeedsHDROnAndAnHDRDisplay() {

@@ -20,7 +20,8 @@ final class UpdaterController {
     /// Retained here: Sparkle holds its user driver delegate weakly.
     private let streamAwareAlerts = StreamAwareUpdateAlerts(
         isStreaming: { AppDelegate.boundManager?.isStreaming ?? false },
-        showUpdate: { UpdaterController.shared.updater.checkForUpdates() })
+        showUpdate: { UpdaterController.shared.updater.checkForUpdates() },
+        checkInBackground: { UpdaterController.shared.updater.checkForUpdatesInBackground() })
 
     private init() {
         // Auto-update IS the release channel. No build-type gating needed:
@@ -29,7 +30,8 @@ final class UpdaterController {
         // release grabs it, and a dev build at/after the latest release stays
         // silent until the next one - exactly the desired behavior, for free.
         controller = SPUStandardUpdaterController(
-            startingUpdater: true, updaterDelegate: nil, userDriverDelegate: streamAwareAlerts)
+            startingUpdater: true, updaterDelegate: streamAwareAlerts, userDriverDelegate: streamAwareAlerts)
+        streamAwareAlerts.observeAvailability(of: controller.updater)
         // PRESCRIPTIVE nag policy (2026-08-26). Previously nothing set a check
         // schedule: Sparkle's own opt-in prompt decided whether SCHEDULED
         // checks ever ran, and the only forced check fired on a user-initiated
@@ -58,18 +60,57 @@ final class UpdaterController {
     var updater: SPUUpdater { controller.updater }
 }
 
-/// Holds a scheduled update alert while a stream is live, so a daily check can't
-/// pull focus from a full-screen game, then brings it forward once the stream
-/// ends. Outside a stream, and for user-initiated checks, Sparkle is unchanged.
+/// Defers daily checks and update alerts so neither downloads nor pulls focus
+/// during a stream. User-initiated checks pass through.
 @MainActor
-final class StreamAwareUpdateAlerts: NSObject, @preconcurrency SPUStandardUserDriverDelegate {
+final class StreamAwareUpdateAlerts: NSObject, @preconcurrency SPUStandardUserDriverDelegate, SPUUpdaterDelegate {
     private let isStreaming: @MainActor () -> Bool
     private let showUpdate: @MainActor () -> Void
+    private let checkInBackground: @MainActor () -> Void
     private(set) var isHoldingUpdate = false
+    private var hasPendingBackgroundCheck = false
+    private(set) var canCheckForUpdates = true
+    private var availabilityObservation: NSKeyValueObservation?
 
-    init(isStreaming: @escaping @MainActor () -> Bool, showUpdate: @escaping @MainActor () -> Void) {
+    init(
+        isStreaming: @escaping @MainActor () -> Bool,
+        showUpdate: @escaping @MainActor () -> Void,
+        checkInBackground: @escaping @MainActor () -> Void
+    ) {
         self.isStreaming = isStreaming
         self.showUpdate = showUpdate
+        self.checkInBackground = checkInBackground
+    }
+
+    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        try mayPerform(updateCheck)
+    }
+
+    func observeAvailability(of updater: SPUUpdater) {
+        availabilityObservation = updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
+            MainActor.assumeIsolated {
+                self?.availabilityDidChange(updater.canCheckForUpdates)
+            }
+        }
+    }
+
+    func availabilityDidChange(_ canCheck: Bool) {
+        canCheckForUpdates = canCheck
+        // Sparkle can report availability before its scheduling callback ends.
+        Task { @MainActor [weak self] in
+            self?.runPendingActionsWhenStreamEnds()
+        }
+    }
+
+    func mayPerform(_ updateCheck: SPUUpdateCheck) throws {
+        if updateCheck == .updates {
+            hasPendingBackgroundCheck = false
+            return
+        }
+        guard updateCheck == .updatesInBackground, isStreaming() else { return }
+        hasPendingBackgroundCheck = true
+        runPendingActionsWhenStreamEnds()
+        throw NSError(domain: "StreamAwareUpdateAlerts", code: 1)
     }
 
     var supportsGentleScheduledUpdateReminders: Bool { true }
@@ -93,19 +134,30 @@ final class StreamAwareUpdateAlerts: NSObject, @preconcurrency SPUStandardUserDr
     func holdUntilStreamEnds() {
         Diag.info("update alert held until the stream ends", "Update")
         isHoldingUpdate = true
-        showUpdateOnceStreamEnds()
+        runPendingActionsWhenStreamEnds()
     }
 
-    private func showUpdateOnceStreamEnds() {
-        guard isHoldingUpdate else { return }
+    private func runPendingActionsWhenStreamEnds() {
+        guard isHoldingUpdate || hasPendingBackgroundCheck else { return }
         guard isStreaming() else {
-            isHoldingUpdate = false
-            showUpdate()
+            runPendingActions()
             return
         }
         // onChange fires before the new value lands; re-read it on the next turn.
         withObservationTracking { _ = isStreaming() } onChange: { [weak self] in
-            Task { @MainActor in self?.showUpdateOnceStreamEnds() }
+            Task { @MainActor in self?.runPendingActionsWhenStreamEnds() }
+        }
+    }
+
+    private func runPendingActions() {
+        if isHoldingUpdate {
+            isHoldingUpdate = false
+            showUpdate()
+        }
+        if hasPendingBackgroundCheck {
+            guard !isStreaming(), canCheckForUpdates else { return }
+            hasPendingBackgroundCheck = false
+            checkInBackground()
         }
     }
 }

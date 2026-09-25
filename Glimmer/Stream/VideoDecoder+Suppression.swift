@@ -151,11 +151,10 @@ extension VideoDecoder {
 
     // MARK: - Decode gating (stage 2: stop feeding VideoToolbox while hidden)
 
-    /// What the submit boundary should do with one assembled AU, given the
-    /// gate state. Computed under `presentSuppressedLock` in
-    /// `decodeGateDisposition(isIDR:)`; consumed at the very top of
+    /// What the submit boundary does with one assembled AU, given the gate state. Computed under
+    /// `presentSuppressedLock` in `decodeGateDisposition(isIDR:)`, consumed at the top of
     /// `decodeAssembledFrame` before any slot reservation or VT work.
-    enum DecodeGateDisposition {
+    enum DecodeGateDisposition: Equatable {
         /// Normal path - feed the frame, tagged with the IDR epoch it was fed
         /// under (see `_idrEpoch`).
         case feed(epoch: UInt)
@@ -228,12 +227,9 @@ extension VideoDecoder {
         return _decodeGated
     }
 
-    /// Seconds since the decode gate last lifted; `.infinity` if no gate has
-    /// ever engaged this session. The frame watchdog takes
-    /// `min(secondsSinceLastDecodedFrame(), this)` so a long gated span reads
-    /// as idle-since-resume instead of idle-for-the-whole-gate - the watchdog
-    /// re-arms honestly FROM the resume edge (a post-gate IDR that genuinely
-    /// never decodes still trips it on the normal thresholds).
+    /// Seconds since this connection's last gate lift, or `.infinity` without one.
+    /// The watchdog floors decode idle at the lift so a gated span cannot cause
+    /// a premature trip; a missing post-gate IDR still gets the normal timeout.
     nonisolated func secondsSinceDecodeGateLifted() -> Double {
         presentSuppressedLock.lock(); defer { presentSuppressedLock.unlock() }
         guard let lifted = _decodeGateLiftedAtNanos else { return .infinity }
@@ -365,6 +361,10 @@ extension VideoDecoder {
     /// hidden gets back what the connect-edge resets and the stop-edge gate clear
     /// took: the suppressed gauge, gap-judging exclusion and the gate timer.
     nonisolated func reapplySuppressionAtConnect() {
+        // A prior connection's gate lift is not decode progress on this one.
+        presentSuppressedLock.lock()
+        _decodeGateLiftedAtNanos = nil
+        presentSuppressedLock.unlock()
         guard presentSuppressed else { return }
         TelemetryCounters.shared.setPresentSuppressed(true)
         statsCollector.setGapJudgingExcluded(true)

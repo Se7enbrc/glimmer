@@ -158,14 +158,9 @@ extension StatsOverlayLayer {
             ?? .monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
-    /// Map row health → NSColor for the value text.
-    ///
-    /// Healthy and neutral both render at full white today. We could
-    /// dim neutral further to read as "informational, not a signal",
-    /// but in practice the labels on neutral rows ("Host", "Bitrate",
-    /// "Host encode", "Audio") already telegraph that they're
-    /// informational, and dimming would make the bitrate row hard to
-    /// read at a glance - which is exactly when the user looks at it.
+    /// Row health as the value's colour. Neutral stays full white: its labels
+    /// ("PC", "Bitrate", "PC encode", "Audio") already read as information, and
+    /// dimming would make the bitrate row hard to read at a glance.
     private func healthColor(_ h: StatsRow.Health) -> NSColor {
         switch h {
         case .healthy, .neutral: return NSColor(white: 1.0, alpha: 1.0)

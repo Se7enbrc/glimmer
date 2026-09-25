@@ -10,6 +10,13 @@
 import Foundation
 
 extension EnetControlChannel {
+    /// Wrap-safe ms from `then` to `now`, or 0 when `then` is ahead: a stamp written
+    /// under stateLock after `now` was sampled must never read as a 49-day silence.
+    static func msSince(_ then: UInt32, now: UInt32) -> UInt32 {
+        let elapsed = now &- then
+        return elapsed < 0x8000_0000 ? elapsed : 0
+    }
+
     // MARK: - Persistent control loop (post-START_B)
 
     /// Mutable cursor for the control-loop's per-iteration bookkeeping. Lives in a
@@ -87,8 +94,9 @@ extension EnetControlChannel {
         // A shorter window would kill a recoverable blip - moonlight rides those
         // out by retransmitting, never self-terminating early, and so do we.
         let health = withState { () -> AckHealth in
-            let sinceAck = now &- lastAckRecvMs
-            let oldest = sentReliable.map { now &- $0.firstSentAtMs }.max() ?? 0
+            let sampleTime = serviceTimeMs
+            let sinceAck = Self.msSince(lastAckRecvMs, now: sampleTime)
+            let oldest = sentReliable.map { Self.msSince($0.firstSentAtMs, now: sampleTime) }.max() ?? 0
             return AckHealth(sinceLastAck: sinceAck, unackedCount: sentReliable.count,
                              oldestUnackedMs: oldest, rttMs: roundTripTime,
                              haveRtt: hasRttSample)
@@ -135,8 +143,8 @@ extension EnetControlChannel {
         }
 
         // (B) transport ENet ping if we haven't sent anything in 500ms.
-        let lastSend = withState { lastSendMs }
-        if now &- lastSend >= Enet.pingIntervalMs {
+        let idleMs = withState { Self.msSince(lastSendMs, now: serviceTimeMs) }
+        if idleMs >= Enet.pingIntervalMs {
             sendEnetPing()
         }
 

@@ -13,6 +13,7 @@ import Darwin
 import Foundation
 import IOKit.ps
 import os
+import QuartzCore
 
 /// Snapshot of host-Mac vitals at one point in time. All fields are
 /// optional so a probe failure surfaces as `nil` → em-dash in the overlay,
@@ -49,15 +50,36 @@ public final class MacSystemStats {
         let idle: UInt32
     }
 
+    private struct BatterySnapshot {
+        let percent: Int?
+        let charging: Bool?
+        let sampledAt: CFTimeInterval
+    }
+
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "MacSystemStats")
     private var lastCPUTicks: CPUTicks?
+    private var batterySnapshot: BatterySnapshot?
+    private let pageSize: vm_size_t
+    private let totalRAM: UInt64
 
-    private init() {}
+    private init() {
+        var pageSize: vm_size_t = 0
+        host_page_size(mach_host_self(), &pageSize)
+        self.pageSize = pageSize
+
+        var totalRAM: UInt64 = 0
+        var size = MemoryLayout<UInt64>.size
+        if sysctlbyname("hw.memsize", &totalRAM, &size, nil, 0) != 0 {
+            totalRAM = 0
+        }
+        self.totalRAM = totalRAM
+    }
 
     public func snapshot() -> MacSystemStatsSnapshot {
-        MacSystemStatsSnapshot(
-            batteryPercent: batteryPercentSnapshot(),
-            batteryCharging: batteryChargingSnapshot(),
+        let battery = batterySnapshotForNow()
+        return MacSystemStatsSnapshot(
+            batteryPercent: battery.percent,
+            batteryCharging: battery.charging,
             cpuPercent: cpuPercentSnapshot(),
             ramPercent: ramPercentSnapshot()
         )
@@ -65,42 +87,47 @@ public final class MacSystemStats {
 
     // MARK: - Battery
 
-    /// Walks IOPSCopyPowerSourcesInfo for the first source that has a
-    /// percentage. Returns nil on Macs with no battery (Mac Studio, Mac
-    /// mini, Mac Pro) - the caller treats nil as "no row to render".
-    private func batteryPercentSnapshot() -> Int? {
-        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
-        else { return nil }
-        for source in sources {
-            guard let desc = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue()
-                    as? [String: Any] else { continue }
-            if let capacity = desc[kIOPSCurrentCapacityKey] as? Int,
-               let max = desc[kIOPSMaxCapacityKey] as? Int, max > 0 {
-                return Int((Double(capacity) / Double(max) * 100).rounded())
-            }
-        }
-        return nil
+    private static let batteryCacheInterval: CFTimeInterval = 10
+
+    static func batteryCacheIsStale(sampledAt: CFTimeInterval?, now: CFTimeInterval) -> Bool {
+        guard let sampledAt else { return true }
+        return now - sampledAt >= batteryCacheInterval
     }
 
-    /// True when AC power is providing energy (charging or topped off);
-    /// false when running on battery. Nil if no power source could be
-    /// queried at all (extremely rare). The overlay shows "charging" /
-    /// "discharging" off this flag.
-    private func batteryChargingSnapshot() -> Bool? {
+    private func batterySnapshotForNow() -> BatterySnapshot {
+        let now = CACurrentMediaTime()
+        if let batterySnapshot,
+           !Self.batteryCacheIsStale(sampledAt: batterySnapshot.sampledAt, now: now) {
+            return batterySnapshot
+        }
+        let (percent, charging) = readBatterySnapshot()
+        let snapshot = BatterySnapshot(percent: percent, charging: charging, sampledAt: now)
+        batterySnapshot = snapshot
+        return snapshot
+    }
+
+    /// One power-source walk keeps the related battery values in sync.
+    private func readBatterySnapshot() -> (Int?, Bool?) {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
-        else { return nil }
+        else { return (nil, nil) }
+        var percent: Int?
+        var charging: Bool?
         for source in sources {
             guard let desc = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue()
                     as? [String: Any] else { continue }
-            if let state = desc[kIOPSPowerSourceStateKey] as? String {
+            if percent == nil,
+               let capacity = desc[kIOPSCurrentCapacityKey] as? Int,
+               let max = desc[kIOPSMaxCapacityKey] as? Int, max > 0 {
+                percent = Int((Double(capacity) / Double(max) * 100).rounded())
+            }
+            if charging == nil, let state = desc[kIOPSPowerSourceStateKey] as? String {
                 // kIOPSACPowerValue when plugged in (charging or full),
                 // kIOPSBatteryPowerValue otherwise.
-                return state == (kIOPSACPowerValue as String)
+                charging = state == (kIOPSACPowerValue as String)
             }
         }
-        return nil
+        return (percent, charging)
     }
 
     // MARK: - CPU
@@ -158,22 +185,12 @@ public final class MacSystemStats {
             log.warning("host_statistics64(HOST_VM_INFO64) failed: \(result, privacy: .public)")
             return nil
         }
-        // 16KB page size on Apple Silicon, 4KB on Intel. host_page_size
-        // returns the live value.
-        var pageSize: vm_size_t = 0
-        host_page_size(mach_host_self(), &pageSize)
         guard pageSize > 0 else { return nil }
         let used = (UInt64(stats.active_count)
                     + UInt64(stats.wire_count)
                     + UInt64(stats.compressor_page_count))
                     * UInt64(pageSize)
-        // Physical RAM via sysctl hw.memsize - gives total installed RAM
-        // in bytes, the denominator for the percent calc.
-        var totalRAM: UInt64 = 0
-        var size = MemoryLayout<UInt64>.size
-        if sysctlbyname("hw.memsize", &totalRAM, &size, nil, 0) != 0 || totalRAM == 0 {
-            return nil
-        }
+        guard totalRAM > 0 else { return nil }
         return (Double(used) / Double(totalRAM)) * 100.0
     }
 }

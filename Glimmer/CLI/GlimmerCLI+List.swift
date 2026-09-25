@@ -1,7 +1,7 @@
 //
 //  GlimmerCLI+List.swift
 //
-//  `glimmer list`: the paired PCs with the launcher's live status, and
+//  `glimmer list [--csv]`: the paired PCs with the launcher's live status, and
 //  `glimmer list <pc> [--csv]`: the apps that PC offers right now.
 //
 
@@ -20,9 +20,12 @@ extension GlimmerCLI {
         }
         // One PC at a time: a handful of 2-second probes at most. The status
         // is the launcher chip's own words, untruncated.
+        let csv = command.flags.contains("--csv")
+        if csv { print(pcCSVHeader) }
         for host in model.hosts {
             let live = await probe(host, model: model)
-            print("\(host.displayName)\t\(AppModel.routeAddress(host))\t\(ChipPresentation(live: live).fullLabel)")
+            let fields = [host.displayName, AppModel.routeAddress(host), ChipPresentation(live: live).fullLabel]
+            print(csv ? fields.map(csvField).joined(separator: ",") : fields.joined(separator: "\t"))
         }
         return Exit.ok
     }
@@ -58,9 +61,14 @@ extension GlimmerCLI {
     }
 
     nonisolated static let csvHeader = "Name,ID,HDR Support,Hidden"
+    nonisolated static let pcCSVHeader = "Name,Address,Status"
 
     nonisolated static func csvRow(_ app: HostApp) -> String {
-        let name = "\"" + app.name.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-        return "\(name),\(app.id),\(app.hdrCapable),\(app.hidden)"
+        "\(csvField(app.name)),\(app.id),\(app.hdrCapable),\(app.hidden)"
+    }
+
+    /// Quoted, with inner quotes doubled, so commas and quotes in a name survive.
+    nonisolated static func csvField(_ text: String) -> String {
+        "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 }

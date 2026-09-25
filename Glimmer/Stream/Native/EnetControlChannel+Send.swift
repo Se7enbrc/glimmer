@@ -54,15 +54,17 @@ extension EnetControlChannel {
         }
     }
 
-    /// Send one already-built plaintext NV_INPUT_HEADER+body as control-V2 input
-    /// data, sealed identically to `sendInputPacket` but emitted as an ENet
-    /// SEND_UNRELIABLE command (no ACK, no retransmit). Used for controller motion
-    /// (gyro/accel) - a superseded sensor sample is worthless, so losing one is
-    /// harmless and we must NOT let it HOL-block or back up the reliable stream.
-    /// Matches current upstream InputStream.c:525-534 (motion ships unreliable).
-    /// Returns false if the seal/send failed.
+    /// Motion uses unacknowledged control-V2 input so superseded samples cannot
+    /// hold up the reliable stream (InputStream.c). Returns false on seal/send failure.
     @discardableResult
     func sendInputPacketUnreliable(_ plaintext: [UInt8], channel: UInt8) -> Bool {
+        // enet_peer_send promotes at 0xFFFF so the receiver accepts later samples.
+        // The serial batcher owns sensor sends, so the check and send need no wider lock.
+        let needsReliable = withState {
+            let effective = Enet.effectiveChannel(channel, negotiatedCount: negotiatedChannelCount)
+            return (channelOutgoingUnreliableSeq[effective] ?? 0) >= 0xFFFF
+        }
+        if needsReliable { return sendInputPacket(plaintext, channel: channel) }
         do {
             try sendEncryptedControlUnreliable(
                 type: CtrlV2.inputData, payload: plaintext,
@@ -183,32 +185,13 @@ extension EnetControlChannel {
         }
     }
 
-    /// Arm a P2 IDR ROUND-TRIP measurement (signal: IDR-RTT) - EXPLICIT
-    /// REQUEST_IDR sends only (RFIs don't arm; see sendRfiNow). Stamps the
-    /// send instant + bumps the request counter so the receive side can compute
-    /// request→arrival when the matching IDR/recovery frame lands. GATED on the
-    /// latency tracker existing (gate-on) so the OFF path pays a single optional
-    /// load - the resolve side is gated the same way, so off they stay perfectly
-    /// paired and cost nothing. Off any hot path (an IDR send is rare).
+    /// Only explicit IDR requests arm this round trip; RFIs use loss episodes.
+    /// Gate the stamp on the tracker so it pairs with the gated IDR resolver
+    /// and costs only an optional load when telemetry is off.
     private func armIdrRoundTrip() {
         guard FrameTimingTracker.shared != nil else { return }
         TelemetryCounters.shared.p2.stampIdrRequest(TelemetryCounters.monotonicNowNanos())
         TelemetryCounters.shared.idrRoundTripRequestTotal.increment()
-    }
-
-    /// Confirm a long-term reference frame (LTR-ACK). type 0x0350,
-    /// SS_LTR_FRAME_ACK = 8 bytes LE: {frameIndex, reserved}. URGENT, RELIABLE.
-    func confirmLtr(frame: Int) {
-        var w = ByteWriter()
-        w.u32LE(UInt32(truncatingIfNeeded: frame))
-        w.u32LE(0)
-        do {
-            _ = try sendEncryptedControl(
-                type: CtrlV2.ltrFrameAck, payload: w.bytes,
-                channel: Enet.ctrlChannelUrgent, label: "LTR_ACK")
-        } catch {
-            Diag.error("ENet LTR ack failed: \(error, privacy: .private)", Self.logCategory)
-        }
     }
 
     /// Seal `type`+`payload` as a control-V2 message and send it as a reliable
@@ -334,7 +317,7 @@ extension EnetControlChannel {
             throw EnetError.mtuExceeded
         }
 
-        // Fire-and-forget: NOT tracked in sentReliable (never retransmitted/acked).
-        sendDatagram(wrapDatagram(commands: [cmd.bytes], sentTime: true))
+        // Fire-and-forget: no reliable tracking or RTT stamp, since no ACK consumes either.
+        sendDatagram(wrapDatagram(commands: [cmd.bytes], sentTime: true, recordRtt: false))
     }
 }

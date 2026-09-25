@@ -17,7 +17,7 @@ import os.log
 // a standalone swiftc build with zero app dependencies. The two MUST stay in
 // sync — same selectors, same signatures.
 @objc protocol GlimmerHelperProtocol {
-    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping (Bool) -> Void)
+    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping @Sendable (Bool) -> Void)
     func currentStatus(reply: @escaping (Bool, Date?) -> Void)
     func ping(reply: @escaping (String) -> Void)
     func reSuppressCount(reply: @escaping (UInt64) -> Void)
@@ -333,9 +333,8 @@ final class AWDLHelperManager: ObservableObject {
     /// restore it. No-op unless the helper is enabled.
     func suppressForStream() {
         // A freshly-approved daemon isn't reflected in `state` until a UI
-        // refresh; re-read the live status so the FIRST stream after enabling
-        // actually parks awdl0 instead of no-op'ing on stale state.
-        refresh()
+        // refresh; re-read only when the cached state could be stale.
+        AWDLStreamLease.refreshIfNeeded(isEnabled: { self.isEnabled }, refresh: { self.refresh() })
         guard isEnabled else {
             Diag.notice("AWDL helper NOT engaged - state \(state.diagDescription); awdl0 left to macOS", "Stream")
             return
@@ -365,15 +364,17 @@ final class AWDLHelperManager: ObservableObject {
 
     /// Release awdl0 when a stream ends.
     func releaseForStream() {
-        heartbeatTask?.cancel()
-        heartbeatTask = nil
-        let client = self.client
-        Task { @MainActor in
-            _ = await client.setAWDLDown(false, reason: "stream-end")
-            self.suppressing = false
-            TelemetryCounters.shared.setAWDLHelper(.init(suppressing: false, reSuppressTotal: 0))
-            Diag.info("AWDL helper released awdl0 (stream end)", "Stream")
-        }
+        AWDLStreamLease.releaseIfHeartbeatExists(hasHeartbeat: { self.heartbeatTask != nil }, release: {
+            self.heartbeatTask?.cancel()
+            self.heartbeatTask = nil
+            let client = self.client
+            Task { @MainActor in
+                _ = await client.setAWDLDown(false, reason: "stream-end")
+                self.suppressing = false
+                TelemetryCounters.shared.setAWDLHelper(.init(suppressing: false, reSuppressTotal: 0))
+                Diag.info("AWDL helper released awdl0 (stream end)", "Stream")
+            }
+        })
     }
 }
 

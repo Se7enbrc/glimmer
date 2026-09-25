@@ -20,14 +20,6 @@ extension StreamSession {
     /// allocation) when the gate is off. Called from `start()` once the
     /// connection is up and the decoder/backend are live.
     func startTelemetryExporter(decoder: VideoDecoder, serverName: String) {
-        // Diag file sink is opened earlier, at the connect-start anchor (see
-        // anchorTelemetryConnectStart), so the RTSP/ENet handshake - including
-        // the `RTSP negotiated codec=...` line - is captured in the file and
-        // shipped with the rest of the logs. This call is a no-op backstop
-        // (startIfEnabled is idempotent) for any path that reaches the exporter
-        // without having gone through the anchor.
-        SessionLogFileSink.startIfEnabled(enabled: TelemetryGate.isEnabled)
-
         // Capture the decoder weakly; its telemetry accessors are all
         // `nonisolated` + lock-guarded, so the exporter's utility queue can call
         // them directly. RTT / ENet health route through the decoder's LIVE
@@ -82,13 +74,6 @@ extension StreamSession {
             // Isolates the launch-path leg (click → connect-start); no-op without a click.
             ConnectTimingTelemetry.shared.markConnectStart()
         }
-        // Open the Diag file sink HERE - at connect-start, before
-        // startConnection runs the RTSP/ENet handshake - so the handshake and
-        // the `RTSP negotiated codec=...` line land in the file and get shipped.
-        // Previously it opened with the exporter (post-connect), so the entire
-        // negotiation phase was missing from shipped logs. Same opt-in gate;
-        // idempotent; torn down in stopTelemetryExporter.
-        SessionLogFileSink.startIfEnabled(enabled: TelemetryGate.isEnabled)
         // Pre-start EVENT pen: anything still buffered belongs to a dead
         // session - forget it so this session's exporter can't flush it.
         TelemetryExporter.resetPreStartEventBuffer()
@@ -125,8 +110,5 @@ extension StreamSession {
     func stopTelemetryExporter() {
         telemetryExporter?.stop()
         telemetryExporter = nil
-        // Flush + close the per-session Diag file sink (idempotent; no-op if it
-        // was never installed). Done last so any teardown Diag lines are captured.
-        SessionLogFileSink.stop()
     }
 }

@@ -56,11 +56,11 @@ extension FrameTimingTracker {
         // breakdown. Only emit bytes when known (>0); the type is "idr"/"p".
         if record.frameBytes > 0 { fields.append("\"bytes\":\(record.frameBytes)") }
         fields.append("\"type\":\"\(record.isIDR ? "idr" : "p")\"")
-        fields.append("\"t_present_ms\":\(jsonNumber(record.presentUptimeMs))")
+        fields.append("\"t_present_ms\":\(TelemetryRenderer.jsonNumber(record.presentUptimeMs))")
         if record.isResumePresent { fields.append("\"resume\":true") }
         func add(_ key: String, _ value: Double?) {
             guard let value, value.isFinite else { return }
-            fields.append("\"\(key)\":\(jsonNumber(value))")
+            fields.append("\"\(key)\":\(TelemetryRenderer.jsonNumber(value))")
         }
         add("recv_to_assemble_ms", record.receiveToAssemble)
         add("assemble_to_submit_ms", record.assembleToSubmit)
@@ -76,8 +76,8 @@ extension FrameTimingTracker {
     }
 
     /// Frames-file DROP STUBS (`event:"frame_drop"`) for frames evicted unpresented;
-    /// `stage` is the last stage reached and `t_evict_ms` the eviction instant,
-    /// ~maxInFlight frames after the drop. Called off the mapLock.
+    /// `stage` is the last stage reached; assemble and eviction times locate the hitch.
+    /// Called off the mapLock.
     func emitDropStubs(_ evicted: [(rtp: UInt32, timing: Timing)]) {
         let counters = TelemetryCounters.shared
         let lines = dropStubLines(
@@ -97,7 +97,9 @@ extension FrameTimingTracker {
             return "{\"session\":\"\(sessionId)\",\"event\":\"frame_drop\","
                 + "\"frame\":\(drop.timing.frameIndex),\"rtp\":\(drop.rtp),"
                 + "\"type\":\"\(drop.timing.isIDR ? "idr" : "p")\","
-                + "\"stage\":\"\(stage)\",\"t_evict_ms\":\(jsonNumber(evictMs))}"
+                + "\"stage\":\"\(stage)\","
+                + "\"t_assemble_ms\":\(TelemetryRenderer.jsonNumber(Double(drop.timing.assembleNanos) / 1_000_000.0)),"
+                + "\"t_evict_ms\":\(TelemetryRenderer.jsonNumber(evictMs))}"
         }
     }
 
@@ -105,15 +107,6 @@ extension FrameTimingTracker {
     /// input sent just before it is one search away.
     func bookmarkLine(total: UInt64, uptimeNanos: UInt64) -> String {
         "{\"session\":\"\(sessionId)\",\"event\":\"bookmark\",\"bookmark_total\":\(total),"
-            + "\"t_ms\":\(jsonNumber(Double(uptimeNanos) / 1_000_000.0))}"
-    }
-
-    /// Same integer/decimal discipline as TelemetryRenderer.jsonNumber so the
-    /// per-frame trace and the per-second snapshot read consistently.
-    func jsonNumber(_ value: Double) -> String {
-        if value == value.rounded() && abs(value) < 1e15 {
-            return String(Int64(value))
-        }
-        return String(format: "%.3f", value)
+            + "\"t_ms\":\(TelemetryRenderer.jsonNumber(Double(uptimeNanos) / 1_000_000.0))}"
     }
 }

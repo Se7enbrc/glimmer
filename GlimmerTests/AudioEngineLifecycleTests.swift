@@ -53,10 +53,94 @@ struct AudioEngineLifecycleTests {
         #expect((failure == nil) == running)
     }
 
+    /// A fresh opus decoder must not inherit a missing frame or an exhausted
+    /// restart ladder from the previous connection.
+    @Test func reinitializationClearsPendingGapAndRestartState() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.stateLock.lock()
+        decoder.pendingFecGap = true
+        decoder.engineRestartRetries = AudioDecoder.maxEngineRestartRetries
+        decoder.primeEdgeRetryAtNanos = 1
+        decoder.primeEdgeFailureStreak = true
+        decoder.stateLock.unlock()
+        _ = decoder.initDecoderCore(channelCount: 2, sampleRate: 48_000,
+                                    streams: 1, coupledStreams: 1,
+                                    samplesPerFrame: 240, mapping: [0, 1])
+        decoder.stateLock.lock()
+        #expect(!decoder.pendingFecGap)
+        #expect(decoder.engineRestartRetries <= 1)
+        #expect(decoder.primeEdgeRetryAtNanos == 0)
+        #expect(!decoder.primeEdgeFailureStreak)
+        decoder.stateLock.unlock()
+        decoder.shutdown()
+        #expect(decoder.decoder == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func oldSessionRetryCannotConsumeNewLadder(shutdownFirst: Bool) throws {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        let generation = decoder.engineRestartGeneration
+        if shutdownFirst { decoder.shutdown() }
+        // Invalid opus parameters keep this graph empty regardless of hardware.
+        #expect(decoder.initDecoderCore(channelCount: 2, sampleRate: 0,
+                                       streams: 1, coupledStreams: 1,
+                                       samplesPerFrame: 240, mapping: [0, 1]) == -1)
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        decoder.stateLock.lock()
+        decoder.inputFormat = format
+        let currentGeneration = decoder.engineRestartGeneration
+        decoder.stateLock.unlock()
+        #expect(currentGeneration != generation)
+        decoder.retryEngineStart(attempt: 1, generation: generation)
+        decoder.stateLock.lock()
+        #expect(decoder.engineRestartRetries == 0)
+        #expect(!decoder.engine.isRunning)
+        decoder.stateLock.unlock()
+        // The current session still retries the same empty graph normally.
+        decoder.retryEngineStart(attempt: 1, generation: currentGeneration)
+        decoder.stateLock.lock()
+        #expect(decoder.engineRestartRetries == 1)
+        decoder.stateLock.unlock()
+    }
+
+    @Test(arguments: [false, true])
+    func recoveryStartUpdatesEngineGauge(primeEdge: Bool) throws {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        decoder.inputFormat = format
+        decoder.engine.attach(decoder.playerNode)
+        decoder.engine.connect(decoder.playerNode, to: decoder.engine.mainMixerNode, format: format)
+        // Offline rendering exercises real engine starts without an output device.
+        try decoder.engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 240)
+        if primeEdge {
+            decoder.stateLock.lock()
+            #expect(decoder.startPlayoutAtPrimeEdge())
+            decoder.stateLock.unlock()
+        } else {
+            decoder.retryEngineStart(attempt: 1, generation: decoder.engineRestartGeneration)
+        }
+        decoder.stateLock.lock()
+        #expect(decoder.engine.isRunning)
+        decoder.audioMeterLock.lock()
+        #expect(decoder.engineRunning)
+        decoder.audioMeterLock.unlock()
+        decoder.stateLock.unlock()
+    }
+
+    @Test func shutdownDiscardsPendingGap() {
+        let decoder = AudioDecoder()
+        decoder.pendingFecGap = true
+        decoder.shutdown()
+        #expect(!decoder.pendingFecGap)
+    }
+
     /// The per-session listener leak: a Swift closure re-bridges to a new block on
     /// every call, so a Swift-side remove never matched. Removing through the
     /// shim's token must stop the notifications.
-    @Test func removedListenerStopsFiring() {
+    @Test func removedListenerStopsFiring() async {
         let system = AudioObjectID(kAudioObjectSystemObject)
         var addr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertySleepingIsAllowed,
@@ -83,11 +167,11 @@ struct AudioEngineLifecycleTests {
             return
         }
         toggle()
-        #expect(fired.wait(timeout: .now() + 2) == .success)
-        #expect(fired.wait(timeout: .now() + 2) == .success)
+        #expect(await fired.waitAsync(for: .seconds(2)) == .success)
+        #expect(await fired.waitAsync(for: .seconds(2)) == .success)
         #expect(gl_audio_listener_remove(system, &addr, queue, token) == noErr)
         toggle()
-        #expect(fired.wait(timeout: .now() + 0.5) == .timedOut)
+        #expect(await fired.waitAsync(for: .seconds(0.5)) == .timedOut)
     }
 
     /// A backend that outlives its session must let the decoder, and the

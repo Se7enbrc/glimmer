@@ -96,7 +96,9 @@ struct RtspMessage {
         let parts = statusLine.split(separator: " ", maxSplits: 2,
                                      omittingEmptySubsequences: false)
         if parts.count >= 2 {
-            msg.statusCode = Int(parts[1]) ?? 0
+            if let statusCode = Int(parts[1]), (100...999).contains(statusCode) {
+                msg.statusCode = statusCode
+            }
         }
         if parts.count >= 3 {
             msg.statusString = String(parts[2])
@@ -309,13 +311,8 @@ struct SdpBuilder {
         attrs.append(("x-nv-video[0].framesWithInvalidRefThreshold", "0"))
 
         // adjustedBitrate = bitrate * 0.80, remote -=500 if >500, cap 200000.
-        // The cap is the ceiling Sunshine VQOS can ever climb to. It was 100 Mbps
-        // - which silently truncated the abundant-link, high-res case (4K@240 wire
-        // ~105 Mbps and 5K/6K@120 push past 125 Mbps configured → ×0.80 ≥ 100 Mbps,
-        // clipped) exactly where quality should be highest. Raised to 200 Mbps to
-        // match QualityCalculator's own ceiling; the host simply won't use more
-        // than it can sustain, and the minimumBitrateKbps floor below still gives
-        // VQOS room to drop under loss.
+        // The 200 Mbps cap preserves headroom for high-resolution streams whose
+        // configured bitrate exceeds the former 100 Mbps limit after adjustment.
         var adjustedBitrate = Int(Double(config.bitrate) * 0.80)
         if config.isRemoteSession {
             if adjustedBitrate > 500 { adjustedBitrate -= 500 }

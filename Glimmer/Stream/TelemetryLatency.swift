@@ -78,6 +78,12 @@ final class FrameTimingTracker: @unchecked Sendable {
     private static let sharedBox = OSAllocatedUnfairLock<FrameTimingTracker?>(initialState: nil)
     static var shared: FrameTimingTracker? { sharedBox.withLock { $0 } }
 
+    #if DEBUG
+    static func installForTesting(_ tracker: FrameTimingTracker?) {
+        sharedBox.withLock { $0 = tracker }
+    }
+    #endif
+
     /// Install a fresh tracker iff the gate is on, and start its trace writer.
     /// Called from the exporter's `start()`. No-op (and nothing installed) when
     /// off, so `shared` stays nil and the hot path stays zero-cost.
@@ -95,6 +101,7 @@ final class FrameTimingTracker: @unchecked Sendable {
             box = nil
             return previous
         }
+        tracker?.flushRemainingDrops()
         tracker?.traceWriter.stop()
     }
 
@@ -277,6 +284,34 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// stream never evicts; the bound exists purely so a frame that is received
     /// but never presented (dropped at decode or pacing) can't leak.
     private static let maxInFlight = 256
+    private static let dropAgeNanos: UInt64 = 2_000_000_000
+
+    /// Only an old leading run can be discarded without disturbing the order.
+    static func expiredDropCount(order: [UInt32], timings: [UInt32: Timing], nowNanos: UInt64) -> Int {
+        var count = 0
+        for key in order {
+            guard let assembled = timings[key]?.assembleNanos,
+                  nowNanos >= assembled, nowNanos - assembled >= dropAgeNanos else { break }
+            count += 1
+        }
+        return count
+    }
+
+    @discardableResult
+    func flushRemainingDrops(nowNanos: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Int {
+        os_unfair_lock_lock(mapLock)
+        let expired = Self.expiredDropCount(order: insertionOrder, timings: inFlight,
+                                            nowNanos: nowNanos)
+        let keys = insertionOrder.prefix(expired)
+        let remaining = keys.compactMap { key -> (rtp: UInt32, timing: Timing)? in
+            guard let timing = inFlight.removeValue(forKey: key) else { return nil }
+            return (key, timing)
+        }
+        insertionOrder.removeFirst(expired)
+        os_unfair_lock_unlock(mapLock)
+        if !remaining.isEmpty { emitDropStubs(remaining) }
+        return remaining.count
+    }
 
     /// Internal for tests; the engine only reaches a tracker through `shared`.
     init(sessionId: String) {
@@ -324,6 +359,12 @@ final class FrameTimingTracker: @unchecked Sendable {
         // but dropped before present, which would otherwise leak. Evictions
         // become frames-file DROP STUBS, emitted off the lock (emitDropStubs).
         var evicted: [(rtp: UInt32, timing: Timing)] = []
+        let expired = Self.expiredDropCount(order: insertionOrder, timings: inFlight,
+                                            nowNanos: assembleNanos)
+        for _ in 0..<expired {
+            let stale = insertionOrder.removeFirst()
+            if let dropped = inFlight.removeValue(forKey: stale) { evicted.append((stale, dropped)) }
+        }
         while insertionOrder.count > Self.maxInFlight {
             let stale = insertionOrder.removeFirst()
             if let dropped = inFlight.removeValue(forKey: stale) { evicted.append((stale, dropped)) }
@@ -481,7 +522,7 @@ final class FrameTimingTracker: @unchecked Sendable {
         histograms.idrRoundTrip.observe(roundTripMs)
         traceWriter.append(
             "{\"session\":\"\(sessionId)\",\"event\":\"idr_round_trip\","
-            + "\"frame\":\(frameIndex),\"idr_round_trip_ms\":\(jsonNumber(roundTripMs))}")
+            + "\"frame\":\(frameIndex),\"idr_round_trip_ms\":\(TelemetryRenderer.jsonNumber(roundTripMs))}")
     }
 
     // The COMPOSITE stage computations (glass-to-glass + the consume-once

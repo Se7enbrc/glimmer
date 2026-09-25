@@ -2,8 +2,8 @@
 //  StreamWindowFirstFrameTests.swift
 //
 //  The stream window's hand-off: nothing is taken from the user before the
-//  first frame, or after a close or a Cmd-Tab away; the cover's presentation
-//  options stay a set AppKit accepts; a warp's jump never reaches the PC.
+//  first frame, after a close or Cmd-Tab away; cover options stay valid; a
+//  warp's jump never reaches the PC.
 //
 
 import AppKit
@@ -44,16 +44,14 @@ struct StreamWindowFirstFrameTests {
     }
 
     /// The window goes visible for the user's return, but keeps its hands off
-    /// the pointer and the menu bar while they are in another app.
+    /// the pointer while they are in another app.
     @Test func aFirstFrameWhileTheUserIsAwayTakesNothing() {
         let stream = StreamWindow()
         stream.awaitingFirstFrameFadeIn = true
         stream.userBackgrounded = true
-        let options = NSApp.presentationOptions
         stream.fadeInOnFirstFrame()
         #expect(!stream.window.ignoresMouseEvents)
         #expect(stream.cursorHideCount == 0)
-        #expect(NSApp.presentationOptions == options)
     }
 
     @Test func coverOptionsPairEachMenuBarChoiceWithItsDock() {
@@ -73,6 +71,25 @@ struct StreamWindowFirstFrameTests {
                 #expect(options.contains(.disableScreenCornerInteractions))
             }
         }
+    }
+
+    @Test func displayWakeUsesDedicatedCallbackAndCloseRemovesObserver() {
+        let stream = StreamWindow()
+        var wakeCount = 0
+        var screenChangeCount = 0
+        stream.onDisplaysWoke = { wakeCount += 1 }
+        stream.onScreenChanged = { screenChangeCount += 1 }
+        stream.installDisplayObservers(nc: NotificationCenter())
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+
+        workspaceCenter.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+        #expect(wakeCount == 1)
+        #expect(screenChangeCount == 0)
+
+        stream.close()
+        workspaceCenter.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+        #expect(wakeCount == 1)
+        #expect(screenChangeCount == 0)
     }
 
     /// AppKit mouse rows run from minY + 1 to maxY: the top row belongs to

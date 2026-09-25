@@ -185,36 +185,31 @@ final class AudioTtfContext: @unchecked Sendable {
     /// Wall-clock stamp (`timeIntervalSinceReferenceDate`) of the previous
     /// stream's end; 0 = no stream has ended this process run.
     private var lastStreamEndReference: Double = 0
+    /// Idle gap captured at connect; nil when no prior end can be measured.
+    private var idleAtStartSeconds: Double?
     init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
-    /// Stamp the stream-end instant. Called from session teardown (the source
-    /// site wires this); idempotence doesn't matter - last writer wins and a
-    /// double teardown stamps the same instant twice.
-    func markStreamEnd() {
-        let now = Date().timeIntervalSinceReferenceDate
+    /// Stamp the stream-end instant. The next connect snapshots its idle gap.
+    func markStreamEnd(now: Double = Date().timeIntervalSinceReferenceDate) {
         os_unfair_lock_lock(lock)
         lastStreamEndReference = now
         os_unfair_lock_unlock(lock)
     }
 
-    /// Classify + latch this session's TTF record (first writer wins, like the
-    /// cold-start gauge it travels with), deriving `host_idle_s` from the
-    /// previous stream-end stamp. Returns the latched record so the event row
-    /// emits exactly what the scorecard will report. Called once per session
-    /// from the audio receive path's TTF latch - never a hot path.
+    /// Classify + latch this session's TTF record using the idle gap captured at connect.
+    /// Returns the record emitted by telemetry and retained for the scorecard.
+    /// Called once per session from the audio receive path.
     @discardableResult
-    func latchClassifying(pingToRtpMs: Double?, startup: String?) -> Record {
-        let now = Date().timeIntervalSinceReferenceDate
+    func latchClassifying(pingToRtpMs: Double?, startup: String?,
+                          now: Double = Date().timeIntervalSinceReferenceDate) -> Record {
         os_unfair_lock_lock(lock)
         defer { os_unfair_lock_unlock(lock) }
         if let existing = record { return existing }
         let warm = (pingToRtpMs ?? .infinity) <= Self.warmPingToRtpThresholdMs
-        let idle = lastStreamEndReference > 0 && now > lastStreamEndReference
-            ? now - lastStreamEndReference : nil
         let latched = Record(ttfClass: warm ? "warm" : "cold",
                              pingToRtpMs: pingToRtpMs,
-                             hostIdleSeconds: idle,
+                             hostIdleSeconds: idleAtStartSeconds,
                              startup: startup)
         record = latched
         return latched
@@ -227,11 +222,13 @@ final class AudioTtfContext: @unchecked Sendable {
         return record
     }
 
-    /// Clear the per-session record but PRESERVE the last-stream-end stamp -
-    /// the stamp is the previous session's teardown instant, exactly what this
-    /// session's `host_idle_s` measures from.
-    func resetForNewSession() {
-        os_unfair_lock_lock(lock); record = nil; os_unfair_lock_unlock(lock)
+    /// Clear the record and snapshot the previous-session idle gap at connect.
+    func resetForNewSession(now: Double = Date().timeIntervalSinceReferenceDate) {
+        os_unfair_lock_lock(lock)
+        record = nil
+        idleAtStartSeconds = lastStreamEndReference > 0 && now > lastStreamEndReference
+            ? now - lastStreamEndReference : nil
+        os_unfair_lock_unlock(lock)
     }
 }
 

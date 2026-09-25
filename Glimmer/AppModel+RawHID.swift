@@ -11,6 +11,11 @@ import Foundation
 import GameController
 import IOKit.hid
 
+@MainActor
+private enum HIDDiscoveryState {
+    static var holders: Set<AppModel.HIDVisibilityHolder> = []
+}
+
 extension AppModel {
 
     /// Shared up-front explanation shown before macOS's Input Monitoring prompt
@@ -60,6 +65,19 @@ extension AppModel {
     }
 
     // MARK: Generic HID pads
+
+    enum HIDVisibilityHolder: Hashable {
+        case launcher, menuBar
+    }
+
+    /// Keep discovery alive only while a surface that lists or offers pads is shown.
+    func setHIDDiscovery(_ shown: Bool, for holder: HIDVisibilityHolder) {
+        if shown {
+            if HIDDiscoveryState.holders.insert(holder).inserted { HIDGamepadManager.shared.retain(reading: false) }
+        } else if HIDDiscoveryState.holders.remove(holder) != nil {
+            HIDGamepadManager.shared.release(reading: false)
+        }
+    }
 
     static let hidPermissionExplanation =
         "macOS doesn't recognise this controller on its own, so Glimmer reads it "

@@ -23,12 +23,16 @@ extension AppModel {
 
     private static var bootstrapTask: Task<Void, Never>?
 
-    /// Runs the launch bootstrap once, then takes command-line requests. App Intents
-    /// await the same task: one can be what launched Glimmer, and until it finishes
-    /// no PCs are loaded.
+    /// Loads PCs before the first window frame, then runs launch setup once.
+    /// App Intents await the task before taking command-line requests.
     @discardableResult
     func startBootstrap() -> Task<Void, Never> {
         if let task = Self.bootstrapTask { return task }
+        migrateFromMoonlightQtIfNeeded()
+        loadHosts()
+        // Install before the launcher appears so pad discovery can explain
+        // Input Monitoring there, before a stream.
+        HIDGamepadManager.shared.onPermissionNeeded = { [weak self] pad in self?.hidPadNeedsPermission(pad) }
         let task = Task {
             await bootstrap()
             listenForCommands()
@@ -56,8 +60,6 @@ extension AppModel {
         // Install step: build the client SecIdentity once, into Glimmer's own
         // keychain, so streams don't prompt the user for keychain access.
         await IdentityManager.shared.preflight()
-        migrateFromMoonlightQtIfNeeded()
-        loadHosts()
         // Seed the Custom fields from the display when Custom is ALREADY the
         // live preset and has no values on record (a preset restored from
         // defaults, or a moonlight-qt migration).
@@ -74,7 +76,6 @@ extension AppModel {
         }
         persistQualitySettings()
         startLiveRefresh()
-        restartHostStatusPolling()
     }
 
     func startLiveRefresh() {
@@ -221,10 +222,6 @@ extension AppModel {
         // the auto-offer and seeding `controllerConnected`).
         controllerConnected = !GCController.controllers().isEmpty
         maybeOfferRawHID()
-        // Generic HID pads are discovered here, in the launcher, so their
-        // permission is explained before a stream and never during one.
-        HIDGamepadManager.shared.onPermissionNeeded = { [weak self] pad in self?.hidPadNeedsPermission(pad) }
-        HIDGamepadManager.shared.retain()
     }
 
     /// Human-readable description of the current primary display, for the UI.

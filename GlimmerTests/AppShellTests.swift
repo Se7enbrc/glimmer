@@ -11,6 +11,12 @@ import Testing
 
 struct AppShellTests {
 
+    @Test @MainActor func testHostRegistersDefaultsWithoutLaunchingTheApp() {
+        #expect(AppDelegate.boundManager == nil)
+        let registration = UserDefaults.standard.volatileDomain(forName: UserDefaults.registrationDomain)
+        #expect(registration[MouseAccelerationControl.enabledDefaultsKey] as? Bool == true)
+    }
+
     @Test func dockIconStaysWhileThereIsSomethingToComeBackTo() {
         let policy = AppDelegate.activationPolicy
         #expect(policy(["main"], false) == .regular)

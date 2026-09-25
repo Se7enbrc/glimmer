@@ -210,13 +210,13 @@ extension AppModel {
             // loop drained normally.
             await session.stop()
             // A takeover prompt is not a stream that ended: no toast, no receipt.
-            if takeover != nil { self.isStreaming = false }
-            self.cleanupAfterStream(host: host, caughtError: caughtError)
             if let takeover {
                 let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name
                 self.pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
-                self.presentTakeoverAlertIfNeeded()
+                self.isStreaming = false
             }
+            self.cleanupAfterStream(host: host, caughtError: caughtError)
+            if takeover != nil { self.presentTakeoverAlertIfNeeded() }
         }
     }
 

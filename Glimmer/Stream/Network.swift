@@ -55,17 +55,11 @@ public enum HostReachability {
     public enum Outcome: Sendable, Equatable {
         case reachable(rttMs: Int)
         case unreachable     // refused / timed out / DNS failed
+        case noPath          // no route from this Mac yet (Wi-Fi rejoining after a wake)
     }
 
-    /// Open a TCP connection to `host:port`, time how long it takes to reach
-    /// `.ready`, cancel it, and return the result. Never throws - failures
-    /// fold into `.unreachable` because the caller (a status pill poller)
-    /// doesn't need to distinguish refused-vs-timed-out.
-    ///
-    /// - Parameters:
-    ///   - host: hostname or IP
-    ///   - port: TCP port to dial (Sunshine/GFE HTTP is 47989)
-    ///   - timeoutMs: how long to wait before giving up
+    /// Time a TCP connection to `host:port` until `.ready`, then cancel it.
+    /// Returns `.noPath` while this Mac lacks a route; other failures are `.unreachable`.
     public static func measureRTT(host: String,
                                   port: Int = 47989,
                                   timeoutMs: Int = 2_000) async -> Outcome {
@@ -110,11 +104,10 @@ public enum HostReachability {
                 case .cancelled:
                     once.resume(with: .unreachable)
                 case .waiting:
-                    // Waiting means we couldn't form the connection (host
-                    // refused / unreachable / firewalled). The Network
-                    // framework will keep retrying indefinitely; we don't
-                    // care - treat as unreachable and tear down.
-                    once.resume(with: .unreachable)
+                    // A waiting connection retries forever, so tear it down. With no satisfied path
+                    // (Wi-Fi rejoining after a wake) this Mac can't judge the PC; a refused port
+                    // waits on a satisfied one and stays unreachable.
+                    once.resume(with: conn.currentPath?.status != .satisfied ? .noPath : .unreachable)
                     conn.cancel()
                 default:
                     break

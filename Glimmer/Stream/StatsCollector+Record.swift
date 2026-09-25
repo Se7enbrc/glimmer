@@ -1,15 +1,5 @@
-//
-//  StatsCollector+Record.swift
-//
-//  The hot-path recording API + lightweight accessors for StatsCollector - the
-//  per-frame `record*` mutators called from the native backend's receive
-//  thread, the VideoToolbox decode queue, and the FramePacer's pacing queue,
-//  plus the `secondsSince*` / `*Count` reads the watchdog + telemetry use. Split
-//  out of StatsCollector.swift (which keeps the stored state, `reset()`, and the
-//  windowed `snapshot()`) so each unit stays under the file-length budget. All
-//  methods take the same single `os_unfair_lock` declared on the class; the
-//  cross-file extension is intra-module so it shares that internal state.
-//
+// Per-frame recording from the receive, decode, and pacing queues.
+// Accessors feed the watchdog and telemetry through the collector's lock.
 
 import Foundation
 import QuartzCore
@@ -19,12 +9,24 @@ extension StatsCollector {
 
     /// `ptsUs` is the frame's host presentation time (0 = unknown), feeding the
     /// window's host cadence.
-    func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0) {
+    func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0,
+                             frameNumber: Int32) {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         receivedFrames &+= 1
         totalReceived &+= 1
-        foldHostDeltaLocked(ptsUs: ptsUs)
+        let consecutive = lastReceivedFrameNumber.map { frameNumber == $0 &+ 1 } ?? false
+        if lastReceivedPtsUs > 0, ptsUs < lastReceivedPtsUs {
+            pendingNetworkGapCount = 0
+            pendingNetworkGapHead = 0
+            lastPresentedPtsSeconds = .nan
+            clientSkipSinceLastPresent = true
+        }
+        if lastReceivedFrameNumber != nil && !consecutive {
+            if ptsUs > 0 { enqueueNetworkGapLocked(Double(ptsUs) / 1_000_000.0) }
+        }
+        foldHostDeltaLocked(ptsUs: ptsUs, consecutive: consecutive)
+        lastReceivedFrameNumber = frameNumber
         if bytes > 0 {
             receivedBytes &+= UInt64(bytes)
             // Telemetry frame-size + type window accumulators - cheap integer adds
@@ -227,20 +229,16 @@ extension StatsCollector {
         clientSkipSinceLastPresent = true
     }
 
-    /// Total renderer-backpressure drops since reset(). Used by stream-
-    /// session diagnostics; not currently surfaced in the overlay (the
-    /// overlay's decoder-dropped row covers the more user-visible drop
-    /// path), but logged on teardown for "did we stall a lot" forensics.
+    /// Session-total renderer-backpressure drops for stream diagnostics.
+    /// The overlay shows decoder drops; teardown logs this separate cause.
     func backpressureDropCount() -> UInt64 {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         return rendererBackpressureDrops
     }
 
-    /// Total decoder-side drops since reset() (VT reported
-    /// `kVTDecodeInfo_FrameDropped`). The overlay surfaces this as a percentage;
-    /// the telemetry exporter wants the absolute count for its drops-by-cause
-    /// split. Cheap lock-guarded read, same as `backpressureDropCount`.
+    /// Session-total decoder drops. The overlay uses the percentage;
+    /// telemetry needs the absolute count for its drops-by-cause split.
     func decoderDropCount() -> UInt64 {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
@@ -284,7 +282,7 @@ extension StatsCollector {
         clientSkipSinceLastPresent = true
     }
 
-    /// Total presentation-late drops since reset(). Surfaced in the overlay's
+    /// Total presentation-late drops this session. Surfaced in the overlay's
     /// drops-by-cause split and logged on teardown.
     func presentationLateDropCount() -> UInt64 {
         os_unfair_lock_lock(&lock)
@@ -303,7 +301,7 @@ extension StatsCollector {
         presentationGaps &+= 1
     }
 
-    /// Total perceived present gaps since reset(). Exported as the badge's
+    /// Total perceived present gaps this session. Exported as the badge's
     /// felt-stutter telemetry signal.
     func presentationGapCount() -> UInt64 {
         os_unfair_lock_lock(&lock)
@@ -311,14 +309,11 @@ extension StatsCollector {
         return presentationGaps
     }
 
-    /// Sample the pacing queue depth once per link tick. Updates the live gauge
-    /// and the window peak. Called from FramePacer on the pacing queue at the
-    /// display's vsync rate (60-240 Hz).
+    /// Sample the live pacing queue depth at the display's vsync rate.
     func recordPacingDepth(_ depth: Int) {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         lastPacingDepth = depth
-        if depth > maxPacingDepth { maxPacingDepth = depth }
     }
 
     /// Record one present's cadence error (present-vs-PTS grid delta, ms; bucketed
@@ -332,6 +327,13 @@ extension StatsCollector {
         if hostPTSSeconds.isFinite { lastPresentedPtsSeconds = hostPTSSeconds }
         let afterClientSkip = clientSkipSinceLastPresent
         clientSkipSinceLastPresent = false
+        var afterNetworkGap = false
+        while pendingNetworkGapCount > 0,
+              hostPTSSeconds >= pendingNetworkGapPtsSeconds[pendingNetworkGapHead] {
+            pendingNetworkGapHead = (pendingNetworkGapHead + 1) % Self.networkGapCapacity
+            pendingNetworkGapCount -= 1
+            afterNetworkGap = true
+        }
         let magnitude = abs(cadenceErrorMs)
         presentCadenceErrorMsSum += magnitude
         presentCadenceSamples &+= 1
@@ -340,10 +342,26 @@ extension StatsCollector {
             onTimePresents &+= 1
         } else {
             latePresents &+= 1
-            if !afterClientSkip, Self.hostTimingExplainsLate(
+            if !afterClientSkip, !afterNetworkGap, Self.hostTimingExplainsLate(
                 hostDeltaMs: hostDeltaMs, streamIntervalMs: streamIntervalMs, refreshMs: refreshMs) {
                 hostTimedLatePresents &+= 1
             }
+        }
+    }
+
+    /// Keep the newest gaps when decoding stays hidden longer than the queue.
+    /// MUST be called with `lock` held.
+    private func enqueueNetworkGapLocked(_ ptsSeconds: Double) {
+        let tail = (pendingNetworkGapHead + pendingNetworkGapCount) % Self.networkGapCapacity
+        if tail == pendingNetworkGapPtsSeconds.count {
+            pendingNetworkGapPtsSeconds.append(ptsSeconds)
+        } else {
+            pendingNetworkGapPtsSeconds[tail] = ptsSeconds
+        }
+        if pendingNetworkGapCount == Self.networkGapCapacity {
+            pendingNetworkGapHead = (pendingNetworkGapHead + 1) % Self.networkGapCapacity
+        } else {
+            pendingNetworkGapCount += 1
         }
     }
 
@@ -357,11 +375,11 @@ extension StatsCollector {
     }
 
     /// Fold one received frame's host PTS into the window's host cadence. Zero, a
-    /// backward step or a gap of 1 s or more breaks the chain instead of counting.
+    /// backward step, frame skip or a gap of 1 s or more breaks the chain.
     /// MUST be called with `lock` held.
-    func foldHostDeltaLocked(ptsUs: UInt64) {
+    func foldHostDeltaLocked(ptsUs: UInt64, consecutive: Bool) {
         defer { lastReceivedPtsUs = ptsUs }
-        guard lastReceivedPtsUs > 0, ptsUs > lastReceivedPtsUs,
+        guard consecutive, lastReceivedPtsUs > 0, ptsUs > lastReceivedPtsUs,
               ptsUs - lastReceivedPtsUs < 1_000_000 else {
             lastHostDeltaMs = 0
             return

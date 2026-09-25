@@ -156,18 +156,21 @@ extension AppModel {
             // so nothing in it proves the PC already trusts this Mac.
             let paired = try await PairingClient(network: network, server: fetched).pair(pin: pin)
             try checkPairing(attempt)
-            guard paired.uniqueId == fetched.uniqueId else { throw CancellationError() }
-            let apps = await pairingApps(server: paired)
+            // Neither pairchallenge nor /applist returns a PC identity.
+            // A pinned /serverinfo reply must supply it before choosing a saved slot.
+            let verified = try await network.fetchServerInfo(requiredUniqueId: fetched.uniqueId)
             try checkPairing(attempt)
-            saveHost(
-                uuid: paired.uniqueId,
-                hostname: paired.serverName.isEmpty ? address : paired.serverName,
+            let apps = await pairingApps(server: verified)
+            try checkPairing(attempt)
+            try saveHost(
+                uuid: verified.uniqueId,
+                hostname: verified.serverName.isEmpty ? address : verified.serverName,
                 address: address, serverCertPEM: paired.serverCertPEM,
-                appVersion: paired.appVersion,
-                apps: apps, macAddress: paired.macAddress)
+                appVersion: verified.appVersion,
+                apps: apps, macAddress: verified.macAddress)
             pairingPhase = .success
             Diag.notice("Pairing succeeded", "Pairing")
-            return hosts.first { $0.id == paired.uniqueId }
+            return hosts.first { $0.id == verified.uniqueId }
         } catch {
             guard (try? checkPairing(attempt)) != nil else { return nil }
             // A timeout or a busy PC says so; every other cause (wrong PIN, signature,

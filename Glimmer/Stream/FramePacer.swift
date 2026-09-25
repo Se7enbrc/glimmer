@@ -130,6 +130,13 @@ final class FramePacer: @unchecked Sendable {
     struct Entry {
         let sampleBuffer: CMSampleBuffer
         let hostPTSSeconds: Double
+        let ptsEpoch: UInt64
+
+        init(sampleBuffer: CMSampleBuffer, hostPTSSeconds: Double, ptsEpoch: UInt64 = 0) {
+            self.sampleBuffer = sampleBuffer
+            self.hostPTSSeconds = hostPTSSeconds
+            self.ptsEpoch = ptsEpoch
+        }
     }
 
     // MARK: - Shared state (guarded by `lock`)
@@ -151,10 +158,9 @@ final class FramePacer: @unchecked Sendable {
         #endif
     }
 
-    /// The pacing queue: hostPTS-ordered FIFO of decoded frames awaiting a
-    /// vsync. Bounded at `maxQueuedFrames`. Insertion keeps it sorted by
-    /// hostPTS so an out-of-order decode (VT can momentarily reorder under
-    /// load even with ThreadCount=1 on some codecs) presents in display order.
+    /// The pacing queue: epoch-ordered FIFO of decoded frames awaiting a vsync.
+    /// Within an epoch, hostPTS sorting handles out-of-order decode; a PTS reset
+    /// starts a new epoch so wrapped timestamps cannot move ahead of old frames.
     var queue: [Entry] = []
 
     /// Learned stream inter-frame interval in seconds, derived from the median
@@ -170,8 +176,11 @@ final class FramePacer: @unchecked Sendable {
     let configuredFrameIntervalSeconds: Double
     /// Last hostPTS we saw at submit, to compute the next delta.
     var lastSubmittedPTSSeconds: Double = .nan
+    var ptsEpoch: UInt64 = 0
     /// Recent hostPTS deltas (seconds) for the median estimate. Bounded.
     var ptsDeltas: [Double] = []
+    /// Sorted mirror used to read the cadence percentile without sorting under lock.
+    var sortedPtsDeltas: [Double] = []
 
     /// Adaptive target-depth + reconciler-snapshot state (guarded by `lock`).
     /// The `AdaptiveDepthState` type - and the THREAD ISOLATION contract behind
@@ -329,6 +338,8 @@ final class FramePacer: @unchecked Sendable {
         let interval = FramePacer.clampFrameInterval(1.0 / fps)
         self.streamFrameIntervalSeconds = interval
         self.configuredFrameIntervalSeconds = interval
+        self.ptsDeltas.reserveCapacity(65)
+        self.sortedPtsDeltas.reserveCapacity(65)
     }
 
     /// Clamp a frame-interval estimate to a sane [1ms, 1s] range. A poisoned

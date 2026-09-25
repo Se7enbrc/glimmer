@@ -52,6 +52,16 @@ extension HotkeyChord {
 
 // MARK: - Keyboard shortcut recorder
 
+enum ShortcutCaptureEvent: Equatable {
+    case capture
+    case endAndPassThrough
+
+    static func disposition(eventWindow: NSWindow?, captureWindow: NSWindow?) -> Self {
+        guard let captureWindow, eventWindow === captureWindow else { return .endAndPassThrough }
+        return .capture
+    }
+}
+
 struct HotkeyRow: View {
     let label: String
     @Binding var hotkey: HotkeyChord
@@ -75,6 +85,7 @@ struct HotkeyBadge: View {
     /// Why the last chord pressed wasn't saved; capture stays open for another.
     @State private var problem: String?
     @State private var monitor: Any?
+    @State private var captureWindow: NSWindow?
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
@@ -137,10 +148,17 @@ struct HotkeyBadge: View {
         isCapturing = true
         livePreview = ""
         problem = nil
+        captureWindow = NSApp.keyWindow
         // Local event monitor catches keys regardless of first-responder state.
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
-            handle(event)
-            return nil  // swallow so Cmd+Q etc. don't activate menu items
+            switch ShortcutCaptureEvent.disposition(eventWindow: event.window, captureWindow: captureWindow) {
+            case .endAndPassThrough:
+                DispatchQueue.main.async { stop() }
+                return event
+            case .capture:
+                handle(event)
+                return nil  // swallow so Cmd+Q etc. don't activate menu items
+            }
         }
     }
 
@@ -148,6 +166,7 @@ struct HotkeyBadge: View {
         isCapturing = false
         livePreview = ""
         problem = nil
+        captureWindow = nil
         if let activeMonitor = monitor {
             NSEvent.removeMonitor(activeMonitor)
             monitor = nil
@@ -214,6 +233,7 @@ struct ChordCaptureSheet: View {
     @State private var captured: Set<ControllerButton> = []
     @State private var recording = true
     @State private var hidRetained = false
+    @State private var priorBackgroundMonitoring = false
     // Drives poll(): capture reads pad state, so a live stream keeps its handlers.
     private let tick = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
 
@@ -271,6 +291,7 @@ struct ChordCaptureSheet: View {
     /// sheet never takes the single-slot input handlers a live stream owns.
     private func engage() {
         HIDGamepadManager.shared.retain()
+        priorBackgroundMonitoring = GCController.shouldMonitorBackgroundEvents
         GCController.shouldMonitorBackgroundEvents = true
         GCController.startWirelessControllerDiscovery {}
         if DualSenseHID.isEnabled {
@@ -281,7 +302,10 @@ struct ChordCaptureSheet: View {
 
     private func disengage() {
         HIDGamepadManager.shared.release()
-        GCController.stopWirelessControllerDiscovery()
+        GCController.shouldMonitorBackgroundEvents = priorBackgroundMonitoring
+        ControllerDiscovery.stopIfIdle(isStreaming: model.isStreaming) {
+            GCController.stopWirelessControllerDiscovery()
+        }
         if hidRetained {
             DualSenseHID.shared.release()
             hidRetained = false

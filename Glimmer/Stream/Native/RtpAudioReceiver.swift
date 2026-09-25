@@ -73,6 +73,8 @@ public extension NativeAudioSink {
     func noteArrivalGap(nanos: UInt64) {}
 }
 
+// Lifecycle calls serialize startup and shutdown; receive state stays on recvQueue,
+// and ping state stays on its dedicated thread.
 final class RtpAudioReceiver: @unchecked Sendable {
     static let cat = "NativeAudio"
 
@@ -116,6 +118,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     var destAddrLen: socklen_t = 0
     var pingThread: Thread?
     let interrupted = ManagedAtomicFlag()
+    private let lifecycleLock = NSRecursiveLock()
 
     // `internal` so the RtpAudioReceiver+Telemetry extension can read `queue.stats`
     // for the per-window receive-quality fold; touched only on `recvQueue`.
@@ -207,7 +210,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     private var pingStarted = false
     private var receiveStarted = false
     var pingCount: UInt32 = 0
-    private var initialized = false
+    var initialized = false
 
     // --- Time-to-first-packet metric (Track B; logged via Diag since we don't
     // own StatsCollector). `pingStartTimeUs` is stamped by the ping thread when
@@ -229,7 +232,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     var firstRtpPings: UInt64 = 0
     /// Consecutive ping sendto() failures - for STREAK-EDGE logging only (first
     /// failure + recovery, never per packet). Owned by the ping thread.
-    var pingSendFailureStreak = 0
+    var pingSendFailureStreak = UdpPinger.SendFailureStreak()
 
     static let maxPacketSize = 1400  // MAX_PACKET_SIZE
 
@@ -321,6 +324,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// notifyAudioPortNegotiationComplete() does, since Sunshine won't aim audio at us until it has one.
     /// Audio that lands first waits in SO_RCVBUF, and the startup gate drops that stale burst. Idempotent.
     func startPing() throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard !interrupted.isSet else { return }
         if pingStarted { return }
         try openSocket()
         pingStarted = true
@@ -342,6 +348,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// recv loop. The ping must already be running (startPing); if it isn't (e.g.
     /// the early-start path was skipped) we bring it up here for safety. Idempotent.
     func startReceive() throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard !interrupted.isSet else { return }
         if receiveStarted { return }
         // The ping side normally started mid-handshake; ensure the socket is open.
         if !pingStarted { try startPing() }
@@ -371,13 +380,10 @@ final class RtpAudioReceiver: @unchecked Sendable {
     }
 
     func stop() {
-        interrupted.set()
-        // Stamp the stream-end instant for the NEXT session's `host_idle_s`
-        // covariate (the warm/cold TTF classification): this teardown trails the
-        // last audio packet by well under a second - close enough for a covariate
-        // whose interesting scale is minutes. The stamp deliberately survives
-        // `resetForNewSession` (it anchors the next session's measurement);
-        // last-writer-wins, so a repeated stop() harmlessly re-stamps.
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard interrupted.testAndSet() else { return }
+        // Preserve the stream-end instant as the next session's idle anchor.
         TelemetryCounters.shared.audioTtf.markStreamEnd()
         pingThread = nil // the dedicated ping thread exits on the interrupted flag
         if fd >= 0 { close(fd); fd = -1 }  // unblocks the in-flight recvfrom

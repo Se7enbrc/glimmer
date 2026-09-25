@@ -370,15 +370,15 @@ extension FramePacer {
             guard tickDeficit.warmHealthyWindowStreak >= FramePacer.warmHandoverHealthyWindows else {
                 return []
             }
-            // ATOMIC flip under the lock: the very next submit queues instead
-            // of direct-presenting. The queue is empty here (everything so far
-            // went direct), so resetting the cadence base reproduces the clean
-            // session-start state - first tick releases immediately and
-            // re-seeds the grid from the live link's clock.
+            // Suppression can retain a stale frame while warm submits go direct.
+            // Discard it at the atomic flip so paced release starts on fresh pixels
+            // and re-seeds its cadence from the live link's clock.
+            let discarded = queue.count
+            queue.removeAll(keepingCapacity: true)
             tickDeficit.warmingUp = false
             tickDeficit.warmHealthyWindowStreak = 0
             resetCadenceBaseLocked()
-            return [.warmHandoverComplete(ticksPerS: ticksPerS)]
+            return [.warmHandoverComplete(ticksPerS: ticksPerS, discarded: discarded)]
         }
         tickDeficit.warmHealthyWindowStreak = 0
         return []

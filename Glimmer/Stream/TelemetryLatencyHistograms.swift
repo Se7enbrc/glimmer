@@ -148,7 +148,7 @@ final class LatencyHistograms: @unchecked Sendable {
     let assembleToSubmit = Stage()
     let submitToOutput = Stage()
     let outputToPresent = Stage(bounds: Stage.outputToPresentBoundsMs)
-    let endToEnd = Stage()
+    let endToEnd = Stage(bounds: Stage.outputToPresentBoundsMs)
 
     /// DECODE time split by frame type (signal: DECODE). The submit→output
     /// (VTDecompressionSessionDecodeFrame → output callback) delta, bucketed

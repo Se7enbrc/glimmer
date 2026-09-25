@@ -1,16 +1,16 @@
 import Foundation
 import Darwin
 import SystemConfiguration
-import os.log
+import os
 
-/// Owns the awdl0 suppression state.
-///
-/// When `suppressing == true`, the suppressor actively forces `awdl0` down whenever
-/// macOS attempts to bring it up (for AirDrop, Sidecar, AirPlay, Continuity).
-/// When `suppressing == false`, it leaves AWDL alone.
+/// Keeps awdl0 down while suppressing and restores it on release.
+/// Mutable state is locked; interface changes serialize on execQueue.
 final class AWDLSuppressor: @unchecked Sendable {
     private let interfaceName = "awdl0"
-    private let log = OSLog(subsystem: "io.ugfugl.glimmer.helper", category: "AWDL")
+    private let interfaceIsUp: (@Sendable () -> Bool)?
+    private let runIfconfig: (@Sendable ([String]) -> Bool)?
+    private let clockNow: @Sendable () -> ContinuousClock.Instant
+    private let log = Logger(subsystem: "io.ugfugl.glimmer.helper", category: "AWDL")
     /// Event-servicing queue: route socket, poll timer, SCDynamicStore handler.
     private let queue = DispatchQueue(label: "io.ugfugl.glimmer.helper.awdl", qos: .userInitiated)
     /// Interface-mutation queue. Serial (preserves re-suppress-count ordering)
@@ -23,7 +23,7 @@ final class AWDLSuppressor: @unchecked Sendable {
 
     private var _suppressing = false
     private var _suppressionSince: Date?
-    private var _lastHeartbeat = Date()
+    private var _lastHeartbeat: ContinuousClock.Instant
     private let stateLock = NSLock()
     private var pollTimer: DispatchSourceTimer?
     private var _initialDownDone = false
@@ -35,6 +35,16 @@ final class AWDLSuppressor: @unchecked Sendable {
     /// Tight verify-retry per down: macOS can re-raise within ms, so confirm + retry.
     private static let maxDownAttempts = 3
     private static let downRetrySettleUs: UInt32 = 40_000
+
+    // Production uses the kernel and ifconfig; tests supply inert operations.
+    init(interfaceIsUp: (@Sendable () -> Bool)? = nil,
+         runIfconfig: (@Sendable ([String]) -> Bool)? = nil,
+         clockNow: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }) {
+        self.interfaceIsUp = interfaceIsUp
+        self.runIfconfig = runIfconfig
+        self.clockNow = clockNow
+        _lastHeartbeat = clockNow()
+    }
 
     var suppressing: Bool {
         stateLock.lock(); defer { stateLock.unlock() }
@@ -56,14 +66,14 @@ final class AWDLSuppressor: @unchecked Sendable {
         setupMonitoring()
         setupRouteSocket()
         startPolling()
-        os_log("AWDL suppressor started", log: log, type: .default)
+        log.notice("AWDL suppressor started")
     }
 
     func setSuppressing(_ value: Bool, reason: String) {
         stateLock.lock()
         let wasSuppressing = _suppressing
         _suppressing = value
-        if value { _lastHeartbeat = Date() }
+        if value { _lastHeartbeat = clockNow() }
         if value, _suppressionSince == nil {
             _suppressionSince = Date()
             _initialDownDone = false
@@ -73,10 +83,9 @@ final class AWDLSuppressor: @unchecked Sendable {
         stateLock.unlock()
 
         // Log only the on/off TRANSITION - the client heartbeats setSuppressing(true)
-        // ~1/s, so logging every call would bury the signal. .default persists to disk.
+        // ~1/s, so logging every call would bury the signal. Notice persists to disk.
         if wasSuppressing != value {
-            os_log("suppression %{public}@ (reason: %{public}@)", log: log, type: .default,
-                   value ? "ON" : "OFF", reason)
+            log.notice("suppression \(value ? "ON" : "OFF", privacy: .public) (reason: \(reason, privacy: .private))")
         }
         // Mutate the interface on the serial `execQueue` so concurrent
         // re-suppressions serialize and can't double-count.
@@ -89,8 +98,13 @@ final class AWDLSuppressor: @unchecked Sendable {
         }
     }
 
+    func afterPendingChanges(_ work: @escaping @Sendable () -> Void) {
+        execQueue.async(execute: work)
+    }
+
     /// True if awdl0 is currently UP per the kernel.
     func isInterfaceUp() -> Bool {
+        if let interfaceIsUp { return interfaceIsUp() }
         var ifaces: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&ifaces) == 0, let first = ifaces else { return false }
         defer { freeifaddrs(ifaces) }
@@ -119,18 +133,14 @@ final class AWDLSuppressor: @unchecked Sendable {
         let count = _reSuppressCount
         stateLock.unlock()
         if initial {
-            os_log("%{public}@ forced down - suppressing", log: log, type: .default, interfaceName)
+            log.notice("\(self.interfaceName, privacy: .public) forced down - suppressing")
         } else {
-            // macOS re-raised awdl0 on its own: recent macOS auto-enables it for
-            // AirDrop/Continuity even while we hold it down. Each re-enable is a brief
-            // AWDL-contention window that can hitch a stream; logged at .default so it
-            // persists in `log show` for exactly this diagnosis.
-            os_log("%{public}@ re-enabled by macOS (#%ld this stream) - re-suppressed",
-                   log: log, type: .default, interfaceName, count)
+            // macOS can re-raise awdl0 for AirDrop/Continuity, briefly hitching
+            // a stream. Keep this persisted for diagnosing those windows.
+            log.notice("\(self.interfaceName, privacy: .public) re-enabled by macOS (#\(count) this stream) - re-suppressed")
         }
         if !confirmed {
-            os_log("%{public}@ STILL up after %d down attempts", log: log, type: .error,
-                   interfaceName, Self.maxDownAttempts)
+            log.error("\(self.interfaceName, privacy: .public) STILL up after \(Self.maxDownAttempts) down attempts")
         }
     }
 
@@ -177,7 +187,7 @@ final class AWDLSuppressor: @unchecked Sendable {
     /// SCDynamicStore, so the firmware barely gets an AWDL scan window in.
     private func setupRouteSocket() {
         let fd = socket(PF_ROUTE, SOCK_RAW, AF_UNSPEC)
-        guard fd >= 0 else { os_log("route socket failed (errno %d)", log: log, type: .error, errno); return }
+        guard fd >= 0 else { log.error("route socket failed (errno \(errno))"); return }
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK)
         routeFd = fd
         let src = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
@@ -185,7 +195,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         src.setCancelHandler { close(fd) }
         src.resume()
         routeSource = src
-        os_log("route-socket fast path armed (fd %d)", log: log, type: .default, fd)
+        log.notice("route-socket fast path armed (fd \(fd))")
     }
 
     /// Drain pending routing messages then re-assert the down if awdl0 popped up. We
@@ -207,10 +217,10 @@ final class AWDLSuppressor: @unchecked Sendable {
     private func upIfDown() {
         guard !suppressing, !isInterfaceUp() else { return }
         guard executeIfconfig(args: [interfaceName, "up"]) else {
-            os_log("Failed to bring %{public}@ up", log: log, type: .error, interfaceName)
+            log.error("Failed to bring \(self.interfaceName, privacy: .public) up")
             return
         }
-        os_log("%{public}@ restored (up) - suppression ended", log: log, type: .default, interfaceName)
+        log.notice("\(self.interfaceName, privacy: .public) restored (up) - suppression ended")
     }
 
     // MARK: Heartbeat poll - state-driven safety net
@@ -227,28 +237,57 @@ final class AWDLSuppressor: @unchecked Sendable {
     }
 
     private func poll() {
-        stateLock.lock()
-        let suppressing = _suppressing
-        let idle = Date().timeIntervalSince(_lastHeartbeat)
-        stateLock.unlock()
-        if suppressing {
-            // 1s backstop re-assert (in case the route socket missed an edge) -
-            // on execQueue so this poll on `queue` doesn't block servicing.
-            execQueue.async { [weak self] in self?.downIfUp() }
-            if idle > 3 {
-                os_log("heartbeat stale %.1fs - releasing awdl0", log: log, type: .default, idle)
-                setSuppressing(false, reason: "heartbeat-timeout")
+        withHeartbeatDecision(at: clockNow()) { decision in
+            switch decision {
+            case .stale(let idle):
+                let seconds = Double(idle.components.seconds) + Double(idle.components.attoseconds) / 1e18
+                log.notice("heartbeat stale \(seconds, format: .fixed(precision: 1))s - releasing awdl0")
+                log.notice("suppression OFF (reason: heartbeat-timeout)")
+                execQueue.async { [weak self] in self?.upIfDown() }
+            case .exit(let idle):
+                let seconds = Double(idle.components.seconds) + Double(idle.components.attoseconds) / 1e18
+                log.notice("idle \(seconds, format: .fixed(precision: 0))s - exiting for a clean reload")
+                exit(0)
+            case .suppressing:
+                // 1s backstop re-assert (in case the route socket missed an edge) -
+                // on execQueue so this poll on `queue` doesn't block servicing.
+                execQueue.async { [weak self] in self?.downIfUp() }
+            case .idle:
+                break
             }
-        } else if idle > 8 {
-            os_log("idle %.0fs - exiting for a clean reload", log: log, type: .default, idle)
-            exit(0)
         }
+    }
+
+    enum HeartbeatDecision: Equatable {
+        case stale(Duration)
+        case exit(Duration)
+        case suppressing
+        case idle
+    }
+
+    // Handle each decision under the lock so a renewed heartbeat cannot be
+    // overtaken by stale release or idle exit.
+    func withHeartbeatDecision<Result>(at now: ContinuousClock.Instant,
+                                       _ handle: (HeartbeatDecision) -> Result) -> Result {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        let idle = _lastHeartbeat.duration(to: now)
+        if _suppressing, idle > .seconds(3) {
+            _suppressing = false
+            _suppressionSince = nil
+            return handle(.stale(idle))
+        }
+        if !_suppressing, idle > .seconds(8) {
+            return handle(.exit(idle))
+        }
+        return handle(_suppressing ? .suppressing : .idle)
     }
 
     @discardableResult
     private func executeIfconfig(args: [String]) -> Bool {
+        if let runIfconfig { return runIfconfig(args) }
         let task = Process()
-        task.launchPath = "/sbin/ifconfig"
+        task.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
         task.arguments = args
         task.standardError = Pipe()
         task.standardOutput = Pipe()
@@ -281,7 +320,7 @@ final class AWDLSuppressor: @unchecked Sendable {
             )
         }
         guard let store = storeOpt else {
-            os_log("Failed to create SCDynamicStore", log: log, type: .error)
+            log.error("Failed to create SCDynamicStore")
             return
         }
         dynamicStore = store

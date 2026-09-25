@@ -16,14 +16,16 @@ public actor HostDiscovery {
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Discovery")
     private var browsers: [NWBrowser] = []
     private var resultsContinuation: AsyncStream<Update>.Continuation?
-    private var seen: [String: Discovered] = [:]  // keyed by service name
+    private(set) var seen: [String: Discovered] = [:]  // keyed by service name
+    private var liveByType: [String: Set<String>] = [:]
+    private var run: UInt64 = 0
     private var denied = false
 
     /// Resolver connections kept alive long enough for `NWConnection`'s state
     /// machine to walk from `.preparing` → `.ready` and expose its resolved
     /// `currentPath.remoteEndpoint`. Keyed by service name so a flapping mDNS
     /// announcement doesn't spawn duplicate probes.
-    private var resolvers: [String: NWConnection] = [:]
+    private(set) var resolvers: [String: NWConnection] = [:]
 
     /// Never fall back past IPv4, for a caller that needs an address Wake on LAN reaches.
     private let ipv4Only: Bool
@@ -55,8 +57,11 @@ public actor HostDiscovery {
 
     /// Start browsing. Emits the *current* set on every change. Cancel by
     /// breaking out of the for-await loop or calling `stop()`.
-    public func start() -> AsyncStream<Update> {
-        AsyncStream { continuation in
+    public func start() -> (stream: AsyncStream<Update>, run: UInt64) {
+        run &+= 1
+        reset()
+        let currentRun = run
+        let stream = AsyncStream<Update> { continuation in
             self.resultsContinuation = continuation
             for type in ["_nvstream._tcp", "_nvstream-tcp._tcp"] {
                 let browser = NWBrowser(
@@ -64,25 +69,42 @@ public actor HostDiscovery {
                     using: .tcp
                 )
                 browser.browseResultsChangedHandler = { [weak self] results, _ in
-                    Task { await self?.handleResults(results) }
+                    var services: [String: NWEndpoint] = [:]
+                    for result in results {
+                        if case let .service(name, _, _, _) = result.endpoint {
+                            services[name] = result.endpoint
+                        }
+                    }
+                    Task { await self?.handleResults(services, type: type, run: currentRun) }
                 }
                 browser.stateUpdateHandler = { [weak self] state in
                     if case .failed(let err) = state {
-                        self?.log.error("Browser failed for \(type): \(err.localizedDescription)")
+                        self?.log.error("Browser failed for \(type): \(err.localizedDescription, privacy: .private)")
                     }
                     let isDenied = Self.isPolicyDenied(state)
-                    Task { await self?.setDenied(isDenied) }
+                    Task { await self?.setDenied(isDenied, run: currentRun) }
                 }
                 browser.start(queue: .global(qos: .userInitiated))
                 browsers.append(browser)
             }
             continuation.onTermination = { [weak self] _ in
-                Task { await self?.stop() }
+                Task { await self?.stop(run: currentRun) }
             }
         }
+        return (stream, currentRun)
     }
 
     public func stop() {
+        run &+= 1
+        reset()
+    }
+
+    public func stop(run expectedRun: UInt64) {
+        guard run == expectedRun else { return }
+        stop()
+    }
+
+    private func reset() {
         for browser in browsers { browser.cancel() }
         browsers.removeAll()
         for resolver in resolvers.values { resolver.cancel() }
@@ -90,6 +112,7 @@ public actor HostDiscovery {
         resultsContinuation?.finish()
         resultsContinuation = nil
         seen.removeAll()
+        liveByType.removeAll()
         denied = false
     }
 
@@ -104,7 +127,8 @@ public actor HostDiscovery {
         }
     }
 
-    private func setDenied(_ isDenied: Bool) {
+    private func setDenied(_ isDenied: Bool, run expectedRun: UInt64) {
+        guard run == expectedRun else { return }
         guard denied != isDenied else { return }
         denied = isDenied
         publish()
@@ -114,56 +138,65 @@ public actor HostDiscovery {
         resultsContinuation?.yield(Update(hosts: Array(seen.values), denied: denied))
     }
 
-    private func handleResults(_ results: Set<NWBrowser.Result>) async {
-        for r in results {
-            if case let .service(name, _, _, _) = r.endpoint {
-                let key = name
-                // Resolve the Bonjour service to a concrete host:port via
-                // NWConnection. We start a TCP connection at the service
-                // endpoint - Network.framework's name resolver walks DNS-SD
-                // PTR → SRV → A/AAAA for us, and once the connection lands
-                // in `.ready` its `currentPath?.remoteEndpoint` is a
-                // `.hostPort(host:port:)` carrying the actual numeric
-                // address and the SRV-advertised port. That lets us cope
-                // with hosts on non-default ports and multi-homed Macs
-                // without parsing TXT records ourselves.
-                if seen[key] == nil && resolvers[key] == nil {
-                    startResolve(name: name, endpoint: r.endpoint)
-                }
-            }
+    func retainResolver(_ conn: NWConnection, for name: String) {
+        resolvers[name] = conn
+    }
+
+    func recordResolved(_ result: Discovered) {
+        seen[result.id] = result
+        publish()
+    }
+
+    var liveNames: Set<String> { Set(liveByType.values.joined()) }
+
+    func handleResults(_ services: [String: NWEndpoint], type: String, run expectedRun: UInt64) {
+        for (name, endpoint) in reconcileResults(services, type: type, run: expectedRun) {
+            startResolve(name: name, endpoint: endpoint, run: expectedRun)
         }
+    }
+
+    func reconcileResults(_ services: [String: NWEndpoint], type: String,
+                          run expectedRun: UInt64) -> [String: NWEndpoint] {
+        guard run == expectedRun else { return [:] }
+        liveByType[type] = Set(services.keys)
+        let liveKeys = liveNames
         // Drop departed services and tear down any in-flight resolver for them.
-        let liveKeys: Set<String> = Set(results.compactMap {
-            if case let .service(name, _, _, _) = $0.endpoint { return name } else { return nil }
-        })
         for (key, conn) in resolvers where !liveKeys.contains(key) {
             conn.cancel()
             resolvers.removeValue(forKey: key)
         }
         seen = seen.filter { liveKeys.contains($0.key) }
         publish()
+        return services.filter { seen[$0.key] == nil && resolvers[$0.key] == nil }
     }
 
     /// Drive the service endpoint through resolution on a short-lived, send-nothing
     /// `NWConnection`, IPv4 first (Sunshine binds it by default), any family as a
     /// fallback unless `ipv4Only`. Once ready or failed, cache host:port and cancel.
-    private func startResolve(name: String, endpoint: NWEndpoint, anyFamily: Bool = false) {
+    private func startResolve(name: String, endpoint: NWEndpoint, run expectedRun: UInt64, anyFamily: Bool = false) {
+        guard run == expectedRun else { return }
+        // The service endpoint resolves SRV and address records together, including non-default ports.
         let parameters = NWParameters.tcp
         if !anyFamily, let ip = parameters.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
             ip.version = .v4
         }
         let conn = NWConnection(to: endpoint, using: parameters)
-        resolvers[name] = conn
+        retainResolver(conn, for: name)
         let fallback = (anyFamily || ipv4Only) ? nil : endpoint
         conn.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
-                Task { await self?.finishResolve(name: name, conn: conn) }
+                Task { await self?.finishResolve(name: name, conn: conn, run: expectedRun) }
             case .failed(let err):
-                Task { await self?.failResolve(name: name, conn: conn, error: err, retry: fallback) }
+                Task { await self?.failResolve(name: name, conn: conn, error: err, retry: fallback, run: expectedRun) }
             case .waiting(let err) where fallback != nil:
                 // No usable IPv4 answer; a PC that advertises none gets any family.
-                Task { await self?.failResolve(name: name, conn: conn, error: err, retry: fallback) }
+                Task { await self?.failResolve(name: name, conn: conn, error: err, retry: fallback, run: expectedRun) }
+            case .waiting where fallback == nil:
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(2))
+                    await self?.restartResolve(name: name, conn: conn, run: expectedRun)
+                }
             default:
                 break
             }
@@ -171,7 +204,13 @@ public actor HostDiscovery {
         conn.start(queue: .global(qos: .userInitiated))
     }
 
-    private func finishResolve(name: String, conn: NWConnection) {
+    private func restartResolve(name: String, conn: NWConnection, run expectedRun: UInt64) {
+        guard run == expectedRun, resolvers[name] === conn else { return }
+        conn.restart()
+    }
+
+    private func finishResolve(name: String, conn: NWConnection, run expectedRun: UInt64) {
+        guard run == expectedRun, resolvers[name] === conn else { return }
         defer {
             conn.cancel()
             resolvers.removeValue(forKey: name)
@@ -181,9 +220,8 @@ public actor HostDiscovery {
             // read. Fall back to the service name so the host is at least
             // reachable by DNS-SD-aware callers; canonical port.
             if seen[name] == nil {
-                seen[name] = Discovered(id: name, displayName: name,
-                                         host: name, port: 47989)
-                publish()
+                recordResolved(Discovered(id: name, displayName: name,
+                                          host: name, port: 47989))
             }
             return
         }
@@ -200,10 +238,9 @@ public actor HostDiscovery {
                 return
             }
             let resolvedPort = Int(port.rawValue)
-            seen[name] = Discovered(id: name, displayName: name,
-                                    host: resolvedHost, port: resolvedPort)
+            recordResolved(Discovered(id: name, displayName: name,
+                                      host: resolvedHost, port: resolvedPort))
             log.info("Resolved host \(name, privacy: .private) → \(resolvedHost, privacy: .private):\(resolvedPort)")
-            publish()
         }
     }
 
@@ -218,8 +255,9 @@ public actor HostDiscovery {
 
     /// Drop a failed resolver; `retry` re-resolves the service in any address
     /// family. A stale call (service gone, or already retried) does nothing.
-    private func failResolve(name: String, conn: NWConnection, error: NWError, retry endpoint: NWEndpoint?) {
-        guard resolvers[name] === conn else { return }
+    private func failResolve(name: String, conn: NWConnection, error: NWError,
+                             retry endpoint: NWEndpoint?, run expectedRun: UInt64) {
+        guard run == expectedRun, resolvers[name] === conn else { return }
         conn.cancel()
         resolvers.removeValue(forKey: name)
         guard let endpoint else {
@@ -227,6 +265,6 @@ public actor HostDiscovery {
             return
         }
         log.info("No IPv4 answer for \(name, privacy: .private) (\(error.localizedDescription, privacy: .private)); trying any family")
-        startResolve(name: name, endpoint: endpoint, anyFamily: true)
+        startResolve(name: name, endpoint: endpoint, run: expectedRun, anyFamily: true)
     }
 }

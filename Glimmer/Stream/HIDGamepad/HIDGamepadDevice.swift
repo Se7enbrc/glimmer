@@ -24,6 +24,7 @@ final class HIDGamepadDevice: Identifiable {
     private var pendingReportID: UInt32?
     private var flushScheduled = false
     private var opened = false
+    private var reading = false
     var onReport: ((HIDGamepadDevice) -> Void)?
 
     var state: (buttons: Int32, analog: GamepadAnalog) { mapping.translate(snapshot) }
@@ -73,31 +74,45 @@ final class HIDGamepadDevice: Identifiable {
             return false
         }
         opened = true
+        return true
+    }
+
+    func startReading() {
+        guard opened, !reading else { return }
+        reading = true
         for element in elements.values {
             if let value = read(element) { update(value) }
         }
         IOHIDDeviceRegisterInputValueCallback(device, Self.inputValue, Unmanaged.passUnretained(self).toOpaque())
-        return true
+    }
+
+    func stopReading() {
+        guard reading else { return }
+        reading = false
+        IOHIDDeviceRegisterInputValueCallback(device, nil, nil)
+        pendingReport = nil
+        pendingReportID = nil
     }
 
     /// Close and open again (after an Input Monitoring grant); keeps `onReport`.
     func reopen() -> Bool {
+        let wasReading = reading
         if opened {
-            IOHIDDeviceRegisterInputValueCallback(device, nil, nil)
+            stopReading()
             IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
             opened = false
         }
-        return open()
+        guard open() else { return false }
+        if wasReading { startReading() }
+        return true
     }
 
     func close() {
         guard opened else { return }
+        stopReading()
         opened = false
-        pendingReport = nil
-        pendingReportID = nil
         onReport = nil
         rumble.close()
-        IOHIDDeviceRegisterInputValueCallback(device, nil, nil)
         IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
     }
 
@@ -129,7 +144,7 @@ final class HIDGamepadDevice: Identifiable {
     }
 
     private func receive(cookie: UInt32, raw: Int, timestamp: UInt64, reportID: UInt32) {
-        guard opened else { return }
+        guard reading else { return }
         if pendingReport != nil && (pendingReport != timestamp || pendingReportID != reportID) { flush() }
         pendingReport = timestamp
         pendingReportID = reportID
@@ -145,7 +160,7 @@ final class HIDGamepadDevice: Identifiable {
     }
 
     private func flush() {
-        guard opened, pendingReport != nil else { return }
+        guard reading, pendingReport != nil else { return }
         pendingReport = nil
         pendingReportID = nil
         reportCount &+= 1

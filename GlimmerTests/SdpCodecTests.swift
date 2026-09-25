@@ -60,6 +60,16 @@ struct SdpCodecTests {
         #expect(msg.statusString == "Not Found")
     }
 
+    @Test func parseResponseRejectsOutOfRangeStatusCodes() throws {
+        let oversized = Data("RTSP/1.0 2147483648 Broken\r\n\r\n".utf8)
+        let negative = Data("RTSP/1.0 -1 Broken\r\n\r\n".utf8)
+        let valid = Data("RTSP/1.0 454 x\r\n\r\n".utf8)
+
+        #expect(try #require(RtspMessage.parseResponse(oversized)).statusCode == 0)
+        #expect(try #require(RtspMessage.parseResponse(negative)).statusCode == 0)
+        #expect(try #require(RtspMessage.parseResponse(valid)).statusCode == 454)
+    }
+
     @Test func serializeThenParseRoundTrip() throws {
         // Build a response-shaped message by hand, serialize... actually serialize
         // emits a REQUEST line, so round-trip the header semantics via a crafted

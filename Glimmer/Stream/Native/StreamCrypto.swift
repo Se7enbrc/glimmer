@@ -164,14 +164,13 @@ final class VideoDecryptor {
         encryptionFeaturesEnabled & RtspClient.ssEncVideo != 0 ? configured - headerSize : configured
     }
 
-    /// The RTP packet inside `datagram`, or nil for a runt, a shard of a frame the queue has already
-    /// passed (skipped before decrypting, as upstream does), or a packet that fails authentication.
-    func open(_ datagram: UnsafeRawBufferPointer, currentFrame: UInt32) -> [UInt8]? {
+    /// Opens every authenticated RTP packet, including passed frames, so trailing parity reaches
+    /// the queue's receive-quality accounting. Returns nil for runts or authentication failures.
+    func open(_ datagram: UnsafeRawBufferPointer) -> [UInt8]? {
         let length = datagram.count - Self.headerSize
         guard length >= RtpVideoQueue.FIXED_RTP_HEADER_SIZE,
               let header = datagram.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
         let frameNumber = UInt32(littleEndian: datagram.loadUnaligned(fromByteOffset: 12, as: UInt32.self))
-        if frameNumber != 0 && frameNumber < currentFrame { return nil }
         var opened = false
         let packet = [UInt8](unsafeUninitializedCapacity: length) { out, count in
             opened = decrypt(header, length: length, into: out)

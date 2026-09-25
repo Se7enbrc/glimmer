@@ -89,6 +89,10 @@ extension VideoDecoder {
             consecutiveBacklogOverflow = 0
             lastVtDecodeFailed = false
             inFlightDecodeLock.unlock()
+            // Older submits finish first; drain their stamps before this IDR's decode block.
+            decodeQueue.async { [statsCollector] in
+                statsCollector.dropPendingDecodeSubmits()
+            }
             log.error("""
                 Decode stall ESCALATION (\(backlog) in flight, VT dark \(String(format: "%.1f", vtDark))s) - abandoning wedged \
                 session, forcing recreate with this IDR

@@ -1,41 +1,11 @@
-//
-//  ReedSolomon.swift
-//
-//  GF(256) Reed-Solomon erasure decoder for the Swift-native video receive
-//  path. Ports nanors (nanors/rs.c) plus the scalar GF math from
-//  nanors/deps/obl/oblas_lite.c, reduced to the subset RtpVideoQueue.c actually
-//  invokes (erasure DECODE only; never encode, never SIMD).
-//
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md. The
-//  Reed-Solomon algorithm and GF math originate from the nanors project by
-//  Joseph Calderon (MIT License, Copyright (c) 2021 Joseph Calderon),
-//  including its vendored deps/obl scalar GF(256) routines - notice preserved
-//  in CREDITS.md as the MIT license requires.
-//
-//  WHY pure-Swift instead of vendoring the C: the actual algorithm is rs.c
-//  (~190 lines) + a 256-entry GF log/exp/inv table. The rest of nanors
-//  (rswrapper.c, oblas_lite.c SIMD multiversioning) exists only for multi-ISA
-//  SIMD dispatch we don't need - FEC runs only on packet loss, a few hundred
-//  ~1.1KB shards per frame, far below the per-frame budget for scalar GF mul.
-//  Keeping it in Swift avoids a new C target / pbxproj C-compile flags / the
-//  "clean wipes the C lib" gotcha, and keeps all native code under
-//  Glimmer/Stream/Native/ as the task mandates.
-//
-//  FIELD: GF(2^8) with polynomial 0x11D (285) - the standard AES/QR field.
-//  We GENERATE the log/exp/inv tables at first use from the polynomial; this
-//  yields byte-identical tables to nanors/deps/obl/gf2_8_tables.h (verified
-//  poly 285). gfMul(a,b) = (a==0||b==0) ? 0 : EXP[LOG[a]+LOG[b]] (EXP doubled
-//  to length 512 so the sum never needs a modulo).
-//
-//  MATRIX: a ps×ds Cauchy matrix over GF(256): p[j*ds + i] = INV[(ps + i) ^ j]
-//  for parity row j in [0,ps), data col i in [0,ds). This is the EXACT
-//  generator from rs.c:98-102 - the single most load-bearing constant. Note the
-//  base is (ps + i), NOT (ds + i): using the wrong base makes a non-invertible
-//  matrix and decode returns wrong bytes with NO error.
+// Erasure decoding follows nanors; transport provenance and MIT notices are in CREDITS.md.
+// Swift owns the field and Cauchy matrix; arm64 nibble kernels keep shard recovery
+// from holding up the receive thread during packet loss.
 
 import Foundation
 
 /// GF(2^8) arithmetic tables (poly 0x11D), generated once and shared.
+/// This polynomial matches nanors/deps/obl/gf2_8_tables.h for wire compatibility.
 enum GF256 {
     /// log table: LOG[a] = discrete log of a (LOG[0] is unused/255 sentinel).
     static let log: [UInt8] = tables.log
@@ -73,6 +43,18 @@ enum GF256 {
         return (logT, expT, invT)
     }()
 
+    // Cache both nibble tables per coefficient so shard operations allocate no tables.
+    static let shardProducts: [UInt8] = {
+        var products = [UInt8](repeating: 0, count: 256 * 32)
+        for coefficient in 0..<256 {
+            for nibble in 0..<16 {
+                products[coefficient * 32 + nibble] = mul(UInt8(coefficient), UInt8(nibble))
+                products[coefficient * 32 + 16 + nibble] = mul(UInt8(coefficient), UInt8(nibble << 4))
+            }
+        }
+        return products
+    }()
+
     /// GF(256) multiply.
     @inline(__always)
     static func mul(_ a: UInt8, _ b: UInt8) -> UInt8 {
@@ -86,6 +68,7 @@ enum GF256 {
 struct ReedSolomon {
     let ds: Int          // data shards
     let ps: Int          // parity shards
+    // Cauchy uses INV[(ps + i) ^ j]; using ds as the base can make it singular.
     private let matrix: [UInt8]  // ps*ds Cauchy generator
 
     /// Mirrors reed_solomon_new / reed_solomon_new_static (rs.c:82-105).
@@ -138,15 +121,18 @@ struct ReedSolomon {
     /// shard array used during the data-shard back-substitution.
     @inline(__always)
     private static func axpyShard(_ a: inout [UInt8], _ b: [UInt8], _ coeff: UInt8, _ k: Int) {
-        if coeff == 0 { return }
-        if coeff == 1 {
-            for i in 0..<k { a[i] ^= b[i] }
-        } else {
-            let lu = Int(GF256.log[Int(coeff)])
-            for i in 0..<k {
-                let bv = b[i]
-                if bv != 0 {
-                    a[i] ^= GF256.exp[lu + Int(GF256.log[Int(bv)])]
+        if coeff == 0 || k == 0 { return }
+        a.withUnsafeMutableBufferPointer { target in
+            b.withUnsafeBufferPointer { source in
+                guard let dst = target.baseAddress, let src = source.baseAddress else { return }
+                if coeff == 1 {
+                    for i in 0..<k { dst[i] ^= src[i] }
+                } else {
+                    GF256.shardProducts.withUnsafeBufferPointer { products in
+                        guard let base = products.baseAddress else { return }
+                        let lo = base + Int(coeff) * 32
+                        gl_gf256_mul_add(dst, src, k, lo, lo + 16)
+                    }
                 }
             }
         }
@@ -167,22 +153,20 @@ struct ReedSolomon {
 
     @inline(__always)
     private static func scalShard(_ a: inout [UInt8], _ coeff: UInt8, _ k: Int) {
-        if coeff < 2 { return }
-        let lu = Int(GF256.log[Int(coeff)])
-        for i in 0..<k {
-            let av = a[i]
-            if av != 0 {
-                a[i] = GF256.exp[lu + Int(GF256.log[Int(av)])]
+        if coeff < 2 || k == 0 { return }
+        a.withUnsafeMutableBufferPointer { target in
+            GF256.shardProducts.withUnsafeBufferPointer { products in
+                guard let dst = target.baseAddress, let base = products.baseAddress else { return }
+                let lo = base + Int(coeff) * 32
+                gl_gf256_mul(dst, k, lo, lo + 16)
             }
         }
     }
 
     // MARK: - In-place shard mutation (copy-on-write avoidance)
 
-    // Mutate one shard WITHOUT per-op CoW: `var target = shards[i]` double-refs the
-    // buffer, so the next write copies the whole ~1.1KB shard on every axpy/scal
-    // during loss bursts. Assigning `shards[i] = []` first drops that ref so
-    // `target` owns it alone. (`target` is rs.c's axpy/scal destination operand.)
+    // Clearing the slot gives target sole ownership, avoiding a full shard copy
+    // on each multiply-add or scale during loss bursts.
 
     @inline(__always)
     private static func axpyShardInPlace(_ shards: inout [[UInt8]], _ tIdx: Int,
@@ -302,18 +286,18 @@ struct ReedSolomon {
         for x in 0..<unknowns {
             let pivot = wrk[x * unknowns + x]
             let coeff = GF256.inv[Int(pivot)]
-            // C does `scal(wrk + x*W + x, u, W)` which intentionally overruns the
-            // logical W×W matrix into harmless adjacent scratch (nanors allocates
-            // a larger buffer); we scale only the in-row remainder [x, W) - cols
-            // [0, x) are already 0 so this is byte-identical for every value that
-            // is ever read, without the out-of-bounds write.
+            // Scale only the row remainder: earlier columns are already zero.
+            // The C routine overruns into extra scratch; bounding the write here
+            // preserves every value read without needing that extra allocation.
             Self.scal(&wrk, x * unknowns + x, coeff, unknowns - x)
             Self.scalShardInPlace(&shards, colPerm[survBase + x], coeff, shardSize)
             if x + 1 < unknowns {
                 let src = shards[colPerm[survBase + x]]
+                // Retain only the pivot row so each destination write keeps wrk unique.
+                let pivotRow = Array(wrk[x * unknowns..<(x + 1) * unknowns])
                 for row in (x + 1)..<unknowns {
                     let rowCoeff = wrk[row * unknowns + x]
-                    Self.axpy(&wrk, row * unknowns, wrk, x * unknowns, rowCoeff, unknowns)
+                    Self.axpy(&wrk, row * unknowns, pivotRow, 0, rowCoeff, unknowns)
                     Self.axpyShardInPlace(&shards, colPerm[survBase + row], src, rowCoeff, shardSize)
                 }
             }
