@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.9.8 - Unreleased
+## 2026.9.8 - 2026-09-25
 
 Steadier reconnects, a Cancel that also quits the game it started, lighter video
 decoding, and an installer for the command line tool.
