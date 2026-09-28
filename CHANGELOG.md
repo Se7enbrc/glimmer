@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.9.10 - 2026-09-28
+
+A stream started from the menu bar hides the pointer again. Closing the menu bar
+panel as the picture came up left the cursor showing over the stream; Back to
+Stream in the panel had the same problem.
+
 ## 2026.9.9 - 2026-09-28
 
 Smooth out Wi-Fi stutter while streaming works again after updating Glimmer with
