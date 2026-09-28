@@ -37,10 +37,13 @@ extension FramePacer {
             os_unfair_lock_unlock(&lock)
             return
         }
+        let latePreWrap = ptsSeconds.isFinite && lastSubmittedPTSSeconds.isFinite
+            && ptsSeconds - lastSubmittedPTSSeconds > Self.halfTimestampRangeSeconds
         let isPTSDiscontinuity = ptsSeconds.isFinite && lastSubmittedPTSSeconds.isFinite
             && ptsSeconds < lastSubmittedPTSSeconds - 1.0
         if isPTSDiscontinuity { ptsEpoch &+= 1 }
-        let entry = Entry(sampleBuffer: sampleBuffer, hostPTSSeconds: ptsSeconds, ptsEpoch: ptsEpoch)
+        let entryEpoch = latePreWrap && ptsEpoch > 0 ? ptsEpoch - 1 : ptsEpoch
+        let entry = Entry(sampleBuffer: sampleBuffer, hostPTSSeconds: ptsSeconds, ptsEpoch: entryEpoch)
 
         // Learn the stream's frame interval from consecutive PTS deltas. The
         // lower-quartile (skip-robust) estimate over a short window holds the true
@@ -66,7 +69,7 @@ extension FramePacer {
                 }
             }
         }
-        if ptsSeconds.isFinite {
+        if ptsSeconds.isFinite && !latePreWrap {
             lastSubmittedPTSSeconds = ptsSeconds
         }
 
@@ -148,13 +151,21 @@ extension FramePacer {
         }
     }
 
+    private static let halfTimestampRangeSeconds = Double(UInt64(1) << 31) / 90_000
+
     static func insert(_ entry: Entry, into queue: inout [Entry]) {
         var insertAt = queue.count
-        while insertAt > 0, queue[insertAt - 1].ptsEpoch > entry.ptsEpoch {
-            insertAt -= 1
-        }
-        while insertAt > 0, queue[insertAt - 1].ptsEpoch == entry.ptsEpoch,
-              queue[insertAt - 1].hostPTSSeconds > entry.hostPTSSeconds {
+        while insertAt > 0 {
+            let previous = queue[insertAt - 1]
+            let delta = previous.hostPTSSeconds - entry.hostPTSSeconds
+            guard delta.isFinite else { break }
+            // Compare both sides of wrap before epochs: a late pre-wrap decode
+            // may arrive after the first post-wrap frame, even at session start.
+            if delta > halfTimestampRangeSeconds { break }
+            if delta >= -halfTimestampRangeSeconds {
+                if previous.ptsEpoch < entry.ptsEpoch { break }
+                if previous.ptsEpoch == entry.ptsEpoch && delta <= 0 { break }
+            }
             insertAt -= 1
         }
         queue.insert(entry, at: insertAt)

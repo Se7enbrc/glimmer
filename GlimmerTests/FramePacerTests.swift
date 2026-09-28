@@ -184,6 +184,26 @@ struct FramePacerTests {
         #expect(gapSorted[Int(Double(gapSorted.count) * FramePacer.cadencePercentile)] == 1.0 / 120)
     }
 
+    @Test(arguments: [[UInt32.max - 1, 0, 1], [0, UInt32.max - 1, 1],
+                      [UInt32.max - 1, 1, 0]])
+    func timestampWrapOrdersBothArrivalDirections(ticks: [UInt32]) throws {
+        let pacer = try makePacer(fps: 120, queued: 0)
+        pacer.tickDeficit.warmingUp = false
+        for tick in ticks {
+            try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: Int64(tick), timescale: 90_000))
+        }
+        #expect(pacer.queue.map(\.hostPTSSeconds) == [Double(UInt32.max - 1) / 90_000, 0, 1.0 / 90_000])
+    }
+
+    @Test func missingPTSRetainsArrivalOrder() throws {
+        let pacer = try makePacer(fps: 120, queued: 0)
+        pacer.tickDeficit.warmingUp = false
+        try pacer.submit(emptySampleBuffer(), hostPTS: .invalid)
+        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 1, timescale: 90_000))
+        #expect(pacer.queue.first?.hostPTSSeconds.isNaN == true)
+        #expect(pacer.queue.last?.hostPTSSeconds == 1.0 / 90_000)
+    }
+
     @Test func backwardsPTSAppendsInQueueOrder() throws {
         let pacer = try makePacer(fps: 120, queued: 0)
         pacer.tickDeficit.warmingUp = false
