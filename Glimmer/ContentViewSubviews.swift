@@ -56,8 +56,8 @@ struct AppIconsRow: View {
         return app.name == model.heroTargetAppName
     }
 
-    /// The app being launched, once the connect shows: its button becomes the
-    /// progress and the cancel, so the status stays on the chip and nothing new appears.
+    /// The app being launched or reconnected, once that shows: its button becomes the
+    /// progress and the way out, so the status stays on the chip and nothing new appears.
     private func isLaunching(_ app: LibraryApp) -> Bool {
         guard connectingShown, case .connecting = model.streamPhase,
               let attempt = model.lastLaunchAttempt else { return false }
@@ -90,21 +90,29 @@ struct AppIconsRow: View {
 
     private func appTile(_ app: LibraryApp) -> some View {
         let launching = isLaunching(app)
+        // A reconnect is a live stream, so its way out ends it rather than cancelling.
+        let reconnecting = launching && model.isReconnecting
         return Button {
-            if launching { model.cancelConnect() } else { model.requestStream(app: app, on: host) }
+            if reconnecting {
+                model.stopStreamFromMenu(source: "the launcher")
+            } else if launching {
+                model.cancelConnect()
+            } else {
+                model.requestStream(app: app, on: host)
+            }
         } label: {
             tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill", launching: launching)
         }
         .buttonStyle(AppTileStyle())
-        // Escape cancels a connect in flight; Return never does (users mash it).
+        // Escape is the way out of a connect or reconnect; Return never is (users mash it).
         .keyboardShortcut(launching ? .cancelAction : takesReturn(app) ? .defaultAction : nil)
         .disabled(model.isStreaming && !launching)
-        .help(launching ? "Cancel the connection"
+        .help(reconnecting ? "End the stream" : launching ? "Cancel the connection"
               : model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)")
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
-        .accessibilityValue(launching ? "Connecting" : "")
-        .accessibilityHint(launching ? "Cancels the connection" : "")
+        .accessibilityValue(reconnecting ? "Reconnecting" : launching ? "Connecting" : "")
+        .accessibilityHint(reconnecting ? "Ends the stream" : launching ? "Cancels the connection" : "")
     }
 
     private var overflowMenu: some View {
