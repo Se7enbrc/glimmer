@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.9.9 - Unreleased
+## 2026.9.9 - 2026-09-28
 
 Smooth out Wi-Fi stutter while streaming works again after updating Glimmer with
 Homebrew. The update could leave the setting on while the part that parks
