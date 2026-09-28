@@ -35,6 +35,9 @@ private final class SingleResume<T: Sendable>: @unchecked Sendable {
 actor HelperClient {
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "AWDLHelper")
     private var connection: NSXPCConnection?
+    /// Which connection a late invalidation or deadline belongs to. Not ObjectIdentifier:
+    /// that is an address, and a freed connection's replacement can reuse it.
+    private var generation = 0
     private let makeConnection: @Sendable () -> NSXPCConnection
     private let makeProxy: @Sendable (NSXPCConnection, @escaping @Sendable (Error) -> Void) -> GlimmerHelperProtocol?
 
@@ -50,19 +53,21 @@ actor HelperClient {
         self.makeProxy = makeProxy
     }
 
-    private func connect() -> NSXPCConnection {
-        if let existing = connection { return existing }
+    private func connect() -> (connection: NSXPCConnection, generation: Int) {
+        if let existing = connection { return (existing, generation) }
         let conn = makeConnection()
         conn.remoteObjectInterface = NSXPCInterface(with: GlimmerHelperProtocol.self)
-        let identity = ObjectIdentifier(conn)
-        conn.invalidationHandler = { [weak self] in Task { await self?.drop(identity) } }
+        generation += 1
+        let token = generation
+        conn.invalidationHandler = { [weak self] in Task { await self?.drop(token) } }
         conn.resume()
         connection = conn
-        return conn
+        return (conn, token)
     }
 
-    func drop(_ identity: ObjectIdentifier) {
-        guard let current = connection, ObjectIdentifier(current) == identity else { return }
+    /// Drops the connection only if it is still the one `token` was issued for.
+    func drop(_ token: Int) {
+        guard token == generation, let current = connection else { return }
         connection = nil
         current.invalidate()
     }
@@ -78,13 +83,12 @@ actor HelperClient {
         fallback: Value,
         send: (NSXPCConnection, @escaping @Sendable (Value) -> Void) -> Void
     ) async -> Value {
-        let connection = connect()
-        let identity = ObjectIdentifier(connection)
+        let (connection, token) = connect()
         return await withCheckedContinuation { continuation in
             let once = SingleResume(continuation)
             let deadline = Task {
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
-                if once.resume(fallback) { drop(identity) }
+                if once.resume(fallback) { drop(token) }
             }
             send(connection) { value in
                 deadline.cancel()

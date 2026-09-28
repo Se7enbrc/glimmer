@@ -172,7 +172,7 @@ struct HelperClientTests {
     }
 
     @Test func errorsRetainConnectionAndStaleInvalidationsCannotDropReplacement() async throws {
-        let identities = Mutex<[ObjectIdentifier]>([])
+        let made = Mutex(0)
         let fail = Mutex(false)
         let invalidated = DispatchSemaphore(value: 0)
         let listener = NSXPCListener.anonymous()
@@ -182,7 +182,7 @@ struct HelperClientTests {
             let connection = NSXPCConnection(listenerEndpoint: endpoint)
             #expect(connection.serviceName == nil)
             #expect(connection.endpoint === endpoint)
-            identities.withLock { $0.append(ObjectIdentifier(connection)) }
+            made.withLock { $0 += 1 }
             return connection
         }, makeProxy: { connection, error in
             #expect(connection.interruptionHandler == nil)
@@ -198,20 +198,21 @@ struct HelperClientTests {
             return HelperTestProxy()
         })
         #expect(await client.setAWDLDown(true, reason: "test"))
-        let first = try #require(identities.withLock { $0.first })
+        // The first connection's generation; a freed connection's address can be reused, its generation cannot.
+        let first = 1
         fail.withLock { $0 = true }
         #expect(!(await client.setAWDLDown(false, reason: "test")))
         #expect(await client.currentStatus() == nil)
         #expect(await client.reSuppressCount() == nil)
-        #expect(identities.withLock { $0.count } == 1)
+        #expect(made.withLock { $0 } == 1)
         await client.drop(first)
         #expect(await invalidated.waitAsync(for: .seconds(10)) == .success)
         fail.withLock { $0 = false }
         #expect(await client.reSuppressCount() == 0)
-        #expect(identities.withLock { $0.count } == 2)
+        #expect(made.withLock { $0 } == 2)
         await client.drop(first)
         #expect(await client.reSuppressCount() == 0)
-        #expect(identities.withLock { $0.count } == 2)
+        #expect(made.withLock { $0 } == 2)
         await client.invalidate()
     }
 }
