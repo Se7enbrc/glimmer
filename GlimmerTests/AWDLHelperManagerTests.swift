@@ -114,6 +114,18 @@ struct AWDLHelperManagerTests {
         #expect(harness.events.isEmpty)
     }
 
+    @Test(arguments: [false, true])
+    func queuedHeartbeatDoesNotContactHelper(disable: Bool) async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        let manager = harness.makeManager()
+        manager.suppressForStream()
+        if !disable { manager.releaseForStream() }
+        manager.disable()
+        #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
+        #expect(harness.events == ["invalidate", "unregister"])
+    }
+
     @Test func repeatedDisableWaitsForRestorationAndRejectsNewStreams() async throws {
         let harness = try HelperHarness()
         defer { harness.cleanUp() }
@@ -205,7 +217,7 @@ struct AWDLHelperManagerTests {
     }
 
     @Test(arguments: [false, true])
-    func persistentReleaseFailureUsesDisconnectRecovery(disable: Bool) async throws {
+    func failedReleasesWaitForDelayedRestoration(disable: Bool) async throws {
         let harness = try HelperHarness()
         defer { harness.cleanUp() }
         let manager = harness.makeManager()
@@ -219,26 +231,35 @@ struct AWDLHelperManagerTests {
         #expect(await recovery.entered.waitAsync(for: .seconds(10)) == .success)
         #expect(harness.retryDelays == [.seconds(1), .seconds(2), .seconds(4), .seconds(10)])
         #expect(harness.events.filter { $0 == "release-failed" }.count == 4)
-        #expect(harness.events.last == "invalidate")
-        #expect(!harness.events.contains("unregister"))
-        #expect(!manager.isEnabled)
         if !disable { manager.suppressForStream() }
-        #expect(harness.events.filter { $0 == "down" }.count == 1)
-        if !disable { harness.persistentReleaseFailure = false }
         recovery.open()
+        #expect(await recovery.entered.waitAsync(for: .seconds(1)) == .success)
+        #expect(harness.events.filter { $0 == "release-failed" }.count == 5)
+        #expect(harness.retryDelays.last == .seconds(10))
+        #expect(!harness.events.contains("unregister"))
+        #expect(harness.events.filter { $0 == "down" }.count == 1)
+        #expect(!manager.isEnabled)
+        let restoration = HelperGate()
+        harness.releaseGate = restoration
+        harness.persistentReleaseFailure = false
+        recovery.open()
+        #expect(await restoration.entered.waitAsync(for: .seconds(1)) == .success)
+        #expect(!harness.events.contains("unregister"))
+        #expect(harness.events.filter { $0 == "down" }.count == 1)
+        #expect(!manager.isEnabled)
+        harness.releaseGate = nil
+        restoration.open()
         if disable {
             #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
             #expect(!manager.isRegistered)
-            #expect(harness.events.suffix(2) == ["invalidate", "unregister"])
+            #expect(harness.events.suffix(3) == ["restored", "invalidate", "unregister"])
         } else {
             #expect(await harness.tick.waitAsync(for: .seconds(10)) == .success)
             #expect(manager.isEnabled)
-            manager.releaseForStream()
-            for _ in 0..<5 {
-                #expect(await harness.released.waitAsync(for: .seconds(10)) == .success)
-            }
+            #expect(harness.events.suffix(2) == ["restored", "down"])
+            manager.disable()
+            #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
         }
-        #expect(harness.events.filter { $0 == "release-failed" }.count == 4)
     }
 
     @Test(arguments: [false, true])

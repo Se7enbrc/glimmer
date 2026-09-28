@@ -390,6 +390,7 @@ final class AWDLHelperManager: ObservableObject {
     // MARK: Stream-scoped suppression
 
     private var heartbeatTask: Task<Void, Never>?
+    private var downRequested = false
 
     /// Park awdl0 for the life of a stream. Heartbeats the daemon every second so
     /// it keeps awdl0 down and can detect if we go away (stream end / crash) and
@@ -412,6 +413,7 @@ final class AWDLHelperManager: ObservableObject {
             var tick = 0
             var lastLogged: UInt64 = 0
             while !Task.isCancelled {
+                downRequested = true
                 let down = await operations.setDown(true, "stream")
                 guard !Task.isCancelled else { break }
                 suppressing = down
@@ -437,6 +439,8 @@ final class AWDLHelperManager: ObservableObject {
         heartbeatTask = nil
         suppressing = false
         operations.telemetry(false, 0)
+        guard downRequested else { return }
+        downRequested = false
         restoring = true
         restorationTask = Task { @MainActor in
             // An in-flight down must finish before release, including its XPC reply.
@@ -455,12 +459,13 @@ final class AWDLHelperManager: ObservableObject {
             try? await operations.sleep(.seconds(delay))
         }
         if await operations.setDown(false, reason) { return }
-        // Closing the peer triggers restoration without launching another helper.
-        // Allow its 3-second heartbeat watchdog and 8-second idle exit to finish
-        // before unregistering or admitting another stream.
+        // Disconnect gives the helper another chance to restore, but elapsed time
+        // cannot prove its queued interface work finished. Keep ownership until
+        // a release acknowledges completion, with a capped retry interval.
         await operations.invalidate()
-        try? await operations.sleep(.seconds(10))
-        log.notice("AWDL release unavailable; waited for helper disconnect and heartbeat recovery")
+        repeat {
+            try? await operations.sleep(.seconds(10))
+        } while !(await operations.setDown(false, reason))
     }
 
     /// A queued next stream can end before the previous stream finishes restoring.
