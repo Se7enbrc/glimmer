@@ -290,6 +290,7 @@ final class RtpVideoQueue {
         let timestamp: UInt32
         let ssrc: UInt32
         let dataOffset: Int
+        let frameIndex: UInt32?
     }
 
     // MARK: - Entry point: a raw datagram from the socket
@@ -323,9 +324,13 @@ final class RtpVideoQueue {
         let ssrc = (UInt32(datagram[8]) << 24) | (UInt32(datagram[9]) << 16)
             | (UInt32(datagram[10]) << 8) | UInt32(datagram[11])
 
+        let frameIndex = datagram.count >= dataOffset + 16 ? le32(datagram, dataOffset + 4) : nil
         let parsed = ParsedRtp(bytes: datagram, length: datagram.count, header: header,
-                               seq: seq, timestamp: timestamp, ssrc: ssrc, dataOffset: dataOffset)
+                               seq: seq, timestamp: timestamp, ssrc: ssrc, dataOffset: dataOffset, frameIndex: frameIndex)
         if !isReplay {
+            if let frameIndex {
+                accumulateReceiveQuality(seq: seq, frameIndex: frameIndex, receiveTimeUs: receiveTimeUs)
+            }
             accumulateJitter(timestamp: timestamp, receiveTimeUs: receiveTimeUs)
         }
 

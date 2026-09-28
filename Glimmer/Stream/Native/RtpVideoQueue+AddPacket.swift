@@ -33,24 +33,21 @@ extension RtpVideoQueue {
         let timestamp = rtp.timestamp
 
         // Reject packets too small for the NV header.
-        if rtp.length < rtp.dataOffset + 16 {
+        guard let frameIndex = rtp.frameIndex else {
             return .rejected
         }
 
-        // Parse once for both receive accounting and the frame transition.
+        // Reuse the frame index already parsed for receive accounting.
         let nv = rtp.dataOffset
         let fecInfo = le32(bytes, nv + 12)
         let multiFecBlocks = bytes[nv + 11]
         let fields = NvFields(
-            frameIndex: le32(bytes, nv + 4),
+            frameIndex: frameIndex,
             fecIndex: (fecInfo & 0x3FF000) >> 12,
             fecCurrentBlockNumber: (multiFecBlocks >> 4) & 0x3,
             multiFecBlocks: multiFecBlocks,
             fecInfo: fecInfo)
 
-        if allowHold {
-            accumulateReceiveQuality(seq: seq, frameIndex: fields.frameIndex, receiveTimeUs: receiveTimeUs)
-        }
         // Newer frames disambiguate sequence aliases after a long dropout.
         if Self.isBefore16(seq, nextContiguousSequenceNumber),
            !Self.isBefore32(currentFrameNumber, fields.frameIndex) {

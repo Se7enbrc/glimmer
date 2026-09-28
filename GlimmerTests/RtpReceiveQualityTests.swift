@@ -74,11 +74,34 @@ struct RtpReceiveQualityTests {
         receive(queue, seq: 10, frame: 1, at: 1_000)
         receive(queue, seq: 12, frame: 1, at: 2_000)
         receive(queue, seq: 10, frame: 1, at: 2_002_000)
+        #expect(queue.windowDuplicate == 0)
+        receive(queue, seq: 10, frame: 1, at: 2_002_001)
         #expect(queue.windowDuplicate == 1)
         #expect(queue.windowOutOfOrder == 0)
         #expect(queue.pendingReorderCredit == 0)
         receive(queue, seq: 14, frame: 1, at: 2_003_000)
         #expect(queue.applyPendingReorderCredit() == 1)
+    }
+
+    @Test(arguments: [UInt16(14), UInt16(10), UInt16(11)])
+    func boundaryPacketQualityFlushesWithItsPacketCount(sequence: UInt16) {
+        let queue = queue()
+        receive(queue, seq: 10, frame: 1, at: 1_000)
+        receive(queue, seq: 12, frame: 1, at: 2_000_999)
+        #expect(queue.packetsInWindow == 2)
+        #expect(queue.windowLostPreFec == 1)
+        #expect(queue.gapCount == 1)
+
+        receive(queue, seq: sequence, frame: 1, at: 2_001_000)
+        #expect(queue.metricsWindowStartUs == 2_001_000)
+        #expect(queue.packetsInWindow == 0)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(queue.windowDuplicate == 0)
+        #expect(queue.windowOutOfOrder == 0)
+        #expect(queue.pendingReorderCredit == 0)
+        #expect(queue.gapCount == 0)
+        #expect(queue.gapMaxUs == 0)
+        #expect(queue.gapBuckets.allSatisfy { $0 == 0 })
     }
 
     @Test func ringEvictsOnlyTheOldestAndHandlesSequenceWrap() {
@@ -103,7 +126,7 @@ struct RtpReceiveQualityTests {
     @Test func forwardJumpAfterBlackoutStillCountsLoss() {
         let queue = queue()
         receive(queue, seq: 0, frame: 1, at: 1_000)
-        receive(queue, seq: 100, frame: 2, at: 3_001_000)
+        receive(queue, seq: 100, frame: 2, at: 1_002_000)
         #expect(queue.windowLostPreFec == 99)
     }
 }
