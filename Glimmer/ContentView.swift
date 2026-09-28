@@ -389,7 +389,8 @@ private struct HostHero: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
+            // 16pt inset keeps the 10pt tiles concentric with the 26pt card (26 - 16).
+            .padding(16)
         }
         // `width`, not `maxWidth`: the window is sized from this column, and a
         // maxWidth has no size of its own to measure, which is why an earlier
