@@ -69,6 +69,26 @@ struct RtpReceiveQualityTests {
         #expect(queue.windowLostPreFec == 0)
     }
 
+    @Test(arguments: [UInt32(2), UInt32(0)])
+    func olderFrameForwardAliasPreservesBlackoutEligibility(frame: UInt32) {
+        let queue = queue()
+        receive(queue, seq: 1_000, frame: frame, at: 1_000)
+        receive(queue, seq: 2_000, frame: frame &- 1, at: 1_002_000)
+        #expect(queue.seqHighestSeen == 1_000)
+        #expect(queue.seqNewestFrame == frame)
+        #expect(queue.sequenceBlackoutEligible)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(!queue.haveOpenGap)
+
+        receive(queue, seq: 41_000, frame: frame &+ 1, at: 1_002_001)
+        #expect(queue.seqHighestSeen == 41_000)
+        #expect(queue.seqNewestFrame == frame &+ 1)
+        #expect(!queue.sequenceBlackoutEligible)
+        #expect(queue.pendingReorderCredit == 0)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(!queue.haveOpenGap)
+    }
+
     @Test func duplicateHistorySurvivesMetricFlush() {
         let queue = queue()
         receive(queue, seq: 10, frame: 1, at: 1_000)

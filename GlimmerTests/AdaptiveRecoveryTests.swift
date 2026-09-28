@@ -341,6 +341,26 @@ struct RtpVideoQueueRecoveryTests {
         #expect(queue.currentFrameNumber == 2)
     }
 
+    @Test func blackoutAfterCompletedFrameAcceptsNextExpectedFrame() {
+        let queue = makeQueue(av1: true)
+        var first = datagram(seq: 0, frame: 1, fecIndex: 0,
+                             flags: RtpVideoQueue.FLAG_SOF | RtpVideoQueue.FLAG_EOF,
+                             dataCount: 1, fecPercent: 0)
+        first.append(1)
+        first[36] = 9
+        queue.addRawDatagram(first, receiveTimeUs: 1_000)
+        #expect(delegate.units.map(\.frameNumber) == [1])
+        #expect(queue.currentFrameNumber == 2)
+        #expect(queue.nextContiguousSequenceNumber == 1)
+        #expect(queue.pending.isEmpty)
+
+        queue.addRawDatagram(datagram(seq: 40_000, frame: 2, fecIndex: 0,
+                                     flags: RtpVideoQueue.FLAG_SOF), receiveTimeUs: 3_002_000)
+        #expect(queue.currentFrameNumber == 2)
+        #expect(queue.pending.map(\.sequenceNumber) == [40_000])
+        #expect(queue.nextContiguousSequenceNumber == 40_001)
+    }
+
     @Test(arguments: [false, true])
     func heldFrameExpiresOrAdvancesOnNextFrame(advance: Bool) {
         let queue = makeQueue(av1: true)

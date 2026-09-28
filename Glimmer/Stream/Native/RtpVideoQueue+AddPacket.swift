@@ -48,9 +48,11 @@ extension RtpVideoQueue {
             multiFecBlocks: multiFecBlocks,
             fecInfo: fecInfo)
 
-        // Newer frames disambiguate sequence aliases after a long dropout.
+        // A completed frame leaves currentFrameNumber at the next expected frame.
+        // Its first packet opens a new sequence window even after a long dropout.
+        let awaitingNextFrame = pending.isEmpty && completed.isEmpty
         if Self.isBefore16(seq, nextContiguousSequenceNumber),
-           !Self.isBefore32(currentFrameNumber, fields.frameIndex) {
+           !Self.isBefore32(currentFrameNumber, fields.frameIndex), !awaitingNextFrame {
             return .rejected
         }
 

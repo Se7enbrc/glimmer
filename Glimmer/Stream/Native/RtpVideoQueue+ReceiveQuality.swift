@@ -22,7 +22,8 @@ extension RtpVideoQueue {
             windowDuplicate += 1
             return
         }
-        if !Self.isBefore16(seq, seqHighestSeen) {
+        // Older frames can alias forward in sequence space after a blackout.
+        if !Self.isBefore32(frameIndex, seqNewestFrame), !Self.isBefore16(seq, seqHighestSeen) {
             let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
             if jump > 1 {
                 windowLostPreFec += jump - 1
