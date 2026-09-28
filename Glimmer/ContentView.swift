@@ -238,18 +238,10 @@ private struct ConnectSurface: View {
         // down into was the empty area under the footer. The window now sizes to
         // this column (see .windowResizability in GlimmerApp), so there is no
         // leftover height to absorb and nothing to pin against.
-        // 80pt sides -> a 680pt window around the 520pt card. Bisected between
-        // two values checked on screen: 32 (584 window) read as cramped, the
-        // card nearly touching the frame; 130 (780, matching 7.7's default
-        // width) read as too big. The VERTICAL padding stays tight - the space
-        // under the footer was the part that read as waste, and 7.7's own top
-        // margin was 20.
-        //
-        // This is THE margin dial. It must stay in step with GlimmerApp's
-        // window minWidth (520 + 2x this): a floor below the real content width
-        // leaves the window a range to be dragged through, which is how the
-        // margins got squeezed flat once already.
-        .padding(.horizontal, 80)
+        // 60pt sides around the 460pt card make a 580pt window. This is THE margin
+        // dial: it must stay in step with GlimmerApp's window minWidth (460 + 2x
+        // this), or the window gets a range to be dragged through.
+        .padding(.horizontal, 60)
         .padding(.vertical, 20)
         // TAKE THE IDEAL HEIGHT, NOT THE OFFERED ONE. Removing the Spacer was
         // not enough on its own: StreamButton's label carries
@@ -402,14 +394,13 @@ private struct HostHero: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 22)
+            .padding(.vertical, 28)
             .padding(.horizontal, 24)
         }
         // `width`, not `maxWidth`: the window is sized from this column, and a
-        // maxWidth has no size of its own to measure - which is why an earlier
-        // attempt at a content-sized window stayed resizable anyway. 520 is the
-        // width the card already had in every window wide enough to show it.
-        .frame(width: 520)
+        // maxWidth has no size of its own to measure, which is why an earlier
+        // attempt at a content-sized window stayed resizable anyway.
+        .frame(width: 460)
         // Right-click the hero to rename / set codec / unpair the current PC.
         .modifier(OptionalHostContextMenu(host: host))
     }

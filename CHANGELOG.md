@@ -21,7 +21,13 @@ control explains itself in one line underneath, and the Quality presets are
 named for what you get: Sharpest and Balanced. "Fill the notch" is now "Keep
 picture below the camera", off by default as before. Fixed shortcuts show their
 keys as plain text, PCs get a device glyph instead of initials, and the menu bar
-panel shows Open Glimmer instead of hiding it in a menu.
+panel shows Open Glimmer instead of hiding it in a menu. The launcher window is
+narrower, so the card no longer reads as a wide strip.
+
+Every in-stream shortcut now defaults to two keys: ⌃Q stops streaming, ⌃I shows
+or hides stats, ⌃P captures or releases the pointer, ⌃M opens the mini player,
+and ⌃V pastes as text, in place of ⌃⌥Q, ⌃⌥S, ⌃⌥R and ⌃⌥⇧V. Shortcuts you had
+already changed stay as you set them.
 
 ## 2026.9.8 - 2026-09-25
 

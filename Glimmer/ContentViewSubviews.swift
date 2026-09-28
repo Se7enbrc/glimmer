@@ -14,10 +14,10 @@ struct AppIconsRow: View {
     let host: Host
     @Environment(AppModel.self) private var model
 
-    /// Most tiles the row will ever show inline. Five 84pt tiles span
-    /// 5x84 + 4x10 = 460 inside the hero's 472pt content box, so the row stays
+    /// Most tiles the row will ever show inline. Four 84pt tiles span
+    /// 4x84 + 3x10 = 366 inside the hero's 412pt content box, so the row stays
     /// one comfortable line at the card's FIXED width.
-    private static let maxInlineTiles = 5
+    private static let maxInlineTiles = 4
 
     /// Apps shown as tiles. At or under the inline cap every app gets one; past
     /// it the last slot is spent on the overflow menu instead of a tile, so the

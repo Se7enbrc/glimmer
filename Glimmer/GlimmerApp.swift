@@ -109,14 +109,10 @@ struct GlimmerApp: App {
         Window("Glimmer", id: "main") {
             MainWindow()
                 .environment(model)
-                // 520pt card + 80pt margins per side = 680. This MUST equal the
-                // connect surface's real width (ConnectSurface's .horizontal
-                // padding): a floor BELOW it leaves the window that much range
-                // to be dragged through, and it opens at the bottom of the range
-                // with the margins squeezed flat - which is exactly what a stale
-                // 584 here did. A floor equal to the content leaves nothing to
-                // drag.
-                .frame(minWidth: 680)
+                // 460pt card + 60pt margins per side = 580. This MUST equal the
+                // connect surface's real width (its .horizontal padding): a floor
+                // below it leaves the window a range to be dragged through.
+                .frame(minWidth: 580)
                 .containerBackground(.regularMaterial, for: .window)
         }
         .windowStyle(.hiddenTitleBar)

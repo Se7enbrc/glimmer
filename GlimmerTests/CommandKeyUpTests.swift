@@ -211,7 +211,7 @@ struct ConnectEscapeTests {
         forwarder.attach(to: window)
         defer { forwarder.detach() }
         let view = try #require(forwarder.inputView)
-        let quitChord = try key(.keyDown, kVK_ANSI_Q, mods: [.control, .option], chars: "q", at: 4)
+        let quitChord = try key(.keyDown, kVK_ANSI_Q, mods: [.control], chars: "q", at: 4)
 
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, mods: [.shift]))
         #expect(cancels.calls == 0)
@@ -239,10 +239,10 @@ struct ConnectEscapeTests {
 @MainActor
 struct HotkeyChordLayoutTests {
 
-    private let quit = HotkeyChord.defaultQuit  // ⌃⌥Q
+    private let quit = HotkeyChord.defaultQuit  // ⌃Q
 
     private func matches(_ keyCode: Int, typing chars: String) throws -> Bool {
-        let mods: NSEvent.ModifierFlags = [.control, .option]
+        let mods: NSEvent.ModifierFlags = [.control]
         return quit.matches(event: try key(.keyDown, keyCode, mods: mods, chars: chars), modifiers: mods)
     }
 
