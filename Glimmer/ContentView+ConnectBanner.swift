@@ -1,7 +1,7 @@
 //
 //  ContentView+ConnectBanner.swift
 //
-//  The connect-failure banner above the hero card and the recovery it offers,
+//  The connect-failure banner at the top of the launcher and the recovery it offers,
 //  split out of ContentView.swift for length.
 //
 
@@ -57,7 +57,7 @@ extension AppModel {
     }
 }
 
-/// Tip-style banner above the hero card. Shows for stream errors. Stays out
+/// Tip-style banner at the top of the launcher. Shows for stream errors. Stays out
 /// of the way otherwise. Internal (not private): ConnectSurface, which
 /// mounts it, lives in ContentView.swift.
 struct ConnectBanner: View {

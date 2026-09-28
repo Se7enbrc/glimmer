@@ -11,19 +11,20 @@ moment, and Glimmer stops checking on it while your displays are asleep. Video
 comes back faster after a network dropout of a few seconds. Turning off Smooth
 out Wi-Fi stutter during a stream brings AirDrop and Continuity back right away.
 
-The launcher is calmer. The PC card wears your accent colour more lightly so the
-Stream button stands out from it, the name and button are sized like the rest of
-macOS, the specs under the card are a line of text instead of buttons, and app
-names are no longer cut off. Clicking an app streams it, so the card no longer
-draws a ring around one as if you had to choose first.
+The launcher is redesigned as one sheet of frosted glass. Your PC's name is its
+title, with the specs underneath, and each app is a large violet button that
+streams it, so there is no separate Stream button to find. Return streams the
+app you start with. A button appears under the apps only when the PC needs
+something else first: Wake and Connect, Cancel while a slow connection is under
+way, Back to Stream, or Pair Again. With more than one PC paired, click the name
+to switch.
 
 Settings reads more like System Settings. The pane you read is opaque, each
 control explains itself in one line underneath, and the Quality presets are
 named for what you get: Sharpest and Balanced. "Fill the notch" is now "Keep
 picture below the camera", off by default as before. Fixed shortcuts show their
 keys as plain text, PCs get a device glyph instead of initials, and the menu bar
-panel shows Open Glimmer instead of hiding it in a menu. The launcher window is
-narrower, so the card no longer reads as a wide strip.
+panel shows Open Glimmer instead of hiding it in a menu.
 
 Every in-stream shortcut now defaults to two keys: ⌃Q stops streaming, ⌃I shows
 or hides stats, ⌃P captures or releases the pointer, ⌃M opens the mini player,
@@ -31,15 +32,15 @@ and ⌃V pastes as text, in place of ⌃⌥Q, ⌃⌥S, ⌃⌥R and ⌃⌥⇧V. S
 already changed stay as you set them.
 
 A new Stream menu holds Stream, Mini Player and Stop Streaming, and lists your
-PCs with ⌘1 to ⌘9 to switch between them. With one PC paired, the launcher's
-toolbar shows just the Settings button. The Stream button in the menu bar panel
-now matches the launcher's, and the panel's cards are titled the way macOS's own
-panels are. Smooth out Wi-Fi stutter sits next to Bandwidth in Settings ›
-Quality, and Open in the menu bar only appears once Open at login is on.
+PCs with ⌘1 to ⌘9 to switch between them. The launcher's toolbar holds just the
+Settings button. The Stream button in the menu bar panel matches the launcher's
+violet, and the panel's cards are titled the way macOS's own panels are. Smooth
+out Wi-Fi stutter sits next to Bandwidth in Settings › Quality, and Open in the
+menu bar only appears once Open at login is on.
 
 Pairing errors now say to choose Pair Again… without pointing at a menu the
 screen doesn't have. With Reduce Motion on, banners and notices fade in instead
-of sliding, and nothing bounces. VoiceOver reads each app tile by its name,
+of sliding, and nothing bounces. VoiceOver reads each app button by its name,
 announces a newly recorded shortcut, and keeps its own keys while you record
 one. The log level picker in Diagnostics shows every level again.
 

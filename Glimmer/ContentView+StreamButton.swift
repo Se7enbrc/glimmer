@@ -8,9 +8,23 @@
 
 import SwiftUI
 
-/// Material-weighted accent button - same gradient + glass tint + soft rim as
-/// the hero card. Sized naturally by its label so modal-sheet rows keep their
-/// layout (the hero StreamButton applies its own `.frame(maxWidth:)`).
+extension InsettableShape {
+    /// The primary controls' violet: the opaque accent gradient under accent-tinted
+    /// glass, a lit 1pt rim and a soft lift. The Stream button and the app buttons share it.
+    @MainActor
+    func accentSurface() -> some View {
+        fill(accentSurfaceGradient)
+            .glassEffect(.regular.tint(Color.accentColor.opacity(0.15)), in: self)
+            .overlay {
+                strokeBorder(LinearGradient(colors: [.white.opacity(0.30), .white.opacity(0.02)],
+                                            startPoint: .top, endPoint: .bottom), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
+    }
+}
+
+/// The accent capsule. Sized naturally by its label so modal-sheet rows keep their
+/// layout (the launcher's StreamButton applies its own `.frame(maxWidth:)`).
 /// Internal so SettingsView's Pair/Stream-now buttons share the treatment.
 struct StreamButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
@@ -18,32 +32,26 @@ struct StreamButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.title2.weight(.semibold))
-            .foregroundStyle(.primary)
+            // White on the opaque accent in both appearances, as a prominent button is.
+            .foregroundStyle(.white)
             .padding(.horizontal, 22)
             .padding(.vertical, 12)
             .frame(minHeight: 46)
-            .background {
-                Capsule()
-                    .fill(accentSurfaceGradient)
-                    .glassEffect(
-                        .regular.tint(Color.accentColor.opacity(0.25)),
-                        in: .capsule
-                    )
-                    .overlay {
-                        Capsule()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.10),
-                                        Color.white.opacity(0.02)
-                                    ],
-                                    startPoint: .top, endPoint: .bottom
-                                ),
-                                lineWidth: 0.5
-                            )
-                    }
-                    .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
-            }
+            .background { Capsule().accentSurface() }
+            .opacity(isEnabled ? 1.0 : 0.55)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+/// The launcher's app buttons: each one streams, so each wears the Stream button's violet.
+struct AppTileStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .background { RoundedRectangle(cornerRadius: 14, style: .continuous).accentSurface() }
             .opacity(isEnabled ? 1.0 : 0.55)
             .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
             .animation(.snappy(duration: 0.15), value: configuration.isPressed)

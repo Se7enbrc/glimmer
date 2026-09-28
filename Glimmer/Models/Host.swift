@@ -300,7 +300,7 @@ extension String {
 // MARK: - Host live status
 
 /// What we know about the selected host between streams. Surfaced on the
-/// HostHero readiness chip. Refreshed by a low-frequency poller that runs
+/// launcher's readiness chip. Refreshed by a low-frequency poller that runs
 /// only while the main window is foreground, a host is selected, and we're
 /// NOT actively streaming (during a stream the engine's own RTT estimator
 /// drives the stats overlay - polling /serverinfo on top of that is noise).

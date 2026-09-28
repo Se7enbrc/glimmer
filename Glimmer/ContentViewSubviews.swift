@@ -14,10 +14,10 @@ struct AppIconsRow: View {
     let host: Host
     @Environment(AppModel.self) private var model
 
-    /// Two columns of wide, short tiles (the Home app's shape) fill the card's
-    /// width with two apps or four; past four the last cell is the overflow menu.
+    /// Two columns of large app buttons fill the window's width with two apps or
+    /// four; past four the last cell is the overflow menu.
     private static let maxInlineTiles = 4
-    private static let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+    private static let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     private var inlineApps: [LibraryApp] {
         apps.count <= Self.maxInlineTiles ? apps : Array(apps.prefix(Self.maxInlineTiles - 1))
@@ -28,42 +28,45 @@ struct AppIconsRow: View {
     }
 
     var body: some View {
-        // One glass composite for the grid - see ReadinessChip's container note.
-        GlassEffectContainer(spacing: 8) {
-            LazyVGrid(columns: Self.columns, spacing: 8) {
-                ForEach(inlineApps) { app in
-                    appTile(app)
-                }
-                // Overflow is a MENU, not more rows: the window is sized to this
-                // content, and a menu opens over it at no layout cost.
-                if !overflowApps.isEmpty {
-                    overflowMenu
-                }
+        // No GlassEffectContainer: it composites its glass above the app buttons' labels.
+        LazyVGrid(columns: Self.columns, spacing: 10) {
+            ForEach(inlineApps) { app in
+                appTile(app)
+            }
+            // Overflow is a MENU, not more rows: the window is sized to this
+            // content, and a menu opens over it at no layout cost.
+            if !overflowApps.isEmpty {
+                overflowMenu
             }
         }
-        // Dim the grid while a session exists; each tile is disabled on its own so
-        // the overflow menu stays openable mid-session (looking launches nothing).
-        .opacity(model.isStreaming ? 0.45 : 1.0)
+        // Each app button is disabled (and dimmed by its style) while a session exists;
+        // the overflow menu stays openable mid-session, since looking launches nothing.
         .animation(.snappy(duration: 0.3), value: model.isStreaming)
+    }
+
+    /// Return streams the Start with app while the PC is ready; otherwise the
+    /// state button (Wake, Pair Again) owns it.
+    private func takesReturn(_ app: LibraryApp) -> Bool {
+        guard case .stream = model.menuBarPrimaryAction else { return false }
+        return app.name == model.heroTargetAppName
     }
 
     /// Icon, name, and a quiet play glyph: a click streams this app at once.
     private func tileLabel(systemImage: String, title: String, trailing: String) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .medium))
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 24, height: 24)
+                .font(.system(size: 20, weight: .semibold))
+                .frame(width: 28, height: 28)
             Text(title)
-                .font(.callout.weight(.medium))
+                .font(.headline)
                 .lineLimit(1)
             Spacer(minLength: 0)
             Image(systemName: trailing)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(.footnote.weight(.bold))
+                .opacity(0.75)
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 60)
         .contentShape(Rectangle())
     }
 
@@ -73,8 +76,8 @@ struct AppIconsRow: View {
         } label: {
             tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill")
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
+        .buttonStyle(AppTileStyle())
+        .keyboardShortcut(takesReturn(app) ? .defaultAction : nil)
         .disabled(model.isStreaming)
         .help(model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)")
         // One name, not glyph + name + play glyph read in turn.
@@ -99,7 +102,8 @@ struct AppIconsRow: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
+        // Glass, not violet: it opens a list rather than streaming.
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
         .help(model.isStreaming
             ? "Finish the current stream first"
             : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
@@ -114,7 +118,7 @@ struct SpecChipsRow: View {
     var body: some View {
         // Facts, not controls: one secondary line, so nothing here looks pressable.
         Text(model.streamSpecChips.joined(separator: " · "))
-            .font(.callout)
+            .font(.body)
             .foregroundStyle(.secondary)
     }
 }

@@ -170,7 +170,7 @@ final class AppModel {
     let hostRoute = HostRouteMonitor()
 
     /// Latest reachability + activity snapshot for the selected host. Drives
-    /// the HostHero readiness chip ("Ready · 12 ms", "Streaming Helldivers 2",
+    /// the launcher's readiness chip ("Ready · 12 ms", "Streaming Helldivers 2",
     /// "Asleep"). `nil` until the first poll completes after selection. Always
     /// keyed by the selected host's id - see `liveStatusForSelected` for the
     /// safe read accessor used by the UI.

@@ -109,26 +109,18 @@ struct GlimmerApp: App {
         Window("Glimmer", id: "main") {
             MainWindow()
                 .environment(model)
-                // 460pt card + 60pt margins per side = 580. This MUST equal the
+                // 532pt content + 24pt margins per side = 580. This MUST equal the
                 // connect surface's real width (its .horizontal padding): a floor
                 // below it leaves the window a range to be dragged through.
                 .frame(minWidth: 580)
-                .containerBackground(.regularMaterial, for: .window)
+                // Frosted Liquid Glass is the launcher's surface: see-through enough to show
+                // colour behind it, blurred enough that text behind turns to colour.
+                .containerBackground(for: .window) { Color.clear.glassEffect(.regular, in: .rect) }
         }
         .windowStyle(.hiddenTitleBar)
-        // The window is exactly its content and cannot be dragged bigger. The
-        // launcher is one fixed-height hero card, a chip row, a button and a
-        // footer - nothing in it grows, so a resize could only ever add empty
-        // space, which is precisely what it was doing.
-        //
-        // This works only because every element below now states a definite
-        // size: the card is a fixed 248x520, the column no longer ends in a
-        // Spacer, and MainWindow no longer forces itself to .infinity. An
-        // earlier attempt set this while the content was still flexible - the
-        // window stayed resizable and the card stretched to fill it.
-        //
-        // No .defaultSize: it would be a second opinion about a size the content
-        // already knows.
+        // Exactly its content, never draggable bigger: nothing in the launcher grows, so a
+        // resize could only add empty space. Every element states a definite size, and
+        // there is no .defaultSize to second-guess it.
         .windowResizability(.contentSize)
         // Opt OUT of window state restoration so a previously-X-closed
         // launcher always re-spawns fresh next launch (the bug that made

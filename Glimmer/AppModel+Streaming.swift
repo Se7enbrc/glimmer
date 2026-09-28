@@ -348,7 +348,7 @@ extension AppModel {
             // The host closed a live session (it likely restarted across a
             // lock/desktop transition) and the engine is silently re-establishing
             // under the frozen last frame. Show "Reconnecting..." - DON'T go .idle,
-            // which would tear the hero card back to the launcher; the stream
+            // which would snap the launcher back to idle; the stream
             // window stays up holding the frame. Resolves on .reconnected or, if
             // the engine gives up, a real .connectionTerminated.
             streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)…")
