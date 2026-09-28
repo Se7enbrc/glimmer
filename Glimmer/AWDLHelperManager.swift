@@ -308,7 +308,13 @@ final class AWDLHelperManager: ObservableObject {
         guard registered || UserDefaults.standard.bool(forKey: Self.enabledIntentKey) else { return }
         switch state {
         case .enabled:
-            log.info("AWDL daemon enabled; new binary loads on the next stream (idle-exit)")
+            // A delete-and-recopy install (Homebrew) can leave `.enabled` with no launchd job
+            // behind it, so every stream's calls fail. Only a reply proves the daemon is there.
+            Task {
+                guard await client.currentStatus() == nil else { return }
+                log.notice("AWDL daemon enabled but unreachable after an update - self-healing")
+                enable()
+            }
         case .requiresApproval:
             log.notice("AWDL daemon awaiting approval in System Settings ▸ Login Items")
         case .notRegistered, .unavailable:

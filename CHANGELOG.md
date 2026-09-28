@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.9.9 - Unreleased
+
+Smooth out Wi-Fi stutter while streaming works again after updating Glimmer with
+Homebrew. The update could leave the setting on while the part that parks
+AirDrop's radio wasn't running, so Wi-Fi streams stuttered as they started.
+
 ## 2026.9.8 - 2026-09-25
 
 Steadier reconnects, a Cancel that also quits the game it started, lighter video
