@@ -37,6 +37,9 @@ private final class HelperHarness {
     var countGate: HelperGate?
     var registrationGate: HelperGate?
     var retryGate: HelperGate?
+    var recoveryGate: HelperGate?
+    var retryDelays: [Duration] = []
+    var persistentReleaseFailure = false
     let tick = DispatchSemaphore(value: 0)
     let released = DispatchSemaphore(value: 0)
     let unregistered = DispatchSemaphore(value: 0)
@@ -70,7 +73,7 @@ private final class HelperHarness {
                     return true
                 }
                 await self.releaseGate?.wait()
-                let result = self.releaseResults.removeFirst()
+                let result = self.persistentReleaseFailure ? false : self.releaseResults.removeFirst()
                 self.events.append(result ? "restored" : "release-failed")
                 self.released.signal()
                 return result
@@ -85,6 +88,9 @@ private final class HelperHarness {
                 if duration == .milliseconds(600) {
                     await self.registrationGate?.wait()
                     try Task.checkCancellation()
+                } else if self.persistentReleaseFailure {
+                    self.retryDelays.append(duration)
+                    if self.retryDelays.count >= 4 { await self.recoveryGate?.wait() }
                 } else if let retry = self.retryGate {
                     await retry.wait()
                 } else {
@@ -196,6 +202,43 @@ struct AWDLHelperManagerTests {
         #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
         #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
         #expect(harness.events.prefix(6) == ["down", "user-disabled", "release-failed", "user-disabled", "restored", "invalidate"])
+    }
+
+    @Test(arguments: [false, true])
+    func persistentReleaseFailureUsesDisconnectRecovery(disable: Bool) async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        let manager = harness.makeManager()
+        manager.suppressForStream()
+        #expect(await harness.tick.waitAsync(for: .seconds(10)) == .success)
+        harness.persistentReleaseFailure = true
+        harness.releaseResults = [true, true]
+        let recovery = HelperGate()
+        harness.recoveryGate = recovery
+        if disable { manager.disable() } else { manager.releaseForStream() }
+        #expect(await recovery.entered.waitAsync(for: .seconds(10)) == .success)
+        #expect(harness.retryDelays == [.seconds(1), .seconds(2), .seconds(4), .seconds(10)])
+        #expect(harness.events.filter { $0 == "release-failed" }.count == 4)
+        #expect(harness.events.last == "invalidate")
+        #expect(!harness.events.contains("unregister"))
+        #expect(!manager.isEnabled)
+        if !disable { manager.suppressForStream() }
+        #expect(harness.events.filter { $0 == "down" }.count == 1)
+        if !disable { harness.persistentReleaseFailure = false }
+        recovery.open()
+        if disable {
+            #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
+            #expect(!manager.isRegistered)
+            #expect(harness.events.suffix(2) == ["invalidate", "unregister"])
+        } else {
+            #expect(await harness.tick.waitAsync(for: .seconds(10)) == .success)
+            #expect(manager.isEnabled)
+            manager.releaseForStream()
+            for _ in 0..<5 {
+                #expect(await harness.released.waitAsync(for: .seconds(10)) == .success)
+            }
+        }
+        #expect(harness.events.filter { $0 == "release-failed" }.count == 4)
     }
 
     @Test(arguments: [false, true])
@@ -389,8 +432,13 @@ struct HelperClientTests {
         let identities = Mutex<[ObjectIdentifier]>([])
         let fail = Mutex(false)
         let invalidated = DispatchSemaphore(value: 0)
+        let listener = NSXPCListener.anonymous()
+        defer { listener.invalidate() }
+        let endpoint = listener.endpoint
         let client = HelperClient(makeConnection: {
-            let connection = NSXPCConnection(machServiceName: glimmerHelperMachServiceName, options: .privileged)
+            let connection = NSXPCConnection(listenerEndpoint: endpoint)
+            #expect(connection.serviceName == nil)
+            #expect(connection.endpoint === endpoint)
             identities.withLock { $0.append(ObjectIdentifier(connection)) }
             return connection
         }, makeProxy: { connection, error in

@@ -441,15 +441,26 @@ final class AWDLHelperManager: ObservableObject {
         restorationTask = Task { @MainActor in
             // An in-flight down must finish before release, including its XPC reply.
             await heartbeat.value
-            while !(await operations.setDown(false, reason)) {
-                // A transport failure retains the obligation and retries without a user toggle.
-                try? await operations.sleep(.seconds(1))
-            }
+            await restoreAfterHeartbeat(reason: reason)
             restoring = false
             restorationTask = nil
-            if reason == "stream-end" { Diag.info("AWDL helper released awdl0 (stream end)", "Stream") }
+            if reason == "stream-end" { Diag.info("AWDL helper restoration finished (stream end)", "Stream") }
             startHeartbeatIfRequested()
         }
+    }
+
+    private func restoreAfterHeartbeat(reason: String) async {
+        for delay in [1, 2, 4] {
+            if await operations.setDown(false, reason) { return }
+            try? await operations.sleep(.seconds(delay))
+        }
+        if await operations.setDown(false, reason) { return }
+        // Closing the peer triggers restoration without launching another helper.
+        // Allow its 3-second heartbeat watchdog and 8-second idle exit to finish
+        // before unregistering or admitting another stream.
+        await operations.invalidate()
+        try? await operations.sleep(.seconds(10))
+        log.notice("AWDL release unavailable; waited for helper disconnect and heartbeat recovery")
     }
 
     /// A queued next stream can end before the previous stream finishes restoring.
