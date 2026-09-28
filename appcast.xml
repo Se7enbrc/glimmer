@@ -6,6 +6,17 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.9.11</title>
+      <description><![CDATA[
+<p>Reconnecting no longer brings back a Stream button under your apps. The app that's streaming shows a spinner while Glimmer reconnects, and clicking it or pressing Escape ends the stream.</p>
+]]></description>
+      <pubDate>Mon, 28 Sep 2026 20:21:04 GMT</pubDate>
+      <sparkle:version>20260930</sparkle:version>
+      <sparkle:shortVersionString>2026.9.11</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.9.11/Glimmer-2026.9.11.zip" type="application/octet-stream" sparkle:edSignature="nxjEPRfH4XLr5MAjals7h1UoOJaTZG0dvTSAxRu6ny9XPneXp3dSYRnsZSM79L7iE0kNN6ImnBoPBud7nsoABQ==" length="9019523" />
+    </item>
+    <item>
       <title>2026.9.10</title>
       <description><![CDATA[
 <p>A stream started from the menu bar hides the pointer again. Closing the menu bar panel as the picture came up left the cursor showing over the stream; Back to Stream in the panel had the same problem.</p>
