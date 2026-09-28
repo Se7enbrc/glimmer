@@ -16,6 +16,7 @@ import SwiftUI
 
 struct PairSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @State private var hostnameOrIP: String
     /// The name discovery listed the PC under; nil for a typed address.
@@ -96,7 +97,7 @@ struct PairSheet: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(.green)
-                .symbolEffect(.bounce, value: paired)
+                .symbolEffect(.bounce, value: reduceMotion ? false : paired)
             Text("\(pairedHost?.displayName ?? pcLabel) is ready to stream.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -292,7 +293,7 @@ private struct HostChooser: View {
                             selected(host.host, host.displayName)
                         } label: {
                             HStack(spacing: 10) {
-                                Image(systemName: "desktopcomputer")
+                                Image(systemName: "display")
                                     .foregroundStyle(.tint)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(host.displayName).fontWeight(.medium)

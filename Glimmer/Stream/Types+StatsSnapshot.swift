@@ -282,7 +282,7 @@ public struct StreamStatsSnapshot: Sendable {
             return StatsRow(
                 kind: .hostFps, label: "PC",
                 value: formatFps(hostFps),
-                symbolName: "desktopcomputer",
+                symbolName: "display",
                 health: .neutral, section: .frameRates)
         }
     }

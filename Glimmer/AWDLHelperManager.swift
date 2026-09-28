@@ -4,28 +4,11 @@ import ServiceManagement
 import SwiftUI
 import os.log
 
-// App-side integration for the privileged AWDL network helper (helper/, a root
-// LaunchDaemon). The daemon parks awdl0 — the AirDrop/Continuity radio — while
-// streaming, which kills the multi-second Wi-Fi delivery gaps AWDL contention
-// causes on a single-radio Mac. This file owns: registering the daemon
-// (SMAppService.daemon), the XPC client that drives it, and the observable
-// state the UI binds to.
-
-// MARK: - XPC interface (app-side mirror of helper/Protocol.swift)
-
-// Deliberately a SEPARATE declaration from the daemon's copy so the daemon stays
-// a standalone swiftc build with zero app dependencies. The two MUST stay in
-// sync — same selectors, same signatures.
-@objc protocol GlimmerHelperProtocol {
-    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping @Sendable (Bool) -> Void)
-    func currentStatus(reply: @escaping (Bool, Date?) -> Void)
-    func ping(reply: @escaping (String) -> Void)
-    func reSuppressCount(reply: @escaping (UInt64) -> Void)
-}
+// The root helper parks the shared AirDrop/Continuity radio to avoid Wi-Fi delivery gaps.
+// Restoration outlives cancelled registration requests; registration waits
+// until the daemon acknowledges release even when interface work is blocked.
 
 enum HelperConstants {
-    /// The daemon's Mach service (matches helper/Protocol.swift + the launchd plist).
-    static let machServiceName = "io.ugfugl.glimmer.helper"
     /// The launchd plist filename in Contents/Library/LaunchDaemons/.
     static let daemonPlistName = "io.ugfugl.glimmer.helper.plist"
 }
@@ -33,82 +16,115 @@ enum HelperConstants {
 // MARK: - Single-resume continuation guard
 
 /// An XPC call can complete via its reply OR via the connection's error handler.
-/// This resumes the continuation exactly once across both paths.
+/// The lock protects the continuation and allows exactly one resume.
 private final class SingleResume<T: Sendable>: @unchecked Sendable {
     private var cont: CheckedContinuation<T, Never>?
     private let lock = NSLock()
     init(_ cont: CheckedContinuation<T, Never>) { self.cont = cont }
-    func resume(_ value: T) {
+    @discardableResult
+    func resume(_ value: T) -> Bool {
         lock.lock(); let pending = cont; cont = nil; lock.unlock()
         pending?.resume(returning: value)
+        return pending != nil
     }
 }
 
 // MARK: - XPC client
 
-/// Thin async client to the privileged helper. Lazily (re)connects; tears the
-/// connection down on any interruption/invalidation so the next call reconnects.
+/// Keeps interrupted connections alive so launchd can relaunch the idle daemon.
 actor HelperClient {
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "AWDLHelper")
     private var connection: NSXPCConnection?
+    /// Which connection a late invalidation or deadline belongs to. Not ObjectIdentifier:
+    /// that is an address, and a freed connection's replacement can reuse it.
+    private var generation = 0
+    private let makeConnection: @Sendable () -> NSXPCConnection
+    private let makeProxy: @Sendable (NSXPCConnection, @escaping @Sendable (Error) -> Void) -> GlimmerHelperProtocol?
 
-    private func connect() -> NSXPCConnection {
-        if let existing = connection { return existing }
-        let conn = NSXPCConnection(machServiceName: HelperConstants.machServiceName, options: .privileged)
-        conn.remoteObjectInterface = NSXPCInterface(with: GlimmerHelperProtocol.self)
-        conn.invalidationHandler = { [weak self] in Task { await self?.drop() } }
-        conn.interruptionHandler = { [weak self] in Task { await self?.drop() } }
-        conn.resume()
-        connection = conn
-        return conn
+    init(
+        makeConnection: @escaping @Sendable () -> NSXPCConnection = {
+            NSXPCConnection(machServiceName: glimmerHelperMachServiceName, options: .privileged)
+        },
+        makeProxy: @escaping @Sendable (NSXPCConnection, @escaping @Sendable (Error) -> Void) -> GlimmerHelperProtocol? = {
+            $0.remoteObjectProxyWithErrorHandler($1) as? GlimmerHelperProtocol
+        }
+    ) {
+        self.makeConnection = makeConnection
+        self.makeProxy = makeProxy
     }
 
-    private func drop() { connection = nil }
+    private func connect() -> (connection: NSXPCConnection, generation: Int) {
+        if let existing = connection { return (existing, generation) }
+        let conn = makeConnection()
+        conn.remoteObjectInterface = NSXPCInterface(with: GlimmerHelperProtocol.self)
+        generation += 1
+        let token = generation
+        conn.invalidationHandler = { [weak self] in Task { await self?.drop(token) } }
+        conn.resume()
+        connection = conn
+        return (conn, token)
+    }
+
+    /// Drops the connection only if it is still the one `token` was issued for.
+    func drop(_ token: Int) {
+        guard token == generation, let current = connection else { return }
+        connection = nil
+        current.invalidate()
+    }
 
     func invalidate() {
         connection?.invalidate()
         connection = nil
     }
 
-    /// Returns true on success. Any XPC failure (helper not installed/approved,
-    /// or it rejected our code signature) resolves to false.
+    // A connected daemon can stop replying without invalidating XPC. Bound every
+    // wait and drop that connection so missing replies cannot accumulate in XPC.
+    private func reply<Value: Sendable>(
+        fallback: Value,
+        send: (NSXPCConnection, @escaping @Sendable (Value) -> Void) -> Void
+    ) async -> Value {
+        let (connection, token) = connect()
+        return await withCheckedContinuation { continuation in
+            let once = SingleResume(continuation)
+            let deadline = Task {
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                if once.resume(fallback) { drop(token) }
+            }
+            send(connection) { value in
+                deadline.cancel()
+                once.resume(value)
+            }
+        }
+    }
+
+    /// A missing reply is not proof that suppression failed; callers still owe release.
     func setAWDLDown(_ down: Bool, reason: String) async -> Bool {
-        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            let once = SingleResume(cont)
-            let proxy = connect().remoteObjectProxyWithErrorHandler { [weak self] err in
-                self?.log.error("helper XPC error: \(err.localizedDescription)")
-                Task { await self?.drop() }
-                once.resume(false)
-            } as? GlimmerHelperProtocol
-            guard let proxy else { once.resume(false); return }
-            proxy.setAWDLDown(down, reason: reason) { ok in once.resume(ok) }
+        await reply(fallback: false) { connection, complete in
+            let proxy = makeProxy(connection) { [weak self] err in
+                self?.log.error("helper XPC error: \(err.localizedDescription, privacy: .private)")
+                complete(false)
+            }
+            guard let proxy else { complete(false); return }
+            proxy.setAWDLDown(down, reason: reason, reply: complete)
         }
     }
 
     /// (isDown, since) per the live daemon, or nil if it's unreachable.
     func currentStatus() async -> (Bool, Date?)? {
-        await withCheckedContinuation { (cont: CheckedContinuation<(Bool, Date?)?, Never>) in
-            let once = SingleResume(cont)
-            let proxy = connect().remoteObjectProxyWithErrorHandler { [weak self] _ in
-                Task { await self?.drop() }
-                once.resume(nil)
-            } as? GlimmerHelperProtocol
-            guard let proxy else { once.resume(nil); return }
-            proxy.currentStatus { isDown, since in once.resume((isDown, since)) }
+        await reply(fallback: nil) { connection, complete in
+            let proxy = makeProxy(connection) { _ in complete(nil) }
+            guard let proxy else { complete(nil); return }
+            proxy.currentStatus { isDown, since in complete((isDown, since)) }
         }
     }
 
     /// The daemon's whack-a-mole count (macOS re-raises of awdl0 this stream), or
     /// nil if unreachable. Read on the suppress heartbeat for the contention gauge.
     func reSuppressCount() async -> UInt64? {
-        await withCheckedContinuation { (cont: CheckedContinuation<UInt64?, Never>) in
-            let once = SingleResume(cont)
-            let proxy = connect().remoteObjectProxyWithErrorHandler { [weak self] _ in
-                Task { await self?.drop() }
-                once.resume(nil)
-            } as? GlimmerHelperProtocol
-            guard let proxy else { once.resume(nil); return }
-            proxy.reSuppressCount { count in once.resume(count) }
+        await reply(fallback: nil) { connection, complete in
+            let proxy = makeProxy(connection) { _ in complete(nil) }
+            guard let proxy else { complete(nil); return }
+            proxy.reSuppressCount { count in complete(count) }
         }
     }
 }
@@ -134,24 +150,41 @@ final class AWDLHelperManager: ObservableObject {
 
     @Published private(set) var state: State = .notRegistered
     /// True while awdl0 is actively parked (a stream is up).
-    @Published private(set) var suppressing = false
+    private(set) var suppressing = false
 
-    private let client = HelperClient()
-    private let service = SMAppService.daemon(plistName: HelperConstants.daemonPlistName)
+    struct Operations {
+        var status: () -> SMAppService.Status
+        var register: () throws -> Void
+        var unregister: () async throws -> Void
+        var setDown: (Bool, String) async -> Bool
+        var invalidate: () async -> Void
+        var reachable: () async -> Bool
+        var count: () async -> UInt64?
+        var sleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        var telemetry: (Bool, UInt64) -> Void = {
+            TelemetryCounters.shared.setAWDLHelper(.init(suppressing: $0, reSuppressTotal: $1))
+        }
+    }
+
+    private let operations: Operations
+    private let defaults: UserDefaults
+    @Published private var enabledIntent: Bool
+    @Published private var changingRegistration = false
+    @Published private var restoring = false
+    private var registrationTask: Task<Void, Never>?
+    private var serviceTask: Task<Void, Never>?
+    private var restorationTask: Task<Void, Never>?
+    private var requestID = 0
+    private var streamRequested = false
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "AWDLHelper")
     private static let promptSuppressedKey = "awdlHelperPromptSuppressed"
-    /// The user's saved intent (set on enable, cleared on disable). Drives the
-    /// launch-time reconcile so a registration the user wanted self-heals after
-    /// an update even if SMAppService's status reads `.notFound`.
+    /// Saved intent lets registration self-heal after an update without undoing an explicit off choice.
     private static let enabledIntentKey = "awdlHelperEnabled"
 
     // MARK: Diagnostics messaging
 
-    /// Whether the daemon plist is actually present in OUR bundle. SMAppService
-    /// reports `.notFound` (and register() fails `SMAppServiceErrorDomain 1`) even
-    /// when the file is right here - that's a stuck system record after a bundle
-    /// swap, NOT a packaging miss - so we check the bundle to tell the truth
-    /// instead of the misleading "not found in the app bundle".
+    /// Distinguish missing packaging from a stuck system record after a bundle swap:
+    /// SMAppService can report .notFound even when the daemon is bundled.
     private static var daemonIsBundled: Bool {
         let url = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Library/LaunchDaemons", isDirectory: true)
@@ -159,13 +192,8 @@ final class AWDLHelperManager: ObservableObject {
         return FileManager.default.fileExists(atPath: url.path)
     }
 
-    /// User-facing recovery text for the known wedged-Background-Task-Management
-    /// case (`SMAppServiceErrorDomain 1`, or `.notFound` while the daemon IS
-    /// bundled): after a bundle swap the system kept a stuck registration that
-    /// refuses both register and unregister. The record lives in the on-disk BTM
-    /// database and survives a plain reboot; the reliable clear is `sfltool
-    /// resetbtm` + restart, which we log for support rather than ask users to run -
-    /// the UI points them at Apple's own Login Items guide (`recoveryDocURL`).
+    /// A wedged BTM record survives reboot; log resetbtm recovery for support,
+    /// but direct users to Apple's Login Items guide instead of a root command.
     private static let wedgedRegistrationMessage =
         "macOS left a stuck background-item record (a known glitch after an app "
         + "update), so it won't register the helper. You can manage Glimmer's "
@@ -187,24 +215,41 @@ final class AWDLHelperManager: ObservableObject {
         ns.domain == "SMAppServiceErrorDomain" && ns.code == 1
     }
 
-    private init() { refresh() }
+    private convenience init() {
+        let client = HelperClient()
+        let service = SMAppService.daemon(plistName: HelperConstants.daemonPlistName)
+        self.init(operations: Operations(
+            status: { service.status }, register: { try service.register() },
+            unregister: { try await service.unregister() },
+            setDown: { await client.setAWDLDown($0, reason: $1) },
+            invalidate: { await client.invalidate() },
+            reachable: { await client.currentStatus() != nil },
+            count: { await client.reSuppressCount() }), defaults: .standard)
+    }
 
-    var isEnabled: Bool { state == .enabled }
+    init(operations: Operations, defaults: UserDefaults) {
+        self.operations = operations
+        self.defaults = defaults
+        enabledIntent = defaults.object(forKey: Self.enabledIntentKey) as? Bool
+            ?? (operations.status() == .enabled || operations.status() == .requiresApproval)
+        refresh()
+    }
+
+    var isEnabled: Bool { enabledIntent && !changingRegistration && !restoring && state == .enabled }
 
     /// Registered with the system, whether or not the user has approved it yet
     /// in System Settings. Drives the toggle's on/off so flipping it on doesn't
     /// snap back while approval is pending.
     var isRegistered: Bool {
+        guard enabledIntent else { return false }
         switch state {
         case .enabled, .requiresApproval: return true
         case .notRegistered, .unavailable: return false
         }
     }
 
-    /// Help link to surface beside the unavailable message - non-nil ONLY for the
-    /// known wedged-registration case, so users see Apple's Login Items guide
-    /// rather than a scary command. Matches against the same constant the state
-    /// was built from, so it's exact, not a heuristic on the prose.
+    /// Only the known wedged-registration message gets Apple's recovery guide.
+    /// Match the same constant used to build state rather than guessing from prose.
     var recoveryDocURL: URL? {
         if case .unavailable(let why) = state, why == Self.wedgedRegistrationMessage {
             return Self.loginItemsHelpURL
@@ -223,39 +268,49 @@ final class AWDLHelperManager: ObservableObject {
     var shouldPromptToEnable: Bool { !promptSuppressed && state != .enabled }
 
     func refresh() {
-        let status = service.status
+        let status = operations.status()
+        let newState: State
         switch status {
-        case .enabled:          state = .enabled
-        case .requiresApproval: state = .requiresApproval
-        case .notRegistered:    state = .notRegistered
-        case .notFound:         state = .unavailable(Self.notFoundMessage)
-        @unknown default:       state = .unavailable("Unknown status")
+        case .enabled:          newState = .enabled
+        case .requiresApproval: newState = .requiresApproval
+        case .notRegistered:    newState = .notRegistered
+        case .notFound:         newState = .unavailable(Self.notFoundMessage)
+        @unknown default:       newState = .unavailable("Unknown status")
         }
-        log.notice("AWDL daemon status raw=\(status.rawValue, privacy: .public) state=\(String(describing: self.state), privacy: .public)")
+        if newState != state { state = newState }
+        log.notice("""
+            AWDL daemon status raw=\(status.rawValue, privacy: .public) \
+            state=\(self.state.diagDescription.systemLogText, privacy: .public)
+            """)
     }
 
     /// Register the daemon. The first time, macOS surfaces a one-time approval in
     /// System Settings → General → Login Items & Extensions.
     func enable() {
-        UserDefaults.standard.set(true, forKey: Self.enabledIntentKey)
-        // SMAppService can wedge into "Operation not permitted" (SMAppServiceErrorDomain 1)
-        // or .notFound after the app bundle is replaced - a known re-registration bug, and
-        // every rebuild/app update replaces our bundle. Clear any stuck record with an
-        // unregister, let it settle, then register fresh.
-        Task { @MainActor in
-            try? await service.unregister()
-            try? await Task.sleep(for: .milliseconds(600))
+        setIntent(true)
+        let (previous, restoration, identifier) = prepareRegistration()
+        // Capture predecessors before publishing this task: reading serviceTask inside
+        // the task would let an immediate disable create a circular wait. Even cancelled
+        // tasks wait for their predecessor so successors cannot bypass older teardown.
+        let task = Task { @MainActor in
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await restoration?.value
+            guard !Task.isCancelled else { return }
+            // Bundle swaps can wedge BTM registration. Clear the old record and let
+            // macOS settle before registering the replacement.
+            try? await operations.unregister()
+            do { try await operations.sleep(.milliseconds(600)) } catch { return }
+            guard !Task.isCancelled else { return }
             do {
-                try service.register()
+                try operations.register()
                 log.info("AWDL helper registered")
                 refresh()
             } catch {
                 let ns = error as NSError
                 let detail = "\(ns.localizedDescription) [\(ns.domain) \(ns.code)]"
-                // SMAppServiceErrorDomain 1 ("Operation not permitted") is the known
-                // wedged-BTM case after a bundle swap - both register and unregister
-                // refuse. Show users a plain message + Apple's Login Items guide; keep
-                // the reliable `sfltool resetbtm` fix in the log for support, not the UI.
+                // A wedged BTM record refuses both operations. Show Apple's guide;
+                // keep the reliable resetbtm recovery in support logs, not the UI.
                 if Self.isWedgedRegistration(ns) {
                     log.error("""
                         AWDL helper register failed: \(ns.localizedDescription, privacy: .private) \
@@ -271,44 +326,71 @@ final class AWDLHelperManager: ObservableObject {
                     state = .unavailable(detail)
                 }
             }
+            finishRegistration(identifier)
         }
+        registrationTask = task
+        serviceTask = task
+    }
+
+    private func setIntent(_ value: Bool) {
+        if enabledIntent != value { enabledIntent = value }
+        defaults.set(value, forKey: Self.enabledIntentKey)
+    }
+
+    private func prepareRegistration() -> (Task<Void, Never>?, Task<Void, Never>?, Int) {
+        registrationTask?.cancel()
+        registrationTask = nil
+        requestID += 1
+        if !changingRegistration { changingRegistration = true }
+        stopHeartbeat(reason: "user-disabled")
+        return (serviceTask, restorationTask, requestID)
+    }
+
+    private func finishRegistration(_ identifier: Int) {
+        guard identifier == requestID else { return }
+        changingRegistration = false
+        serviceTask = nil
+        registrationTask = nil
+        startHeartbeatIfRequested()
     }
 
     /// Stop suppressing, then unregister the daemon (launchd unloads it; awdl0
     /// returns to normal Continuity behaviour).
     func disable() {
-        UserDefaults.standard.set(false, forKey: Self.enabledIntentKey)
-        let client = self.client
-        Task {
-            _ = await client.setAWDLDown(false, reason: "user-disabled")
-            await client.invalidate()
+        setIntent(false)
+        streamRequested = false
+        let (previous, restoration, identifier) = prepareRegistration()
+        // Teardown is never cancelled: every successor must inherit its release obligation.
+        serviceTask = Task { @MainActor in
+            await previous?.value
+            await restoration?.value
+            await operations.invalidate()
+            do { try await operations.unregister() } catch {
+                log.error("AWDL helper unregister failed: \(error.localizedDescription, privacy: .private)")
+            }
+            refresh()
+            finishRegistration(identifier)
         }
-        do { try service.unregister() } catch {
-            log.error("AWDL helper unregister failed: \(error.localizedDescription)")
-        }
-        suppressing = false
-        refresh()
     }
 
-    /// Re-assert the daemon registration at launch so one invalidated by an app
-    /// update / move / reinstall self-heals. The daemon binary lives in the app
-    /// bundle, and every Sparkle update, `make dev`, or reinstall swaps that
-    /// bundle in place. A healthy `.enabled` registration already picks up the
-    /// new binary on the next on-demand launch - the daemon idle-exits, so no
-    /// stale process lingers - so we only need to act when the swap WEDGED the
-    /// registration (.notFound / .notRegistered, the known SMAppService failure).
-    /// Mirrors `LoginItemManager.reconcile()`; runs only if the user wants it on.
+    /// Bundle replacement can wedge registration. Healthy daemons idle-exit and
+    /// reload on demand; unreachable or drifted registrations need repair.
+    /// Only repair when the saved intent still wants protection.
     func reconcileAfterUpdate() {
         refresh()
-        // Ground truth beats the flag: the unsandbox flip can orphan
-        // `enabledIntentKey`, but a live registration proves intent - re-arm
-        // the flag so the rest of the launch path agrees.
-        let registered = state == .enabled || state == .requiresApproval
-        if registered { UserDefaults.standard.set(true, forKey: Self.enabledIntentKey) }
-        guard registered || UserDefaults.standard.bool(forKey: Self.enabledIntentKey) else { return }
+        guard enabledIntent, !changingRegistration, !restoring else { return }
+        // Migrate a live registration only when no explicit off intent was saved.
+        setIntent(true)
+        let identifier = requestID
         switch state {
         case .enabled:
-            log.info("AWDL daemon enabled; new binary loads on the next stream (idle-exit)")
+            // A delete-and-recopy install (Homebrew) can leave `.enabled` with no launchd job
+            // behind it, so every stream's calls fail. Only a reply proves the daemon is there.
+            Task {
+                guard !(await operations.reachable()), enabledIntent, requestID == identifier else { return }
+                log.notice("AWDL daemon enabled but unreachable after an update - self-healing")
+                enable()
+            }
         case .requiresApproval:
             log.notice("AWDL daemon awaiting approval in System Settings ▸ Login Items")
         case .notRegistered, .unavailable:
@@ -327,63 +409,98 @@ final class AWDLHelperManager: ObservableObject {
     // MARK: Stream-scoped suppression
 
     private var heartbeatTask: Task<Void, Never>?
+    private var downRequested = false
 
     /// Park awdl0 for the life of a stream. Heartbeats the daemon every second so
     /// it keeps awdl0 down and can detect if we go away (stream end / crash) and
     /// restore it. No-op unless the helper is enabled.
     func suppressForStream() {
-        // A freshly-approved daemon isn't reflected in `state` until a UI
-        // refresh; re-read only when the cached state could be stale.
+        // Approval can change outside the app; keep the enabled fast path quiet.
         AWDLStreamLease.refreshIfNeeded(isEnabled: { self.isEnabled }, refresh: { self.refresh() })
-        guard isEnabled else {
+        guard enabledIntent, state == .enabled else {
             Diag.notice("AWDL helper NOT engaged - state \(state.diagDescription); awdl0 left to macOS", "Stream")
             return
         }
+        streamRequested = true
+        startHeartbeatIfRequested()
+    }
+
+    private func startHeartbeatIfRequested() {
+        guard streamRequested, isEnabled, heartbeatTask == nil else { return }
         Diag.notice("AWDL helper engaged - parking awdl0 for the stream", "Stream")
-        heartbeatTask?.cancel()
         heartbeatTask = Task { @MainActor in
             var tick = 0
             var lastLogged: UInt64 = 0
             while !Task.isCancelled {
-                self.suppressing = await self.client.setAWDLDown(true, reason: "stream")
-                // ~5s: pull the daemon's re-raise count → telemetry gauge + a breadcrumb
-                // each time macOS fights awdl0 back up again (link contention).
-                if tick % 5 == 0, let n = await self.client.reSuppressCount() {
-                    TelemetryCounters.shared.setAWDLHelper(
-                        .init(suppressing: self.suppressing, reSuppressTotal: n))
-                    if n > lastLogged {
-                        lastLogged = n
-                        Diag.info("AWDL re-suppress \(n) - macOS re-raised awdl0 this stream", "Stream")
+                downRequested = true
+                let down = await operations.setDown(true, "stream")
+                guard !Task.isCancelled else { break }
+                suppressing = down
+                // Pull the contention gauge every five ticks, with a breadcrumb on change.
+                if tick % 5 == 0, let count = await operations.count() {
+                    guard !Task.isCancelled else { break }
+                    operations.telemetry(suppressing, count)
+                    if count > lastLogged {
+                        lastLogged = count
+                        Diag.info("AWDL re-suppress \(count) - macOS re-raised awdl0 this stream", "Stream")
                     }
                 }
+                guard !Task.isCancelled else { break }
                 tick &+= 1
-                try? await Task.sleep(for: .seconds(1))
+                do { try await operations.sleep(.seconds(1)) } catch { break }
             }
         }
     }
 
-    /// Release awdl0 when a stream ends.
+    private func stopHeartbeat(reason: String) {
+        guard let heartbeat = heartbeatTask else { return }
+        heartbeat.cancel()
+        heartbeatTask = nil
+        suppressing = false
+        operations.telemetry(false, 0)
+        guard downRequested else { return }
+        downRequested = false
+        restoring = true
+        restorationTask = Task { @MainActor in
+            // Wait for the down reply or its deadline, then release even if it timed out.
+            await heartbeat.value
+            await restoreAfterHeartbeat(reason: reason)
+            restoring = false
+            restorationTask = nil
+            if reason == "stream-end" { Diag.info("AWDL helper release recovery finished (stream end)", "Stream") }
+            startHeartbeatIfRequested()
+        }
+    }
+
+    private func restoreAfterHeartbeat(reason: String) async {
+        for delay in [1, 2, 4] {
+            if await operations.setDown(false, reason) { return }
+            try? await operations.sleep(.seconds(delay))
+        }
+        if await operations.setDown(false, reason) { return }
+        await operations.invalidate()
+        // A watchdog deadline cannot prove that queued interface work finished.
+        // Keep registration and new streams waiting for an acknowledged release.
+        while true {
+            try? await operations.sleep(.seconds(10))
+            if await operations.setDown(false, reason) { return }
+            await operations.invalidate()
+        }
+    }
+
+    /// A queued next stream can end before the previous stream finishes restoring.
     func releaseForStream() {
+        streamRequested = false
         AWDLStreamLease.releaseIfHeartbeatExists(hasHeartbeat: { self.heartbeatTask != nil }, release: {
-            self.heartbeatTask?.cancel()
-            self.heartbeatTask = nil
-            let client = self.client
-            Task { @MainActor in
-                _ = await client.setAWDLDown(false, reason: "stream-end")
-                self.suppressing = false
-                TelemetryCounters.shared.setAWDLHelper(.init(suppressing: false, reSuppressTotal: 0))
-                Diag.info("AWDL helper released awdl0 (stream end)", "Stream")
-            }
+            self.stopHeartbeat(reason: "stream-end")
         })
     }
 }
 
 // MARK: - Launch-time enable prompt
 
-/// One-time nudge to turn on Wi-Fi stutter protection, shown on launch while the
-/// helper isn't enabled and the user hasn't opted out. "Don't ask again" and
-/// "Enable" are orthogonal — you can enable and still silence future asks, or
-/// dismiss for good without enabling.
+/// The enable nudge and "Don't ask again" are independent: enabling need not
+/// silence future asks, and dismissing need not opt out forever.
 struct AWDLEnablePrompt: View {
     @ObservedObject var manager: AWDLHelperManager
     @Environment(\.dismiss) private var dismiss

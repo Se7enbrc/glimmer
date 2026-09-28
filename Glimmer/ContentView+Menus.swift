@@ -2,7 +2,7 @@
 //  ContentView+Menus.swift
 //
 //  The shared per-host menu (Rename / Codec / Wake on LAN / Pair Again / Quit / Unpair):
-//  the right-click menu on the hero card and Settings' PCTile, and the tile's
+//  the right-click menu on the launcher's PC header and Settings' PCTile, and the tile's
 //  visible menu button. The menu bar item's panel lives in MenuBarPanel.swift.
 //
 

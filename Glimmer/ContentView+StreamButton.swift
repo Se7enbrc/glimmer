@@ -8,42 +8,51 @@
 
 import SwiftUI
 
-/// Material-weighted accent button - same gradient + glass tint + soft rim as
-/// the hero card. Sized naturally by its label so modal-sheet rows keep their
-/// layout (the hero StreamButton applies its own `.frame(maxWidth:)`).
+extension InsettableShape {
+    /// The primary controls' violet: the opaque accent gradient under accent-tinted
+    /// glass, a lit 1pt rim and a soft lift. The Stream button and the app buttons share it.
+    @MainActor
+    func accentSurface() -> some View {
+        fill(accentSurfaceGradient)
+            // Interactive: the native hover and press response a violet control otherwise lacks.
+            .glassEffect(.regular.tint(Color.accentColor.opacity(0.15)).interactive(), in: self)
+            .overlay {
+                strokeBorder(LinearGradient(colors: [.white.opacity(0.30), .white.opacity(0.02)],
+                                            startPoint: .top, endPoint: .bottom), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
+    }
+}
+
+/// The accent capsule. Sized naturally by its label so modal-sheet rows keep their
+/// layout (the launcher's StreamButton applies its own `.frame(maxWidth:)`).
 /// Internal so SettingsView's Pair/Stream-now buttons share the treatment.
 struct StreamButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(.primary)
+            .font(.title2.weight(.semibold))
+            // White on the opaque accent in both appearances, as a prominent button is.
+            .foregroundStyle(.white)
             .padding(.horizontal, 22)
             .padding(.vertical, 12)
             .frame(minHeight: 46)
-            .background {
-                Capsule()
-                    .fill(accentSurfaceGradient)
-                    .glassEffect(
-                        .regular.tint(Color.accentColor.opacity(0.25)),
-                        in: .capsule
-                    )
-                    .overlay {
-                        Capsule()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.10),
-                                        Color.white.opacity(0.02)
-                                    ],
-                                    startPoint: .top, endPoint: .bottom
-                                ),
-                                lineWidth: 0.5
-                            )
-                    }
-                    .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
-            }
+            .background { Capsule().accentSurface() }
+            .opacity(isEnabled ? 1.0 : 0.55)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+/// The launcher's app buttons: each one streams, so each wears the Stream button's violet.
+struct AppTileStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .background { RoundedRectangle(cornerRadius: 14, style: .continuous).accentSurface() }
             .opacity(isEnabled ? 1.0 : 0.55)
             .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
             .animation(.snappy(duration: 0.15), value: configuration.isPressed)
@@ -131,7 +140,7 @@ struct StreamButton: View {
                     Image(systemName: "display")
                         .font(.system(size: 16, weight: .semibold))
                     Text("Choose a PC")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .contentTransition(.opacity)
                 case .connecting, .reconnecting:
                     // Steady primary line; engine-stage churn flows through
@@ -144,7 +153,7 @@ struct StreamButton: View {
                             .lineLimit(1)
                         if let stage = connectingSubtext {
                             Text(stage)
-                                .font(.system(size: 11, weight: .regular))
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .contentTransition(.opacity)
@@ -152,33 +161,33 @@ struct StreamButton: View {
                     }
                     // The whole capsule is the cancel button - say so, quietly.
                     Text(role == .reconnecting ? "Stop Streaming" : "Cancel")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 4)
                 case .liveBackgrounded:
                     Image(systemName: "play.tv.fill")
                         .font(.system(size: 16, weight: .semibold))
                     Text("Back to Stream")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .contentTransition(.opacity)
                 case .pairAgain:
                     Image(systemName: "key.fill")
                         .font(.system(size: 16, weight: .semibold))
                     Text("Pair Again…")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .contentTransition(.opacity)
                 case .wake:
                     Image(systemName: "power")
                         .font(.system(size: 16, weight: .semibold))
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Wake and Connect")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.title2.weight(.semibold))
                             .contentTransition(.opacity)
                         // One line that fits; the Wake on LAN limits live in the
                         // tooltip. A cancelled wake shows nothing.
                         if let reason = wakeFailure, let host = model.selectedHost {
                             Text(Self.wakeFailureLine(reason, pcName: host.displayName))
-                                .font(.system(size: 11, weight: .regular))
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -193,7 +202,7 @@ struct StreamButton: View {
                     // Same quiet trailing affordance as the connecting capsule:
                     // the whole capsule is the cancel, so name it.
                     Text("Stop Waiting")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 4)
                 case .connect:
@@ -205,12 +214,12 @@ struct StreamButton: View {
                         // under Reduce Motion; the success haptic still fires.
                         .symbolEffect(.bounce, value: reduceMotion ? false : isLive)
                     Text(model.heroActionLabel)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .lineLimit(1)
                         .contentTransition(.opacity)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 46)
+            .frame(maxWidth: .infinity)
         }
         // Custom style = the hero's accent gradient + glass + soft rim.
         // `.glassProminent` was too saturated; `.glass` near-neutral.
@@ -246,23 +255,22 @@ struct StreamButton: View {
         // VoiceOver hint mirrors the sighted-only `.help` so assistive-tech
         // users learn WHY the button is disabled (noPC) or what a click does.
         .accessibilityHint(guidance.hint)
-        .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: isConnecting)
-        .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: model.isStreaming)
+        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: isConnecting)
+        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: model.isStreaming)
     }
 
     /// Tooltip and VoiceOver hint for the current role, kept in one place.
     private var guidance: (help: String, hint: String) {
         switch role {
         case .noPC: ("Pair a PC first to start streaming", "Pair a PC first to start streaming")
-        case .connect: ("Right-click to choose an app", "Right-click to choose an app")
+        case .connect: ("Starts the stream", "Starts the stream")
         case .connecting: ("Cancel the connection attempt", "Cancels the connection attempt")
         case .reconnecting: ("End the stream", "Ends the stream")
         case .liveBackgrounded: ("Show the stream window", "Shows the stream window")
         case .pairAgain: ("Pair again to trust this PC's new certificate", "Pairs again to trust this PC's new certificate")
         case .wake where wakeFailure == .noAnswer: (Self.wakeLimits, Self.wakeLimits)
         case .wake:
-            ("Wake this PC, then connect. Right-click to choose an app.",
-             "Wakes this PC, then connects. Right-click to choose an app.")
+            ("Wake this PC, then connect", "Wakes this PC, then connects")
         case .waking: ("Stop waiting for this PC to wake up", "Stops waiting for this PC to wake up")
         }
     }

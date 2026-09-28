@@ -32,7 +32,7 @@ extension NetworkClient {
     /// A PC this Mac holds no pin for, in the sentence the banner shows as is.
     static func notPaired(_ pcName: String) -> StreamError {
         let name = pcName.isEmpty ? "The PC" : pcName
-        return .pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
+        return .pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… to keep streaming.")
     }
 
     /// Workhorse. Builds the URL, attaches our uniqueid + a per-request UUID

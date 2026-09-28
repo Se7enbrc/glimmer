@@ -1,17 +1,17 @@
 //
 //  InputForwarder+Paste.swift
 //
-//  Paste as text (moonlight's ⌃⌥⇧V): the Mac clipboard is typed into the PC
-//  as characters, so passwords, links, codes and accented text arrive as
-//  written whatever the PC's keyboard layout. Keys are otherwise positional.
+//  Paste as text (⌃V): the Mac clipboard is typed into the PC as characters,
+//  so passwords, links, codes and accented text arrive as written whatever the
+//  PC's keyboard layout. Keys are otherwise positional.
 //
 
 import AppKit
 
 /// The text rules, pure so they are testable without a pasteboard or a stream.
 enum PasteText {
-    /// moonlight's chord, for when ⌘V goes to the game.
-    static let chord = HotkeyChord(ctrl: true, alt: true, shift: true, cmd: false, keyChar: "v")
+    /// Two keys like every other in-stream chord, for when ⌘V goes to the game.
+    static let chord = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "v")
 
     /// Plenty for a password, a code or a link; a clipboard of prose is cut.
     static let maxBytes = 4096

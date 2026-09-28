@@ -410,9 +410,8 @@ extension FramePacer {
             liveness.starvedTickStreak = 0
             liveness.loggedStarvation = false
         }
-        let shouldLogStarvation = wedgedThisTick
-            && liveness.starvedTickStreak >= FramePacer.starvationLogTicks
-            && !liveness.loggedStarvation
+        let logThreshold = FramePacer.starvationLogThreshold(streamInterval: streamFrameIntervalSeconds, vsync: vsyncInterval)
+        let shouldLogStarvation = wedgedThisTick && liveness.starvedTickStreak >= logThreshold && !liveness.loggedStarvation
         if shouldLogStarvation { liveness.loggedStarvation = true }
         let starvationSnapshot = StarvationSnapshot(
             streak: liveness.starvedTickStreak, depth: sampledDepth,

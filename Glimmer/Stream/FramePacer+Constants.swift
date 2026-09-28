@@ -116,6 +116,13 @@ extension FramePacer {
     /// before the self-heal re-seed clears them).
     static let starvationLogTicks = 4
 
+    /// A frame waiting out its own cadence (30fps on a 240Hz tick holds ~8 ticks) isn't
+    /// starved, so the logged streak must also outlast one stream interval.
+    static func starvationLogThreshold(streamInterval: CFTimeInterval, vsync: CFTimeInterval) -> Int {
+        guard streamInterval.isFinite, vsync > 0 else { return starvationLogTicks }
+        return max(starvationLogTicks, Int(min(streamInterval / vsync, 1_000).rounded()) + 1)
+    }
+
     /// PRESENT-LOOP BACKOFF threshold (in stream-frame intervals). When the head
     /// frame is HOPELESSLY late - its display-time lateness exceeds this many
     /// stream intervals AND a fresher frame is queued behind it - the tick stops

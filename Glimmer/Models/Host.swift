@@ -35,12 +35,8 @@ struct Host: Identifiable, Hashable {
         guard let last = lastConnected else { return nil }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        // Lowercased - macOS HIG sentence-case convention for
-        // relative-time strings in secondary/footnote contexts. Apple's
-        // own Time Machine and Photos do "last opened 2 hours ago", not
-        // "Last opened 2 Hours Ago". Producing it lowercase at the source
-        // keeps every call site consistent.
-        return "last played \(formatter.localizedString(for: last, relativeTo: .now))"
+        // Sentence case at the source: every caller starts a line with it.
+        return "Last played \(formatter.localizedString(for: last, relativeTo: .now))"
     }
 
     /// The app a spoken or typed name means: an exact match first, then one
@@ -121,22 +117,21 @@ enum QualityPreset: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Named by outcome, not mechanism: a player picks how it looks, and the
+    /// numbers live in the Quality pane's "Your next stream" summary.
     var displayName: String {
         switch self {
-        case .matchDisplay: return "Native Retina"
-        case .hidpi: return "HiDPI"
+        case .matchDisplay: return "Sharpest"
+        case .hidpi: return "Balanced"
         case .custom: return "Custom"
         }
     }
 
-    // Outcome-first subtitles: what each preset feels like, with the
-    // tradeoff in the parenthetical. Mechanism numbers live in the Quality
-    // pane's "Your next stream" summary.
     var subtitle: String {
         switch self {
-        case .matchDisplay: return "Every pixel of this Mac's panel (sharpest; wants a solid network)"
-        case .hidpi: return "This Mac's default Retina scale (a touch softer, far less bandwidth)"
-        case .custom: return "Pick your own resolution and refresh rate"
+        case .matchDisplay: return "Every pixel of this Mac's display. Needs a solid network."
+        case .hidpi: return "This Mac's usual Retina scale. A touch softer, far less bandwidth."
+        case .custom: return "Pick your own resolution and refresh rate."
         }
     }
 }
@@ -160,52 +155,24 @@ public struct HotkeyChord: Codable, Equatable, Sendable {
         self.keyChar = keyChar
     }
 
-    /// Default quit chord: ⌃⌥Q. Cmd is deliberately not in the default
-    /// because ⌃⌘Q is macOS's system-reserved Lock Screen shortcut - the
-    /// OS intercepts it before any app sees the keyDown. ⌃⌥Q is short,
-    /// memorable, not OS-reserved, and carries no `.command` flag so the
-    /// `captureSysKeys` gate (which only strips Cmd-bearing keystrokes)
-    /// doesn't affect it.
-    public static let defaultQuit = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "q")
+    // Every default is ⌃ plus one letter: two keys, one family. No ⌘, so they fire whether
+    // or not ⌘ is forwarded to the PC, and no ⇧, which games and Windows bind freely. The
+    // letters avoid crouch combos a shooter sends with ⌃ held (S, R, and the WASD cluster).
 
-    /// Default stats-overlay chord: ⌃⌥S. Chosen because:
-    ///   * It doesn't collide with `defaultQuit` (⌃⌥Q).
-    ///   * It carries no `.command` modifier, so it's intercepted BEFORE the
-    ///     sys-keys-capture gate in InputForwarder - which means it fires
-    ///     whether or not the user has enabled the ⌘-forwarding toggle in
-    ///     Input ("Send ⌘ to the PC as the Windows key"). A Cmd-bearing
-    ///     default would silently fail when capture was off.
-    ///   * No Shift, to dodge the common Win+Shift+S screenshot binding on
-    ///     the host side that some users have muscle memory for.
-    public static let defaultStats = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "s")
+    /// ⌃Q. ⌃⌘Q is macOS's Lock Screen and never reaches an app.
+    public static let defaultQuit = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "q")
 
-    /// Default telemetry-bookmark chord: ⌃B ("B" for Bookmark). Client-only -
-    /// NEVER forwarded to the host. Pressed during a stream to flag "that felt
-    /// bad" (signal 4): writes a timestamped jank marker into the telemetry so a
-    /// review jumps straight to the moment. Deliberately the SIMPLE two-key ⌃B
-    /// (dropped the ⌥ from the old ⌃⌥B) - the moment to mark is mid-jank, when a
-    /// fumbled three-key chord is exactly what you don't want:
-    ///   * No `.command`, so it's intercepted BEFORE the sys-keys-capture gate
-    ///     and fires whether or not the user forwards macOS shortcuts.
-    ///   * No Shift, dodging common host-side ⇧ bindings.
-    ///   * "B" collides with neither quit ("q") nor stats ("s"). ⌃B is not a
-    ///     macOS-reserved chord; it CAN collide with an in-game Ctrl+B, but the
-    ///     chord is client-only + telemetry-gated, so it only matters during an
-    ///     opt-in diagnostic session.
+    /// ⌃I, not ⌃S: ⌃S is crouch plus walk back in most shooters.
+    public static let defaultStats = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+
+    /// ⌃B, client-only and telemetry-gated: it only means anything in a diagnostic session.
     public static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")
 
-    /// Default Window-mode pointer chord: ⌃⌥R, a toggle (capture, release).
-    /// Same ⌃⌥ family as quit (Q) and stats (S) so the three read as one set,
-    /// "R" for Relative aim, and no `.command` so it fires whether or not ⌘
-    /// shortcuts are forwarded. Collides with none of the other defaults
-    /// (⌃⌥Q, ⌃⌥S, ⌃B). Only intercepted while the stream is in a window - in
-    /// full screen capture follows key status and there is nothing to toggle,
-    /// so ⌃⌥R reaches the host.
-    public static let defaultReleasePointer = HotkeyChord(ctrl: true, alt: true, shift: false, cmd: false, keyChar: "r")
+    /// ⌃P for the pointer toggle, not ⌃R: ⌃R is crouch plus reload. Window mode only;
+    /// in full screen capture follows key status, so the chord reaches the PC.
+    public static let defaultReleasePointer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "p")
 
-    /// Default mini player chord: ⌃M, a toggle between the mini player and
-    /// the full presentation. Two keys like ⌃B (it is pressed to step away,
-    /// not mid-fight), no ⌘, and it collides with none of the defaults.
+    /// ⌃M toggles the mini player and the full presentation.
     public static let defaultMiniPlayer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "m")
 
     var displayString: String {
@@ -290,7 +257,7 @@ public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
     public var displayName: String {
         switch self {
         case .none: return "None (keyboard only)"
-        case .startSelectL1R1: return "Start + Select + L1 + R1 (Moonlight default)"
+        case .startSelectL1R1: return "Start + Select + L1 + R1"
         case .l1r1: return "L1 + R1"
         case .l1r1l2r2: return "L1 + R1 + L2 + R2"
         case .l3r3: return "L3 + R3 (stick clicks)"
@@ -333,7 +300,7 @@ extension String {
 // MARK: - Host live status
 
 /// What we know about the selected host between streams. Surfaced on the
-/// HostHero readiness chip. Refreshed by a low-frequency poller that runs
+/// launcher's readiness chip. Refreshed by a low-frequency poller that runs
 /// only while the main window is foreground, a host is selected, and we're
 /// NOT actively streaming (during a stream the engine's own RTT estimator
 /// drives the stats overlay - polling /serverinfo on top of that is noise).

@@ -184,6 +184,26 @@ struct FramePacerTests {
         #expect(gapSorted[Int(Double(gapSorted.count) * FramePacer.cadencePercentile)] == 1.0 / 120)
     }
 
+    @Test(arguments: [[UInt32.max - 1, 0, 1], [0, UInt32.max - 1, 1],
+                      [UInt32.max - 1, 1, 0]])
+    func timestampWrapOrdersBothArrivalDirections(ticks: [UInt32]) throws {
+        let pacer = try makePacer(fps: 120, queued: 0)
+        pacer.tickDeficit.warmingUp = false
+        for tick in ticks {
+            try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: Int64(tick), timescale: 90_000))
+        }
+        #expect(pacer.queue.map(\.hostPTSSeconds) == [Double(UInt32.max - 1) / 90_000, 0, 1.0 / 90_000])
+    }
+
+    @Test func missingPTSRetainsArrivalOrder() throws {
+        let pacer = try makePacer(fps: 120, queued: 0)
+        pacer.tickDeficit.warmingUp = false
+        try pacer.submit(emptySampleBuffer(), hostPTS: .invalid)
+        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 1, timescale: 90_000))
+        #expect(pacer.queue.first?.hostPTSSeconds.isNaN == true)
+        #expect(pacer.queue.last?.hostPTSSeconds == 1.0 / 90_000)
+    }
+
     @Test func backwardsPTSAppendsInQueueOrder() throws {
         let pacer = try makePacer(fps: 120, queued: 0)
         pacer.tickDeficit.warmingUp = false
@@ -248,6 +268,15 @@ struct FramePacerTests {
         }
         pacer.tickDeficit.floorAssistActive = true
         return (pacer, presents)
+    }
+
+    /// 30fps on a 240Hz tick holds each frame ~8 ticks by design; that must not read as starved.
+    @Test func starvationLogWaitsOutTheStreamCadence() {
+        let vsync = 1.0 / 240
+        #expect(FramePacer.starvationLogThreshold(streamInterval: 1.0 / 240, vsync: vsync) == 4)
+        #expect(FramePacer.starvationLogThreshold(streamInterval: 1.0 / 30, vsync: vsync) == 9)
+        #expect(FramePacer.starvationLogThreshold(streamInterval: .nan, vsync: vsync) == 4)
+        #expect(FramePacer.starvationLogThreshold(streamInterval: 1.0 / 30, vsync: 0) == 4)
     }
 
     private func emptySampleBuffer() throws -> CMSampleBuffer {

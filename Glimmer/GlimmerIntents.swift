@@ -24,7 +24,7 @@ struct PCEntity: AppEntity, Hashable {
     }
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(name)", image: .init(systemName: "desktopcomputer"))
+        DisplayRepresentation(title: "\(name)", image: .init(systemName: "display"))
     }
 }
 
@@ -102,12 +102,14 @@ struct WakePCIntent: AppIntent {
         let host = try model.pairedHost(pc)
         guard host.wakeOnLAN else { throw PCIntentError.wakeOff(host.displayName) }
         let outcome = await model.sendWakeAndWait(host, waitSeconds: AppModel.wakeBudgetSeconds)
-        if let failure = PCIntentError(outcome, pc: host.displayName) {
-            // A wait cut short means Shortcuts stopped the action.
-            try Task.checkCancellation()
-            throw failure
-        }
+        try Self.checkOutcome(outcome, pc: host.displayName)
         return .result()
+    }
+
+    static func checkOutcome(_ outcome: WakeOutcome, pc: String) throws {
+        try Task.checkCancellation()
+        if outcome == .cancelled { throw CancellationError() }
+        if let failure = PCIntentError(outcome, pc: pc) { throw failure }
     }
 }
 
@@ -180,11 +182,10 @@ enum PCIntentError: Error, Equatable, CustomLocalizedStringResourceConvertible {
         }
     }
 
-    /// Why Wake PC failed; nil when the PC answered. `sent` only comes back from
-    /// a wait that was stopped.
+    /// Cancellation is handled separately from failures to wake the PC.
     init?(_ outcome: WakeOutcome, pc: String) {
         switch outcome {
-        case .answered: return nil
+        case .answered, .cancelled: return nil
         case .noMac: self = .noAddress(pc)
         case .couldNotSend: self = .notSent
         case .sent, .noAnswer: self = .noAnswer(pc)

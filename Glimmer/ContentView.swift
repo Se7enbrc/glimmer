@@ -115,53 +115,46 @@ struct MainWindow: View {
         } message: { _ in
             Text(TakeoverDialogCopy.message)
         }
-        .background {
-            // ⌘1-⌘9 host switching (multi-PC households only) - invisible,
-            // window-scoped. See HostSwitchShortcuts for why hidden buttons
-            // beat toolbar-menu shortcuts or app-level .commands here.
-            HostSwitchShortcuts()
-        }
         .toolbar {
-            // Single navigation pill merging the host dropdown with the
-            // Settings gear. With zero hosts paired the host menu has nothing
-            // to point at, so the pill collapses to a standalone gear button.
-            ToolbarItem(placement: .navigation) {
-                if model.hosts.isEmpty {
-                    Button {
-                        openSettings()
-                    } label: {
-                        Image(systemName: "gearshape")
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                    .keyboardShortcut(",", modifiers: .command)
-                    .help("Settings")
-                } else {
-                    HostAndSettingsPill()
+            // The PC switcher is the header's name; the toolbar keeps only Settings,
+            // on the trailing edge (a hidden title bar has no title to push it there).
+            ToolbarSpacer(.flexible)
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    openSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                        .symbolRenderingMode(.hierarchical)
                 }
+                .keyboardShortcut(",", modifiers: .command)
+                .help("Settings")
             }
         }
         .navigationTitle("Glimmer")
     }
 }
 
-/// Invisible ⌘1-⌘9 host-switch shortcuts, mounted behind the launcher when
-/// more than one PC is paired. Zero-size transparent buttons are the reliable
-/// window-scoped registration here: toolbar-Menu items only exist while the
-/// menu is open (shortcuts never register), and app-level `.commands` would
-/// also fire from Settings. Capped at nine - ⌘0 reads as "reset".
-private struct HostSwitchShortcuts: View {
-    @Environment(AppModel.self) private var model
+/// The Stream menu: the launcher's verbs where ⌘? finds them, and the PCs on ⌘1-⌘9
+/// (nine at most; ⌘0 reads as reset). PCs lock while streaming, since ⌘ stays with the Mac.
+struct StreamMenu: View {
+    let model: AppModel
 
     var body: some View {
-        if model.hosts.count > 1 {
-            ForEach(Array(model.hosts.prefix(9).enumerated()), id: \.element.id) { index, host in
-                Button("") { model.selectHost(host) }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+        if case .stream(let app) = model.menuBarPrimaryAction {
+            Button("Stream \(app)") { model.streamHeroApp() }
+        } else {
+            Button("Stream") {}.disabled(true)
+        }
+        Toggle("Mini Player", isOn: Binding(get: { model.isMiniPlayer }, set: { _ in model.toggleMiniPlayer() }))
+            .disabled(!model.isStreaming)
+        Button("Stop Streaming") { model.stopStreamFromMenu(source: "the Stream menu") }
+            .disabled(!model.isStreaming || model.menuStopInProgress)
+        if !model.hosts.isEmpty { Divider() }
+        ForEach(Array(model.hosts.enumerated()), id: \.element.id) { index, host in
+            Toggle(host.displayName, isOn: Binding(
+                get: { model.selectedHost?.id == host.id }, set: { if $0 { model.selectHost(host) } }))
+                .keyboardShortcut(index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))) : nil)
+                .disabled(model.isStreaming)
         }
     }
 }
@@ -170,7 +163,6 @@ private struct HostSwitchShortcuts: View {
 
 private struct ConnectSurface: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The raw connecting edge: `streamPhase` alone, since `isStreaming` flips at
     /// stream() entry and would hide a stuck connect. Off while the stream window
@@ -202,55 +194,51 @@ private struct ConnectSurface: View {
         return true
     }
 
+    /// The app buttons stream, so the Stream button only appears for the states they
+    /// can't show: Wake, Back to Stream, Pair Again, and a connect with no button of its own.
+    private var showsStateButton: Bool {
+        guard !isHandedOff else { return false }
+        let role = StreamButton.role(for: model.menuBarPrimaryAction,
+                                     backgrounded: model.isStreaming && model.nativeStreamBackgrounded,
+                                     connectingShown: showsConnectingUI)
+        if role == .connecting { return !launchIsOnAButton }
+        return role != .connect && role != .noPC
+    }
+
+    /// A launch from an app button shows on that button; one from the overflow menu,
+    /// the menu bar or Shortcuts keeps the Connecting… capsule as its cancel.
+    private var launchIsOnAButton: Bool {
+        guard let attempt = model.lastLaunchAttempt, let host = model.selectedHost,
+              attempt.host.id == host.id else { return false }
+        return AppIconsRow.inlineApps(host.apps).contains { $0.id == attempt.app.id }
+    }
+
     var body: some View {
-        VStack(spacing: 16) {
-            // Banner sits above the hero so it can't be missed. NOT behind
-            // the 400 ms hold: errors must surface the instant they exist.
+        // The window is the object: frosted glass holding the PC, its apps and, when
+        // needed, the state button. Violet is only where you act.
+        VStack(alignment: .leading, spacing: 16) {
+            // Banner first so it can't be missed. NOT behind the 400 ms hold:
+            // errors must surface the instant they exist.
             ConnectBanner()
-                .padding(.horizontal, 4)
-
-            HostHero(host: model.selectedHost)
-                .scaleEffect((showsConnectingUI && !reduceMotion) ? 1.04 : 1.0)
-                .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: showsConnectingUI)
-
-            // Spec chips stay put during connect. The StreamButton below
-            // morphs into the calm "Connecting to <host>... / stage" capsule -
-            // the ONE connecting surface (a separate phase line would flash
-            // duplicate affordances on fast connects).
-            SpecChipsRow()
-
-            // Hide the StreamButton entirely while the stream window owns
-            // the foreground - a disabled "Streaming..." button would just
-            // duplicate the stream window's presence and compete for visual
-            // weight against the dimmed hero. (Connecting is NOT handed off,
-            // so the capsule below stays mounted through the handshake.)
-            if !isHandedOff {
+            PCHeader(host: model.selectedHost)
+            if let host = model.selectedHost, !host.apps.isEmpty {
+                AppIconsRow(apps: host.apps, host: host, connectingShown: showsConnectingUI)
+            }
+            if showsStateButton {
                 StreamButton(isConnecting: showsConnectingUI)
-                    .frame(maxWidth: 380)
-                    .padding(.top, 2)
                     .transition(.opacity)
             }
-
             ContextFooter()
+                .frame(maxWidth: .infinity)
         }
-        // No trailing Spacer. It existed to pin the column to the top of a
-        // window that could be taller than its content - and the space it pushed
-        // down into was the empty area under the footer. The window now sizes to
-        // this column (see .windowResizability in GlimmerApp), so there is no
-        // leftover height to absorb and nothing to pin against.
-        // 80pt sides -> a 680pt window around the 520pt card. Bisected between
-        // two values checked on screen: 32 (584 window) read as cramped, the
-        // card nearly touching the frame; 130 (780, matching 7.7's default
-        // width) read as too big. The VERTICAL padding stays tight - the space
-        // under the footer was the part that read as waste, and 7.7's own top
-        // margin was 20.
-        //
-        // This is THE margin dial. It must stay in step with GlimmerApp's
-        // window minWidth (520 + 2x this): a floor below the real content width
-        // leaves the window a range to be dragged through, which is how the
-        // margins got squeezed flat once already.
-        .padding(.horizontal, 80)
-        .padding(.vertical, 20)
+        .animation(.snappy(duration: 0.3), value: showsStateButton)
+        // No trailing Spacer: the window sizes to this column (.windowResizability
+        // in GlimmerApp). 532pt of content in 24pt margins is the 580pt window, and
+        // must stay in step with GlimmerApp's minWidth, or the window can be dragged.
+        .frame(width: 532)
+        .padding(.horizontal, 24)
+        .padding(.top, 4)
+        .padding(.bottom, 18)
         // TAKE THE IDEAL HEIGHT, NOT THE OFFERED ONE. Removing the Spacer was
         // not enough on its own: StreamButton's label carries
         // `.frame(maxWidth: .infinity, minHeight: 46)`, and a minHeight is a
@@ -284,188 +272,88 @@ private struct ConnectSurface: View {
     }
 }
 
-/// Dim contextual footer. Previously read "Ready · last played 2h ago", but
-/// "Ready" now lives on the HostHero `ReadinessChip` (alongside RTT and the
-/// live host state), so the footer just shows the last-played hint to avoid
-/// repeating the same word twice in a single glance. The host's reported
-/// version, when known, shows here as a footnote-weight breadcrumb - Apple's
-/// first-party pattern (System Settings → About) of surfacing version subtly.
+/// One quiet line at the bottom: when this PC was last played. "Ready" lives
+/// on the readiness chip, so the footer never repeats it.
 private struct ContextFooter: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let host = model.selectedHost
-        let parts: [String] = {
-            var segments: [String] = []
-            // `lastPlayedDescription` is already lowercase at the source
-            // (see Host.swift) - sentence-case relative-time per macOS HIG.
-            if let lp = host?.lastPlayedDescription { segments.append(lp) }
-            if let version = model.hostLiveStatus?.sunshineVersion,
-               !version.isEmpty, host != nil {
-                // Leading Major.Minor.Patch of /serverinfo's appversion -
-                // both products emit a long GFE-shaped string ("7.1.431.0").
-                let short = version.split(separator: ".").prefix(3).joined(separator: ".")
-                // Product-NEUTRAL copy, deliberately: GFE hosts report this
-                // field too, and nothing the launcher holds can prove which
-                // product sent it (Sunshine mimics GFE's appversion and
-                // GfeVersion; the one discriminator - "MJOLNIR" in <state> -
-                // is stream-side and never persisted). "Sunshine <ver>"
-                // mislabeled every GFE host, so brand neither.
-                segments.append("PC version \(short)")
-            }
-            return segments
-        }()
-        if !parts.isEmpty {
-            Text(parts.joined(separator: " · "))
+        if let lastPlayed = model.selectedHost?.lastPlayedDescription {
+            Text(lastPlayed)
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
-        } else {
-            EmptyView()
         }
     }
 }
 
-/// Combined toolbar pill - host dropdown left, Settings gear right, grouped
-/// via `ControlGroup`, which picks up the macOS 26 Liquid Glass toolbar
-/// material and renders one segmented pill with a hairline divider.
-private struct HostAndSettingsPill: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.openSettings) private var openSettings
-
-    var body: some View {
-        ControlGroup {
-            // macOS 27 hides a plain systemImage Label inside a menu item, so
-            // a hand-rolled checkmark no longer marks the selection. An
-            // inline Picker gets the native selection checkmark for free.
-            Menu {
-                Picker("PC", selection: Binding(
-                    get: { model.selectedHost?.id },
-                    set: { id in
-                        guard let id, let host = model.hosts.first(where: { $0.id == id }) else { return }
-                        model.selectHost(host)
-                    }
-                )) {
-                    ForEach(model.hosts) { host in
-                        Text(host.displayName).tag(Optional(host.id))
-                    }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "display")
-                        .symbolRenderingMode(.hierarchical)
-                    Text(model.selectedHost?.displayName ?? "Choose a PC")
-                        .lineLimit(1)
-                }
-            }
-            Button {
-                openSettings()
-            } label: {
-                Image(systemName: "gearshape")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .keyboardShortcut(",", modifiers: .command)
-            .help("Settings")
-        }
-    }
-}
-
-/// Three-stop accent gradient shared by the hero card (ContentView) and the
-/// Stream button (ContentViewSubviews) - internal, not file-private - so the
-/// two surfaces read as a matched pair. Top-left lifts toward white,
-/// bottom-right deepens toward black; opacities stay low so the Liquid Glass
-/// material dominates and the accent reads as a tint rather than a fill.
+/// The primary controls' surface: the accent lifted toward white at the top left and
+/// deepened at the bottom right, opaque, so the app buttons and Stream are the violet on screen.
 @MainActor
 var accentSurfaceGradient: LinearGradient {
-    LinearGradient(
-        stops: [
-            // Saturation matched to the Eclipse app icon (the old
-            // 0.16-0.30 opacities read dull next to it).
-            .init(color: Color.accentColor.mix(with: .white, by: 0.12).opacity(0.55), location: 0),
-            .init(color: Color.accentColor.opacity(0.38), location: 0.55),
-            .init(color: Color.accentColor.mix(with: .black, by: 0.25).opacity(0.45), location: 1.0)
-        ],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
+    LinearGradient(colors: [Color.accentColor.mix(with: .white, by: 0.10), Color.accentColor.mix(with: .black, by: 0.18)],
+                   startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 
-private struct HostHero: View {
+/// The PC as the launcher's title: its name (the switcher, when there is more than
+/// one PC), the specs under it and the readiness chip. Right-click for the PC's menu.
+private struct PCHeader: View {
     let host: Host?
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            // Background: Liquid Glass with a host-stable accent tint (hue
-            // stable per name) - multi-PC households get visual continuity
-            // per machine while the OS handles refraction / EDR composition.
-            // `.regular.tint(...)` keeps the translucent material reading
-            // correctly across light + dark mode without hardcoded RGB fights.
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(accentSurfaceGradient)
-                .glassEffect(
-                    .regular.tint(Color.accentColor.opacity(0.22)),
-                    in: .rect(cornerRadius: 26)
-                )
-                .overlay {
-                    // Faint top-edge gloss - softened so the accent reads
-                    // as material rather than a neon border.
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.08),
-                                    Color.white.opacity(0.02)
-                                ],
-                                startPoint: .top, endPoint: .bottom
-                            ),
-                            lineWidth: 0.5
-                        )
-                }
-                .shadow(color: .black.opacity(0.22), radius: 22, x: 0, y: 10)
-
-            // Top-leading readiness chip: reachability, activity, and the
-            // re-pair affordance for a changed host certificate.
-            ReadinessChip()
-                .padding(14)
-
-            // Centered content
-            VStack(spacing: 12) {
-                Image(systemName: "display")
-                    .font(.system(size: 42, weight: .regular))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white.opacity(0.92))
-                    .shadow(color: .black.opacity(0.30), radius: 10, x: 0, y: 2)
-                    // No pulse: while a stream is foreground the hero is
-                    // occluded - a pulse would burn CPU on unseen pixels.
-
-                Text(host?.displayName ?? "No PC selected")
-                    .font(.system(size: 34, weight: .bold))
-                    .tracking(-0.5)
-                    .foregroundStyle(.primary)
-                // No last-played line here: ContextFooter is its single
-                // source (both read glimmer.lastConnected, stamped at stream
-                // END - the hero copy used to duplicate it AND disagree).
-
-                if let host, !host.apps.isEmpty {
-                    AppIconsRow(apps: host.apps, host: host)
-                        .padding(.top, 6)
-                }
+        HStack(spacing: 14) {
+            Image(systemName: "display")
+                .font(.system(size: 30))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                if model.hosts.count > 1 { switcher } else { name }
+                SpecChipsRow()
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 22)
-            .padding(.horizontal, 24)
+            Spacer(minLength: 12)
+            // Reachability, activity, and the re-pair affordance for a
+            // changed certificate; last played stays in ContextFooter.
+            ReadinessChip()
         }
-        // 248pt (was 270): content measures ~218pt, so this trims the hero's
-        // dead air ("a bit too much") while keeping honest breathing room.
-        .frame(height: 248)
-        // `width`, not `maxWidth`: the window is sized from this column, and a
-        // maxWidth has no size of its own to measure - which is why an earlier
-        // attempt at a content-sized window stayed resizable anyway. 520 is the
-        // width the card already had in every window wide enough to show it.
-        .frame(width: 520)
-        // Right-click the hero to rename / set codec / unpair the current PC.
         .modifier(OptionalHostContextMenu(host: host))
+    }
+
+    private var name: some View {
+        Text(host?.displayName ?? "No PC selected")
+            .font(.title.weight(.semibold))
+            .lineLimit(1)
+    }
+
+    /// The name opens the PC list. An inline Picker gives the native checkmark,
+    /// which macOS 27 no longer draws for a plain symbol in a menu item.
+    private var switcher: some View {
+        Menu {
+            Picker("PC", selection: Binding(
+                get: { model.selectedHost?.id },
+                set: { id in
+                    guard let id, let pick = model.hosts.first(where: { $0.id == id }) else { return }
+                    model.selectHost(pick)
+                }
+            )) {
+                ForEach(model.hosts) { Text($0.displayName).tag(Optional($0.id)) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 6) {
+                name
+                Image(systemName: "chevron.down")
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Choose a PC")
+        .accessibilityLabel("PC")
+        .accessibilityValue(host?.displayName ?? "None")
     }
 }
 

@@ -147,14 +147,10 @@ extension AppModel {
                 }
             }
         })
-        // NOTE: there is intentionally no `didResignActiveNotification` handler
-        // cancelling the host-status poller. We used to pause polling whenever
-        // Glimmer lost focus, on the theory "the chip can't be seen" - but the
-        // chip is plainly visible when Glimmer's window sits behind another app,
-        // and cancelling on resign stranded it on "Checking..." the instant the
-        // user clicked away (last sample aged past HostLiveStatus.stale). The
-        // poller now runs continuously while on the launcher (matching
-        // Moonlight) and only pauses for an active stream or no selected host.
+        // Losing focus must not strand a visible chip on Checking. Hidden-but-awake
+        // polling also keeps the menu's Wake vs Stream action current; streams and
+        // system or display sleep pause it instead.
+
         // Proactively offer the raw-HID DualSense feature the moment a
         // DualSense connects while Glimmer is running (once), rather than
         // burying it in Settings. The same observers keep `controllerConnected`
@@ -188,40 +184,58 @@ extension AppModel {
                 self?.controllerConnected = !GCController.controllers().isEmpty
             }
         })
-        // Sleep/wake: stop the chip poller BEFORE the Mac goes dark and re-arm
-        // it on wake. A /serverinfo poll caught mid-exchange by sleep leaves the
-        // host holding a half-open TLS connection, and Sunshine's HTTPS server
-        // (one asio thread for accept + handshake + handlers) blocks on it with
-        // no timeout - the 2026-09-02 "port 47984 refused until Sunshine
-        // restarts" wedge, which Glimmer used to misreport as "re-pair". Any
-        // client can trigger it; we simply stop being the client that does.
-        // NSWorkspace posts these on its OWN center (see StreamSession+Wake).
-        let wsnc = NSWorkspace.shared.notificationCenter
-        workspaceTokens.append(wsnc.addObserver(
-            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.hostPollingPausedForSleep = true
-                self.hostStatusTask?.cancel()
-                self.hostStatusTask = nil
-                Diag.info("system will sleep - host status polling paused", "Host")
-            }
-        })
-        workspaceTokens.append(wsnc.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.hostPollingPausedForSleep = false
-                Diag.info("system woke - host status polling resumed", "Host")
-                self.restartHostStatusPolling()
-            }
-        })
+        observeHostPollingSleep()
         // Catch a controller that was already connected at launch (covers both
         // the auto-offer and seeding `controllerConnected`).
         controllerConnected = !GCController.controllers().isEmpty
         maybeOfferRawHID()
+    }
+
+    /// Close control exchanges synchronously: Sunshine can retain a half-open TLS
+    /// connection across sleep and block its single HTTPS thread indefinitely.
+    func observeHostPollingSleep(center: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+        let events: [(Notification.Name, Bool, Bool)] = [
+            (NSWorkspace.willSleepNotification, true, true),
+            (NSWorkspace.didWakeNotification, true, false),
+            (NSWorkspace.screensDidSleepNotification, false, true),
+            (NSWorkspace.screensDidWakeNotification, false, false)
+        ]
+        for (name, system, sleeping) in events {
+            workspaceTokens.append(center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
+                // A background post must wait for cancellation before the Mac can sleep.
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { self?.setHostPollingSleep(system: system, sleeping: sleeping) }
+                } else {
+                    DispatchQueue.main.sync {
+                        self?.setHostPollingSleep(system: system, sleeping: sleeping)
+                    }
+                }
+            })
+        }
+    }
+
+    func setHostPollingSleep(system: Bool, sleeping: Bool) {
+        if system { hostPolling.systemSleeping = sleeping } else { hostPolling.displaysSleeping = sleeping }
+        if sleeping {
+            hostStatusTask?.cancel()
+            hostStatusTask = nil
+            hostPolling.movedHostSearch?.cancel()
+            hostPolling.movedHostSearch = nil
+            if system {
+                cancelWakeForSleep()
+                Diag.info("system will sleep - host status polling paused", "Host")
+            } else {
+                Diag.info("displays will sleep - host status polling paused", "Host")
+            }
+        } else {
+            extendPollSettle()
+            if system {
+                Diag.info("system woke - host status polling re-armed", "Host")
+            } else {
+                Diag.info("displays woke - host status polling re-armed", "Host")
+            }
+            restartHostStatusPolling()
+        }
     }
 
     /// Human-readable description of the current primary display, for the UI.

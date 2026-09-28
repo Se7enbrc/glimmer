@@ -1,10 +1,10 @@
 # Host setup: display modes (Sunshine + VDD)
 
 Glimmer asks the host for an **exact** `width × height @ refresh`, whatever you
-pick in **Settings ▸ Quality**. The presets there are _Native Retina_ (your
-panel's own pixel grid), _HiDPI_ (half that in each direction), and _Custom_.
-The host can only honor a mode it can actually present, so the host's display
-has to be able to produce every mode you might request. On Windows that means a
+pick in **Settings ▸ Quality**. The presets there are _Sharpest_ (your panel's
+own pixel grid), _Balanced_ (half that in each direction), and _Custom_. The
+host can only honor a mode it can actually present, so the host's display has to
+be able to produce every mode you might request. On Windows that means a
 **Virtual Display Driver**; on Linux a current Sunshine that resizes the
 session. Without one, the stream falls back to a wrong size or fails to start.
 

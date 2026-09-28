@@ -109,30 +109,18 @@ struct GlimmerApp: App {
         Window("Glimmer", id: "main") {
             MainWindow()
                 .environment(model)
-                // 520pt card + 80pt margins per side = 680. This MUST equal the
-                // connect surface's real width (ConnectSurface's .horizontal
-                // padding): a floor BELOW it leaves the window that much range
-                // to be dragged through, and it opens at the bottom of the range
-                // with the margins squeezed flat - which is exactly what a stale
-                // 584 here did. A floor equal to the content leaves nothing to
-                // drag.
-                .frame(minWidth: 680)
-                .containerBackground(.regularMaterial, for: .window)
+                // 532pt content + 24pt margins per side = 580. This MUST equal the
+                // connect surface's real width (its .horizontal padding): a floor
+                // below it leaves the window a range to be dragged through.
+                .frame(minWidth: 580)
+                // Frosted Liquid Glass is the launcher's surface: see-through enough to show
+                // colour behind it, blurred enough that text behind turns to colour.
+                .containerBackground(for: .window) { Color.clear.glassEffect(.regular, in: .rect) }
         }
         .windowStyle(.hiddenTitleBar)
-        // The window is exactly its content and cannot be dragged bigger. The
-        // launcher is one fixed-height hero card, a chip row, a button and a
-        // footer - nothing in it grows, so a resize could only ever add empty
-        // space, which is precisely what it was doing.
-        //
-        // This works only because every element below now states a definite
-        // size: the card is a fixed 248x520, the column no longer ends in a
-        // Spacer, and MainWindow no longer forces itself to .infinity. An
-        // earlier attempt set this while the content was still flexible - the
-        // window stayed resizable and the card stretched to fill it.
-        //
-        // No .defaultSize: it would be a second opinion about a size the content
-        // already knows.
+        // Exactly its content, never draggable bigger: nothing in the launcher grows, so a
+        // resize could only add empty space. Every element states a definite size, and
+        // there is no .defaultSize to second-guess it.
         .windowResizability(.contentSize)
         // Opt OUT of window state restoration so a previously-X-closed
         // launcher always re-spawns fresh next launch (the bug that made
@@ -157,12 +145,15 @@ struct GlimmerApp: App {
             CommandGroup(after: .appSettings) {
                 Button("Install Command Line Tool…") { CommandLineToolInstaller.install() }
             }
+            CommandMenu("Stream") { StreamMenu(model: model) }
         }
 
         Settings {
             SettingsRoot()
                 .environment(model)
-                .frame(minWidth: 720, minHeight: 480)
+                // Taller than wide, like System Settings: the panes are lists, and
+                // Diagnostics needs the height for its log.
+                .frame(minWidth: 680, minHeight: 540)
                 // Settings reads a notch lighter than the main window so
                 // the sidebar / content materials layer cleanly on top.
                 .containerBackground(.thinMaterial, for: .window)

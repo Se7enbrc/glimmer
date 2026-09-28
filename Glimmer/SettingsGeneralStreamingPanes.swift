@@ -75,15 +75,21 @@ struct GeneralPane: View {
                     .onChange(of: launchAtLogin) { _, on in
                         scheduleLoginItemRegistration(launchAtLogin: on, minimized: launchMinimized)
                     }
-                Toggle("Open in the menu bar only", isOn: $launchMinimized)
+                // Only means something at login, so it appears with that switch rather than sitting disabled.
+                if launchAtLogin {
+                    Toggle(isOn: $launchMinimized) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Open in the menu bar only")
+                            Text("Starts in the menu bar at login. Opening Glimmer from the Dock or Spotlight "
+                                + "shows the window.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     .onChange(of: launchMinimized) { _, on in
                         scheduleLoginItemRegistration(launchAtLogin: launchAtLogin, minimized: on)
                     }
-                    .disabled(!launchAtLogin)
-                Text("At login, Glimmer can start in the menu bar without showing its window. "
-                    + "Opening it from the Dock, Finder or Spotlight always shows the window.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                }
                 if loginItemNeedsApproval {
                     HStack(spacing: 8) {
                         Label("macOS needs you to approve Glimmer in Login Items, "
@@ -94,26 +100,31 @@ struct GeneralPane: View {
                         Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
                     }
                 }
-                Toggle("Play sound on the PC", isOn: $model.muteMacWhileStreaming)
-                Text("The PC plays the game's sound and this Mac stays quiet. Other apps and this Mac's "
-                    + "volume aren't changed. Takes effect the next time you stream.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $model.muteMacWhileStreaming) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Play sound on the PC")
+                        Text("Sound plays on the PC instead of this Mac. Other apps aren't affected. "
+                            + "Applies to the next stream.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            Section("Default action") {
+            Section {
                 // Picker sourced from the selected host's announced app
                 // list (Sunshine's `applist`). "Desktop" is always
                 // present as a baseline; a stored choice missing from
                 // the host's live applist (host offline at config time)
                 // is preserved in the list so we don't silently lose it.
-                Picker("On connect, launch", selection: $model.defaultLaunchApp) {
+                Picker("Start with", selection: $model.defaultLaunchApp) {
                     ForEach(launchAppOptions, id: \.self) { name in
                         Text(launchOptionLabel(name)).tag(name)
                     }
                 }
-                Text("Right-click the Stream button to pick a different app per connection.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Streaming")
+            } footer: {
+                Text("To stream a different app once, click it in the launcher.")
             }
         }
         .formStyle(.grouped)
@@ -215,7 +226,7 @@ struct QualityPane: View {
         Form {
             // Header is "Preset" now that the pane itself is named Quality -
             // "Quality" twice in a row read as a stutter.
-            Section("Preset") {
+            Section {
                 Picker("", selection: $model.qualityPreset) {
                     ForEach(QualityPreset.allCases) { preset in
                         VStack(alignment: .leading) {
@@ -229,6 +240,11 @@ struct QualityPane: View {
                 .labelsHidden()
                 // Nothing else lives in this card: a switch or a picker under
                 // the radio rows read as extra preset rows (owner's screenshot).
+            } header: {
+                Text("Preset")
+            } footer: {
+                // Said once for the pane: every control here is read at session start.
+                Text("Changes here apply to the next stream.")
             }
 
             // Bandwidth in its own card, segmented like "Show the stream": two
@@ -246,7 +262,41 @@ struct QualityPane: View {
                     + "Bandwidth saver asks for the usual bitrate.")
             } footer: {
                 Text("Highest quality gives every frame more bits, which keeps fine detail from turning to grain. "
-                    + "Bandwidth saver uses less. Applies next stream.")
+                    + "On Wi-Fi it follows what the radio can carry. Bandwidth saver uses less.")
+            }
+
+            // Beside Bandwidth: the couch player's network controls, in the pane's first screen.
+            Section("Wi-Fi") {
+                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
+                        Text("Pauses AirDrop and Continuity while you stream, so they can't take over "
+                            + "the Wi-Fi and freeze the picture. They come back the moment you stop. "
+                            + "Needs a one-time approval.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .help("Installs a small helper that pauses AirDrop's radio for each stream.")
+                if case .requiresApproval = awdl.state {
+                    HStack(spacing: 8) {
+                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Login Items") { awdl.openSystemSettings() }
+                    }
+                }
+                if case .unavailable(let why) = awdl.state {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
+                            .font(.footnote).foregroundStyle(.red)
+                        if let url = awdl.recoveryDocURL {
+                            Link("How to manage login items (Apple Support)", destination: url)
+                                .font(.footnote)
+                        }
+                    }
+                }
             }
 
             // One HDR switch for every preset, on by default; off asks the PC
@@ -257,26 +307,21 @@ struct QualityPane: View {
                     .help("Sends a 10-bit high-dynamic-range stream when the PC and this display both support it. "
                         + "Off asks the PC for SDR.")
             } footer: {
-                Text("Brighter highlights, deeper color (needs HDR on the PC and this display). Applies next stream.")
+                Text("Brighter highlights and deeper color when the PC and this display both support HDR.")
             }
 
-            // Notch coverage in its own compact card. DEFAULT ON: full-panel
-            // coverage is the product stance on notched MacBooks. Shown ONLY on
-            // a notched panel and only for a full-screen stream: elsewhere the
-            // toggle used to silently switch the fullscreen mechanism to a
-            // macOS Space (issue #84), so notchless Macs now always take the
-            // cover and never see the switch. Snapshotted at session start, so
-            // the next-stream caveat lives in the footer; the .help() carries
-            // the detail.
+            // Shown only on a notched panel for a full-screen stream: elsewhere the
+            // toggle used to silently switch the fullscreen mechanism to a macOS
+            // Space (issue #84). Default off: covering the whole panel is the stance.
             if model.currentDisplayHasNotch, model.effectiveDisplayMode == .fullScreen {
                 Section {
-                    Toggle("Fill the notch", isOn: $model.streamCoversNotch)
+                    Toggle("Keep picture below the camera", isOn: Binding(
+                        get: { !model.streamCoversNotch }, set: { model.streamCoversNotch = !$0 }))
                         .toggleStyle(.switch)
-                        .help("Covers the whole panel, camera notch included, so a panel-native stream renders 1:1. "
-                            + "Off keeps the picture below the notch by using a macOS full-screen space.")
+                        .help("Uses a macOS full-screen space that stops short of the notch. "
+                            + "Off covers the whole panel, so a panel-native stream renders 1:1.")
                 } footer: {
-                    Text("A thin strip of the picture hides behind the notch. Off keeps it clear, "
-                        + "using a macOS full-screen space. Applies next stream.")
+                    Text("Off, a thin strip of the picture hides behind the notch.")
                 }
             }
 
@@ -419,39 +464,6 @@ struct QualityPane: View {
                 // they are. The editor inside still says warn/critical.
                 DisclosureGroup("When numbers turn yellow or red") {
                     StatsThresholdsEditor()
-                }
-            }
-
-            Section("Wi-Fi") {
-                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
-                        Text("Parks AirDrop's radio (AWDL) for the length of a stream so it can't "
-                            + "grab the Wi-Fi channel and cause multi-second freezes. Restored the "
-                            + "instant you stop. Installs a small helper that needs a one-time approval.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .help("Holds awdl0 down for the duration of each stream via a privileged helper.")
-                if case .requiresApproval = awdl.state {
-                    HStack(spacing: 8) {
-                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote).foregroundStyle(.orange)
-                        Spacer()
-                        Button("Open Login Items") { awdl.openSystemSettings() }
-                    }
-                }
-                if case .unavailable(let why) = awdl.state {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
-                            .font(.footnote).foregroundStyle(.red)
-                        if let url = awdl.recoveryDocURL {
-                            Link("How to manage login items (Apple Support)", destination: url)
-                                .font(.footnote)
-                        }
-                    }
                 }
             }
 

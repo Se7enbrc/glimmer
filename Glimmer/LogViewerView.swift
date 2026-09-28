@@ -26,19 +26,22 @@ struct LogViewer: View {
                     Text("All").tag(LogLevel.debug)
                     Text("Info").tag(LogLevel.info)
                     Text("Notice").tag(LogLevel.notice)
-                    Text("Warn").tag(LogLevel.warning)
+                    Text("Warning").tag(LogLevel.warning)
                     Text("Error").tag(LogLevel.error)
                 }
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 300)
+                // A Form gives a labelled picker its own row and squeezed out "All"; one row, natural width.
+                .labelsHidden()
+                .fixedSize()
                 Spacer()
-                Button { reload() } label: { Image(systemName: "arrow.clockwise") }
+                Button("Refresh", systemImage: "arrow.clockwise") { reload() }
                     .help("Refresh")
-                Button { copyAll() } label: { Image(systemName: "doc.on.doc") }
+                Button("Copy shown entries", systemImage: "doc.on.doc") { copyAll() }
                     .help("Copy shown entries").disabled(visible.isEmpty)
-                Button { LogStore.shared.clear(); reload() } label: { Image(systemName: "trash") }
+                Button("Clear log", systemImage: "trash") { LogStore.shared.clear(); reload() }
                     .help("Clear log").disabled(entries.isEmpty)
             }
+            .labelStyle(.iconOnly)
 
             if visible.isEmpty {
                 Text("No log entries at this level yet. Start a stream and they'll appear here.")

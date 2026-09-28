@@ -362,6 +362,7 @@ extension AppModel {
     /// TLS, and save it once the saved address stops answering. True when it changed.
     @discardableResult
     func healAddress(of host: Host, within seconds: Double) async -> Bool {
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return false }
         var probe = nativeServerInfo(for: host)
         let saved = probe.address
         guard probe.serverCertPEM != nil, Self.canHealAddress(saved) else { return false }
@@ -375,10 +376,12 @@ extension AppModel {
         // Every change to the list re-checks it, so a PC still booting gets another try.
         search: for await found in session.stream {
             for address in Set(found.hosts.map(\.host)) where address != saved && IPv4Address(address) != nil {
+                guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
                 probe.address = address
                 let client = NetworkClient(server: probe)
                 let answer = try? await client.fetchServerInfo()
                 await client.shutdown()
+                guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
                 if answer?.uniqueId == host.id {
                     moved = address
                     break search
@@ -387,10 +390,19 @@ extension AppModel {
         }
         deadline.cancel()
         await discovery.stop()
-        // A PC with a second LAN interface answers mDNS there too; keep the paired one.
-        guard let moved,
-              await HostReachability.measureRTT(host: saved, port: probe.httpPort, timeoutMs: 2_000) == .unreachable,
-              Self.storeAddress(moved, hostID: host.id, in: .standard) else { return false }
+        guard let moved else { return false }
+        return await saveHealedAddress(of: host, moved: moved, saved: saved, port: probe.httpPort)
+    }
+
+    /// A second LAN interface can answer discovery too; replace only an unreachable address.
+    func saveHealedAddress(
+        of host: Host, moved: String, saved: String, port: Int, defaults: UserDefaults = .standard,
+        probe: @Sendable (String, Int, Int) async -> HostReachability.Outcome = HostReachability.measureRTT
+    ) async -> Bool {
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return false }
+        let result = await probe(saved, port, 2_000)
+        guard !Task.isCancelled, !hostPolling.systemSleeping, result == .unreachable,
+              Self.storeAddress(moved, hostID: host.id, in: defaults) else { return false }
         Diag.notice("\(host.displayName, privacy: .private) answered at a new network address; saved it", "Host")
         loadHosts()
         return true

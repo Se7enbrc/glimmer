@@ -1,10 +1,4 @@
-//
-//  AppModel+Power.swift
-//
-//  Wake and Connect: Wake-on-LAN packets for a PC, a wait for Sunshine, then a
-//  launch, or a notification when another app is in front. Per-PC "Wake on LAN"
-//  gates it; the state the button reads (waking, last failure) lives here.
-//
+// Wake and Connect work and notifications share per-model cancellation state.
 
 import AppKit
 import Foundation
@@ -12,13 +6,13 @@ import UserNotifications
 
 /// How one wake went. `sent` is a send that wasn't asked to wait for Sunshine.
 enum WakeOutcome: Equatable {
-    case noMac, couldNotSend, sent, answered, noAnswer
+    case noMac, couldNotSend, sent, answered, noAnswer, cancelled
 
     var failureReason: AppModel.WakeFailureReason? {
         switch self {
         case .couldNotSend: .couldNotSend
         case .noAnswer: .noAnswer
-        case .noMac, .sent, .answered: nil
+        case .noMac, .sent, .answered, .cancelled: nil
         }
     }
 }
@@ -34,8 +28,13 @@ extension AppModel.WakeFailureReason {
     }
 }
 
+@MainActor
+final class WakeWork {
+    var buttonTask: Task<Void, Never>?
+    var operations: [UUID: @Sendable () -> Void] = [:]
+}
+
 extension AppModel {
-    private static var wakeTask: Task<Void, Never>?
     static let wakeReadinessTimeout = NetworkClient.controlTimeout
     static let wakeBudgetSeconds: Double = 90
     /// Every surface adds this when a wake gets no answer.
@@ -63,14 +62,14 @@ extension AppModel {
     /// notification reports the result instead of a stream opening over that app.
     func wakeHost(_ host: Host, thenConnect: Bool) {
         guard WakeOnLAN.normalizeMac(host.macAddress) != nil else { return }
-        Self.wakeTask?.cancel()
+        wakeWork.buttonTask?.cancel()
         wakingHostID = host.id
         wakeFailedHostID = nil
         wakeFailureReason = nil
         hostStatusTask?.cancel()
         hostStatusTask = nil
         WakeNotifier.shared.prepare(for: self, host: host)
-        Self.wakeTask = Task { @MainActor in
+        wakeWork.buttonTask = Task { @MainActor in
             // A stopped or superseded wake leaves the state to whoever cancelled it.
             defer {
                 if !Task.isCancelled {
@@ -99,23 +98,50 @@ extension AppModel {
     /// Sunshine gets `waitSeconds` to answer (nil sends only). A first burst that sent
     /// nothing means this Mac can't reach the network, so there's nothing to wait for.
     func sendWakeAndWait(_ host: Host, waitSeconds: Double?,
-                         send: @escaping @Sendable (String, [String?]) -> Int = WakeOnLAN.send) async -> WakeOutcome {
+                         send: @escaping @Sendable (String, [String?]) -> Int = WakeOnLAN.send,
+                         waitForAnswer: ((Host, Double) async -> Bool)? = nil) async -> WakeOutcome {
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .cancelled }
+        let operation = Task {
+            await self.performWake(host, waitSeconds: waitSeconds, waitForAnswer: waitForAnswer, send: send)
+        }
+        let id = UUID()
+        wakeWork.operations[id] = { operation.cancel() }
+        defer { wakeWork.operations[id] = nil }
+        return await withTaskCancellationHandler {
+            let outcome = await operation.value
+            return operation.isCancelled ? .cancelled : outcome
+        } onCancel: {
+            operation.cancel()
+        }
+    }
+
+    private func performWake(_ host: Host, waitSeconds: Double?,
+                             waitForAnswer: ((Host, Double) async -> Bool)?,
+                             send: @escaping @Sendable (String, [String?]) -> Int) async -> WakeOutcome {
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .cancelled }
         guard let mac = WakeOnLAN.normalizeMac(host.macAddress) else { return .noMac }
         let addresses = [host.localAddress, host.manualAddress]
         for burst in 0..<3 {
+            guard !Task.isCancelled else { return .cancelled }
             let sent = await Task.detached(priority: .userInitiated) { send(mac, addresses) }.value
+            guard !Task.isCancelled else { return .cancelled }
             Diag.notice("Wake on LAN: burst \(burst + 1), \(sent) packets for \(host.displayName, privacy: .private)", "Power")
             if sent == 0 {
                 if burst == 0 { return .couldNotSend }
                 break
             }
-            do { try await Task.sleep(for: .seconds(1)) } catch { return .sent }
+            do { try await Task.sleep(for: .seconds(1)) } catch { return .cancelled }
         }
         guard let waitSeconds else { return .sent }
-        guard await waitForSunshine(host: host, budgetSeconds: waitSeconds) else {
-            if !Task.isCancelled {
-                Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) did not answer within \(Int(waitSeconds)) s", "Power")
-            }
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .cancelled }
+        let answered = if let waitForAnswer {
+            await waitForAnswer(host, waitSeconds)
+        } else {
+            await waitForSunshine(host: host, budgetSeconds: waitSeconds)
+        }
+        guard !Task.isCancelled else { return .cancelled }
+        guard answered else {
+            Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) did not answer within \(Int(waitSeconds)) s", "Power")
             return .noAnswer
         }
         Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) is answering", "Power")
@@ -126,25 +152,56 @@ extension AppModel {
     func cancelWake(_ host: Host) {
         guard wakingHostID == host.id else { return }
         Diag.notice("Wake on LAN: stopped waiting for \(host.displayName, privacy: .private)", "Power")
-        Self.wakeTask?.cancel()
-        Self.wakeTask = nil
+        wakeWork.buttonTask?.cancel()
+        wakeWork.buttonTask = nil
         wakingHostID = nil
         restartHostStatusPolling()
     }
 
+    func cancelWakeForSleep() {
+        wakeWork.buttonTask?.cancel()
+        wakeWork.buttonTask = nil
+        wakingHostID = nil
+        // Each direct shortcut wait and each nested search has its own handle.
+        for cancel in wakeWork.operations.values { cancel() }
+    }
+
     /// Pinned /serverinfo until Sunshine answers or the budget ends. mDNS runs alongside
     /// in case the PC came back on a new DHCP address; each try dials the latest saved address.
-    private func waitForSunshine(host: Host, budgetSeconds: Double) async -> Bool {
-        let search = Task { await healAddress(of: host, within: budgetSeconds) }
-        defer { search.cancel() }
+    func waitForSunshine(
+        host: Host, budgetSeconds: Double,
+        searchAddress: (() async -> Bool)? = nil, poll: (() async -> Bool)? = nil
+    ) async -> Bool {
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return false }
+        let search = Task {
+            guard !Task.isCancelled, !hostPolling.systemSleeping else { return false }
+            if let searchAddress { return await searchAddress() }
+            return await healAddress(of: host, within: budgetSeconds)
+        }
+        let id = UUID()
+        wakeWork.operations[id] = { search.cancel() }
+        defer {
+            search.cancel()
+            wakeWork.operations[id] = nil
+        }
+        return await withTaskCancellationHandler {
+            if let poll { return await poll() }
+            return await pollForSunshine(host: host, budgetSeconds: budgetSeconds)
+        } onCancel: {
+            search.cancel()
+        }
+    }
+
+    private func pollForSunshine(host: Host, budgetSeconds: Double) async -> Bool {
         let deadline = Date().addingTimeInterval(budgetSeconds)
-        while Date() < deadline {
+        while !Task.isCancelled, !hostPolling.systemSleeping, Date() < deadline {
             let current = hosts.first { $0.id == host.id } ?? host
             let info = nativeServerInfo(for: current)
             let client = NetworkClient(server: info)
             let answered = (try? await client.fetchServerInfo(timeout: Self.wakeReadinessTimeout,
                                                                diagnosePinnedFailure: false)) != nil
             await client.shutdown()
+            guard !Task.isCancelled else { return false }
             if answered { return true }
             do { try await Task.sleep(for: .seconds(1)) } catch { return false }
         }

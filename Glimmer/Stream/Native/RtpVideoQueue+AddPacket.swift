@@ -32,55 +32,39 @@ extension RtpVideoQueue {
         let seq = rtp.seq
         let timestamp = rtp.timestamp
 
-        // Reject packets behind our current buffer window.
-        if Self.isBefore16(seq, nextContiguousSequenceNumber) {
-            return .rejected
-        }
-
         // Reject packets too small for the NV header.
-        if rtp.length < rtp.dataOffset + 16 {
+        guard let frameIndex = rtp.frameIndex else {
             return .rejected
         }
 
-        // Return to the strict (no-hold) regime once the link has run
-        // clean for the cooldown period since the last out-of-order observation
-        // (mirrors moonlight's 5-min SPECULATIVE_RFI_COOLDOWN hysteresis). Uses
-        // presentation time (90kHz → µs) so it tracks media time, like the C.
-        //
-        // ORDINARY comparison, matching upstream RtpVideoQueue.c exactly
-        // (`presentationTimeUs > lastOos + COOLDOWN`): presentationUs is a
-        // NON-modular mapping of the host's u32 90kHz RTP timestamp, so it
-        // COLLAPSES from ~47.7e9µs toward 0 when the host clock crosses 2^32
-        // (period ~13.26h, origin arbitrary - the wrap can land mid-session).
-        // A wrapping `&-` delta here goes astronomically large at that collapse
-        // and clears receivedOosData on a still-reordering link - failing OPEN,
-        // so the next cross-frame reorder is declared an immediate unrecoverable
-        // loss (spurious RFI + one dropped frame, the exact false-loss hitch the
-        // hold exists to prevent). The plain `>` instead goes FALSE at the wrap:
-        // we stay in OOS mode (fail CLOSED) and the next OOS observation
-        // re-latches lastOosPresentationUs past the wrap, restoring the cooldown
-        // clock. No overflow risk: lastOos tops out near 47.7e9 and the cooldown
-        // is 3e8, both far under UInt64.max.
+        // Reuse the frame index already parsed for receive accounting.
+        let nv = rtp.dataOffset
+        let fecInfo = le32(bytes, nv + 12)
+        let multiFecBlocks = bytes[nv + 11]
+        let fields = NvFields(
+            frameIndex: frameIndex,
+            fecIndex: (fecInfo & 0x3FF000) >> 12,
+            fecCurrentBlockNumber: (multiFecBlocks >> 4) & 0x3,
+            multiFecBlocks: multiFecBlocks,
+            fecInfo: fecInfo)
+
+        // A completed frame leaves currentFrameNumber at the next expected frame.
+        // Its first packet opens a new sequence window even after a long dropout.
+        let awaitingNextFrame = pending.isEmpty && completed.isEmpty
+        if Self.isBefore16(seq, nextContiguousSequenceNumber),
+           !Self.isBefore32(currentFrameNumber, fields.frameIndex), !awaitingNextFrame {
+            return .rejected
+        }
+
+        // Keep the upstream non-modular cooldown: a timestamp wrap must fail
+        // closed, retaining the hold until a new OOS observation resets its clock.
+        // A wrapping subtraction would instead clear protection on a reordering link.
         if receivedOosData {
             let presentationUs = (UInt64(timestamp) * 1000) / 90
             if presentationUs > lastOosPresentationUs + Self.speculativeRfiCooldownUs {
                 receivedOosData = false
             }
         }
-
-        // NV header fields are LITTLE-endian, at dataOffset. We only read the
-        // fields this stage needs: streamPacketIndex (nv+0) and flags/extraFlags
-        // (nv+8/+9) are re-parsed in the emit path; multiFecFlags (nv+10) is
-        // unused on this path (the block index/count come from multiFecBlocks).
-        let nv = rtp.dataOffset
-        let fecInfo = le32(bytes, nv + 12)
-        let multiFecBlocks = bytes[nv + 11]
-        let fields = NvFields(
-            frameIndex: le32(bytes, nv + 4),
-            fecIndex: (fecInfo & 0x3FF000) >> 12,
-            fecCurrentBlockNumber: (multiFecBlocks >> 4) & 0x3,
-            multiFecBlocks: multiFecBlocks,
-            fecInfo: fecInfo)
 
         // Reject frames behind our current frame number.
         if Self.isBefore32(fields.frameIndex, currentFrameNumber) {

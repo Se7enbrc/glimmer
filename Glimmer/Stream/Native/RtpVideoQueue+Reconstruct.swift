@@ -31,7 +31,7 @@ extension RtpVideoQueue {
         // the PC caps the packet size. Parity is always full length: take the longest.
         let receiveSize = min(pending.reduce(0) { max($0, $1.length) },
                               packetSize + Self.MAX_RTP_HEADER_SIZE)
-        guard let rs = decoder(dataShards: bufferDataPackets, parityShards: bufferParityPackets) else {
+        guard let rs = ReedSolomon(dataShards: bufferDataPackets, parityShards: bufferParityPackets) else {
             Diag.error("NativeVideo reed_solomon_new failed (ds=\(bufferDataPackets) ps=\(bufferParityPackets))", Self.cat)
             return -1
         }
@@ -45,28 +45,17 @@ extension RtpVideoQueue {
             return -1
         }
 
-        if bufferDataPackets != receivedDataPackets {
-            logFecRecovery()
+        // Validate the entire recovery before committing any shard or success metric.
+        var recovered: [Entry] = []
+        for index in 0..<bufferDataPackets where marks[index] {
+            guard let entry = rebuildRecoveredShard(shards[index], index: index, headEntry: pending.first) else {
+                return -1
+            }
+            recovered.append(entry)
         }
-
-        // Re-queue recovered DATA shards (i < bufferDataPackets) (c:348-446).
-        let headEntry = pending.first
-        for i in 0..<totalPackets where marks[i] && i < bufferDataPackets {
-            requeueRecoveredShard(shards[i], index: i, headEntry: headEntry)
-        }
-
+        logFecRecovery()
+        for entry in recovered { _ = queuePacket(entry, isFecRecovery: true) }
         return 0
-    }
-
-    /// Memoized Cauchy decoder per (ds,ps) shape. Safe to cache: `ReedSolomon` is an
-    /// immutable value type whose `decode` mutates only caller-supplied shards. nil
-    /// for invalid geometry (not cached).
-    private func decoder(dataShards ds: Int, parityShards ps: Int) -> ReedSolomon? {
-        let shape = ReedSolomonShape(ds: ds, ps: ps)
-        if let cached = rsDecoderCache[shape] { return cached }
-        guard let rs = ReedSolomon(dataShards: ds, parityShards: ps) else { return nil }
-        rsDecoderCache[shape] = rs
-        return rs
     }
 
     /// Assemble the Reed-Solomon shard array from the pending entries: each shard
@@ -117,11 +106,9 @@ extension RtpVideoQueue {
         }
     }
 
-    /// Rebuild the RTP+NV header on one recovered DATA shard (slot `index`) and
-    /// re-feed it through queuePacket, dropping it if its sanity-checked flags are
-    /// corrupt (RtpVideoQueue.c:348-446). `headEntry` is the block's first received
-    /// packet, used to source the header/timestamp/ssrc the FEC math can't recover.
-    private func requeueRecoveredShard(_ shard: [UInt8], index: Int, headEntry: Entry?) {
+    /// FEC cannot recover every header field. Rebuild those from the block and
+    /// validate flags before any recovered data becomes visible to the queue.
+    private func rebuildRecoveredShard(_ shard: [UInt8], index: Int, headEntry: Entry?) -> Entry? {
         var recovered = shard
         // Rebuild RTP header on the recovered shard.
         let recoveredSeq = Self.u16(index + Int(bufferLowestSequenceNumber))
@@ -149,41 +136,40 @@ extension RtpVideoQueue {
         let recFlags = (nv + 8 < recovered.count) ? recovered[nv + 8] : 0
         if index == 0 && (recFlags & Self.FLAG_SOF) == 0 {
             Diag.warn("NativeVideo FEC corrupt recovered packet \(recoveredSeq) (no SOF) frame \(currentFrameNumber)", Self.cat)
-            return
+            return nil
         }
         if index == bufferDataPackets - 1 && (recFlags & Self.FLAG_EOF) == 0 {
             Diag.warn("NativeVideo FEC corrupt recovered packet \(recoveredSeq) (no EOF) frame \(currentFrameNumber)", Self.cat)
-            return
+            return nil
         }
         if index > 0 && index < bufferDataPackets - 1 && (recFlags & Self.FLAG_CONTAINS_PIC_DATA) == 0 {
             Diag.warn("NativeVideo FEC corrupt recovered packet \(recoveredSeq) (no PIC) frame \(currentFrameNumber)", Self.cat)
-            return
+            return nil
         }
         if recFlags & ~(Self.FLAG_SOF | Self.FLAG_EOF | Self.FLAG_CONTAINS_PIC_DATA) != 0 {
             Diag.warn("NativeVideo FEC corrupt recovered packet \(recoveredSeq) (stray flags) frame \(currentFrameNumber)", Self.cat)
-            return
+            return nil
         }
 
-        let recoveredEntry = Entry(
+        return Entry(
             bytes: recovered, length: recovered.count - Self.MAX_RTP_HEADER_SIZE + dataOffset, seq: recoveredSeq,
             ts: ts, ssrc: ssrc, header: header, isParity: false)
-        _ = queuePacket(recoveredEntry, isFecRecovery: true)
     }
 
     // MARK: - stageCompleteFecBlock (c:465-524)
 
     func stageCompleteFecBlock() {
-        // Pull pending DATA entries in sequence order from bufferLowestSeq;
-        // drop parity. Sort by 16-bit-distance from the buffer low to handle
-        // wraparound + reorder, then move in order.
+        // The fast path already proved sequence order. Otherwise sort by modular
+        // distance from the block's low sequence so wrap and reorders stay ordered.
         let low = bufferLowestSequenceNumber
-        let dataEntries = pending
-            .filter { !$0.isParity }
-            .sorted { a, b in
+        var dataEntries = pending.filter { !$0.isParity }
+        if !useFastQueuePath {
+            dataEntries.sort { a, b in
                 let da = Int(Self.u16(Int(a.sequenceNumber) - Int(low)))
                 let db = Int(Self.u16(Int(b.sequenceNumber) - Int(low)))
                 return da < db
             }
+        }
         for entry in dataEntries {
             entry.receiveTimeUs = bufferFirstRecvTimeUs
             completed.append(entry)

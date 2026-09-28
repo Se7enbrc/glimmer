@@ -46,7 +46,7 @@ struct StreamButtonTests {
         let wake = Task { await model.sendWakeAndWait(pc, waitSeconds: 90) { _, _ in 1 } }
         wake.cancel()
         let outcome = await wake.value
-        #expect(outcome == .sent)
+        #expect(outcome == .cancelled)
         #expect(outcome.failureReason == nil)
     }
 

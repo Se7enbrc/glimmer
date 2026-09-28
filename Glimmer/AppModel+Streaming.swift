@@ -52,6 +52,7 @@ extension AppModel {
     /// here too: the engine's own clock starts after HTTPS + window build, so
     /// only the click can answer "did the user wait > 400 ms".
     private func armLaunchState(app: LibraryApp, host: Host) {
+        hostPolling.establishedHostID = nil
         lastLaunchAttempt = (app, host)
         Self.connectClickedAt = Date()
         ConnectTimingTelemetry.shared.resetForNewSession()
@@ -295,16 +296,8 @@ extension AppModel {
                 UserDefaults.standard.set(Date(), forKey: "glimmer.lastConnected.\(host.id)")
             }
         }
-        // Re-arm the readiness-chip poller so it goes back to
-        // "Ready · 12 ms" instead of holding its last value from
-        // the moment polling stopped at stream start. `afterStream:
-        // true` adds a short settle delay before the first probe so it
-        // doesn't race the host's `/cancel`-induced HTTP blip and
-        // publish a false "Asleep" on a host that was streaming moments
-        // ago (the chip slander bug). Combined with the two-strikes
-        // unreachable guard in the poller, an awake host that just
-        // streamed can never be declared asleep on a single transient
-        // miss.
+        // Wait out /cancel before probing. An established session also holds the chip
+        // through transient misses, even when its pre-stream sample is stale.
         self.restartHostStatusPolling(afterStream: true)
         NSApp.activate()
         if let main = NSApp.windows.first(where: {
@@ -334,6 +327,7 @@ extension AppModel {
             // failure arrives as start()'s throw or the give-up terminate.
             break
         case .connectionEstablished:
+            hostPolling.establishedHostID = host.id
             streamPhase = .streaming
             isReconnecting = false
             logConnectHoldAdjudication()
@@ -342,6 +336,7 @@ extension AppModel {
             // Latched once inside the store - repeat edges are no-ops.
             SessionReceiptStore.markSessionLive()
         case .firstFrame:
+            if case .connecting = streamPhase { hostPolling.establishedHostID = host.id }
             promoteToStreamingOnFirstFrame()
         case .connectionTerminated(let code):
             streamPhase = .idle
@@ -353,7 +348,7 @@ extension AppModel {
             // The host closed a live session (it likely restarted across a
             // lock/desktop transition) and the engine is silently re-establishing
             // under the frozen last frame. Show "Reconnecting..." - DON'T go .idle,
-            // which would tear the hero card back to the launcher; the stream
+            // which would snap the launcher back to idle; the stream
             // window stays up holding the frame. Resolves on .reconnected or, if
             // the engine gives up, a real .connectionTerminated.
             streamPhase = .connecting(stage: "Reconnecting to \(host.displayName)…")

@@ -58,7 +58,7 @@ extension AppModel {
             // Sunshine brings its own certificate, so the next step after installing it is pairing.
             return (needsSunshineMessage(hostName), .pairing)
         case .pairingRejected:
-            return ("Couldn't pair with \(hostName). Choose Pair Again… from the PC's ⋯ menu.", .pairing)
+            return ("Couldn't pair with \(hostName). Choose Pair Again… to start over.", .pairing)
         case .streamPortsBlocked(let proto, let port):
             return ("\(hostName) answered, but the stream couldn't get through. "
                 + "Check that the PC's firewall allows \(proto) \(port).", .other)
