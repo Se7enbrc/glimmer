@@ -22,8 +22,8 @@ extension RtpVideoQueue {
             windowDuplicate += 1
             return
         }
-        // A forward alias from an older frame cannot fill a gap in this sequence epoch.
-        if Self.isBefore32(frameIndex, seqNewestFrame), !Self.isBefore16(seq, seqHighestSeen) { return }
+        // An unseen packet from an older frame cannot fill a gap in this sequence epoch.
+        if Self.isBefore32(frameIndex, seqNewestFrame) { return }
         if !Self.isBefore16(seq, seqHighestSeen) {
             let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
             if jump > 1 {
