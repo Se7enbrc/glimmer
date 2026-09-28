@@ -331,14 +331,17 @@ Tactile and confident: the things on screen that ask to be pressed.
 - **App buttons (`AppTileStyle`):** the launcher's main actions. 60pt tall with
   a 14pt radius, a 20pt glyph, the app name in bold headline, and a play glyph
   trailing at 75%, all white on the primary surface. One click streams that app,
-  and Return streams the Start with app while the PC is ready.
+  and Return streams the Start with app while the PC is ready. While a slow
+  connect is under way, the pressed button's play glyph becomes a spinner and a
+  click or Escape cancels; the readiness chip carries the status.
 - **State button (`StreamButtonStyle`):** a capsule at least 46pt tall, with
   22pt of horizontal and 12pt of vertical padding, white title2 semibold label.
   It appears under the app buttons only when the PC needs something other than a
-  stream: Wake and Connect, Connecting… (the whole capsule is the cancel and
-  answers Escape), Back to Stream and Pair Again…. A fast connect shows nothing:
-  the capsule waits out a 400ms hold. The same style is the menu bar panel's
-  primary button, "Pair a PC…" and the pair sheet's main action.
+  stream: Wake and Connect, Back to Stream and Pair Again…, and Connecting… (the
+  whole capsule is the cancel) for a launch with no app button of its own, from
+  the overflow menu, the menu bar or Shortcuts. A fast connect shows nothing:
+  both wait out a 400ms hold. The same style is the menu bar panel's primary
+  button, "Pair a PC…" and the pair sheet's main action.
 - **Pressed:** scales to 0.985 over a 0.15s snappy spring; no colour change.
   Disabled drops to 55% opacity.
 - **Secondary:** standard AppKit and SwiftUI buttons (bordered, borderless or

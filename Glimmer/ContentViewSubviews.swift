@@ -12,6 +12,8 @@ import SwiftUI
 struct AppIconsRow: View {
     let apps: [LibraryApp]
     let host: Host
+    /// The connect is on screen (past the 400 ms hold), so the app being launched shows it.
+    var connectingShown = false
     @Environment(AppModel.self) private var model
 
     /// Two columns of large app buttons fill the window's width with two apps or
@@ -19,9 +21,12 @@ struct AppIconsRow: View {
     private static let maxInlineTiles = 4
     private static let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
-    private var inlineApps: [LibraryApp] {
-        apps.count <= Self.maxInlineTiles ? apps : Array(apps.prefix(Self.maxInlineTiles - 1))
+    /// The apps that get a button of their own; the rest are in the overflow menu.
+    static func inlineApps(_ apps: [LibraryApp]) -> [LibraryApp] {
+        apps.count <= maxInlineTiles ? apps : Array(apps.prefix(maxInlineTiles - 1))
     }
+
+    private var inlineApps: [LibraryApp] { Self.inlineApps(apps) }
 
     private var overflowApps: [LibraryApp] {
         apps.count <= Self.maxInlineTiles ? [] : Array(apps.dropFirst(Self.maxInlineTiles - 1))
@@ -51,8 +56,16 @@ struct AppIconsRow: View {
         return app.name == model.heroTargetAppName
     }
 
+    /// The app being launched, once the connect shows: its button becomes the
+    /// progress and the cancel, so the status stays on the chip and nothing new appears.
+    private func isLaunching(_ app: LibraryApp) -> Bool {
+        guard connectingShown, case .connecting = model.streamPhase,
+              let attempt = model.lastLaunchAttempt else { return false }
+        return attempt.app.id == app.id && attempt.host.id == host.id
+    }
+
     /// Icon, name, and a quiet play glyph: a click streams this app at once.
-    private func tileLabel(systemImage: String, title: String, trailing: String) -> some View {
+    private func tileLabel(systemImage: String, title: String, trailing: String, launching: Bool = false) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 20, weight: .semibold))
@@ -61,9 +74,14 @@ struct AppIconsRow: View {
                 .font(.headline)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            Image(systemName: trailing)
-                .font(.footnote.weight(.bold))
-                .opacity(0.75)
+            if launching {
+                // Dark so the spinner draws light on the violet in both appearances.
+                ProgressView().controlSize(.small).environment(\.colorScheme, .dark)
+            } else {
+                Image(systemName: trailing)
+                    .font(.footnote.weight(.bold))
+                    .opacity(0.75)
+            }
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 60)
@@ -71,17 +89,22 @@ struct AppIconsRow: View {
     }
 
     private func appTile(_ app: LibraryApp) -> some View {
-        Button {
-            model.requestStream(app: app, on: host)
+        let launching = isLaunching(app)
+        return Button {
+            if launching { model.cancelConnect() } else { model.requestStream(app: app, on: host) }
         } label: {
-            tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill")
+            tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill", launching: launching)
         }
         .buttonStyle(AppTileStyle())
-        .keyboardShortcut(takesReturn(app) ? .defaultAction : nil)
-        .disabled(model.isStreaming)
-        .help(model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)")
+        // Escape cancels a connect in flight; Return never does (users mash it).
+        .keyboardShortcut(launching ? .cancelAction : takesReturn(app) ? .defaultAction : nil)
+        .disabled(model.isStreaming && !launching)
+        .help(launching ? "Cancel the connection"
+              : model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)")
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
+        .accessibilityValue(launching ? "Connecting" : "")
+        .accessibilityHint(launching ? "Cancels the connection" : "")
     }
 
     private var overflowMenu: some View {

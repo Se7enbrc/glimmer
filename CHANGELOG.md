@@ -14,10 +14,11 @@ out Wi-Fi stutter during a stream brings AirDrop and Continuity back right away.
 The launcher is redesigned as one sheet of frosted glass. Your PC's name is its
 title, with the specs underneath, and each app is a large violet button that
 streams it, so there is no separate Stream button to find. Return streams the
-app you start with. A button appears under the apps only when the PC needs
-something else first: Wake and Connect, Cancel while a slow connection is under
-way, Back to Stream, or Pair Again. With more than one PC paired, click the name
-to switch.
+app you start with. While a slow connection is under way, the app you clicked
+shows a spinner; click it again or press Escape to cancel. A button appears
+under the apps only when the PC needs something else first: Wake and Connect,
+Back to Stream, or Pair Again. With more than one PC paired, click the name to
+switch.
 
 Settings reads more like System Settings. The pane you read is opaque, each
 control explains itself in one line underneath, and the Quality presets are

@@ -195,13 +195,22 @@ private struct ConnectSurface: View {
     }
 
     /// The app buttons stream, so the Stream button only appears for the states they
-    /// can't show: Wake, Connecting… (the cancel), Back to Stream and Pair Again.
+    /// can't show: Wake, Back to Stream, Pair Again, and a connect with no button of its own.
     private var showsStateButton: Bool {
         guard !isHandedOff else { return false }
         let role = StreamButton.role(for: model.menuBarPrimaryAction,
                                      backgrounded: model.isStreaming && model.nativeStreamBackgrounded,
                                      connectingShown: showsConnectingUI)
+        if role == .connecting { return !launchIsOnAButton }
         return role != .connect && role != .noPC
+    }
+
+    /// A launch from an app button shows on that button; one from the overflow menu,
+    /// the menu bar or Shortcuts keeps the Connecting… capsule as its cancel.
+    private var launchIsOnAButton: Bool {
+        guard let attempt = model.lastLaunchAttempt, let host = model.selectedHost,
+              attempt.host.id == host.id else { return false }
+        return AppIconsRow.inlineApps(host.apps).contains { $0.id == attempt.app.id }
     }
 
     var body: some View {
@@ -213,7 +222,7 @@ private struct ConnectSurface: View {
             ConnectBanner()
             PCHeader(host: model.selectedHost)
             if let host = model.selectedHost, !host.apps.isEmpty {
-                AppIconsRow(apps: host.apps, host: host)
+                AppIconsRow(apps: host.apps, host: host, connectingShown: showsConnectingUI)
             }
             if showsStateButton {
                 StreamButton(isConnecting: showsConnectingUI)
