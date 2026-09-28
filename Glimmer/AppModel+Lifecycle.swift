@@ -212,10 +212,10 @@ extension AppModel {
         if sleeping {
             hostStatusTask?.cancel()
             hostStatusTask = nil
+            hostPolling.movedHostSearch?.cancel()
+            hostPolling.movedHostSearch = nil
             if system {
                 cancelWakeForSleep()
-                hostPolling.movedHostSearch?.cancel()
-                hostPolling.movedHostSearch = nil
                 Diag.info("system will sleep - host status polling paused", "Host")
             } else {
                 Diag.info("displays will sleep - host status polling paused", "Host")

@@ -236,15 +236,29 @@ struct HostsStoreTests {
         #expect(model.hostPolling.provenAwake == nil)
     }
 
-    @MainActor @Test func displaySleepLeavesWakeWorkRunning() {
+    @MainActor @Test func displaySleepCancelsMovedHostSearchAndLeavesWakeWorkRunning() async {
         let model = AppModel()
+        let center = NotificationCenter()
+        model.observeHostPollingSleep(center: center)
+        let movedHostProbe = PollerCancellationGate()
+        let movedHostSearch = Task { _ = await movedHostProbe.wait() }
+        model.hostPolling.movedHostSearch = movedHostSearch
         let wake = Task {}
         let search = Task {}
         model.wakeWork.buttonTask = wake
         let id = UUID()
         model.wakeWork.operations[id] = { search.cancel() }
-        defer { wake.cancel(); search.cancel() }
-        model.setHostPollingSleep(system: false, sleeping: true)
+        defer {
+            wake.cancel()
+            search.cancel()
+            movedHostSearch.cancel()
+            for token in model.workspaceTokens { center.removeObserver(token) }
+        }
+        #expect(await movedHostProbe.started.waitAsync(for: .seconds(5)) == .success)
+        center.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
+        #expect(movedHostSearch.isCancelled)
+        #expect(movedHostProbe.cancelled.isSet)
+        #expect(model.hostPolling.movedHostSearch == nil)
         #expect(!wake.isCancelled)
         #expect(!search.isCancelled)
         #expect(model.hostPollingPausedForSleep)
