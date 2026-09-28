@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.9.11 - 2026-09-28
+
+Reconnecting no longer brings back a Stream button under your apps. The app
+that's streaming shows a spinner while Glimmer reconnects, and clicking it or
+pressing Escape ends the stream.
+
 ## 2026.9.10 - 2026-09-28
 
 A stream started from the menu bar hides the pointer again. Closing the menu bar
