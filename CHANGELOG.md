@@ -35,9 +35,11 @@ already changed stay as you set them.
 A new Stream menu holds Stream, Mini Player and Stop Streaming, and lists your
 PCs with ⌘1 to ⌘9 to switch between them. The launcher's toolbar holds just the
 Settings button. The Stream button in the menu bar panel matches the launcher's
-violet, and the panel's cards are titled the way macOS's own panels are. Smooth
-out Wi-Fi stutter sits next to Bandwidth in Settings › Quality, and Open in the
-menu bar only appears once Open at login is on.
+violet, and the panel's cards are titled the way macOS's own panels are. A
+stream started from the menu bar panel closes the panel as the picture comes up,
+instead of leaving it over the stream. Smooth out Wi-Fi stutter sits next to
+Bandwidth in Settings › Quality, and Open in the menu bar only appears once Open
+at login is on.
 
 Pairing errors now say to choose Pair Again… without pointing at a menu the
 screen doesn't have. With Reduce Motion on, banners and notices fade in instead
