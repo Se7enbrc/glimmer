@@ -1,9 +1,8 @@
 //
 //  MenuBarPanel.swift
 //
-//  The menu bar item's panel: card groups with a headline and a value at the
-//  right, big numbers and a one-minute chart while streaming, chevron rows
-//  for the PC, a battery bar for the controller, and a footer of round buttons.
+//  The menu bar item's panel: titled cards, big numbers and a one-minute chart while
+//  streaming, chevron rows for the PC, a controller battery bar, and a footer of round buttons.
 //
 
 import AppKit
@@ -14,6 +13,8 @@ struct MenuBarPanel: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    @State private var isShown = false
+    @State private var handingToStream = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -28,14 +29,21 @@ struct MenuBarPanel: View {
         }
         .padding(10)
         .frame(width: 300)
-        .onAppear { model.startMenuBarRefresh() }
-        .onDisappear { model.stopMenuBarRefresh() }
-        // A stream going live under the panel gets the screen; opening the panel
-        // mid-stream never fires this, so its stats stay up.
+        .onAppear { isShown = true; model.startMenuBarRefresh() }
+        .onDisappear {
+            isShown = false
+            model.stopMenuBarRefresh()
+            // Closing the panel ends menu tracking, which re-shows the pointer; re-engage
+            // the stream (the Cmd-Tab path) once the panel is gone so the cursor hides.
+            if handingToStream { handingToStream = false; model.resumeStreamWindow() }
+        }
+        // Opening the panel mid-stream never fires this, so its stats stay up.
         .onChange(of: model.streamPhase == .streaming) { _, live in
-            if live { dismiss() }
+            if live, isShown { handToStream() }
         }
     }
+
+    private func handToStream() { handingToStream = true; dismiss() }
 
     // MARK: Card chrome
 
@@ -149,9 +157,8 @@ struct MenuBarPanel: View {
                 .lineLimit(1)
             Divider()
             actionRow("Back to Stream", systemImage: "play.fill") {
-                if model.isMiniPlayer { model.toggleMiniPlayer() } else { model.resumeStreamWindow() }
-                activate()
-                dismiss()
+                if model.isMiniPlayer { model.toggleMiniPlayer() }
+                handToStream()
             }
             if !model.isMiniPlayer {
                 actionRow("Mini Player", systemImage: "pip.enter") { model.toggleMiniPlayer() }
