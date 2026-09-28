@@ -89,6 +89,21 @@ struct RtpReceiveQualityTests {
         #expect(!queue.haveOpenGap)
     }
 
+    @Test(arguments: [UInt32(2), UInt32(0)])
+    func olderFrameForwardAliasCannotCancelLaterLoss(frame: UInt32) {
+        let queue = queue()
+        receive(queue, seq: 1_000, frame: frame, at: 1_000)
+        receive(queue, seq: 2_000, frame: frame &- 1, at: 1_002_000)
+        #expect(queue.windowOutOfOrder == 0)
+        #expect(queue.pendingReorderCredit == 0)
+        #expect(queue.seqHighestSeen == 1_000)
+
+        receive(queue, seq: 1_002, frame: frame &+ 1, at: 1_002_001)
+        #expect(queue.windowLostPreFec == 1)
+        #expect(queue.applyPendingReorderCredit() == 1)
+        #expect(queue.seqHighestSeen == 1_002)
+    }
+
     @Test func duplicateHistorySurvivesMetricFlush() {
         let queue = queue()
         receive(queue, seq: 10, frame: 1, at: 1_000)
