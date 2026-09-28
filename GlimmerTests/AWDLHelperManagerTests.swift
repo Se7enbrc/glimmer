@@ -217,6 +217,52 @@ struct AWDLHelperManagerTests {
     }
 
     @Test(arguments: [false, true])
+    func permanentReleaseFailureCompletesTeardown(queueEnable: Bool) async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        let manager = harness.makeManager()
+        manager.suppressForStream()
+        #expect(await harness.tick.waitAsync(for: .seconds(10)) == .success)
+        harness.persistentReleaseFailure = true
+        let recovery = HelperGate()
+        harness.recoveryGate = recovery
+        manager.disable()
+        #expect(await recovery.entered.waitAsync(for: .seconds(10)) == .success)
+        if queueEnable { manager.enable() }
+        for _ in 0..<3 {
+            #expect(!harness.events.contains("unregister"))
+            #expect(!harness.events.contains("register"))
+            recovery.open()
+            #expect(await recovery.entered.waitAsync(for: .seconds(10)) == .success)
+        }
+        #expect(harness.events.last == "invalidate")
+        recovery.open()
+        let completed = await harness.unregistered.waitAsync(for: .seconds(10)) == .success
+        #expect(completed)
+        #expect(harness.events.filter { $0 == "release-failed" }.count == 7)
+        #expect(harness.retryDelays == [1, 2, 4, 10, 10, 10, 10].map { .seconds($0) })
+        // Let an unbounded implementation finish too, so a regression leaves no task behind.
+        if !completed {
+            harness.persistentReleaseFailure = false
+            recovery.open()
+            #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
+        }
+        if queueEnable {
+            #expect(await harness.registered.waitAsync(for: .seconds(10)) == .success)
+            #expect(manager.isEnabled)
+            #expect(harness.events.suffix(3) == ["unregister", "unregister", "register"])
+            manager.disable()
+        } else {
+            #expect(manager.state == .notRegistered)
+            #expect(!manager.isEnabled)
+            manager.enable()
+            #expect(await harness.registered.waitAsync(for: .seconds(10)) == .success)
+            #expect(manager.isEnabled)
+            manager.disable()
+        }
+    }
+
+    @Test(arguments: [false, true])
     func failedReleasesWaitForDelayedRestoration(disable: Bool) async throws {
         let harness = try HelperHarness()
         defer { harness.cleanUp() }

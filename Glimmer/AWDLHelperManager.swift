@@ -5,8 +5,8 @@ import SwiftUI
 import os.log
 
 // The root helper parks the shared AirDrop/Continuity radio to avoid Wi-Fi delivery gaps.
-// Restoration outlives cancelled registration requests so unloading the daemon
-// can never overtake its queued interface work.
+// Restoration outlives cancelled registration requests; failed XPC recovery
+// gives the daemon a watchdog grace period before registration can proceed.
 
 enum HelperConstants {
     /// The launchd plist filename in Contents/Library/LaunchDaemons/.
@@ -448,7 +448,7 @@ final class AWDLHelperManager: ObservableObject {
             await restoreAfterHeartbeat(reason: reason)
             restoring = false
             restorationTask = nil
-            if reason == "stream-end" { Diag.info("AWDL helper restoration finished (stream end)", "Stream") }
+            if reason == "stream-end" { Diag.info("AWDL helper release recovery finished (stream end)", "Stream") }
             startHeartbeatIfRequested()
         }
     }
@@ -459,13 +459,17 @@ final class AWDLHelperManager: ObservableObject {
             try? await operations.sleep(.seconds(delay))
         }
         if await operations.setDown(false, reason) { return }
-        // Disconnect gives the helper another chance to restore, but elapsed time
-        // cannot prove its queued interface work finished. Keep ownership until
-        // a release acknowledges completion, with a capped retry interval.
         await operations.invalidate()
-        repeat {
+        for _ in 0..<3 {
             try? await operations.sleep(.seconds(10))
-        } while !(await operations.setDown(false, reason))
+            if await operations.setDown(false, reason) { return }
+        }
+        // Permanent XPC failure must not block registration forever. Disconnect
+        // and allow the helper's 3-second watchdog and 8-second idle exit to run;
+        // this is a best-effort fallback, not an acknowledgement of restoration.
+        await operations.invalidate()
+        try? await operations.sleep(.seconds(10))
+        log.error("AWDL release unacknowledged after bounded recovery; continuing after watchdog grace period")
     }
 
     /// A queued next stream can end before the previous stream finishes restoring.
