@@ -6,6 +6,9 @@ Smooth out Wi-Fi stutter while streaming works again after updating Glimmer with
 Homebrew. The update could leave the setting on while the part that parks
 AirDrop's radio wasn't running, so Wi-Fi streams stuttered as they started.
 
+After your Mac wakes or a stream ends, the PC no longer shows as Asleep for a
+moment, and Glimmer stops checking on it while your displays are asleep.
+
 ## 2026.9.8 - 2026-09-25
 
 Steadier reconnects, a Cancel that also quits the game it started, lighter video
