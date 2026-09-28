@@ -6,6 +6,7 @@
 //  what a PC that replaces the selection gets.
 //
 
+import AppKit
 import Foundation
 import Testing
 @testable import Glimmer
@@ -114,9 +115,9 @@ struct HostsStoreTests {
         #expect(!AppModel.needsAppList(runningID: 7, known: [1], fetchedFor: 7))
     }
 
-    private static func host(_ id: String, address: String) -> Glimmer.Host {
+    private static func host(_ id: String, address: String, mac: String? = nil) -> Glimmer.Host {
         Glimmer.Host(id: id, name: id, customName: nil, localAddress: address, manualAddress: nil, apps: [],
-                     lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+                     lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: mac)
     }
 
     /// With the launcher closed a second miss lands up to two cycles (interval, 2 s
@@ -125,13 +126,16 @@ struct HostsStoreTests {
         let model = AppModel()
         model.selectedHost = Self.host("tower", address: "192.0.2.10")
         model.hostStatusTask?.cancel()
+        defer { model.hostPolling.movedHostSearch?.cancel() }
         let cycle = AppModel.idleHostStatusPollSeconds + 2 + 2
         model.hostLiveStatus = HostLiveStatus(hostID: "tower", state: .idle, rttMs: 3, sunshineVersion: nil,
                                               capturedAt: Date().addingTimeInterval(-2 * cycle))
         model.hostUnreachableStreak = 1
-        await model.publishUnreachable(hostID: "tower", expectedHostID: "tower")
+        _ = await model.pollHostStatusOnce(for: "tower", appListFor: nil,
+                                           probe: { _, _, _ in .unreachable }, macHasRoute: true)
         #expect(model.hostLiveStatus?.state == .idle)
-        await model.publishUnreachable(hostID: "tower", expectedHostID: "tower")
+        _ = await model.pollHostStatusOnce(for: "tower", appListFor: nil,
+                                           probe: { _, _, _ in .unreachable }, macHasRoute: true)
         #expect(model.hostLiveStatus?.state == .asleep)
     }
 
@@ -188,5 +192,248 @@ struct HostsStoreTests {
         model.wakingHostID = "den"
         model.restartHostStatusPolling()
         #expect(model.hostStatusTask != nil)
+    }
+
+    @Test func noRouteIsNotEvidenceOfSleep() {
+        #expect(!AppModel.missPublishesAsleep(streak: 1, holdsGoodStatus: false, macHasRoute: false))
+        #expect(AppModel.missPublishesAsleep(streak: 1, holdsGoodStatus: false, macHasRoute: true))
+        #expect(!AppModel.missPublishesAsleep(streak: 2, holdsGoodStatus: true, macHasRoute: true))
+        #expect(AppModel.missPublishesAsleep(streak: 3, holdsGoodStatus: true, macHasRoute: true))
+    }
+
+    @Test func aRecentStreamHoldsAnOldSampleOnlyForItsOwnPC() {
+        let now = Date()
+        let live = HostLiveStatus(hostID: "pc", state: .idle, rttMs: 3, sunshineVersion: nil,
+                                  capturedAt: now.addingTimeInterval(-300))
+        #expect(AppModel.holdsGoodStatus(live: live, provenAwake: ("pc", now.addingTimeInterval(-3)),
+                                         hostID: "pc", now: now))
+        #expect(!AppModel.holdsGoodStatus(live: live, provenAwake: ("pc", now.addingTimeInterval(-61)),
+                                          hostID: "pc", now: now))
+        #expect(!AppModel.holdsGoodStatus(live: live, provenAwake: ("other", now), hostID: "pc", now: now))
+    }
+
+    @MainActor @Test(arguments: [true, false])
+    func wakeNotificationsClearOnlyTheirOwnPause(systemWakesFirst: Bool) {
+        let model = AppModel()
+        let center = NotificationCenter()
+        model.observeHostPollingSleep(center: center)
+        defer {
+            model.hostStatusTask?.cancel()
+            for token in model.workspaceTokens { center.removeObserver(token) }
+        }
+        model.selectedHost = Self.host("pc", address: "192.0.2.10")
+        center.post(name: NSWorkspace.willSleepNotification, object: nil)
+        center.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
+        center.post(name: systemWakesFirst ? NSWorkspace.didWakeNotification : NSWorkspace.screensDidWakeNotification,
+                    object: nil)
+        #expect(model.hostPollingPausedForSleep)
+        #expect(model.hostStatusTask == nil)
+        center.post(name: systemWakesFirst ? NSWorkspace.screensDidWakeNotification : NSWorkspace.didWakeNotification,
+                    object: nil)
+        #expect(!model.hostPollingPausedForSleep)
+        #expect(model.hostStatusTask != nil)
+        #expect(model.hostPolling.settleUntil > Date())
+        #expect(model.hostPolling.provenAwake == nil)
+    }
+
+    @MainActor @Test func displaySleepLeavesWakeWorkRunning() {
+        let model = AppModel()
+        let wake = Task {}
+        let search = Task {}
+        model.wakeWork.buttonTask = wake
+        let id = UUID()
+        model.wakeWork.operations[id] = { search.cancel() }
+        defer { wake.cancel(); search.cancel() }
+        model.setHostPollingSleep(system: false, sleeping: true)
+        #expect(!wake.isCancelled)
+        #expect(!search.isCancelled)
+        #expect(model.hostPollingPausedForSleep)
+    }
+
+    @MainActor @Test func activationPreservesAndConsumesTheSettleDeadline() async {
+        let model = AppModel()
+        model.selectedHost = Self.host("pc", address: "192.0.2.10")
+        defer { model.hostStatusTask?.cancel() }
+        let firstSleep = PollerCancellationGate()
+        let activationSleep = PollerCancellationGate()
+        // Keep the deadline ahead of any suite scheduling delay; the sleeps are controlled.
+        model.hostPolling.settleUntil = Date().addingTimeInterval(60)
+        model.restartHostStatusPolling(afterStream: true, sleep: { _ in
+            _ = await firstSleep.wait()
+            try Task.checkCancellation()
+        })
+        let deadline = model.hostPolling.settleUntil
+        #expect(await firstSleep.started.waitAsync(for: .seconds(5)) == .success)
+        model.restartHostStatusPolling(sleep: { remaining in
+            #expect(remaining > 0)
+            _ = await activationSleep.wait()
+            try Task.checkCancellation()
+        })
+        #expect(firstSleep.cancelled.isSet)
+        #expect(model.hostPolling.settleUntil == deadline)
+        #expect(await activationSleep.started.waitAsync(for: .seconds(5)) == .success)
+        model.hostStatusTask?.cancel()
+        #expect(activationSleep.cancelled.isSet)
+    }
+
+    @MainActor @Test func failedConnectionsDoNotProveTheSelectedPCIsAwake() {
+        let model = AppModel()
+        model.selectedHost = Self.host("pc", address: "192.0.2.10")
+        defer { model.hostStatusTask?.cancel() }
+        model.restartHostStatusPolling(afterStream: true)
+        #expect(model.hostPolling.provenAwake == nil)
+    }
+
+    @MainActor @Test func aStreamProvesItsPCDespiteASelectionChange() {
+        let model = AppModel()
+        let streamed = Self.host("streamed", address: "192.0.2.10")
+        model.selectedHost = streamed
+        defer { model.hostStatusTask?.cancel() }
+        model.handleNativeEvent(.connectionEstablished, host: streamed)
+        model.selectedHost = Self.host("selected", address: "192.0.2.20")
+        model.restartHostStatusPolling(afterStream: true)
+        #expect(model.hostPolling.provenAwake?.hostID == streamed.id)
+        #expect(model.hostPolling.establishedHostID == nil)
+    }
+
+    @MainActor @Test func anUnreachablePollWithoutARouteDoesNothing() async {
+        let model = AppModel()
+        model.selectedHost = Self.host("pc", address: "192.0.2.10")
+        model.hostStatusTask?.cancel()
+        model.hostUnreachableStreak = 2
+        let live = HostLiveStatus(hostID: "pc", state: .idle, rttMs: 3, sunshineVersion: nil,
+                                  capturedAt: Date().addingTimeInterval(-300))
+        model.hostLiveStatus = live
+        let result = await model.pollHostStatusOnce(for: "pc", appListFor: 7,
+                                                    probe: { _, _, _ in .unreachable }, macHasRoute: false)
+        #expect(result.appListFor == 7)
+        #expect(result.noPath)
+        #expect(model.hostLiveStatus == live)
+        #expect(model.hostUnreachableStreak == 2)
+        #expect(model.hostPolling.movedHostSearch == nil)
+    }
+
+    @MainActor @Test func sleepDuringMissPublicationCannotStartANewSearch() async {
+        let model = AppModel()
+        model.selectedHost = Self.host("pc", address: "192.0.2.10")
+        model.hostStatusTask?.cancel()
+        let entered = DispatchSemaphore(value: 0)
+        let release = AsyncStream<Void>.makeStream()
+        let task = Task {
+            await model.pollHostStatusOnce(for: "pc", appListFor: nil,
+                                           probe: { _, _, _ in .unreachable }, macHasRoute: true, publishMiss: { hostID, expected in
+                await model.publishUnreachable(hostID: hostID, expectedHostID: expected)
+                entered.signal()
+                for await _ in release.stream {}
+            })
+        }
+        model.hostStatusTask = Task { _ = await task.value }
+        #expect(await entered.waitAsync(for: .seconds(5)) == .success)
+        #expect(model.hostLiveStatus?.state == .asleep)
+        model.setHostPollingSleep(system: true, sleeping: true)
+        task.cancel()
+        release.continuation.finish()
+        _ = await task.value
+        #expect(model.hostPolling.movedHostSearch == nil)
+    }
+
+    @MainActor @Test func cancellationDuringTheSavedAddressProbeCannotPersistOrReload() async throws {
+        let domain = "io.ugfugl.Glimmer.tests.cancel-address-probe"
+        let defaults = try pairedTower(domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let model = AppModel()
+        let host = Self.host("TOWER-ID", address: "192.0.2.10")
+        model.selectedHost = host
+        model.hostStatusTask?.cancel()
+        let task = Task {
+            await model.saveHealedAddress(of: host, moved: "192.0.2.77", saved: "192.0.2.10",
+                                          port: 47989, defaults: defaults) { _, _, _ in
+                withUnsafeCurrentTask { $0?.cancel() }
+                return .unreachable
+            }
+        }
+        #expect(await task.value == false)
+        #expect(defaults.string(forKey: "hosts.1.localaddress") == "192.0.2.10")
+        #expect(model.selectedHost?.id == host.id)
+    }
+
+    @MainActor @Test func systemSleepCancelsADirectWakeAfterItsPCDisappears() async {
+        let model = AppModel()
+        let host = Self.host("pc", address: "192.0.2.10", mac: "aa:bb:cc:dd:ee:ff")
+        let sent = DispatchSemaphore(value: 0)
+        let task = Task {
+            await model.sendWakeAndWait(host, waitSeconds: 90) { _, _ in
+                sent.signal()
+                return 1
+            }
+        }
+        #expect(await sent.waitAsync(for: .seconds(5)) == .success)
+        #expect(model.wakeWork.operations.count == 1)
+        let button = Task {}
+        let search = Task {}
+        model.wakeWork.buttonTask = button
+        model.hostPolling.movedHostSearch = search
+        model.wakingHostID = host.id
+        model.hosts = []
+        model.setHostPollingSleep(system: true, sleeping: true)
+        #expect(button.isCancelled)
+        #expect(search.isCancelled)
+        #expect(model.wakingHostID == nil)
+        #expect(await task.value == .sent)
+        #expect(model.wakeWork.operations.isEmpty)
+    }
+
+    @MainActor @Test func overlappingWaitsCancelEveryAddressSearchSynchronously() async {
+        let model = AppModel()
+        let host = Self.host("pc", address: "192.0.2.10", mac: "aa:bb:cc:dd:ee:ff")
+        let searches = [PollerCancellationGate(), PollerCancellationGate()]
+        let polls = [PollerCancellationGate(), PollerCancellationGate()]
+        let tasks = (0..<2).map { index in
+            Task {
+                await model.sendWakeAndWait(host, waitSeconds: 90, send: { _, _ in 1 }, waitForAnswer: { host, seconds in
+                    await model.waitForSunshine(host: host, budgetSeconds: seconds,
+                                                 searchAddress: { await searches[index].wait() },
+                                                 poll: { await polls[index].wait() })
+                })
+            }
+        }
+        for gate in searches + polls {
+            #expect(await gate.started.waitAsync(for: .seconds(5)) == .success)
+        }
+        model.setHostPollingSleep(system: true, sleeping: true)
+        for gate in searches + polls { #expect(gate.cancelled.isSet) }
+        for task in tasks { _ = await task.value }
+        #expect(model.wakeWork.operations.isEmpty)
+    }
+
+    @MainActor @Test func cancellingAWaitPropagatesImmediatelyToItsSearch() async {
+        let model = AppModel()
+        let search = PollerCancellationGate()
+        let poll = PollerCancellationGate()
+        let task = Task {
+            await model.waitForSunshine(host: Self.host("pc", address: "192.0.2.10"), budgetSeconds: 90,
+                                         searchAddress: { await search.wait() }, poll: { await poll.wait() })
+        }
+        #expect(await search.started.waitAsync(for: .seconds(5)) == .success)
+        #expect(await poll.started.waitAsync(for: .seconds(5)) == .success)
+        task.cancel()
+        #expect(search.cancelled.isSet)
+        _ = await task.value
+    }
+}
+
+private struct PollerCancellationGate: Sendable {
+    let started = DispatchSemaphore(value: 0)
+    let cancelled = ManagedAtomicFlag()
+    private let channel = AsyncStream<Void>.makeStream()
+
+    func wait() async -> Bool {
+        await withTaskCancellationHandler {
+            started.signal()
+            for await _ in channel.stream {}
+            return false
+        } onCancel: {
+            cancelled.set()
+        }
     }
 }

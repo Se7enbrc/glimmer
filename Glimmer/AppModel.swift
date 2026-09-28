@@ -427,49 +427,30 @@ final class AppModel {
     /// NotificationCenter's global table.
     @ObservationIgnored var notificationTokens: [NSObjectProtocol] = []
 
-    /// Background poller for the host readiness chip. Cancelled and
-    /// re-spawned on every lifecycle edge (host change, app activation,
-    /// stream start/end) - callers go through `restartHostStatusPolling()`
-    /// which owns the cancel+respawn dance. Internal so
-    /// HostStatusPoller.swift can drive it.
+    /// Lifecycle changes replace the chip poll through restartHostStatusPolling(),
+    /// so every loop observes the sleep pause and any outstanding settle deadline.
     @ObservationIgnored var hostStatusTask: Task<Void, Never>?
 
-    /// True between NSWorkspace's willSleep and didWake. The chip poller must
-    /// not run across a nap: a poll caught mid-exchange when the Mac goes dark
-    /// leaves a half-open TLS connection on the host, and Sunshine's single
-    /// HTTPS thread blocks on it forever (2026-09-02: 47984 refused for 14h
-    /// until a Sunshine restart). `restartHostStatusPolling` is a no-op while
-    /// this is set; didWake clears it and re-arms.
-    @ObservationIgnored var hostPollingPausedForSleep = false
+    /// Sleep must close control requests before Sunshine inherits a half-open TLS exchange.
+    @ObservationIgnored var hostPolling = HostPollingState()
+    @ObservationIgnored var wakeWork = WakeWork()
+    var hostPollingPausedForSleep: Bool { hostPolling.systemSleeping || hostPolling.displaysSleeping }
 
     /// Observer tokens registered on `NSWorkspace.shared.notificationCenter`
     /// (sleep/wake live there, not on the default center), kept apart from
     /// `notificationTokens` so each is removed from the center that owns it.
     @ObservationIgnored var workspaceTokens: [NSObjectProtocol] = []
 
-    /// Consecutive unreachable TCP probes for the currently-polled host. A
-    /// SINGLE timed-out probe degrades the chip to `.unknown` ("Checking...")
-    /// rather than asserting `.asleep`; only TWO misses in a row publish
-    /// `.asleep`. This is the guard against the post-stream false negative:
-    /// right after a session ends the app sends the host `/cancel`, and
-    /// Sunshine's HTTP front-end is briefly unresponsive in that window, so a
-    /// single probe through that blip would otherwise slander an awake host
-    /// (that was streaming <6s ago) as "asleep". Reset to 0 on any reachable
-    /// probe. Keyed implicitly to the active poll loop - `restartHostStatusPolling`
-    /// resets it when re-arming for a (possibly different) host.
+    /// Misses in this poll loop. Recent answers or a just-ended stream hold through
+    /// two misses; a third publishes Asleep. Re-arming or a reachable probe resets it.
     @ObservationIgnored var hostUnreachableStreak = 0
 
     /// Consecutive missed probes before the chip shows Asleep while it holds a fresh
     /// last good status (see `publishUnreachable`). Three ride out a Wi-Fi double blip
     /// or a momentarily busy PC without a false Asleep.
-    static let asleepProbeThreshold = 3
+    nonisolated static let asleepProbeThreshold = 3
 
-    /// Settle delay before the FIRST chip probe when the poller is re-armed
-    /// right after a stream ended. Lets the host's `/cancel`-induced HTTP blip
-    /// clear before we probe, so the post-stream poll doesn't race it and
-    /// publish a false `.asleep`. Only applied on the stream-end re-arm path
-    /// (`restartHostStatusPolling(afterStream: true)`); host-switch / activation
-    /// re-arms probe immediately as before.
+    /// Wait out Sunshine's /cancel blip and Wi-Fi reassociation after waking.
     static let postStreamPollSettle: TimeInterval = 2.0
 
     /// Poll interval between /serverinfo refreshes for the selected host's

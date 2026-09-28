@@ -1,20 +1,34 @@
-//
-//  HostStatusPoller.swift
-//
-//  The readiness chip's background poll: a TCP probe of the selected PC's HTTP
-//  port for an RTT, then /serverinfo for idle or busy. Lifecycle edges (a PC
-//  change, activation, stream start and end) funnel through restartHostStatusPolling().
-//
+// Readiness polling holds recent answers through transient network and stream teardown blips.
 
 import AppKit
 import Foundation
+
+@MainActor
+final class HostPollingState {
+    var systemSleeping = false
+    var displaysSleeping = false
+    var settleUntil = Date.distantPast
+    var provenAwake: (hostID: String, at: Date)?
+    var establishedHostID: String?
+    var movedHostSearch: Task<Void, Never>?
+}
 
 extension AppModel {
 
     /// Restart the selected PC's chip poller: one probe now, then every 10 s while any
     /// of the launcher is on screen (frontmost or not, since the chip shows either way)
     /// and every 20 s otherwise. Only the selected PC is polled.
-    func restartHostStatusPolling(afterStream: Bool = false) {
+    func restartHostStatusPolling(
+        afterStream: Bool = false,
+        sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
+    ) {
+        if afterStream {
+            extendPollSettle()
+            if let hostID = hostPolling.establishedHostID {
+                hostPolling.provenAwake = (hostID, Date())
+                hostPolling.establishedHostID = nil
+            }
+        }
         hostStatusTask?.cancel()
         hostStatusTask = nil
 
@@ -22,9 +36,7 @@ extension AppModel {
         // metric, and concurrent /serverinfo calls would tag along with the
         // pairing TLS session and confuse Sunshine's logs.
         guard !isStreaming else { return }
-        // Not across a nap either: the willSleep observer (AppModel+Lifecycle)
-        // set this so a poll can't be caught mid-exchange by the Mac going
-        // dark; didWake clears it and calls back here.
+        // Both sleep sources must clear before control traffic can resume.
         guard !hostPollingPausedForSleep else { return }
         guard let host = selectedHost else { return }
         // Pairing and Wake and Connect pause the poll so it can't dial beside their own
@@ -37,16 +49,9 @@ extension AppModel {
         hostUnreachableStreak = 0
 
         let task = Task { [weak self] in
-            // Capture the host UUID at task-spawn time. If the user switches
-            // PCs mid-poll, the new poll task will inherit the new id; this
-            // task's results land into `hostLiveStatus` only if its id still
-            // matches `selectedHost` at the moment of publication.
+            // A selection change cannot publish this PC's answer onto another PC.
             let pollHostID = host.id
-            // Right after a stream, wait out the host's `/cancel` HTTP blip before
-            // the first probe so it can't publish a false Asleep. Sleep throws on cancel.
-            if afterStream {
-                do { try await Task.sleep(for: .seconds(Self.postStreamPollSettle)) } catch { return }
-            }
+            guard await self?.waitForPollSettle(sleep: sleep) == true else { return }
             var appListFor: Int?
             var noPathRetry = Self.noPathRetrySeconds
             while !Task.isCancelled {
@@ -80,34 +85,55 @@ extension AppModel {
         return runningID != 0 && runningID != fetchedFor && !known.contains(runningID)
     }
 
-    /// A missed probe, with hysteresis so a Wi-Fi blip or the post-stream `/cancel` blip
-    /// can't flap the chip: below `asleepProbeThreshold` misses in a row it holds a fresh
-    /// last good status and publishes nothing. With none to hold, one miss shows Asleep.
-    func publishUnreachable(hostID: String, expectedHostID: String) async {
-        let (streak, hasFreshLastGood): (Int, Bool) = await MainActor.run { [weak self] in
-            guard let self else { return (0, false) }
-            self.hostUnreachableStreak += 1
-            // The bar protects a fresh last good status from a blip. With none
-            // (launch, a PC switch) it would only delay the honest Asleep and the
-            // wake controls behind it.
-            return (self.hostUnreachableStreak, HostLiveStatus.isFresh(self.hostLiveStatus, for: hostID))
+    /// Every replacement loop waits out the shared deadline, including activation restarts.
+    func waitForPollSettle(
+        sleep: (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
+    ) async -> Bool {
+        while hostPolling.settleUntil > Date() {
+            do { try await sleep(hostPolling.settleUntil.timeIntervalSinceNow) } catch { return false }
         }
-        // A cold start's false Asleep is corrected by the next answered poll,
-        // a far cheaper error than a minute of "Checking...".
-        guard streak >= (hasFreshLastGood ? Self.asleepProbeThreshold : 1) else { return }
+        return !Task.isCancelled && !hostPollingPausedForSleep
+    }
+
+    func extendPollSettle(now: Date = Date()) {
+        hostPolling.settleUntil = max(hostPolling.settleUntil, now.addingTimeInterval(Self.postStreamPollSettle))
+    }
+
+    nonisolated static func holdsGoodStatus(live: HostLiveStatus?, provenAwake: (hostID: String, at: Date)?,
+                                            hostID: String, now: Date) -> Bool {
+        if HostLiveStatus.isFresh(live, for: hostID, at: now) {
+            return true
+        }
+        guard let provenAwake, provenAwake.hostID == hostID else { return false }
+        return now.timeIntervalSince(provenAwake.at) <= HostLiveStatus.stale
+    }
+
+    nonisolated static func missPublishesAsleep(streak: Int, holdsGoodStatus: Bool, macHasRoute: Bool) -> Bool {
+        macHasRoute && streak >= (holdsGoodStatus ? asleepProbeThreshold : 1)
+    }
+
+    /// Hold a recent answer or established stream through transient misses. At cold start,
+    /// delaying Asleep without evidence would hide the wake controls behind Checking.
+    func publishUnreachable(hostID: String, expectedHostID: String) async {
+        guard !Task.isCancelled, !hostPollingPausedForSleep else { return }
+        hostUnreachableStreak += 1
+        let holds = Self.holdsGoodStatus(live: hostLiveStatus, provenAwake: hostPolling.provenAwake,
+                                         hostID: hostID, now: Date())
+        guard Self.missPublishesAsleep(streak: hostUnreachableStreak, holdsGoodStatus: holds,
+                                      macHasRoute: true) else { return }
         await publishLiveStatus(HostLiveStatus(
-            hostID: hostID,
-            state: .asleep,
-            rttMs: nil,
-            sunshineVersion: nil,
-            capturedAt: Date()
+            hostID: hostID, state: .asleep, rttMs: nil, sunshineVersion: nil, capturedAt: Date()
         ), expectedHostID: expectedHostID)
     }
 
     /// One poll: TCP-probe for an RTT, then /serverinfo, published only while `expectedHostID`
     /// is still selected so a late answer can't paint another PC. No route from this Mac is no
     /// verdict: nothing is published, the streak is kept, and `noPath` asks for a quick retry.
-    func pollHostStatusOnce(for expectedHostID: String, appListFor: Int?) async -> (appListFor: Int?, noPath: Bool) {
+    func pollHostStatusOnce(
+        for expectedHostID: String, appListFor: Int?,
+        probe: @Sendable (String, Int, Int) async -> HostReachability.Outcome = HostReachability.measureRTT,
+        macHasRoute: Bool? = nil, publishMiss: ((String, String) async -> Void)? = nil
+    ) async -> (appListFor: Int?, noPath: Bool) {
         // Snapshot the host on MainActor so we can hand its address etc.
         // off to the background work without crossing the actor boundary
         // with a non-Sendable type.
@@ -119,27 +145,26 @@ extension AppModel {
         }
         guard let snap = snapshot else { return (appListFor, false) }
 
-        // Step 1: TCP probe to host's HTTP port. This is the cheapest signal
-        // we have for "is the box answering on the network" - if this fails
-        // there's no point in trying /serverinfo (which would tack on TLS +
-        // a longer timeout). It also gives us a free RTT for the chip.
-        let probe = await HostReachability.measureRTT(
-            host: snap.address,
-            port: snap.info.httpPort,
-            timeoutMs: 2_000
-        )
-
-        if Task.isCancelled { return (appListFor, false) }
+        // TCP is the cheapest signal; an unanswered port does not warrant a TLS exchange.
+        guard !Task.isCancelled, !hostPollingPausedForSleep else { return (appListFor, false) }
+        let probe = await probe(snap.address, snap.info.httpPort, 2_000)
+        guard !Task.isCancelled, !hostPollingPausedForSleep else { return (appListFor, false) }
 
         switch probe {
         case .noPath:
             return (appListFor, true)
 
         case .unreachable:
+            guard macHasRoute ?? (hostRoute.routeClass != .unknown) else { return (appListFor, true) }
             let wasAsleep = hostLiveStatus?.hostID == snap.id && hostLiveStatus?.state == .asleep
-            await publishUnreachable(hostID: snap.id, expectedHostID: expectedHostID)
+            if let publishMiss {
+                await publishMiss(snap.id, expectedHostID)
+            } else {
+                await publishUnreachable(hostID: snap.id, expectedHostID: expectedHostID)
+            }
+            guard !Task.isCancelled, !hostPollingPausedForSleep else { return (appListFor, false) }
             if !wasAsleep, hostLiveStatus?.hostID == snap.id, hostLiveStatus?.state == .asleep,
-               let host = selectedHost {
+               let host = selectedHost, host.id == snap.id {
                 searchForMovedHost(host)
             }
             return (appListFor, false)
@@ -233,18 +258,18 @@ extension AppModel {
     /// The first Asleep for a PC may really be a DHCP move: look for it by mDNS for
     /// 10 s, once, outside the poll loop so a restart can't cut the search short.
     private func searchForMovedHost(_ host: Host) {
-        Task {
-            if await healAddress(of: host, within: 10) { restartHostStatusPolling() }
+        guard !Task.isCancelled, !hostPollingPausedForSleep else { return }
+        hostPolling.movedHostSearch?.cancel()
+        hostPolling.movedHostSearch = Task {
+            guard !Task.isCancelled, !hostPollingPausedForSleep else { return }
+            if await healAddress(of: host, within: 10), !Task.isCancelled { restartHostStatusPolling() }
         }
     }
 
-    /// Land a poll result onto `hostLiveStatus` only if the user hasn't
-    /// already swapped to a different host while we were in flight. Keeps
-    /// the readiness chip from briefly flashing PC-A's status onto PC-B's
-    /// hero card after a quick picker switch.
+    /// A late result must not paint another PC after a selection change or sleep.
     func publishLiveStatus(_ status: HostLiveStatus, expectedHostID: String) async {
         await MainActor.run { [weak self] in
-            guard let self else { return }
+            guard let self, !Task.isCancelled, !self.hostPollingPausedForSleep else { return }
             guard let host = self.selectedHost, host.id == expectedHostID else { return }
             self.hostLiveStatus = status
         }
