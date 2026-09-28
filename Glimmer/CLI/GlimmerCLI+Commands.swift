@@ -81,6 +81,9 @@ extension GlimmerCLI {
         case .answered:
             print("\(name) is awake.")
             return Exit.ok
+        case .cancelled:
+            printError("Stopped waiting for \(name).")
+            return Exit.failed
         case .noAnswer:
             printError("No answer from \(name). \(AppModel.wakeNoAnswerHint)")
             return Exit.unreachable

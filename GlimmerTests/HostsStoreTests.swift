@@ -236,6 +236,58 @@ struct HostsStoreTests {
         #expect(model.hostPolling.provenAwake == nil)
     }
 
+    @MainActor @Test func backgroundSleepPostCancelsNetworkWorkBeforeReturning() async {
+        let model = AppModel()
+        let center = SynchronousSleepNotificationCenter()
+        model.observeHostPollingSleep(center: center)
+        let gates = [PollerCancellationGate(), PollerCancellationGate(), PollerCancellationGate()]
+        let tasks = gates.map { gate in Task { _ = await gate.wait() } }
+        model.hostStatusTask = tasks[0]
+        model.hostPolling.movedHostSearch = tasks[1]
+        model.wakeWork.operations[UUID()] = { tasks[2].cancel() }
+        defer {
+            for task in tasks { task.cancel() }
+            for token in model.workspaceTokens { center.removeObserver(token) }
+        }
+        for gate in gates { #expect(await gate.started.waitAsync(for: .seconds(5)) == .success) }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                #expect(!Thread.isMainThread)
+                center.post(name: NSWorkspace.willSleepNotification, object: nil)
+                for task in tasks { #expect(task.isCancelled) }
+                for gate in gates { #expect(gate.cancelled.isSet) }
+                continuation.resume()
+            }
+        }
+        #expect(model.hostPolling.systemSleeping)
+        #expect(model.hostStatusTask == nil)
+        #expect(model.hostPolling.movedHostSearch == nil)
+    }
+
+    @MainActor @Test func systemSleepDoesNotReportADirectWakeWaitAsNoAnswer() async throws {
+        let model = AppModel()
+        let host = Self.host("pc", address: "192.0.2.10", mac: "aa:bb:cc:dd:ee:ff")
+        let poll = PollerCancellationGate()
+        let caller = Task {
+            await model.sendWakeAndWait(host, waitSeconds: 90, send: { _, _ in 1 },
+                                        waitForAnswer: { _, _ in await poll.wait() })
+        }
+        defer { caller.cancel() }
+        // The real three-burst send takes at least three seconds under suite load.
+        try #require(await poll.started.waitAsync(for: .seconds(15)) == .success)
+        model.setHostPollingSleep(system: true, sleeping: true)
+        let outcome = await caller.value
+        #expect(!caller.isCancelled)
+        #expect(poll.cancelled.isSet)
+        #expect(outcome == .cancelled)
+        #expect(throws: CancellationError.self) {
+            try WakePCIntent.checkOutcome(outcome, pc: host.displayName)
+        }
+        #expect(outcome.failureReason == nil)
+        #expect(PCIntentError(outcome, pc: host.displayName) == nil)
+        #expect(model.wakeWork.operations.isEmpty)
+    }
+
     @MainActor @Test func displaySleepCancelsMovedHostSearchAndLeavesWakeWorkRunning() async {
         let model = AppModel()
         let center = NotificationCenter()
@@ -393,11 +445,11 @@ struct HostsStoreTests {
         #expect(button.isCancelled)
         #expect(search.isCancelled)
         #expect(model.wakingHostID == nil)
-        #expect(await task.value == .sent)
+        #expect(await task.value == .cancelled)
         #expect(model.wakeWork.operations.isEmpty)
     }
 
-    @MainActor @Test func overlappingWaitsCancelEveryAddressSearchSynchronously() async {
+    @MainActor @Test func overlappingWaitsCancelEveryAddressSearchSynchronously() async throws {
         let model = AppModel()
         let host = Self.host("pc", address: "192.0.2.10", mac: "aa:bb:cc:dd:ee:ff")
         let searches = [PollerCancellationGate(), PollerCancellationGate()]
@@ -411,8 +463,9 @@ struct HostsStoreTests {
                 })
             }
         }
+        defer { for task in tasks { task.cancel() } }
         for gate in searches + polls {
-            #expect(await gate.started.waitAsync(for: .seconds(5)) == .success)
+            try #require(await gate.started.waitAsync(for: .seconds(15)) == .success)
         }
         model.setHostPollingSleep(system: true, sleeping: true)
         for gate in searches + polls { #expect(gate.cancelled.isSet) }
@@ -449,5 +502,15 @@ private struct PollerCancellationGate: Sendable {
         } onCancel: {
             cancelled.set()
         }
+    }
+}
+
+// No mutable state is added; NotificationCenter owns synchronization of observers.
+private final class SynchronousSleepNotificationCenter: NotificationCenter, @unchecked Sendable {
+    override func addObserver(forName name: NSNotification.Name?, object obj: Any?, queue: OperationQueue?,
+                              using block: @escaping @Sendable (Notification) -> Void) -> any NSObjectProtocol {
+        // A nil queue is the API guarantee that post waits for cancellation.
+        if name == NSWorkspace.willSleepNotification { #expect(queue == nil) }
+        return super.addObserver(forName: name, object: obj, queue: queue, using: block)
     }
 }

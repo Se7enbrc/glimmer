@@ -1,10 +1,4 @@
-//
-//  AppModel+Power.swift
-//
-//  Wake and Connect: Wake-on-LAN packets for a PC, a wait for Sunshine, then a
-//  launch, or a notification when another app is in front. Per-PC "Wake on LAN"
-//  gates it; the state the button reads (waking, last failure) lives here.
-//
+// Wake and Connect work and notifications share per-model cancellation state.
 
 import AppKit
 import Foundation
@@ -12,13 +6,13 @@ import UserNotifications
 
 /// How one wake went. `sent` is a send that wasn't asked to wait for Sunshine.
 enum WakeOutcome: Equatable {
-    case noMac, couldNotSend, sent, answered, noAnswer
+    case noMac, couldNotSend, sent, answered, noAnswer, cancelled
 
     var failureReason: AppModel.WakeFailureReason? {
         switch self {
         case .couldNotSend: .couldNotSend
         case .noAnswer: .noAnswer
-        case .noMac, .sent, .answered: nil
+        case .noMac, .sent, .answered, .cancelled: nil
         }
     }
 }
@@ -106,7 +100,7 @@ extension AppModel {
     func sendWakeAndWait(_ host: Host, waitSeconds: Double?,
                          send: @escaping @Sendable (String, [String?]) -> Int = WakeOnLAN.send,
                          waitForAnswer: ((Host, Double) async -> Bool)? = nil) async -> WakeOutcome {
-        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .sent }
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .cancelled }
         let operation = Task {
             await self.performWake(host, waitSeconds: waitSeconds, waitForAnswer: waitForAnswer, send: send)
         }
@@ -114,7 +108,8 @@ extension AppModel {
         wakeWork.operations[id] = { operation.cancel() }
         defer { wakeWork.operations[id] = nil }
         return await withTaskCancellationHandler {
-            await operation.value
+            let outcome = await operation.value
+            return operation.isCancelled ? .cancelled : outcome
         } onCancel: {
             operation.cancel()
         }
@@ -123,30 +118,30 @@ extension AppModel {
     private func performWake(_ host: Host, waitSeconds: Double?,
                              waitForAnswer: ((Host, Double) async -> Bool)?,
                              send: @escaping @Sendable (String, [String?]) -> Int) async -> WakeOutcome {
-        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .sent }
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .cancelled }
         guard let mac = WakeOnLAN.normalizeMac(host.macAddress) else { return .noMac }
         let addresses = [host.localAddress, host.manualAddress]
         for burst in 0..<3 {
-            guard !Task.isCancelled else { return .sent }
+            guard !Task.isCancelled else { return .cancelled }
             let sent = await Task.detached(priority: .userInitiated) { send(mac, addresses) }.value
+            guard !Task.isCancelled else { return .cancelled }
             Diag.notice("Wake on LAN: burst \(burst + 1), \(sent) packets for \(host.displayName, privacy: .private)", "Power")
             if sent == 0 {
                 if burst == 0 { return .couldNotSend }
                 break
             }
-            do { try await Task.sleep(for: .seconds(1)) } catch { return .sent }
+            do { try await Task.sleep(for: .seconds(1)) } catch { return .cancelled }
         }
         guard let waitSeconds else { return .sent }
-        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .sent }
+        guard !Task.isCancelled, !hostPolling.systemSleeping else { return .cancelled }
         let answered = if let waitForAnswer {
             await waitForAnswer(host, waitSeconds)
         } else {
             await waitForSunshine(host: host, budgetSeconds: waitSeconds)
         }
-        guard answered, !Task.isCancelled else {
-            if !Task.isCancelled {
-                Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) did not answer within \(Int(waitSeconds)) s", "Power")
-            }
+        guard !Task.isCancelled else { return .cancelled }
+        guard answered else {
+            Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) did not answer within \(Int(waitSeconds)) s", "Power")
             return .noAnswer
         }
         Diag.notice("Wake on LAN: \(host.displayName, privacy: .private) is answering", "Power")

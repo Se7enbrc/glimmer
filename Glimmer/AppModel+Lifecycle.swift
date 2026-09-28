@@ -201,8 +201,15 @@ extension AppModel {
             (NSWorkspace.screensDidWakeNotification, false, false)
         ]
         for (name, system, sleeping) in events {
-            workspaceTokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.setHostPollingSleep(system: system, sleeping: sleeping) }
+            workspaceTokens.append(center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
+                // A background post must wait for cancellation before the Mac can sleep.
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { self?.setHostPollingSleep(system: system, sleeping: sleeping) }
+                } else {
+                    DispatchQueue.main.sync {
+                        self?.setHostPollingSleep(system: system, sleeping: sleeping)
+                    }
+                }
             })
         }
     }
