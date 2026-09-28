@@ -7,7 +7,8 @@ Homebrew. The update could leave the setting on while the part that parks
 AirDrop's radio wasn't running, so Wi-Fi streams stuttered as they started.
 
 After your Mac wakes or a stream ends, the PC no longer shows as Asleep for a
-moment, and Glimmer stops checking on it while your displays are asleep.
+moment, and Glimmer stops checking on it while your displays are asleep. Video
+comes back faster after a network dropout of a few seconds.
 
 The launcher is calmer. The PC card wears your accent colour more lightly so the
 Stream button stands out from it, the name and button are sized like the rest of
