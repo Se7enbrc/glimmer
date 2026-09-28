@@ -70,42 +70,53 @@ actor HelperClient {
         connection = nil
     }
 
-    /// Returns true on success. Any XPC failure (helper not installed/approved,
-    /// or it rejected our code signature) resolves to false.
+    // A connected daemon can stop replying without invalidating XPC. Bound every
+    // wait so heartbeat cancellation and restoration retries can still finish.
+    private func reply<Value: Sendable>(
+        fallback: Value,
+        send: (@escaping @Sendable (Value) -> Void) -> Void
+    ) async -> Value {
+        await withCheckedContinuation { continuation in
+            let once = SingleResume(continuation)
+            let deadline = Task {
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                once.resume(fallback)
+            }
+            send { value in
+                deadline.cancel()
+                once.resume(value)
+            }
+        }
+    }
+
+    /// A missing reply is not proof that suppression failed; callers still owe release.
     func setAWDLDown(_ down: Bool, reason: String) async -> Bool {
-        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-            let once = SingleResume(cont)
+        await reply(fallback: false) { complete in
             let proxy = makeProxy(connect()) { [weak self] err in
                 self?.log.error("helper XPC error: \(err.localizedDescription, privacy: .private)")
-                once.resume(false)
+                complete(false)
             }
-            guard let proxy else { once.resume(false); return }
-            proxy.setAWDLDown(down, reason: reason) { ok in once.resume(ok) }
+            guard let proxy else { complete(false); return }
+            proxy.setAWDLDown(down, reason: reason, reply: complete)
         }
     }
 
     /// (isDown, since) per the live daemon, or nil if it's unreachable.
     func currentStatus() async -> (Bool, Date?)? {
-        await withCheckedContinuation { (cont: CheckedContinuation<(Bool, Date?)?, Never>) in
-            let once = SingleResume(cont)
-            let proxy = makeProxy(connect()) { _ in
-                once.resume(nil)
-            }
-            guard let proxy else { once.resume(nil); return }
-            proxy.currentStatus { isDown, since in once.resume((isDown, since)) }
+        await reply(fallback: nil) { complete in
+            let proxy = makeProxy(connect()) { _ in complete(nil) }
+            guard let proxy else { complete(nil); return }
+            proxy.currentStatus { isDown, since in complete((isDown, since)) }
         }
     }
 
     /// The daemon's whack-a-mole count (macOS re-raises of awdl0 this stream), or
     /// nil if unreachable. Read on the suppress heartbeat for the contention gauge.
     func reSuppressCount() async -> UInt64? {
-        await withCheckedContinuation { (cont: CheckedContinuation<UInt64?, Never>) in
-            let once = SingleResume(cont)
-            let proxy = makeProxy(connect()) { _ in
-                once.resume(nil)
-            }
-            guard let proxy else { once.resume(nil); return }
-            proxy.reSuppressCount { count in once.resume(count) }
+        await reply(fallback: nil) { complete in
+            let proxy = makeProxy(connect()) { _ in complete(nil) }
+            guard let proxy else { complete(nil); return }
+            proxy.reSuppressCount { count in complete(count) }
         }
     }
 }
@@ -443,7 +454,7 @@ final class AWDLHelperManager: ObservableObject {
         downRequested = false
         restoring = true
         restorationTask = Task { @MainActor in
-            // An in-flight down must finish before release, including its XPC reply.
+            // Wait for the down reply or its deadline, then release even if it timed out.
             await heartbeat.value
             await restoreAfterHeartbeat(reason: reason)
             restoring = false

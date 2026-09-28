@@ -34,6 +34,7 @@ private final class HelperHarness {
     var reachable = true
     var releaseGate: HelperGate?
     var downGate: HelperGate?
+    var client: HelperClient?
     var countGate: HelperGate?
     var registrationGate: HelperGate?
     var retryGate: HelperGate?
@@ -69,6 +70,7 @@ private final class HelperHarness {
             setDown: { down, reason in
                 self.events.append(down ? "down" : reason)
                 if down {
+                    if let client = self.client { return await client.setAWDLDown(true, reason: reason) }
                     await self.downGate?.wait()
                     return true
                 }
@@ -81,6 +83,7 @@ private final class HelperHarness {
             invalidate: { self.events.append("invalidate") },
             reachable: { self.reachable },
             count: {
+                if let client = self.client { return await client.reSuppressCount() }
                 await self.countGate?.wait()
                 return 1
             },
@@ -373,6 +376,41 @@ struct AWDLHelperManagerTests {
         #expect(harness.events == ["down", "user-disabled", "restored", "invalidate", "unregister"])
     }
 
+    @Test(arguments: [false, true])
+    func disableRestoresBeforeUnregisterWithSuspendedReply(duringCount: Bool) async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        let listener = NSXPCListener.anonymous()
+        defer { listener.invalidate() }
+        let endpoint = listener.endpoint
+        let proxy = HelperTestProxy(suspendDown: !duringCount, suspendCount: duringCount)
+        let client = HelperClient(makeConnection: { NSXPCConnection(listenerEndpoint: endpoint) },
+                                  makeProxy: { _, _ in proxy })
+        harness.client = client
+        let release = HelperGate()
+        harness.releaseGate = release
+        let manager = harness.makeManager()
+        manager.suppressForStream()
+        #expect(await proxy.stalledEntered.waitAsync(for: .seconds(10)) == .success)
+        manager.disable()
+        let restored = await release.entered.waitAsync(for: .seconds(5)) == .success
+        #expect(restored)
+        #expect(!harness.events.contains("unregister"))
+        #expect(!manager.isEnabled)
+        // Drain the old implementation on failure without hiding its blocked teardown.
+        if !restored {
+            proxy.finishDown()
+            #expect(await release.entered.waitAsync(for: .seconds(10)) == .success)
+        }
+        release.open()
+        #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
+        proxy.finishDown()
+        #expect(!manager.suppressing)
+        #expect(!harness.gauge)
+        #expect(harness.events == ["down", "user-disabled", "restored", "invalidate", "unregister"])
+        await client.invalidate()
+    }
+
     @Test func heartbeatAndUnchangedRefreshDoNotPublishButTeardownDoes() async throws {
         let harness = try HelperHarness()
         defer { harness.cleanUp() }
@@ -487,11 +525,32 @@ struct AWDLHelperManagerTests {
     }
 }
 
-private final class HelperTestProxy: NSObject, Glimmer.GlimmerHelperProtocol {
-    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping @Sendable (Bool) -> Void) { reply(true) }
+private final class HelperTestProxy: NSObject, Glimmer.GlimmerHelperProtocol, Sendable {
+    let stalledEntered = DispatchSemaphore(value: 0)
+    private let pendingDown = Mutex<(@Sendable (Bool) -> Void)?>(nil)
+    private let suspendDown: Bool
+    private let suspendCount: Bool
+
+    init(suspendDown: Bool = false, suspendCount: Bool = false) {
+        self.suspendDown = suspendDown
+        self.suspendCount = suspendCount
+    }
+
+    func finishDown() { pendingDown.withLock { let reply = $0; $0 = nil; return reply }?(true) }
+
+    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping @Sendable (Bool) -> Void) {
+        if down && suspendDown {
+            pendingDown.withLock { $0 = reply }
+            stalledEntered.signal()
+        } else {
+            reply(true)
+        }
+    }
     func currentStatus(reply: @escaping (Bool, Date?) -> Void) { reply(false, nil) }
     func ping(reply: @escaping (String) -> Void) { reply("test") }
-    func reSuppressCount(reply: @escaping (UInt64) -> Void) { reply(0) }
+    func reSuppressCount(reply: @escaping (UInt64) -> Void) {
+        if suspendCount { stalledEntered.signal() } else { reply(0) }
+    }
 }
 
 struct HelperClientTests {
