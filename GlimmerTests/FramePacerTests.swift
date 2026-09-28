@@ -250,6 +250,15 @@ struct FramePacerTests {
         return (pacer, presents)
     }
 
+    /// 30fps on a 240Hz tick holds each frame ~8 ticks by design; that must not read as starved.
+    @Test func starvationLogWaitsOutTheStreamCadence() {
+        let vsync = 1.0 / 240
+        #expect(FramePacer.starvationLogThreshold(streamInterval: 1.0 / 240, vsync: vsync) == 4)
+        #expect(FramePacer.starvationLogThreshold(streamInterval: 1.0 / 30, vsync: vsync) == 9)
+        #expect(FramePacer.starvationLogThreshold(streamInterval: .nan, vsync: vsync) == 4)
+        #expect(FramePacer.starvationLogThreshold(streamInterval: 1.0 / 30, vsync: 0) == 4)
+    }
+
     private func emptySampleBuffer() throws -> CMSampleBuffer {
         var buffer: CMSampleBuffer?
         CMSampleBufferCreate(
