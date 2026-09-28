@@ -41,6 +41,7 @@ private final class HelperHarness {
     var recoveryGate: HelperGate?
     var retryDelays: [Duration] = []
     var persistentReleaseFailure = false
+    var releaseAcknowledged: (() -> Bool)?
     let tick = DispatchSemaphore(value: 0)
     let released = DispatchSemaphore(value: 0)
     let unregistered = DispatchSemaphore(value: 0)
@@ -75,7 +76,8 @@ private final class HelperHarness {
                     return true
                 }
                 await self.releaseGate?.wait()
-                let result = self.persistentReleaseFailure ? false : self.releaseResults.removeFirst()
+                let result = self.releaseAcknowledged?()
+                    ?? (self.persistentReleaseFailure ? false : self.releaseResults.removeFirst())
                 self.events.append(result ? "restored" : "release-failed")
                 self.released.signal()
                 return result
@@ -220,48 +222,56 @@ struct AWDLHelperManagerTests {
     }
 
     @Test(arguments: [false, true])
-    func permanentReleaseFailureCompletesTeardown(queueEnable: Bool) async throws {
+    func blockedInterfaceRestorationPreventsTeardown(queueEnable: Bool) async throws {
         let harness = try HelperHarness()
         defer { harness.cleanUp() }
         let manager = harness.makeManager()
         manager.suppressForStream()
         #expect(await harness.tick.waitAsync(for: .seconds(10)) == .success)
+        let started = DispatchSemaphore(value: 0)
+        let unblock = DispatchSemaphore(value: 0)
+        let acknowledged = DispatchSemaphore(value: 0)
+        let restored = Mutex(false)
+        let suppressor = AWDLSuppressor(interfaceIsUp: { restored.withLock { $0 } }, runIfconfig: { _ in
+            started.signal()
+            unblock.wait()
+            restored.withLock { $0 = true }
+            return true
+        })
+        let service = HelperService(suppressor: suppressor)
+        let completed = Mutex(false)
+        service.setAWDLDown(false, reason: "test") { success in
+            completed.withLock { $0 = success }
+            acknowledged.signal()
+        }
+        #expect(await started.waitAsync(for: .seconds(10)) == .success)
+        harness.releaseAcknowledged = { completed.withLock { $0 } }
         harness.persistentReleaseFailure = true
         let recovery = HelperGate()
         harness.recoveryGate = recovery
         manager.disable()
         #expect(await recovery.entered.waitAsync(for: .seconds(10)) == .success)
         if queueEnable { manager.enable() }
-        for _ in 0..<3 {
+        for _ in 0..<5 {
             #expect(!harness.events.contains("unregister"))
             #expect(!harness.events.contains("register"))
+            #expect(!restored.withLock { $0 })
             recovery.open()
-            #expect(await recovery.entered.waitAsync(for: .seconds(10)) == .success)
+            if await recovery.entered.waitAsync(for: .seconds(1)) != .success { break }
         }
-        #expect(harness.events.last == "invalidate")
+        #expect(!harness.events.contains("unregister"))
+        #expect(!manager.isEnabled)
+        #expect(harness.events.filter { $0 == "release-failed" }.count >= 8)
+        unblock.signal()
+        #expect(await acknowledged.waitAsync(for: .seconds(10)) == .success)
         recovery.open()
-        let completed = await harness.unregistered.waitAsync(for: .seconds(10)) == .success
-        #expect(completed)
-        #expect(harness.events.filter { $0 == "release-failed" }.count == 7)
-        #expect(harness.retryDelays == [1, 2, 4, 10, 10, 10, 10].map { .seconds($0) })
-        // Let an unbounded implementation finish too, so a regression leaves no task behind.
-        if !completed {
-            harness.persistentReleaseFailure = false
-            recovery.open()
-            #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
-        }
+        #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
+        #expect(restored.withLock { $0 })
         if queueEnable {
             #expect(await harness.registered.waitAsync(for: .seconds(10)) == .success)
             #expect(manager.isEnabled)
-            #expect(harness.events.suffix(3) == ["unregister", "unregister", "register"])
             manager.disable()
-        } else {
-            #expect(manager.state == .notRegistered)
-            #expect(!manager.isEnabled)
-            manager.enable()
-            #expect(await harness.registered.waitAsync(for: .seconds(10)) == .success)
-            #expect(manager.isEnabled)
-            manager.disable()
+            #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
         }
     }
 
@@ -525,7 +535,7 @@ struct AWDLHelperManagerTests {
     }
 }
 
-private final class HelperTestProxy: NSObject, Glimmer.GlimmerHelperProtocol, Sendable {
+final class HelperTestProxy: NSObject, Glimmer.GlimmerHelperProtocol, Sendable {
     let stalledEntered = DispatchSemaphore(value: 0)
     private let pendingDown = Mutex<(@Sendable (Bool) -> Void)?>(nil)
     private let suspendDown: Bool
@@ -550,51 +560,5 @@ private final class HelperTestProxy: NSObject, Glimmer.GlimmerHelperProtocol, Se
     func ping(reply: @escaping (String) -> Void) { reply("test") }
     func reSuppressCount(reply: @escaping (UInt64) -> Void) {
         if suspendCount { stalledEntered.signal() } else { reply(0) }
-    }
-}
-
-struct HelperClientTests {
-    @Test func errorsRetainConnectionAndStaleInvalidationsCannotDropReplacement() async throws {
-        let identities = Mutex<[ObjectIdentifier]>([])
-        let fail = Mutex(false)
-        let invalidated = DispatchSemaphore(value: 0)
-        let listener = NSXPCListener.anonymous()
-        defer { listener.invalidate() }
-        let endpoint = listener.endpoint
-        let client = HelperClient(makeConnection: {
-            let connection = NSXPCConnection(listenerEndpoint: endpoint)
-            #expect(connection.serviceName == nil)
-            #expect(connection.endpoint === endpoint)
-            identities.withLock { $0.append(ObjectIdentifier(connection)) }
-            return connection
-        }, makeProxy: { connection, error in
-            #expect(connection.interruptionHandler == nil)
-            let original = connection.invalidationHandler
-            connection.invalidationHandler = {
-                invalidated.signal()
-                original?()
-            }
-            if fail.withLock({ $0 }) {
-                error(CancellationError())
-                // A late reply after a transport failure must not resume twice.
-            }
-            return HelperTestProxy()
-        })
-        #expect(await client.setAWDLDown(true, reason: "test"))
-        let first = try #require(identities.withLock { $0.first })
-        fail.withLock { $0 = true }
-        #expect(!(await client.setAWDLDown(false, reason: "test")))
-        #expect(await client.currentStatus() == nil)
-        #expect(await client.reSuppressCount() == nil)
-        #expect(identities.withLock { $0.count } == 1)
-        await client.drop(first)
-        #expect(await invalidated.waitAsync(for: .seconds(10)) == .success)
-        fail.withLock { $0 = false }
-        #expect(await client.reSuppressCount() == 0)
-        #expect(identities.withLock { $0.count } == 2)
-        await client.drop(first)
-        #expect(await client.reSuppressCount() == 0)
-        #expect(identities.withLock { $0.count } == 2)
-        await client.invalidate()
     }
 }

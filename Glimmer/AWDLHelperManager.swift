@@ -5,8 +5,8 @@ import SwiftUI
 import os.log
 
 // The root helper parks the shared AirDrop/Continuity radio to avoid Wi-Fi delivery gaps.
-// Restoration outlives cancelled registration requests; failed XPC recovery
-// gives the daemon a watchdog grace period before registration can proceed.
+// Restoration outlives cancelled registration requests; registration waits
+// until the daemon acknowledges release even when interface work is blocked.
 
 enum HelperConstants {
     /// The launchd plist filename in Contents/Library/LaunchDaemons/.
@@ -21,9 +21,11 @@ private final class SingleResume<T: Sendable>: @unchecked Sendable {
     private var cont: CheckedContinuation<T, Never>?
     private let lock = NSLock()
     init(_ cont: CheckedContinuation<T, Never>) { self.cont = cont }
-    func resume(_ value: T) {
+    @discardableResult
+    func resume(_ value: T) -> Bool {
         lock.lock(); let pending = cont; cont = nil; lock.unlock()
         pending?.resume(returning: value)
+        return pending != nil
     }
 }
 
@@ -71,18 +73,20 @@ actor HelperClient {
     }
 
     // A connected daemon can stop replying without invalidating XPC. Bound every
-    // wait so heartbeat cancellation and restoration retries can still finish.
+    // wait and drop that connection so missing replies cannot accumulate in XPC.
     private func reply<Value: Sendable>(
         fallback: Value,
-        send: (@escaping @Sendable (Value) -> Void) -> Void
+        send: (NSXPCConnection, @escaping @Sendable (Value) -> Void) -> Void
     ) async -> Value {
-        await withCheckedContinuation { continuation in
+        let connection = connect()
+        let identity = ObjectIdentifier(connection)
+        return await withCheckedContinuation { continuation in
             let once = SingleResume(continuation)
             let deadline = Task {
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
-                once.resume(fallback)
+                if once.resume(fallback) { drop(identity) }
             }
-            send { value in
+            send(connection) { value in
                 deadline.cancel()
                 once.resume(value)
             }
@@ -91,8 +95,8 @@ actor HelperClient {
 
     /// A missing reply is not proof that suppression failed; callers still owe release.
     func setAWDLDown(_ down: Bool, reason: String) async -> Bool {
-        await reply(fallback: false) { complete in
-            let proxy = makeProxy(connect()) { [weak self] err in
+        await reply(fallback: false) { connection, complete in
+            let proxy = makeProxy(connection) { [weak self] err in
                 self?.log.error("helper XPC error: \(err.localizedDescription, privacy: .private)")
                 complete(false)
             }
@@ -103,8 +107,8 @@ actor HelperClient {
 
     /// (isDown, since) per the live daemon, or nil if it's unreachable.
     func currentStatus() async -> (Bool, Date?)? {
-        await reply(fallback: nil) { complete in
-            let proxy = makeProxy(connect()) { _ in complete(nil) }
+        await reply(fallback: nil) { connection, complete in
+            let proxy = makeProxy(connection) { _ in complete(nil) }
             guard let proxy else { complete(nil); return }
             proxy.currentStatus { isDown, since in complete((isDown, since)) }
         }
@@ -113,8 +117,8 @@ actor HelperClient {
     /// The daemon's whack-a-mole count (macOS re-raises of awdl0 this stream), or
     /// nil if unreachable. Read on the suppress heartbeat for the contention gauge.
     func reSuppressCount() async -> UInt64? {
-        await reply(fallback: nil) { complete in
-            let proxy = makeProxy(connect()) { _ in complete(nil) }
+        await reply(fallback: nil) { connection, complete in
+            let proxy = makeProxy(connection) { _ in complete(nil) }
             guard let proxy else { complete(nil); return }
             proxy.reSuppressCount { count in complete(count) }
         }
@@ -471,16 +475,13 @@ final class AWDLHelperManager: ObservableObject {
         }
         if await operations.setDown(false, reason) { return }
         await operations.invalidate()
-        for _ in 0..<3 {
+        // A watchdog deadline cannot prove that queued interface work finished.
+        // Keep registration and new streams waiting for an acknowledged release.
+        while true {
             try? await operations.sleep(.seconds(10))
             if await operations.setDown(false, reason) { return }
+            await operations.invalidate()
         }
-        // Permanent XPC failure must not block registration forever. Disconnect
-        // and allow the helper's 3-second watchdog and 8-second idle exit to run;
-        // this is a best-effort fallback, not an acknowledgement of restoration.
-        await operations.invalidate()
-        try? await operations.sleep(.seconds(10))
-        log.error("AWDL release unacknowledged after bounded recovery; continuing after watchdog grace period")
     }
 
     /// A queued next stream can end before the previous stream finishes restoring.

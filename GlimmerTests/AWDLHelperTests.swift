@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import Testing
+@testable import Glimmer
 
 struct AWDLHelperTests {
     @MainActor @Test func enabledHelperSkipsStatusRefresh() {
@@ -134,5 +135,83 @@ struct AWDLHelperTests {
         #expect(await heartbeatFinished.waitAsync(for: .seconds(10)) == .success)
         #expect(decisions.withLock { $0 } == [expected])
         #expect(suppressor.suppressing)
+    }
+}
+
+struct HelperClientTests {
+    @Test(arguments: [false, true])
+    func repeatedMissingRepliesInvalidateConnections(duringCount: Bool) async {
+        let created = Mutex(0)
+        let invalidated = DispatchSemaphore(value: 0)
+        let listener = NSXPCListener.anonymous()
+        defer { listener.invalidate() }
+        let endpoint = listener.endpoint
+        let proxy = HelperTestProxy(suspendDown: !duringCount, suspendCount: duringCount)
+        let client = HelperClient(makeConnection: {
+            created.withLock { $0 += 1 }
+            return NSXPCConnection(listenerEndpoint: endpoint)
+        }, makeProxy: { connection, _ in
+            let original = connection.invalidationHandler
+            connection.invalidationHandler = {
+                invalidated.signal()
+                original?()
+            }
+            return proxy
+        })
+        for attempt in 1...3 {
+            if duringCount {
+                #expect(await client.reSuppressCount() == nil)
+            } else {
+                #expect(!(await client.setAWDLDown(true, reason: "test")))
+            }
+            #expect(await invalidated.waitAsync(for: .milliseconds(100)) == .success)
+            #expect(created.withLock { $0 } == attempt)
+            proxy.finishDown()
+        }
+        await client.invalidate()
+    }
+
+    @Test func errorsRetainConnectionAndStaleInvalidationsCannotDropReplacement() async throws {
+        let identities = Mutex<[ObjectIdentifier]>([])
+        let fail = Mutex(false)
+        let invalidated = DispatchSemaphore(value: 0)
+        let listener = NSXPCListener.anonymous()
+        defer { listener.invalidate() }
+        let endpoint = listener.endpoint
+        let client = HelperClient(makeConnection: {
+            let connection = NSXPCConnection(listenerEndpoint: endpoint)
+            #expect(connection.serviceName == nil)
+            #expect(connection.endpoint === endpoint)
+            identities.withLock { $0.append(ObjectIdentifier(connection)) }
+            return connection
+        }, makeProxy: { connection, error in
+            #expect(connection.interruptionHandler == nil)
+            let original = connection.invalidationHandler
+            connection.invalidationHandler = {
+                invalidated.signal()
+                original?()
+            }
+            if fail.withLock({ $0 }) {
+                error(CancellationError())
+                // A late reply after a transport failure must not resume twice.
+            }
+            return HelperTestProxy()
+        })
+        #expect(await client.setAWDLDown(true, reason: "test"))
+        let first = try #require(identities.withLock { $0.first })
+        fail.withLock { $0 = true }
+        #expect(!(await client.setAWDLDown(false, reason: "test")))
+        #expect(await client.currentStatus() == nil)
+        #expect(await client.reSuppressCount() == nil)
+        #expect(identities.withLock { $0.count } == 1)
+        await client.drop(first)
+        #expect(await invalidated.waitAsync(for: .seconds(10)) == .success)
+        fail.withLock { $0 = false }
+        #expect(await client.reSuppressCount() == 0)
+        #expect(identities.withLock { $0.count } == 2)
+        await client.drop(first)
+        #expect(await client.reSuppressCount() == 0)
+        #expect(identities.withLock { $0.count } == 2)
+        await client.invalidate()
     }
 }
