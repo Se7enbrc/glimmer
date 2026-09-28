@@ -367,35 +367,29 @@ private struct HostHero: View {
                 .glassEffect(.regular.tint(Color.accentColor.opacity(0.12)), in: .rect(cornerRadius: 26))
                 .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
 
-            // Top-leading readiness chip: reachability, activity, and the
-            // re-pair affordance for a changed host certificate.
-            ReadinessChip()
-                .padding(14)
-
-            // Centered content
-            VStack(spacing: 12) {
-                Image(systemName: "display")
-                    .font(.system(size: 28, weight: .regular))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.primary)
-                    // No pulse: while a stream is foreground the hero is
-                    // occluded - a pulse would burn CPU on unseen pixels.
-
-                Text(host?.displayName ?? "No PC selected")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                // No last-played line here: ContextFooter is its single
-                // source (both read glimmer.lastConnected, stamped at stream
-                // END - the hero copy used to duplicate it AND disagree).
-
+            // A header row and an app row, both leading, so the card is full of
+            // content edge to edge instead of a small column in a wide field.
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Image(systemName: "display")
+                        .font(.system(size: 22, weight: .regular))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.primary)
+                    Text(host?.displayName ?? "No PC selected")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 12)
+                    // Reachability, activity, and the re-pair affordance for a
+                    // changed certificate; last played stays in ContextFooter.
+                    ReadinessChip()
+                }
                 if let host, !host.apps.isEmpty {
                     AppIconsRow(apps: host.apps, host: host)
-                        .padding(.top, 6)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 28)
-            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
         }
         // `width`, not `maxWidth`: the window is sized from this column, and a
         // maxWidth has no size of its own to measure, which is why an earlier

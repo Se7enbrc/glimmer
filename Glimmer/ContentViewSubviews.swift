@@ -14,126 +14,90 @@ struct AppIconsRow: View {
     let host: Host
     @Environment(AppModel.self) private var model
 
-    /// Most tiles the row will ever show inline. Four 84pt tiles span
-    /// 4x84 + 3x10 = 366 inside the hero's 412pt content box, so the row stays
-    /// one comfortable line at the card's FIXED width.
+    /// Two columns of wide, short tiles (the Home app's shape) fill the card's
+    /// width with two apps or four; past four the last cell is the overflow menu.
     private static let maxInlineTiles = 4
+    private static let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 
-    /// Apps shown as tiles. At or under the inline cap every app gets one; past
-    /// it the last slot is spent on the overflow menu instead of a tile, so the
-    /// row is never wider than `maxInlineTiles`.
     private var inlineApps: [LibraryApp] {
-        apps.count <= Self.maxInlineTiles
-            ? apps
-            : Array(apps.prefix(Self.maxInlineTiles - 1))
+        apps.count <= Self.maxInlineTiles ? apps : Array(apps.prefix(Self.maxInlineTiles - 1))
     }
 
     private var overflowApps: [LibraryApp] {
-        apps.count <= Self.maxInlineTiles
-            ? []
-            : Array(apps.dropFirst(Self.maxInlineTiles - 1))
+        apps.count <= Self.maxInlineTiles ? [] : Array(apps.dropFirst(Self.maxInlineTiles - 1))
     }
 
     var body: some View {
-        // One glass composite for the row - see ReadinessChip's container note.
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
+        // One glass composite for the grid - see ReadinessChip's container note.
+        GlassEffectContainer(spacing: 8) {
+            LazyVGrid(columns: Self.columns, spacing: 8) {
                 ForEach(inlineApps) { app in
                     appTile(app)
                 }
-                // Overflow goes in a MENU, not an expanding grid. The launcher
-                // window is sized to its content and deliberately not resizable,
-                // so anything that grows the card has to grow the window - which
-                // is what made the expand-in-place grid untenable. A menu opens
-                // OVER the window and costs no layout at all.
+                // Overflow is a MENU, not more rows: the window is sized to this
+                // content, and a menu opens over it at no layout cost.
                 if !overflowApps.isEmpty {
                     overflowMenu
                 }
             }
         }
-        // Dim the whole row while a session exists (connecting, live,
-        // backgrounded) as the visual "parked" cue - .plain buttons don't
-        // restyle on disable, so the opacity IS the affordance.
-        //
-        // The DISABLE, though, is scoped to the launch affordances themselves
-        // (each tile, and each item inside the overflow menu) rather than
-        // blanket-applied here. A click on one would spawn a SECOND concurrent
-        // session - stream()'s re-entrancy guard is the wall, this is the honest
-        // signal. But OPENING the menu launches nothing, and disabling the whole
-        // row took that with it: mid-session you could not even look at which
-        // apps the PC has. Same distinction this file's review of #49 drew for
-        // the old expand/collapse controls; it was lost in the revert.
+        // Dim the grid while a session exists; each tile is disabled on its own so
+        // the overflow menu stays openable mid-session (looking launches nothing).
         .opacity(model.isStreaming ? 0.45 : 1.0)
         .animation(.snappy(duration: 0.3), value: model.isStreaming)
+    }
+
+    /// Icon, name, and a quiet play glyph: a click streams this app at once.
+    private func tileLabel(systemImage: String, title: String, trailing: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .medium))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 24, height: 24)
+            Text(title)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Image(systemName: trailing)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .contentShape(Rectangle())
     }
 
     private func appTile(_ app: LibraryApp) -> some View {
         Button {
             model.requestStream(app: app, on: host)
         } label: {
-            VStack(spacing: 4) {
-                // No selection ring: a click streams at once, so a ring that said
-                // "chosen" would promise a step that doesn't exist.
-                Image(systemName: app.systemImage)
-                    .font(.system(size: 18, weight: .medium))
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
-                Text(app.name)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            }
-            // A `.plain` Button only hit-tests its LABEL, so without this the
-            // padding around the icon and name was dead space. Fill the declared
-            // slot (two caption lines tall) and claim it as the content shape.
-            .frame(width: 84, height: 78, alignment: .top)
-            .contentShape(Rectangle())
+            tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill")
         }
         .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
         .disabled(model.isStreaming)
-        .help(model.isStreaming
-            ? "Finish the current stream first" : "Stream \(app.name)")
+        .help(model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)")
     }
 
-    /// The overflow dropdown: every app past the inline cap, in source order.
-    /// Reads as one more tile in the row, but opens a native menu over the
-    /// window instead of resizing anything.
     private var overflowMenu: some View {
         Menu {
             ForEach(overflowApps) { app in
                 Button {
                     model.requestStream(app: app, on: host)
                 } label: {
-                    // macOS 27 hides a plain menu-item symbol image by
-                    // default; these items name an app (not an action), so
-                    // force the icon back on rather than go text-only.
+                    // macOS 27 hides a plain menu-item symbol image by default;
+                    // these items name an app, so force the icon back on.
                     Label(app.name, systemImage: app.systemImage)
                         .labelStyle(.titleAndIcon)
                 }
-                // Each ITEM is a launch, so each item parks - the menu itself
-                // stays openable so the list is still readable mid-session.
                 .disabled(model.isStreaming)
             }
         } label: {
-            VStack(spacing: 4) {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 18, weight: .medium))
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
-                Text("\(overflowApps.count) more")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .frame(width: 84, height: 78, alignment: .top)
-            .contentShape(Rectangle())
+            tileLabel(systemImage: "ellipsis", title: "\(overflowApps.count) more", trailing: "chevron.down")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .frame(width: 84, height: 78)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
         .help(model.isStreaming
             ? "Finish the current stream first"
             : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
