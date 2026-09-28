@@ -100,12 +100,6 @@ final class RtpVideoQueue {
 
     var loggedFirstFecRecovery = false
 
-    /// Cauchy-decoder cache keyed by shape: the matrix is a pure function of (ds,ps)
-    /// that repeats across a loss burst, so memoize instead of rebuilding per frame.
-    /// Single receive thread → no lock; bounded by the few shapes a stream uses.
-    var rsDecoderCache: [ReedSolomonShape: ReedSolomon] = [:]
-    struct ReedSolomonShape: Hashable { let ds: Int; let ps: Int }
-
     // MARK: - Receive-side reorder tolerance
     //
     // On a reordering link the tail/EOF data shards of frame N frequently arrive
@@ -150,8 +144,9 @@ final class RtpVideoQueue {
     // straight from the logs without the overlay. ---
     /// RFC 3550-style smoothed inter-arrival jitter (microseconds) over the RTP
     /// receiveTimeUs of incoming datagrams. transit = receiveTime - presentation.
-    private var jitterUs = 0.0
-    private var lastTransitUs = 0.0
+    private(set) var jitterUs = 0.0
+    private var lastTimestamp: UInt32 = 0
+    private var lastReceiveUs: UInt64 = 0
     private var haveLastTransit = false
     /// Frames seen vs. frames that needed Reed-Solomon recovery in the window.
     /// `internal`: tallied by submitCompletedFrame in the reconstruct extension.
@@ -226,13 +221,14 @@ final class RtpVideoQueue {
     /// gauge each ~2s window alongside the FEC health snapshot).
     var reorderDispSessionMaxMs: Double = 0
     var reorderDispSessionMaxPackets = 0
-    /// Recent seqs for duplicate vs reorder disambiguation. A small ring of the
-    /// last seqs seen this window: a behind-highest arrival that's in the ring is a
-    /// DUPLICATE, otherwise a genuine reorder. Bounded + cleared per window so it
-    /// can't grow; sized well over the deepest realistic reorder/duplication burst.
-    var recentSeqs: Set<UInt16> = []
-    var recentSeqOrder: [UInt16] = []
+    /// Fixed history survives reporting windows so duplicates cannot cancel real loss.
+    var recentSeqOrder = [UInt16](repeating: 0, count: recentSeqCapacity)
+    var recentSeqBits = [UInt64](repeating: 0, count: 1024)
+    var recentSeqHead = 0
+    var recentSeqCount = 0
     static let recentSeqCapacity = 512
+    var seqNewestFrame: UInt32 = 0
+    var sequenceBlackoutEligible = false
     /// Cap on the parked cross-window reorder credit. A credit legitimately spans
     /// only ONE ~2s window boundary (gap at the tail of a window, late filler at the
     /// head of the next), so a small bound is ample; capping stops a stale credit
@@ -331,10 +327,6 @@ final class RtpVideoQueue {
                                seq: seq, timestamp: timestamp, ssrc: ssrc, dataOffset: dataOffset)
         if !isReplay {
             accumulateJitter(timestamp: timestamp, receiveTimeUs: receiveTimeUs)
-            // P1 NETWORK receive-quality: pre-FEC loss / out-of-order / duplicate
-            // off the RTP seq, plus the inter-packet-gap histogram off the arrival
-            // time. Replays are skipped (the original arrival was already counted).
-            accumulateReceiveQuality(seq: seq, receiveTimeUs: receiveTimeUs)
         }
 
         // If a previous datagram triggered a cross-frame reorder hold,
@@ -355,22 +347,21 @@ final class RtpVideoQueue {
 
     // MARK: - Receive-path smoothness metrics
 
-    /// RFC 3550 inter-arrival jitter over the RTP receive timeline. transit is the
-    /// difference between a packet's wall-clock receive time and its RTP
-    /// presentation time (90kHz → µs); jitter is the smoothed |Δtransit|. Also
-    /// counts packets for the periodic window line. Cheap; runs per datagram.
+    /// RFC 3550 jitter uses signed modular deltas so the 90 kHz clock can wrap
+    /// without turning a steady arrival cadence into a huge transit spike.
     private func accumulateJitter(timestamp: UInt32, receiveTimeUs: UInt64) {
         if metricsWindowStartUs == 0 { metricsWindowStartUs = receiveTimeUs }
         packetsInWindow += 1
 
-        let presentationUs = Double(UInt64(timestamp) * 1000 / 90)
-        let transitUs = Double(receiveTimeUs) - presentationUs
         if haveLastTransit {
-            let transitDelta = abs(transitUs - lastTransitUs)
+            let receiveDelta = Double(Int64(bitPattern: receiveTimeUs &- lastReceiveUs))
+            let timestampDelta = Double(Int32(bitPattern: timestamp &- lastTimestamp)) * 1000 / 90
+            let transitDelta = abs(receiveDelta - timestampDelta)
             // jitter += (|D| - jitter) / 16  (RFC 3550 6.4.1).
             jitterUs += (transitDelta - jitterUs) / 16.0
         }
-        lastTransitUs = transitUs
+        lastTimestamp = timestamp
+        lastReceiveUs = receiveTimeUs
         haveLastTransit = true
 
         maybeLogMetrics(nowUs: receiveTimeUs)
@@ -449,11 +440,8 @@ final class RtpVideoQueue {
         packetsInWindow = 0
         metricsWindowStartUs = nowUs
 
-        // Reset the P1 receive-quality window accumulators alongside the others so
-        // the rates track the current ~2s slice. seqHighestSeen / haveSeqBaseline
-        // PERSIST (the sequence space is session-long, not per-window). The gap
-        // histogram + recent-seq ring reset so each window's distribution + dup
-        // horizon is fresh; gapMaxUs resets so the published max is per-window.
+        // Sequence history survives reporting windows; only the tallies and
+        // gap histogram reset, so a duplicate stays a duplicate across a flush.
         windowLostPreFec = 0
         windowOutOfOrder = 0
         windowDuplicate = 0
@@ -461,8 +449,6 @@ final class RtpVideoQueue {
         for index in gapBuckets.indices { gapBuckets[index] = 0 }
         gapCount = 0
         gapMaxUs = 0
-        recentSeqs.removeAll(keepingCapacity: true)
-        recentSeqOrder.removeAll(keepingCapacity: true)
     }
 
     // MARK: - little-endian read

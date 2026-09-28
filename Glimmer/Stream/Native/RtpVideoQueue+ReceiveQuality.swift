@@ -1,38 +1,57 @@
-//
-//  RtpVideoQueue+ReceiveQuality.swift
-//
-//  P1 NETWORK receive-quality + inter-packet-gap accumulation for the opt-in
-//  telemetry rig, split out of RtpVideoQueue.swift to keep that type's body under
-//  the SwiftLint limit. Everything here is derived PURELY from the RTP sequence
-//  numbers + arrival times of packets WE receive (no host tool): pre-FEC loss,
-//  out-of-order, and duplicate classification, plus a log-spaced inter-arrival-gap
-//  histogram (the microburst detector). The window tallies live on RtpVideoQueue
-//  (extensions can't hold stored state) and are flushed into the always-live
-//  TelemetryCounters in maybeLogMetrics; see RtpVideoQueue.swift for those fields.
-//
-//  HOT-PATH SAFETY: per datagram on the receive thread, off the jitter path's receiveTimeUs: integer
-//  compares and a histogram bump, no lock, alloc or clock read. Only a >20ms gap pays a locked add
-//  (>100ms also hands a running exporter a `video_gap` row); nothing reads them with telemetry off.
-//
+// Receive-thread quality accounting uses fixed storage: no allocation or clock
+// read on the steady path. Only rare gaps and excessive reorder pay locked telemetry.
 
 import Foundation
 
 extension RtpVideoQueue {
+    func accumulateReceiveQuality(seq: UInt16, frameIndex: UInt32, receiveTimeUs: UInt64) {
+        observeArrival(receiveTimeUs, seq: seq)
+        guard haveSeqBaseline else {
+            seedSequence(seq, frameIndex: frameIndex)
+            return
+        }
+        let newerFrame = Self.isBefore32(seqNewestFrame, frameIndex)
+        // A stale arrival must neither consume blackout eligibility nor reset history.
+        // New frame progress also disambiguates a fresh sequence still in the ring.
+        if sequenceBlackoutEligible, newerFrame,
+           seq == seqHighestSeen || Self.isBefore16(seq, seqHighestSeen) {
+            seedSequence(seq, frameIndex: frameIndex)
+            return
+        }
+        if hasRecentSequence(seq) || seq == seqHighestSeen {
+            windowDuplicate += 1
+            return
+        }
+        if !Self.isBefore16(seq, seqHighestSeen) {
+            let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
+            if jump > 1 {
+                windowLostPreFec += jump - 1
+                gapOpenLowSeq = seqHighestSeen &+ 1
+                gapOpenHighSeq = seq &- 1
+                gapOpenAtUs = receiveTimeUs
+                haveOpenGap = true
+            }
+            seqHighestSeen = seq
+            sequenceBlackoutEligible = false
+        } else {
+            windowOutOfOrder += 1
+            // A late filler can straddle a reporting boundary. Bound parked credits
+            // so old reorders cannot suppress an arbitrarily large future loss.
+            if windowLostPreFec > 0 {
+                windowLostPreFec -= 1
+            } else if pendingReorderCredit < Self.maxPendingReorderCredit {
+                pendingReorderCredit += 1
+            }
+            recordReorderDisplacement(seq: seq, receiveTimeUs: receiveTimeUs)
+        }
+        if newerFrame { seqNewestFrame = frameIndex }
+        rememberSeq(seq)
+    }
 
-    /// P1 NETWORK per-datagram receive-quality + inter-packet-gap accumulation.
-    /// Pure integer work off the RTP seq and the arrival time the jitter path
-    /// already has - no lock, no alloc, no extra clock read - so it adds nothing
-    /// measurable to the multi-kHz receive path. Classifies each datagram:
-    ///   * FORWARD (seq advances the highest seen): the normal case. The forward
-    ///     jump beyond +1 is pre-FEC LOSS (a gap in the wire sequence space).
-    ///   * BEHIND highest, seq already in the recent ring: a true DUPLICATE.
-    ///   * BEHIND highest, not in the ring: a genuine OUT-OF-ORDER (reorder).
-    /// All wrap-aware via the existing isBefore16 helper. The gap histogram buckets
-    /// the inter-arrival µs gap for the microburst detector.
-    func accumulateReceiveQuality(seq: UInt16, receiveTimeUs: UInt64) {
-        // Inter-packet gap (µs) - the microburst detector. First packet seeds it.
+    private func observeArrival(_ receiveTimeUs: UInt64, seq: UInt16) {
         if haveLastArrival, receiveTimeUs >= lastArrivalUs {
             let gapUs = receiveTimeUs &- lastArrivalUs
+            if gapUs > 1_000_000 { sequenceBlackoutEligible = true }
             observeGap(Double(gapUs))
             if haveSeqBaseline, gapUs > Self.gapEventThresholdUs {
                 TelemetryExporter.recordLiveEvent(Self.gapEventFields(
@@ -41,69 +60,6 @@ extension RtpVideoQueue {
         }
         lastArrivalUs = receiveTimeUs
         haveLastArrival = true
-
-        guard haveSeqBaseline else {
-            // Seed the sequence space on the first datagram; none lost yet.
-            // recentSeqs tracks it so an immediate dup is caught.
-            seqHighestSeen = seq
-            haveSeqBaseline = true
-            rememberSeq(seq)
-            return
-        }
-
-        if seq == seqHighestSeen || !Self.isBefore16(seq, seqHighestSeen) {
-            // At or ahead of the highest seen → a forward-progress packet.
-            if seq == seqHighestSeen || recentSeqs.contains(seq) {
-                // Same seq as the highest (or a re-seen one at the front) → dup.
-                windowDuplicate += 1
-            } else {
-                // Forward jump: the gap beyond +1 is pre-FEC loss.
-                let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
-                if jump > 1 {
-                    windowLostPreFec += (jump - 1)
-                    // Anchor the open gap for reorder-displacement: this packet
-                    // is the overtaker; a late filler measures against its
-                    // arrival. Newest gap wins the single slot.
-                    gapOpenLowSeq = Self.u16(Int(seqHighestSeen) + 1)
-                    gapOpenHighSeq = Self.u16(Int(seq) - 1)
-                    gapOpenAtUs = receiveTimeUs
-                    haveOpenGap = true
-                }
-                seqHighestSeen = seq
-                rememberSeq(seq)
-            }
-        } else {
-            // Behind the highest seen: duplicate if we've already seen this exact
-            // seq, otherwise a genuine reorder. Either way it is NOT a new expected
-            // packet (it filled a gap we already counted as expected, or repeated
-            // one), so the loss accounting below keeps the pre-FEC loss rate an
-            // honest gap/expected ratio.
-            if recentSeqs.contains(seq) {
-                windowDuplicate += 1
-            } else {
-                windowOutOfOrder += 1
-                // A reordered packet that fills a previously-counted gap recovers
-                // one "lost" slot - uncount it so a pure reorder (no real loss)
-                // doesn't read as loss. The gap was counted as a forward jump; if it
-                // happened in THIS window we credit it straight away. But the gap and
-                // its late filler often straddle a maybeLogMetrics boundary, so when
-                // there's nothing left to deduct this window, PARK the credit and
-                // apply it against a later window's loss before it flushes (see
-                // applyPendingReorderCredit). This stops a pure reorder reading as
-                // permanent loss across the window boundary.
-                if windowLostPreFec > 0 {
-                    windowLostPreFec -= 1
-                } else if pendingReorderCredit < Self.maxPendingReorderCredit {
-                    // Cap the parked credit: it legitimately straddles ONE window
-                    // boundary, so a credit that never finds a future loss to cancel
-                    // is stale and must not be allowed to suppress a genuine loss
-                    // spike arbitrarily far in the future.
-                    pendingReorderCredit += 1
-                }
-                recordReorderDisplacement(seq: seq, receiveTimeUs: receiveTimeUs)
-                rememberSeq(seq)
-            }
-        }
     }
 
     /// A video arrival gap past this (µs) gets its own `video_gap` event, so a host
@@ -139,17 +95,35 @@ extension RtpVideoQueue {
         return max(0, windowLostPreFec)
     }
 
-    /// Add a seq to the bounded recent-seq ring (dup detection). FIFO-evicts the
-    /// oldest past the cap so the set can't grow; cleared per window in
-    /// maybeLogMetrics so it tracks only the current window's reorder/dup horizon.
+    func hasRecentSequence(_ seq: UInt16) -> Bool {
+        recentSeqBits[Int(seq) >> 6] & (UInt64(1) << (Int(seq) & 63)) != 0
+    }
+
+    /// Evict in constant time without shifting storage or hashing on every packet.
     func rememberSeq(_ seq: UInt16) {
-        if recentSeqs.insert(seq).inserted {
-            recentSeqOrder.append(seq)
-            if recentSeqOrder.count > Self.recentSeqCapacity {
-                let evicted = recentSeqOrder.removeFirst()
-                recentSeqs.remove(evicted)
-            }
+        guard !hasRecentSequence(seq) else { return }
+        if recentSeqCount == Self.recentSeqCapacity {
+            let evicted = Int(recentSeqOrder[recentSeqHead])
+            recentSeqBits[evicted >> 6] &= ~(UInt64(1) << (evicted & 63))
+        } else {
+            recentSeqCount += 1
         }
+        recentSeqOrder[recentSeqHead] = seq
+        recentSeqHead = (recentSeqHead + 1) & (Self.recentSeqCapacity - 1)
+        recentSeqBits[Int(seq) >> 6] |= UInt64(1) << (Int(seq) & 63)
+    }
+
+    private func seedSequence(_ seq: UInt16, frameIndex: UInt32) {
+        for index in recentSeqBits.indices { recentSeqBits[index] = 0 }
+        recentSeqCount = 0
+        recentSeqHead = 0
+        seqHighestSeen = seq
+        seqNewestFrame = frameIndex
+        haveSeqBaseline = true
+        haveOpenGap = false
+        pendingReorderCredit = 0
+        sequenceBlackoutEligible = false
+        rememberSeq(seq)
     }
 
     /// Bucket one inter-arrival gap (µs) into the log-spaced histogram + track the

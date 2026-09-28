@@ -285,6 +285,7 @@
 		D2B00008 /* MouseAccelerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00007 /* MouseAccelerationTests.swift */; };
 		D2B0000A /* EnvKeepalivePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B00009 /* EnvKeepalivePolicyTests.swift */; };
 		DEC0DE202609221100000001 /* AdaptiveRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221100000002 /* AdaptiveRecoveryTests.swift */; };
+		DEC0DE202609258100000001 /* RtpReceiveQualityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258100000002 /* RtpReceiveQualityTests.swift */; };
 		DEC0DE202609253900000001 /* VideoDepacketizerRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */; };
 		D2B0000C /* PresentTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000B /* PresentTripTests.swift */; };
 		DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221200000002 /* FramePacerTests.swift */; };
@@ -695,6 +696,7 @@
 		D2B00007 /* MouseAccelerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseAccelerationTests.swift; sourceTree = "<group>"; };
 		D2B00009 /* EnvKeepalivePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvKeepalivePolicyTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221100000002 /* AdaptiveRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveRecoveryTests.swift; sourceTree = "<group>"; };
+		DEC0DE202609258100000002 /* RtpReceiveQualityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RtpReceiveQualityTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDepacketizerRecoveryTests.swift; sourceTree = "<group>"; };
 		D2B0000B /* PresentTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentTripTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221200000002 /* FramePacerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerTests.swift; sourceTree = "<group>"; };
@@ -1144,6 +1146,7 @@
 				D2B00007 /* MouseAccelerationTests.swift */,
 				D2B00009 /* EnvKeepalivePolicyTests.swift */,
 				DEC0DE202609221100000002 /* AdaptiveRecoveryTests.swift */,
+				DEC0DE202609258100000002 /* RtpReceiveQualityTests.swift */,
 				DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */,
 				D2B0000B /* PresentTripTests.swift */,
 				DEC0DE202609221200000002 /* FramePacerTests.swift */,
@@ -1637,6 +1640,7 @@
 				D2B00008 /* MouseAccelerationTests.swift in Sources */,
 				D2B0000A /* EnvKeepalivePolicyTests.swift in Sources */,
 				DEC0DE202609221100000001 /* AdaptiveRecoveryTests.swift in Sources */,
+				DEC0DE202609258100000001 /* RtpReceiveQualityTests.swift in Sources */,
 				DEC0DE202609253900000001 /* VideoDepacketizerRecoveryTests.swift in Sources */,
 				D2B0000C /* PresentTripTests.swift in Sources */,
 				DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */,
