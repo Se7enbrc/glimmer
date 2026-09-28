@@ -13,6 +13,7 @@ struct MenuBarPanel: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 8) {
@@ -29,6 +30,11 @@ struct MenuBarPanel: View {
         .frame(width: 300)
         .onAppear { model.startMenuBarRefresh() }
         .onDisappear { model.stopMenuBarRefresh() }
+        // A stream going live under the panel gets the screen; opening the panel
+        // mid-stream never fires this, so its stats stay up.
+        .onChange(of: model.streamPhase == .streaming) { _, live in
+            if live { dismiss() }
+        }
     }
 
     // MARK: Card chrome
@@ -145,6 +151,7 @@ struct MenuBarPanel: View {
             actionRow("Back to Stream", systemImage: "play.fill") {
                 if model.isMiniPlayer { model.toggleMiniPlayer() } else { model.resumeStreamWindow() }
                 activate()
+                dismiss()
             }
             if !model.isMiniPlayer {
                 actionRow("Mini Player", systemImage: "pip.enter") { model.toggleMiniPlayer() }
