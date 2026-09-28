@@ -14,8 +14,8 @@ struct AppIconsRow: View {
     let host: Host
     @Environment(AppModel.self) private var model
 
-    /// Most tiles the row will ever show inline. Five 70pt tiles span
-    /// 5x70 + 4x10 = 390 inside the hero's 472pt content box, so the row stays
+    /// Most tiles the row will ever show inline. Five 84pt tiles span
+    /// 5x84 + 4x10 = 460 inside the hero's 472pt content box, so the row stays
     /// one comfortable line at the card's FIXED width.
     private static let maxInlineTiles = 5
 
@@ -72,31 +72,23 @@ struct AppIconsRow: View {
             model.requestStream(app: app, on: host)
         } label: {
             VStack(spacing: 4) {
+                // No selection ring: a click streams at once, so a ring that said
+                // "chosen" would promise a step that doesn't exist.
                 Image(systemName: app.systemImage)
                     .font(.system(size: 18, weight: .medium))
                     .symbolRenderingMode(.hierarchical)
                     .frame(width: 44, height: 44)
                     .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
-                    .overlay {
-                        // Accent ring for the hero target (resume app, else
-                        // default) so the ring always agrees with the hero
-                        // button's verb.
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(
-                                app.name == model.heroTargetAppName ? Color.accentColor : Color.clear,
-                                lineWidth: 2
-                            )
-                    }
                 Text(app.name)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
             }
             // A `.plain` Button only hit-tests its LABEL, so without this the
             // padding around the icon and name was dead space. Fill the declared
-            // 70pt slot inside the label and claim it as the content shape.
-            // (Salvaged from #49, which got this part right.)
-            .frame(width: 70, height: 70)
+            // slot (two caption lines tall) and claim it as the content shape.
+            .frame(width: 84, height: 78, alignment: .top)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -136,12 +128,12 @@ struct AppIconsRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            .frame(width: 70, height: 70)
+            .frame(width: 84, height: 78, alignment: .top)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .frame(width: 70, height: 70)
+        .frame(width: 84, height: 78)
         .help(model.isStreaming
             ? "Finish the current stream first"
             : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
@@ -154,19 +146,10 @@ struct SpecChipsRow: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        // One glass composite for the row - see ReadinessChip's container note.
-        GlassEffectContainer(spacing: 6) {
-            HStack(spacing: 6) {
-                ForEach(model.streamSpecChips, id: \.self) { chip in
-                    Text(chip)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .glassEffect(.regular, in: .capsule)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
+        // Facts, not controls: one secondary line, so nothing here looks pressable.
+        Text(model.streamSpecChips.joined(separator: " · "))
+            .font(.callout)
+            .foregroundStyle(.secondary)
     }
 }
 

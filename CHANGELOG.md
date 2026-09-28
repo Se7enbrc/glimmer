@@ -9,6 +9,19 @@ AirDrop's radio wasn't running, so Wi-Fi streams stuttered as they started.
 After your Mac wakes or a stream ends, the PC no longer shows as Asleep for a
 moment, and Glimmer stops checking on it while your displays are asleep.
 
+The launcher is calmer. The PC card wears your accent colour more lightly so the
+Stream button stands out from it, the name and button are sized like the rest of
+macOS, the specs under the card are a line of text instead of buttons, and app
+names are no longer cut off. Clicking an app streams it, so the card no longer
+draws a ring around one as if you had to choose first.
+
+Settings reads more like System Settings. The pane you read is opaque, each
+control explains itself in one line underneath, and the Quality presets are
+named for what you get: Sharpest and Balanced. "Fill the notch" is now "Keep
+picture below the camera", off by default as before. Fixed shortcuts show their
+keys as plain text, PCs get a device glyph instead of initials, and the menu bar
+panel shows Open Glimmer instead of hiding it in a menu.
+
 ## 2026.9.8 - 2026-09-25
 
 Steadier reconnects, a Cancel that also quits the game it started, lighter video

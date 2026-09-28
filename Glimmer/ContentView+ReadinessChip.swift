@@ -157,34 +157,9 @@ struct ReadinessChip: View {
                 .accessibilityLabel(accessibilitySummary(for: chip))
                 .accessibilityAddTraits(chip == .certMismatch ? .isButton : [])
                 .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
-
-                // HDR-active chip: only while a stream is confirmed PQ (HDR10)
-                // end-to-end (the static SpecChipsRow tag is just the pref).
-                // Intentionally NOT glass - a vivid status badge should pop
-                // (Apple's HIG carves badges out of the glass-everything rule).
-                if model.nativeHDRActive {
-                    Text("HDR")
-                        .font(.caption2.weight(.bold))
-                        .tracking(0.5)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.yellow, Color.orange],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: Capsule()
-                        )
-                        .overlay(Capsule().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
-                        .transition(.scale.combined(with: .opacity))
-                        .accessibilityLabel("HDR active")
-                }
             }
         }
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: presentation)
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.nativeHDRActive)
         .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.hostRoute.routeClass)
     }
 

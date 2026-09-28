@@ -92,7 +92,7 @@ struct AboutPane: View {
             }
             Section("License") {
                 Text("Glimmer is free software under the GNU General Public License v3. "
-                    + "You may run, study, share, and modify it; there is no warranty.")
+                    + "You may run, study, share, and modify it. There is no warranty.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if let url = URL(string: AboutLink.license) {
@@ -100,11 +100,11 @@ struct AboutPane: View {
                         .font(.footnote)
                 }
             }
-            Section("Projects we like") {
+            Section("Acknowledgements") {
                 Text("Built for Sunshine, the open-source game-streaming server that runs on "
                     + "your PC. Glimmer talks to it over the same RTSP-based protocol as Moonlight, "
                     + "the client that inspired it, and the transport is ported from "
-                    + "moonlight-common-c, with respect. Full credits in CREDITS.md.")
+                    + "moonlight-common-c, with respect.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if let url = URL(string: AboutLink.sunshine) {

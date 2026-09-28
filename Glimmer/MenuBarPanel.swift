@@ -340,9 +340,11 @@ struct MenuBarPanel: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Text("Glimmer")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            // Written out, the way Control Center does, not hidden in the "…" menu.
+            Button("Open Glimmer") { openLauncher() }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
             Spacer()
             Button {
                 openSettings()
@@ -354,14 +356,13 @@ struct MenuBarPanel: View {
             .buttonBorderShape(.circle)
             .help("Settings")
             Menu {
-                Button("Open Glimmer") { openLauncher() }
                 #if canImport(Sparkle)
                 Button("Check for Updates…") {
                     UpdaterController.shared.updater.checkForUpdates()
                     activate()
                 }
-                #endif
                 Divider()
+                #endif
                 Button("Quit Glimmer") { NSApp.terminate(nil) }
             } label: {
                 Image(systemName: "ellipsis")

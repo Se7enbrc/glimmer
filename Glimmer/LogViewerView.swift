@@ -26,7 +26,7 @@ struct LogViewer: View {
                     Text("All").tag(LogLevel.debug)
                     Text("Info").tag(LogLevel.info)
                     Text("Notice").tag(LogLevel.notice)
-                    Text("Warn").tag(LogLevel.warning)
+                    Text("Warning").tag(LogLevel.warning)
                     Text("Error").tag(LogLevel.error)
                 }
                 .pickerStyle(.segmented)

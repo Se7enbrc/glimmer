@@ -35,12 +35,8 @@ struct Host: Identifiable, Hashable {
         guard let last = lastConnected else { return nil }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        // Lowercased - macOS HIG sentence-case convention for
-        // relative-time strings in secondary/footnote contexts. Apple's
-        // own Time Machine and Photos do "last opened 2 hours ago", not
-        // "Last opened 2 Hours Ago". Producing it lowercase at the source
-        // keeps every call site consistent.
-        return "last played \(formatter.localizedString(for: last, relativeTo: .now))"
+        // Sentence case at the source: every caller starts a line with it.
+        return "Last played \(formatter.localizedString(for: last, relativeTo: .now))"
     }
 
     /// The app a spoken or typed name means: an exact match first, then one
@@ -121,22 +117,21 @@ enum QualityPreset: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Named by outcome, not mechanism: a player picks how it looks, and the
+    /// numbers live in the Quality pane's "Your next stream" summary.
     var displayName: String {
         switch self {
-        case .matchDisplay: return "Native Retina"
-        case .hidpi: return "HiDPI"
+        case .matchDisplay: return "Sharpest"
+        case .hidpi: return "Balanced"
         case .custom: return "Custom"
         }
     }
 
-    // Outcome-first subtitles: what each preset feels like, with the
-    // tradeoff in the parenthetical. Mechanism numbers live in the Quality
-    // pane's "Your next stream" summary.
     var subtitle: String {
         switch self {
-        case .matchDisplay: return "Every pixel of this Mac's panel (sharpest; wants a solid network)"
-        case .hidpi: return "This Mac's default Retina scale (a touch softer, far less bandwidth)"
-        case .custom: return "Pick your own resolution and refresh rate"
+        case .matchDisplay: return "Every pixel of this Mac's display. Needs a solid network."
+        case .hidpi: return "This Mac's usual Retina scale. A touch softer, far less bandwidth."
+        case .custom: return "Pick your own resolution and refresh rate."
         }
     }
 }

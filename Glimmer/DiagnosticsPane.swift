@@ -44,10 +44,8 @@ struct DiagnosticsPane: View {
             } header: {
                 Text("Controller input test")
             } footer: {
-                Text("Reads the controller directly through macOS. If a signal "
-                    + "lights up here but not in a stream, the issue is in how "
-                    + "the stream forwards it. Try this view right after a "
-                    + "⌘-Tab to confirm input is still live.")
+                Text("Reads the controller through macOS directly. If it lights up here "
+                    + "but not in a stream, the stream's forwarding is at fault.")
             }
 
             Section {
@@ -155,19 +153,14 @@ struct DiagnosticsPane: View {
     }
 }
 
-/// Read-only chord badge for non-configurable shortcuts (the bookmark chord is
-/// fixed). Mirrors the look of the interactive `HotkeyBadge` capsule without the
-/// capture machinery, so it reads as the same family of UI.
+/// Fixed shortcuts show plain key notation, so nothing that can't be recorded
+/// looks like a recorder.
 struct StaticChordBadge: View {
     let chord: HotkeyChord
 
     var body: some View {
         Text(chord.displayString)
             .font(.system(size: 13, weight: .medium, design: .monospaced))
-            .frame(minWidth: 60, minHeight: 22)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .glassEffect(.regular, in: .capsule)
-            .foregroundStyle(.primary)
+            .foregroundStyle(.secondary)
     }
 }

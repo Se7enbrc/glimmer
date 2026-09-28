@@ -284,43 +284,16 @@ private struct ConnectSurface: View {
     }
 }
 
-/// Dim contextual footer. Previously read "Ready · last played 2h ago", but
-/// "Ready" now lives on the HostHero `ReadinessChip` (alongside RTT and the
-/// live host state), so the footer just shows the last-played hint to avoid
-/// repeating the same word twice in a single glance. The host's reported
-/// version, when known, shows here as a footnote-weight breadcrumb - Apple's
-/// first-party pattern (System Settings → About) of surfacing version subtly.
+/// One quiet line under the button: when this PC was last played. "Ready" lives
+/// on the readiness chip, so the footer never repeats it.
 private struct ContextFooter: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let host = model.selectedHost
-        let parts: [String] = {
-            var segments: [String] = []
-            // `lastPlayedDescription` is already lowercase at the source
-            // (see Host.swift) - sentence-case relative-time per macOS HIG.
-            if let lp = host?.lastPlayedDescription { segments.append(lp) }
-            if let version = model.hostLiveStatus?.sunshineVersion,
-               !version.isEmpty, host != nil {
-                // Leading Major.Minor.Patch of /serverinfo's appversion -
-                // both products emit a long GFE-shaped string ("7.1.431.0").
-                let short = version.split(separator: ".").prefix(3).joined(separator: ".")
-                // Product-NEUTRAL copy, deliberately: GFE hosts report this
-                // field too, and nothing the launcher holds can prove which
-                // product sent it (Sunshine mimics GFE's appversion and
-                // GfeVersion; the one discriminator - "MJOLNIR" in <state> -
-                // is stream-side and never persisted). "Sunshine <ver>"
-                // mislabeled every GFE host, so brand neither.
-                segments.append("PC version \(short)")
-            }
-            return segments
-        }()
-        if !parts.isEmpty {
-            Text(parts.joined(separator: " · "))
+        if let lastPlayed = model.selectedHost?.lastPlayedDescription {
+            Text(lastPlayed)
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
-        } else {
-            EmptyView()
         }
     }
 }
@@ -371,11 +344,9 @@ private struct HostAndSettingsPill: View {
     }
 }
 
-/// Three-stop accent gradient shared by the hero card (ContentView) and the
-/// Stream button (ContentViewSubviews) - internal, not file-private - so the
-/// two surfaces read as a matched pair. Top-left lifts toward white,
-/// bottom-right deepens toward black; opacities stay low so the Liquid Glass
-/// material dominates and the accent reads as a tint rather than a fill.
+/// Three-stop accent gradient shared by the Stream button and, at half strength,
+/// the hero card. Top-left lifts toward white, bottom-right deepens toward black,
+/// at opacities low enough that the glass still reads as material.
 @MainActor
 var accentSurfaceGradient: LinearGradient {
     LinearGradient(
@@ -396,33 +367,13 @@ private struct HostHero: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // Background: Liquid Glass with a host-stable accent tint (hue
-            // stable per name) - multi-PC households get visual continuity
-            // per machine while the OS handles refraction / EDR composition.
-            // `.regular.tint(...)` keeps the translucent material reading
-            // correctly across light + dark mode without hardcoded RGB fights.
+            // The accent at about half the button's strength: the card and the
+            // button read as a pair, and the button still leads under any accent.
             RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .fill(accentSurfaceGradient)
-                .glassEffect(
-                    .regular.tint(Color.accentColor.opacity(0.22)),
-                    in: .rect(cornerRadius: 26)
-                )
-                .overlay {
-                    // Faint top-edge gloss - softened so the accent reads
-                    // as material rather than a neon border.
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.08),
-                                    Color.white.opacity(0.02)
-                                ],
-                                startPoint: .top, endPoint: .bottom
-                            ),
-                            lineWidth: 0.5
-                        )
-                }
-                .shadow(color: .black.opacity(0.22), radius: 22, x: 0, y: 10)
+                .opacity(0.55)
+                .glassEffect(.regular.tint(Color.accentColor.opacity(0.12)), in: .rect(cornerRadius: 26))
+                .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 6)
 
             // Top-leading readiness chip: reachability, activity, and the
             // re-pair affordance for a changed host certificate.
@@ -432,16 +383,14 @@ private struct HostHero: View {
             // Centered content
             VStack(spacing: 12) {
                 Image(systemName: "display")
-                    .font(.system(size: 42, weight: .regular))
+                    .font(.system(size: 28, weight: .regular))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white.opacity(0.92))
-                    .shadow(color: .black.opacity(0.30), radius: 10, x: 0, y: 2)
+                    .foregroundStyle(.primary)
                     // No pulse: while a stream is foreground the hero is
                     // occluded - a pulse would burn CPU on unseen pixels.
 
                 Text(host?.displayName ?? "No PC selected")
-                    .font(.system(size: 34, weight: .bold))
-                    .tracking(-0.5)
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(.primary)
                 // No last-played line here: ContextFooter is its single
                 // source (both read glimmer.lastConnected, stamped at stream
@@ -456,9 +405,6 @@ private struct HostHero: View {
             .padding(.vertical, 22)
             .padding(.horizontal, 24)
         }
-        // 248pt (was 270): content measures ~218pt, so this trims the hero's
-        // dead air ("a bit too much") while keeping honest breathing room.
-        .frame(height: 248)
         // `width`, not `maxWidth`: the window is sized from this column, and a
         // maxWidth has no size of its own to measure - which is why an earlier
         // attempt at a content-sized window stayed resizable anyway. 520 is the

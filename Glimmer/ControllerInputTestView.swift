@@ -116,11 +116,10 @@ struct ControllerInputTest: View {
         let hidPads = HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }
         Group {
             if pads.isEmpty && hidPads.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    diagnosticLine
-                    emptyState
-                }
-                .id(revision)
+                // Counters only mean something once a pad is here; until then the
+                // section is one line, and the logs below get the room.
+                emptyState
+                    .id(revision)
             } else {
                 TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
                     VStack(alignment: .leading, spacing: 12) {

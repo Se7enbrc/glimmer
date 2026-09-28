@@ -162,7 +162,9 @@ struct GlimmerApp: App {
         Settings {
             SettingsRoot()
                 .environment(model)
-                .frame(minWidth: 720, minHeight: 480)
+                // Taller than wide, like System Settings: the panes are lists, and
+                // Diagnostics needs the height for its log.
+                .frame(minWidth: 680, minHeight: 540)
                 // Settings reads a notch lighter than the main window so
                 // the sidebar / content materials layer cleanly on top.
                 .containerBackground(.thinMaterial, for: .window)

@@ -125,12 +125,8 @@ struct SettingsRoot: View {
                 case .about: AboutPane()
                 }
             }
-            // Hide the detail pane's scroll/form opaque background so the
-            // Settings window's `.thinMaterial` chrome shows through. On
-            // macOS 26 grouped Forms auto-upgrade their Section backgrounds
-            // to the Tahoe inset-rounded glass material once nothing is
-            // painting over the container.
-            .scrollContentBackground(.hidden)
+            // The pane you read keeps its own opaque background, as System
+            // Settings does; only the sidebar shows the window's material.
             .navigationTitle(selection.title)
         }
         .navigationSplitViewStyle(.balanced)

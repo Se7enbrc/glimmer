@@ -210,7 +210,7 @@ struct StreamButton: View {
                         .contentTransition(.opacity)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 46)
+            .frame(maxWidth: .infinity)
         }
         // Custom style = the hero's accent gradient + glass + soft rim.
         // `.glassProminent` was too saturated; `.glass` near-neutral.
@@ -254,15 +254,14 @@ struct StreamButton: View {
     private var guidance: (help: String, hint: String) {
         switch role {
         case .noPC: ("Pair a PC first to start streaming", "Pair a PC first to start streaming")
-        case .connect: ("Right-click to choose an app", "Right-click to choose an app")
+        case .connect: ("Starts the stream", "Starts the stream")
         case .connecting: ("Cancel the connection attempt", "Cancels the connection attempt")
         case .reconnecting: ("End the stream", "Ends the stream")
         case .liveBackgrounded: ("Show the stream window", "Shows the stream window")
         case .pairAgain: ("Pair again to trust this PC's new certificate", "Pairs again to trust this PC's new certificate")
         case .wake where wakeFailure == .noAnswer: (Self.wakeLimits, Self.wakeLimits)
         case .wake:
-            ("Wake this PC, then connect. Right-click to choose an app.",
-             "Wakes this PC, then connects. Right-click to choose an app.")
+            ("Wake this PC, then connect", "Wakes this PC, then connects")
         case .waking: ("Stop waiting for this PC to wake up", "Stops waiting for this PC to wake up")
         }
     }
