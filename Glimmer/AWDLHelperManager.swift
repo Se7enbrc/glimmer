@@ -4,28 +4,11 @@ import ServiceManagement
 import SwiftUI
 import os.log
 
-// App-side integration for the privileged AWDL network helper (helper/, a root
-// LaunchDaemon). The daemon parks awdl0 — the AirDrop/Continuity radio — while
-// streaming, which kills the multi-second Wi-Fi delivery gaps AWDL contention
-// causes on a single-radio Mac. This file owns: registering the daemon
-// (SMAppService.daemon), the XPC client that drives it, and the observable
-// state the UI binds to.
-
-// MARK: - XPC interface (app-side mirror of helper/Protocol.swift)
-
-// Deliberately a SEPARATE declaration from the daemon's copy so the daemon stays
-// a standalone swiftc build with zero app dependencies. The two MUST stay in
-// sync — same selectors, same signatures.
-@objc protocol GlimmerHelperProtocol {
-    func setAWDLDown(_ down: Bool, reason: String, reply: @escaping @Sendable (Bool) -> Void)
-    func currentStatus(reply: @escaping (Bool, Date?) -> Void)
-    func ping(reply: @escaping (String) -> Void)
-    func reSuppressCount(reply: @escaping (UInt64) -> Void)
-}
+// The root helper parks the shared AirDrop/Continuity radio to avoid Wi-Fi delivery gaps.
+// Restoration outlives cancelled registration requests so unloading the daemon
+// can never overtake its queued interface work.
 
 enum HelperConstants {
-    /// The daemon's Mach service (matches helper/Protocol.swift + the launchd plist).
-    static let machServiceName = "io.ugfugl.glimmer.helper"
     /// The launchd plist filename in Contents/Library/LaunchDaemons/.
     static let daemonPlistName = "io.ugfugl.glimmer.helper.plist"
 }
@@ -33,7 +16,7 @@ enum HelperConstants {
 // MARK: - Single-resume continuation guard
 
 /// An XPC call can complete via its reply OR via the connection's error handler.
-/// This resumes the continuation exactly once across both paths.
+/// The lock protects the continuation and allows exactly one resume.
 private final class SingleResume<T: Sendable>: @unchecked Sendable {
     private var cont: CheckedContinuation<T, Never>?
     private let lock = NSLock()
@@ -46,24 +29,41 @@ private final class SingleResume<T: Sendable>: @unchecked Sendable {
 
 // MARK: - XPC client
 
-/// Thin async client to the privileged helper. Lazily (re)connects; tears the
-/// connection down on any interruption/invalidation so the next call reconnects.
+/// Keeps interrupted connections alive so launchd can relaunch the idle daemon.
 actor HelperClient {
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "AWDLHelper")
     private var connection: NSXPCConnection?
+    private let makeConnection: @Sendable () -> NSXPCConnection
+    private let makeProxy: @Sendable (NSXPCConnection, @escaping @Sendable (Error) -> Void) -> GlimmerHelperProtocol?
+
+    init(
+        makeConnection: @escaping @Sendable () -> NSXPCConnection = {
+            NSXPCConnection(machServiceName: glimmerHelperMachServiceName, options: .privileged)
+        },
+        makeProxy: @escaping @Sendable (NSXPCConnection, @escaping @Sendable (Error) -> Void) -> GlimmerHelperProtocol? = {
+            $0.remoteObjectProxyWithErrorHandler($1) as? GlimmerHelperProtocol
+        }
+    ) {
+        self.makeConnection = makeConnection
+        self.makeProxy = makeProxy
+    }
 
     private func connect() -> NSXPCConnection {
         if let existing = connection { return existing }
-        let conn = NSXPCConnection(machServiceName: HelperConstants.machServiceName, options: .privileged)
+        let conn = makeConnection()
         conn.remoteObjectInterface = NSXPCInterface(with: GlimmerHelperProtocol.self)
-        conn.invalidationHandler = { [weak self] in Task { await self?.drop() } }
-        conn.interruptionHandler = { [weak self] in Task { await self?.drop() } }
+        let identity = ObjectIdentifier(conn)
+        conn.invalidationHandler = { [weak self] in Task { await self?.drop(identity) } }
         conn.resume()
         connection = conn
         return conn
     }
 
-    private func drop() { connection = nil }
+    func drop(_ identity: ObjectIdentifier) {
+        guard let current = connection, ObjectIdentifier(current) == identity else { return }
+        connection = nil
+        current.invalidate()
+    }
 
     func invalidate() {
         connection?.invalidate()
@@ -75,11 +75,10 @@ actor HelperClient {
     func setAWDLDown(_ down: Bool, reason: String) async -> Bool {
         await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
             let once = SingleResume(cont)
-            let proxy = connect().remoteObjectProxyWithErrorHandler { [weak self] err in
-                self?.log.error("helper XPC error: \(err.localizedDescription)")
-                Task { await self?.drop() }
+            let proxy = makeProxy(connect()) { [weak self] err in
+                self?.log.error("helper XPC error: \(err.localizedDescription, privacy: .private)")
                 once.resume(false)
-            } as? GlimmerHelperProtocol
+            }
             guard let proxy else { once.resume(false); return }
             proxy.setAWDLDown(down, reason: reason) { ok in once.resume(ok) }
         }
@@ -89,10 +88,9 @@ actor HelperClient {
     func currentStatus() async -> (Bool, Date?)? {
         await withCheckedContinuation { (cont: CheckedContinuation<(Bool, Date?)?, Never>) in
             let once = SingleResume(cont)
-            let proxy = connect().remoteObjectProxyWithErrorHandler { [weak self] _ in
-                Task { await self?.drop() }
+            let proxy = makeProxy(connect()) { _ in
                 once.resume(nil)
-            } as? GlimmerHelperProtocol
+            }
             guard let proxy else { once.resume(nil); return }
             proxy.currentStatus { isDown, since in once.resume((isDown, since)) }
         }
@@ -103,10 +101,9 @@ actor HelperClient {
     func reSuppressCount() async -> UInt64? {
         await withCheckedContinuation { (cont: CheckedContinuation<UInt64?, Never>) in
             let once = SingleResume(cont)
-            let proxy = connect().remoteObjectProxyWithErrorHandler { [weak self] _ in
-                Task { await self?.drop() }
+            let proxy = makeProxy(connect()) { _ in
                 once.resume(nil)
-            } as? GlimmerHelperProtocol
+            }
             guard let proxy else { once.resume(nil); return }
             proxy.reSuppressCount { count in once.resume(count) }
         }

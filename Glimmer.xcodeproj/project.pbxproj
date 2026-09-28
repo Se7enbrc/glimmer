@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
+		DEC0DE202609258300000001 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000002 /* Protocol.swift */; };
 		DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000002 /* AWDLHelperTests.swift */; };
 		DEC0DE202609258000000001 /* TestConcurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258000000002 /* TestConcurrency.swift */; };
 		DEC0DE202609253700000003 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000004 /* Protocol.swift */; };
@@ -400,6 +402,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
+		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000002 /* AWDLHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258000000002 /* TestConcurrency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestConcurrency.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000004 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
@@ -1099,6 +1103,7 @@
 				A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */,
 				71A5B2E11628E68BFAF05421 /* AppIcon.icon */,
 				2C2C61CA646A8599B4EC06C5 /* AWDLHelperManager.swift */,
+				DEC0DE202609258300000002 /* Protocol.swift */,
 				DEC0DE202609256700000002 /* AWDLStreamLease.swift */,
 				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
 				DEC0DE202609220100000001 /* GlimmerMain.swift */,
@@ -1129,6 +1134,7 @@
 			isa = PBXGroup;
 			children = (
 				DEC0DE202609253700000002 /* AWDLHelperTests.swift */,
+				DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */,
 				DEC0DE202609258000000002 /* TestConcurrency.swift */,
 				DEC0DE202609256700000004 /* AWDLStreamLease.swift */,
 				DEC0DE202609253700000004 /* Protocol.swift */,
@@ -1603,6 +1609,7 @@
 				026FD8A0211FCD7B527606B0 /* StatsOverlaySettings.swift in Sources */,
 				FB153DF267467B06C6BE3467 /* MacSystemStats.swift in Sources */,
 				109EA4B557EB9EFC0400C751 /* AWDLHelperManager.swift in Sources */,
+				DEC0DE202609258300000001 /* Protocol.swift in Sources */,
 				DEC0DE202609256700000001 /* AWDLStreamLease.swift in Sources */,
 				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
 				DEC0DE202609220100000002 /* GlimmerMain.swift in Sources */,
@@ -1623,6 +1630,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */,
+				DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */,
 				DEC0DE202609258000000001 /* TestConcurrency.swift in Sources */,
 				DEC0DE202609256700000005 /* AWDLStreamLease.swift in Sources */,
 				DEC0DE202609253700000003 /* Protocol.swift in Sources */,
