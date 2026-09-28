@@ -1,0 +1,413 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-28T16:47:04Z",
+  "title": "Design System: Glimmer",
+  "extensions": {
+    "colorMeta": {
+      "eclipse-violet": {
+        "role": "primary",
+        "displayName": "Eclipse Violet",
+        "canonical": "oklch(41.7% 0.203 308.0)",
+        "source": "AccentColor, light appearance",
+        "tonalRamp": [
+          "#140023",
+          "#360054",
+          "#5C008A",
+          "#7D2BB3",
+          "#A254DB",
+          "#C478FF",
+          "#E0AEFF",
+          "#FDE1FF"
+        ]
+      },
+      "eclipse-violet-night": {
+        "role": "primary",
+        "displayName": "Eclipse Violet, night",
+        "canonical": "oklch(59.5% 0.227 310.3)",
+        "source": "AccentColor, dark appearance",
+        "tonalRamp": [
+          "#160025",
+          "#3A0058",
+          "#620090",
+          "#8418B9",
+          "#AA49E2",
+          "#CD6EFF",
+          "#E7A9FF",
+          "#FFDFFF"
+        ]
+      },
+      "ready-green": {
+        "role": "status",
+        "displayName": "Ready Green",
+        "canonical": "oklch(74.1% 0.222 144.7)",
+        "source": "NSColor.systemGreen; #32D74B in dark",
+        "tonalRamp": [
+          "#001300",
+          "#003300",
+          "#005700",
+          "#007900",
+          "#009F00",
+          "#14C236",
+          "#84E187",
+          "#CCFECC"
+        ]
+      },
+      "caution-orange": {
+        "role": "status",
+        "displayName": "Caution Orange",
+        "canonical": "oklch(76.5% 0.175 62.6)",
+        "source": "NSColor.systemOrange; #FF9F0A in dark",
+        "tonalRamp": [
+          "#1D0200",
+          "#480C00",
+          "#771A00",
+          "#9E3B00",
+          "#C66100",
+          "#EB8400",
+          "#FFB572",
+          "#FFE5C1"
+        ]
+      },
+      "fault-red": {
+        "role": "status",
+        "displayName": "Fault Red",
+        "canonical": "oklch(65.4% 0.232 28.7)",
+        "source": "NSColor.systemRed; #FF453A in dark",
+        "tonalRamp": [
+          "#260000",
+          "#590000",
+          "#920000",
+          "#BF0000",
+          "#EB201B",
+          "#FF5344",
+          "#FF9C8B",
+          "#FFD9CD"
+        ]
+      },
+      "default-yellow": {
+        "role": "status",
+        "displayName": "Default Yellow",
+        "canonical": "oklch(86.5% 0.177 90.4)",
+        "source": "NSColor.systemYellow; #FFD60A in dark",
+        "tonalRamp": [
+          "#160800",
+          "#391D00",
+          "#613500",
+          "#835300",
+          "#A87800",
+          "#CB9A00",
+          "#E5C464",
+          "#FFEDBB"
+        ]
+      },
+      "label": {
+        "role": "neutral",
+        "displayName": "Label",
+        "canonical": "NSColor.labelColor",
+        "source": "NSColor.labelColor: black 85%, white 85% in dark",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#242424",
+          "#404040",
+          "#5D5D5D",
+          "#808080",
+          "#A1A1A1",
+          "#C7C7C7",
+          "#EEEEEE"
+        ]
+      },
+      "secondary-label": {
+        "role": "neutral",
+        "displayName": "Secondary Label",
+        "canonical": "NSColor.secondaryLabelColor",
+        "source": "NSColor.secondaryLabelColor: black 50%, white 55% in dark",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#242424",
+          "#404040",
+          "#5D5D5D",
+          "#808080",
+          "#A1A1A1",
+          "#C7C7C7",
+          "#EEEEEE"
+        ]
+      },
+      "tertiary-label": {
+        "role": "neutral",
+        "displayName": "Tertiary Label",
+        "canonical": "NSColor.tertiaryLabelColor",
+        "source": "NSColor.tertiaryLabelColor: black 25%, white 25% in dark",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#242424",
+          "#404040",
+          "#5D5D5D",
+          "#808080",
+          "#A1A1A1",
+          "#C7C7C7",
+          "#EEEEEE"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The empty state headline only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "PC name on the launcher card and the Stream button label."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "The empty state supporting line (title3)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Settings rows, menus and form labels (system default)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "App tile names in callout medium; the spec line in callout regular."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Explanations under toggles, the readiness chip, Last played."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-lift",
+        "value": "0 6px 16px rgba(0,0,0,0.18)",
+        "purpose": "The launcher's PC card."
+      },
+      {
+        "name": "button-lift",
+        "value": "0 4px 12px rgba(0,0,0,0.18)",
+        "purpose": "The primary capsule button."
+      },
+      {
+        "name": "icon-lift",
+        "value": "0 4px 10px rgba(0,0,0,0.20)",
+        "purpose": "The app icon on the About pane."
+      },
+      {
+        "name": "toast-float",
+        "value": "0 4px 8px rgba(0,0,0,0.12)",
+        "purpose": "The Stream ended toast."
+      }
+    ],
+    "materials": [
+      {
+        "name": "window-regular",
+        "value": ".regularMaterial",
+        "purpose": "The launcher window background."
+      },
+      {
+        "name": "window-thin",
+        "value": ".thinMaterial",
+        "purpose": "The Settings window, sheets and the toast."
+      },
+      {
+        "name": "glass-interactive",
+        "value": ".glassEffect(.regular.interactive())",
+        "purpose": "App tiles and the hotkey recorder."
+      },
+      {
+        "name": "glass-accent-half",
+        "value": ".glassEffect(.regular.tint(accent 0.12))",
+        "purpose": "The PC card, over the accent gradient at 55%."
+      },
+      {
+        "name": "glass-accent-full",
+        "value": ".glassEffect(.regular.tint(accent 0.25))",
+        "purpose": "The primary capsule button."
+      },
+      {
+        "name": "glass-plain",
+        "value": ".glassEffect(.regular)",
+        "purpose": "The readiness chip, PC tiles and pair sheet panels."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-snappy",
+        "value": ".snappy(duration: 0.3, extraBounce: 0.1)",
+        "purpose": "State changes, the toast, the failure banner, dimming mid-stream."
+      },
+      {
+        "name": "connect-grow",
+        "value": ".snappy(duration: 0.35, extraBounce: 0.1)",
+        "purpose": "The PC card growing to 104% while connecting."
+      },
+      {
+        "name": "press",
+        "value": ".snappy(duration: 0.15), scale 0.985",
+        "purpose": "The primary capsule pressed."
+      },
+      {
+        "name": "reduce-motion",
+        "value": "accessibilityReduceMotion",
+        "purpose": "Turns off every pulse, bounce and scale-up."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "launcher-min",
+        "value": "580px"
+      },
+      {
+        "name": "settings-min",
+        "value": "680px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Stream Button",
+      "kind": "button",
+      "refersTo": "stream-button",
+      "description": "The one full-strength violet on a screen: the primary capsule that starts the stream and answers Return.",
+      "html": "<button class=\"ds-stream-btn\"><svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\"><path d=\"M4 2.5v11l9-5.5z\" fill=\"currentColor\"/></svg><span>Stream</span></button>",
+      "css": ".ds-stream-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 380px; max-width: 100%; min-height: 46px; padding: 12px 22px; border: 0.5px solid rgba(255,255,255,0.10); border-radius: 9999px; background: linear-gradient(to bottom right, rgba(125,44,170,0.55) 0%, rgba(107,15,158,0.38) 55%, rgba(80,11,119,0.45) 100%), rgba(107,15,158,0.25); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); box-shadow: 0 4px 12px rgba(0,0,0,0.18); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: 17px; font-weight: 600; color: rgba(0,0,0,0.85); transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.3, 1.1); } .ds-stream-btn svg { width: 16px; height: 16px; } .ds-stream-btn:hover { filter: brightness(1.04); } .ds-stream-btn:active { transform: scale(0.985); } .ds-stream-btn:focus-visible { outline: 3px solid rgba(107,15,158,0.5); outline-offset: 3px; } .ds-stream-btn:disabled { opacity: 0.55; }"
+    },
+    {
+      "name": "PC Card",
+      "kind": "card",
+      "refersTo": "hero-card",
+      "description": "The launcher card: violet at half strength under glass, a header row with the readiness chip, and a two-column grid of app tiles.",
+      "html": "<section class=\"ds-card\"><div class=\"ds-card-glow\"></div><header class=\"ds-card-head\"><span class=\"ds-card-glyph\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M9 20h6M12 16v4\"/></svg></span><h2 class=\"ds-card-name\">Den PC</h2><span class=\"ds-chip\" role=\"status\"><span class=\"ds-chip-dot\"></span>Ready · 12 ms<span class=\"ds-chip-route\"><svg viewBox=\"0 0 16 16\" width=\"9\" height=\"9\" aria-hidden=\"true\"><path d=\"M9 1 3 9h4l-1 6 6-8H8z\" fill=\"currentColor\"/></svg></span></span></header><div class=\"ds-card-grid\"><button class=\"ds-tile\"><span class=\"ds-tile-icon\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M9 20h6M12 16v4\"/></svg></span><span class=\"ds-tile-name\">Desktop</span><span class=\"ds-tile-play\"><svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\"><path d=\"M4 2.5v11l9-5.5z\" fill=\"currentColor\"/></svg></span></button><button class=\"ds-tile\"><span class=\"ds-tile-icon\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M7 8h10a4 4 0 0 1 3.9 4.9l-.9 3.6a2 2 0 0 1-3.4.9L14 15h-4l-2.6 2.4a2 2 0 0 1-3.4-.9l-.9-3.6A4 4 0 0 1 7 8z\"/><path d=\"M8 10.5v3M6.5 12h3\"/></svg></span><span class=\"ds-tile-name\">Steam Big Picture</span><span class=\"ds-tile-play\"><svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\"><path d=\"M4 2.5v11l9-5.5z\" fill=\"currentColor\"/></svg></span></button></div></section>",
+      "css": ".ds-card { position: relative; width: 460px; max-width: 100%; box-sizing: border-box; padding: 16px; border-radius: 26px; overflow: hidden; backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); background: rgba(107,15,158,0.12); box-shadow: 0 6px 16px rgba(0,0,0,0.18); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; } .ds-card-glow { position: absolute; inset: 0; background: linear-gradient(to bottom right, rgba(125,44,170,0.55) 0%, rgba(107,15,158,0.38) 55%, rgba(80,11,119,0.45) 100%); opacity: 0.55; pointer-events: none; } .ds-card-head, .ds-card-grid { position: relative; } .ds-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; } .ds-card-glyph { display: inline-flex; color: rgba(0,0,0,0.85); } .ds-card-name { flex: 1; margin: 0; font-size: 17px; font-weight: 600; color: rgba(0,0,0,0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(255,255,255,0.38); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.08); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: 10px; font-weight: 500; color: rgba(0,0,0,0.85); white-space: nowrap; } .ds-chip-dot { width: 7px; height: 7px; border-radius: 50%; background: #28CD41; } .ds-chip-route { color: rgba(0,0,0,0.5); display: inline-flex; } .ds-tile { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: none; border-radius: 10px; background: rgba(255,255,255,0.38); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.08); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: 12px; font-weight: 500; color: rgba(0,0,0,0.85); text-align: left; transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.3, 1.1), background 0.15s; } .ds-tile-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; } .ds-tile-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-tile-play { color: rgba(0,0,0,0.5); display: inline-flex; } .ds-tile:hover { background: rgba(255,255,255,0.52); } .ds-tile:active { transform: scale(0.97); } .ds-tile:focus-visible { outline: 3px solid rgba(107,15,158,0.5); outline-offset: 2px; }"
+    },
+    {
+      "name": "App Tile",
+      "kind": "button",
+      "refersTo": "app-tile",
+      "description": "A wide, short glass tile shaped like the Home app's: one click streams that app.",
+      "html": "<button class=\"ds-tile\"><span class=\"ds-tile-icon\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M7 8h10a4 4 0 0 1 3.9 4.9l-.9 3.6a2 2 0 0 1-3.4.9L14 15h-4l-2.6 2.4a2 2 0 0 1-3.4-.9l-.9-3.6A4 4 0 0 1 7 8z\"/><path d=\"M8 10.5v3M6.5 12h3\"/></svg></span><span class=\"ds-tile-name\">Steam Big Picture</span><span class=\"ds-tile-play\"><svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\"><path d=\"M4 2.5v11l9-5.5z\" fill=\"currentColor\"/></svg></span></button>",
+      "css": ".ds-tile { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: none; border-radius: 10px; background: rgba(255,255,255,0.38); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.08); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: 12px; font-weight: 500; color: rgba(0,0,0,0.85); text-align: left; transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.3, 1.1), background 0.15s; } .ds-tile-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; } .ds-tile-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-tile-play { color: rgba(0,0,0,0.5); display: inline-flex; } .ds-tile:hover { background: rgba(255,255,255,0.52); } .ds-tile:active { transform: scale(0.97); } .ds-tile:focus-visible { outline: 3px solid rgba(107,15,158,0.5); outline-offset: 2px; }"
+    },
+    {
+      "name": "Readiness Chip",
+      "kind": "chip",
+      "refersTo": "readiness-chip",
+      "description": "A glass capsule stating whether the PC is ready, with a status dot and the route glyph.",
+      "html": "<span class=\"ds-chip\" role=\"status\"><span class=\"ds-chip-dot\"></span>Ready · 12 ms<span class=\"ds-chip-route\"><svg viewBox=\"0 0 16 16\" width=\"9\" height=\"9\" aria-hidden=\"true\"><path d=\"M9 1 3 9h4l-1 6 6-8H8z\" fill=\"currentColor\"/></svg></span></span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; background: rgba(255,255,255,0.38); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.08); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: 10px; font-weight: 500; color: rgba(0,0,0,0.85); white-space: nowrap; } .ds-chip-dot { width: 7px; height: 7px; border-radius: 50%; background: #28CD41; } .ds-chip-route { color: rgba(0,0,0,0.5); display: inline-flex; }"
+    },
+    {
+      "name": "Spec Line",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Facts, not controls: one secondary line under the card, separated by middle dots.",
+      "html": "<p class=\"ds-spec\">4K · 120 Hz · HDR · 150 Mbps</p>",
+      "css": ".ds-spec { margin: 0; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: 12px; font-weight: 400; color: rgba(0,0,0,0.5); }"
+    },
+    {
+      "name": "Hotkey Recorder",
+      "kind": "input",
+      "refersTo": "hotkey-recorder",
+      "description": "A glass capsule showing a chord in key notation; recording tints it violet with a 2pt accent ring.",
+      "html": "<div class=\"ds-keys\"><button class=\"ds-key\">⌃Q</button><button class=\"ds-key ds-key-recording\" aria-pressed=\"true\">⌃…</button></div>",
+      "css": ".ds-keys { display: flex; gap: 12px; } .ds-key { min-width: 80px; min-height: 22px; padding: 4px 12px; border: 2px solid transparent; border-radius: 9999px; background: rgba(255,255,255,0.38); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(0,0,0,0.08); font-family: ui-monospace, 'SF Mono', monospace; font-size: 13px; font-weight: 500; color: rgba(0,0,0,0.85); transition: background 0.2s, border-color 0.2s; } .ds-key:hover { background: rgba(255,255,255,0.52); } .ds-key:focus-visible { outline: 3px solid rgba(107,15,158,0.5); outline-offset: 2px; } .ds-key-recording { background: rgba(107,15,158,0.22); border-color: #6B0F9E; color: #6B0F9E; }"
+    },
+    {
+      "name": "Connect Banner",
+      "kind": "custom",
+      "refersTo": "connect-banner",
+      "description": "The one filled status surface: faint red glass and a 1pt red stroke, above the card, only when a connection fails.",
+      "html": "<div class=\"ds-banner\" role=\"alert\"><span class=\"ds-banner-text\">Couldn't reach Den PC. Make sure it's awake and on the same network.</span><button class=\"ds-banner-close\" aria-label=\"Dismiss error\"><svg viewBox=\"0 0 16 16\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" aria-hidden=\"true\"><path d=\"M4 4l8 8M12 4l-8 8\"/></svg></button></div>",
+      "css": ".ds-banner { display: flex; align-items: center; gap: 10px; max-width: 460px; padding: 10px 14px; border: 1px solid #FF3B30; border-radius: 12px; background: rgba(255,59,48,0.12); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; font-size: 12px; color: rgba(0,0,0,0.85); } .ds-banner-text { flex: 1; } .ds-banner-close { display: inline-flex; padding: 4px; border: none; background: none; color: rgba(0,0,0,0.5); border-radius: 6px; } .ds-banner-close:hover { background: rgba(0,0,0,0.06); } .ds-banner-close:focus-visible { outline: 3px solid rgba(107,15,158,0.5); outline-offset: 2px; }"
+    },
+    {
+      "name": "Stream-Ended Toast",
+      "kind": "custom",
+      "refersTo": "stream-ended-toast",
+      "description": "An understated thin-material capsule with a hairline, stating the session ended and its receipt.",
+      "html": "<div class=\"ds-toast\" role=\"status\"><strong>Stream ended</strong><span>2h 12m · 12 ms median</span></div>",
+      "css": ".ds-toast { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 18px; border: 0.5px solid rgba(0,0,0,0.08); border-radius: 9999px; background: rgba(246,246,246,0.72); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8); box-shadow: 0 4px 8px rgba(0,0,0,0.12); font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; } .ds-toast strong { font-size: 12px; font-weight: 500; color: rgba(0,0,0,0.85); } .ds-toast span { font-size: 10px; color: rgba(0,0,0,0.5); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Other Room",
+    "overview": "The gaming PC lives in another room, and Glimmer is the doorway to it. The interface is a quiet Mac surface that says one thing at a time: this PC is ready, and here is the button that takes you there. Everything that isn't that sentence belongs to macOS: its materials, its type, its controls, its menus. The only thing Glimmer brings of its own is Eclipse Violet, the colour of the light under the door.\n\nSurfaces are tactile, but taste comes first. The things you can press feel like objects: Liquid Glass that refracts what sits behind the window, a soft downward shadow, a slight give when pressed (scale 0.985). Everything else stays flat: facts, labels, explanations and status sit as plain text on the system material, with no chrome. Depth marks what can be pressed or what floats above the window, never decoration.\n\nThe launcher is compact and sized to its content. A window with empty space in it reads as unfinished, so the card fills its width with a header row and a grid of app tiles instead of a thin column floating in the middle. Two layouts have been tried and rejected: a neutral grey card (the \"grey blob\") and a narrow centred column in a wide card. The app icon is final and is not redrawn, recoloured or reinterpreted.",
+    "keyCharacteristics": [
+      "One brand hue, Eclipse Violet, used at full strength only on the primary capsule button.",
+      "Liquid Glass and soft black shadows only on things you can press or that float.",
+      "SF system text styles throughout; footnote-size secondary text does the explaining.",
+      "Continuous (squircle) corners, concentric from the card inward.",
+      "Windows sized to their content; no empty space, no stretched columns.",
+      "Motion is snappy and short, and every pulse or bounce respects Reduce Motion."
+    ],
+    "rules": [
+      {
+        "name": "The One Violet Rule",
+        "body": "Eclipse Violet is the only brand hue. There is no secondary or tertiary accent, and violet never marks status.",
+        "section": "colors"
+      },
+      {
+        "name": "The Half-Strength Rule",
+        "body": "The PC card carries the accent at about half the button's strength (gradient at 55% opacity, glass tint 0.12 against the button's 0.25). One primary capsule per screen is the only full-strength violet.",
+        "section": "colors"
+      },
+      {
+        "name": "The Dot, Not Fill Rule",
+        "body": "Status colours appear as a small dot (6 to 7pt), a glyph or a line of text, never as a filled surface. The one exception is the connect-failure banner: glass with a faint red tint (0.12) and a 1pt red stroke, where the stroke carries the severity.",
+        "section": "colors"
+      },
+      {
+        "name": "The System Voice Rule",
+        "body": "Use text styles, not point sizes. Fixed sizes are allowed only for SF Symbol glyph sizing and the two display moments above.",
+        "section": "typography"
+      },
+      {
+        "name": "The Footnote Explains Rule",
+        "body": "An explanation sits in footnote-size secondary text inside the control's own label, directly under its title, never as a loose paragraph elsewhere in the pane.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sized-to-Content Rule",
+        "body": "Windows and cards are exactly as big as their contents. No `minHeight` floor, no `maxWidth: .infinity` and no trailing `Spacer` on the launcher column; prove a geometry change with the osascript window check in CONTRIBUTING.",
+        "section": "layout"
+      },
+      {
+        "name": "The No Empty Aisles Rule",
+        "body": "A narrow column centred in a wide container reads as wasted space. Fill the width with structure (a header row, a grid) or narrow the container.",
+        "section": "layout"
+      },
+      {
+        "name": "The Press, Not Pose Rule",
+        "body": "Depth (glass, shadow or scale) marks something you can press or something floating above the window. Facts and labels sit flat on the material.",
+        "section": "elevation"
+      },
+      {
+        "name": "The One Light Rule",
+        "body": "Every shadow is black, at 12 to 20% opacity, offset downward. No coloured glows, no inner shadows, no upward light.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Concentric Rule",
+        "body": "Inner radius = outer radius − inset. If a tile's corner doesn't follow its parent's, change the inset or the radius until it does.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do build every custom look as a style on a real control (a `ButtonStyle` on a `Button`, glass on a `Button`), keeping native focus, keyboard and VoiceOver behaviour.",
+      "Do keep one primary capsule as the only full-strength Eclipse Violet on any screen, and the PC card at half strength.",
+      "Do group glass siblings in one `GlassEffectContainer` with spacing equal to the layout gap (8pt).",
+      "Do nest radii concentrically: 26pt card, 16pt inset, 10pt tiles.",
+      "Do animate state with `.snappy` (0.3 to 0.35s, extra bounce 0.1), and switch every pulse and bounce off under Reduce Motion.",
+      "Do dim rather than hide the launcher's tiles while a stream is running (45% opacity).",
+      "Do explain in footnote secondary text inside the control's label."
+    ],
+    "donts": [
+      "Don't flatten the PC card to a neutral surface; a grey card reads as a blob. Keep the violet at half strength.",
+      "Don't centre a narrow column in a wide card, or add a flexible frame to the launcher column; fill the width with structure or narrow the window.",
+      "Don't redraw, recolour or reinterpret the app icon, and don't introduce a second brand hue.",
+      "Don't style facts as controls: no chips, pills or glass behind the spec line, addresses or static key notation.",
+      "Don't use coloured shadows, glows or upward light, and don't use colour fills for status.",
+      "Don't draw a control from a shape with a tap gesture, or reach for web views or cross-platform UI.",
+      "Don't use em dashes, emoji, exclamation marks, or \"host\" or \"server\" in anything a person reads."
+    ]
+  }
+}
