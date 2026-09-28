@@ -30,6 +30,19 @@ or hides stats, ⌃P captures or releases the pointer, ⌃M opens the mini playe
 and ⌃V pastes as text, in place of ⌃⌥Q, ⌃⌥S, ⌃⌥R and ⌃⌥⇧V. Shortcuts you had
 already changed stay as you set them.
 
+A new Stream menu holds Stream, Mini Player and Stop Streaming, and lists your
+PCs with ⌘1 to ⌘9 to switch between them. With one PC paired, the launcher's
+toolbar shows just the Settings button. The Stream button in the menu bar panel
+now matches the launcher's, and the panel's cards are titled the way macOS's own
+panels are. Smooth out Wi-Fi stutter sits next to Bandwidth in Settings ›
+Quality, and Open in the menu bar only appears once Open at login is on.
+
+Pairing errors now say to choose Pair Again… without pointing at a menu the
+screen doesn't have. With Reduce Motion on, banners and notices fade in instead
+of sliding, and nothing bounces. VoiceOver reads each app tile by its name,
+announces a newly recorded shortcut, and keeps its own keys while you record
+one. The log level picker in Diagnostics shows every level again.
+
 ## 2026.9.8 - 2026-09-25
 
 Steadier reconnects, a Cancel that also quits the game it started, lighter video

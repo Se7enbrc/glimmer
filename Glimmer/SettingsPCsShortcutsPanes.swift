@@ -78,7 +78,7 @@ struct PCTile: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 // A machine gets a device glyph; initials are for people.
-                Image(systemName: "desktopcomputer")
+                Image(systemName: "display")
                     .font(.system(size: 16, weight: .medium))
                     .frame(width: 36, height: 36)
                     .background(tileColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))

@@ -159,8 +159,8 @@ struct ReadinessChip: View {
                 .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
             }
         }
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: presentation)
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.hostRoute.routeClass)
+        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: presentation)
+        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: model.hostRoute.routeClass)
     }
 
     /// The dot + label + route-glyph capsule, shared by the plain chip and

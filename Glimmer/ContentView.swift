@@ -115,18 +115,11 @@ struct MainWindow: View {
         } message: { _ in
             Text(TakeoverDialogCopy.message)
         }
-        .background {
-            // ⌘1-⌘9 host switching (multi-PC households only) - invisible,
-            // window-scoped. See HostSwitchShortcuts for why hidden buttons
-            // beat toolbar-menu shortcuts or app-level .commands here.
-            HostSwitchShortcuts()
-        }
         .toolbar {
-            // Single navigation pill merging the host dropdown with the
-            // Settings gear. With zero hosts paired the host menu has nothing
-            // to point at, so the pill collapses to a standalone gear button.
+            // Single navigation pill merging the host dropdown with the Settings gear.
+            // With one PC or none there is nothing to choose, so it is the gear alone.
             ToolbarItem(placement: .navigation) {
-                if model.hosts.isEmpty {
+                if model.hosts.count <= 1 {
                     Button {
                         openSettings()
                     } label: {
@@ -144,24 +137,27 @@ struct MainWindow: View {
     }
 }
 
-/// Invisible ⌘1-⌘9 host-switch shortcuts, mounted behind the launcher when
-/// more than one PC is paired. Zero-size transparent buttons are the reliable
-/// window-scoped registration here: toolbar-Menu items only exist while the
-/// menu is open (shortcuts never register), and app-level `.commands` would
-/// also fire from Settings. Capped at nine - ⌘0 reads as "reset".
-private struct HostSwitchShortcuts: View {
-    @Environment(AppModel.self) private var model
+/// The Stream menu: the launcher's verbs where ⌘? finds them, and the PCs on ⌘1-⌘9
+/// (nine at most; ⌘0 reads as reset). PCs lock while streaming, since ⌘ stays with the Mac.
+struct StreamMenu: View {
+    let model: AppModel
 
     var body: some View {
-        if model.hosts.count > 1 {
-            ForEach(Array(model.hosts.prefix(9).enumerated()), id: \.element.id) { index, host in
-                Button("") { model.selectHost(host) }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+        if case .stream(let app) = model.menuBarPrimaryAction {
+            Button("Stream \(app)") { model.streamHeroApp() }
+        } else {
+            Button("Stream") {}.disabled(true)
+        }
+        Toggle("Mini Player", isOn: Binding(get: { model.isMiniPlayer }, set: { _ in model.toggleMiniPlayer() }))
+            .disabled(!model.isStreaming)
+        Button("Stop Streaming") { model.stopStreamFromMenu(source: "the Stream menu") }
+            .disabled(!model.isStreaming || model.menuStopInProgress)
+        if !model.hosts.isEmpty { Divider() }
+        ForEach(Array(model.hosts.enumerated()), id: \.element.id) { index, host in
+            Toggle(host.displayName, isOn: Binding(
+                get: { model.selectedHost?.id == host.id }, set: { if $0 { model.selectHost(host) } }))
+                .keyboardShortcut(index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))) : nil)
+                .disabled(model.isStreaming)
         }
     }
 }
@@ -211,7 +207,7 @@ private struct ConnectSurface: View {
 
             HostHero(host: model.selectedHost)
                 .scaleEffect((showsConnectingUI && !reduceMotion) ? 1.04 : 1.0)
-                .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: showsConnectingUI)
+                .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: showsConnectingUI)
 
             // Spec chips stay put during connect. The StreamButton below
             // morphs into the calm "Connecting to <host>... / stage" capsule -
@@ -324,6 +320,9 @@ private struct HostAndSettingsPill: View {
                         .lineLimit(1)
                 }
             }
+            .help("Choose a PC")
+            .accessibilityLabel("PC")
+            .accessibilityValue(model.selectedHost?.displayName ?? "None")
             Button {
                 openSettings()
             } label: {

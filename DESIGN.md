@@ -324,9 +324,10 @@ Tactile and confident: the one thing on screen that asks to be pressed.
   vertical padding.
 - **Primary (`StreamButtonStyle`):** the accent-surface gradient under Liquid
   Glass tinted with the accent at 0.25, a 0.5pt white rim fading from 10% to 2%
-  top to bottom, the button lift shadow, and a 17pt semibold label in the
-  primary label colour beside a 16pt play glyph. On the launcher it is up to
-  380pt wide and answers Return.
+  top to bottom, the button lift shadow, and a title2 semibold label (17pt) in
+  the primary label colour beside a 16pt play glyph. On the launcher it is up to
+  380pt wide and answers Return; the menu bar panel's primary action is the same
+  button.
 - **Pressed:** scales to 0.985 over a 0.15s snappy spring; no colour change.
   Disabled drops to 55% opacity.
 - **One button, changing verb:** the launcher's button reads Stream, Wake or
@@ -341,8 +342,8 @@ Tactile and confident: the one thing on screen that asks to be pressed.
 
 - **Readiness chip:** a glass capsule with 4 by 10pt of padding, a 7pt status
   dot, a caption-medium label and an optional 9pt route glyph (bolt for wired,
-  Wi-Fi arcs for wireless). The dot pulses while connecting, unless Reduce
-  Motion is on.
+  Wi-Fi arcs for wireless). The dot pulses while your own stream is live, unless
+  Reduce Motion is on.
 - **Spec line:** not a chip. Resolution, refresh rate and codec are a single
   line of callout text in secondary colour, separated by middle dots, so nothing
   that is a fact looks pressable.
@@ -381,7 +382,7 @@ The launcher's signature row: shaped like the Home app's accessory tiles.
 
 ### PC Tiles (Settings)
 
-- A desktop glyph on a colour picked by hashing the PC's ID, the name in
+- The `display` glyph on a colour picked by hashing the PC's ID, the name in
   headline, the address in caption monospaced, and "Last played" in tertiary.
   The PC's apps appear as up to three plain secondary glyphs, not buttons. Plain
   glass at 16pt. The yellow star alone marks the default PC.
@@ -391,9 +392,10 @@ The launcher's signature row: shaped like the Home app's accessory tiles.
 - **Style:** standard system text fields, pickers, toggles and steppers in a
   grouped Form. No custom field chrome.
 - **Hotkey recorder:** an interactive glass capsule, at least 80 by 22pt,
-  showing the chord in 13pt medium monospaced text. While recording, the glass
+  showing the chord in body medium monospaced text. While recording, the glass
   takes an accent tint (0.22), a 2pt accent ring and accent text; a rejected
-  chord explains itself in a line underneath and recording stays open.
+  chord explains itself in a line underneath and recording stays open. A saved
+  chord is announced to VoiceOver, and VoiceOver's own keys pass through.
 - **Static key notation:** fixed chords appear as plain monospaced secondary
   text, not as badges, because they cannot be pressed.
 
@@ -401,16 +403,25 @@ The launcher's signature row: shaped like the Home app's accessory tiles.
 
 - **Settings sidebar:** the standard source list, each row with an SF Symbol on
   a 6pt coloured glyph chip.
-- **Menu bar panel:** 300pt wide, with sections on 12pt quaternary-fill panels,
-  6pt status dots, and a footer with an "Open Glimmer" plain button and a "…"
-  menu holding "Check for Updates…" and "Quit Glimmer".
+- **Stream menu:** in the main menu bar: Stream, Mini Player and Stop Streaming,
+  then the PCs with a checkmark on the selected one and ⌘1 to ⌘9. The PCs lock
+  while a stream is running.
+- **Toolbar:** the gear alone when one PC or none is paired; with more, a PC
+  menu joins it in one pill.
+- **Menu bar panel:** 300pt wide, with cards on 12pt quaternary fill, each
+  titled in headline with its value in secondary on the right, the way Tahoe's
+  own panels are. The PC card has no title: the PC's name is the title. Big
+  numbers are title semibold with monospaced digits; the chart draws bandwidth
+  in the accent, latency in secondary and frames in green, with orange for a
+  short second. The footer holds an "Open Glimmer" plain button, a glass gear
+  for Settings and a "…" menu with "Check for Updates…" and "Quit Glimmer".
 
 ### Stream-Ended Toast
 
 - A thin-material capsule with a 0.5pt hairline, "Stream ended" in callout
   medium and an optional receipt line in caption secondary. It slides down from
-  the top edge, stays 2 seconds (4 with a receipt) and is announced to
-  VoiceOver.
+  the top edge (fades under Reduce Motion), stays 2 seconds (4 with a receipt)
+  and is announced to VoiceOver.
 
 ## Do's and Don'ts
 
@@ -424,8 +435,10 @@ The launcher's signature row: shaped like the Home app's accessory tiles.
 - **Do** group glass siblings in one `GlassEffectContainer` with spacing equal
   to the layout gap (8pt).
 - **Do** nest radii concentrically: 26pt card, 16pt inset, 10pt tiles.
-- **Do** animate state with `.snappy` (0.3 to 0.35s, extra bounce 0.1), and
-  switch every pulse and bounce off under Reduce Motion.
+- **Do** animate state with `.snappy` (0.3 to 0.35s, extra bounce 0.1). Under
+  Reduce Motion the extra bounce is 0, slides become fades, and every pulse and
+  bounce is off.
+- **Do** use the `display` glyph for a PC, everywhere a PC is drawn.
 - **Do** dim rather than hide the launcher's tiles while a stream is running
   (45% opacity).
 - **Do** explain in footnote secondary text inside the control's label.

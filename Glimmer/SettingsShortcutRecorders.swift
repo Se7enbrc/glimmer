@@ -6,6 +6,7 @@
 //  that keep a recording from clashing with another shortcut or with the Mac.
 //
 
+import Accessibility
 import AppKit
 import Combine
 import GameController
@@ -103,7 +104,7 @@ struct HotkeyBadge: View {
                     if isCapturing { stop() } else { start() }
                 } label: {
                     Text(displayText)
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .font(.body.weight(.medium).monospaced())
                         .frame(minWidth: 80, minHeight: 22)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
@@ -165,6 +166,10 @@ struct HotkeyBadge: View {
                 DispatchQueue.main.async { stop() }
                 return event
             case .capture:
+                // VoiceOver's own ⌃⌥ keys keep working while recording; no stream chord could use them anyway.
+                if NSWorkspace.shared.isVoiceOverEnabled, event.modifierFlags.isSuperset(of: [.control, .option]) {
+                    return event
+                }
                 handle(event)
                 return nil  // swallow so Cmd+Q etc. don't activate menu items
             }
@@ -224,6 +229,7 @@ struct HotkeyBadge: View {
         }
         hotkey = hk
         stop()
+        AccessibilityNotification.Announcement("Shortcut set to \(hk.displayString)").post()
     }
 }
 
@@ -345,6 +351,7 @@ struct ChordCaptureSheet: View {
             // Fully released after a held combo → that's the chord.
             captured = accumulated
             recording = false
+            AccessibilityNotification.Announcement("Captured \(ControllerButton.describe(captured))").post()
         }
     }
 

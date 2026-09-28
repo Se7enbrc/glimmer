@@ -77,6 +77,8 @@ struct AppIconsRow: View {
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 10))
         .disabled(model.isStreaming)
         .help(model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)")
+        // One name, not glyph + name + play glyph read in turn.
+        .accessibilityLabel(app.name)
     }
 
     private var overflowMenu: some View {
@@ -163,7 +165,7 @@ struct EmptyPairingState: View {
                 Text("Let's find your gaming PC")
                     .font(.system(size: 26, weight: .bold))
                     .tracking(-0.4)
-                Text("Glimmer plays games from your gaming PC, on this Mac.")
+                Text("Glimmer plays your PC's games on this Mac.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -193,6 +195,7 @@ struct EmptyPairingState: View {
 /// connect, volume HUD) are deliberately understated.
 struct StreamEndedToast: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -214,7 +217,7 @@ struct StreamEndedToast: View {
                 .background(.thinMaterial, in: Capsule())
                 .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                 // One element, one sentence for assistive tech.
                 .accessibilityElement(children: .combine)
                 // Keyed on the receipt so a back-to-back end re-arms the hold
@@ -237,7 +240,7 @@ struct StreamEndedToast: View {
                 }
             }
         }
-        .animation(.snappy(duration: 0.30, extraBounce: 0.1),
+        .animation(.snappy(duration: 0.30, extraBounce: reduceMotion ? 0 : 0.1),
                    value: model.streamEndedToastVisible)
     }
 }

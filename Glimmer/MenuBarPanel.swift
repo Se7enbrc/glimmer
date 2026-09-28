@@ -1,8 +1,8 @@
 //
 //  MenuBarPanel.swift
 //
-//  The menu bar item's panel: card groups with an accent label and a value at
-//  the right, big numbers and a one-minute chart while streaming, chevron rows
+//  The menu bar item's panel: card groups with a headline and a value at the
+//  right, big numbers and a one-minute chart while streaming, chevron rows
 //  for the PC, a battery bar for the controller, and a footer of round buttons.
 //
 
@@ -33,20 +33,17 @@ struct MenuBarPanel: View {
 
     // MARK: Card chrome
 
-    private func card<Content: View>(_ label: String, trailing: String? = nil,
+    /// A card titled the way Tahoe's own panels are; the PC card has none, its name is the title.
+    private func card<Content: View>(_ label: String?, trailing: String? = nil,
                                      @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(label)
-                    .textCase(.uppercase)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
-                if let trailing {
-                    Text(trailing)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
+            if let label {
+                HStack {
+                    Text(label).font(.headline).accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    if let trailing {
+                        Text(trailing).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    }
                 }
             }
             content()
@@ -101,8 +98,8 @@ struct MenuBarPanel: View {
             Label(title, systemImage: systemImage)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.glassProminent)
-        .controlSize(.large)
+        // The launcher's style: one Stream button across both windows (DESIGN.md, One Violet Rule).
+        .buttonStyle(StreamButtonStyle())
     }
 
     // MARK: Cards
@@ -128,7 +125,7 @@ struct MenuBarPanel: View {
             let metrics = model.menuBarMetrics
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 bigNumber(metrics[2], dot: .accentColor)
-                bigNumber(metrics[1], dot: .pink)
+                bigNumber(metrics[1], dot: .secondary)
                 bigNumber(metrics[0], dot: .green)
             }
             VStack(spacing: 6) {
@@ -180,7 +177,7 @@ struct MenuBarPanel: View {
     private func bigNumber(_ metric: MenuBarMetric, dot: Color) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(metric.value)
-                .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.title.weight(.semibold).monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             HStack(spacing: 5) {
@@ -216,9 +213,10 @@ struct MenuBarPanel: View {
 
     @ViewBuilder private var pcCard: some View {
         if let host = model.selectedHost {
-            card("PC") {
+            card(nil) {
                 HStack {
                     Text(host.displayName).font(.title3.weight(.semibold)).lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     if let chip = model.menuBarHost?.chip { readinessPill(chip) }
                 }
@@ -226,7 +224,7 @@ struct MenuBarPanel: View {
                 pcRows(host: host)
             }
         } else {
-            card("PC") {
+            card(nil) {
                 Text("No PC paired yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -279,7 +277,7 @@ struct MenuBarPanel: View {
         }
         if model.hosts.count > 1 {
             // A Picker, not checkmark images: macOS 27 hides symbols in menus.
-            row("PCs", systemImage: "desktopcomputer") {
+            row("PCs", systemImage: "display") {
                 Picker("PCs", selection: Binding(
                     get: { model.selectedHost?.id },
                     set: { id in
@@ -343,8 +341,7 @@ struct MenuBarPanel: View {
             // Written out, the way Control Center does, not hidden in the "…" menu.
             Button("Open Glimmer") { openLauncher() }
                 .buttonStyle(.plain)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
             Spacer()
             Button {
                 openSettings()
@@ -416,7 +413,7 @@ private struct RowHighlight: ViewModifier {
 
 /// Sixty seconds on one baseline: bandwidth bars above it (scaled to the asked
 /// bitrate or the minute's peak), latency as a line below it (30 ms or the peak),
-/// so a hitch is a pink spike under a blue dip. Hovering reads any second back.
+/// so a hitch is a grey spike under a violet dip. Hovering reads any second back.
 private struct StreamChart: View {
     let mbps: [Double]
     let latency: [Double]
@@ -481,8 +478,8 @@ private struct StreamChart: View {
                 if index == latency.count - 1 { area.addLine(to: CGPoint(x: x, y: baseline + 1)) }
             }
             area.closeSubpath()
-            context.fill(area, with: .color(.pink.opacity(0.22)))
-            context.stroke(line, with: .color(.pink), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+            context.fill(area, with: .color(.secondary.opacity(0.22)))
+            context.stroke(line, with: .color(.secondary), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
         }
         var base = Path()
         base.move(to: CGPoint(x: 0, y: baseline + 0.5))

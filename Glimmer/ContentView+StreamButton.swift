@@ -17,7 +17,7 @@ struct StreamButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 17, weight: .semibold))
+            .font(.title2.weight(.semibold))
             .foregroundStyle(.primary)
             .padding(.horizontal, 22)
             .padding(.vertical, 12)
@@ -131,7 +131,7 @@ struct StreamButton: View {
                     Image(systemName: "display")
                         .font(.system(size: 16, weight: .semibold))
                     Text("Choose a PC")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .contentTransition(.opacity)
                 case .connecting, .reconnecting:
                     // Steady primary line; engine-stage churn flows through
@@ -144,7 +144,7 @@ struct StreamButton: View {
                             .lineLimit(1)
                         if let stage = connectingSubtext {
                             Text(stage)
-                                .font(.system(size: 11, weight: .regular))
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .contentTransition(.opacity)
@@ -152,33 +152,33 @@ struct StreamButton: View {
                     }
                     // The whole capsule is the cancel button - say so, quietly.
                     Text(role == .reconnecting ? "Stop Streaming" : "Cancel")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 4)
                 case .liveBackgrounded:
                     Image(systemName: "play.tv.fill")
                         .font(.system(size: 16, weight: .semibold))
                     Text("Back to Stream")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .contentTransition(.opacity)
                 case .pairAgain:
                     Image(systemName: "key.fill")
                         .font(.system(size: 16, weight: .semibold))
                     Text("Pair Again…")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .contentTransition(.opacity)
                 case .wake:
                     Image(systemName: "power")
                         .font(.system(size: 16, weight: .semibold))
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Wake and Connect")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.title2.weight(.semibold))
                             .contentTransition(.opacity)
                         // One line that fits; the Wake on LAN limits live in the
                         // tooltip. A cancelled wake shows nothing.
                         if let reason = wakeFailure, let host = model.selectedHost {
                             Text(Self.wakeFailureLine(reason, pcName: host.displayName))
-                                .font(.system(size: 11, weight: .regular))
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -193,7 +193,7 @@ struct StreamButton: View {
                     // Same quiet trailing affordance as the connecting capsule:
                     // the whole capsule is the cancel, so name it.
                     Text("Stop Waiting")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.leading, 4)
                 case .connect:
@@ -205,7 +205,7 @@ struct StreamButton: View {
                         // under Reduce Motion; the success haptic still fires.
                         .symbolEffect(.bounce, value: reduceMotion ? false : isLive)
                     Text(model.heroActionLabel)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.title2.weight(.semibold))
                         .lineLimit(1)
                         .contentTransition(.opacity)
                 }
@@ -246,8 +246,8 @@ struct StreamButton: View {
         // VoiceOver hint mirrors the sighted-only `.help` so assistive-tech
         // users learn WHY the button is disabled (noPC) or what a click does.
         .accessibilityHint(guidance.hint)
-        .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: isConnecting)
-        .animation(.snappy(duration: 0.35, extraBounce: 0.1), value: model.isStreaming)
+        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: isConnecting)
+        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: model.isStreaming)
     }
 
     /// Tooltip and VoiceOver hint for the current role, kept in one place.

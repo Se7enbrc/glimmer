@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-28T16:47:04Z",
+  "generatedAt": "2026-09-28T17:20:00Z",
   "title": "Design System: Glimmer",
   "extensions": {
     "colorMeta": {
@@ -330,11 +330,11 @@
   ],
   "narrative": {
     "northStar": "The Other Room",
-    "overview": "The gaming PC lives in another room, and Glimmer is the doorway to it. The interface is a quiet Mac surface that says one thing at a time: this PC is ready, and here is the button that takes you there. Everything that isn't that sentence belongs to macOS: its materials, its type, its controls, its menus. The only thing Glimmer brings of its own is Eclipse Violet, the colour of the light under the door.\n\nSurfaces are tactile, but taste comes first. The things you can press feel like objects: Liquid Glass that refracts what sits behind the window, a soft downward shadow, a slight give when pressed (scale 0.985). Everything else stays flat: facts, labels, explanations and status sit as plain text on the system material, with no chrome. Depth marks what can be pressed or what floats above the window, never decoration.\n\nThe launcher is compact and sized to its content. A window with empty space in it reads as unfinished, so the card fills its width with a header row and a grid of app tiles instead of a thin column floating in the middle. Two layouts have been tried and rejected: a neutral grey card (the \"grey blob\") and a narrow centred column in a wide card. The app icon is final and is not redrawn, recoloured or reinterpreted.",
+    "overview": "The gaming PC lives in another room, and Glimmer is the doorway to it. The\ninterface is a quiet Mac surface that says one thing at a time: this PC is\nready, and here is the button that takes you there. Everything that isn't that\nsentence belongs to macOS: its materials, its type, its controls, its menus. The\nonly thing Glimmer brings of its own is Eclipse Violet, the colour of the light\nunder the door.\n\nSurfaces are tactile, but taste comes first. The things you can press feel like\nobjects: Liquid Glass that refracts what sits behind the window, a soft downward\nshadow, a slight give when pressed (scale 0.985). Everything else stays flat:\nfacts, labels, explanations and status sit as plain text on the system material,\nwith no chrome. Depth marks what can be pressed or what floats above the window,\nnever decoration.\n\nThe launcher is compact and sized to its content. A window with empty space in\nit reads as unfinished, so the card fills its width with a header row and a grid\nof app tiles instead of a thin column floating in the middle. Two layouts have\nbeen tried and rejected: a neutral grey card (the \"grey blob\") and a narrow\ncentred column in a wide card. The app icon is final and is not redrawn,\nrecoloured or reinterpreted.",
     "keyCharacteristics": [
-      "One brand hue, Eclipse Violet, used at full strength only on the primary capsule button.",
-      "Liquid Glass and soft black shadows only on things you can press or that float.",
-      "SF system text styles throughout; footnote-size secondary text does the explaining.",
+      "One brand hue, Eclipse Violet, used at full strength only on the primary",
+      "Liquid Glass and soft black shadows only on things you can press or that",
+      "SF system text styles throughout; footnote-size secondary text does the",
       "Continuous (squircle) corners, concentric from the card inward.",
       "Windows sized to their content; no empty space, no stretched columns.",
       "Motion is snappy and short, and every pulse or bounce respects Reduce Motion."
@@ -342,72 +342,73 @@
     "rules": [
       {
         "name": "The One Violet Rule",
-        "body": "Eclipse Violet is the only brand hue. There is no secondary or tertiary accent, and violet never marks status.",
+        "body": "Eclipse Violet is the only brand hue. There is no",
         "section": "colors"
       },
       {
         "name": "The Half-Strength Rule",
-        "body": "The PC card carries the accent at about half the button's strength (gradient at 55% opacity, glass tint 0.12 against the button's 0.25). One primary capsule per screen is the only full-strength violet.",
+        "body": "The PC card carries the accent at about half the",
         "section": "colors"
       },
       {
         "name": "The Dot, Not Fill Rule",
-        "body": "Status colours appear as a small dot (6 to 7pt), a glyph or a line of text, never as a filled surface. The one exception is the connect-failure banner: glass with a faint red tint (0.12) and a 1pt red stroke, where the stroke carries the severity.",
+        "body": "Status colours appear as a small dot (6 to 7pt), a",
         "section": "colors"
       },
       {
         "name": "The System Voice Rule",
-        "body": "Use text styles, not point sizes. Fixed sizes are allowed only for SF Symbol glyph sizing and the two display moments above.",
+        "body": "Use text styles, not point sizes. Fixed sizes are",
         "section": "typography"
       },
       {
         "name": "The Footnote Explains Rule",
-        "body": "An explanation sits in footnote-size secondary text inside the control's own label, directly under its title, never as a loose paragraph elsewhere in the pane.",
+        "body": "An explanation sits in footnote-size secondary",
         "section": "typography"
       },
       {
         "name": "The Sized-to-Content Rule",
-        "body": "Windows and cards are exactly as big as their contents. No `minHeight` floor, no `maxWidth: .infinity` and no trailing `Spacer` on the launcher column; prove a geometry change with the osascript window check in CONTRIBUTING.",
+        "body": "Windows and cards are exactly as big as their",
         "section": "layout"
       },
       {
         "name": "The No Empty Aisles Rule",
-        "body": "A narrow column centred in a wide container reads as wasted space. Fill the width with structure (a header row, a grid) or narrow the container.",
+        "body": "A narrow column centred in a wide container reads",
         "section": "layout"
       },
       {
         "name": "The Press, Not Pose Rule",
-        "body": "Depth (glass, shadow or scale) marks something you can press or something floating above the window. Facts and labels sit flat on the material.",
+        "body": "Depth (glass, shadow or scale) marks something you",
         "section": "elevation"
       },
       {
         "name": "The One Light Rule",
-        "body": "Every shadow is black, at 12 to 20% opacity, offset downward. No coloured glows, no inner shadows, no upward light.",
+        "body": "Every shadow is black, at 12 to 20% opacity, offset",
         "section": "elevation"
       },
       {
         "name": "The Concentric Rule",
-        "body": "Inner radius = outer radius − inset. If a tile's corner doesn't follow its parent's, change the inset or the radius until it does.",
+        "body": "Inner radius = outer radius − inset. If a tile's corner",
         "section": "shapes"
       }
     ],
     "dos": [
-      "Do build every custom look as a style on a real control (a `ButtonStyle` on a `Button`, glass on a `Button`), keeping native focus, keyboard and VoiceOver behaviour.",
-      "Do keep one primary capsule as the only full-strength Eclipse Violet on any screen, and the PC card at half strength.",
-      "Do group glass siblings in one `GlassEffectContainer` with spacing equal to the layout gap (8pt).",
+      "Do build every custom look as a style on a real control (a `ButtonStyle`",
+      "Do keep one primary capsule as the only full-strength Eclipse Violet on",
+      "Do group glass siblings in one `GlassEffectContainer` with spacing equal",
       "Do nest radii concentrically: 26pt card, 16pt inset, 10pt tiles.",
-      "Do animate state with `.snappy` (0.3 to 0.35s, extra bounce 0.1), and switch every pulse and bounce off under Reduce Motion.",
-      "Do dim rather than hide the launcher's tiles while a stream is running (45% opacity).",
+      "Do animate state with `.snappy` (0.3 to 0.35s, extra bounce 0.1). Under",
+      "Do use the `display` glyph for a PC, everywhere a PC is drawn.",
+      "Do dim rather than hide the launcher's tiles while a stream is running",
       "Do explain in footnote secondary text inside the control's label."
     ],
     "donts": [
-      "Don't flatten the PC card to a neutral surface; a grey card reads as a blob. Keep the violet at half strength.",
-      "Don't centre a narrow column in a wide card, or add a flexible frame to the launcher column; fill the width with structure or narrow the window.",
-      "Don't redraw, recolour or reinterpret the app icon, and don't introduce a second brand hue.",
-      "Don't style facts as controls: no chips, pills or glass behind the spec line, addresses or static key notation.",
-      "Don't use coloured shadows, glows or upward light, and don't use colour fills for status.",
-      "Don't draw a control from a shape with a tap gesture, or reach for web views or cross-platform UI.",
-      "Don't use em dashes, emoji, exclamation marks, or \"host\" or \"server\" in anything a person reads."
+      "Don't flatten the PC card to a neutral surface; a grey card reads as a",
+      "Don't centre a narrow column in a wide card, or add a flexible frame to",
+      "Don't redraw, recolour or reinterpret the app icon, and don't introduce a",
+      "Don't style facts as controls: no chips, pills or glass behind the spec",
+      "Don't use coloured shadows, glows or upward light, and don't use colour",
+      "Don't draw a control from a shape with a tap gesture, or reach for web",
+      "Don't use em dashes, emoji, exclamation marks, or \"host\" or \"server\" in"
     ]
   }
 }

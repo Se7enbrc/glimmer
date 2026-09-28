@@ -62,6 +62,7 @@ extension AppModel {
 /// mounts it, lives in ContentView.swift.
 struct ConnectBanner: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -114,9 +115,9 @@ struct ConnectBanner: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(Color.red, lineWidth: 1)
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.snappy(duration: 0.3, extraBounce: 0.1), value: model.nativeStreamError)
+        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: model.nativeStreamError)
     }
 }

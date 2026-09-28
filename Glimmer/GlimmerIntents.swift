@@ -24,7 +24,7 @@ struct PCEntity: AppEntity, Hashable {
     }
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(name)", image: .init(systemName: "desktopcomputer"))
+        DisplayRepresentation(title: "\(name)", image: .init(systemName: "display"))
     }
 }
 

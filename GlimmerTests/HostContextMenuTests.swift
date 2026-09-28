@@ -47,7 +47,7 @@ struct HostContextMenuTests {
             Issue.record("a quit went out without a pin")
         } catch {
             #expect(AppModel.quitFailureMessage(for: error, hostName: host.displayName)
-                == "Tower isn't paired with this Mac. Choose Pair Again… from the PC's ⋯ menu.")
+                == "Tower isn't paired with this Mac. Choose Pair Again… to keep streaming.")
         }
     }
 

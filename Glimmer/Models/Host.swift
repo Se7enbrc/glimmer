@@ -257,7 +257,7 @@ public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
     public var displayName: String {
         switch self {
         case .none: return "None (keyboard only)"
-        case .startSelectL1R1: return "Start + Select + L1 + R1 (Moonlight default)"
+        case .startSelectL1R1: return "Start + Select + L1 + R1"
         case .l1r1: return "L1 + R1"
         case .l1r1l2r2: return "L1 + R1 + L2 + R2"
         case .l3r3: return "L3 + R3 (stick clicks)"

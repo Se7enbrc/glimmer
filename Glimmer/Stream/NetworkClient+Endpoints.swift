@@ -138,14 +138,14 @@ extension NetworkClient {
         }
         if detail.contains("Host requires pairing") {
             return .pairingFailed("\(name) no longer recognizes this Mac, or this Mac is switched off on "
-                + "Sunshine's Troubleshooting page. Choose Pair Again… from the PC's ⋯ menu.")
+                + "Sunshine's Troubleshooting page. Choose Pair Again… to keep streaming.")
         }
         if detail.hasPrefix("TLS handshake") {
-            return .pairingFailed("\(name) rejected this Mac's certificate. Choose Pair Again… from the PC's ⋯ menu.")
+            return .pairingFailed("\(name) rejected this Mac's certificate. Choose Pair Again… to keep streaming.")
         }
         if isCertChange(detail) {
             return .hostCertChanged(
-                "\(name)'s certificate changed. To trust it, choose Pair Again… from the PC's ⋯ menu."
+                "\(name)'s certificate changed. Choose Pair Again… to trust the new one."
             )
         }
         // The detail is in the log line above the call; the sentence stays plain.

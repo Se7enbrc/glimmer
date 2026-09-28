@@ -101,7 +101,7 @@ struct AboutPane: View {
                 }
             }
             Section("Acknowledgements") {
-                Text("Built for Sunshine, the open-source game-streaming server that runs on "
+                Text("Built for Sunshine, the open-source game-streaming app that runs on "
                     + "your PC. Glimmer talks to it over the same RTSP-based protocol as Moonlight, "
                     + "the client that inspired it, and the transport is ported from "
                     + "moonlight-common-c, with respect.")

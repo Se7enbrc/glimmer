@@ -153,6 +153,7 @@ struct GlimmerApp: App {
             CommandGroup(after: .appSettings) {
                 Button("Install Command Line Tool…") { CommandLineToolInstaller.install() }
             }
+            CommandMenu("Stream") { StreamMenu(model: model) }
         }
 
         Settings {

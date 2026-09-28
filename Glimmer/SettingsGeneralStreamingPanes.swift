@@ -75,19 +75,21 @@ struct GeneralPane: View {
                     .onChange(of: launchAtLogin) { _, on in
                         scheduleLoginItemRegistration(launchAtLogin: on, minimized: launchMinimized)
                     }
-                Toggle(isOn: $launchMinimized) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Open in the menu bar only")
-                        Text("Starts in the menu bar at login. Opening Glimmer from the Dock or Spotlight "
-                            + "shows the window.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                // Only means something at login, so it appears with that switch rather than sitting disabled.
+                if launchAtLogin {
+                    Toggle(isOn: $launchMinimized) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Open in the menu bar only")
+                            Text("Starts in the menu bar at login. Opening Glimmer from the Dock or Spotlight "
+                                + "shows the window.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: launchMinimized) { _, on in
+                        scheduleLoginItemRegistration(launchAtLogin: launchAtLogin, minimized: on)
                     }
                 }
-                .onChange(of: launchMinimized) { _, on in
-                    scheduleLoginItemRegistration(launchAtLogin: launchAtLogin, minimized: on)
-                }
-                .disabled(!launchAtLogin)
                 if loginItemNeedsApproval {
                     HStack(spacing: 8) {
                         Label("macOS needs you to approve Glimmer in Login Items, "
@@ -260,7 +262,41 @@ struct QualityPane: View {
                     + "Bandwidth saver asks for the usual bitrate.")
             } footer: {
                 Text("Highest quality gives every frame more bits, which keeps fine detail from turning to grain. "
-                    + "Bandwidth saver uses less.")
+                    + "On Wi-Fi it follows what the radio can carry. Bandwidth saver uses less.")
+            }
+
+            // Beside Bandwidth: the couch player's network controls, in the pane's first screen.
+            Section("Wi-Fi") {
+                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
+                        Text("Pauses AirDrop and Continuity while you stream, so they can't take over "
+                            + "the Wi-Fi and freeze the picture. They come back the moment you stop. "
+                            + "Needs a one-time approval.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .help("Installs a small helper that pauses AirDrop's radio for each stream.")
+                if case .requiresApproval = awdl.state {
+                    HStack(spacing: 8) {
+                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(.orange)
+                        Spacer()
+                        Button("Open Login Items") { awdl.openSystemSettings() }
+                    }
+                }
+                if case .unavailable(let why) = awdl.state {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
+                            .font(.footnote).foregroundStyle(.red)
+                        if let url = awdl.recoveryDocURL {
+                            Link("How to manage login items (Apple Support)", destination: url)
+                                .font(.footnote)
+                        }
+                    }
+                }
             }
 
             // One HDR switch for every preset, on by default; off asks the PC
@@ -428,39 +464,6 @@ struct QualityPane: View {
                 // they are. The editor inside still says warn/critical.
                 DisclosureGroup("When numbers turn yellow or red") {
                     StatsThresholdsEditor()
-                }
-            }
-
-            Section("Wi-Fi") {
-                Toggle(isOn: Binding(get: { awdl.isRegistered }, set: { scheduleHelperToggle($0) })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Smooth out Wi-Fi stutter while streaming").fontWeight(.medium)
-                        Text("Parks AirDrop's radio (AWDL) for the length of a stream so it can't "
-                            + "grab the Wi-Fi channel and cause multi-second freezes. Restored the "
-                            + "instant you stop. Installs a small helper that needs a one-time approval.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .help("Holds awdl0 down for the duration of each stream via a privileged helper.")
-                if case .requiresApproval = awdl.state {
-                    HStack(spacing: 8) {
-                        Label("macOS needs you to approve the Glimmer network helper in Login Items.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote).foregroundStyle(.orange)
-                        Spacer()
-                        Button("Open Login Items") { awdl.openSystemSettings() }
-                    }
-                }
-                if case .unavailable(let why) = awdl.state {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Network helper unavailable: \(why)", systemImage: "xmark.octagon")
-                            .font(.footnote).foregroundStyle(.red)
-                        if let url = awdl.recoveryDocURL {
-                            Link("How to manage login items (Apple Support)", destination: url)
-                                .font(.footnote)
-                        }
-                    }
                 }
             }
 
