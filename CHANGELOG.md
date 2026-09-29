@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.9.14 - Unreleased
+
+While your stream is hidden behind other windows, the launcher no longer turns
+every app grey and adds a Back to Stream button. The app you're streaming stays
+violet with a TV glyph; click it or press Return to go back to the stream.
+
 ## 2026.9.13 - 2026-09-28
 
 Open at login keeps working after a Homebrew upgrade. The upgrade removed
