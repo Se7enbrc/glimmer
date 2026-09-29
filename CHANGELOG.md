@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.9.13 - 2026-09-28
+
+Open at login keeps working after a Homebrew upgrade. The upgrade removed
+Glimmer's login helper from the system while macOS still showed it as on, so
+Glimmer didn't start at the next login. Glimmer now notices when it opens and
+sets the login helper up again.
+
 ## 2026.9.12 - 2026-09-28
 
 With Open at login on, Glimmer starts the way you set it after a restart,
