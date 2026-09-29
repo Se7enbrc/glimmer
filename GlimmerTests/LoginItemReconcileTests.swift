@@ -2,7 +2,8 @@
 //  LoginItemReconcileTests.swift
 //
 //  Open at login: a login item gone while the app is unchanged is the user's
-//  removal and is respected; after an update or move it is re-registered.
+//  removal and is respected; after an update or move, or with its launchd job
+//  removed, it is re-registered.
 //
 
 import ServiceManagement
@@ -32,6 +33,14 @@ struct LoginItemReconcileTests {
         #expect(action(.enabled, registered: build) == .keep)
         #expect(action(.enabled, registered: nil) == .keep)
         #expect(action(.requiresApproval, registered: "/Applications/Glimmer.app#2026.9.6") == .keep)
+    }
+
+    @Test func enabledWithNoLaunchdJobIsResubmitted() {
+        let resubmit = LoginItemManager.reconcileAction(status: .enabled, registeredBuild: build,
+                                                        currentBuild: build, jobLoaded: false)
+        #expect(resubmit == .resubmit)
+        #expect(LoginItemManager.reconcileAction(status: .requiresApproval, registeredBuild: build,
+                                                 currentBuild: build, jobLoaded: false) == .keep)
     }
 
     @Test func removedFromTheSameBuildTurnsTheToggleOff() {
