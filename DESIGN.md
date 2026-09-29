@@ -331,17 +331,20 @@ Tactile and confident: the things on screen that ask to be pressed.
 - **App buttons (`AppTileStyle`):** the launcher's main actions. 60pt tall with
   a 14pt radius, a 20pt glyph, the app name in bold headline, and a play glyph
   trailing at 75%, all white on the primary surface. One click streams that app,
-  and Return streams the Start with app while the PC is ready. While a slow
-  connect is under way, the pressed button's play glyph becomes a spinner and a
-  click or Escape cancels; the readiness chip carries the status.
+  and Return streams the Start with app while the PC is ready. The app that is
+  launching or streaming carries its own state, with the readiness chip as the
+  status: during a slow connect or a reconnect its play glyph becomes a spinner
+  and a click or Escape is the way out; while its stream window is hidden it
+  stays violet with a TV glyph and a click or Return goes back to the stream.
+  The other app buttons dim while a stream exists.
 - **State button (`StreamButtonStyle`):** a capsule at least 46pt tall, with
   22pt of horizontal and 12pt of vertical padding, white title2 semibold label.
   It appears under the app buttons only when the PC needs something other than a
-  stream: Wake and Connect, Back to Stream and Pair Again…, and Connecting… (the
-  whole capsule is the cancel) for a launch with no app button of its own, from
-  the overflow menu, the menu bar or Shortcuts. A fast connect shows nothing:
-  both wait out a 400ms hold. The same style is the menu bar panel's primary
-  button, "Pair a PC…" and the pair sheet's main action.
+  stream: Wake and Connect and Pair Again…, and Connecting… or Back to Stream
+  for a stream with no app button of its own, from the overflow menu, the menu
+  bar or Shortcuts. A fast connect shows nothing: both wait out a 400ms hold.
+  The same style is the menu bar panel's primary button, "Pair a PC…" and the
+  pair sheet's main action.
 - **Pressed:** scales to 0.985 over a 0.15s snappy spring; no colour change.
   Disabled drops to 55% opacity.
 - **Secondary:** standard AppKit and SwiftUI buttons (bordered, borderless or

@@ -194,14 +194,16 @@ private struct ConnectSurface: View {
         return true
     }
 
-    /// The app buttons stream, so the Stream button only appears for the states they
-    /// can't show: Wake, Back to Stream, Pair Again, and a (re)connect with no button of its own.
+    /// The app buttons stream, so the Stream button only appears for the states they can't
+    /// show: Wake, Pair Again, and a (re)connect or hidden stream with no button of its own.
     private var showsStateButton: Bool {
         guard !isHandedOff else { return false }
         let role = StreamButton.role(for: model.menuBarPrimaryAction,
                                      backgrounded: model.isStreaming && model.nativeStreamBackgrounded,
                                      connectingShown: showsConnectingUI)
-        if role == .connecting || role == .reconnecting { return !launchIsOnAButton }
+        if [StreamButton.ButtonRole.connecting, .reconnecting, .liveBackgrounded].contains(role) {
+            return !launchIsOnAButton
+        }
         return role != .connect && role != .noPC
     }
 
