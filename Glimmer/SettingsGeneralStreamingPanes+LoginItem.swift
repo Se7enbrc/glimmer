@@ -20,7 +20,7 @@ enum LoginItemManager {
 
     /// What reconcile does about the saved "Open at login" intent.
     enum Reconcile: Equatable {
-        case keep, reregister, userRemoved
+        case keep, reregister, resubmit, userRemoved
     }
 
     /// The service that backs the user's current intent.
@@ -43,12 +43,14 @@ enum LoginItemManager {
     }
 
     /// Gone from Login Items while the app wasn't moved or updated means the
-    /// user removed it; after a move or update (or with no record, from builds
-    /// that kept none) it's an invalidated registration to heal.
+    /// user removed it; after a move or update it's an invalidated registration to
+    /// heal. Enabled with no launchd job (a Homebrew upgrade removes it) is resubmitted.
     static func reconcileAction(status: SMAppService.Status, registeredBuild: String?,
-                                currentBuild: String) -> Reconcile {
+                                currentBuild: String, jobLoaded: Bool = true) -> Reconcile {
         switch status {
-        case .enabled, .requiresApproval:
+        case .enabled:
+            return jobLoaded ? .keep : .resubmit
+        case .requiresApproval:
             return .keep
         case .notRegistered, .notFound:
             return registeredBuild == currentBuild ? .userRemoved : .reregister
@@ -100,7 +102,8 @@ enum LoginItemManager {
         let minimized = defaults.bool(forKey: "launchMinimized")
         let status = activeService(minimized: minimized).status
         switch reconcileAction(status: status, registeredBuild: defaults.string(forKey: registeredBuildKey),
-                               currentBuild: currentBuild()) {
+                               currentBuild: currentBuild(),
+                               jobLoaded: !minimized || status != .enabled || helperJobLoaded()) {
         case .keep:
             // A live registration belongs to this build, including one made
             // before builds kept a record, so a later removal is recognized.
@@ -114,12 +117,29 @@ enum LoginItemManager {
         case .reregister:
             Diag.notice("login item drifted (\(statusLabel(status))) - re-registering", "LoginItem")
             return apply(launchAtLogin: true, minimized: minimized)
+        case .resubmit:
+            Diag.notice("login helper enabled but launchd has no job - re-registering", "LoginItem")
+            try? SMAppService.loginItem(identifier: helperBundleID).unregister()
+            return apply(launchAtLogin: true, minimized: minimized)
         case .userRemoved:
             Diag.notice("login item removed in System Settings - Open at login is off", "LoginItem")
             defaults.set(false, forKey: "launchAtLogin")
             defaults.removeObject(forKey: registeredBuildKey)
             return nil
         }
+    }
+
+    /// Whether launchd holds the helper's job. SMAppService reports what macOS recorded,
+    /// so only launchd can say the job itself is gone; when it can't answer, assume present.
+    static func helperJobLoaded() -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = ["print", "gui/\(getuid())/\(helperBundleID)"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do { try task.run() } catch { return true }
+        task.waitUntilExit()
+        return task.terminationStatus == 0
     }
 
     /// Open at login's own item starts Glimmer (menu-bar only when asked), so macOS's
