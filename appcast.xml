@@ -6,6 +6,17 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.9.13</title>
+      <description><![CDATA[
+<p>Open at login keeps working after a Homebrew upgrade. The upgrade removed Glimmer's login helper from the system while macOS still showed it as on, so Glimmer didn't start at the next login. Glimmer now notices when it opens and sets the login helper up again.</p>
+]]></description>
+      <pubDate>Tue, 29 Sep 2026 01:11:08 GMT</pubDate>
+      <sparkle:version>20261002</sparkle:version>
+      <sparkle:shortVersionString>2026.9.13</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.9.13/Glimmer-2026.9.13.zip" type="application/octet-stream" sparkle:edSignature="s2m1Ccng97nuUsbbBPOpxDacvfl6st4/5NT9ILnw0Ptgnf0ZISWmLxDV0cVpc3sJXN7nWLQ+gBBt9uGPU4/yDw==" length="9021512" />
+    </item>
+    <item>
       <title>2026.9.12</title>
       <description><![CDATA[
 <p>With Open at login on, Glimmer starts the way you set it after a restart, including in the menu bar only. macOS's Reopen windows when logging back in used to relaunch Glimmer as an ordinary app, window and all, before Glimmer's own login item could start it.</p>
