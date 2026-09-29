@@ -6,6 +6,7 @@
 //  General pane run. Registration plumbing, not a pane, so it lives apart.
 //
 
+import AppKit
 import Foundation
 import ServiceManagement
 
@@ -119,6 +120,17 @@ enum LoginItemManager {
             defaults.removeObject(forKey: registeredBuildKey)
             return nil
         }
+    }
+
+    /// Open at login's own item starts Glimmer (menu-bar only when asked), so macOS's
+    /// reopen-at-login must not start it first as a plain launch with its window up.
+    @MainActor private static var relaunchDisabled = false
+
+    @MainActor
+    static func syncRelaunchOnLogin(_ launchAtLogin: Bool) {
+        guard launchAtLogin != relaunchDisabled else { return }
+        relaunchDisabled = launchAtLogin
+        if launchAtLogin { NSApp.disableRelaunchOnLogin() } else { NSApp.enableRelaunchOnLogin() }
     }
 
     static func statusLabel(_ status: SMAppService.Status) -> String {
