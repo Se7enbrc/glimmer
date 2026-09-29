@@ -34,6 +34,7 @@ struct GeneralPane: View {
     private func scheduleLoginItemRegistration(launchAtLogin: Bool, minimized: Bool) {
         DispatchQueue.main.async {
             let status = LoginItemManager.apply(launchAtLogin: launchAtLogin, minimized: minimized)
+            LoginItemManager.syncRelaunchOnLogin(launchAtLogin)
             loginItemNeedsApproval = (status == .requiresApproval)
         }
     }
