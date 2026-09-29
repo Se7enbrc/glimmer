@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.9.12 - 2026-09-28
+
+With Open at login on, Glimmer starts the way you set it after a restart,
+including in the menu bar only. macOS's Reopen windows when logging back in used
+to relaunch Glimmer as an ordinary app, window and all, before Glimmer's own
+login item could start it.
+
 ## 2026.9.11 - 2026-09-28
 
 Reconnecting no longer brings back a Stream button under your apps. The app
