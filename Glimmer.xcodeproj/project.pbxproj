@@ -131,6 +131,7 @@
 		D1000022 /* VideoDepacketizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000021 /* VideoDepacketizer.swift */; };
 		D1000024 /* RtpVideoQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000023 /* RtpVideoQueue.swift */; };
 		D1000026 /* VideoRtpReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000025 /* VideoRtpReceiver.swift */; };
+		D2C0000E /* DatagramBatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C0000D /* DatagramBatch.swift */; };
 		DEC0DE202609221900000008 /* VideoRtpReceiver+Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */; };
 		D1000028 /* UdpPinger.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000027 /* UdpPinger.swift */; };
 		D1B00006 /* StreamSession+Downshift.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B00005 /* StreamSession+Downshift.swift */; };
@@ -168,6 +169,7 @@
 		D1000066 /* NetworkClient+Request.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000065 /* NetworkClient+Request.swift */; };
 		D1000068 /* Network+Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000067 /* Network+Support.swift */; };
 		D100006A /* InputForwarder+Capture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000069 /* InputForwarder+Capture.swift */; };
+		D2C0000C /* MouseAccelerationControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C0000B /* MouseAccelerationControl.swift */; };
 		D1000CR2 /* InputForwarder+Cruise.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000CR1 /* InputForwarder+Cruise.swift */; };
 		D100006C /* InputForwarder+StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006B /* InputForwarder+StreamView.swift */; };
 		D100006E /* StreamWindow+Show.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006D /* StreamWindow+Show.swift */; };
@@ -302,6 +304,7 @@
 		D2B00010 /* HostResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000F /* HostResolutionTests.swift */; };
 		D2C00002 /* ControlTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00001 /* ControlTransportTests.swift */; };
 		D2C0000A /* OpusDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00009 /* OpusDecoderTests.swift */; };
+		D2C00010 /* DatagramBatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C0000F /* DatagramBatchTests.swift */; };
 		D2000031 /* StreamCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000030 /* StreamCryptoTests.swift */; };
 		D2000033 /* PairingCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000032 /* PairingCryptoTests.swift */; };
 		DEC0DE2026091900000000EA /* SessionSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E9 /* SessionSafetyTests.swift */; };
@@ -535,6 +538,7 @@
 		D1000021 /* VideoDepacketizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoDepacketizer.swift; sourceTree = "<group>"; };
 		D1000023 /* RtpVideoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpVideoQueue.swift; sourceTree = "<group>"; };
 		D1000025 /* VideoRtpReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoRtpReceiver.swift; sourceTree = "<group>"; };
+		D2C0000D /* DatagramBatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/DatagramBatch.swift; sourceTree = "<group>"; };
 		DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/VideoRtpReceiver+Recovery.swift"; sourceTree = "<group>"; };
 		D1000027 /* UdpPinger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/UdpPinger.swift; sourceTree = "<group>"; };
 		D1B00005 /* StreamSession+Downshift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Downshift.swift"; sourceTree = "<group>"; };
@@ -572,6 +576,7 @@
 		D1000065 /* NetworkClient+Request.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Request.swift"; sourceTree = "<group>"; };
 		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Network+Support.swift"; sourceTree = "<group>"; };
 		D1000069 /* InputForwarder+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Capture.swift"; sourceTree = "<group>"; };
+		D2C0000B /* MouseAccelerationControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/MouseAccelerationControl.swift; sourceTree = "<group>"; };
 		D1000CR1 /* InputForwarder+Cruise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Cruise.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220100000001 /* GlimmerMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLI/GlimmerMain.swift; sourceTree = "<group>"; };
 		DEC0DE202609250100000001 /* CommandLineToolInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLI/CommandLineToolInstaller.swift; sourceTree = "<group>"; };
@@ -719,6 +724,7 @@
 		D2B0000F /* HostResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResolutionTests.swift; sourceTree = "<group>"; };
 		D2C00001 /* ControlTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlTransportTests.swift; sourceTree = "<group>"; };
 		D2C00009 /* OpusDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpusDecoderTests.swift; sourceTree = "<group>"; };
+		D2C0000F /* DatagramBatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatagramBatchTests.swift; sourceTree = "<group>"; };
 		D2000030 /* StreamCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamCryptoTests.swift; sourceTree = "<group>"; };
 		D2000032 /* PairingCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCryptoTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E9 /* SessionSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionSafetyTests.swift"; sourceTree = "<group>"; };
@@ -961,6 +967,7 @@
 				D1000C12 /* StreamWindow+Views.swift */,
 				D100006B /* InputForwarder+StreamView.swift */,
 				D1000069 /* InputForwarder+Capture.swift */,
+				D2C0000B /* MouseAccelerationControl.swift */,
 				D1000CR1 /* InputForwarder+Cruise.swift */,
 				D1000067 /* Network+Support.swift */,
 				D1000065 /* NetworkClient+Request.swift */,
@@ -1050,6 +1057,7 @@
 				D1000D10 /* RtpVideoQueue+AddPacket.swift */,
 				D1000D20 /* RtpVideoQueue+Reconstruct.swift */,
 				D1000025 /* VideoRtpReceiver.swift */,
+				D2C0000D /* DatagramBatch.swift */,
 				DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */,
 				D1000027 /* UdpPinger.swift */,
 				D1B00005 /* StreamSession+Downshift.swift */,
@@ -1175,6 +1183,7 @@
 				D2B0000F /* HostResolutionTests.swift */,
 				D2C00001 /* ControlTransportTests.swift */,
 				D2C00009 /* OpusDecoderTests.swift */,
+				D2C0000F /* DatagramBatchTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
 				D2000032 /* PairingCryptoTests.swift */,
 				DEC0DE2026091900000000E9 /* SessionSafetyTests.swift */,
@@ -1475,6 +1484,7 @@
 				D1000C11 /* StreamWindow+Views.swift in Sources */,
 				D100006C /* InputForwarder+StreamView.swift in Sources */,
 				D100006A /* InputForwarder+Capture.swift in Sources */,
+				D2C0000C /* MouseAccelerationControl.swift in Sources */,
 				D1000CR2 /* InputForwarder+Cruise.swift in Sources */,
 				D1000068 /* Network+Support.swift in Sources */,
 				D1000066 /* NetworkClient+Request.swift in Sources */,
@@ -1560,6 +1570,7 @@
 				D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */,
 				D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */,
 				D1000026 /* VideoRtpReceiver.swift in Sources */,
+				D2C0000E /* DatagramBatch.swift in Sources */,
 				DEC0DE202609221900000008 /* VideoRtpReceiver+Recovery.swift in Sources */,
 				D1000028 /* UdpPinger.swift in Sources */,
 				D1B00006 /* StreamSession+Downshift.swift in Sources */,
@@ -1675,6 +1686,7 @@
 				D2B00010 /* HostResolutionTests.swift in Sources */,
 				D2C00002 /* ControlTransportTests.swift in Sources */,
 				D2C0000A /* OpusDecoderTests.swift in Sources */,
+				D2C00010 /* DatagramBatchTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
 				D2000033 /* PairingCryptoTests.swift in Sources */,
 				DEC0DE2026091900000000EA /* SessionSafetyTests.swift in Sources */,

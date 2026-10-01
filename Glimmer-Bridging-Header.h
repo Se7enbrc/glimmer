@@ -7,7 +7,7 @@
 #ifndef Glimmer_Bridging_Header_h
 #define Glimmer_Bridging_Header_h
 
-// Inline C shims: the FEC kernel, batched receive, the exception guard and mouse acceleration.
+// The Objective-C exception guard.
 #import "Glimmer/Stream/CHelpers.h"
 
 #endif

@@ -6,10 +6,19 @@
 //  read-back is ours; a read-back of "curve on" means the sentinel went stale.
 //
 
+import Foundation
+import IOKit.hidsystem
 import Testing
 @testable import Glimmer
 
 struct MouseAccelerationTests {
+
+    /// The HID system answers through IOKit, and writing back the flag it holds leaves it as it was.
+    @Test func hidParameterReadsAndWritesBackUnchanged() throws {
+        let current = try #require(MouseAccelerationControl.linearScaling() as Bool?)
+        #expect(MouseAccelerationControl.setParameter(kIOHIDUseLinearScalingMouseAccelerationKey, NSNumber(value: current)))
+        #expect(MouseAccelerationControl.linearScaling() == current)
+    }
 
     /// Live override: the read-back says linear (ours), the sentinel is the truth.
     @Test func liveOverrideAdoptsSentinel() {
