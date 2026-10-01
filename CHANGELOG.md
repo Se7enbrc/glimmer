@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.9.14 - Unreleased
+## 2026.10.0 - Unreleased
 
 While your stream is hidden behind other windows, the launcher no longer turns
 every app grey and adds a Back to Stream button. The app you're streaming stays
