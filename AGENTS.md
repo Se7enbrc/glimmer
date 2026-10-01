@@ -33,7 +33,7 @@ tests and makes the app worse is a regression with a green check mark.
 ## Setup and commands
 
 ```bash
-brew install opus swiftlint trufflehog pre-commit
+brew install swiftlint trufflehog pre-commit
 pre-commit install && pre-commit install --hook-type pre-push
 ```
 

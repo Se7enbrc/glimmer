@@ -86,6 +86,7 @@
 		ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000701 /* AudioDecoder+Meter.swift */; };
 		AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000001 /* AudioDecoder+Engine.swift */; };
 		AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000003 /* AudioDecoder+Decode.swift */; };
+		D2C00008 /* OpusDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00007 /* OpusDecoder.swift */; };
 		AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000005 /* AudioDecoder+Prime.swift */; };
 		AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000007 /* AudioDecoder+Route.swift */; };
 		AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000009 /* AudioDecoder+Resampler.swift */; };
@@ -300,6 +301,7 @@
 		DEC0DE202609221300000008 /* AudioPendingProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221300000007 /* AudioPendingProbeTests.swift */; };
 		D2B00010 /* HostResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000F /* HostResolutionTests.swift */; };
 		D2C00002 /* ControlTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00001 /* ControlTransportTests.swift */; };
+		D2C0000A /* OpusDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00009 /* OpusDecoderTests.swift */; };
 		D2000031 /* StreamCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000030 /* StreamCryptoTests.swift */; };
 		D2000033 /* PairingCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000032 /* PairingCryptoTests.swift */; };
 		DEC0DE2026091900000000EA /* SessionSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E9 /* SessionSafetyTests.swift */; };
@@ -489,6 +491,7 @@
 		ABCD20260609000000000701 /* AudioDecoder+Meter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Meter.swift"; sourceTree = "<group>"; };
 		AC2026083000000000000001 /* AudioDecoder+Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Engine.swift"; sourceTree = "<group>"; };
 		AC2026083000000000000003 /* AudioDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Decode.swift"; sourceTree = "<group>"; };
+		D2C00007 /* OpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/OpusDecoder.swift; sourceTree = "<group>"; };
 		AC2026083000000000000005 /* AudioDecoder+Prime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Prime.swift"; sourceTree = "<group>"; };
 		AC2026083000000000000007 /* AudioDecoder+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Route.swift"; sourceTree = "<group>"; };
 		AC2026083000000000000009 /* AudioDecoder+Resampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Resampler.swift"; sourceTree = "<group>"; };
@@ -715,6 +718,7 @@
 		DEC0DE202609221300000007 /* AudioPendingProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPendingProbeTests.swift; sourceTree = "<group>"; };
 		D2B0000F /* HostResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostResolutionTests.swift; sourceTree = "<group>"; };
 		D2C00001 /* ControlTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlTransportTests.swift; sourceTree = "<group>"; };
+		D2C00009 /* OpusDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpusDecoderTests.swift; sourceTree = "<group>"; };
 		D2000030 /* StreamCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamCryptoTests.swift; sourceTree = "<group>"; };
 		D2000032 /* PairingCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCryptoTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E9 /* SessionSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionSafetyTests.swift"; sourceTree = "<group>"; };
@@ -1074,6 +1078,7 @@
 				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
 				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
 				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
+				D2C00007 /* OpusDecoder.swift */,
 				AC2026083000000000000005 /* AudioDecoder+Prime.swift */,
 				AC2026083000000000000007 /* AudioDecoder+Route.swift */,
 				AC2026083000000000000009 /* AudioDecoder+Resampler.swift */,
@@ -1169,6 +1174,7 @@
 				DEC0DE202609221300000007 /* AudioPendingProbeTests.swift */,
 				D2B0000F /* HostResolutionTests.swift */,
 				D2C00001 /* ControlTransportTests.swift */,
+				D2C00009 /* OpusDecoderTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
 				D2000032 /* PairingCryptoTests.swift */,
 				DEC0DE2026091900000000E9 /* SessionSafetyTests.swift */,
@@ -1582,6 +1588,7 @@
 				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
 				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
 				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,
+				D2C00008 /* OpusDecoder.swift in Sources */,
 				AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */,
 				AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */,
 				AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */,
@@ -1667,6 +1674,7 @@
 				DEC0DE202609221300000008 /* AudioPendingProbeTests.swift in Sources */,
 				D2B00010 /* HostResolutionTests.swift in Sources */,
 				D2C00002 /* ControlTransportTests.swift in Sources */,
+				D2C0000A /* OpusDecoderTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
 				D2000033 /* PairingCryptoTests.swift in Sources */,
 				DEC0DE2026091900000000EA /* SessionSafetyTests.swift in Sources */,

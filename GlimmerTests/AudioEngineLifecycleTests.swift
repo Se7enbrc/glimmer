@@ -53,13 +53,11 @@ struct AudioEngineLifecycleTests {
         #expect((failure == nil) == running)
     }
 
-    /// A fresh opus decoder must not inherit a missing frame or an exhausted
-    /// restart ladder from the previous connection.
-    @Test func reinitializationClearsPendingGapAndRestartState() {
+    /// A fresh decoder must not inherit an exhausted restart ladder from the previous connection.
+    @Test func reinitializationClearsRestartState() {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
         decoder.stateLock.lock()
-        decoder.pendingFecGap = true
         decoder.engineRestartRetries = AudioDecoder.maxEngineRestartRetries
         decoder.primeEdgeRetryAtNanos = 1
         decoder.primeEdgeFailureStreak = true
@@ -68,7 +66,6 @@ struct AudioEngineLifecycleTests {
                                     streams: 1, coupledStreams: 1,
                                     samplesPerFrame: 240, mapping: [0, 1])
         decoder.stateLock.lock()
-        #expect(!decoder.pendingFecGap)
         #expect(decoder.engineRestartRetries <= 1)
         #expect(decoder.primeEdgeRetryAtNanos == 0)
         #expect(!decoder.primeEdgeFailureStreak)
@@ -128,13 +125,6 @@ struct AudioEngineLifecycleTests {
         #expect(decoder.engineRunning)
         decoder.audioMeterLock.unlock()
         decoder.stateLock.unlock()
-    }
-
-    @Test func shutdownDiscardsPendingGap() {
-        let decoder = AudioDecoder()
-        decoder.pendingFecGap = true
-        decoder.shutdown()
-        #expect(!decoder.pendingFecGap)
     }
 
     /// The per-session listener leak: a Swift closure re-bridges to a new block on

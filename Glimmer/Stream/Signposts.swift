@@ -73,7 +73,7 @@ extension OSSignposter {
         subsystem: "io.ugfugl.Glimmer",
         category: "Stream.Pairing")
 
-    /// Audio path: opus_multistream_decode_float + scheduleBuffer. One
+    /// Audio path: Opus decode + scheduleBuffer. One
     /// interval per network-delivered audio packet.
     static let audio = OSSignposter(
         subsystem: "io.ugfugl.Glimmer",

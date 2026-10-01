@@ -40,7 +40,6 @@ GLIMMER_APP_DST ?= /Applications/Glimmer.app
 CONFIG          ?= Debug
 DERIVED         := $(CURDIR)/build
 GLIMMER_APP_SRC := $(DERIVED)/Build/Products/$(CONFIG)/Glimmer.app
-OPUS_PREFIX     := $(shell brew --prefix opus)
 STREAM_XCCONFIG := Glimmer/StreamLib.xcconfig
 INSTRUMENTS_DIR := $(HOME)/Library/Developer/Xcode/Instruments
 
@@ -106,7 +105,7 @@ HELPER_BIN    := $(DERIVED)/$(HELPER_LABEL)
 HELPER_SDK    := $(shell xcrun --sdk macosx --show-sdk-path)
 HELPER_TARGET := arm64-apple-macos26.0
 
-.PHONY: all release install reinstall uninstall clean app sign embed open \
+.PHONY: all release install reinstall uninstall clean app sign open \
         helper-build embed-helper \
         profile profile-signposts setup-notary notarize dmg dmg-background dist preflight \
         codesign-setup codesign-teardown ensure-signing dev test \
@@ -114,7 +113,7 @@ HELPER_TARGET := arm64-apple-macos26.0
         guard-clean-tree brew-bump
 
 # TIER 1 - "everything but publish": the full release pipeline at Release
-# (xcodebuild -> inside-out sign -> embed + re-sign dylibs -> notarize -> staple),
+# (xcodebuild -> inside-out sign -> notarize -> staple),
 # stopping just short of cutting/uploading a DMG, then INSTALLED to /Applications.
 # EVERY build goes through this, so what you run is byte-for-byte what ships:
 # daemon registration, TCC, and STRICT library validation all behave identically
@@ -132,18 +131,18 @@ release:
 		$(MAKE) CONFIG=Release notarize; \
 	else \
 		echo "  ▶ everything-but-publish: adhoc Release - no Developer ID cert (un-notarized; TCC re-prompts)"; \
-		$(MAKE) CONFIG=Release app embed; \
+		$(MAKE) CONFIG=Release sign; \
 	fi
 
 # Build + run the hostless GlimmerTests unit-test bundle (swift-testing).
-# Mirrors the app build invocation (same xcconfig + Homebrew prefixes +
+# Mirrors the app build invocation (same xcconfig +
 # CODE_SIGNING_ALLOWED=NO) then runs the scheme's Test action. The shared
 # Glimmer scheme's BuildAction builds ONLY the app, so `make app`/`make dist`
 # are unaffected; only `xcodebuild test` pulls in the GlimmerTests target.
 test:
 	@scripts/generate-build-info.sh
 	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
-	  -xcconfig $(STREAM_XCCONFIG) OPUS_PREFIX=$(OPUS_PREFIX) \
+	  -xcconfig $(STREAM_XCCONFIG) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
 
 app:
@@ -151,7 +150,6 @@ app:
 	@scripts/generate-build-info.sh
 	xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration $(CONFIG) \
 		-xcconfig $(STREAM_XCCONFIG) \
-		OPUS_PREFIX=$(OPUS_PREFIX) \
 		CODE_SIGNING_ALLOWED=NO \
 		-derivedDataPath $(DERIVED) -destination 'platform=macOS' build
 # CODE_SIGNING_ALLOWED=NO: signing is owned EXCLUSIVELY by the `sign` target
@@ -206,8 +204,8 @@ ensure-signing:
 # device.usb / moonlight exceptions onto the Sparkle downloader, which breaks the
 # sandboxed installer XPC), and Apple deprecated it for distribution. The helper
 # signs each nested component preserving its own entitlements, the app last.
-# Build the AWDL helper daemon with swiftc (system frameworks only - no opus, so
-# it doesn't need the StreamLib xcconfig). Output lives under build/.
+# Build the AWDL helper daemon with swiftc (system frameworks only, so it doesn't
+# need the StreamLib xcconfig). Output lives under build/.
 $(HELPER_BIN): $(HELPER_SRCS)
 	@echo "▶ Building AWDL helper (swiftc, $(HELPER_TARGET))..."
 	@mkdir -p $(DERIVED)
@@ -225,10 +223,9 @@ embed-helper: app $(HELPER_BIN)
 	@install -m 0644 "$(HELPER_PLIST)" "$(GLIMMER_APP_SRC)/Contents/Library/LaunchDaemons/$(HELPER_LABEL).plist"
 	@echo "  ✓ helper embedded (Contents/MacOS + Contents/Library/LaunchDaemons)"
 
-# Strict library validation (Glimmer.entitlements) needs the Homebrew dylibs
-# embedded + re-signed under our Team ID, which only the Release/Dev-ID path does
-# (embed-dylibs). Debug and any adhoc build link the Homebrew copies as-is, so
-# they get Glimmer-Debug.entitlements (disable-library-validation). See SECURITY.md.
+# Release with a Developer ID signs with Glimmer.entitlements (library validation
+# on). Debug and adhoc builds get Glimmer-Debug.entitlements: an adhoc signature
+# has no Team ID for validation to match. See SECURITY.md.
 sign: app embed-helper ensure-signing
 ifeq ($(strip $(DEVELOPER_ID)),)
 	@echo "▶ Adhoc-signing bundle inside-out (no Developer ID cert found)..."
@@ -237,12 +234,6 @@ else
 	@echo "▶ Signing bundle inside-out with: $(DEVELOPER_ID)"
 	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "$(DEVELOPER_ID)" "$(SIGN_KEYCHAIN)" $(if $(filter Release,$(CONFIG)),Glimmer/Glimmer.entitlements,Glimmer/Glimmer-Debug.entitlements)
 endif
-
-# Embed + re-sign the Homebrew dylibs. Done AFTER `sign` because embedding
-# rewrites the bundle (the app must be signed last); embed-dylibs re-signs the
-# whole bundle itself with the same identity. Use this for distribution builds.
-embed: sign
-	scripts/embed-dylibs.sh "$(GLIMMER_APP_SRC)" "$(if $(strip $(DEVELOPER_ID)),$(DEVELOPER_ID),-)" "$(if $(strip $(DEVELOPER_ID)),$(SIGN_KEYCHAIN),)"
 
 # Install the everything-but-publish build (see `release`) to /Applications.
 # `reinstall`/`open`/`dev` build on this.
@@ -291,7 +282,7 @@ asan-reinstall:
 	@printf '#include "%s"\nENABLE_ADDRESS_SANITIZER = YES\nOTHER_SWIFT_FLAGS = $$(inherited) -sanitize=address\nOTHER_CFLAGS = $$(inherited) -fsanitize=address\nOTHER_LDFLAGS = $$(inherited) -fsanitize=address\n' "$(CURDIR)/$(STREAM_XCCONFIG)" > "$(ASAN_XCCONFIG)"
 	$(MAKE) CONFIG=Debug STREAM_XCCONFIG="$(ASAN_XCCONFIG)" app
 	@rm -rf "$(DERIVED)/Build/Products/Debug/Glimmer.app/Contents/PlugIns"/*.xctest
-	$(MAKE) CONFIG=Debug STREAM_XCCONFIG="$(ASAN_XCCONFIG)" embed
+	$(MAKE) CONFIG=Debug STREAM_XCCONFIG="$(ASAN_XCCONFIG)" sign
 	$(MAKE) quit-running
 	@echo "▶ Installing the ASan Debug build to $(GLIMMER_APP_DST)..."
 	@rm -rf "$(GLIMMER_APP_DST)"; cp -R "$(DERIVED)/Build/Products/Debug/Glimmer.app" "$(GLIMMER_APP_DST)"
@@ -302,7 +293,7 @@ asan-reinstall:
 
 # `make dev` is the inner loop: run the unit tests, THEN build + install +
 # relaunch the notarized Release build. Tests run first so a failure skips the
-# slow notarize. (Pipeline: `all` build/sign/embed/notarize + `install` stage +
+# slow notarize. (Pipeline: `all` build/sign/notarize + `install` stage +
 # `reinstall` quit/relaunch.)
 dev: test reinstall
 
@@ -333,7 +324,7 @@ clean:
 # keychain after a sleep/lock from any session. The keychain is left UNLOCKED
 # so codesign can use it immediately; `make codesign-teardown` removes it.
 #
-# After this, `make embed` / `make dist` find the identity via DEVELOPER_ID
+# After this, `make sign` / `make dist` find the identity via DEVELOPER_ID
 # (auto-detected across all keychains in the search list, including this one).
 codesign-setup:
 	@echo "▶ Building dedicated signing keychain $(SIGN_KEYCHAIN)..."
@@ -415,7 +406,7 @@ setup-notary:
 # it, readable any session) and falls back to notarytool's default search
 # (login keychain) for profiles stored by the old setup-notary - a metadata
 # probe only, so it never prompts.
-notarize: embed
+notarize: sign
 	@test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: no Developer ID cert - can't notarize" >&2; exit 1; }
 	@$(MAKE) --no-print-directory ensure-signing
 	@echo "▶ Notarizing $(GLIMMER_APP_SRC)..."
@@ -443,7 +434,7 @@ notarize: embed
 # unavailable, so a release never fails over cosmetics. Same output path/name as
 # before, so `dist`, `release-publish`, and the Homebrew bump are unaffected.
 dmg:
-	@test -d "$(GLIMMER_APP_SRC)" || { echo "ERR: build first (make release embed)" >&2; exit 1; }
+	@test -d "$(GLIMMER_APP_SRC)" || { echo "ERR: build first (make release)" >&2; exit 1; }
 	@echo "▶ Building $(DMG_NAME)..."
 	@rm -rf "$(DIST_DIR)" && mkdir -p "$(DIST_DIR)"
 	@scripts/make-dmg.sh "$(GLIMMER_APP_SRC)" "$(DIST_DIR)/$(DMG_NAME)" "Glimmer $(MARKETING_VERSION)"
@@ -517,7 +508,7 @@ guard-clean-tree:
 	@git diff --cached --quiet || { echo "ERROR: refusing to build a release with staged changes (commit or stash first)"; exit 1; }
 
 # Full distribution pipeline: clean-tree gate → preflight (fail fast, see above)
-# → clean Release → Developer ID sign + embed → notarize + staple → DMG. The
+# → clean Release → Developer ID sign → notarize + staple → DMG. The
 # DMG's app is stapled, so it passes Gatekeeper offline on any Mac.
 # Non-interactive from any session once the one-time setup is done (creds file +
 # codesign-setup + setup-notary - docs/RELEASE.md).

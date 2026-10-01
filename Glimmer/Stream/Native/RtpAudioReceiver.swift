@@ -53,8 +53,8 @@ public protocol NativeAudioSink: AnyObject, Sendable {
     func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32
     /// Decode + play one opus packet (raw bytes, after FEC + any decrypt).
     func decodeAndPlay(_ opus: [UInt8])
-    /// Packet-loss concealment for one unrecovered/missing frame: invoke the opus
-    /// decoder with no input so libopus conceals the gap (AudioStream.c:166-169).
+    /// Packet-loss concealment for one unrecovered/missing frame: the decoder
+    /// conceals the gap (AudioStream.c:166-169).
     func decodeAndPlayPLC()
     /// Tear down the decoder + engine.
     func cleanup()

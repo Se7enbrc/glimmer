@@ -3,25 +3,17 @@
 // `-xcconfig` flag supplies the version to the build.
 #include "Version.xcconfig"
 
-// Xcode build settings for the one C library the Swift engine links (Homebrew Opus).
-// Applied via `xcodebuild -xcconfig` from the Makefile, which injects
-// OPUS_PREFIX = $(brew --prefix opus), so the pbxproj carries no absolute paths.
+// Xcode build settings for the app: the bridging header and its search path, applied via
+// `xcodebuild -xcconfig` from the Makefile. Glimmer links no third-party library.
 
 // SRCROOT = repo root (directory containing Glimmer.xcodeproj).
 GLIMMER_REPO_ROOT = $(SRCROOT)
 
-// Repo root for our own headers (CHelpers.h, imported via the bridging header) + Opus.
-HEADER_SEARCH_PATHS = $(inherited) $(GLIMMER_REPO_ROOT) $(OPUS_PREFIX)/include
+// Repo root for our own headers (CHelpers.h, imported via the bridging header).
+HEADER_SEARCH_PATHS = $(inherited) $(GLIMMER_REPO_ROOT)
 
-LIBRARY_SEARCH_PATHS = $(inherited) $(OPUS_PREFIX)/lib
-
-OTHER_LDFLAGS = $(inherited) -lopus
-
-// Apple Silicon only. Homebrew's opus is arm64-only, so a universal
-// (arm64 + x86_64) link fails on the x86_64 slice with undefined Opus symbols.
-// Pin arm64 so the Release build - which otherwise defaults to ARCHS_STANDARD
-// (universal) - stays arm64-only, matching the shipped binaries. (The committed
-// shared scheme doesn't carry the auto-scheme's run-destination arch narrowing.)
+// Apple Silicon only, the platform Glimmer ships for: pinned because the Release build otherwise
+// defaults to ARCHS_STANDARD (universal), and the shared scheme carries no arch narrowing.
 ARCHS = arm64
 
 // Bridging header at repo root (where Xcode looks by convention).

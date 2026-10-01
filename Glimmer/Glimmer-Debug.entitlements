@@ -3,12 +3,9 @@
 <plist version="1.0">
 <dict>
 	<!-- DEBUG / adhoc builds ONLY. Identical to Glimmer.entitlements but KEEPS
-	     disable-library-validation: a Debug/adhoc build links the Homebrew
-	     openssl@3 / opus dylibs (a different Team ID, not embedded + Team-signed),
-	     which strict Hardened-Runtime library validation rejects. Release builds
-	     (Dev-ID, notarized, dylibs embedded + re-signed under our Team ID) use
-	     Glimmer.entitlements with validation ON. The Makefile picks the file by
-	     config; see docs/SECURITY.md. -->
+	     disable-library-validation: an adhoc signature has no Team ID for
+	     validation to match. Release (Developer ID, notarized) uses
+	     Glimmer.entitlements with validation ON; see docs/SECURITY.md. -->
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
 

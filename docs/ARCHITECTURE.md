@@ -4,9 +4,9 @@ Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
 process. No external player, no linked C streaming library - the
 GameStream/Sunshine transport is implemented in Swift under
 `Glimmer/Stream/Native/` (ported from `moonlight-common-c`, GPLv3; see
-[CREDITS.md](../CREDITS.md)). The only C that crosses the bridging header is
-Opus (audio decode) and a few inline shims in `CHelpers.h`; crypto and TLS run
-on CryptoKit, CommonCrypto, Security and Network.framework.
+[CREDITS.md](../CREDITS.md)). The only C that crosses the bridging header is a
+few inline shims in `CHelpers.h`; crypto, TLS and audio decode run on CryptoKit,
+CommonCrypto, Security, Network.framework and AudioToolbox.
 
 There is one other process, and it is not in the stream path: an opt-in root
 LaunchDaemon under `helper/` that parks the AirDrop radio (`awdl0`) for the
@@ -550,30 +550,25 @@ details and the pinning lifecycle live in [SECURITY.md](SECURITY.md).
 ## Build pipeline
 
 There is no separate native library and no submodule: the entire streaming
-engine compiles as part of the app target. The only external link dependency is
-Homebrew `opus`; `make dist` copies its dylib into `Contents/Frameworks`
-(rewired to `@rpath`), so the shipped app is self-contained and needs nothing
-installed to run.
+engine compiles as part of the app target. Glimmer links no third-party library,
+so the shipped app needs nothing installed to run.
 
 ### `Glimmer/StreamLib.xcconfig`
 
-Tells Xcode where the Opus headers and library live, and pulls in the version
+Points Xcode at the bridging header and pulls in the version
 single-source-of-truth:
 
 ```
 #include "Version.xcconfig"
-HEADER_SEARCH_PATHS  = $(inherited) $(GLIMMER_REPO_ROOT) $(OPUS_PREFIX)/include
-LIBRARY_SEARCH_PATHS = $(inherited) $(OPUS_PREFIX)/lib
-OTHER_LDFLAGS        = $(inherited) -lopus
+HEADER_SEARCH_PATHS  = $(inherited) $(GLIMMER_REPO_ROOT)
 ARCHS                = arm64
 SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
 ```
 
-`OPUS_PREFIX` is injected by the Makefile from `brew --prefix` so the pbxproj
-stays portable. `ARCHS = arm64` is pinned because Homebrew's `opus` is
-arm64-only, so a universal link fails on the x86_64 slice.
-`Glimmer/Version.xcconfig` is the single source of truth for `MARKETING_VERSION`
-/ `CURRENT_PROJECT_VERSION` - the version is NOT set in `project.pbxproj`.
+`ARCHS = arm64` is pinned so the Release build stays Apple Silicon only, the
+platform Glimmer ships for. `Glimmer/Version.xcconfig` is the single source of
+truth for `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` - the version is NOT
+set in `project.pbxproj`.
 
 ### `Makefile`
 

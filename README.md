@@ -108,12 +108,11 @@ that name.
 
 ## Build
 
-Xcode 26 (Swift 6) and Homebrew.
+Xcode 26 (Swift 6). Glimmer links no third-party libraries.
 
 ```bash
 git clone https://github.com/Se7enbrc/glimmer.git
 cd glimmer
-brew install opus
 make
 ```
 

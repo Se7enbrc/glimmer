@@ -12,13 +12,13 @@ Required:
 Brew prerequisites:
 
 ```bash
-brew install opus swiftlint trufflehog pre-commit
+brew install swiftlint trufflehog pre-commit
 ```
 
-`opus` is the Swift streaming engine's one link-time dependency, for audio
-decode; crypto and TLS use the platform frameworks. There are no submodules and
-no vendored C library. `swiftlint` and `trufflehog` back pre-commit hooks and
-the commit fails without them.
+The app links no third-party library: crypto, TLS and audio decode use the
+platform frameworks. There are no submodules and no vendored C library.
+`swiftlint` and `trufflehog` back pre-commit hooks and the commit fails without
+them.
 
 Clone:
 
@@ -56,7 +56,6 @@ The canonical xcodebuild invocation (what `make app` runs) is:
 scripts/generate-build-info.sh
 xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
     -xcconfig Glimmer/StreamLib.xcconfig \
-    OPUS_PREFIX=$(brew --prefix opus) \
     CODE_SIGNING_ALLOWED=NO \
     -derivedDataPath ./build -destination 'platform=macOS' build
 ```
@@ -76,7 +75,7 @@ notarized Release build, installed and relaunched - same signing path as
    `Glimmer/BuildInfo.generated.swift` exists (`make app` and `make test` run it
    for you).
 2. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
-   Scheme → Run → Info). It supplies the Opus search paths and the version from
+   Scheme → Run → Info). It supplies the bridging header and the version from
    `Glimmer/Version.xcconfig`.
 3. Build and run.
 
