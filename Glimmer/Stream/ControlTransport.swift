@@ -1,17 +1,14 @@
 //
 //  ControlTransport.swift
 //
-//  Mutual-TLS HTTP/1.1 client for the GameStream control channel, built directly
-//  on the embedded OpenSSL (libssl) + POSIX sockets - NO URLSession, and crucially
-//  NO keychain. The client cert + key load straight from PEM in memory
-//  (SSL_CTX_use_certificate / _PrivateKey); the self-signed host cert is validated
-//  by exact-DER pinning (X509_cmp) in place of CA validation - the same posture
-//  the old URLSession TLSDelegate enforced. macOS only ever forced a
-//  SecIdentity/login-keychain on us to satisfy URLSession; running TLS ourselves
-//  removes it (and the sleep-lock class of bug) entirely.
+//  HTTP/1.1 client for the control channel on Network.framework: mutual TLS with an in-memory
+//  client identity and the PC's self-signed cert pinned by exact DER, so neither the keychain
+//  nor CA trust is ever in the path.
 //
 
 import Foundation
+import Network
+import Security
 import os
 
 enum ControlTransport {
@@ -20,34 +17,34 @@ enum ControlTransport {
         let deadline: Date
         private struct State {
             var cancelled = false
-            var fd: Int32?
+            var connection: NWConnection?
         }
         private let state = OSAllocatedUnfairLock(initialState: State())
 
         init(timeout: TimeInterval) { deadline = Date().addingTimeInterval(timeout) }
 
-        /// Shut down the attached socket so blocked SSL_connect or read wakes now, not at SO_RCVTIMEO.
-        /// detach() runs before close so cancellation never shuts down a reused fd number.
+        /// Cancel the attached connection so a pending handshake or read ends now.
         func cancel() {
-            state.withLock {
-                $0.cancelled = true
-                if let fd = $0.fd { shutdown(fd, SHUT_RDWR) }
+            let connection = state.withLock { state -> NWConnection? in
+                state.cancelled = true
+                return state.connection
+            }
+            connection?.cancel()
+        }
+
+        /// False when the request was cancelled before its connection existed; it never starts.
+        func attach(_ connection: NWConnection) -> Bool {
+            state.withLock { state in
+                guard !state.cancelled else { return false }
+                state.connection = connection
+                return true
             }
         }
 
-        func attach(_ fd: Int32) { state.withLock { $0.fd = fd } }
-        func detach() { state.withLock { $0.fd = nil } }
         var isCancelled: Bool { state.withLock { $0.cancelled } }
-
-        func check() throws {
-            if isCancelled { throw CancellationError() }
-            if Date() >= deadline { throw StreamError.hostUnreachable("Control request timed out.") }
-        }
     }
 
-    /// One control response. `peerCertPEM` is the host's leaf cert (PEM) seen on
-    /// the TLS handshake - returned on every paired call so the caller can pin it
-    /// after the out-of-band RSA pairing handshake.
+    /// One control response.
     struct Response: Sendable {
         let status: Int
         let body: Data
@@ -55,8 +52,6 @@ enum ControlTransport {
 
     /// The PEM material one control call carries: the client credential we
     /// present on the mutual-TLS handshake plus the host leaf we pin against.
-    /// Grouped into one value so the request entry points stay inside the
-    /// parameter-count bar; the fields keep their individual meanings verbatim.
     /// All-nil is the plain-HTTP unpaired probe (no cert, no pin).
     struct TLSCredential: Sendable {
         let clientCertPEM: String?
@@ -68,265 +63,256 @@ enum ControlTransport {
     }
 
     private static let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Network.TLS")
-    private static let ioQueue = DispatchQueue(label: "io.ugfugl.Glimmer.control", attributes: .concurrent)
+
+    /// Requests wrapped in `StreamAttempt.run` report its deadline as `hostTimedOut`; this
+    /// backstop only ends an unwrapped `/launch`, so it lands just after the same deadline.
+    static let backstopGrace: TimeInterval = 0.25
 
     /// Perform one HTTP/1.1 GET. `tls == false` is plain HTTP (the unpaired probe
     /// path - no cert, no pin); `tls == true` presents the client cert and pins.
-    /// - credential: the client cert/key + pinned host leaf (see `TLSCredential`).
     static func get(host: String, port: Int, target: String,
                     userAgent: String,
                     tls: Bool,
                     credential: TLSCredential,
                     timeout: TimeInterval) async throws -> Response {
         let lifetime = RequestLifetime(timeout: timeout)
-        return try await withTaskCancellationHandler {
-            try Task.checkCancellation()
-            return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Response, Error>) in
-                ioQueue.async {
-                    // libcrypto plants per-thread state on this pooled worker and
-                    // frees it in a TSD destructor when GCD retires the thread
-                    // (2026-08-21 SIGSEGV); release it here, deterministically.
-                    defer { OPENSSL_thread_stop() }
-                    do {
-                        cont.resume(returning: try performBlocking(
-                            host: host, port: port, target: target, userAgent: userAgent,
-                            tls: tls, credential: credential, lifetime: lifetime))
-                    } catch {
-                        // Cancellation's shutdown surfaces as EOF; report cancellation, not a failed handshake or malformed reply.
-                        cont.resume(throwing: lifetime.isCancelled ? CancellationError() : error)
-                    }
-                }
-            }
-        } onCancel: {
-            lifetime.cancel()
-        }
-    }
-
-    // MARK: - Blocking worker (runs off-actor on ioQueue)
-
-    private static func performBlocking(host: String, port: Int, target: String,
-                                        userAgent: String,
-                                        tls: Bool,
-                                        credential: TLSCredential,
-                                        lifetime: RequestLifetime) throws -> Response {
-        try lifetime.check()
-        // Round up so the socket backstop cannot expire before the request deadline.
-        let timeoutMs = Int32((max(0.001, lifetime.deadline.timeIntervalSinceNow) * 1000).rounded(.up))
-        let fd = gl_tcp_connect(host, String(port), timeoutMs)
-        guard fd >= 0 else {
-            throw StreamError.hostUnreachable("connect to \(host):\(port) failed or timed out")
-        }
-        lifetime.attach(fd)
-        defer { lifetime.detach(); close(fd) }
-        try lifetime.check()
-
-        // Build the request bytes once - same for the TLS and plaintext paths.
         var request = "GET \(target) HTTP/1.1\r\n"
         request += "Host: \(host):\(port)\r\n"
         request += "User-Agent: \(userAgent)\r\n"
         request += "Accept: */*\r\n"
         request += "Connection: close\r\n\r\n"
-        let requestBytes = Array(request.utf8)
-
-        if !tls {
-            try lifetime.check()
-            try writeAll(fd: fd, ssl: nil, requestBytes)
-            let raw = try readAll(fd: fd, ssl: nil, lifetime: lifetime)
-            return try parse(raw)
-        }
-
-        // --- TLS ----------------------------------------------------------
-        guard let method = TLS_client_method(),
-              let ctx = SSL_CTX_new(method) else {
-            throw StreamError.crypto("SSL_CTX_new failed")
-        }
-        defer { SSL_CTX_free(ctx) }
-        // Floor the handshake at TLS 1.2 - the pin is the real guarantee, this just
-        // keeps us off legacy protocol versions. (Sunshine speaks 1.2/1.3.)
-        _ = gl_ssl_ctx_set_min_tls12(ctx)
-        // We pin instead of CA-validating (the host cert is self-signed); do the
-        // pin check by hand after the handshake. VERIFY_NONE keeps SSL_connect
-        // from rejecting the self-signed leaf before we get to look at it.
-        SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, nil)
-
-        if let certPEM = credential.clientCertPEM, let keyPEM = credential.clientKeyPEM {
-            try loadClientCredential(ctx: ctx, certPEM: certPEM, keyPEM: keyPEM)
-        }
-
-        guard let ssl = SSL_new(ctx) else { throw StreamError.crypto("SSL_new failed") }
-        defer { SSL_free(ssl) }
-        SSL_set_fd(ssl, fd)
-        guard SSL_connect(ssl) == 1 else {
-            throw StreamError.hostUnreachable("TLS handshake to \(host):\(port) failed (SSL_connect)")
-        }
-
-        // Pinning + leaf capture.
-        guard let peer = SSL_get1_peer_certificate(ssl) else {
-            throw StreamError.hostUnreachable("host presented no certificate")
-        }
-        defer { X509_free(peer) }
-        if let pinPEM = credential.pinnedCertPEM {
-            guard let pinned = x509(fromPEM: pinPEM) else {
-                throw StreamError.crypto("could not parse pinned host cert")
+        let exchange = Exchange(host: host, port: port, request: Data(request.utf8), lifetime: lifetime)
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else {
+                throw StreamError.hostUnreachable("connect to \(host):\(port) failed or timed out")
             }
-            defer { X509_free(pinned) }
-            guard X509_cmp(peer, pinned) == 0 else {
-                log.error("pinned host cert mismatch - refusing (possible MITM or host re-imaged)")
-                throw StreamError.hostUnreachable("pinned host cert mismatch")
-            }
+            let parameters = try exchange.parameters(tls: tls, credential: credential)
+            return try await exchange.run(NWConnection(host: NWEndpoint.Host(host), port: endpointPort,
+                                                       using: parameters))
+        } onCancel: {
+            lifetime.cancel()
         }
-
-        try lifetime.check()
-        try writeAll(fd: fd, ssl: ssl, requestBytes)
-        let raw = try readAll(fd: fd, ssl: ssl, lifetime: lifetime)
-        SSL_shutdown(ssl)   // best-effort clean close; body is already read
-        return try parse(raw)
     }
 
-    // MARK: - Client credential (PEM → SSL_CTX, no keychain)
+    // MARK: - One request
 
-    private static func loadClientCredential(ctx: OpaquePointer, certPEM: String, keyPEM: String) throws {
-        guard let cert = x509(fromPEM: certPEM) else {
+    /// One request's connection and reply. Invariant: `reply` and `continuation` are only
+    /// touched on `queue`, which runs every connection callback, the backstop, and the start.
+    private final class Exchange: @unchecked Sendable {
+        let queue = DispatchQueue(label: "io.ugfugl.Glimmer.control", qos: .userInitiated)
+        let host: String
+        let port: Int
+        let request: Data
+        let lifetime: RequestLifetime
+        /// Why the verify block refused the PC; written there, read when the handshake fails.
+        private let pinRejection = OSAllocatedUnfairLock<String?>(initialState: nil)
+        private var reply = ResponseBuffer()
+        private var continuation: CheckedContinuation<Response, Error>?
+
+        init(host: String, port: Int, request: Data, lifetime: RequestLifetime) {
+            self.host = host
+            self.port = port
+            self.request = request
+            self.lifetime = lifetime
+        }
+
+        func parameters(tls: Bool, credential: TLSCredential) throws -> NWParameters {
+            guard tls else { return .tcp }
+            let options = NWProtocolTLS.Options()
+            let security = options.securityProtocolOptions
+            // The pin is the guarantee; the floor just keeps the handshake off legacy versions.
+            sec_protocol_options_set_min_tls_protocol_version(security, .TLSv12)
+            // A resumed session skips the verify block, so every connection does a full handshake.
+            sec_protocol_options_set_tls_resumption_enabled(security, false)
+            if let certPEM = credential.clientCertPEM, let keyPEM = credential.clientKeyPEM {
+                sec_protocol_options_set_local_identity(security, try clientIdentity(certPEM: certPEM, keyPEM: keyPEM))
+            }
+            let pinned = try credential.pinnedCertPEM.map { pem in
+                guard let der = derBytes(fromPEM: pem) else { throw StreamError.crypto("could not parse pinned host cert") }
+                return der
+            }
+            let rejection = pinRejection
+            // Self-signed, so pinned instead of CA-validated: the leaf must byte-equal the pin.
+            sec_protocol_options_set_verify_block(security, { _, trust, complete in
+                let chain = SecTrustCopyCertificateChain(sec_trust_copy_ref(trust).takeRetainedValue())
+                guard let leaf = (chain as? [SecCertificate])?.first else {
+                    rejection.withLock { $0 = "host presented no certificate" }
+                    return complete(false)
+                }
+                let matches = pinned.map { SecCertificateCopyData(leaf) as Data == $0 } ?? true
+                if !matches { rejection.withLock { $0 = "pinned host cert mismatch" } }
+                complete(matches)
+            }, queue)
+            return NWParameters(tls: options)
+        }
+
+        func run(_ connection: NWConnection) async throws -> Response {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async { [self] in
+                    self.continuation = continuation
+                    guard lifetime.attach(connection) else { return finish(.failure(CancellationError()), closing: nil) }
+                    connection.stateUpdateHandler = { [self] state in handle(state, on: connection) }
+                    connection.start(queue: queue)
+                    let backstop = max(0, lifetime.deadline.timeIntervalSinceNow) + backstopGrace
+                    queue.asyncAfter(deadline: .now() + backstop) { [self] in
+                        finish(.failure(StreamError.hostUnreachable("Control request timed out.")), closing: connection)
+                    }
+                }
+            }
+        }
+
+        private func handle(_ state: NWConnection.State, on connection: NWConnection) {
+            switch state {
+            case .ready:
+                connection.send(content: request, completion: .contentProcessed { [self] error in
+                    if let error { return finish(.failure(failure(error)), closing: connection) }
+                    receive(on: connection)
+                })
+            case .waiting(let error), .failed(let error):
+                // Network.framework retries a waiting connection; a control request fails now instead.
+                finish(.failure(failure(error)), closing: connection)
+            case .cancelled:
+                finish(.failure(StreamError.hostUnreachable("control connection closed")), closing: nil)
+            default:
+                break
+            }
+        }
+
+        private func receive(on connection: NWConnection) {
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 16 * 1024) { [self] data, _, isComplete, error in
+                do {
+                    if let data, try reply.append(data) {
+                        return finish(.success(try parse(reply.bytes)), closing: connection)
+                    }
+                    // The PC's close ends the reply; a body short of Content-Length is truncated.
+                    if isComplete || error != nil {
+                        return finish(.success(try parse(reply.finish())), closing: connection)
+                    }
+                    receive(on: connection)
+                } catch {
+                    finish(.failure(error), closing: connection)
+                }
+            }
+        }
+
+        /// The error a connection failure reports, in the wording `classifyPairedPathFailure` reads.
+        private func failure(_ error: NWError) -> Error {
+            if let rejection = pinRejection.withLock({ $0 }) {
+                log.error("\(rejection, privacy: .public) - refusing (possible MITM or host re-imaged)")
+                return StreamError.hostUnreachable(rejection)
+            }
+            if case .tls = error {
+                return StreamError.hostUnreachable("TLS handshake to \(host):\(port) failed (\(error))")
+            }
+            return StreamError.hostUnreachable("connect to \(host):\(port) failed or timed out")
+        }
+
+        /// Resumes the caller once; a cancelled request always reports cancellation.
+        private func finish(_ result: Result<Response, Error>, closing connection: NWConnection?) {
+            connection?.cancel()
+            guard let continuation else { return }
+            self.continuation = nil
+            if case .failure = result, lifetime.isCancelled { return continuation.resume(throwing: CancellationError()) }
+            continuation.resume(with: result)
+        }
+    }
+
+    // MARK: - Client identity (PEM to an in-memory identity, no keychain)
+
+    /// The client identity from its PEM files, held in memory only.
+    static func clientIdentity(certPEM: String, keyPEM: String) throws -> sec_identity_t {
+        guard let certDER = derBytes(fromPEM: certPEM),
+              let cert = SecCertificateCreateWithData(nil, certDER as CFData) else {
             throw StreamError.crypto("could not parse client cert PEM")
         }
-        defer { X509_free(cert) }
-        guard SSL_CTX_use_certificate(ctx, cert) == 1 else {
-            throw StreamError.crypto("SSL_CTX_use_certificate failed")
-        }
-        guard let key = pkey(fromPEM: keyPEM) else {
+        // Security takes an RSA key as PKCS#1; the identity file wraps it in PKCS#8.
+        let attributes: [CFString: Any] = [kSecAttrKeyType: kSecAttrKeyTypeRSA,
+                                           kSecAttrKeyClass: kSecAttrKeyClassPrivate]
+        guard let keyDER = derBytes(fromPEM: keyPEM),
+              let key = SecKeyCreateWithData((rsaKey(fromPKCS8: keyDER) ?? keyDER) as CFData,
+                                             attributes as CFDictionary, nil) else {
             throw StreamError.crypto("could not parse client key PEM")
         }
-        defer { EVP_PKEY_free(key) }
-        guard SSL_CTX_use_PrivateKey(ctx, key) == 1 else {
-            throw StreamError.crypto("SSL_CTX_use_PrivateKey failed")
-        }
-        guard SSL_CTX_check_private_key(ctx) == 1 else {
+        guard let identity = SecIdentityCreate(nil, cert, key), let secIdentity = sec_identity_create(identity) else {
             throw StreamError.crypto("client cert/key mismatch")
         }
+        return secIdentity
     }
 
-    // MARK: - PEM <-> OpenSSL helpers
+    /// The DER inside a single PEM block, or nil when there is none.
+    static func derBytes(fromPEM pem: String) -> Data? {
+        let body = pem.split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("-----") }.joined()
+        guard let der = Data(base64Encoded: body), !der.isEmpty else { return nil }
+        return der
+    }
 
-    private static func x509(fromPEM pem: String) -> OpaquePointer? {
-        Array(pem.utf8).withUnsafeBytes { raw -> OpaquePointer? in
-            guard let bio = BIO_new_mem_buf(raw.baseAddress, Int32(raw.count)) else { return nil }
-            defer { BIO_free(bio) }
-            return PEM_read_bio_X509(bio, nil, nil, nil)
+    /// The PKCS#1 key inside PKCS#8: SEQUENCE { INTEGER version, SEQUENCE algorithm, OCTET STRING key }.
+    static func rsaKey(fromPKCS8 der: Data) -> Data? {
+        let bytes = [UInt8](der)
+        var index = 0
+        guard let outer = derElement(bytes, at: &index), outer.tag == 0x30 else { return nil }
+        index = outer.body.lowerBound
+        guard derElement(bytes, at: &index)?.tag == 0x02, derElement(bytes, at: &index)?.tag == 0x30,
+              let key = derElement(bytes, at: &index), key.tag == 0x04 else { return nil }
+        return Data(bytes[key.body])
+    }
+
+    /// One DER element at `index`, which moves past it; nil when the bytes run out.
+    private static func derElement(_ bytes: [UInt8], at index: inout Int) -> (tag: UInt8, body: Range<Int>)? {
+        guard bytes.count - index >= 2 else { return nil }
+        let tag = bytes[index]
+        var length = Int(bytes[index + 1])
+        index += 2
+        if length & 0x80 != 0 {
+            let count = length & 0x7F
+            guard count <= 4, bytes.count - index >= count else { return nil }
+            length = bytes[index..<(index + count)].reduce(0) { $0 << 8 | Int($1) }
+            index += count
         }
+        guard length <= bytes.count - index else { return nil }
+        defer { index += length }
+        return (tag, index..<(index + length))
     }
 
-    private static func pkey(fromPEM pem: String) -> OpaquePointer? {
-        Array(pem.utf8).withUnsafeBytes { raw -> OpaquePointer? in
-            guard let bio = BIO_new_mem_buf(raw.baseAddress, Int32(raw.count)) else { return nil }
-            defer { BIO_free(bio) }
-            return PEM_read_bio_PrivateKey(bio, nil, nil, nil)
-        }
-    }
-
-    // MARK: - Socket / TLS IO
-
-    private static func writeAll(fd: Int32, ssl: OpaquePointer?, _ bytes: [UInt8]) throws {
-        var sent = 0
-        try bytes.withUnsafeBytes { raw in
-            // A nil base address means an EMPTY buffer, and the loop below would
-            // not run for one anyway (sent == bytes.count == 0) - so bailing out
-            // here is the same "nothing to write" outcome, without the trap.
-            guard let base = raw.baseAddress else { return }
-            while sent < bytes.count {
-                let n: Int
-                if let ssl {
-                    n = Int(SSL_write(ssl, base + sent, Int32(bytes.count - sent)))
-                } else {
-                    n = write(fd, base + sent, bytes.count - sent)
-                }
-                guard n > 0 else { throw StreamError.hostUnreachable("control write failed") }
-                sent += n
-            }
-        }
-    }
+    // MARK: - Reply
 
     /// Ceiling for one control response. Real replies are tens of KiB of XML at
     /// most, so anything past this is a broken or hostile responder.
     static let maxResponseBytes = 4 * 1024 * 1024
 
-    /// Read until peer close or `Content-Length` body bytes arrive; SO_RCVTIMEO and a
-    /// per-read lifetime check bound a stuck or trickling peer. A short body is a
-    /// truncatedRead, not a half-body the XML parser later calls "Malformed XML".
-    static func readAll(fd: Int32, ssl: OpaquePointer?, lifetime: RequestLifetime) throws -> Data {
-        var data = Data()
-        var buf = [UInt8](repeating: 0, count: 16 * 1024)
-        var contentLength: Int?
-        var headerEnd: Int?
-        func bodyShort() -> Bool {
+    /// One reply as it arrives: whole at `Content-Length` when the PC sends one, else at close.
+    struct ResponseBuffer {
+        private(set) var bytes = Data()
+        private var headerEnd: Int?
+        private var contentLength: Int?
+
+        /// Adds a chunk; true once the body has reached `Content-Length`.
+        mutating func append(_ chunk: Data) throws -> Bool {
+            bytes.append(chunk)
+            if headerEnd == nil, let separator = bytes.range(of: Data("\r\n\r\n".utf8)) {
+                headerEnd = separator.upperBound
+                contentLength = try contentLengthHeader(in: bytes[bytes.startIndex..<separator.lowerBound])
+            }
+            if bytes.count > maxResponseBytes || (contentLength ?? 0) > maxResponseBytes {
+                throw StreamError.hostUnreachable("control response too large")
+            }
             guard let headerEnd, let contentLength else { return false }
-            return data.count - headerEnd < contentLength
+            return bytes.count - headerEnd >= contentLength
         }
-        readLoop: while true {
-            try lifetime.check()
-            let n: Int = buf.withUnsafeMutableBytes { raw in
-                if let ssl { return Int(SSL_read(ssl, raw.baseAddress, Int32(raw.count))) }
-                return read(fd, raw.baseAddress, raw.count)
-            }
-            if n <= 0 {
-                if let ssl {
-                    switch SSL_get_error(ssl, Int32(n)) {
-                    case SSL_ERROR_ZERO_RETURN:
-                        break readLoop   // clean TLS close-notify EOF
-                    case SSL_ERROR_WANT_READ, SSL_ERROR_WANT_WRITE:
-                        // A blocking socket with SO_RCVTIMEO surfaces a recv-timeout
-                        // as WANT_READ; retrying here would spin forever on a silent
-                        // host. Body short of Content-Length = truncated; fail fast.
-                        if bodyShort() {
-                            throw StreamError.truncatedRead(
-                                "TLS recv timed out mid-body (have \(data.count) bytes)")
-                        }
-                        break readLoop
-                    default:
-                        if bodyShort() {
-                            throw StreamError.truncatedRead(
-                                "TLS read failed mid-body (have \(data.count) bytes)")
-                        }
-                        break readLoop   // error after a complete/headerless body
-                    }
-                } else {
-                    if n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-                        if bodyShort() {
-                            throw StreamError.truncatedRead(
-                                "recv timed out mid-body (have \(data.count) bytes)")
-                        }
-                    }
-                    break readLoop       // plaintext EOF (0) or non-retriable error
-                }
-            }
-            data.append(contentsOf: buf[0..<n])
 
-            // Once headers are complete, learn Content-Length so we can stop
-            // exactly at the body end instead of waiting on the close.
-            if headerEnd == nil, let r = data.range(of: Data("\r\n\r\n".utf8)) {
-                headerEnd = r.upperBound
-                contentLength = try contentLengthHeader(in: data[data.startIndex..<r.lowerBound])
+        /// The reply once the PC closes; a body short of its `Content-Length` is a truncated read.
+        func finish() throws -> Data {
+            if let headerEnd, let contentLength, bytes.count - headerEnd < contentLength {
+                throw StreamError.truncatedRead(
+                    "connection closed before Content-Length satisfied (have \(bytes.count) bytes)")
             }
-            try enforceSizeCap(received: data.count, declared: contentLength)
-            if let headerEnd, let contentLength, data.count - headerEnd >= contentLength { break }
-        }
-        // A peer close before a declared Content-Length was met is a truncated body.
-        if bodyShort() {
-            throw StreamError.truncatedRead(
-                "connection closed before Content-Length satisfied "
-                + "(have \(data.count) bytes)")
-        }
-        return data
-    }
-
-    /// Throws once a response outgrows `maxResponseBytes`, received or declared.
-    private static func enforceSizeCap(received: Int, declared: Int?) throws {
-        if received > maxResponseBytes || (declared ?? 0) > maxResponseBytes {
-            throw StreamError.hostUnreachable("control response too large")
+            return bytes
         }
     }
 
-    /// `Content-Length` from a completed header block, so `readAll` stops at the body end instead of waiting for
-    /// the peer to close; the last matching line wins, and nil (also for an empty or negative value) = no header.
+    /// `Content-Length` from a completed header block, so a reply ends at its body instead of
+    /// the PC's close; the last matching line wins, and nil (also for an empty or negative value) = no header.
     /// Fails closed on non-UTF-8 headers: this is host-supplied input, and a lossy decode would half-parse it.
     static func contentLengthHeader(in headerBytes: Data) throws -> Int? {
         guard let head = String(bytes: headerBytes, encoding: .utf8) else {
@@ -347,9 +333,8 @@ enum ControlTransport {
         guard let sep = raw.range(of: Data("\r\n\r\n".utf8)) else {
             throw StreamError.hostUnreachable("malformed HTTP response (no header terminator)")
         }
-        // Same fail-closed rule as `readAll`: header bytes that are not UTF-8 are
-        // malformed protocol text, handled by the malformed-response path rather
-        // than lossily decoded into a status line we only think we understood.
+        // Header bytes that are not UTF-8 are malformed protocol text, handled by the
+        // malformed-response path rather than lossily decoded into a status line.
         guard let head = String(bytes: raw[raw.startIndex..<sep.lowerBound], encoding: .utf8) else {
             throw StreamError.hostUnreachable("malformed HTTP response (headers are not UTF-8)")
         }

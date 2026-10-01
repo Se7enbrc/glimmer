@@ -32,31 +32,33 @@ running (`isStreaming` guard).
 
 Top-level pieces:
 
-| Layer                 | Type                                                       | Lives where                                             |
-| --------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
-| SwiftUI views         | views + observable state                                   | `Glimmer/ContentView.swift`, `SettingsView.swift`       |
-| `AppModel`            | `@MainActor` `@Observable`                                 | `Glimmer/AppModel.swift` (+ extensions)                 |
-| `StreamSession`       | `actor`                                                    | `Glimmer/Stream/StreamSession.swift` (+ extensions)     |
-| `StreamingBackend`    | protocol (the engine boundary)                             | `Glimmer/Stream/StreamingBackend.swift`                 |
-| `NativeBackend`       | `final class`, sole backend conformer                      | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/` |
-| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StreamBridgeContext.swift`              |
-| `NetworkClient`       | `actor` over `ControlTransport` (hand-rolled OpenSSL mTLS) | `Glimmer/Stream/Network.swift`                          |
-| `PairingClient`       | `actor`                                                    | `Glimmer/Stream/Pairing.swift`                          |
-| `IdentityManager`     | `actor` (singleton)                                        | `Glimmer/Stream/Identity.swift`                         |
-| `VideoDecoder`        | `@MainActor final class`                                   | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)      |
-| `FramePacer`          | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/FramePacer.swift` (+ extensions)        |
-| `AudioDecoder`        | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/AudioDecoder.swift`                     |
-| `InputForwarder`      | `@MainActor final class`                                   | `Glimmer/Stream/InputForwarder.swift`                   |
-| `ControllerForwarder` | `@MainActor` extension on InputForwarder                   | `Glimmer/Stream/ControllerForwarder.swift`              |
-| `HIDGamepadManager`   | `@MainActor final class` (singleton)                       | `Glimmer/Stream/HIDGamepad/`                            |
-| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)           | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)      |
-| `StreamWindow`        | `@MainActor final class`                                   | `Glimmer/Stream/StreamWindow.swift`                     |
-| `StatsCollector`      | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StatsCollector.swift`                   |
-| Telemetry (opt-in)    | exporter + counters                                        | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
+| Layer                 | Type                                                     | Lives where                                             |
+| --------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| SwiftUI views         | views + observable state                                 | `Glimmer/ContentView.swift`, `SettingsView.swift`       |
+| `AppModel`            | `@MainActor` `@Observable`                               | `Glimmer/AppModel.swift` (+ extensions)                 |
+| `StreamSession`       | `actor`                                                  | `Glimmer/Stream/StreamSession.swift` (+ extensions)     |
+| `StreamingBackend`    | protocol (the engine boundary)                           | `Glimmer/Stream/StreamingBackend.swift`                 |
+| `NativeBackend`       | `final class`, sole backend conformer                    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/` |
+| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StreamBridgeContext.swift`              |
+| `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `Glimmer/Stream/Network.swift`                          |
+| `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                          |
+| `IdentityManager`     | `actor` (singleton)                                      | `Glimmer/Stream/Identity.swift`                         |
+| `VideoDecoder`        | `@MainActor final class`                                 | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)      |
+| `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)        |
+| `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/AudioDecoder.swift`                     |
+| `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                   |
+| `ControllerForwarder` | `@MainActor` extension on InputForwarder                 | `Glimmer/Stream/ControllerForwarder.swift`              |
+| `HIDGamepadManager`   | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                            |
+| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)         | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)      |
+| `StreamWindow`        | `@MainActor final class`                                 | `Glimmer/Stream/StreamWindow.swift`                     |
+| `StatsCollector`      | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StatsCollector.swift`                   |
+| Telemetry (opt-in)    | exporter + counters                                      | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
 
 > The control/HTTP path runs over `ControlTransport` (`ControlTransport.swift`):
-> a hand-rolled OpenSSL + POSIX-socket mutual-TLS client, deliberately **not**
-> `URLSession` - this keeps the (sleep-locking) keychain out of the path.
+> mutual TLS on Network.framework, deliberately **not** `URLSession`. The client
+> identity is built in memory from its PEM files (`SecIdentityCreate`), so the
+> (sleep-locking) keychain is never in the path, and the PC's self-signed cert
+> is pinned by exact DER in the TLS verify block instead of CA-validated.
 
 **Command line.** The same binary is the `glimmer` command. `GlimmerMain`
 (`Glimmer/CLI/`) is the entry point: run as `glimmer` (the cask's link), or with

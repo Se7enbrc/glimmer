@@ -80,11 +80,9 @@ extension NetworkClient {
         // (session AES key + nonce) that must never reach the unified log.
         log.debug("GET /\(path, privacy: .public)")
 
-        // Mutual-TLS HTTP over our own OpenSSL transport (no URLSession, no
-        // keychain). usePaired=true presents the client cert + pins the host cert
-        // by DER; usePaired=false is the plain-HTTP unpaired probe. The UA matches
-        // moonlight-qt so Sunshine's per-client feature gating (HDR etc.) doesn't
-        // refuse us as an unknown client.
+        // usePaired presents the client cert and pins the PC's by DER; otherwise this is the
+        // plain-HTTP unpaired probe. The UA matches moonlight-qt so Sunshine's per-client
+        // feature gating (HDR etc.) doesn't refuse us as an unknown client.
         let deadline = requestDeadline ?? Date().addingTimeInterval(timeout)
         let address = server.address
         let credential = ControlTransport.TLSCredential(

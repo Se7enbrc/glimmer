@@ -10,20 +10,11 @@
 
 #include <stdint.h>
 #include <arm_neon.h>
-#include <time.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/time.h>
 #include <sys/uio.h>
 #include <openssl/bio.h>
 #include <openssl/pkcs12.h>
-#include <openssl/ssl.h>
 
 // MARK: - GF(256) shard arithmetic
 // Split-nibble tables keep field multiplication in registers while recovery
@@ -146,15 +137,6 @@ static inline long gl_bio_get_mem_data(BIO * _Nonnull bio, char * _Nullable * _N
     return BIO_ctrl(bio, BIO_CTRL_INFO, 0, (char *)out_data);
 }
 
-// MARK: - TLS minimum-version floor (control channel)
-// SSL_CTX_set_min_proto_version is a macro, so Swift can't call it. Exact-DER
-// cert PINNING is the security guarantee (see ControlTransport); flooring at
-// TLS 1.2 just keeps the handshake off legacy protocol versions - cheap defense
-// in depth. Returns 1 on success.
-static inline int gl_ssl_ctx_set_min_tls12(SSL_CTX * _Nonnull ctx) {
-    return SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
-}
-
 // MARK: - OpenSSL keygen wrapper
 // EVP_PKEY_Q_keygen is variadic in C, which Swift refuses to import. Wrap
 // the proper non-variadic RSA keygen path here.
@@ -171,67 +153,6 @@ static inline EVP_PKEY * _Nullable gl_rsa_keygen(int bits) {
 cleanup:
     EVP_PKEY_CTX_free(ctx);
     return pkey;
-}
-
-// MARK: - TCP connect with timeout (control channel)
-
-static inline int64_t gl_monotonic_ms(void) {
-    return (int64_t)(clock_gettime_nsec_np(CLOCK_MONOTONIC) / 1000000);
-}
-
-// Connect one address, polling only until the shared deadline.
-// Returns the connected non-blocking fd or -1.
-static inline int gl_tcp_connect_address(const struct addrinfo * _Nonnull ai, int64_t deadline) {
-    int fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-    if (fd < 0) return -1;
-    int one = 1;
-    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
-    int fl = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, fl | O_NONBLOCK);
-    int rc = connect(fd, ai->ai_addr, ai->ai_addrlen);
-    int connect_errno = errno;
-    if (rc == 0) return fd;
-    if (rc < 0 && connect_errno == EINPROGRESS) {
-        int64_t remaining_ms = deadline - gl_monotonic_ms();
-        struct pollfd pfd = { .fd = fd, .events = POLLOUT, .revents = 0 };
-        if (remaining_ms > 0 && poll(&pfd, 1, (int)remaining_ms) > 0 && (pfd.revents & POLLOUT)) {
-            int soerr = 0;
-            socklen_t slen = sizeof(soerr);
-            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &slen) == 0 && soerr == 0) return fd;
-        }
-    }
-    close(fd);
-    return -1;
-}
-
-// Non-blocking connect, IPv4 first (Sunshine binds IPv4 by default), within one deadline.
-// Returns a blocking SO_NOSIGPIPE fd or -1. Its timeouts are the full budget, only a backstop:
-// the caller cancels the request, shutting the socket down, at its own deadline.
-static inline int gl_tcp_connect(const char * _Nonnull host, const char * _Nonnull port, int timeout_ms) {
-    int64_t deadline = gl_monotonic_ms() + timeout_ms;
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    struct addrinfo *res = NULL;
-    if (getaddrinfo(host, port, &hints, &res) != 0 || !res) return -1;
-
-    int fd = -1;
-    for (int pass = 0; pass < 2 && fd < 0 && gl_monotonic_ms() < deadline; pass++) {
-        for (struct addrinfo *ai = res; ai && gl_monotonic_ms() < deadline; ai = ai->ai_next) {
-            if ((ai->ai_family == AF_INET) != (pass == 0)) continue;
-            fd = gl_tcp_connect_address(ai, deadline);
-            if (fd >= 0) break;
-        }
-    }
-    freeaddrinfo(res);
-    if (fd < 0) return -1;
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
-    struct timeval tv = { .tv_sec = timeout_ms / 1000, .tv_usec = (timeout_ms % 1000) * 1000 };
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-    return fd;
 }
 
 // MARK: - ObjC exception guard (AV-call crash shield)

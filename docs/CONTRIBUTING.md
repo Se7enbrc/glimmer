@@ -332,8 +332,8 @@ the comment at `StreamBridgeContext.eventContinuation` (in
     - URLs carrying `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`, or
       `uniqueid`. `NetworkClient.sensitiveQueryKeys` is the set; the redaction
       that consumes it lives in `NetworkClient+Endpoints.swift`.
-    - Cert PEMs or fingerprints at `.public` (see the hostile-log-scraping
-      comment in `ControlTransport.swift`).
+    - Cert PEMs or fingerprints at `.public` (a hostile log scraper could read
+      the pinned cert; see SECURITY.md).
     - PIN values, AES keys, signed pairing-secret bytes.
 
 The current Swift 6 strict-concurrency posture means

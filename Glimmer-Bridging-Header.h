@@ -15,10 +15,9 @@
 // Opus multistream decoder (audio path).
 #import <opus/opus_multistream.h>
 
-// OpenSSL primitives used by Identity + Pairing + Network.
+// OpenSSL primitives used by Identity, Pairing and the encrypted streams.
 // crypto.h explicitly for OPENSSL_thread_stop - the per-thread state release
-// every pooled (GCD) thread that touches OpenSSL must run before it can be
-// retired (see ControlTransport's defer; the 2026-08-21 TSD-destructor crash).
+// a pooled thread that touches OpenSSL runs before it retires (2026-08-21 crash).
 #import <openssl/crypto.h>
 #import <openssl/bio.h>
 #import <openssl/x509.h>
@@ -30,6 +29,5 @@
 #import <openssl/bn.h>
 #import <openssl/pkcs12.h>
 #import <openssl/err.h>
-#import <openssl/ssl.h>
 
 #endif

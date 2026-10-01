@@ -474,40 +474,24 @@ struct FuzzTests {
     }
 
     @Test func controlReaderStopsAtContentLength() throws {
-        let (reader, writer) = try Self.socketPair(sending: "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc")
-        defer { close(reader); close(writer) }
-        let raw = try ControlTransport.readAll(
-            fd: reader, ssl: nil, lifetime: ControlTransport.RequestLifetime(timeout: 5))
-        #expect(String(bytes: raw, encoding: .utf8)?.hasSuffix("\r\n\r\nabc") == true)
+        var reply = ControlTransport.ResponseBuffer()
+        #expect(try !reply.append(Data("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\na".utf8)))
+        #expect(try reply.append(Data("bc".utf8)))
+        #expect(String(bytes: reply.bytes, encoding: .utf8)?.hasSuffix("\r\n\r\nabc") == true)
     }
 
     @Test func controlReaderRefusesOversizedBody() throws {
         let declared = ControlTransport.maxResponseBytes + 1
-        let (reader, writer) = try Self.socketPair(sending: "HTTP/1.1 200 OK\r\nContent-Length: \(declared)\r\n\r\n")
-        defer { close(reader); close(writer) }
+        var reply = ControlTransport.ResponseBuffer()
         #expect(throws: StreamError.self) {
-            try ControlTransport.readAll(fd: reader, ssl: nil, lifetime: ControlTransport.RequestLifetime(timeout: 5))
+            try reply.append(Data("HTTP/1.1 200 OK\r\nContent-Length: \(declared)\r\n\r\n".utf8))
         }
     }
 
-    @Test func controlReaderStopsWhenCancelled() throws {
-        let (reader, writer) = try Self.socketPair(sending: "HTTP/1.1 200 OK\r\n")
-        defer { close(reader); close(writer) }
-        let lifetime = ControlTransport.RequestLifetime(timeout: 5)
-        lifetime.cancel()
-        #expect(throws: CancellationError.self) {
-            try ControlTransport.readAll(fd: reader, ssl: nil, lifetime: lifetime)
-        }
-    }
-
-    /// A connected local socket pair with `text` already written to the reader.
-    private static func socketPair(sending text: String) throws -> (reader: Int32, writer: Int32) {
-        var fds: [Int32] = [-1, -1]
-        try #require(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)
-        let bytes = Array(text.utf8)
-        let sent = bytes.withUnsafeBytes { write(fds[1], $0.baseAddress, $0.count) }
-        try #require(sent == bytes.count)
-        return (fds[0], fds[1])
+    @Test func controlReaderReportsABodyCutShort() throws {
+        var reply = ControlTransport.ResponseBuffer()
+        _ = try reply.append(Data("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc".utf8))
+        #expect(throws: StreamError.self) { try reply.finish() }
     }
 
     /// Inline AES-GCM 'H'-direction envelope builder (the byte layout open()

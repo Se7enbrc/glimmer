@@ -196,10 +196,10 @@ ref does not. The cert is public information, so a pin needs integrity, not
 secrecy.
 
 **Once pinned, ANY mismatch fails the connection.** Enforcement lives in
-`ControlTransport.swift`: `performBlocking` runs a post-handshake exact-DER pin
-check via `X509_cmp` (no `URLSession`, no `SecTrust`), refusing the connection
-if the leaf cert doesn't byte-equal the pinned PEM. We do NOT silently re-pin on
-TLS error. The previous auto-rebind-on-TLS-error path was the gap a same-LAN
+`ControlTransport.swift`: the Network.framework TLS verify block compares the
+leaf's DER to the pinned PEM's (no `URLSession`, no CA trust evaluation) and
+fails the handshake unless they are byte-equal. We do NOT silently re-pin on TLS
+error. The previous auto-rebind-on-TLS-error path was the gap a same-LAN
 attacker rode to pin their own cert - closed.
 
 **Rotation UX.** A real cert rotation (Sunshine reinstall, OS reset on the host)
