@@ -6,6 +6,18 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.10.0</title>
+      <description><![CDATA[
+<p>While your stream is hidden behind other windows, the launcher no longer turns every app grey and adds a Back to Stream button. The app you're streaming stays violet with a TV glyph; click it or press Return to go back to the stream.</p>
+<p>Glimmer now uses macOS's own encryption to pair with and talk to your PC, and macOS's own Opus decoder for the sound, instead of copies of OpenSSL and Opus bundled inside the app. The app is smaller, its security fixes arrive with macOS updates, and the keychain never comes into it, so waking the Mac can't leave a stream stuck on a keychain prompt.</p>
+]]></description>
+      <pubDate>Thu, 01 Oct 2026 22:21:13 GMT</pubDate>
+      <sparkle:version>20261003</sparkle:version>
+      <sparkle:shortVersionString>2026.10.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.10.0/Glimmer-2026.10.0.zip" type="application/octet-stream" sparkle:edSignature="gOjvImHQ5kc92aLIAL4JqL6GQibU4QDi+bXlPx2m9VRyMkL7S2k3SoP/O8ITGLWArEx/1xISkxK9mBo+w4XhAg==" length="6155790" />
+    </item>
+    <item>
       <title>2026.9.13</title>
       <description><![CDATA[
 <p>Open at login keeps working after a Homebrew upgrade. The upgrade removed Glimmer's login helper from the system while macOS still showed it as on, so Glimmer didn't start at the next login. Glimmer now notices when it opens and sets the login helper up again.</p>
