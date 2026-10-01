@@ -13,7 +13,7 @@
 # Instead we sign deepest-first: each Sparkle component re-signed with OUR
 # Developer-ID but PRESERVING its own entitlements/identifier, the Login Helper
 # with its own entitlements, then the app last with Glimmer's entitlements. The
-# embedded openssl/opus dylibs are added + signed later by embed-dylibs.sh, which
+# embedded opus dylib is added + signed later by embed-dylibs.sh, which
 # re-signs only the app's OUTER seal (nested signatures are preserved).
 #
 # Args:

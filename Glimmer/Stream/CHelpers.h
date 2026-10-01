@@ -1,9 +1,9 @@
 //
 //  CHelpers.h
 //
-//  Tiny C shims that Swift can't express directly: audio-configuration bit
-//  helpers and OpenSSL macro/variadic wrappers. Imported via the bridging
-//  header so all Swift sources can call these.
+//  Tiny C shims that Swift can't express directly: NEON FEC kernels, batched
+//  receive, audio-configuration bits and platform glue. Imported via the
+//  bridging header so all Swift sources can call these.
 
 #ifndef Glimmer_Stream_CHelpers_h
 #define Glimmer_Stream_CHelpers_h
@@ -13,8 +13,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
-#include <openssl/bio.h>
-#include <openssl/pkcs12.h>
 
 // MARK: - GF(256) shard arithmetic
 // Split-nibble tables keep field multiplication in registers while recovery
@@ -127,32 +125,6 @@ static inline int gl_channel_mask_from_audio_configuration(int x) {
 static inline int gl_surround_audio_info_from_audio_configuration(int x) {
     return (gl_channel_mask_from_audio_configuration(x) << 16) |
             gl_channel_count_from_audio_configuration(x);
-}
-
-// MARK: - OpenSSL BIO helpers
-
-/// Returns the length of memory-buffered data in `bio` and writes the pointer
-/// into `*out_data`. Equivalent to the `BIO_get_mem_data` macro.
-static inline long gl_bio_get_mem_data(BIO * _Nonnull bio, char * _Nullable * _Nonnull out_data) {
-    return BIO_ctrl(bio, BIO_CTRL_INFO, 0, (char *)out_data);
-}
-
-// MARK: - OpenSSL keygen wrapper
-// EVP_PKEY_Q_keygen is variadic in C, which Swift refuses to import. Wrap
-// the proper non-variadic RSA keygen path here.
-
-#include <openssl/rsa.h>
-
-static inline EVP_PKEY * _Nullable gl_rsa_keygen(int bits) {
-    EVP_PKEY *pkey = NULL;
-    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL);
-    if (!ctx) return NULL;
-    if (EVP_PKEY_keygen_init(ctx) <= 0)            goto cleanup;
-    if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx, bits) <= 0) goto cleanup;
-    EVP_PKEY_keygen(ctx, &pkey);
-cleanup:
-    EVP_PKEY_CTX_free(ctx);
-    return pkey;
 }
 
 // MARK: - ObjC exception guard (AV-call crash shield)

@@ -64,7 +64,7 @@ is sized to that.
 **Out of scope:**
 
 - Nation-state attackers.
-- Supply-chain compromise of the build toolchain (homebrew `openssl@3`, Xcode).
+- Supply-chain compromise of the build toolchain (homebrew `opus`, Xcode).
 - Kernel-level attackers / a hostile macOS install.
 - Local attacker with root. Nothing to defend; they already have everything.
 - Protocol-design limitations fixed by GameStream / Sunshine (e.g. the 4-digit
@@ -274,11 +274,11 @@ parsers directly instead:
   AES-GCM / HTTP control headers with random + mutated-valid input, asserting
   they reject rather than trap. It found and fixed an out-of-bounds read in the
   Reed-Solomon FEC decoders (a shard shorter than the block size).
-- **Hardened Runtime library validation is ON for Release.** The embedded
-  OpenSSL/Opus dylibs are re-signed under the team id at build time, so the
-  Release entitlements drop `disable-library-validation`. Adhoc / Debug builds
-  link the Homebrew dylibs as-is and keep it via `Glimmer-Debug.entitlements` -
-  an adhoc binary has no team id for validation to match.
+- **Hardened Runtime library validation is ON for Release.** The embedded Opus
+  dylib is re-signed under the team id at build time, so the Release
+  entitlements drop `disable-library-validation`. Adhoc / Debug builds link the
+  Homebrew dylibs as-is and keep it via `Glimmer-Debug.entitlements` - an adhoc
+  binary has no team id for validation to match.
 
 This is a LAN client connecting to the **user's own host**, so that exploit path
 is low-likelihood to begin with.
@@ -293,9 +293,8 @@ is low-likelihood to begin with.
 Unsandboxed builds carry no `device.*` exceptions - those are sandbox
 capabilities; raw-HID, networking, and file access all work without them once
 unsandboxed. The Debug/adhoc variant (`Glimmer/Glimmer-Debug.entitlements`) adds
-`cs.disable-library-validation` = true so a build that links the Homebrew
-OpenSSL/Opus dylibs as-is can still load them; Release omits it (validation
-enforced).
+`cs.disable-library-validation` = true so a build that links the Homebrew Opus
+dylib as-is can still load them; Release omits it (validation enforced).
 
 **NSWindow.sharingType** = `.none`. The stream window opts out of
 ScreenCaptureKit, `screencapture(1)`, and Cmd-Shift-5. Third-party recording /

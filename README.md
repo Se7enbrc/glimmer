@@ -113,7 +113,7 @@ Xcode 26 (Swift 6) and Homebrew.
 ```bash
 git clone https://github.com/Se7enbrc/glimmer.git
 cd glimmer
-brew install openssl@3 opus
+brew install opus
 make
 ```
 

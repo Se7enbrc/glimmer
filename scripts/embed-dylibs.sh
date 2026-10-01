@@ -2,27 +2,25 @@
 #
 # embed-dylibs.sh - make a built Glimmer.app self-contained for distribution
 #
-# The Release build links openssl@3 (libssl + libcrypto) and opus from
+# The Release build links opus from
 # /opt/homebrew/opt/.../lib/*. Those paths don't exist on user machines,
 # and even when they do, Hardened Runtime library validation rejects them
 # because Homebrew's CI signs with a different Team ID than our adhoc app
 # (so loading fails with "non-platform mapping with different Team IDs").
 #
 # This script:
-#   1. Copies the three Homebrew dylibs into Glimmer.app/Contents/Frameworks/
-#   2. Rewrites each dylib's install_name (id) to @rpath/<file>
-#   3. Rewrites libssl's libcrypto reference to @rpath
-#   4. Rewrites the main binary's three references to @rpath
-#   5. Re-signs the embedded dylibs with the adhoc identity + runtime option
-#   6. Re-signs the app bundle so its hashes match (entitlements preserved)
+#   1. Copies the Homebrew opus dylib into Glimmer.app/Contents/Frameworks/
+#   2. Rewrites its install_name (id) to @rpath/<file>
+#   3. Rewrites the main binary's reference to @rpath
+#   4. Re-signs the embedded dylib with the adhoc identity + runtime option
+#   5. Re-signs the app bundle so its hashes match (entitlements preserved)
 #
 # Run after xcodebuild -configuration Release, before packaging the DMG.
 #
 # Args:
 #   $1 - absolute path to Glimmer.app (Release build product)
 #
-# Requires `/opt/homebrew/opt/openssl@3` and `/opt/homebrew/opt/opus` to be
-# present on the build machine. The CI host needs `brew install openssl@3 opus`
+# Requires `/opt/homebrew/opt/opus` on the build machine (`brew install opus`),
 # the same as a development machine.
 
 set -euo pipefail
@@ -54,7 +52,6 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
-OPENSSL_PREFIX="$(brew --prefix openssl@3)"
 OPUS_PREFIX="$(brew --prefix opus)"
 
 BIN="$APP/Contents/MacOS/Glimmer"
@@ -62,15 +59,11 @@ FRAMEWORKS="$APP/Contents/Frameworks"
 mkdir -p "$FRAMEWORKS"
 
 echo "Embedding dylibs into $FRAMEWORKS"
-cp "$OPENSSL_PREFIX/lib/libssl.3.dylib"     "$FRAMEWORKS/"
-cp "$OPENSSL_PREFIX/lib/libcrypto.3.dylib"  "$FRAMEWORKS/"
-cp "$OPUS_PREFIX/lib/libopus.0.dylib"       "$FRAMEWORKS/"
+cp "$OPUS_PREFIX/lib/libopus.0.dylib" "$FRAMEWORKS/"
 chmod u+w "$FRAMEWORKS"/lib*.dylib
 
 echo "Rewriting dylib install names"
-install_name_tool -id @rpath/libssl.3.dylib    "$FRAMEWORKS/libssl.3.dylib"
-install_name_tool -id @rpath/libcrypto.3.dylib "$FRAMEWORKS/libcrypto.3.dylib"
-install_name_tool -id @rpath/libopus.0.dylib   "$FRAMEWORKS/libopus.0.dylib"
+install_name_tool -id @rpath/libopus.0.dylib "$FRAMEWORKS/libopus.0.dylib"
 
 # Rewrite EVERY Homebrew-path reference each Mach-O actually carries, as
 # reported by otool - never a hardcoded expected path. References are spelled
@@ -136,7 +129,7 @@ rm -f "$ENTITLEMENTS"
 echo "Verifying"
 codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tail -5
 echo
-otool -L "$BIN" | grep -E '(libssl|libcrypto|libopus)' || {
+otool -L "$BIN" | grep -E 'libopus' || {
   echo "WARN: no dylib references found in linked binary?" >&2
 }
 

@@ -110,6 +110,7 @@
 		BBF95775D96E9853A40ADED0 /* Host.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9158C8506080330EC17875A9 /* Host.swift */; };
 		BC8B3FD0322A256049C1CAF8 /* QualityCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */; };
 		C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */; };
+		D2C00006 /* PEM.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00005 /* PEM.swift */; };
 		CC00000002 /* StatsCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000001 /* StatsCollector.swift */; };
 		CC00000004 /* VideoDecoder+HDR.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000003 /* VideoDecoder+HDR.swift */; };
 		DEC0DE2026091900000000E8 /* PairingAttempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E7 /* PairingAttempt.swift */; };
@@ -420,6 +421,7 @@
 		447FF92C9458E21549E4965D /* HostStatusPoller.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostStatusPoller.swift; sourceTree = "<group>"; };
 		448F2B492E4B38A0CFF51260 /* StreamingState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingState.swift; sourceTree = "<group>"; };
 		48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Stream/ControlTransport.swift; sourceTree = "<group>"; };
+		D2C00005 /* PEM.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Stream/PEM.swift; sourceTree = "<group>"; };
 		505E37FB63C22AC476506587 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Glimmer Login Helper.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		71A5B2E11628E68BFAF05421 /* AppIcon.icon */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
@@ -1108,6 +1110,7 @@
 				DEC0DE202609258300000002 /* Protocol.swift */,
 				DEC0DE202609256700000002 /* AWDLStreamLease.swift */,
 				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
+				D2C00005 /* PEM.swift */,
 				DEC0DE202609220100000001 /* GlimmerMain.swift */,
 				DEC0DE202609250100000001 /* CommandLineToolInstaller.swift */,
 				DEC0DE202609220100000003 /* GlimmerCLI.swift */,
@@ -1615,6 +1618,7 @@
 				DEC0DE202609258300000001 /* Protocol.swift in Sources */,
 				DEC0DE202609256700000001 /* AWDLStreamLease.swift in Sources */,
 				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
+				D2C00006 /* PEM.swift in Sources */,
 				DEC0DE202609220100000002 /* GlimmerMain.swift in Sources */,
 				DEC0DE202609250100000002 /* CommandLineToolInstaller.swift in Sources */,
 				DEC0DE202609220100000004 /* GlimmerCLI.swift in Sources */,

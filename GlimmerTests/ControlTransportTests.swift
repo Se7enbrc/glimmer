@@ -69,7 +69,7 @@ private struct LoopbackSunshine {
         sec_protocol_options_set_local_identity(
             security, try ControlTransport.clientIdentity(certPEM: identity.certPEM, keyPEM: identity.keyPEM))
         sec_protocol_options_set_peer_authentication_required(security, true)
-        let expected = ControlTransport.derBytes(fromPEM: clientCertPEM)
+        let expected = PEM.der(clientCertPEM)
         sec_protocol_options_set_verify_block(security, { _, trust, complete in
             let chain = SecTrustCopyCertificateChain(sec_trust_copy_ref(trust).takeRetainedValue())
             let leaf = (chain as? [SecCertificate])?.first

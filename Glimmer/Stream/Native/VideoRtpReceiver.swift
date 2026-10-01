@@ -276,9 +276,6 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // anonymous instead of mislabeling later unrelated work.
             pthread_setname_np("Glimmer.videoRecv")
             defer { pthread_setname_np("") }
-            // libcrypto keeps per-thread state; release it before GCD can retire this worker (see
-            // ControlTransport). Plaintext video never touches libcrypto.
-            defer { if videoKey != nil { OPENSSL_thread_stop() } }
             let decryptor = videoKey.flatMap { VideoDecryptor(key: $0) }
             guard videoKey == nil || decryptor != nil else {
                 Diag.error("NativeVideo couldn't set up video decryption; no video", Self.cat)

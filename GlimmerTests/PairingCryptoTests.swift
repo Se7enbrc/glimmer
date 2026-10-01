@@ -1,9 +1,9 @@
 //
 //  PairingCryptoTests.swift
 //
-//  The OpenSSL-backed pairing crypto, which resolves because the TEST_HOST app links -lssl -lcrypto: the PIN
-//  key (checked against CryptoKit), AES-128-ECB round trips, the SHA-256 digest, and RSA sign/verify on a
-//  keypair generated in-test by generateKeyPairAndCert(), so no PEM fixture is committed.
+//  Pairing and identity crypto: the PIN key, AES-128-ECB against FIPS-197, SHA-256, RSA sign/verify and the
+//  generated certificate's shape, all on keypairs generateKeyPairAndCert() makes in-test, so no PEM fixture is
+//  committed.
 //
 
 import Foundation
@@ -27,7 +27,7 @@ struct PairingCryptoTests {
         input.append(Data(pin.utf8))
         let expected = Data(SHA256.hash(data: input).prefix(16))
 
-        let actual = try await IdentityManager.shared.aesKey(forPIN: pin, salt: salt)
+        let actual = await IdentityManager.shared.aesKey(forPIN: pin, salt: salt)
         #expect(actual.count == 16)
         #expect(actual == expected)
     }
@@ -36,9 +36,9 @@ struct PairingCryptoTests {
         let salt = Data([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33,
                          0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB])
         let mgr = IdentityManager.shared
-        let k1 = try await mgr.aesKey(forPIN: "0000", salt: salt)
-        let k2 = try await mgr.aesKey(forPIN: "0000", salt: salt)
-        let kOther = try await mgr.aesKey(forPIN: "9999", salt: salt)
+        let k1 = await mgr.aesKey(forPIN: "0000", salt: salt)
+        let k2 = await mgr.aesKey(forPIN: "0000", salt: salt)
+        let kOther = await mgr.aesKey(forPIN: "9999", salt: salt)
         #expect(k1 == k2)              // deterministic
         #expect(k1 != kOther)         // PIN-sensitive
     }
@@ -47,8 +47,8 @@ struct PairingCryptoTests {
         let mgr = IdentityManager.shared
         let saltA = Data(repeating: 0x00, count: 16)
         let saltB = Data(repeating: 0xFF, count: 16)
-        let kA = try await mgr.aesKey(forPIN: "4321", salt: saltA)
-        let kB = try await mgr.aesKey(forPIN: "4321", salt: saltB)
+        let kA = await mgr.aesKey(forPIN: "4321", salt: saltA)
+        let kB = await mgr.aesKey(forPIN: "4321", salt: saltB)
         #expect(kA != kB)
     }
 
@@ -104,7 +104,7 @@ struct PairingCryptoTests {
 
     @Test func digestSha256KnownAnswer() throws {
         // SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
-        let out = try PairingClient.digest(Data("abc".utf8))
+        let out = PairingClient.digest(Data("abc".utf8))
         #expect(out.count == 32)
         let expected = Data(SHA256.hash(data: Data("abc".utf8)))
         #expect(out == expected)
@@ -114,13 +114,13 @@ struct PairingCryptoTests {
 
     @Test func digestCrossChecksCryptoKitOnRandomInput() throws {
         let data = Data((0..<137).map { UInt8(($0 * 31 + 7) & 0xFF) })
-        let out = try PairingClient.digest(data)
+        let out = PairingClient.digest(data)
         #expect(out == Data(SHA256.hash(data: data)))
     }
 
     /// The step-4 proof goes straight from SHA-256 into AES-ECB: two whole blocks, nothing to pad.
     @Test func proofHashFillsTwoAesBlocks() throws {
-        let hash = try PairingClient.digest(Data("challenge".utf8))
+        let hash = PairingClient.digest(Data("challenge".utf8))
         #expect(try PairingClient.aesEcbEncrypt(hash, key: Data(repeating: 7, count: 16)).count == 32)
     }
 
@@ -183,6 +183,52 @@ struct PairingCryptoTests {
         #expect(s1 == s2)
         // RSA-2048 self-signed: the cert signature BIT STRING is 256 bytes.
         #expect(s1.count == 256)
+    }
+
+    // MARK: - Known answers and the generated certificate
+
+    /// FIPS-197 appendix C.1.
+    @Test func aesEcbMatchesFIPS197() throws {
+        let key = Data((0..<16).map { UInt8($0) })
+        let plaintext = try #require(Data(hex: "00112233445566778899aabbccddeeff"))
+        let ciphertext = try #require(Data(hex: "69c4e0d86a7b0430d8cdb78070b4c55a"))
+        #expect(try PairingClient.aesEcbEncrypt(plaintext, key: key) == ciphertext)
+        #expect(try PairingClient.aesEcbDecrypt(ciphertext, key: key) == plaintext)
+    }
+
+    /// The certificate Sunshine sees: moonlight-qt's template, self-signed, with a PKCS#8 key.
+    @Test func generatedCertificateIsTheMoonlightTemplate() async throws {
+        let (certPEM, keyPEM) = try await IdentityManager.shared.generateKeyPairAndCert()
+        #expect(certPEM.hasPrefix("-----BEGIN CERTIFICATE-----\n"))
+        #expect(keyPEM.hasPrefix("-----BEGIN PRIVATE KEY-----\n"))
+        let cert = try #require(PEM.certificate(certPEM))
+        #expect(SecCertificateCopySubjectSummary(cert) as String? == "NVIDIA GameStream Client")
+        let notBefore = try #require(SecCertificateCopyNotValidBeforeDate(cert) as Date?)
+        let notAfter = try #require(SecCertificateCopyNotValidAfterDate(cert) as Date?)
+        #expect(notAfter.timeIntervalSince(notBefore) == 60 * 60 * 24 * 365 * 20)
+
+        let der = try #require(PEM.der(certPEM))
+        let parts = try #require(DER.certificateParts(der))
+        let publicKey = try #require(SecCertificateCopyKey(cert))
+        #expect(SecKeyVerifySignature(publicKey, .rsaSignatureMessagePKCS1v15SHA256,
+                                      parts.tbs as CFData, parts.signature as CFData, nil))
+        // [0] version v3, then serial 0.
+        let tbs = [UInt8](parts.tbs)
+        var index = 0
+        let body = try #require(DER.element(tbs, at: &index)).body
+        #expect(tbs[body].starts(with: [0xA0, 0x03, 0x02, 0x01, 0x02, 0x02, 0x01, 0x00]))
+    }
+
+    @Test func derEncodesLongLengthsAndHighBitIntegers() {
+        #expect(DER.integer(0) == [0x02, 0x01, 0x00])
+        #expect(DER.integer(128) == [0x02, 0x02, 0x00, 0x80])
+        #expect(DER.encode(0x04, [UInt8](repeating: 1, count: 200)).prefix(3) == [0x04, 0x81, 0xC8])
+        #expect(DER.encode(0x04, [UInt8](repeating: 1, count: 300)).prefix(4) == [0x04, 0x82, 0x01, 0x2C])
+    }
+
+    @Test func derSwitchesToGeneralizedTimeIn2050() {
+        #expect(DER.time(Date(timeIntervalSince1970: 2_524_607_999)) == [0x17, 13] + Array("491231235959Z".utf8))
+        #expect(DER.time(Date(timeIntervalSince1970: 2_524_608_000)) == [0x18, 15] + Array("20500101000000Z".utf8))
     }
 
     // MARK: - First contact can't pair or pin (SECURITY C2)

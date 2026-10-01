@@ -129,7 +129,7 @@ enum ControlTransport {
                 sec_protocol_options_set_local_identity(security, try clientIdentity(certPEM: certPEM, keyPEM: keyPEM))
             }
             let pinned = try credential.pinnedCertPEM.map { pem in
-                guard let der = derBytes(fromPEM: pem) else { throw StreamError.crypto("could not parse pinned host cert") }
+                guard let der = PEM.der(pem) else { throw StreamError.crypto("could not parse pinned host cert") }
                 return der
             }
             let rejection = pinRejection
@@ -222,57 +222,12 @@ enum ControlTransport {
 
     /// The client identity from its PEM files, held in memory only.
     static func clientIdentity(certPEM: String, keyPEM: String) throws -> sec_identity_t {
-        guard let certDER = derBytes(fromPEM: certPEM),
-              let cert = SecCertificateCreateWithData(nil, certDER as CFData) else {
-            throw StreamError.crypto("could not parse client cert PEM")
-        }
-        // Security takes an RSA key as PKCS#1; the identity file wraps it in PKCS#8.
-        let attributes: [CFString: Any] = [kSecAttrKeyType: kSecAttrKeyTypeRSA,
-                                           kSecAttrKeyClass: kSecAttrKeyClassPrivate]
-        guard let keyDER = derBytes(fromPEM: keyPEM),
-              let key = SecKeyCreateWithData((rsaKey(fromPKCS8: keyDER) ?? keyDER) as CFData,
-                                             attributes as CFDictionary, nil) else {
-            throw StreamError.crypto("could not parse client key PEM")
-        }
+        guard let cert = PEM.certificate(certPEM) else { throw StreamError.crypto("could not parse client cert PEM") }
+        guard let key = PEM.privateKey(keyPEM) else { throw StreamError.crypto("could not parse client key PEM") }
         guard let identity = SecIdentityCreate(nil, cert, key), let secIdentity = sec_identity_create(identity) else {
             throw StreamError.crypto("client cert/key mismatch")
         }
         return secIdentity
-    }
-
-    /// The DER inside a single PEM block, or nil when there is none.
-    static func derBytes(fromPEM pem: String) -> Data? {
-        let body = pem.split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("-----") }.joined()
-        guard let der = Data(base64Encoded: body), !der.isEmpty else { return nil }
-        return der
-    }
-
-    /// The PKCS#1 key inside PKCS#8: SEQUENCE { INTEGER version, SEQUENCE algorithm, OCTET STRING key }.
-    static func rsaKey(fromPKCS8 der: Data) -> Data? {
-        let bytes = [UInt8](der)
-        var index = 0
-        guard let outer = derElement(bytes, at: &index), outer.tag == 0x30 else { return nil }
-        index = outer.body.lowerBound
-        guard derElement(bytes, at: &index)?.tag == 0x02, derElement(bytes, at: &index)?.tag == 0x30,
-              let key = derElement(bytes, at: &index), key.tag == 0x04 else { return nil }
-        return Data(bytes[key.body])
-    }
-
-    /// One DER element at `index`, which moves past it; nil when the bytes run out.
-    private static func derElement(_ bytes: [UInt8], at index: inout Int) -> (tag: UInt8, body: Range<Int>)? {
-        guard bytes.count - index >= 2 else { return nil }
-        let tag = bytes[index]
-        var length = Int(bytes[index + 1])
-        index += 2
-        if length & 0x80 != 0 {
-            let count = length & 0x7F
-            guard count <= 4, bytes.count - index >= count else { return nil }
-            length = bytes[index..<(index + count)].reduce(0) { $0 << 8 | Int($1) }
-            index += count
-        }
-        guard length <= bytes.count - index else { return nil }
-        defer { index += length }
-        return (tag, index..<(index + length))
     }
 
     // MARK: - Reply

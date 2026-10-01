@@ -40,7 +40,6 @@ GLIMMER_APP_DST ?= /Applications/Glimmer.app
 CONFIG          ?= Debug
 DERIVED         := $(CURDIR)/build
 GLIMMER_APP_SRC := $(DERIVED)/Build/Products/$(CONFIG)/Glimmer.app
-OPENSSL_PREFIX  := $(shell brew --prefix openssl@3)
 OPUS_PREFIX     := $(shell brew --prefix opus)
 STREAM_XCCONFIG := Glimmer/StreamLib.xcconfig
 INSTRUMENTS_DIR := $(HOME)/Library/Developer/Xcode/Instruments
@@ -144,7 +143,7 @@ release:
 test:
 	@scripts/generate-build-info.sh
 	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
-	  -xcconfig $(STREAM_XCCONFIG) OPENSSL_PREFIX=$(OPENSSL_PREFIX) OPUS_PREFIX=$(OPUS_PREFIX) \
+	  -xcconfig $(STREAM_XCCONFIG) OPUS_PREFIX=$(OPUS_PREFIX) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
 
 app:
@@ -152,7 +151,6 @@ app:
 	@scripts/generate-build-info.sh
 	xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration $(CONFIG) \
 		-xcconfig $(STREAM_XCCONFIG) \
-		OPENSSL_PREFIX=$(OPENSSL_PREFIX) \
 		OPUS_PREFIX=$(OPUS_PREFIX) \
 		CODE_SIGNING_ALLOWED=NO \
 		-derivedDataPath $(DERIVED) -destination 'platform=macOS' build
@@ -208,8 +206,8 @@ ensure-signing:
 # device.usb / moonlight exceptions onto the Sparkle downloader, which breaks the
 # sandboxed installer XPC), and Apple deprecated it for distribution. The helper
 # signs each nested component preserving its own entitlements, the app last.
-# Build the AWDL helper daemon with swiftc (system frameworks only - no openssl/
-# opus, so it doesn't need the StreamLib xcconfig). Output lives under build/.
+# Build the AWDL helper daemon with swiftc (system frameworks only - no opus, so
+# it doesn't need the StreamLib xcconfig). Output lives under build/.
 $(HELPER_BIN): $(HELPER_SRCS)
 	@echo "▶ Building AWDL helper (swiftc, $(HELPER_TARGET))..."
 	@mkdir -p $(DERIVED)
