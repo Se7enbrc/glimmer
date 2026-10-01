@@ -1,6 +1,6 @@
 // Erasure decoding follows nanors; transport provenance and MIT notices are in CREDITS.md.
-// Swift owns the field and Cauchy matrix; arm64 nibble kernels keep shard recovery
-// from holding up the receive thread during packet loss.
+// The field, the Cauchy matrix and the shard kernels are Swift; the kernels work 16 bytes
+// at a time so shard recovery doesn't hold up the receive thread during packet loss.
 
 import Foundation
 
@@ -43,23 +43,48 @@ enum GF256 {
         return (logT, expT, invT)
     }()
 
-    // Cache both nibble tables per coefficient so shard operations allocate no tables.
-    static let shardProducts: [UInt8] = {
-        var products = [UInt8](repeating: 0, count: 256 * 32)
-        for coefficient in 0..<256 {
-            for nibble in 0..<16 {
-                products[coefficient * 32 + nibble] = mul(UInt8(coefficient), UInt8(nibble))
-                products[coefficient * 32 + 16 + nibble] = mul(UInt8(coefficient), UInt8(nibble << 4))
-            }
-        }
-        return products
-    }()
-
     /// GF(256) multiply.
     @inline(__always)
     static func mul(_ a: UInt8, _ b: UInt8) -> UInt8 {
         if a == 0 || b == 0 { return 0 }
         return exp[Int(log[Int(a)]) + Int(log[Int(b)])]
+    }
+
+    /// dst[i] ^= coefficient · src[i] over `count` bytes.
+    static func mulAdd(_ dst: UnsafeMutablePointer<UInt8>, _ src: UnsafePointer<UInt8>, count: Int, by coefficient: UInt8) {
+        let target = UnsafeMutableRawPointer(dst), source = UnsafeRawPointer(src)
+        var offset = 0
+        while count - offset >= 16 {
+            let product = times(source.loadUnaligned(fromByteOffset: offset, as: SIMD16<UInt8>.self), coefficient)
+            let old = target.loadUnaligned(fromByteOffset: offset, as: SIMD16<UInt8>.self)
+            target.storeBytes(of: old ^ product, toByteOffset: offset, as: SIMD16<UInt8>.self)
+            offset += 16
+        }
+        for index in offset..<count { dst[index] ^= mul(coefficient, src[index]) }
+    }
+
+    /// dst[i] = coefficient · dst[i] over `count` bytes.
+    static func mulInPlace(_ dst: UnsafeMutablePointer<UInt8>, count: Int, by coefficient: UInt8) {
+        let target = UnsafeMutableRawPointer(dst)
+        var offset = 0
+        while count - offset >= 16 {
+            let product = times(target.loadUnaligned(fromByteOffset: offset, as: SIMD16<UInt8>.self), coefficient)
+            target.storeBytes(of: product, toByteOffset: offset, as: SIMD16<UInt8>.self)
+            offset += 16
+        }
+        for index in offset..<count { dst[index] = mul(coefficient, dst[index]) }
+    }
+
+    /// Sixteen bytes times `coefficient`: the XOR of lanes·2^b over its set bits, doubling with xtime (0x11D).
+    @inline(__always)
+    private static func times(_ lanes: SIMD16<UInt8>, _ coefficient: UInt8) -> SIMD16<UInt8> {
+        var lanes = lanes, product = SIMD16<UInt8>(repeating: 0), bits = coefficient
+        while bits != 0 {
+            if bits & 1 != 0 { product ^= lanes }
+            lanes = (lanes &<< 1) ^ ((lanes &>> 7) &* 0x1D)
+            bits >>= 1
+        }
+        return product
     }
 }
 
@@ -128,11 +153,7 @@ struct ReedSolomon {
                 if coeff == 1 {
                     for i in 0..<k { dst[i] ^= src[i] }
                 } else {
-                    GF256.shardProducts.withUnsafeBufferPointer { products in
-                        guard let base = products.baseAddress else { return }
-                        let lo = base + Int(coeff) * 32
-                        gl_gf256_mul_add(dst, src, k, lo, lo + 16)
-                    }
+                    GF256.mulAdd(dst, src, count: k, by: coeff)
                 }
             }
         }
@@ -155,11 +176,8 @@ struct ReedSolomon {
     private static func scalShard(_ a: inout [UInt8], _ coeff: UInt8, _ k: Int) {
         if coeff < 2 || k == 0 { return }
         a.withUnsafeMutableBufferPointer { target in
-            GF256.shardProducts.withUnsafeBufferPointer { products in
-                guard let dst = target.baseAddress, let base = products.baseAddress else { return }
-                let lo = base + Int(coeff) * 32
-                gl_gf256_mul(dst, k, lo, lo + 16)
-            }
+            guard let dst = target.baseAddress else { return }
+            GF256.mulInPlace(dst, count: k, by: coeff)
         }
     }
 

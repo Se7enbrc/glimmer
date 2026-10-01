@@ -7,14 +7,15 @@
 //  Pairing.swift to keep each unit focused; see that file for the pairing flow.
 //
 
+import CommonCrypto
+import CryptoKit
 import Foundation
 import os
+import Security
 
 // MARK: - Crypto / encoding helpers
 //
-// All static so they're trivially testable in isolation and don't drag the
-// actor's isolation into the OpenSSL calls. OpenSSL itself is thread-safe
-// for these byte-shoveling primitives.
+// All static, so they're testable in isolation and stay out of the actor's isolation.
 
 extension PairingClient {
 
@@ -22,11 +23,8 @@ extension PairingClient {
 
     static func randomBytes(_ count: Int) throws -> Data {
         var bytes = [UInt8](repeating: 0, count: count)
-        let ok = bytes.withUnsafeMutableBufferPointer { buf -> Int32 in
-            RAND_bytes(buf.baseAddress, Int32(buf.count))
-        }
-        guard ok == 1 else {
-            throw StreamError.crypto("RAND_bytes failed")
+        guard SecRandomCopyBytes(kSecRandomDefault, count, &bytes) == errSecSuccess else {
+            throw StreamError.crypto("SecRandomCopyBytes failed")
         }
         return Data(bytes)
     }
@@ -55,48 +53,20 @@ extension PairingClient {
             throw StreamError.crypto("AES input must be a non-zero multiple of 16 bytes (got \(input.count))")
         }
 
-        guard let ctx = EVP_CIPHER_CTX_new() else {
-            throw StreamError.crypto("EVP_CIPHER_CTX_new failed")
-        }
-        defer { EVP_CIPHER_CTX_free(ctx) }
-
         var output = Data(count: input.count)
-        var outLen: Int32 = 0
-
-        let ok = key.withUnsafeBytes { (keyBytes: UnsafeRawBufferPointer) -> Int32 in
-            input.withUnsafeBytes { (inBytes: UnsafeRawBufferPointer) -> Int32 in
-                output.withUnsafeMutableBytes { (outBytes: UnsafeMutableRawBufferPointer) -> Int32 in
-                    let keyPtr = keyBytes.bindMemory(to: UInt8.self).baseAddress
-                    let inPtr  = inBytes.bindMemory(to: UInt8.self).baseAddress
-                    let outPtr = outBytes.bindMemory(to: UInt8.self).baseAddress
-
-                    let initOK: Int32
-                    if encrypt {
-                        initOK = EVP_EncryptInit_ex(ctx, EVP_aes_128_ecb(), nil, keyPtr, nil)
-                    } else {
-                        initOK = EVP_DecryptInit_ex(ctx, EVP_aes_128_ecb(), nil, keyPtr, nil)
-                    }
-                    guard initOK == 1 else { return 0 }
-
-                    // Critical: protocol uses raw blocks, no PKCS#7 padding.
-                    EVP_CIPHER_CTX_set_padding(ctx, 0)
-
-                    let updateOK: Int32
-                    if encrypt {
-                        updateOK = EVP_EncryptUpdate(ctx, outPtr, &outLen, inPtr, Int32(input.count))
-                    } else {
-                        updateOK = EVP_DecryptUpdate(ctx, outPtr, &outLen, inPtr, Int32(input.count))
-                    }
-                    return updateOK
+        var moved = 0
+        // No padding option: the protocol uses raw blocks, never PKCS#7.
+        let status = output.withUnsafeMutableBytes { out in
+            key.withUnsafeBytes { keyBytes in
+                input.withUnsafeBytes { inBytes in
+                    CCCrypt(CCOperation(encrypt ? kCCEncrypt : kCCDecrypt), CCAlgorithm(kCCAlgorithmAES),
+                            CCOptions(kCCOptionECBMode), keyBytes.baseAddress, key.count, nil,
+                            inBytes.baseAddress, input.count, out.baseAddress, out.count, &moved)
                 }
             }
         }
-
-        guard ok == 1 else {
+        guard status == kCCSuccess, moved == input.count else {
             throw StreamError.crypto(encrypt ? "AES encrypt failed" : "AES decrypt failed")
-        }
-        guard Int(outLen) == input.count else {
-            throw StreamError.crypto("AES produced \(outLen) bytes, expected \(input.count)")
         }
         return output
     }
@@ -104,68 +74,22 @@ extension PairingClient {
     // MARK: Digest
 
     /// SHA-256, the only pairing hash Sunshine uses.
-    static func digest(_ data: Data) throws -> Data {
-        var out = [UInt8](repeating: 0, count: Int(SHA256_DIGEST_LENGTH))
-
-        let ok = data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int32 in
-            out.withUnsafeMutableBufferPointer { outBuf -> Int32 in
-                EVP_Q_digest(nil,
-                             "SHA256", nil,
-                             raw.baseAddress, data.count,
-                             outBuf.baseAddress, nil)
-            }
-        }
-        guard ok == 1 else {
-            throw StreamError.crypto("digest failed")
-        }
-        return Data(out)
+    static func digest(_ data: Data) -> Data {
+        Data(SHA256.hash(data: data))
     }
 
-    // MARK: X509 signature extraction
+    // MARK: Certificate signature
     //
-    // The "cert signature" we hash into the challenge response is the raw
-    // ASN.1 BIT STRING from the X509 - not a recomputed signature, but the
-    // bytes that are already on the cert. Both sides extract it the same
-    // way from the same PEM, so they end up with the same value.
+    // The "cert signature" hashed into the challenge response is the bytes already on the cert,
+    // not a recomputed signature, so both sides read the same value from the same PEM.
 
     static func signatureFromPemCert(_ pem: String) throws -> Data {
-        let pemBytes = Data(pem.utf8)
-        let cert = try parsePEMCert(pemBytes)
-        defer { X509_free(cert) }
-
-        // X509_get0_signature takes a const ASN1_BIT_STRING ** out-param. We
-        // hand it a slot, then read the pointer back out. Ownership stays
-        // with the X509 - we must NOT free `asnSig`.
-        var asnSig: UnsafePointer<ASN1_BIT_STRING>?
-        withUnsafeMutablePointer(to: &asnSig) { sigPP in
-            X509_get0_signature(sigPP, nil, cert)
+        // Security vets the certificate before the DER walk reads its signature.
+        guard PEM.certificate(pem) != nil, let der = PEM.der(pem),
+              let signature = DER.certificateParts(der)?.signature else {
+            throw StreamError.crypto("could not read the certificate's signature")
         }
-
-        guard let asnSig else {
-            throw StreamError.crypto("X509_get0_signature returned null")
-        }
-        // ASN1_BIT_STRING is a typedef of ASN1_STRING under the hood, so the
-        // STRING accessors work directly.
-        let asnString = UnsafePointer<ASN1_STRING>(OpaquePointer(asnSig))
-        let length = Int(ASN1_STRING_length(asnString))
-        guard length > 0, let dataPtr = ASN1_STRING_get0_data(asnString) else {
-            throw StreamError.crypto("ASN1_STRING signature has no data")
-        }
-        return Data(bytes: dataPtr, count: length)
-    }
-
-    /// PEM -> X509*. Caller owns the result and must X509_free it.
-    private static func parsePEMCert(_ pemBytes: Data) throws -> OpaquePointer {
-        let cert: OpaquePointer? = pemBytes.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> OpaquePointer? in
-            guard let base = raw.baseAddress else { return nil }
-            guard let bio = BIO_new_mem_buf(base, Int32(pemBytes.count)) else { return nil }
-            defer { BIO_free(bio) }
-            return PEM_read_bio_X509(bio, nil, nil, nil)
-        }
-        guard let cert else {
-            throw StreamError.crypto("PEM_read_bio_X509 failed")
-        }
-        return cert
+        return signature
     }
 
     // MARK: RSA verify (host signature over serverSecret)
@@ -175,87 +99,25 @@ extension PairingClient {
         signature: Data,
         serverCertPEM: String
     ) throws -> Bool {
-        let cert = try parsePEMCert(Data(serverCertPEM.utf8))
-        defer { X509_free(cert) }
-
-        guard let pubKey = X509_get_pubkey(cert) else {
-            throw StreamError.crypto("X509_get_pubkey failed")
+        guard let cert = PEM.certificate(serverCertPEM), let key = SecCertificateCopyKey(cert) else {
+            throw StreamError.crypto("could not read the PC's certificate key")
         }
-        defer { EVP_PKEY_free(pubKey) }
-
-        guard let mdctx = EVP_MD_CTX_new() else {
-            throw StreamError.crypto("EVP_MD_CTX_new failed (verify)")
-        }
-        defer { EVP_MD_CTX_free(mdctx) }
-
-        guard EVP_DigestVerifyInit(mdctx, nil, EVP_sha256(), nil, pubKey) == 1 else {
-            throw StreamError.crypto("EVP_DigestVerifyInit failed")
-        }
-
-        let result = data.withUnsafeBytes { (dataBytes: UnsafeRawBufferPointer) -> Int32 in
-            signature.withUnsafeBytes { (sigBytes: UnsafeRawBufferPointer) -> Int32 in
-                let dataPtr = dataBytes.bindMemory(to: UInt8.self).baseAddress
-                let sigPtr  = sigBytes.bindMemory(to: UInt8.self).baseAddress
-                // EVP_DigestVerify is the one-shot form: update + final in one call.
-                return EVP_DigestVerify(mdctx, sigPtr, signature.count, dataPtr, data.count)
-            }
-        }
-        // 1 = signature valid, 0 = invalid, <0 = hard error. Treat anything
-        // but 1 as "not valid" - we only care about the boolean outcome and
-        // the caller throws on false.
-        return result == 1
+        // Invalid and malformed both come back false; the caller throws on false.
+        return SecKeyVerifySignature(key, .rsaSignatureMessagePKCS1v15SHA256,
+                                     data as CFData, signature as CFData, nil)
     }
 
     // MARK: RSA sign (our signature over our clientSecret)
 
     static func signMessage(_ message: Data, privateKeyPEM: String) throws -> Data {
-        let keyBytes = Data(privateKeyPEM.utf8)
-
-        let pkey: OpaquePointer? = keyBytes.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> OpaquePointer? in
-            guard let base = raw.baseAddress else { return nil }
-            guard let bio = BIO_new_mem_buf(base, Int32(keyBytes.count)) else { return nil }
-            defer { BIO_free(bio) }
-            return PEM_read_bio_PrivateKey(bio, nil, nil, nil)
+        guard let key = PEM.privateKey(privateKeyPEM) else {
+            throw StreamError.crypto("could not read the client key")
         }
-        guard let pkey else {
-            throw StreamError.crypto("PEM_read_bio_PrivateKey failed")
+        var error: Unmanaged<CFError>?
+        guard let signature = SecKeyCreateSignature(key, .rsaSignatureMessagePKCS1v15SHA256,
+                                                    message as CFData, &error) as Data? else {
+            throw StreamError.crypto("signing failed: \(String(describing: error?.takeRetainedValue()))")
         }
-        defer { EVP_PKEY_free(pkey) }
-
-        guard let ctx = EVP_MD_CTX_new() else {
-            throw StreamError.crypto("EVP_MD_CTX_new failed (sign)")
-        }
-        defer { EVP_MD_CTX_free(ctx) }
-
-        guard EVP_DigestSignInit(ctx, nil, EVP_sha256(), nil, pkey) == 1 else {
-            throw StreamError.crypto("EVP_DigestSignInit failed")
-        }
-
-        // Two-pass: first call with NULL out buffer to discover signature
-        // length, then second call to actually fill it. This is the canonical
-        // OpenSSL pattern; signature length depends on the RSA key size.
-        let updateOK = message.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int32 in
-            EVP_DigestSignUpdate(ctx, raw.baseAddress, message.count)
-        }
-        guard updateOK == 1 else {
-            throw StreamError.crypto("EVP_DigestSignUpdate failed")
-        }
-
-        var sigLen: Int = 0
-        guard EVP_DigestSignFinal(ctx, nil, &sigLen) == 1, sigLen > 0 else {
-            throw StreamError.crypto("EVP_DigestSignFinal (probe) failed")
-        }
-
-        var signature = Data(count: sigLen)
-        let finalOK = signature.withUnsafeMutableBytes { (raw: UnsafeMutableRawBufferPointer) -> Int32 in
-            EVP_DigestSignFinal(ctx, raw.bindMemory(to: UInt8.self).baseAddress, &sigLen)
-        }
-        guard finalOK == 1 else {
-            throw StreamError.crypto("EVP_DigestSignFinal failed")
-        }
-        // OpenSSL may report a smaller actual size than the probe value
-        // (e.g. for DER-encoded ECDSA sigs); trim to the real length.
-        signature.count = sigLen
         return signature
     }
 

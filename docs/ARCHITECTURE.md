@@ -4,9 +4,9 @@ Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
 process. No external player, no linked C streaming library - the
 GameStream/Sunshine transport is implemented in Swift under
 `Glimmer/Stream/Native/` (ported from `moonlight-common-c`, GPLv3; see
-[CREDITS.md](../CREDITS.md)). The only C that crosses the bridging header is
-Opus (audio decode) and OpenSSL (identity / pairing / network crypto), plus a
-few inline shims in `CHelpers.h`.
+[CREDITS.md](../CREDITS.md)). The only C that crosses the bridging header is a
+few inline shims in `CHelpers.h`; crypto, TLS and audio decode run on CryptoKit,
+CommonCrypto, Security, Network.framework and AudioToolbox.
 
 There is one other process, and it is not in the stream path: an opt-in root
 LaunchDaemon under `helper/` that parks the AirDrop radio (`awdl0`) for the
@@ -32,31 +32,33 @@ running (`isStreaming` guard).
 
 Top-level pieces:
 
-| Layer                 | Type                                                       | Lives where                                             |
-| --------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
-| SwiftUI views         | views + observable state                                   | `Glimmer/ContentView.swift`, `SettingsView.swift`       |
-| `AppModel`            | `@MainActor` `@Observable`                                 | `Glimmer/AppModel.swift` (+ extensions)                 |
-| `StreamSession`       | `actor`                                                    | `Glimmer/Stream/StreamSession.swift` (+ extensions)     |
-| `StreamingBackend`    | protocol (the engine boundary)                             | `Glimmer/Stream/StreamingBackend.swift`                 |
-| `NativeBackend`       | `final class`, sole backend conformer                      | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/` |
-| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StreamBridgeContext.swift`              |
-| `NetworkClient`       | `actor` over `ControlTransport` (hand-rolled OpenSSL mTLS) | `Glimmer/Stream/Network.swift`                          |
-| `PairingClient`       | `actor`                                                    | `Glimmer/Stream/Pairing.swift`                          |
-| `IdentityManager`     | `actor` (singleton)                                        | `Glimmer/Stream/Identity.swift`                         |
-| `VideoDecoder`        | `@MainActor final class`                                   | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)      |
-| `FramePacer`          | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/FramePacer.swift` (+ extensions)        |
-| `AudioDecoder`        | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/AudioDecoder.swift`                     |
-| `InputForwarder`      | `@MainActor final class`                                   | `Glimmer/Stream/InputForwarder.swift`                   |
-| `ControllerForwarder` | `@MainActor` extension on InputForwarder                   | `Glimmer/Stream/ControllerForwarder.swift`              |
-| `HIDGamepadManager`   | `@MainActor final class` (singleton)                       | `Glimmer/Stream/HIDGamepad/`                            |
-| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)           | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)      |
-| `StreamWindow`        | `@MainActor final class`                                   | `Glimmer/Stream/StreamWindow.swift`                     |
-| `StatsCollector`      | `final class`, `@unchecked Sendable`                       | `Glimmer/Stream/StatsCollector.swift`                   |
-| Telemetry (opt-in)    | exporter + counters                                        | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
+| Layer                 | Type                                                     | Lives where                                             |
+| --------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| SwiftUI views         | views + observable state                                 | `Glimmer/ContentView.swift`, `SettingsView.swift`       |
+| `AppModel`            | `@MainActor` `@Observable`                               | `Glimmer/AppModel.swift` (+ extensions)                 |
+| `StreamSession`       | `actor`                                                  | `Glimmer/Stream/StreamSession.swift` (+ extensions)     |
+| `StreamingBackend`    | protocol (the engine boundary)                           | `Glimmer/Stream/StreamingBackend.swift`                 |
+| `NativeBackend`       | `final class`, sole backend conformer                    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/` |
+| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StreamBridgeContext.swift`              |
+| `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `Glimmer/Stream/Network.swift`                          |
+| `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                          |
+| `IdentityManager`     | `actor` (singleton)                                      | `Glimmer/Stream/Identity.swift`                         |
+| `VideoDecoder`        | `@MainActor final class`                                 | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)      |
+| `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)        |
+| `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/AudioDecoder.swift`                     |
+| `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                   |
+| `ControllerForwarder` | `@MainActor` extension on InputForwarder                 | `Glimmer/Stream/ControllerForwarder.swift`              |
+| `HIDGamepadManager`   | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                            |
+| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)         | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)      |
+| `StreamWindow`        | `@MainActor final class`                                 | `Glimmer/Stream/StreamWindow.swift`                     |
+| `StatsCollector`      | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StatsCollector.swift`                   |
+| Telemetry (opt-in)    | exporter + counters                                      | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
 
 > The control/HTTP path runs over `ControlTransport` (`ControlTransport.swift`):
-> a hand-rolled OpenSSL + POSIX-socket mutual-TLS client, deliberately **not**
-> `URLSession` - this keeps the (sleep-locking) keychain out of the path.
+> mutual TLS on Network.framework, deliberately **not** `URLSession`. The client
+> identity is built in memory from its PEM files (`SecIdentityCreate`), so the
+> (sleep-locking) keychain is never in the path, and the PC's self-signed cert
+> is pinned by exact DER in the TLS verify block instead of CA-validated.
 
 **Command line.** The same binary is the `glimmer` command. `GlimmerMain`
 (`Glimmer/CLI/`) is the entry point: run as `glimmer` (the cask's link), or with
@@ -548,32 +550,25 @@ details and the pinning lifecycle live in [SECURITY.md](SECURITY.md).
 ## Build pipeline
 
 There is no separate native library and no submodule: the entire streaming
-engine compiles as part of the app target. The only external link dependencies
-are Homebrew `openssl@3` and `opus`; `make dist` copies their dylibs into
-`Contents/Frameworks` (rewired to `@rpath`), so the shipped app is
-self-contained and needs nothing installed to run.
+engine compiles as part of the app target. Glimmer links no third-party library,
+so the shipped app needs nothing installed to run.
 
 ### `Glimmer/StreamLib.xcconfig`
 
-Tells Xcode where the OpenSSL/Opus headers and libraries live, and pulls in the
-version single-source-of-truth:
+Points Xcode at the bridging header and pulls in the version
+single-source-of-truth:
 
 ```
 #include "Version.xcconfig"
-HEADER_SEARCH_PATHS  = $(inherited) $(GLIMMER_REPO_ROOT) \
-                      $(OPENSSL_PREFIX)/include $(OPUS_PREFIX)/include
-LIBRARY_SEARCH_PATHS = $(inherited) $(OPENSSL_PREFIX)/lib $(OPUS_PREFIX)/lib
-OTHER_LDFLAGS        = $(inherited) -lssl -lcrypto -lz -lopus
+HEADER_SEARCH_PATHS  = $(inherited) $(GLIMMER_REPO_ROOT)
 ARCHS                = arm64
 SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
 ```
 
-`OPENSSL_PREFIX` and `OPUS_PREFIX` are injected by the Makefile from
-`brew --prefix` so the pbxproj stays portable. `ARCHS = arm64` is pinned because
-Homebrew's `openssl@3` and `opus` are arm64-only, so a universal link fails on
-the x86_64 slice. `Glimmer/Version.xcconfig` is the single source of truth for
-`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` - the version is NOT set in
-`project.pbxproj`.
+`ARCHS = arm64` is pinned so the Release build stays Apple Silicon only, the
+platform Glimmer ships for. `Glimmer/Version.xcconfig` is the single source of
+truth for `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` - the version is NOT
+set in `project.pbxproj`.
 
 ### `Makefile`
 

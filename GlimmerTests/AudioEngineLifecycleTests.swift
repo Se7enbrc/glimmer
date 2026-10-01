@@ -53,13 +53,11 @@ struct AudioEngineLifecycleTests {
         #expect((failure == nil) == running)
     }
 
-    /// A fresh opus decoder must not inherit a missing frame or an exhausted
-    /// restart ladder from the previous connection.
-    @Test func reinitializationClearsPendingGapAndRestartState() {
+    /// A fresh decoder must not inherit an exhausted restart ladder from the previous connection.
+    @Test func reinitializationClearsRestartState() {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
         decoder.stateLock.lock()
-        decoder.pendingFecGap = true
         decoder.engineRestartRetries = AudioDecoder.maxEngineRestartRetries
         decoder.primeEdgeRetryAtNanos = 1
         decoder.primeEdgeFailureStreak = true
@@ -68,7 +66,6 @@ struct AudioEngineLifecycleTests {
                                     streams: 1, coupledStreams: 1,
                                     samplesPerFrame: 240, mapping: [0, 1])
         decoder.stateLock.lock()
-        #expect(!decoder.pendingFecGap)
         #expect(decoder.engineRestartRetries <= 1)
         #expect(decoder.primeEdgeRetryAtNanos == 0)
         #expect(!decoder.primeEdgeFailureStreak)
@@ -130,17 +127,12 @@ struct AudioEngineLifecycleTests {
         decoder.stateLock.unlock()
     }
 
-    @Test func shutdownDiscardsPendingGap() {
-        let decoder = AudioDecoder()
-        decoder.pendingFecGap = true
-        decoder.shutdown()
-        #expect(!decoder.pendingFecGap)
-    }
+    private static let rawListenerFired = DispatchSemaphore(value: 0)
 
-    /// The per-session listener leak: a Swift closure re-bridges to a new block on
-    /// every call, so a Swift-side remove never matched. Removing through the
-    /// shim's token must stop the notifications.
-    @Test func removedListenerStopsFiring() async {
+    /// The per-session listener leak: Swift hands a C API a fresh block per call, so a block remove never matched.
+    /// The HAL matches a function-pointer listener on function and context, which HALListener builds on: a remove
+    /// naming another context leaves it firing, the matching one stops it, and so does HALListener's own remove.
+    @Test func listenersAreRemovedByFunctionAndContext() async {
         let system = AudioObjectID(kAudioObjectSystemObject)
         var addr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertySleepingIsAllowed,
@@ -159,19 +151,34 @@ struct AudioEngineLifecycleTests {
                 _ = AudioObjectSetPropertyData(system, &addr, 0, nil, size, &setting)
             }
         }
-        let queue = DispatchQueue(label: "io.ugfugl.Glimmer.tests.listener")
-        let fired = DispatchSemaphore(value: 0)
-        var status: OSStatus = noErr
-        guard let token = gl_audio_listener_add(system, &addr, queue, { _, _ in fired.signal() }, &status) else {
-            Issue.record("listener install failed (OSStatus \(status))")
-            return
+        // Raw API; the contexts are identities only, never dereferenced.
+        let proc: AudioObjectPropertyListenerProc = { _, _, _, _ in
+            AudioEngineLifecycleTests.rawListenerFired.signal()
+            return noErr
         }
+        let fired = Self.rawListenerFired
+        #expect(AudioObjectAddPropertyListener(system, &addr, proc, UnsafeMutableRawPointer(bitPattern: 0x1)) == noErr)
         toggle()
         #expect(await fired.waitAsync(for: .seconds(2)) == .success)
         #expect(await fired.waitAsync(for: .seconds(2)) == .success)
-        #expect(gl_audio_listener_remove(system, &addr, queue, token) == noErr)
+        _ = AudioObjectRemovePropertyListener(system, &addr, proc, UnsafeMutableRawPointer(bitPattern: 0x2))
+        toggle()
+        #expect(await fired.waitAsync(for: .seconds(2)) == .success)
+        #expect(await fired.waitAsync(for: .seconds(2)) == .success)
+        #expect(AudioObjectRemovePropertyListener(system, &addr, proc, UnsafeMutableRawPointer(bitPattern: 0x1)) == noErr)
         toggle()
         #expect(await fired.waitAsync(for: .seconds(0.5)) == .timedOut)
+
+        // HALListener: its handler fires, then goes quiet once removed.
+        let handled = DispatchSemaphore(value: 0)
+        let added = HALListener.add(system, addr) { handled.signal() }
+        #expect(added.status == noErr)
+        toggle()
+        #expect(await handled.waitAsync(for: .seconds(2)) == .success)
+        #expect(await handled.waitAsync(for: .seconds(2)) == .success)
+        #expect(HALListener.remove(system, addr, key: added.key) == noErr)
+        toggle()
+        #expect(await handled.waitAsync(for: .seconds(0.5)) == .timedOut)
     }
 
     /// A backend that outlives its session must let the decoder, and the

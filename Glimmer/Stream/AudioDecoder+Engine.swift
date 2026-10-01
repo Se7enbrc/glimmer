@@ -1,7 +1,7 @@
 //
 //  AudioDecoder+Engine.swift
 //
-//  The opus + AVAudioEngine LIFECYCLE: `initDecoderCore` (decoder create,
+//  The decoder + AVAudioEngine LIFECYCLE: `initDecoderCore` (decoder create,
 //  channel layout, graph wiring, engine start, session state reset), the
 //  `shutdown()` teardown, and the mid-stream RECOVERY family that keeps playout
 //  alive - the H3/H4 configuration-change hop, the bounded engine-restart retry
@@ -12,7 +12,7 @@
 //  calls from a completion handler" discipline.
 //
 //  Split cost (the ControllerForwarder.swift note, applied here): stored
-//  properties cannot live in an extension, so the opus/engine core state stays
+//  properties cannot live in an extension, so the decoder/engine core state stays
 //  on `AudioDecoder` and is `internal` rather than `private` for the methods in
 //  this file (and AudioDecoder+Decode.swift) to reach. See the property docs in
 //  AudioDecoder.swift for the locking rationale each one carries.
@@ -25,27 +25,20 @@ extension AudioDecoder {
 
     // MARK: Lifecycle
 
-    /// Shared opus + AVAudioEngine setup, called by the Swift-native path (the
+    /// Shared decoder + AVAudioEngine setup, called by the Swift-native path (the
     /// `NativeAudioSink` conformance). Takes plain values, no C types.
     func initDecoderCore(channelCount chCount: Int, sampleRate: Int32,
                          streams strms: Int32, coupledStreams coupled: Int32,
                          samplesPerFrame spf: Int, mapping map: [UInt8]) -> Int32 {
         stateLock.lock()
         defer { stateLock.unlock() }
-        if let decoder { opus_multistream_decoder_destroy(decoder) }
         decoder = nil
-        pendingFecGap = false
         engineRestartGeneration &+= 1
         engineRestartRetries = 0
         primeEdgeRetryAtNanos = 0
         primeEdgeFailureStreak = false
         var initialized = false
-        defer {
-            if !initialized, let decoder {
-                opus_multistream_decoder_destroy(decoder)
-                self.decoder = nil
-            }
-        }
+        defer { if !initialized { decoder = nil } }
         channelCount = chCount
         samplesPerFrame = spf
         streams = Int(strms)
@@ -54,17 +47,10 @@ extension AudioDecoder {
 
         let route = preparePlayoutForSession(sampleRate: sampleRate)
 
-        var err: Int32 = 0
-        decoder = opus_multistream_decoder_create(
-            sampleRate,
-            Int32(channelCount),
-            strms,
-            coupled,
-            mapping,
-            &err
-        )
-        guard err == OPUS_OK, decoder != nil else {
-            log.error("opus_multistream_decoder_create failed: \(err)")
+        decoder = OpusDecoder(sampleRate: sampleRate, channels: channelCount, streams: Int(strms),
+                              coupledStreams: Int(coupled), mapping: mapping, samplesPerFrame: spf)
+        guard decoder != nil else {
+            log.error("Opus decoder setup failed: \(chCount) ch, \(strms)/\(coupled) streams, \(sampleRate) Hz")
             return -1
         }
 
@@ -273,7 +259,6 @@ extension AudioDecoder {
         guard !isShutdown else { return }
         isShutdown = true
         engineRestartGeneration &+= 1
-        pendingFecGap = false
         // Quiesce the meter's EVIDENCE machinery BEFORE stopping the node:
         // stop() flushes a completion-handler burst for the standing cushion
         // (6-30 buffers), and un-gated its last completion minted a synthetic
@@ -289,10 +274,7 @@ extension AudioDecoder {
         engine.stop()
         removeAudioRouteListener()
         removeConfigChangeObserver()
-        if let decoderPtr = decoder {
-            opus_multistream_decoder_destroy(decoderPtr)
-            decoder = nil
-        }
+        decoder = nil
         // No global to clear here - the StreamBridgeContext holds a weak
         // ref to us; when StreamSession drops its strong reference the bridge
         // sees nil at the next callback (or the bridge itself is released

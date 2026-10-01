@@ -94,7 +94,7 @@ enum UdpPinger {
     }
 
     /// Resolve once at connection start so every channel dials the same literal (issue #70).
-    /// Prefer IPv4 like gl_tcp_connect because Sunshine binds IPv4 by default.
+    /// Prefer IPv4 because Sunshine binds IPv4 by default.
     /// Returns nil when the name does not resolve.
     static func resolveHost(_ address: String) -> NWEndpoint.Host? {
         // Literal fast path: NWEndpoint.Host's parser yields .ipv4/.ipv6 for

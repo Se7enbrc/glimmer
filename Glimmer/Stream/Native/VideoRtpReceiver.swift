@@ -276,43 +276,32 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // anonymous instead of mislabeling later unrelated work.
             pthread_setname_np("Glimmer.videoRecv")
             defer { pthread_setname_np("") }
-            // libcrypto keeps per-thread state; release it before GCD can retire this worker (see
-            // ControlTransport). Plaintext video never touches libcrypto.
-            defer { if videoKey != nil { OPENSSL_thread_stop() } }
             let decryptor = videoKey.flatMap { VideoDecryptor(key: $0) }
             guard videoKey == nil || decryptor != nil else {
                 Diag.error("NativeVideo couldn't set up video decryption; no video", Self.cat)
                 return
             }
-            // Batched receive: up to `cap` datagrams per recvmsg_x into buffers allocated once; receive()
+            // Batched receive: up to 32 datagrams per recvmsg_x into buffers allocated once; receive()
             // copies each out, so the win is the syscall count (~14k/s at 4K240). recvmsg_x is private
             // SPI: ENOSYS drops to one recvfrom per datagram for the session, slower but correct.
-            let cap = 32
-            let stride = bufSize
-            let storage = UnsafeMutablePointer<UInt8>.allocate(capacity: cap * stride)
-            let lengths = UnsafeMutablePointer<Int32>.allocate(capacity: cap)
-            defer { storage.deallocate(); lengths.deallocate() }
+            let batch = DatagramBatch(capacity: 32, stride: bufSize)
             var batched = true
             var receiveFailed = false
             while let self, !self.interrupted.load(ordering: .relaxed) {
                 let count: Int
                 if batched {
-                    count = Int(gl_recvmsg_x_batch(sock, storage, Int32(stride), Int32(cap), lengths))
-                    if count > 0 {
-                        for i in 0..<count {
-                            guard !self.interrupted.load(ordering: .relaxed) else { break }
-                            // Clamp to stride: a bad length (never observed, but a
-                            // private-API misread would be) must not read OOB.
-                            let len = min(Int(lengths[i]), stride)
-                            guard len > 0 else { continue }
-                            self.receive(storage + i * stride, count: len, decryptor: decryptor)
-                        }
+                    count = batch.receive(from: sock)
+                    for index in 0..<max(count, 0) {
+                        guard !self.interrupted.load(ordering: .relaxed) else { break }
+                        let datagram = batch.datagram(index)
+                        guard datagram.length > 0 else { continue }
+                        self.receive(datagram.bytes, count: datagram.length, decryptor: decryptor)
                     }
                 } else {
                     // Fallback: one recvfrom per datagram, polling the stop flag on the same 100ms timeout.
-                    count = recvfrom(sock, storage, stride, 0, nil, nil)
+                    count = recvfrom(sock, batch.storage, batch.stride, 0, nil, nil)
                     if count > 0, !self.interrupted.load(ordering: .relaxed) {
-                        self.receive(storage, count: min(count, stride), decryptor: decryptor)
+                        self.receive(batch.storage, count: min(count, batch.stride), decryptor: decryptor)
                     }
                 }
                 if count < 0 {

@@ -154,6 +154,12 @@ public enum AudioConfig: Sendable {
         }
     }
 
+    /// /launch's surroundAudioInfo: the channel mask over the channel count.
+    var surroundAudioInfo: Int32 { ((cValue >> 16) & 0xFFFF) << 16 | Int32(channelCount) }
+
+    /// The channel count a packed configuration carries (`mask << 16 | count << 8 | 0xCA`).
+    static func channelCount(packed: Int32) -> Int { Int((packed >> 8) & 0xFF) }
+
     /// User-facing label for the stats overlay. Match Apple's
     /// QuickTime/Music conventions: "Stereo", "5.1 surround", "7.1
     /// surround" (lowercased "surround" follows HIG sentence-case for

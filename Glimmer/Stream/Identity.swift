@@ -234,7 +234,7 @@ public actor IdentityManager {
             return
         }
 
-        // Sweep 1: the "Glimmer Client Identity" item pre-OpenSSL builds
+        // Sweep 1: the "Glimmer Client Identity" item older builds
         // imported into the login keychain. Only labels Glimmer itself wrote
         // are swept, never a generic one another app's import could carry.
         deleteLabelledIdentity()
@@ -286,30 +286,15 @@ public actor IdentityManager {
     /// from the PIN the user types into Sunshine/GFE; both sides then use it
     /// to AES-128-ECB encrypt the challenge round-trip that proves the PIN
     /// matches. First 16 bytes of SHA-256(salt || pin-as-utf8).
-    public func aesKey(forPIN pin: String, salt: Data) throws -> Data {
+    public func aesKey(forPIN pin: String, salt: Data) -> Data {
         let pinBytes = Data(pin.utf8)
         var input = Data(capacity: salt.count + pinBytes.count)
         input.append(salt)
         input.append(pinBytes)
 
-        var digest = [UInt8](repeating: 0, count: Int(SHA256_DIGEST_LENGTH))
-        let ok = input.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int32 in
-            guard let base = raw.baseAddress else { return 0 }
-            return digest.withUnsafeMutableBufferPointer { out in
-                // EVP_Q_digest is cleaner than SHA256_*, lives in libcrypto 3.x.
-                EVP_Q_digest(nil,
-                             "SHA256", nil,
-                             base, input.count,
-                             out.baseAddress, nil)
-            }
-        }
-        guard ok == 1 else {
-            throw StreamError.crypto("SHA-256 of salted PIN failed")
-        }
-
         // AES-128 - first 16 bytes only. The remaining bytes of the digest are
         // discarded (this matches GFE/Sunshine behaviour, not a quirk on our end).
-        return Data(digest.prefix(16))
+        return PairingClient.digest(input).prefix(16)
     }
 
     // MARK: Loading

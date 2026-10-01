@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.10.0 - 2026-10-01
+
+While your stream is hidden behind other windows, the launcher no longer turns
+every app grey and adds a Back to Stream button. The app you're streaming stays
+violet with a TV glyph; click it or press Return to go back to the stream.
+
+Glimmer now uses macOS's own encryption to pair with and talk to your PC, and
+macOS's own Opus decoder for the sound, instead of copies of OpenSSL and Opus
+bundled inside the app. The app is smaller, its security fixes arrive with macOS
+updates, and the keychain never comes into it, so waking the Mac can't leave a
+stream stuck on a keychain prompt.
+
 ## 2026.9.13 - 2026-09-28
 
 Open at login keeps working after a Homebrew upgrade. The upgrade removed

@@ -56,12 +56,45 @@ struct AppIconsRow: View {
         return app.name == model.heroTargetAppName
     }
 
-    /// The app being launched or reconnected, once that shows: its button becomes the
-    /// progress and the way out, so the status stays on the chip and nothing new appears.
-    private func isLaunching(_ app: LibraryApp) -> Bool {
-        guard connectingShown, case .connecting = model.streamPhase,
-              let attempt = model.lastLaunchAttempt else { return false }
-        return attempt.app.id == app.id && attempt.host.id == host.id
+    /// What the app that is launching or streaming shows on its own button, so the status
+    /// stays on the chip and no second button appears: progress, the way out, the way back.
+    private enum TileState {
+        case ready, connecting, reconnecting, hiddenStream
+
+        var shortcut: KeyboardShortcut? {
+            switch self {
+            case .ready: nil
+            case .connecting, .reconnecting: .cancelAction   // Return never cancels (users mash it)
+            case .hiddenStream: .defaultAction
+            }
+        }
+
+        var help: String? {
+            switch self {
+            case .ready: nil
+            case .connecting: "Cancel the connection"
+            case .reconnecting: "End the stream"
+            case .hiddenStream: "Back to the stream"
+            }
+        }
+
+        var spoken: (value: String, hint: String) {
+            switch self {
+            case .ready: ("", "")
+            case .connecting: ("Connecting", "Cancels the connection")
+            case .reconnecting: ("Reconnecting", "Ends the stream")
+            case .hiddenStream: ("Streaming", "Returns to the stream")
+            }
+        }
+    }
+
+    /// A hidden stream wins, as the Stream button's roles do; a (re)connect shows once past the hold.
+    private func tileState(_ app: LibraryApp) -> TileState {
+        guard let attempt = model.lastLaunchAttempt, attempt.app.id == app.id,
+              attempt.host.id == host.id else { return .ready }
+        if model.isStreaming, model.nativeStreamBackgrounded { return .hiddenStream }
+        guard connectingShown, case .connecting = model.streamPhase else { return .ready }
+        return model.isReconnecting ? .reconnecting : .connecting
     }
 
     /// Icon, name, and a quiet play glyph: a click streams this app at once.
@@ -89,30 +122,29 @@ struct AppIconsRow: View {
     }
 
     private func appTile(_ app: LibraryApp) -> some View {
-        let launching = isLaunching(app)
-        // A reconnect is a live stream, so its way out ends it rather than cancelling.
-        let reconnecting = launching && model.isReconnecting
+        let state = tileState(app)
         return Button {
-            if reconnecting {
-                model.stopStreamFromMenu(source: "the launcher")
-            } else if launching {
-                model.cancelConnect()
-            } else {
-                model.requestStream(app: app, on: host)
+            switch state {
+            case .ready: model.requestStream(app: app, on: host)
+            case .connecting: model.cancelConnect()
+            // A reconnect is a live stream, so its way out ends it rather than cancelling.
+            case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
+            case .hiddenStream: model.resumeStreamWindow()
             }
         } label: {
-            tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill", launching: launching)
+            tileLabel(systemImage: app.systemImage, title: app.name,
+                      trailing: state == .hiddenStream ? "play.tv.fill" : "play.fill",
+                      launching: state == .connecting || state == .reconnecting)
         }
         .buttonStyle(AppTileStyle())
-        // Escape is the way out of a connect or reconnect; Return never is (users mash it).
-        .keyboardShortcut(launching ? .cancelAction : takesReturn(app) ? .defaultAction : nil)
-        .disabled(model.isStreaming && !launching)
-        .help(reconnecting ? "End the stream" : launching ? "Cancel the connection"
-              : model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)")
+        .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
+        // Only the streaming app stays live while a stream exists; the others can't start one.
+        .disabled(model.isStreaming && state == .ready)
+        .help(state.help ?? (model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)"))
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
-        .accessibilityValue(reconnecting ? "Reconnecting" : launching ? "Connecting" : "")
-        .accessibilityHint(reconnecting ? "Ends the stream" : launching ? "Cancels the connection" : "")
+        .accessibilityValue(state.spoken.value)
+        .accessibilityHint(state.spoken.hint)
     }
 
     private var overflowMenu: some View {

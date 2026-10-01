@@ -1,19 +1,9 @@
 //
 //  AudioDecoder+Decode.swift
 //
-//  The per-packet DECODE path and the `NativeAudioSink` entry points that feed
-//  it: opus decode (with the ★6 in-band FEC gap recovery below), the channel
-//  demux/reorder into the player's non-interleaved format, the meter's backlog
-//  gates, and the schedule into `AVAudioPlayerNode`. Split from
-//  AudioDecoder.swift - same idiom as the FramePacer split, to keep that file
-//  under the length limit; the engine lifecycle it hands off to lives in
-//  AudioDecoder+Engine.swift.
-//
-//  Split cost (the ControllerForwarder.swift note, applied here): stored
-//  properties cannot live in an extension, so the opus/format state and the
-//  `pendingFecGap` latch stay on `AudioDecoder` and are `internal` rather than
-//  `private` for the methods here to reach. See the property docs in
-//  AudioDecoder.swift for the locking rationale each one carries.
+//  The per-packet DECODE path and the `NativeAudioSink` entry points that feed it: Opus decode (or
+//  concealment of a lost packet), the demux into the player's non-interleaved format, the meter's backlog
+//  gates, and the schedule into `AVAudioPlayerNode`. The engine lifecycle lives in AudioDecoder+Engine.swift.
 //
 
 import AVFoundation
@@ -22,98 +12,45 @@ import os
 
 extension AudioDecoder {
 
-    // MARK: Per-sample decoding
-
-    // MARK: - ★6 Opus in-band FEC on decode (lossy-link resilience)
+    // MARK: Per-packet decoding
     //
-    // Opus carries low-bitrate in-band FEC: a frame lost on the wire can be
-    // RECONSTRUCTED from the FEC payload the NEXT packet carries, which is
-    // higher fidelity than plain PLC (NULL-input concealment) for the same gap.
-    // The standard opus PLC-with-FEC pattern is: on a detected gap, when the
-    // next real packet arrives, decode it ONCE with `decode_fec=1` at the gap's
-    // frame size to recover the missing frame, schedule that, THEN decode the
-    // same packet normally with `decode_fec=0` for its own frame.
-    //
-    // Composition with the existing PLC path: the queue emits a `.lostPlaceholder`
-    // per missing data shard, which lands here as `decodeAndPlayPLC()`. Rather
-    // than immediately fabricate a NULL-input PLC frame, that call now ARMS a
-    // single pending-gap latch (`pendingFecGap`) and produces NO frame yet. The
-    // gap frame is then minted EXACTLY ONCE, by whichever resolves first:
-    //   • the next REAL packet (`decodeCore`) - FEC recovery (decode_fec=1); if
-    //     that packet happens to carry no FEC, opus still returns a concealed
-    //     frame for the gap, so we always get one frame, never zero; or
-    //   • a SECOND consecutive `decodeAndPlayPLC()` - we can't defer a gap past
-    //     one packet without adding latency, so the standing gap is flushed with
-    //     a NULL-input PLC frame and the new gap re-arms.
-    // Bounded to ONE recovered/concealed frame per gap (no double-count: the
-    // latch is cleared the instant the gap frame is scheduled). On a CLEAN link
-    // `pendingFecGap` is never armed, so this whole path is inert - `decodeCore`
-    // takes the plain `decode_fec=0` branch with zero added work or latency.
+    // A lost packet is concealed as soon as the queue reports it. Sunshine's Opus is CELT-only, which
+    // carries no in-band FEC, so the next packet holds nothing to recover the gap from.
 
-    /// The shared decode → schedule path for a REAL opus packet. If a wire gap is
-    /// pending (`pendingFecGap`), first mint the gap's concealment frame from
-    /// THIS packet's opus in-band FEC (`decode_fec=1`) before decoding the packet
-    /// itself (`decode_fec=0`) - the standard opus PLC-with-FEC pattern. Used by
-    /// the Swift-native `NativeAudioSink` path.
-    func decodeCore(input: UnsafePointer<UInt8>?, length: Int32) {
-        // Hold the state lock for the whole decode so `shutdown()` can't
-        // destroy the opus decoder mid-call. The work is microseconds at
-        // 200 Hz on a single audio thread, so the contention cost is nil.
+    /// Decode one packet, or conceal one lost frame when `packet` is nil, and schedule the result.
+    func decodeCore(_ packet: UnsafeRawBufferPointer?) {
+        // Hold the state lock for the whole decode so `shutdown()` can't release the decoder mid-call.
         stateLock.lock()
         defer { stateLock.unlock() }
         guard !isShutdown, let decoder, let fmt = inputFormat else { return }
 
-        // `AudioFrame` interval - covers opus decode + scheduleBuffer. One
-        // per network-delivered opus packet, on whatever audio receive thread
-        // we're called on. Cheap enough at 200 Hz (5 ms packets) that we don't
-        // gate it.
+        // `AudioFrame` interval - decode + scheduleBuffer, one per 5 ms packet; cheap enough not to gate.
         let audioSignpostID = OSSignposter.audio.makeSignpostID()
         let audioIntervalState = OSSignposter.audio.beginInterval(
             "AudioFrame",
             id: audioSignpostID,
-            "bytes=\(length, privacy: .public)")
+            "bytes=\(packet?.count ?? 0, privacy: .public)")
         defer {
             OSSignposter.audio.endInterval("AudioFrame", audioIntervalState)
         }
-
-        // ★6: a gap is owed a frame. Recover it from THIS packet's in-band FEC
-        // (decode_fec=1) BEFORE the packet's own frame, so the recovered frame
-        // keeps its place in the timeline. One frame per gap; latch cleared
-        // either way so it can't double-mint.
-        if pendingFecGap {
-            pendingFecGap = false
-            _ = decodeOneFrame(decoder: decoder, fmt: fmt,
-                               input: input, length: length, decodeFec: 1)
-        }
-
-        _ = decodeOneFrame(decoder: decoder, fmt: fmt,
-                           input: input, length: length, decodeFec: 0)
+        decodeOneFrame(decoder: decoder, fmt: fmt, packet: packet)
     }
 
-    /// Decode exactly one opus frame (or conceal one) and, if it produced
-    /// samples, demux + meter + schedule it into the player. `decodeFec=1` with a
-    /// real `input` recovers the PREVIOUS (lost) frame from this packet's in-band
-    /// FEC; `decodeFec=0` decodes the packet's own frame; `input==nil` (length 0)
-    /// is NULL-input PLC. Returns true iff a frame was scheduled. Caller holds
-    /// `stateLock`.
+    /// Decode one frame (or conceal one) and, if it produced samples, demux + meter + schedule it into the
+    /// player. Returns true iff a frame was scheduled. Caller holds `stateLock`.
     @discardableResult
-    private func decodeOneFrame(decoder: OpaquePointer, fmt: AVAudioFormat,
-                                input: UnsafePointer<UInt8>?, length: Int32,
-                                decodeFec: Int32) -> Bool {
+    private func decodeOneFrame(decoder: OpusDecoder, fmt: AVAudioFormat, packet: UnsafeRawBufferPointer?) -> Bool {
         let frameCount = AVAudioFrameCount(samplesPerFrame)
         guard let pcm = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frameCount) else { return false }
 
-        // opus_multistream_decode_float writes interleaved float; we declared
-        // a non-interleaved format. Use a small interleaved scratch and then
-        // demux into channelData[i]. A NULL input + frameSize triggers PLC; a
-        // real input with decode_fec=1 reconstructs the prior lost frame.
+        // The decoder writes interleaved float; the player's format is non-interleaved, so decode into a
+        // scratch and demux into channelData[i].
         var interleaved = [Float](repeating: 0, count: samplesPerFrame * channelCount)
-        let decoded = opus_multistream_decode_float(
-            decoder, input, length,
-            &interleaved, Int32(samplesPerFrame), decodeFec
-        )
+        let decoded = interleaved.withUnsafeMutableBufferPointer { scratch in
+            scratch.baseAddress.map { decoder.decode(packet, into: $0) } ?? 0
+        }
         guard decoded > 0 else {
-            // -1..-7 are recoverable; just drop the packet.
+            // A malformed packet, or a loss before any packet: nothing to play.
             return false
         }
         pcm.frameLength = AVAudioFrameCount(decoded)
@@ -171,37 +108,15 @@ extension AudioDecoder {
         publishAudioState()
         return true
     }
-
-    /// ★6: a wire gap occurred (the queue emitted a `.lostPlaceholder`). Arm the
-    /// pending-gap latch so the NEXT real packet recovers this frame via opus
-    /// in-band FEC. If a gap is ALREADY pending (a second consecutive loss), we
-    /// can't defer further without adding latency, so flush the standing gap with
-    /// a NULL-input PLC frame now and re-arm for this one. Caller is the
-    /// `NativeAudioSink` PLC entry point. Holds `stateLock` for the decoder.
-    func concealGap() {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        guard !isShutdown, let decoder, let fmt = inputFormat else { return }
-        if pendingFecGap {
-            // Two gaps in a row: the first can't wait for FEC any longer. Conceal
-            // it with NULL-input PLC, then this new gap takes the pending slot.
-            _ = decodeOneFrame(decoder: decoder, fmt: fmt,
-                               input: nil, length: 0, decodeFec: 0)
-        }
-        pendingFecGap = true
-    }
 }
 
 // MARK: - NativeAudioSink conformance (Swift-native engine)
 //
-// Lets RtpAudioReceiver feed the AudioDecoder. `initialize` reuses the shared
-// opus/engine setup; `decodeAndPlay([UInt8])` runs the shared decodeCore (with
-// opus in-band FEC recovery ahead of the packet when a gap is pending, ★6), and
-// `decodeAndPlayPLC()` arms the pending-gap latch (`concealGap`) so the gap's
-// concealment frame is minted by FEC or, failing that, by NULL-input PLC.
+// Lets RtpAudioReceiver feed the AudioDecoder: `initialize` runs the shared decoder/engine setup, and both
+// `decodeAndPlay` (a packet) and `decodeAndPlayPLC` (the queue's `.lostPlaceholder`) run `decodeCore`.
 extension AudioDecoder: NativeAudioSink {
     public func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
-        let chCount = Int(gl_channel_count_from_audio_configuration(audioConfig))
+        let chCount = AudioConfig.channelCount(packed: audioConfig)
         // `opus` is the layout the PC encodes with (SdpScan.audioLayout). Opus reads
         // one mapping entry per channel, so a short mapping must never reach it.
         guard opus.mapping.count == chCount else {
@@ -219,17 +134,11 @@ extension AudioDecoder: NativeAudioSink {
 
     public func decodeAndPlay(_ opus: [UInt8]) {
         guard !opus.isEmpty else { decodeAndPlayPLC(); return }
-        opus.withUnsafeBufferPointer { buf in
-            decodeCore(input: buf.baseAddress, length: Int32(buf.count))
-        }
+        opus.withUnsafeBytes { decodeCore($0) }
     }
 
     public func decodeAndPlayPLC() {
-        // ★6: arm the pending-gap latch so the next real packet recovers this
-        // frame via opus in-band FEC (decode_fec=1). The actual concealment
-        // frame is minted there, or by `concealGap` itself on a second
-        // consecutive loss (NULL-input PLC) - exactly one frame per gap.
-        concealGap()
+        decodeCore(nil)
     }
 
     public func cleanup() {

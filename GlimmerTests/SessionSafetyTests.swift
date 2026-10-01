@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import os
 import Testing
 @testable import Glimmer
@@ -147,11 +148,10 @@ struct SessionSafetyTests {
         #expect(await mutation.value == 0)
     }
 
-    @Test func cancelledTransportCannotSendAfterHandshake() throws {
+    @Test func cancelledTransportNeverStartsItsConnection() throws {
         let lifetime = ControlTransport.RequestLifetime(timeout: 10)
-        try lifetime.check()
         lifetime.cancel()
-        #expect(throws: CancellationError.self) { try lifetime.check() }
+        #expect(!lifetime.attach(NWConnection(host: "127.0.0.1", port: 9, using: .tcp)))
     }
 
     /// Cancellation must promptly wake a blocked control read and close the peer connection.
@@ -209,26 +209,31 @@ struct SessionSafetyTests {
         }
     }
 
-    /// Control sockets must suppress SIGPIPE so a closed peer cannot terminate the app.
-    @Test func controlSocketSuppressesSIGPIPE() async throws {
+    /// A PC that closes without replying fails the request instead of taking the app down.
+    @Test func peerClosingWithoutAReplyFailsTheRequest() async throws {
         let port = try #require(LoopbackPort(listening: true))
-        let portNumber = String(port.port)
-        let fd = try await onTestThread { gl_tcp_connect("127.0.0.1", portNumber, 1000) }
-        try #require(fd >= 0)
-        defer { close(fd) }
-        var enabled: Int32 = 0
-        var length = socklen_t(MemoryLayout<Int32>.size)
-        #expect(getsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, &length) == 0)
-        #expect(enabled != 0)
+        let request = Task { try await Self.plainGet(host: "127.0.0.1", port: Int(port.port)) }
+        close(try await acceptControlConnection(on: port.fd, requestFinished: ManagedAtomicFlag()))
+        await #expect(throws: StreamError.self) { try await request.value }
     }
 
     /// A hostname must reach an IPv4-only listener even when it also resolves to IPv6.
     @Test func localhostReachesAnIPv4OnlyListener() async throws {
         let port = try #require(LoopbackPort(listening: true))
-        let portNumber = String(port.port)
-        let fd = try await onTestThread { gl_tcp_connect("localhost", portNumber, 2000) }
-        try #require(fd >= 0)
-        close(fd)
+        let request = Task { try await Self.plainGet(host: "localhost", port: Int(port.port)) }
+        let peer = try await acceptControlConnection(on: port.fd, requestFinished: ManagedAtomicFlag())
+        let reply = Array("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".utf8)
+        _ = reply.withUnsafeBytes { write(peer, $0.baseAddress, $0.count) }
+        close(peer)
+        let response = try await request.value
+        #expect(response.status == 200)
+        #expect(response.body == Data("ok".utf8))
+    }
+
+    private static func plainGet(host: String, port: Int) async throws -> ControlTransport.Response {
+        try await ControlTransport.get(
+            host: host, port: port, target: "/serverinfo", userAgent: "GlimmerTests", tls: false,
+            credential: .init(clientCertPEM: nil, clientKeyPEM: nil, pinnedCertPEM: nil), timeout: 5)
     }
 
     @Test func quitWaitsForOverlappingStop() async {

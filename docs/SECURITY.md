@@ -64,7 +64,7 @@ is sized to that.
 **Out of scope:**
 
 - Nation-state attackers.
-- Supply-chain compromise of the build toolchain (homebrew `openssl@3`, Xcode).
+- Supply-chain compromise of the build toolchain (Xcode).
 - Kernel-level attackers / a hostile macOS install.
 - Local attacker with root. Nothing to defend; they already have everything.
 - Protocol-design limitations fixed by GameStream / Sunshine (e.g. the 4-digit
@@ -196,10 +196,10 @@ ref does not. The cert is public information, so a pin needs integrity, not
 secrecy.
 
 **Once pinned, ANY mismatch fails the connection.** Enforcement lives in
-`ControlTransport.swift`: `performBlocking` runs a post-handshake exact-DER pin
-check via `X509_cmp` (no `URLSession`, no `SecTrust`), refusing the connection
-if the leaf cert doesn't byte-equal the pinned PEM. We do NOT silently re-pin on
-TLS error. The previous auto-rebind-on-TLS-error path was the gap a same-LAN
+`ControlTransport.swift`: the Network.framework TLS verify block compares the
+leaf's DER to the pinned PEM's (no `URLSession`, no CA trust evaluation) and
+fails the handshake unless they are byte-equal. We do NOT silently re-pin on TLS
+error. The previous auto-rebind-on-TLS-error path was the gap a same-LAN
 attacker rode to pin their own cert - closed.
 
 **Rotation UX.** A real cert rotation (Sunshine reinstall, OS reset on the host)
@@ -274,11 +274,11 @@ parsers directly instead:
   AES-GCM / HTTP control headers with random + mutated-valid input, asserting
   they reject rather than trap. It found and fixed an out-of-bounds read in the
   Reed-Solomon FEC decoders (a shard shorter than the block size).
-- **Hardened Runtime library validation is ON for Release.** The embedded
-  OpenSSL/Opus dylibs are re-signed under the team id at build time, so the
-  Release entitlements drop `disable-library-validation`. Adhoc / Debug builds
-  link the Homebrew dylibs as-is and keep it via `Glimmer-Debug.entitlements` -
-  an adhoc binary has no team id for validation to match.
+- **Hardened Runtime library validation is ON for Release.** Glimmer links no
+  third-party library, and the Release entitlements drop
+  `disable-library-validation`. Adhoc / Debug builds keep it via
+  `Glimmer-Debug.entitlements` - an adhoc binary has no team id for validation
+  to match.
 
 This is a LAN client connecting to the **user's own host**, so that exploit path
 is low-likelihood to begin with.
@@ -293,9 +293,8 @@ is low-likelihood to begin with.
 Unsandboxed builds carry no `device.*` exceptions - those are sandbox
 capabilities; raw-HID, networking, and file access all work without them once
 unsandboxed. The Debug/adhoc variant (`Glimmer/Glimmer-Debug.entitlements`) adds
-`cs.disable-library-validation` = true so a build that links the Homebrew
-OpenSSL/Opus dylibs as-is can still load them; Release omits it (validation
-enforced).
+`cs.disable-library-validation` = true because an adhoc signature has no team id
+for validation to match; Release omits it (validation enforced).
 
 **NSWindow.sharingType** = `.none`. The stream window opts out of
 ScreenCaptureKit, `screencapture(1)`, and Cmd-Shift-5. Third-party recording /

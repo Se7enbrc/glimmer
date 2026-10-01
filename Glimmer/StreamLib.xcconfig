@@ -3,30 +3,17 @@
 // `-xcconfig` flag supplies the version to the build.
 #include "Version.xcconfig"
 
-// Xcode build settings for the C libraries the Swift-native streaming engine
-// links against (Homebrew OpenSSL + Opus). Applied via `xcodebuild -xcconfig`
-// from the Makefile so the pbxproj stays portable (no absolute paths committed).
-//
-// Resolves at build time:
-//   OPENSSL_PREFIX / OPUS_PREFIX = $(brew --prefix ...), injected by Makefile
+// Xcode build settings for the app: the bridging header and its search path, applied via
+// `xcodebuild -xcconfig` from the Makefile. Glimmer links no third-party library.
 
 // SRCROOT = repo root (directory containing Glimmer.xcodeproj).
 GLIMMER_REPO_ROOT = $(SRCROOT)
 
-// Repo root for our own headers (CHelpers.h, imported via the bridging header) +
-// Homebrew OpenSSL + Opus headers.
-HEADER_SEARCH_PATHS = $(inherited) $(GLIMMER_REPO_ROOT) $(OPENSSL_PREFIX)/include $(OPUS_PREFIX)/include
+// Repo root for our own headers (CHelpers.h, imported via the bridging header).
+HEADER_SEARCH_PATHS = $(inherited) $(GLIMMER_REPO_ROOT)
 
-// Homebrew OpenSSL + Opus libs.
-LIBRARY_SEARCH_PATHS = $(inherited) $(OPENSSL_PREFIX)/lib $(OPUS_PREFIX)/lib
-
-OTHER_LDFLAGS = $(inherited) -lssl -lcrypto -lz -lopus
-
-// Apple Silicon only. Homebrew's openssl@3 / opus are arm64-only, so a universal
-// (arm64 + x86_64) link fails on the x86_64 slice with undefined OpenSSL symbols.
-// Pin arm64 so the Release build - which otherwise defaults to ARCHS_STANDARD
-// (universal) - stays arm64-only, matching the shipped binaries. (The committed
-// shared scheme doesn't carry the auto-scheme's run-destination arch narrowing.)
+// Apple Silicon only, the platform Glimmer ships for: pinned because the Release build otherwise
+// defaults to ARCHS_STANDARD (universal), and the shared scheme carries no arch narrowing.
 ARCHS = arm64
 
 // Bridging header at repo root (where Xcode looks by convention).

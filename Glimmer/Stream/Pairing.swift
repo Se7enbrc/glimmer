@@ -6,6 +6,7 @@
 //  our client cert, then an HTTPS pairchallenge. Wire hex is lowercase; one wrong byte and the host rejects us.
 //
 
+import CryptoKit
 import Foundation
 import os
 public actor PairingClient {
@@ -87,7 +88,7 @@ public actor PairingClient {
         // it there means both sides of the codebase (us + the discovery flow,
         // if it ever needs to verify) hash the PIN identically.
         // ---------------------------------------------------------------
-        let aesKey = try await IdentityManager.shared.aesKey(forPIN: pin, salt: salt)
+        let aesKey = await IdentityManager.shared.aesKey(forPIN: pin, salt: salt)
         guard aesKey.count == 16 else {
             throw StreamError.crypto("derived AES key is not 16 bytes")
         }
@@ -242,7 +243,7 @@ public actor PairingClient {
 
         // The first 32 bytes are the host's own SHA-256; we hold onto it
         // for the PIN-correctness check after step 5.
-        let hashLength = Int(SHA256_DIGEST_LENGTH)
+        let hashLength = SHA256.byteCount
         guard challengeRespPlain.count >= hashLength + 16 else {
             throw StreamError.pairingFailed(
                 "clientchallenge: decrypted response too short (\(challengeRespPlain.count) bytes)")
@@ -393,7 +394,7 @@ public actor PairingClient {
         expectedResponse.append(randomChallenge)
         expectedResponse.append(try Self.signatureFromPemCert(serverCertPEM))
         expectedResponse.append(contentsOf: serverSecret)
-        let expectedResponseHash = try Self.digest(expectedResponse)
+        let expectedResponseHash = Self.digest(expectedResponse)
 
         guard expectedResponseHash == Data(serverResponseHash) else {
             // Wrong PIN - same external surface as the MITM branch so an

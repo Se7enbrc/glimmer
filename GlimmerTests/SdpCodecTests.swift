@@ -319,4 +319,14 @@ struct SdpCodecTests {
         let stereoLayout = RtspHandshakeResult.defaultOpusConfig
         #expect(AudioDecoder().initialize(audioConfig: AudioConfig.surround51.cValue, opus: stereoLayout) == -1)
     }
+
+    /// Limelight.h's packed audio configuration read back, and /launch's surroundAudioInfo (mask over count).
+    @Test func audioConfigurationUnpacksLikeLimelight() {
+        #expect(AudioConfig.stereo.surroundAudioInfo == 0x0003_0002)
+        #expect(AudioConfig.surround51.surroundAudioInfo == 0x003F_0006)
+        #expect(AudioConfig.surround71.surroundAudioInfo == 0x063F_0008)
+        for config in [AudioConfig.stereo, .surround51, .surround71] {
+            #expect(AudioConfig.channelCount(packed: config.cValue) == config.channelCount)
+        }
+    }
 }

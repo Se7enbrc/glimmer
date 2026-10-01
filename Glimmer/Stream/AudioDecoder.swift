@@ -25,21 +25,16 @@ public final class AudioDecoder: @unchecked Sendable {
     // it, and stored properties can't live in extensions.
     let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Audio")
 
-    /// Serializes the opus decoder + AVAudioEngine lifecycle against the
-    /// per-sample decode path. `decodeAndPlay` runs on the native audio
-    /// receive thread; `shutdown` can be invoked from the `NativeAudioSink`
-    /// cleanup AND from `StreamSession.stop()` on the actor. Without this lock a
-    /// decode in flight could call `opus_multistream_decode_float` on a decoder
-    /// that `shutdown()` is concurrently destroying (use-after-free), and the
-    /// AVAudioEngine could be reconfigured from two threads at once. The class
-    /// is `@unchecked Sendable` on the strength of this lock.
+    /// Serializes the decoder and AVAudioEngine lifecycle against the decode path, which runs on the audio
+    /// receive thread while `shutdown` comes from the sink's cleanup or `StreamSession.stop()`. The class is
+    /// `@unchecked Sendable` on the strength of this lock.
     let stateLock = NSLock()
     var isShutdown = false
     /// True while the PC plays this stream's sound: the Mac's main mixer sits at 0
     /// and the engine keeps running. Guarded by `stateLock`; see `setOutputMuted`.
     var outputMuted = false
 
-    var decoder: OpaquePointer?                    // OpusMSDecoder*
+    var decoder: OpusDecoder?
     let engine = AVAudioEngine()
     let playerNode = AVAudioPlayerNode()
     /// Drift-tracking resampler, inserted between `playerNode` and the mixer. A
@@ -427,10 +422,9 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `audioMeterLock`.
     var lastUnderrunNoticeNanos: UInt64 = 0
     var underrunNoticesSuppressed: UInt64 = 0
-    /// Default-output-device listener token (the exact block the HAL holds, which
-    /// `shutdown()` must hand back) and its utility queue. Token guarded by
-    /// `stateLock`; the block touches only `audioMeterLock` state and Diag.
-    var routeListenerToken: Any?
+    /// The default-output-device listener's HALListener key and the queue its handler runs on. Key guarded by
+    /// `stateLock`; the handler touches only meter state and Diag.
+    var routeListenerKey: Int?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
     /// Bounded retry counter for transient route handoffs; guarded by stateLock.
     /// Internal because the ladder lives in AudioDecoder+Engine.swift.
@@ -469,16 +463,6 @@ public final class AudioDecoder: @unchecked Sendable {
     /// backfill). Surfaced as `audio_reprime_total` so a full-drain event is
     /// directly countable alongside `audio_underrun_total`.
     var rePrimeCount: UInt64 = 0
-
-    // MARK: - ★6 Opus in-band FEC on decode (lossy-link resilience)
-    //
-    // Design narrative + the decode path itself: AudioDecoder+Decode.swift.
-    // Only the stored latch lives here (stored properties can't live in
-    // extensions).
-    /// True while a wire gap is owed exactly one concealment frame, to be minted
-    /// by the next real packet (via opus FEC) or the next PLC. Guarded by
-    /// `stateLock` (only ever touched on the decode path, which holds it).
-    var pendingFecGap = false
 
     public init() {}
 

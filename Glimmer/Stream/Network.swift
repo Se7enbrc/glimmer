@@ -18,9 +18,9 @@
 //  Ported from moonlight-qt's app/backend/nvhttp.{h,cpp} (GPLv3; see CREDITS.md).
 //  The big differences from the C++ side:
 //
-//    * Our own OpenSSL mutual-TLS HTTP client (ControlTransport) instead of
-//      QNetworkAccessManager - the client cert + host-cert pin run straight
-//      through libssl, no URLSession and no keychain in the path.
+//    * ControlTransport (mutual TLS on Network.framework) instead of
+//      QNetworkAccessManager - the client cert and host-cert pin never touch
+//      URLSession or the keychain.
 //    * NOT trust-on-first-use: the first /serverinfo call goes over plain HTTP
 //      and the next HTTPS handshake exposes the host cert, but we do NOT pin it
 //      there. The pin is bound only AFTER the PIN/RSA pairing handshake has
@@ -260,10 +260,8 @@ public actor NetworkClient {
     /// successful HTTPS handshake.
     var server: ServerInfo
 
-    /// Client cert + key (PEM), snapshotted from IdentityManager on first use.
-    /// ControlTransport feeds them straight into OpenSSL for mutual TLS - no
-    /// SecIdentity, no keychain. The host-cert pin lives on `server.serverCertPEM`
-    /// and is passed per request.
+    /// Client cert + key (PEM), snapshotted from IdentityManager on first use; ControlTransport
+    /// builds its in-memory identity from them. The host-cert pin rides on `server.serverCertPEM`.
     var clientCertPEM: String?
     var clientKeyPEM: String?
 
@@ -310,7 +308,7 @@ public actor NetworkClient {
     // MARK: Identity prep
     //
     // Snapshot the client cert + key (PEM) out of the IdentityManager actor
-    // before any HTTPS call. ControlTransport feeds them straight into OpenSSL.
+    // before any HTTPS call.
 
     func ensureIdentityLoaded() async throws {
         if clientCertPEM != nil { return }
