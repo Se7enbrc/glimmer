@@ -365,7 +365,7 @@ extension NetworkClient {
             "rikeyid": "\(riKeyID)",
             // 1 = the PC keeps playing its own sound (Moonlight's "play audio on host").
             "localAudioPlayMode": config.playAudioOnHost ? "1" : "0",
-            "surroundAudioInfo": "\(gl_surround_audio_info_from_audio_configuration(config.audio.cValue))",
+            "surroundAudioInfo": "\(config.audio.surroundAudioInfo)",
             "remoteControllersBitmap": "0",
             "gcmap": "0",
             "gcpersist": "0",

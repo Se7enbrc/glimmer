@@ -1,9 +1,9 @@
 //
 //  CHelpers.h
 //
-//  Tiny C shims that Swift can't express directly: NEON FEC kernels, batched
-//  receive, audio-configuration bits and platform glue. Imported via the
-//  bridging header so all Swift sources can call these.
+//  Tiny C shims that Swift can't express directly: the NEON FEC kernel, batched
+//  receive, the ObjC exception guard and the deprecated mouse-acceleration calls.
+//  Imported via the bridging header so all Swift sources can call these.
 
 #ifndef Glimmer_Stream_CHelpers_h
 #define Glimmer_Stream_CHelpers_h
@@ -99,34 +99,6 @@ static inline int gl_recvmsg_x_batch(int fd, uint8_t * _Nonnull storage, int str
     return n;
 }
 
-// MARK: - Main-thread identity
-// libpthread exports this (CoreFoundation uses it) but the public SDK header
-// doesn't declare it. ResourceTelemetry uses it to label the main thread.
-#include <pthread.h>
-extern pthread_t _Nonnull pthread_main_thread_np(void);
-
-// MARK: - Audio-configuration bit helpers
-// The GameStream/Sunshine audio configuration is a packed int (channelMask <<
-// 16 | channelCount << 8 | 0xCA). These mirror the function-style macros the
-// protocol uses; exposed as static inlines so the Swift bridge can call them.
-
-static inline int gl_make_audio_configuration(int channelCount, int channelMask) {
-    return ((channelMask) << 16) | (channelCount << 8) | 0xCA;
-}
-
-static inline int gl_channel_count_from_audio_configuration(int x) {
-    return (x >> 8) & 0xFF;
-}
-
-static inline int gl_channel_mask_from_audio_configuration(int x) {
-    return (x >> 16) & 0xFFFF;
-}
-
-static inline int gl_surround_audio_info_from_audio_configuration(int x) {
-    return (gl_channel_mask_from_audio_configuration(x) << 16) |
-            gl_channel_count_from_audio_configuration(x);
-}
-
 // MARK: - ObjC exception guard (AV-call crash shield)
 // AVFAudio raises NSException from calls like -[AVAudioPlayerNode play] when
 // the engine stopped underneath it - system sleep tears the audio hardware
@@ -147,29 +119,6 @@ static inline BOOL gl_objc_try(void (NS_NOESCAPE ^ _Nonnull block)(void)) {
         NSLog(@"gl_objc_try caught %@: %@", exception.name, exception.reason);
         return NO;
     }
-}
-
-// MARK: - CoreAudio property listener with a stable block identity
-// Swift bridges a closure to a NEW block on every call, so a Swift-side remove
-// never matches the added block (yet returns noErr) and the listener leaks.
-// Copy once here; the returned block is the token the remove must be given.
-#import <CoreAudio/CoreAudio.h>
-static inline id _Nullable gl_audio_listener_add(AudioObjectID object,
-                                                 const AudioObjectPropertyAddress * _Nonnull address,
-                                                 dispatch_queue_t _Nullable queue,
-                                                 AudioObjectPropertyListenerBlock _Nonnull block,
-                                                 OSStatus * _Nonnull status) {
-    AudioObjectPropertyListenerBlock held = [block copy];
-    *status = AudioObjectAddPropertyListenerBlock(object, address, queue, held);
-    return *status == noErr ? held : nil;
-}
-
-static inline OSStatus gl_audio_listener_remove(AudioObjectID object,
-                                                const AudioObjectPropertyAddress * _Nonnull address,
-                                                dispatch_queue_t _Nullable queue,
-                                                id _Nonnull token) {
-    return AudioObjectRemovePropertyListenerBlock(object, address, queue,
-                                                  (AudioObjectPropertyListenerBlock)token);
 }
 #endif
 

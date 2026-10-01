@@ -116,7 +116,7 @@ extension AudioDecoder {
 // `decodeAndPlay` (a packet) and `decodeAndPlayPLC` (the queue's `.lostPlaceholder`) run `decodeCore`.
 extension AudioDecoder: NativeAudioSink {
     public func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
-        let chCount = Int(gl_channel_count_from_audio_configuration(audioConfig))
+        let chCount = AudioConfig.channelCount(packed: audioConfig)
         // `opus` is the layout the PC encodes with (SdpScan.audioLayout). Opus reads
         // one mapping entry per channel, so a short mapping must never reach it.
         guard opus.mapping.count == chCount else {

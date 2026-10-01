@@ -203,11 +203,11 @@ enum ResourceTelemetry {
         QOS_CLASS_USER_INTERACTIVE.rawValue
     ]
 
-    /// The main thread never exits, so its pthread_t is the one safe to read
-    /// from another thread.
-    private static let mainThreadID: UInt64 = {
+    /// The main thread's ID. GlimmerMain reads this first thing, so the lazy initializer runs on the main
+    /// thread; read anywhere else first, it records 0 and the sampler simply leaves "main" unlabelled.
+    static let mainThreadID: UInt64 = {
         var id: UInt64 = 0
-        pthread_threadid_np(pthread_main_thread_np(), &id)
+        if Thread.isMainThread { pthread_threadid_np(nil, &id) }
         return id
     }()
 

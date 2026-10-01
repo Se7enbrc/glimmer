@@ -14,6 +14,7 @@ import Foundation
 @MainActor
 enum GlimmerMain {
     static func main() {
+        _ = ResourceTelemetry.mainThreadID   // recorded here, on the main thread
         reexecIfSymlinked()
         guard GlimmerCLI.isInvocation(CommandLine.arguments) else {
             // The test host shares the app's defaults domain and must not run its launch.

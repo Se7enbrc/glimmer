@@ -422,10 +422,9 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `audioMeterLock`.
     var lastUnderrunNoticeNanos: UInt64 = 0
     var underrunNoticesSuppressed: UInt64 = 0
-    /// Default-output-device listener token (the exact block the HAL holds, which
-    /// `shutdown()` must hand back) and its utility queue. Token guarded by
-    /// `stateLock`; the block touches only `audioMeterLock` state and Diag.
-    var routeListenerToken: Any?
+    /// The default-output-device listener's HALListener key and the queue its handler runs on. Key guarded by
+    /// `stateLock`; the handler touches only meter state and Diag.
+    var routeListenerKey: Int?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
     /// Bounded retry counter for transient route handoffs; guarded by stateLock.
     /// Internal because the ladder lives in AudioDecoder+Engine.swift.

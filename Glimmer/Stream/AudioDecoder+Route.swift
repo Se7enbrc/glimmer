@@ -14,6 +14,7 @@
 
 import CoreAudio
 import Foundation
+import os
 
 extension AudioDecoder {
 
@@ -41,30 +42,21 @@ extension AudioDecoder {
     /// under-run cascades were missing (a BT detach lands here seconds before the
     /// drains it triggers).
     func installAudioRouteListener(initial route: AudioRoute) {
-        guard routeListenerToken == nil else { return }
+        guard routeListenerKey == nil else { return }
         audioMeterLock.lock()
         audioRouteCache = route.label
         audioMeterLock.unlock()
         // First-sample NOTICE - a new sampler announces itself (success AND
         // failure shape) rather than going silently dark.
         Diag.notice("audio output route: \(route.label, privacy: .private)", "Stream")
-        var addr = Self.defaultOutputDeviceAddress
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            guard let self else { return }
-            let fresh = Self.sampleAudioRoute()
-            self.audioMeterLock.lock()
-            let previous = self.audioRouteCache
-            self.audioRouteCache = fresh.label
-            self.noteOutputDeviceLocked(uid: fresh.uid)
-            self.audioMeterLock.unlock()
-            if fresh.label != previous {
-                Diag.notice("audio route changed: \(previous, privacy: .private) → \(fresh.label, privacy: .private)", "Stream")
-            }
+        let queue = routeListenerQueue
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        let (key, status) = HALListener.add(system, Self.defaultOutputDeviceAddress) { [weak self] in
+            guard let decoder = self else { return }
+            queue.async { decoder.noteRouteChange() }
         }
-        var status: OSStatus = noErr
-        routeListenerToken = gl_audio_listener_add(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, block, &status)
-        if routeListenerToken != nil {
+        if status == noErr {
+            routeListenerKey = key
             Diag.notice("audio route listener installed (decoder \(logID))", "Stream")
         } else {
             Diag.notice(
@@ -74,15 +66,25 @@ extension AudioDecoder {
         }
     }
 
-    /// Remove the route listener with the exact block the HAL holds (the token).
-    /// Called from `shutdown()` with `stateLock` held; safe when the install
-    /// failed or never ran.
+    /// A default-output change, on the route queue: resample the route and note a real move.
+    private func noteRouteChange() {
+        let fresh = Self.sampleAudioRoute()
+        audioMeterLock.lock()
+        let previous = audioRouteCache
+        audioRouteCache = fresh.label
+        noteOutputDeviceLocked(uid: fresh.uid)
+        audioMeterLock.unlock()
+        if fresh.label != previous {
+            Diag.notice("audio route changed: \(previous, privacy: .private) → \(fresh.label, privacy: .private)", "Stream")
+        }
+    }
+
+    /// Remove the route listener. Called from `shutdown()` with `stateLock` held; safe when the install failed
+    /// or never ran.
     func removeAudioRouteListener() {
-        guard let token = routeListenerToken else { return }
-        routeListenerToken = nil
-        var addr = Self.defaultOutputDeviceAddress
-        let status = gl_audio_listener_remove(
-            AudioObjectID(kAudioObjectSystemObject), &addr, routeListenerQueue, token)
+        guard let key = routeListenerKey else { return }
+        routeListenerKey = nil
+        let status = HALListener.remove(AudioObjectID(kAudioObjectSystemObject), Self.defaultOutputDeviceAddress, key: key)
         Diag.notice("audio route listener removed (decoder \(logID), OSStatus \(status))", "Stream")
     }
 
@@ -155,4 +157,44 @@ extension AudioDecoder {
         default: return String(format: "0x%08x", transport)
         }
     }
+}
+
+/// HAL property listeners on the function-pointer API, which the HAL matches on function and context: Swift
+/// hands a C API a fresh block on every call, so a block-based remove never matched. The context is a key,
+/// never a pointer, so a callback racing its removal finds no handler instead of freed memory.
+enum HALListener {
+    private static let handlers = OSAllocatedUnfairLock(initialState: (next: 1, table: [Int: @Sendable () -> Void]()))
+
+    /// Calls `handler` on the HAL's thread whenever `address` on `object` changes; `key` is what `remove` needs.
+    static func add(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress,
+                    handler: @escaping @Sendable () -> Void) -> (key: Int, status: OSStatus) {
+        let key = handlers.withLock { state -> Int in
+            let key = state.next
+            state.next += 1
+            state.table[key] = handler
+            return key
+        }
+        var address = address
+        let status = AudioObjectAddPropertyListener(object, &address, halListenerFired, UnsafeMutableRawPointer(bitPattern: key))
+        if status != noErr { handlers.withLock { _ = $0.table.removeValue(forKey: key) } }
+        return (key, status)
+    }
+
+    @discardableResult
+    static func remove(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress, key: Int) -> OSStatus {
+        handlers.withLock { _ = $0.table.removeValue(forKey: key) }
+        var address = address
+        return AudioObjectRemovePropertyListener(object, &address, halListenerFired, UnsafeMutableRawPointer(bitPattern: key))
+    }
+
+    fileprivate static func fire(_ key: Int) {
+        handlers.withLock { $0.table[key] }?()
+    }
+}
+
+/// The one function every HALListener registers, so add and remove always name the same pointer.
+private func halListenerFired(_: AudioObjectID, _: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>,
+                              _ context: UnsafeMutableRawPointer?) -> OSStatus {
+    HALListener.fire(Int(bitPattern: context))
+    return noErr
 }

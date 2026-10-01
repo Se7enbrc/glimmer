@@ -7,7 +7,7 @@
 #ifndef Glimmer_Bridging_Header_h
 #define Glimmer_Bridging_Header_h
 
-// Inline C shims: FEC kernels, batched receive, audio-config bits and platform glue.
+// Inline C shims: the FEC kernel, batched receive, the exception guard and mouse acceleration.
 #import "Glimmer/Stream/CHelpers.h"
 
 #endif
