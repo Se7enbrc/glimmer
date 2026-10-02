@@ -57,6 +57,54 @@ struct StreamReconnectTests {
         #expect(cause.contains("-1"))
     }
 
+    // MARK: - A give-up names the fix
+
+    /// A PC that slept mid-stream fails every attempt without answering; the give-up must say so and
+    /// offer Wake and Connect, not "ended unexpectedly" with Try Again. Once the PC has answered, a
+    /// deadline means the app was slow, and a classified failure keeps its own copy.
+    @Test func reconnectGiveUpKeepsTheLastAttemptsCause() {
+        let asleep = StreamSession.reconnectAttemptError(StreamError.hostTimedOut, pcAnswered: false)
+        guard case .hostUnreachable = asleep else {
+            Issue.record("an unanswered reconnect deadline should read as unreachable, got \(String(describing: asleep))")
+            return
+        }
+        guard case .hostTimedOut = StreamSession.reconnectAttemptError(StreamError.hostTimedOut, pcAnswered: true) else {
+            Issue.record("a deadline after the PC answered is the app being slow")
+            return
+        }
+        guard case .streamPortsBlocked("UDP", 47999) = StreamSession.reconnectAttemptError(
+            StreamError.streamPortsBlocked(proto: "UDP", port: 47999), pcAnswered: true) else {
+            Issue.record("a classified failure must survive")
+            return
+        }
+        #expect(StreamSession.reconnectAttemptError(CancellationError(), pcAnswered: false) == nil)
+    }
+
+    @MainActor @Test func giveUpWithAnUnreachablePcOffersWakeAndConnect() {
+        let model = AppModel()
+        let den = Host(id: "pc-1", name: "den", customName: "Den PC", localAddress: "192.0.2.10", manualAddress: nil,
+                       apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+        model.handleNativeEvent(
+            .connectionTerminated(errorCode: -1, error: .hostUnreachable("the PC didn't answer")), host: den)
+        #expect(model.nativeStreamError == AppModel.unreachableMessage("Den PC"))
+        #expect(model.nativeStreamErrorKind == .unreachable)
+        model.handleNativeEvent(.connectionTerminated(errorCode: -1), host: den)
+        #expect(model.nativeStreamErrorKind == .other)
+    }
+
+    /// Sunshine's own non-recoverable codes name their fix instead of "ended unexpectedly".
+    @Test func sunshineTerminateCodesNameTheirFix() {
+        let protected = AppModel.streamEndedMessage(
+            code: StreamSession.protectedContentTerminationCode, hostName: "Den PC")
+        let conversion = AppModel.streamEndedMessage(
+            code: StreamSession.frameConversionTerminationCode, hostName: "Den PC")
+        #expect(protected.hasPrefix("Den PC stopped the stream: the app is showing protected content"))
+        #expect(conversion.contains("graphics driver") && conversion.hasPrefix("Den PC"))
+        for message in [protected, conversion] {
+            #expect(!message.localizedCaseInsensitiveContains("host") && !message.contains(" - "))
+        }
+    }
+
     @Test func pcSentCodeIsNamedInHex() {
         let cause = StreamSession.reconnectCause(code: Int32(bitPattern: 0x80030023))
         #expect(cause.contains("0x80030023"))

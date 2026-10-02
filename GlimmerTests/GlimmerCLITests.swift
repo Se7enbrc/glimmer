@@ -94,7 +94,8 @@ struct GlimmerCLITests {
         #expect(GlimmerCLI.message(for: StreamError.launchFailed("Tower wouldn't quit the app."), host: tower)
             == "Tower wouldn't quit the app.")
         // The banner's own sentences, named for the PC, not a generic "The PC".
-        #expect(GlimmerCLI.message(for: StreamError.hostTimedOut, host: tower) == "Tower took too long to start the app.")
+        #expect(GlimmerCLI.message(for: StreamError.hostTimedOut, host: tower)
+            == "Tower took too long to start the app. Check the PC's screen, then try again.")
         #expect(GlimmerCLI.message(for: StreamError.hostRefused(message: "  ", code: 503), host: tower)
             == "Tower couldn't start the app.")
         #expect(GlimmerCLI.message(for: StreamError.hostRefused(message: "Game is not installed", code: 500), host: tower)

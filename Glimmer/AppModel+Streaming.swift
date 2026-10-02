@@ -339,12 +339,10 @@ extension AppModel {
         case .firstFrame:
             if case .connecting = streamPhase { hostPolling.establishedHostID = host.id }
             promoteToStreamingOnFirstFrame()
-        case .connectionTerminated(let code):
+        case .connectionTerminated(let code, let error):
             streamPhase = .idle
             nativeHDRActive = false
-            if code != 0 {
-                showStreamFailure((Self.streamEndedMessage(code: code, hostName: host.displayName), .other))
-            }
+            showStreamEnded(code: code, error: error, host: host)
         case .reconnecting:
             // The host closed a live session (it likely restarted across a
             // lock/desktop transition) and the engine is silently re-establishing
@@ -374,6 +372,17 @@ extension AppModel {
             // the failure is already logged + counted at the source.
             break
         case .log: break
+        }
+    }
+
+    /// The banner for a stream that ended on its own. A reconnect that gave up carries its last
+    /// attempt's failure and gets the copy and action a failed connect gets (Wake and Connect for a
+    /// PC that stopped answering); a bare nonzero code gets the ended-stream toast.
+    private func showStreamEnded(code: Int32, error: StreamError?, host: Host) {
+        if let error {
+            showStreamFailure(Self.connectFailure(for: error, hostName: host.displayName))
+        } else if code != 0 {
+            showStreamFailure((Self.streamEndedMessage(code: code, hostName: host.displayName), .other))
         }
     }
 

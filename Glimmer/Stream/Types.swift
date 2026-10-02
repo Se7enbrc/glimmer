@@ -438,7 +438,9 @@ public enum StreamEvent: Sendable {
     /// only); idempotent against `.connectionEstablished` having already
     /// promoted the phase.
     case firstFrame
-    case connectionTerminated(errorCode: Int32)
+    /// `error` is the last reconnect attempt's failure when an episode gives up, so the launcher can
+    /// name the fix (a PC that slept gets the couldn't-reach copy, not "ended unexpectedly").
+    case connectionTerminated(errorCode: Int32, error: StreamError? = nil)
     /// The host closed a LIVE session with a recoverable code (e.g. Sunshine's
     /// process restarting across a Windows lock / secure-desktop transition, or
     /// a brief network blip) and we're silently re-establishing underneath the

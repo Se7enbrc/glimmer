@@ -368,13 +368,20 @@ struct SessionSafetyTests {
              "Tower answers on its plain port but not its secure one. Restart Sunshine on the PC."),
             (StreamError.streamPortsBlocked(proto: "UDP", port: 47999), .other,
              "Tower answered, but the stream couldn't get through. Check that the PC's firewall allows UDP 47999."),
-            (StreamError.hostTimedOut, .other, "Tower took too long to start the app."),
+            (StreamError.hostTimedOut, .other, "Tower took too long to start the app. Check the PC's screen, then try again."),
             (StreamError.hostRefused(message: "Is a display connected", code: 503), .other,
              "Tower couldn't start the app: Is a display connected."),
             (StreamError.hostRefused(message: "Is a display connected?", code: 503), .other,
              "Tower couldn't start the app: Is a display connected?"),
             (StreamError.launchFailed("Malformed XML on /launch"), .other, "Tower couldn't start the app."),
-            (StreamError.sessionFailed(-1), .other, "Tower answered, but the stream couldn't start."),
+            (StreamError.sessionFailed(-1), .other,
+             "Tower answered, but the stream couldn't start. Restart Sunshine on the PC, then try again."),
+            (StreamError.decoderFailed("VT -12911"), .other,
+             "Couldn't start the video decoder for Tower. Try another codec from the PC's ⋯ menu."),
+            (StreamError.audioFailed("engine"), .other,
+             "Couldn't start audio for Tower. Check this Mac's sound output, then try again."),
+            (StreamError.crypto("bad key length"), .other,
+             "A security error stopped the connection to Tower. Try again, and pair again if it keeps happening."),
             (StreamError.truncatedRead("recv timeout"), .unreachable, AppModel.unreachableMessage("Tower")),
             (StreamError.gameStreamHost, .pairing, "Glimmer needs Sunshine on Tower, which is running NVIDIA GameStream.")
         ]
@@ -404,7 +411,7 @@ struct SessionSafetyTests {
         let beforeLaunch = await failure(requestDeadline: nil)
         #expect(beforeLaunch?.kind == .unreachable)
         let duringLaunch = await failure(requestDeadline: .distantFuture)
-        #expect(duringLaunch?.message == "Tower took too long to start the app.")
+        #expect(duringLaunch?.message == "Tower took too long to start the app. Check the PC's screen, then try again.")
     }
 
     /// Cancel, the quit chord and the close button all end a connect by choice:
@@ -444,7 +451,7 @@ struct SessionSafetyTests {
         #expect(!(error is CancellationError))
         #expect(!AppModel.connectWasCancelled(by: error, cancelRequested: false))
         #expect(AppModel.connectFailure(for: error, hostName: "Tower").message
-            == "Tower answered, but the stream couldn't start.")
+            == "Tower answered, but the stream couldn't start. Restart Sunshine on the PC, then try again.")
     }
 
     /// An RTSP port that never took the connection names itself; other RTSP

@@ -84,7 +84,7 @@ struct ConnectBannerActionTests {
         model.handleNativeEvent(.stageFailed(name: "RTSP handshake", errorCode: -1), host: rig)
         #expect(model.nativeStreamError == nil && model.nativeStreamErrorKind == .pairing)
         model.handleNativeEvent(.connectionTerminated(errorCode: -1), host: rig)
-        #expect(model.nativeStreamError == "Lost the connection to Repair Rig.")
+        #expect(model.nativeStreamError == "Lost the connection to Repair Rig. Check the network, then try again.")
         #expect(model.nativeStreamErrorKind == .other)
     }
 }

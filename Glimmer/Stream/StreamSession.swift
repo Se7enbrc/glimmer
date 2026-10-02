@@ -229,6 +229,10 @@ public actor StreamSession {
     /// How long a PC-sent terminate waits on /serverinfo to learn whether the PC
     /// ended the session on purpose. No answer in time means reconnect.
     static let hostEndProbeSeconds: TimeInterval = 1.5
+    /// Sunshine's NVST_DISCONN_SERVER_VFP_PROTECTED_CONTENT and
+    /// NVST_DISCONN_SERVER_VIDEO_ENCODER_CONVERT_INPUT_FRAME_FAILED (moonlight-common-c ControlStream.c).
+    static let protectedContentTerminationCode = Int32(bitPattern: 0x800E_9302)
+    static let frameConversionTerminationCode = Int32(bitPattern: 0x800E_9403)
 
     // MARK: - Launch deadline (M6)
 
@@ -251,6 +255,8 @@ public actor StreamSession {
     var isReconnecting = false
     /// Attempt counter for the current reconnect episode.
     var reconnectAttempts = 0
+    /// The last attempt's classified failure; a give-up hands it to the launcher so the copy names the fix.
+    var lastReconnectError: StreamError?
     /// The inputs needed to rebuild the connection on a reconnect, captured at
     /// `start()`: the original server (for a fresh NetworkClient), the requested
     /// StreamConfig, and the app id. Nil before a session starts.

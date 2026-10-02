@@ -135,6 +135,7 @@ extension StreamSession {
     private func runReconnectEpisode(code: Int32, cause: String, bannerText: String = "Reconnecting…") async {
         isReconnecting = true
         reconnectAttempts = 0
+        lastReconnectError = nil
         let budget = ReconnectBudget(seconds: Self.reconnectWindowSeconds)
         bridge?.eventContinuation?.yield(.reconnecting)
         // Surface the hold over the frozen frame - the launcher's phase chip is
@@ -210,8 +211,18 @@ extension StreamSession {
         Diag.error(
             "reconnect exhausted after \(reconnectAttempts) attempt(s) - tearing down",
             "Stream")
-        bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
+        bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code, error: lastReconnectError))
         await stop(cause: .hostError)
+    }
+
+    /// What a failed attempt tells the user if the episode gives up. A deadline the PC never answered
+    /// inside means the PC is gone (asleep, off the network), not an app slow to start.
+    static func reconnectAttemptError(_ error: Error, pcAnswered: Bool) -> StreamError? {
+        guard let streamError = error as? StreamError else { return nil }
+        if case .hostTimedOut = streamError, !pcAnswered {
+            return .hostUnreachable("the PC didn't answer during the reconnect")
+        }
+        return streamError
     }
 
     /// One attempt: swap in a fresh backend and re-run the handshake, /launch and
@@ -261,11 +272,13 @@ extension StreamSession {
         self.network = net
         await net.setRequestDeadline(deadline)
         let backendConfig: BackendStreamConfig
+        var pcAnswered = false
         do {
             try checkAttempt(deadline: deadline)
             let serverInfo = try await StreamAttempt.run(until: deadline) {
                 try await net.fetchServerInfo()
             }
+            pcAnswered = true
             try checkAttempt(deadline: deadline)
             if serverInfo.currentGameID != appID { ownsHostSession = false }
             let launch = try await launchWithDeadline(
@@ -285,6 +298,7 @@ extension StreamSession {
             try checkAttempt(deadline: deadline)
         } catch {
             Diag.notice("reconnect attempt failed: \(error, privacy: .private)", "Stream")
+            lastReconnectError = Self.reconnectAttemptError(error, pcAnswered: pcAnswered)
             fresh.interruptConnection()
             await net.shutdown()
             if self.network === net { self.network = nil }

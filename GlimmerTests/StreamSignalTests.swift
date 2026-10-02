@@ -216,7 +216,7 @@ struct StreamSignalTests {
         let other = AppModel.streamEndedMessage(code: -102, hostName: "Den PC")
         #expect(traffic.contains("Den PC") && traffic.contains("UDP port 47998"))
         #expect(frame.contains("Den PC") && frame.contains("codec"))
-        #expect(lost == "Lost the connection to Den PC.")
+        #expect(lost == "Lost the connection to Den PC. Check the network, then try again.")
         #expect(other == "Stream to Den PC ended unexpectedly.")
         #expect(Set([traffic, frame, lost, other]).count == 4)
         #expect(![traffic, frame, lost, other].contains { $0.localizedCaseInsensitiveContains("host") })

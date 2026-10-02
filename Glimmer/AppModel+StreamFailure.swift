@@ -63,32 +63,41 @@ extension AppModel {
             return ("\(hostName) answered, but the stream couldn't get through. "
                 + "Check that the PC's firewall allows \(proto) \(port).", .other)
         case .hostTimedOut:
-            return ("\(hostName) took too long to start the app.", .other)
+            return ("\(hostName) took too long to start the app. Check the PC's screen, then try again.", .other)
         case .hostRefused(let message, _) where !sentence(message).isEmpty:
             return ("\(hostName) couldn't start the app: \(sentence(message))", .other)
         case .hostRefused, .launchFailed:
             return ("\(hostName) couldn't start the app.", .other)
         case .sessionFailed, .binaryNotFound:
             // In practice the connect leg, after /launch succeeded: the PC is awake.
-            return ("\(hostName) answered, but the stream couldn't start.", .other)
+            return ("\(hostName) answered, but the stream couldn't start. Restart Sunshine on the PC, then try again.",
+                    .other)
         case .decoderFailed:
-            return ("Couldn't start the video decoder for \(hostName).", .other)
+            return ("Couldn't start the video decoder for \(hostName). Try another codec from the PC's ⋯ menu.", .other)
         case .audioFailed:
-            return ("Couldn't start audio for \(hostName).", .other)
+            return ("Couldn't start audio for \(hostName). Check this Mac's sound output, then try again.", .other)
         case .crypto:
-            return ("A security error stopped the connection to \(hostName).", .other)
+            return ("A security error stopped the connection to \(hostName). "
+                + "Try again, and pair again if it keeps happening.", .other)
         }
     }
 
-    /// The toast for a stream that ended with a nonzero code. The watchdog's
-    /// bring-up codes (see watchdogTerminationCode) each name their own fix.
+    /// The toast for a stream that ended with a nonzero code. The watchdog's bring-up codes (see
+    /// watchdogTerminationCode) and Sunshine's own non-recoverable codes each name their fix.
     nonisolated static func streamEndedMessage(code: Int32, hostName: String) -> String {
         switch code {
         case StreamSession.noVideoTrafficTerminationCode:
             "No video from \(hostName) reached this Mac. Make sure the PC's firewall allows UDP port 47998."
         case StreamSession.noVideoFrameTerminationCode:
             "Video from \(hostName) arrived but couldn't be decoded. Try another codec from the PC's ⋯ menu."
-        case StreamSession.deadPeerTerminationCode: "Lost the connection to \(hostName)."
+        case StreamSession.deadPeerTerminationCode:
+            "Lost the connection to \(hostName). Check the network, then try again."
+        case StreamSession.protectedContentTerminationCode:
+            "\(hostName) stopped the stream: the app is showing protected content, which can't be streamed. "
+                + "Close it on the PC, then try again."
+        case StreamSession.frameConversionTerminationCode:
+            "\(hostName)'s graphics driver couldn't hand frames to the encoder. "
+                + "Update the PC's graphics driver, then try again."
         default: "Stream to \(hostName) ended unexpectedly."
         }
     }
