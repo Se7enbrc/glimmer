@@ -251,6 +251,10 @@ Rules:
     decode-queue, AND the main actor; guarded by an internal `os_unfair_lock`).
   - `StreamBridgeContext` (the receive-thread callback target).
 
+XPC lifecycle tests use a live anonymous listener and assert request outcomes.
+Invalidation handlers run on Foundation's message-handling queue; their delivery
+time is not the connection's invalidation time.
+
 ### `nonisolated(unsafe)`
 
 `nonisolated(unsafe)` IS acceptable in this codebase, and there are currently 74
