@@ -312,11 +312,20 @@ extension AudioDecoder {
                 ? failedTargetMs
                 : learnedFloorMs + Self.cushionFloorEwmaWeight * (failedTargetMs - learnedFloorMs)
             learnedFloorMs = min(learnedFloorMs, effectiveCushionMaxMs)
+            lastFailedTargetMs = failedTargetMs
+            lastUnderrunNanos = now
         }
         floorQuietSinceNanos = now
         quietWindowMinFillMs = .infinity
         return CushionMemoryWrite(key: cushionSeedKey, targetMs: playoutTargetMs,
                                   floorMs: learnedFloorMs)
+    }
+
+    /// A step above the level that last under-ran, until the floor's slow decay window has passed:
+    /// on Wi-Fi the walk-down otherwise retried the failed level a minute later.
+    func recentFailureFloorMs(now: UInt64) -> Double {
+        guard lastUnderrunNanos > 0, now &- lastUnderrunNanos < Self.cushionFloorDecayQuietNanos else { return 0 }
+        return lastFailedTargetMs + Self.playoutCushionStepMs
     }
 
     /// QUIET completion while elevated: arbitrate the two decay clocks.
@@ -348,7 +357,7 @@ extension AudioDecoder {
                 // trough two steps clear. A railing resampler means the depth is carrying skew: hold.
                 let troughClear = cushionLinkClass == "wired"
                     || quietWindowMinFillMs >= 2 * Self.playoutCushionStepMs
-                if troughClear, resamplerSkewConverged {
+                if troughClear, resamplerSkewConverged, candidate >= recentFailureFloorMs(now: now) {
                     learnedFloorMs = max(learnedFloorMs - Self.playoutCushionStepMs,
                                          Self.playoutCushionBaseMs)
                     playoutTargetMs = max(candidate, Self.playoutCushionBaseMs)

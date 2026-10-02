@@ -331,6 +331,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `DispatchTime` ns of the last under-run grow (rate limit). Guarded by
     /// `audioMeterLock`.
     var lastCushionGrowNanos: UInt64 = 0
+    /// The target the last under-run failed at, and when. A quiet-window walk-down stays a step
+    /// above it for the floor's slow decay window. Guarded by `audioMeterLock`.
+    var lastFailedTargetMs: Double = 0
+    var lastUnderrunNanos: UInt64 = 0
     /// The receiver's inter-arrival gap that ended with its newest datagram - the
     /// dead-air test at an under-run edge (`noteArrivalGap`).
     let lastArrivalGapNanos = AtomicUInt64()
