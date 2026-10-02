@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.10.2 - 2026-10-02
+
+Some H.264 and HEVC streams connected but never showed a picture, then ended
+after ten seconds, because their key frames began with information Glimmer
+didn't expect. Glimmer now recognises them, and the picture appears.
+
+On some Macs, 5.1 and 7.1 sound didn't start, because macOS refused Sunshine's
+surround layout. Glimmer now decodes each of Sunshine's audio streams on its own
+and puts the channels back in order, which every supported Mac can do.
+
+Both fixes came from mehmetcansahin.
+
 ## 2026.10.1 - 2026-10-02
 
 Glimmer is now signed with Apple's current Developer ID certificate, ahead of
