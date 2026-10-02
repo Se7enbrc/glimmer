@@ -111,16 +111,22 @@ extension EnetControlChannel {
         if wake { recoveryWake.signal() }
     }
 
-    /// Minimum spacing (ms) between wire IDRs, and between wire RFIs: the first
-    /// request of a loss event leaves at once, repeats keep the old 20ms tick's volume.
+    /// Floor (ms) between wire IDRs, and between wire RFIs: the first request of a loss event leaves at
+    /// once, repeats keep at least the old 20 ms tick's spacing (see `recoverySpacingMs`).
     static let recoveryMinSpacingMs: UInt32 = 20
+
+    /// Repeats of one request kind wait for the previous one's answer: on a 50 ms tunnel the 20 ms floor
+    /// let two or three identical requests leave before the first could land. Unsampled RTT changes nothing.
+    static func recoverySpacingMs(rttMs: Double?) -> UInt32 {
+        max(recoveryMinSpacingMs, UInt32(min(rttMs ?? 0, 1000)))
+    }
 
     /// Drain coalesced IDR/RFI requests on the control loop's thread (moonlight's
     /// requestIdrFrameFunc, ControlStream.c:1624-1640): at most one REQUEST_IDR or RFI,
-    /// each kind spaced `recoveryMinSpacingMs`. Returns how long the loop may wait.
+    /// each kind spaced `recoverySpacingMs`. Returns how long the loop may wait.
     func drainPendingRecoveryRequests() -> UInt32 {
         let now = serviceTimeMs
-        let spacing = Self.recoveryMinSpacingMs
+        let spacing = withState { Self.recoverySpacingMs(rttMs: hasRttSample ? roundTripTime : nil) }
         let sinceIdr = lastIdrSentMs.map { now &- $0 } ?? spacing
         let sinceRfi = lastRfiSentMs.map { now &- $0 } ?? spacing
         // No RFI is ever pending beside an IDR: requestIdrFrame flushes it.
@@ -145,7 +151,7 @@ extension EnetControlChannel {
 
     /// Send one REQUEST_IDR on the wire (gen7Enc: type 0x0302, payload {0,0},
     /// URGENT chan, RELIABLE). ControlStream.c:1521. Only reached from
-    /// `drainPendingRecoveryRequests`, which spaces repeats `recoveryMinSpacingMs`.
+    /// `drainPendingRecoveryRequests`, which spaces repeats `recoverySpacingMs`.
     private func sendIdrFrameNow() {
         do {
             _ = try sendEncryptedControl(

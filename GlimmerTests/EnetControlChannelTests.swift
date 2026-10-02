@@ -176,6 +176,31 @@ struct EnetControlChannelTests {
         #expect(Self.urgentRelSeq(channel) == 2)
     }
 
+    /// On a slow path a repeat waits for the first request's answer: the spacing follows the smoothed
+    /// RTT above the 20 ms floor, and the first request of an episode still leaves at once.
+    @Test func repeatRequestsWaitOutTheRoundTrip() throws {
+        #expect(EnetControlChannel.recoverySpacingMs(rttMs: nil) == 20)
+        #expect(EnetControlChannel.recoverySpacingMs(rttMs: 4) == 20)
+        #expect(EnetControlChannel.recoverySpacingMs(rttMs: 80) == 80)
+        #expect(EnetControlChannel.recoverySpacingMs(rttMs: 5000) == 1000)
+
+        let (channel, _) = try Self.makeChannel()
+        channel.withState { channel.roundTripTime = 80; channel.hasRttSample = true }
+        channel.requestIdrFrame()
+        #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
+        #expect(Self.urgentRelSeq(channel) == 1)
+
+        channel.requestIdrFrame()
+        channel.lastIdrSentMs = channel.serviceTimeMs
+        let wait = channel.drainPendingRecoveryRequests()
+        #expect(wait > EnetControlChannel.recoveryMinSpacingMs && wait <= 80)
+        #expect(Self.urgentRelSeq(channel) == 1)
+
+        channel.lastIdrSentMs = channel.serviceTimeMs &- 80
+        #expect(channel.drainPendingRecoveryRequests() == EnetControlChannel.controlTickMs)
+        #expect(Self.urgentRelSeq(channel) == 2)
+    }
+
     @Test func idrLeavesAtOnceAndSupersedesAHeldRfi() throws {
         let (channel, _) = try Self.makeChannel()
         channel.invalidateReferenceFrames(from: 10, to: 12)
