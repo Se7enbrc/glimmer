@@ -86,7 +86,7 @@ extension TelemetryCounters {
                         discontinuityFlushTotal,
                         audioPacketsTotal, audioPacketsLostTotal, audioFecRecoveredTotal,
                         audioFecMismatchTotal, audioUnderrunTotal, audioOverrunTotal,
-                        audioTrimTotal, audioReceiveFailedTotal,
+                        audioTrimTotal, audioReceiveFailedTotal, audioDecodeFailedTotal,
                         rumbleEventTotal, rumbleDroppedInvalidTotal,
                         // Per-socket gap-event counters.
                         videoGapOver20msTotal, videoGapOver50msTotal, videoGapOver100msTotal,

@@ -47,10 +47,10 @@ extension AudioDecoder {
         // scratch and demux into channelData[i].
         var interleaved = [Float](repeating: 0, count: samplesPerFrame * channelCount)
         let decoded = interleaved.withUnsafeMutableBufferPointer { scratch in
-            scratch.baseAddress.map { decoder.decode(packet, into: $0) } ?? 0
+            scratch.baseAddress.map { decoder.decodeOrConceal(packet, into: $0) } ?? 0
         }
         guard decoded > 0 else {
-            // A malformed packet, or a loss before any packet: nothing to play.
+            // A loss, or a packet that won't decode, before any good packet: nothing to play.
             return false
         }
         pcm.frameLength = AVAudioFrameCount(decoded)

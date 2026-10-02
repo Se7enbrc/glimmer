@@ -19,6 +19,7 @@ final class OpusDecoder {
     private let scratch: UnsafeMutablePointer<Float>?
     private var packets: [OpusPacket?]
     private var hasReceivedPacket = false
+    private var loggedFailure = false
 
     static let maxPacketBytes = 8 * 1_276
 
@@ -84,6 +85,22 @@ final class OpusDecoder {
             for frame in 0..<frames { pcm[frame * channels + channel] = 0 }
         }
         return frames
+    }
+
+    /// `decode`, except a packet that decodes to nothing is concealed like a lost one, so its 5 ms
+    /// plays instead of opening a hole the meter reads as an under-run.
+    func decodeOrConceal(_ packet: UnsafeRawBufferPointer?, into pcm: UnsafeMutablePointer<Float>) -> Int {
+        let frames = decode(packet, into: pcm)
+        guard frames == 0, let packet else { return frames }
+        TelemetryCounters.shared.audioDecodeFailedTotal.increment()
+        if !loggedFailure {
+            loggedFailure = true
+            let status = decoders.lazy.map(\.lastStatus).first { $0 != 0 }
+            let reason = status.map { "AudioConverter OSStatus \($0)" } ?? "malformed packet"
+            Diag.notice("Opus packet of \(packet.count) bytes didn't decode (\(reason)); concealing it. "
+                + "Later failures count in audio_decode_failed_total", "Stream.Audio")
+        }
+        return decode(nil, into: pcm)
     }
 
     private func parse(_ packet: UnsafeRawBufferPointer) -> Bool {

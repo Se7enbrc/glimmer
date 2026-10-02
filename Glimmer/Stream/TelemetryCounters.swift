@@ -397,12 +397,12 @@ final class TelemetryCounters: @unchecked Sendable {
     /// be conflated in a cross-session comparison again. Bumped on the decode
     /// path like its sibling. Always-live integer add.
     let audioTrimTotal = Counter()
-    /// Audio RECEIVE-start failures (H7): `RtpAudioReceiver.startReceive()` threw,
-    /// so this session came up VIDEO-ONLY (the ping keeps the A/V session alive,
-    /// but no audio flows). Previously the throw was caught and dropped with no
-    /// counter and no user signal - a silent audio-dead session. Bumped from the
-    /// pipeline catch alongside the `.audioFailed` event. Always-live integer add.
+    /// Audio RECEIVE-start failures (H7): `RtpAudioReceiver.startReceive()` threw, so this
+    /// session came up video-only. Bumped alongside the `.audioFailed` event.
     let audioReceiveFailedTotal = Counter()
+    /// Received Opus packets that decoded to nothing and were concealed instead; tells a
+    /// decode fault apart from playout starvation when under-runs climb at zero loss.
+    let audioDecodeFailedTotal = Counter()
 
     // ---- Input-activity gauge (last-input instant + idle-edge detection) ----
     //

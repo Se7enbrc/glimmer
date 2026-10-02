@@ -38,6 +38,7 @@ extension TelemetryExporter {
         extras.ctrlIgnoredTotal = counters.ctrlIgnoredTotal.value
         extras.audioFecMismatchTotal = counters.audioFecMismatchTotal.value
         extras.audioReceiveFailedTotal = counters.audioReceiveFailedTotal.value
+        extras.audioDecodeFailedTotal = counters.audioDecodeFailedTotal.value
         // The third hidden-window state: gated (decode stopped) vs merely
         // suppressed (decoded, dropped-to-newest) - plus its designed drops.
         extras.decodeGated = counters.decodeGated
@@ -195,6 +196,8 @@ extension TelemetrySnapshot {
         /// because `startReceive()` threw. >0 with audio dark is the direct
         /// "no audio this session" signal the silent catch used to hide.
         var audioReceiveFailedTotal: UInt64 = 0
+        /// Received Opus packets that decoded to nothing and were concealed.
+        var audioDecodeFailedTotal: UInt64 = 0
         /// Pacer display-link ticks + frame releases per second, from the
         /// liveness totals - the DIRECT measure of display-link callback misses
         /// (previously only reconstructable as rendered+stale).

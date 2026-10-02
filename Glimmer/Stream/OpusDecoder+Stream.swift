@@ -12,6 +12,8 @@ final class OpusStreamDecoder {
     private var inputBytes = 0
     private var inputPending = false
     private var toc: UInt8?
+    /// The last conversion's result (noErr on success), for the session's first-failure log.
+    private(set) var lastStatus: OSStatus = noErr
     private static let inputSpent: OSStatus = 0x6E65_6564 // 'need'
 
     init?(sampleRate: Int32, channels: Int, samplesPerFrame: Int) {
@@ -77,7 +79,8 @@ final class OpusStreamDecoder {
             let decoder = Unmanaged<OpusStreamDecoder>.fromOpaque(context).takeUnretainedValue()
             return decoder.supplyInput(count, data: data, packetDescription: packetDescription)
         }, Unmanaged.passUnretained(self).toOpaque(), &frames, &output, nil)
-        guard status == noErr || status == Self.inputSpent else { return 0 }
+        lastStatus = status == Self.inputSpent ? noErr : status
+        guard lastStatus == noErr else { return 0 }
         return Int(frames)
     }
 

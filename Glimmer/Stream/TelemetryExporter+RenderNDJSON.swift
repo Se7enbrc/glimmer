@@ -120,6 +120,8 @@ extension TelemetryRenderer {
         builder.addCount("audio_fec_mismatch_total", extras.audioFecMismatchTotal)
         // Receive-start failures (H7): >0 with audio dark = video-only session.
         builder.addCount("audio_receive_failed_total", extras.audioReceiveFailedTotal)
+        // Packets that decoded to nothing and were concealed: under-runs at zero loss.
+        builder.addCount("audio_decode_failed_total", extras.audioDecodeFailedTotal)
         builder.add("audio_pkts_per_s", audio.packetsPerSecond)
         builder.add("audio_gap_max_ms", audio.gapMaxMs)
         builder.add("audio_loss_rate", audio.lossRate)

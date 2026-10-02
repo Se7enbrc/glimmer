@@ -149,14 +149,14 @@ struct OpusDecoderTests {
                     mapping: mapping, samplesPerFrame: 240)
     }
 
-    /// Each packet's frames out and per-channel RMS; nil packets are losses.
+    /// Each packet's frames out and per-channel RMS through the playback path; nil packets are losses.
     private static func run(_ decoder: OpusDecoder, _ hex: [String?]) -> [(frames: Int, rms: [Float])] {
         var pcm = [Float](repeating: 0, count: 240 * decoder.channels)
         return hex.map { hex in
             let frames = pcm.withUnsafeMutableBufferPointer { out -> Int in
                 guard let base = out.baseAddress else { return 0 }
-                guard let hex, let packet = Data(hex: hex) else { return decoder.decode(nil, into: base) }
-                return packet.withUnsafeBytes { decoder.decode($0, into: base) }
+                guard let hex, let packet = Data(hex: hex) else { return decoder.decodeOrConceal(nil, into: base) }
+                return packet.withUnsafeBytes { decoder.decodeOrConceal($0, into: base) }
             }
             let rms = (0..<decoder.channels).map { channel -> Float in
                 guard frames > 0 else { return 0 }
@@ -200,6 +200,17 @@ struct OpusDecoderTests {
     @Test func lostPacketIsConcealedAndTheStreamRecovers() throws {
         let decoder = try #require(Self.decoder())
         let out = Self.run(decoder, [Self.stereo[0], Self.stereo[1], Self.stereo[2], nil, Self.stereo[3], Self.stereo[4]])
+        #expect(out.map(\.frames) == [120, 240, 240, 240, 240, 240])
+        #expect(out[3].rms.allSatisfy { $0 > 0.05 }, "concealed \(out[3].rms)")
+        for packet in out.suffix(2) { #expect(packet.rms.allSatisfy { $0 > 0.1 }, "recovered \(packet.rms)") }
+    }
+
+    /// A packet that won't decode used to schedule nothing, a 5 ms hole the meter read as an under-run.
+    @Test func undecodablePacketIsConcealedAndTheStreamRecovers() throws {
+        let decoder = try #require(Self.decoder())
+        let malformed = "ed01"   // two equal frames can't share one byte
+        let out = Self.run(decoder, [Self.stereo[0], Self.stereo[1], Self.stereo[2], malformed,
+                                     Self.stereo[3], Self.stereo[4]])
         #expect(out.map(\.frames) == [120, 240, 240, 240, 240, 240])
         #expect(out[3].rms.allSatisfy { $0 > 0.05 }, "concealed \(out[3].rms)")
         for packet in out.suffix(2) { #expect(packet.rms.allSatisfy { $0 > 0.1 }, "recovered \(packet.rms)") }
