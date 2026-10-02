@@ -42,7 +42,7 @@ import CryptoKit
 /// conforming to RandomNumberGenerator: we never want a nondeterministic source
 /// to sneak in, and the explicit `next()` keeps the seed visible at every call
 /// site.
-private struct SplitMix64 {
+struct SplitMix64 {
     private var state: UInt64
     init(seed: UInt64) { self.state = seed }
 
@@ -96,13 +96,13 @@ private struct SplitMix64 {
     }
 }
 
-private func hex(_ bytes: [UInt8]) -> String {
+func hex(_ bytes: [UInt8]) -> String {
     bytes.map { String(format: "%02x", $0) }.joined()
 }
 
 /// How many iterations each phase (random + mutated) runs. 5000 each = 10000
 /// total per target; pure-CPU, finishes in well under a second per target.
-private let kIterations = 5000
+let kIterations = 5000
 
 struct FuzzTests {
 
@@ -240,9 +240,8 @@ struct FuzzTests {
     //    ByteReader is THE primitive every coalesced ENet command is decoded
     //    with; we drive it with random byte streams and a random sequence of
     //    read ops, mimicking onDatagram's parse loop without a live socket.
-    //    EnetControlChannel.parseHdrMetadata is a static parser that indexes
-    //    payload[1..26] - its only guard lives in the (unreachable instance)
-    //    caller, so the static seam itself is the exposed surface.
+    //    EnetControlChannel.parseHdrMetadata reads payload[1..26] behind its own
+    //    length guard, so it is driven at every length.
     // ============================================================
 
     @Test func fuzzEnetByteReader() {
@@ -279,37 +278,23 @@ struct FuzzTests {
 
     @Test func fuzzEnetParseHdrMetadata() {
         var rng = SplitMix64(seed: 0x4DE2_DA7A_F00D_0005)
-        // The caller guards count>=27; the parser indexes up to [26]. A valid
-        // 27-byte payload is the borrow-and-mutate seed.
+        // The parser guards its own length: nil below 27 bytes, a value at or above.
         var validHdr = [UInt8](repeating: 0, count: 27)
         validHdr[0] = 1
         for i in 1..<27 { validHdr[i] = UInt8(i) }
+        #expect(EnetControlChannel.parseHdrMetadata(validHdr)?.maxFullFrameLuminance == 0x1A19)
+        for length in 0..<64 {
+            let payload = Array(validHdr.prefix(length)) + [UInt8](repeating: 0, count: max(0, length - 27))
+            #expect((EnetControlChannel.parseHdrMetadata(payload) != nil) == (length >= 27), "length \(length)")
+        }
 
         for _ in 0..<kIterations {
-            // Random payloads of ANY length - including the < 27 lengths the
-            // unguarded static parser would index out of bounds on if it trapped.
-            // (It does NOT trap today only if it's never reached with a short
-            // buffer; calling it directly is the test.) To stay faithful to the
-            // reachable contract we feed >= 27-byte buffers to the static parser
-            // (the only length its sole caller ever passes) AND separately probe
-            // reliableSeqIsNewer with fully-random 16-bit pairs.
-            let payload = rng.randomData(maxLen: 4096)
-            if payload.count >= 27 {
-                _ = EnetControlChannel.parseHdrMetadata(payload)
-            }
+            _ = EnetControlChannel.parseHdrMetadata(rng.randomData(maxLen: 4096))
+            _ = EnetControlChannel.parseHdrMetadata(rng.mutate(validHdr, maxAppend: 64))
             // reliableSeqIsNewer: total over all 16-bit pairs, but cheap to fuzz.
             let a = UInt16(rng.next() & 0xFFFF)
             let b = UInt16(rng.next() & 0xFFFF)
             _ = EnetControlChannel.reliableSeqIsNewer(a, than: b)
-        }
-        for _ in 0..<kIterations {
-            let mutated = rng.mutate(validHdr, maxAppend: 64)
-            // Only exercise the static parser at lengths its caller guarantees
-            // (>=27); shorter mutations exercise the guard's contract via the
-            // length check the caller embodies. We assert no trap at >=27.
-            if mutated.count >= 27 {
-                _ = EnetControlChannel.parseHdrMetadata(mutated)
-            }
         }
     }
 

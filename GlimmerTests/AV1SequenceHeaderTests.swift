@@ -7,7 +7,7 @@ import Testing
 struct AV1SequenceHeaderTests {
     @Test func parsesSequenceHeaderWithoutDecoderModel() {
         let decoder = VideoDecoder()
-        let result = decoder.parseAV1SequenceHeader(sequenceHeader(decoderModel: false))
+        let result = decoder.parseAV1SequenceHeader(Self.sequenceHeader(decoderModel: false))
 
         #expect(result?.seqProfile == 1)
         #expect(result?.bitDepth == 10)
@@ -17,7 +17,7 @@ struct AV1SequenceHeaderTests {
 
     @Test func parsesSequenceHeaderWithDecoderModel() {
         let decoder = VideoDecoder()
-        let result = decoder.parseAV1SequenceHeader(sequenceHeader(decoderModel: true))
+        let result = decoder.parseAV1SequenceHeader(Self.sequenceHeader(decoderModel: true))
 
         #expect(result?.seqProfile == 1)
         #expect(result?.bitDepth == 10)
@@ -25,7 +25,8 @@ struct AV1SequenceHeaderTests {
         #expect(result?.subsamplingY == 0)
     }
 
-    private func sequenceHeader(decoderModel: Bool) -> Data {
+    /// A profile 1, 10-bit sequence header OBU; the fuzz suite mutates it.
+    static func sequenceHeader(decoderModel: Bool) -> Data {
         var bits = BitFixtureWriter()
         bits.write(1, count: 3)
         bits.write(0, count: 1)

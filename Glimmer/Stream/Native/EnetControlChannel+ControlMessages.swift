@@ -18,7 +18,7 @@ extension EnetControlChannel {
     /// re-announcements, which can arrive several times per second.
     func handleHdrInfo(_ payload: [UInt8]) {
         let enabled = (payload.first ?? 0) != 0
-        let parsed = enabled && payload.count >= 27 ? Self.parseHdrMetadata(payload) : nil
+        let parsed = enabled ? Self.parseHdrMetadata(payload) : nil
         let changes = withState {
             let modeChanged = lastHdrEnabled != enabled
             let metadataChanged = parsed != nil && parsed != lastHdrMetadata
@@ -36,8 +36,9 @@ extension EnetControlChannel {
 
     /// SS_HDR_METADATA: enable byte, then 13 LE UInt16s in HdrMetadata order: R/G/B
     /// and white-point x/y, max/min luminance, MaxCLL, MaxFALL, max full-frame luminance.
-    /// Verified against a live PC (Rec.2020 primaries, D65 white point).
-    static func parseHdrMetadata(_ payload: [UInt8]) -> HdrMetadata {
+    /// Verified against a live PC (Rec.2020 primaries, D65 white point). nil when short.
+    static func parseHdrMetadata(_ payload: [UInt8]) -> HdrMetadata? {
+        guard payload.count >= 27 else { return nil }
         func u16(_ idx: Int) -> UInt16 { UInt16(payload[idx]) | (UInt16(payload[idx + 1]) << 8) }
         return HdrMetadata(
             displayPrimariesRX: u16(1), displayPrimariesRY: u16(3),

@@ -72,6 +72,9 @@ final class VideoDepacketizer {
     private let strictIdrFrameWait = false             // C:80 (client RFI accept-path armed)
     private var consecutiveFrameDrops = 0              // C:31
     private static let CONSECUTIVE_DROP_LIMIT = 120    // C:30 (Video.h)
+    /// Four FEC blocks of 1023 packets stay far under this at any MTU. Past it the PC
+    /// is sending an endless frame (no SOF, no EOF), which is dropped as corrupt.
+    static let maxFrameBytes = 32 << 20
     private var syntheticPtsBaseUs: UInt64 = 0
 
     // Per-frame accumulation.
@@ -207,6 +210,11 @@ final class VideoDepacketizer {
             waitingForNextSuccessfulFrame = false
         }
         payload.withUnsafeBytes { nalChain.append(contentsOf: $0) }
+        guard nalChain.count <= Self.maxFrameBytes else {
+            Diag.warn("NativeVideo frame \(frameIndex) passed \(Self.maxFrameBytes) bytes without ending", Self.cat)
+            dropCorruptFrame(frameIndex)
+            return
+        }
 
         if lastPacket {
             finishFrame(pkt: pkt, frameIndex: frameIndex)

@@ -270,10 +270,15 @@ malicious host. With the sandbox gone, that is addressed by hardening the
 parsers directly instead:
 
 - **Fuzz the host-reachable parsers** - a deterministic swift-testing suite
-  (`GlimmerTests/FuzzTests.swift`) hammers Annex-B / FEC / RTSP / SDP / ENet /
-  AES-GCM / HTTP control headers with random + mutated-valid input, asserting
-  they reject rather than trap. It found and fixed an out-of-bounds read in the
-  Reed-Solomon FEC decoders (a shard shorter than the block size).
+  (`GlimmerTests/FuzzTests.swift` and `FuzzTests+Stream.swift`) hammers the
+  Annex-B, RTSP, SDP, ENet, AES-GCM and HTTP control parsers, the Reed-Solomon
+  kernels, the whole video RTP queue (`RtpVideoQueue.addRawDatagram` through FEC
+  reassembly and the depacketizer, for H.264, HEVC and AV1), the audio RTP queue
+  and the AV1 sequence header with random + mutated-valid input, asserting they
+  reject rather than trap and that no assembled frame passes
+  `VideoDepacketizer.maxFrameBytes`. It found and fixed an out-of-bounds read in
+  the Reed-Solomon FEC decoders (a shard shorter than the block size) and a
+  first packet shorter than its frame header reaching the decoder as video.
 - **Hardened Runtime library validation is ON for Release.** Glimmer links no
   third-party library, and the Release entitlements drop
   `disable-library-validation`. Adhoc / Debug builds keep it via
