@@ -42,12 +42,8 @@ extension RtpVideoQueue {
         let neededPackets = bufferDataPackets
 
         if pending.count < neededPackets {
-            // With no reordering seen, gaps beyond the parity can't close: tell the PC
-            // now instead of a frame later, when the next frame's first packet lands.
-            if !receivedOosData, !reportedLostFrame, missingPackets > bufferParityPackets {
-                depacketizer.queueLostFrame(Int(currentFrameNumber))
-                reportedLostFrame = true
-            }
+            // No speculative loss report: on Wi-Fi it fired on gaps FEC then filled, dropping
+            // frames for nothing. The next frame's first packet reports a real loss.
             return -1
         }
 
@@ -114,12 +110,6 @@ extension RtpVideoQueue {
         }
         reedSolomonCache[key] = decoder
         return decoder
-    }
-
-    /// Shards of this block unseen below the highest received sequence number.
-    private var missingPackets: Int {
-        let span = Self.u16(Int(receivedHighestSequenceNumber) - Int(bufferLowestSequenceNumber))
-        return Int(span) + 1 - pending.count
     }
 
     /// Assemble the Reed-Solomon shard array from the pending entries: each shard

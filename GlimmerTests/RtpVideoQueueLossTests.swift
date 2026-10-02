@@ -62,35 +62,22 @@ struct RtpVideoQueueLossTests {
                         flags: flags, payload: [UInt8](repeating: 2, count: 8))
     }
 
-    /// On a link that has never reordered, a frame whose gaps already exceed its parity is
-    /// reported lost at once, and the next frame's first packet does not report it again.
-    @Test func lossIsReportedBeforeTheNextFrameStarts() {
+    /// Gaps beyond the parity aren't reported while the frame is still arriving: reordering on
+    /// Wi-Fi fills them often enough that a speculative report only dropped frames. The next
+    /// frame's first packet reports the loss once, and that frame still decodes.
+    @Test func lossIsReportedWhenTheNextFrameStarts() {
         let queue = makeQueue()
         queue.addRawDatagram(VideoWire.singlePacketFrame(1, seq: 0, type: 2), receiveTimeUs: 1_000)
         #expect(delegate.units.map(\.frameNumber) == [1])
 
         queue.addRawDatagram(frameTwoShard(0, flags: RtpVideoQueue.FLAG_SOF), receiveTimeUs: 2_000)
-        #expect(delegate.losses.isEmpty)
         queue.addRawDatagram(frameTwoShard(3, flags: RtpVideoQueue.FLAG_EOF), receiveTimeUs: 2_100)
-        #expect(delegate.losses.map(\.to) == [2])
-        #expect(queue.currentFrameNumber == 2)
-        #expect(queue.reportedLostFrame)
+        #expect(delegate.losses.isEmpty)
+        #expect(!queue.reportedLostFrame)
 
         queue.addRawDatagram(VideoWire.singlePacketFrame(3, seq: 6, type: 4), receiveTimeUs: 3_000)
         #expect(delegate.losses.map(\.to) == [2])
         #expect(delegate.units.map(\.frameNumber) == [1, 3])
-    }
-
-    /// A gap the parity can still fill is not reported, and reordering turns the prediction off.
-    @Test(arguments: [false, true])
-    func recoverableGapsAndReorderingLinksStayQuiet(reordering: Bool) {
-        let queue = makeQueue()
-        queue.addRawDatagram(VideoWire.singlePacketFrame(1, seq: 0, type: 2), receiveTimeUs: 1_000)
-        queue.receivedOosData = reordering
-        queue.addRawDatagram(frameTwoShard(0, flags: RtpVideoQueue.FLAG_SOF), receiveTimeUs: 2_000)
-        queue.addRawDatagram(frameTwoShard(reordering ? 3 : 2, flags: 0), receiveTimeUs: 2_100)
-        #expect(delegate.losses.isEmpty)
-        #expect(!queue.reportedLostFrame)
     }
 
     // MARK: - FEC rebuild latch and geometry

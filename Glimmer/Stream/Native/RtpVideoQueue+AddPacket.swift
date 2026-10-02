@@ -111,10 +111,6 @@ extension RtpVideoQueue {
         if !queuePacket(entry, isFecRecovery: false) {
             return .rejected
         }
-        if Self.isBefore16(receivedHighestSequenceNumber, seq) {
-            receivedHighestSequenceNumber = seq
-        }
-
         if isParity {
             receivedParityPackets += 1
         } else {
@@ -243,7 +239,6 @@ extension RtpVideoQueue {
         bufferFirstRecvTimeUs = receiveTimeUs
         bufferLowestSequenceNumber = Self.u16(Int(rtp.seq) - Int(fields.fecIndex))
         nextContiguousSequenceNumber = bufferLowestSequenceNumber
-        receivedHighestSequenceNumber = rtp.seq
         receivedDataPackets = 0
         receivedParityPackets = 0
         useFastQueuePath = true
