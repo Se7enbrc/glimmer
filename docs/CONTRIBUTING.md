@@ -5,8 +5,8 @@
 Required:
 
 - macOS 26 or newer
-- Xcode 26 (full toolchain - Swift 6 strict concurrency, `swiftc`, `xcodebuild`,
-  `xcrun`)
+- Xcode 27 or later, for the macOS 27 SDK (full toolchain - Swift 6 strict
+  concurrency, `swiftc`, `xcodebuild`, `xcrun`); the app still runs on macOS 26
 - Homebrew
 
 Brew prerequisites:
@@ -397,8 +397,9 @@ Practically, before you call something done:
 ## Pull requests
 
 - `main` is the active development branch; releases are tags on it.
-- PR against `main`. Keep them scoped to one area, so they can land
-  independently.
+- Fork, push your branch to the fork, and open the PR from there against `main`.
+  Only the maintainer can push branches to this repository or merge into `main`.
+- Keep a PR scoped to one area, so it can land independently.
 - Bump `Glimmer/Version.xcconfig` and add a CHANGELOG entry in the same PR. See
   [RELEASE.md](RELEASE.md).
 - Before you ask for a merge, run the thing and look at it. [The bar](#the-bar)

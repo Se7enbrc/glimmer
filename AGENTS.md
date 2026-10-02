@@ -13,6 +13,27 @@ input all run in one Swift process, with no external player and no C engine.
 The bar is one sentence: someone using Glimmer should mistake it for something
 Apple shipped. Everything below follows from it.
 
+## Find your way
+
+Read the part of [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the area
+you're changing before you change it. Before UI work, read
+[DESIGN.md](DESIGN.md) (the visual system) and [PRODUCT.md](PRODUCT.md) (who
+it's for). [docs/PROFILING.md](docs/PROFILING.md) gets the telemetry an engine
+change needs, and [docs/SECURITY.md](docs/SECURITY.md) covers the root helper.
+
+| Path                         | What lives there                                                                             |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `Glimmer/`                   | The app: SwiftUI and AppKit UI, `AppModel+*`, menu bar, settings, logging (`LogStore.swift`) |
+| `Glimmer/Stream/`            | The stream around the protocol: decode, display, audio playout, input, pairing, telemetry    |
+| `Glimmer/Stream/Native/`     | Sunshine's protocol: RTSP, the ENet control channel, RTP video and audio, FEC                |
+| `Glimmer/Stream/HIDGamepad/` | Raw-HID game controllers and the generated controller database                               |
+| `Glimmer/CLI/`               | The `glimmer` command line, in the app binary                                                |
+| `Glimmer/Models/`            | The PC record and a few settings types                                                       |
+| `helper/`                    | The opt-in root daemon that parks AirDrop's radio during a stream                            |
+| `LoginHelper/`               | The login item                                                                               |
+| `GlimmerTests/`              | Hostless unit tests                                                                          |
+| `scripts/`                   | Build, signing and release tooling the Makefile calls                                        |
+
 ## Protect the bar
 
 You are the last reviewer before a change reaches people who care how this app
@@ -32,6 +53,9 @@ tests and makes the app worse is a regression with a green check mark.
 
 ## Setup and commands
 
+Xcode 27 or later: the build needs the macOS 27 SDK, while the app still runs on
+macOS 26.
+
 ```bash
 brew install swiftlint trufflehog pre-commit
 pre-commit install && pre-commit install --hook-type pre-push
@@ -45,6 +69,14 @@ pre-commit install && pre-commit install --hook-type pre-push
 - `make dev`: tests, then the Release build installed and relaunched. On a Mac
   with a Developer ID it signs and notarizes on the way, as every install does.
 
+One suite, after a `make test` has run once:
+
+```bash
+xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+  -xcconfig Glimmer/StreamLib.xcconfig CODE_SIGNING_ALLOWED=NO -derivedDataPath build \
+  -destination 'platform=macOS' -only-testing:GlimmerTests/DatagramBatchTests
+```
+
 Build to look, not to check. Every build of `Glimmer.app` that macOS registers
 earns its own privacy record, so use `make verify` for correctness and
 `make dev` only when someone will actually use the build. See "don't mint app
@@ -54,6 +86,11 @@ Never run the publishing or keychain setup targets (`dist`, `release-publish`,
 `brew-bump`, `sparkle-keys`, `creds-init`, `setup-notary`, `codesign-setup`,
 `codesign-teardown`) unless the maintainer asks for that exact thing. They
 publish to users or rewrite signing state.
+
+Signing material lives outside the repo, in
+`~/Library/Keychains/developer-id.keychain-db` and `~/.config/developer-id/`.
+`make app`, `make test` and `make verify` never touch it. Never read, print,
+copy or change it.
 
 ## Code standards
 
@@ -121,6 +158,23 @@ These are settled. A pull request is not the place to reopen them.
 - No analytics, tracking or third-party network calls. Glimmer talks to the PC,
   to its local network for discovery and Wake on LAN, and to its update feed.
 
+## Choices that look wrong and aren't
+
+Each one has its reason in a code comment or its commit. Undo one only with new
+numbers or a new platform API, never as cleanup.
+
+- **`Glimmer/Stream/CHelpers.h` is the only non-Swift code**: an Objective-C
+  exception guard. AVAudioEngine can raise an NSException mid device change, and
+  Swift can't catch one. Add no other C or Objective-C.
+- **`DatagramBatch` calls `recvmsg_x` through `dlsym`.** It receives video in
+  batches with one syscall, and falls back to `recvfrom` if the symbol is gone.
+- **The FEC kernels in `ReedSolomon.swift` are portable SIMD Swift**, about 2.5×
+  slower than the NEON code they replaced. They only run when packets are lost.
+- **The control channel turns TLS session resumption off**, so every connection
+  re-checks the PC's pinned certificate.
+- **`scripts/sign-bundle.sh` signs inside out.** Never `codesign --deep`: it
+  stamps Glimmer's entitlements onto Sparkle's helpers.
+
 ## UI and copy
 
 - Copy is short, plain and specific, like the app's own “Couldn't reach Den PC.
@@ -165,11 +219,34 @@ These are settled. A pull request is not the place to reopen them.
   unrelated cleanup riding along.
 - Follow [RELEASE.md](docs/RELEASE.md): a change a person will notice carries a
   `CHANGELOG.md` entry in plain prose about what changed for them, and the
-  `Glimmer/Version.xcconfig` bump goes in the same pull request.
+  `Glimmer/Version.xcconfig` bump goes in the same pull request. Bump both
+  lines: Sparkle orders updates by `CURRENT_PROJECT_VERSION`, so a release whose
+  build number doesn't rise past the last one is never offered.
 - The pull request says what changed and why, what you ran and looked at, and
   what you did not verify. An honest gap beats a confident guess.
 - Don't push, open or merge a pull request unless the person you're working for
   asked you to.
+
+## Working in a fork
+
+Glimmer is GPLv3, and forks are welcome. The rules here decide what merges
+upstream; in a fork they're the fork's call. Before a fork's build reaches
+anyone else:
+
+- **Change every identifier**: the bundle IDs (`io.ugfugl.Glimmer`,
+  `io.ugfugl.Glimmer.LoginHelper`, `io.ugfugl.glimmer.helper`), the product
+  name, the logging subsystem and the data folders. Shared IDs make macOS mix
+  the fork's permissions, login item and data with Glimmer's.
+- **Give Sparkle your own feed.** Replace `SUFeedURL` and `SUPublicEDKey` in
+  `Glimmer/Info.plist` with your appcast and your key (`make sparkle-keys`).
+  Left as they are, the fork keeps checking Glimmer's feed: it either installs
+  Glimmer over itself or rejects every update.
+- **Sign as yourself.** The Makefile uses whatever Developer ID is in your
+  keychain. Without one, builds are ad hoc and not notarized.
+- **Keep `LICENSE` and `CREDITS.md`**, including the moonlight-common-c credit.
+- **A change offered back** comes as a pull request from the fork: only the
+  maintainer can push branches here or merge into `main`. It follows every rule
+  above, one area per pull request, on top of current `main`.
 
 ## What gets rejected
 

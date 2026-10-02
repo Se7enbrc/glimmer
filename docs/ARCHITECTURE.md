@@ -4,9 +4,10 @@ Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
 process. No external player, no linked C streaming library - the
 GameStream/Sunshine transport is implemented in Swift under
 `Glimmer/Stream/Native/` (ported from `moonlight-common-c`, GPLv3; see
-[CREDITS.md](../CREDITS.md)). The only C that crosses the bridging header is a
-few inline shims in `CHelpers.h`; crypto, TLS and audio decode run on CryptoKit,
-CommonCrypto, Security, Network.framework and AudioToolbox.
+[CREDITS.md](../CREDITS.md)). The only code that crosses the bridging header is
+an Objective-C exception guard in `CHelpers.h`, which Swift can't express;
+crypto, TLS and audio decode run on CryptoKit, CommonCrypto, Security,
+Network.framework and AudioToolbox.
 
 There is one other process, and it is not in the stream path: an opt-in root
 LaunchDaemon under `helper/` that parks the AirDrop radio (`awdl0`) for the

@@ -108,7 +108,8 @@ that name.
 
 ## Build
 
-Xcode 26 (Swift 6). Glimmer links no third-party libraries.
+Xcode 27 or later (Swift 6, the macOS 27 SDK). Its one third-party library is
+[Sparkle](https://sparkle-project.org), for updates.
 
 ```bash
 git clone https://github.com/Se7enbrc/glimmer.git
