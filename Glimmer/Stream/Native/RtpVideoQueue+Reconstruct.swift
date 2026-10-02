@@ -30,14 +30,26 @@ extension RtpVideoQueue {
         if fecPercentage == 0 {
             return -1
         }
+        // A failed rebuild is retried only once a late data shard changes the gap set.
+        if receivedDataPackets == fecFailedDataCount {
+            return -1
+        }
+        func failed() -> Int {
+            fecFailedDataCount = receivedDataPackets
+            return -1
+        }
 
         // Sunshine sends a block's shards at one length, shorter than we asked for when
         // the PC caps the packet size. Parity is always full length: take the longest.
         let receiveSize = min(pending.reduce(0) { max($0, $1.length) },
                               packetSize + Self.MAX_RTP_HEADER_SIZE)
-        guard let rs = ReedSolomon(dataShards: bufferDataPackets, parityShards: bufferParityPackets) else {
-            Diag.error("NativeVideo reed_solomon_new failed (ds=\(bufferDataPackets) ps=\(bufferParityPackets))", Self.cat)
-            return -1
+        guard let rs = reedSolomon(dataShards: bufferDataPackets, parityShards: bufferParityPackets) else {
+            if !loggedBadFecGeometry {
+                loggedBadFecGeometry = true
+                Diag.error("NativeVideo FEC geometry rejected (ds=\(bufferDataPackets) "
+                    + "ps=\(bufferParityPackets)); logged once per stream", Self.cat)
+            }
+            return failed()
         }
 
         var (shards, marks) = buildShards(totalPackets: totalPackets, receiveSize: receiveSize)
@@ -46,20 +58,32 @@ extension RtpVideoQueue {
         if !ok {
             Diag.error("NativeVideo FEC unrecoverable frame \(currentFrameNumber): "
                 + "have \(pending.count) need \(neededPackets)", Self.cat)
-            return -1
+            return failed()
         }
 
         // Validate the entire recovery before committing any shard or success metric.
         var recovered: [Entry] = []
         for index in 0..<bufferDataPackets where marks[index] {
             guard let entry = rebuildRecoveredShard(shards[index], index: index, headEntry: pending.first) else {
-                return -1
+                return failed()
             }
             recovered.append(entry)
         }
         logFecRecovery()
         for entry in recovered { _ = queuePacket(entry, isFecRecovery: true) }
         return 0
+    }
+
+    /// The decoder for this geometry, built once per (data, parity) pair.
+    private func reedSolomon(dataShards: Int, parityShards: Int) -> ReedSolomon? {
+        let key = dataShards << 16 | parityShards
+        if let cached = reedSolomonCache[key] { return cached }
+        guard let decoder = ReedSolomon(dataShards: dataShards, parityShards: parityShards) else { return nil }
+        if reedSolomonCache.count >= Self.reedSolomonCacheCap {
+            reedSolomonCache.removeAll(keepingCapacity: true)
+        }
+        reedSolomonCache[key] = decoder
+        return decoder
     }
 
     /// Shards of this block unseen below the highest received sequence number.

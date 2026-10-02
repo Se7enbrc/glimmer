@@ -102,6 +102,14 @@ final class RtpVideoQueue {
     var bufferFirstRecvTimeUs: UInt64 = 0
 
     var loggedFirstFecRecovery = false
+    var loggedBadFecGeometry = false
+    /// Cauchy matrices by shard geometry: consecutive frames mostly share one, so a
+    /// recovery reuses it instead of rebuilding it. Cleared at the cap.
+    var reedSolomonCache: [Int: ReedSolomon] = [:]
+    static let reedSolomonCacheCap = 256
+    /// receivedDataPackets when this block's rebuild last failed: a retry can only
+    /// succeed once a late data shard changes the gap set. -1 = no failure yet.
+    var fecFailedDataCount = -1
 
     // MARK: - Receive-side reorder tolerance
     //
