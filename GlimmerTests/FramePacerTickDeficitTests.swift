@@ -77,9 +77,9 @@ struct FramePacerTickDeficitTests {
         #expect(pacer.tickDeficit.deficitModeActive)
         pacer.tickDeficit.warmHealthyWindowStreak = 1
         pacer.tickDeficit.lastRepaintHostTime = now
-        os_unfair_lock_lock(&pacer.lock)
+        pacer.lock.lock()
         let events = pacer.clearForSuppressionLocked(now: now)
-        os_unfair_lock_unlock(&pacer.lock)
+        pacer.lock.unlock()
         #expect(events.count == 2)
         #expect(!pacer.tickDeficit.deficitModeActive)
         #expect(!pacer.tickDeficit.floorAssistActive)
@@ -169,8 +169,8 @@ struct FramePacerTickDeficitTests {
     private func service(
         _ pacer: FramePacer, now: inout Double, ticks: UInt64 = 0, releases: UInt64 = 0
     ) -> [FramePacer.TickDeficitEvent] {
-        os_unfair_lock_lock(&pacer.lock)
-        defer { os_unfair_lock_unlock(&pacer.lock) }
+        pacer.lock.lock()
+        defer { pacer.lock.unlock() }
         if pacer.tickDeficit.rateWindowStartHostTime.isFinite {
             now += FramePacer.rateWindowSeconds
         }

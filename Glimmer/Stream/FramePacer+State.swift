@@ -13,7 +13,7 @@
 //  Swift extension cannot hold stored properties.
 //
 //  EVERY field in every type here is guarded by FramePacer's single
-//  `os_unfair_lock`. The logic that reads and writes them lives in the topic
+//  `OSAllocatedUnfairLock`. The logic that reads and writes them lives in the topic
 //  files named in FramePacer.swift's code map.
 //
 

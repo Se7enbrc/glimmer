@@ -11,8 +11,8 @@ extension StatsCollector {
     /// window's host cadence.
     func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0,
                              frameNumber: Int32) {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         receivedFrames &+= 1
         totalReceived &+= 1
         let consecutive = lastReceivedFrameNumber.map { frameNumber == $0 &+ 1 } ?? false
@@ -42,8 +42,8 @@ extension StatsCollector {
     /// `recordReceivedFrame` so the StreamSession watchdog can gate on
     /// "did the user see a frame," not "did bytes arrive."
     func recordDecodedFrame() {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         lastDecodedFrameTime = CACurrentMediaTime()
     }
 
@@ -52,8 +52,8 @@ extension StatsCollector {
     /// in StreamSession gates on - reception alone doesn't mean the user is
     /// seeing anything.
     func secondsSinceLastDecodedFrame() -> Double {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         guard lastDecodedFrameTime > 0 else { return .infinity }
         return CACurrentMediaTime() - lastDecodedFrameTime
     }
@@ -64,8 +64,8 @@ extension StatsCollector {
     /// and direct-enqueue paths, so the present-path watchdog gates on real
     /// screen updates in EITHER mode - the detector the direct path was missing.
     func secondsSinceLastPresent() -> Double {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         guard lastPresentTime > 0 else { return .infinity }
         return CACurrentMediaTime() - lastPresentTime
     }
@@ -77,8 +77,8 @@ extension StatsCollector {
     /// in) - we skip the count/sum/min update but still let `max` see the
     /// zero, matching moonlight-qt's exact behavior in ffmpeg.cpp.
     func recordHostProcessingLatency(_ tenthsOfMs: UInt16) {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         if tenthsOfMs != 0 {
             if minHostProcessingLatency != 0 {
                 minHostProcessingLatency = min(minHostProcessingLatency, tenthsOfMs)
@@ -100,7 +100,7 @@ extension StatsCollector {
     func recordDecodeSubmit(intervalState: OSSignpostIntervalState) {
         let now = CACurrentMediaTime()
         var evictedForLeakClose: OSSignpostIntervalState?
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         submitFifo.append((timestamp: now, state: intervalState))
         if submitFifo.count > StatsCollector.submitFifoCapacity {
             // Drop the oldest to keep the FIFO bounded. The submit-side opened
@@ -117,7 +117,7 @@ extension StatsCollector {
             // but we still avoid nesting OS-side calls under our own lock.
             evictedForLeakClose = submitFifo.removeFirst().state
         }
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         if let state = evictedForLeakClose {
             OSSignposter.decode.endInterval(
                 "DecodeFrame", state, "outcome=evicted_from_fifo")
@@ -131,8 +131,8 @@ extension StatsCollector {
     /// `endInterval` in that case.
     func recordDecodeComplete(dropped: Bool) -> OSSignpostIntervalState? {
         let now = CACurrentMediaTime()
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         var poppedState: OSSignpostIntervalState?
         if !submitFifo.isEmpty {
             let head = submitFifo.removeFirst()
@@ -162,8 +162,8 @@ extension StatsCollector {
     /// message - leaving it open would have Instruments draw the interval
     /// running forever in the timeline.
     func recordDecodeAbandoned() -> OSSignpostIntervalState? {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         // Pop the most-recent (LIFO) submit - that's the one we just stamped
         // synchronously and which VT rejected inline. We don't credit a
         // "decoded" or "dropped by decoder" frame because VT never saw it.
@@ -175,8 +175,8 @@ extension StatsCollector {
     }
 
     func recordRendererEnqueue() {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         renderedFrames &+= 1
         // Stamp the mode-agnostic present clock here - the single enqueue site
         // for BOTH paced and direct presents - so the present-path watchdog and
@@ -211,8 +211,8 @@ extension StatsCollector {
     /// presents stop). The first present after clearing re-seeds the baseline
     /// un-judged, so the hidden span can never mint a false gap.
     func setGapJudgingExcluded(_ excluded: Bool) {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         gapJudgingExcluded = excluded
         if excluded { gapBaselineTime = 0 }
     }
@@ -223,8 +223,8 @@ extension StatsCollector {
     /// streaming is to drop, not block - see the renderer-backpressure path
     /// in VideoDecoder.enqueueDecodedFrame.
     func recordRendererBackpressureDrop() {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         rendererBackpressureDrops &+= 1
         clientSkipSinceLastPresent = true
     }
@@ -232,16 +232,16 @@ extension StatsCollector {
     /// Session-total renderer-backpressure drops for stream diagnostics.
     /// The overlay shows decoder drops; teardown logs this separate cause.
     func backpressureDropCount() -> UInt64 {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         return rendererBackpressureDrops
     }
 
     /// Session-total decoder drops. The overlay uses the percentage;
     /// telemetry needs the absolute count for its drops-by-cause split.
     func decoderDropCount() -> UInt64 {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         return totalDecoderDropped
     }
 
@@ -259,8 +259,8 @@ extension StatsCollector {
     /// `totalReceived`) and the window counter so the live FPS-window drop view
     /// also reflects it.
     func recordDecoderDiscard() {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         decoderDroppedFrames &+= 1
         totalDecoderDropped &+= 1
         clientSkipSinceLastPresent = true
@@ -276,8 +276,8 @@ extension StatsCollector {
     /// Called from FramePacer on the decode queue (submit overflow) and the
     /// pacing queue (vsync trim).
     func recordPresentationLateDrop() {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         presentationLateDrops &+= 1
         clientSkipSinceLastPresent = true
     }
@@ -285,8 +285,8 @@ extension StatsCollector {
     /// Total presentation-late drops this session. Surfaced in the overlay's
     /// drops-by-cause split and logged on teardown.
     func presentationLateDropCount() -> UInt64 {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         return presentationLateDrops
     }
 
@@ -296,23 +296,23 @@ extension StatsCollector {
     /// `recordRendererEnqueue` - together they are the felt-stutter signal,
     /// distinct from catch-up discards (which DID present a newer frame).
     func recordPresentationGap() {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         presentationGaps &+= 1
     }
 
     /// Total perceived present gaps this session. Exported as the badge's
     /// felt-stutter telemetry signal.
     func presentationGapCount() -> UInt64 {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         return presentationGaps
     }
 
     /// Sample the live pacing queue depth at the display's vsync rate.
     func recordPacingDepth(_ depth: Int) {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         lastPacingDepth = depth
     }
 
@@ -321,8 +321,8 @@ extension StatsCollector {
     /// interval let a late present be charged to the host's own timing.
     func recordPresent(cadenceErrorMs: Double, hostPTSSeconds: Double = .nan,
                        streamIntervalMs: Double = 0, refreshMs: Double = 0) {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
         let hostDeltaMs = (hostPTSSeconds - lastPresentedPtsSeconds) * 1000.0
         if hostPTSSeconds.isFinite { lastPresentedPtsSeconds = hostPTSSeconds }
         let afterClientSkip = clientSkipSinceLastPresent

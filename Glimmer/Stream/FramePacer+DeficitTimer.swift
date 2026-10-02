@@ -24,10 +24,10 @@ extension FramePacer {
     /// idempotent reconcile shape means racing engage/disengage transitions
     /// converge on the latest state instead of double-arming.
     func reconcileDeficitTimer() {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let want = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive) && running
         let interval = streamFrameIntervalSeconds
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         if want, tickDeficit.deficitTimer == nil {
             let timer = DispatchSource.makeTimerSource(queue: pacingQueue)
             timer.schedule(
@@ -47,13 +47,13 @@ extension FramePacer {
     /// A beat before the panel vsync a tick's frame scans out on skips its release.
     func deficitTimerFired() {
         let mediaNow = CACurrentMediaTime()
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let active = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive)
             && running && !presentSuppressed
         let interval = streamFrameIntervalSeconds
         let tickOwnsVsync = Self.tickOwnsScanout(
             now: mediaNow, scanout: tickDeficit.tickScanoutMediaTime)
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         guard active else { return }
         if !tickOwnsVsync {
             releaseDueFrame(targetTimestamp: mediaNow, vsyncInterval: interval, tickScanout: .nan)
@@ -63,9 +63,9 @@ extension FramePacer {
         // and the watchdog mid-teardown there may be no other caller, and the
         // disengage verdict must never depend on the thing that failed.
         let now = CFAbsoluteTimeGetCurrent()
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let events = serviceTickDeficitLocked(now: now)
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         handleTickDeficitEvents(events)
     }
 
@@ -87,7 +87,7 @@ extension FramePacer {
     func maybeRepaintForGovernor(interval: Double) {
         let now = CFAbsoluteTimeGetCurrent()
         var repaint: CMSampleBuffer?
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let sinceRelease = liveness.lastReleaseHostTime.isFinite
             ? now - liveness.lastReleaseHostTime : .infinity
         let sinceRepaint = tickDeficit.lastRepaintHostTime.isFinite
@@ -100,7 +100,7 @@ extension FramePacer {
             tickDeficit.deficitRepaints &+= 1
             repaint = sampleBuffer
         }
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         guard let repaint else { return }
         onDeficitRepaint?(repaint)
     }

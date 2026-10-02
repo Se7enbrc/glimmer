@@ -98,7 +98,7 @@ extension FramePacer {
         var emitRefreshChange = false
         var changedFromHz = 0.0
         var changedToHz = 0.0
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let hostNow = CFAbsoluteTimeGetCurrent()
         liveness.lastTickHostTime = hostNow
         liveness.tickCount &+= 1
@@ -137,7 +137,7 @@ extension FramePacer {
         // the lock we already hold. Events (engage/disengage/NOTICE) are
         // emitted off-lock below.
         let deficitEvents = serviceTickDeficitLocked(now: hostNow)
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
 
         // DIAGNOSTIC tick-miss classifier (metric-only, no behavior change). A
         // stretched realized tick (>1.5 vsyncs between successive targetTimestamps)

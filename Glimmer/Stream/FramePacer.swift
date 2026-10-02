@@ -91,7 +91,7 @@
 //    floor re-apply) to the main actor, and dispatches the dequeue+enqueue to
 //    `pacingQueue`. The link bind/unbind themselves stay on the main actor.
 //  * `start`/`stop`/`screenDidChange` run on the main actor (lifecycle).
-//  All shared mutable state is guarded by a single `os_unfair_lock`, the same
+//  All shared mutable state is guarded by one `OSAllocatedUnfairLock`, the same
 //  discipline StatsCollector uses. The lock is held only for a handful of
 //  field updates per submit/tick - well under a microsecond.
 //
@@ -107,7 +107,7 @@ import os
 /// Drives presentation of decoded frames against the display's true vsync
 /// cadence. One per streaming session; owned by `VideoDecoder`.
 ///
-/// `@unchecked Sendable` over an internal `os_unfair_lock` - the decode queue
+/// `@unchecked Sendable` over an internal `OSAllocatedUnfairLock` - the decode queue
 /// (`submit`), the main run loop (the link tick), and the main actor
 /// (lifecycle) all touch it, mirroring `StatsCollector`'s contract.
 final class FramePacer: @unchecked Sendable {
@@ -141,7 +141,7 @@ final class FramePacer: @unchecked Sendable {
 
     // MARK: - Shared state (guarded by `lock`)
 
-    var lock = os_unfair_lock_s()
+    let lock = OSAllocatedUnfairLock()
 
     /// DEBUG-only lock-discipline assertions (compiled out in release). The never-nest
     /// invariant is load-bearing: `refreshReconciledTarget` takes EnvSignalController's
@@ -149,12 +149,12 @@ final class FramePacer: @unchecked Sendable {
     /// rather than surfacing as a rare deadlock far away.
     @inline(__always) func assertLockHeld() {
         #if DEBUG
-        os_unfair_lock_assert_owner(&lock)
+        lock.precondition(.owner)
         #endif
     }
     @inline(__always) func assertLockNotHeld() {
         #if DEBUG
-        os_unfair_lock_assert_not_owner(&lock)
+        lock.precondition(.notOwner)
         #endif
     }
 
@@ -360,7 +360,7 @@ final class FramePacer: @unchecked Sendable {
     /// own. Idempotent - a second start with the same view rebinds the link.
     @MainActor
     func start(drivingView view: NSView) {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         running = true
         // Seed the present-side liveness clocks to "now" so the watchdog gives
         // the pacer a grace period to produce its first frame rather than
@@ -384,7 +384,7 @@ final class FramePacer: @unchecked Sendable {
         // cadence. The present-callback floor is unaffected: it always pins the
         // FIXED configured rate (configuredFrameIntervalSeconds), never this.
         adoptStashedRefinedCadenceLocked()
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
 
         // Invalidate any prior link (idempotent re-start) before binding fresh.
         displayLink?.invalidate()
@@ -409,7 +409,7 @@ final class FramePacer: @unchecked Sendable {
         // the truth (~174Hz) instead of the configured fps (the 240.0Hz
         // warm-re-enable seed bug) - see adoptStashedRefinedCadenceLocked.
         stashRefinedCadenceForWarmReenable()
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         running = false
         queue.removeAll(keepingCapacity: false)
         // Reset liveness so a future restart starts clean (the watchdog reads
@@ -442,7 +442,7 @@ final class FramePacer: @unchecked Sendable {
         // field-by-field reset lives with the state machine it clears
         // (FramePacer+TickDeficit.swift).
         resetTickDeficitStateLocked()
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
 
         // Cancel the off-tick release timer (if a deficit episode was live).
         // Timer create/cancel is confined to pacingQueue; `deficitModeActive`

@@ -361,24 +361,16 @@ public final class VideoDecoder {
     nonisolated(unsafe) public var onFirstDecodedFrame: (() -> Void)?
     nonisolated(unsafe) var didFireFirstDecodedFrame = false
 
-    // Tracks the last CGColorSpace we attached to a pixel buffer so we only
-    // rebuild it when the bitstream-declared colorspace actually changes -
-    // identical to moonlight-qt's `m_LastColorSpace` + `m_ColorSpace`
-    // pattern in vt_avsamplelayer.mm. The key is a tuple of (primaries,
-    // transfer) decoded from the pixel buffer's attachments at frame time;
-    // changes when the host swaps from Rec.709 SDR ↔ Rec.2020/PQ HDR.
+    // The colorspace last attached to a pixel buffer (moonlight-qt's m_LastColorSpace), rebuilt
+    // only when the bitstream's (primaries, transfer) changes. VT output thread only; the stop
+    // path clears both on the decode queue after WaitForAsynchronousFrames, so no callback runs.
     nonisolated(unsafe) var lastColorSpaceKey: String?
     nonisolated(unsafe) var lastColorSpace: CGColorSpace?
 
-    // Renderer-backpressure consecutive-drop counter. When the
-    // AVSampleBufferVideoRenderer's internal queue fills (host bitrate spike,
-    // decode hitting headroom, OS-side compositor falling behind),
-    // `isReadyForMoreMediaData` flips to false; we drop the frame to keep
-    // wall-clock latency bounded. We still COUNT this (the renderer's own
-    // queue overflowing is a real signal) but never request an IDR off it - a
-    // presentation-timing drop of an already-decoded frame never needs a
-    // keyframe (the reference chain is intact).
-    nonisolated(unsafe) var consecutiveBackpressureDrops: Int = 0
+    // Consecutive frames the renderer refused (`isReadyForMoreMediaData` false). Counted, never
+    // an IDR trigger: the reference chain is intact. Atomic because the paced present runs on
+    // pacingQueue while the direct and warm-handover presents run on the VT output thread.
+    nonisolated let consecutiveBackpressureDrops = Atomic<Int>(0)
 
     nonisolated let presentRecoveryPending = Atomic<Bool>(false)
 

@@ -34,10 +34,10 @@ extension FramePacer {
     /// one-step grow.
     func noteMeasuredJitter(_ ms: Double) {
         refreshReconciledTarget()
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         if ms.isFinite, ms >= 0 { adaptiveDepth.measuredJitterMs = ms }
         bumpTargetForJitterLocked()
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
     }
 
     /// Pull the reconciler's latest published headroom level into
@@ -54,14 +54,14 @@ extension FramePacer {
         // this MUST run off the pacer lock (DEBUG-only trap on a future violation).
         assertLockNotHeld()
         let decision = EnvSignalController.shared.decision
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         if decision.generation != adaptiveDepth.reconciledDecisionGeneration {
             adaptiveDepth.reconciledDecisionGeneration = decision.generation
             adaptiveDepth.reconciledTargetDepth = min(FramePacer.maxTargetDepth,
                                         max(FramePacer.targetDepth,
                                             FramePacer.targetDepth + decision.headroomLevel))
         }
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
     }
 
     // MARK: - Adaptive target depth. All run under `lock`.
@@ -182,7 +182,7 @@ extension FramePacer {
     /// late vs the grid), plus that interval, in seconds. Read under the lock right
     /// after a present updates `lastPresentMediaTime`.
     func lastPresentInterPresentDelta() -> (error: Double, streamInterval: Double) {
-        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        lock.lock(); defer { lock.unlock() }
         let now = lastPresentMediaTime
         defer { prevPresentMediaTimeForMetric = now }
         guard prevPresentMediaTimeForMetric.isFinite, now.isFinite else { return (0, streamFrameIntervalSeconds) }

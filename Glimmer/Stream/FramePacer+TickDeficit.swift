@@ -466,10 +466,10 @@ extension FramePacer {
     /// lock itself, so call it OFF the lock. MainActor: the statics are.
     @MainActor
     func stashRefinedCadenceForWarmReenable() {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let interval = streamFrameIntervalSeconds
         let refined = ptsDeltas.count >= FramePacer.refinedCadenceStashMinSamples
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         guard refined, interval.isFinite, interval > 0 else { return }
         FramePacer.stashedRefinedIntervalSeconds = interval
         FramePacer.stashedRefinedIntervalAt = CFAbsoluteTimeGetCurrent()
@@ -504,10 +504,10 @@ extension FramePacer {
     /// and the stream re-froze 350ms after re-enable (the re-enable hiccup was
     /// itself a felt freeze, separate from the original stall).
     func armWarmHandover() {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         tickDeficit.warmingUp = true
         tickDeficit.warmHealthyWindowStreak = 0
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
     }
 
     /// Direct-present one frame during warm-up (called from `submit` on the VT

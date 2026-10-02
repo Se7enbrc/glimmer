@@ -15,6 +15,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
+import Synchronization
 import VideoToolbox
 import os
 
@@ -318,16 +319,16 @@ extension VideoDecoder {
         // compounds lag. A presentation-timing drop of an already-decoded frame
         // never requests a keyframe - the reference chain is intact.
         if !renderer.isReadyForMoreMediaData {
-            consecutiveBackpressureDrops += 1
+            let streak = consecutiveBackpressureDrops.add(1, ordering: .relaxed).newValue
             statsCollector.recordRendererBackpressureDrop()
             OSSignposter.render.emitEvent(
                 "BackpressureDrop",
-                "streak=\(self.consecutiveBackpressureDrops, privacy: .public)")
+                "streak=\(streak, privacy: .public)")
             return false
         }
 
         // Healthy frame - reset the backpressure streak and present.
-        consecutiveBackpressureDrops = 0
+        consecutiveBackpressureDrops.store(0, ordering: .relaxed)
         renderer.enqueue(sampleBuffer)
 
         // Latency telemetry stage t_present (opt-in; nil = zero cost): the frame

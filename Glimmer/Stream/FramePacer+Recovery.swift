@@ -111,9 +111,9 @@ extension FramePacer {
         // `lastPresentMediaTime` from this link's clock instead of comparing
         // against a stale value from the old link - the negative-`sinceLast`
         // wedge that hard-froze the stream. See `resetCadenceBaseLocked`.
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         resetCadenceBaseLocked()
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
 
         let proxy = DisplayLinkProxy { [weak self] link in
             self?.handleTick(link)
@@ -151,9 +151,9 @@ extension FramePacer {
         self.appliedFloorHz = Double(range.minimum)
         // Mirror the floor under the lock for the off-main floor-violation
         // detector (the rate-window roll can't touch main-actor state).
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         tickDeficit.pinnedFloorHz = Double(range.minimum)
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         // Add the link to the PRIVATE tick run loop (default) so the present
         // callback isn't starved when the main thread is busy - the governor
         // callback-gap that trimmed ~73% of clean-link frame drops. `.main` is
@@ -204,7 +204,7 @@ extension FramePacer {
     @MainActor
     func screenDidChange() {
         let isRunning: Bool = {
-            os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+            lock.lock(); defer { lock.unlock() }
             return running
         }()
         guard isRunning, let view = boundView else { return }
@@ -245,7 +245,7 @@ extension FramePacer {
     @MainActor
     func rebuildLink(reason: String) {
         let isRunning: Bool = {
-            os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+            lock.lock(); defer { lock.unlock() }
             return running
         }()
         guard isRunning, let view = boundView else { return }
@@ -261,7 +261,7 @@ extension FramePacer {
 
     /// Read + RESET the display-refresh window. See `RefreshWindowSnapshot`.
     func refreshWindowSnapshot() -> RefreshWindowSnapshot {
-        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        lock.lock(); defer { lock.unlock() }
         defer {
             refreshTelemetry.refreshIntervalSumSeconds = 0
             refreshTelemetry.refreshIntervalSamples = 0
@@ -289,7 +289,7 @@ extension FramePacer {
     /// guaranteed alive during the exact failure this machinery measures.
     func livenessSnapshot() -> LivenessSnapshot {
         let now = CFAbsoluteTimeGetCurrent()
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let events = serviceTickDeficitLocked(now: now)
         let sinceTick = liveness.lastTickHostTime.isFinite ? now - liveness.lastTickHostTime : .infinity
         let sinceRelease = liveness.lastReleaseHostTime.isFinite ? now - liveness.lastReleaseHostTime : .infinity
@@ -310,7 +310,7 @@ extension FramePacer {
             expectedTickHz: tickDeficit.lastExpectedTickHz,
             tickDeficitModeActive: tickDeficit.deficitModeActive,
             presentRejectStreak: liveness.presentRejectStreak)
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         // Emit breadcrumbs / reconcile the off-tick timer OFF the lock (LogStore
         // takes its own lock; timer ops dispatch) - same discipline as handleTick.
         handleTickDeficitEvents(events)
@@ -327,11 +327,11 @@ extension FramePacer {
     @discardableResult
     func forceReleaseNextTick(reason: String) -> Int {
         let target = displayLink?.targetTimestamp ?? .nan
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let depth = queue.count
         anchorCadenceBaseOnGridLocked(targetTimestamp: target)
         liveness.starvedTickStreak = 0
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         log.warning("FramePacer self-heal: force-release-next-tick (\(reason, privacy: .public)) depth=\(depth, privacy: .public)")
         Diag.notice(
             "FramePacer self-heal: force-release-next-tick (\(reason)) depth=\(depth)",
@@ -350,9 +350,9 @@ extension FramePacer {
     private func drainHeadDirectlyOnQueue(reason: String) {
         var freshest: Entry?
         var stale: [CMSampleBuffer] = []
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         guard running, !queue.isEmpty else {
-            os_unfair_lock_unlock(&lock)
+            lock.unlock()
             return
         }
         // Present the FRESHEST frame (queue tail, hostPTS-ordered) and discard
@@ -364,7 +364,7 @@ extension FramePacer {
         resetCadenceBaseLocked()
         liveness.starvedTickStreak = 0
         liveness.lastReleaseHostTime = CFAbsoluteTimeGetCurrent()
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
 
         for _ in stale { stats.recordPresentationLateDrop() }
         log.warning(
@@ -401,16 +401,16 @@ extension FramePacer {
     /// hidden layer) and from `clearQueue`, which empties it entirely.
     @discardableResult
     func dropToNewest(reason: String) -> Int {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         guard running, queue.count > 1 else {
-            os_unfair_lock_unlock(&lock)
+            lock.unlock()
             return 0
         }
         let newest = queue.removeLast()
         let discarded = queue.count
         queue.removeAll(keepingCapacity: true)
         queue.append(newest)
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
 
         for _ in 0..<discarded { stats.recordPresentationLateDrop() }
         log.info("FramePacer drop-to-newest (\(reason, privacy: .public)) discarded=\(discarded, privacy: .public)")
@@ -427,9 +427,9 @@ extension FramePacer {
     /// keeps the pacer live, only the queue is cleared.
     @discardableResult
     func clearQueue(reason: String) -> Int {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         guard running else {
-            os_unfair_lock_unlock(&lock)
+            lock.unlock()
             return 0
         }
         let discarded = queue.count
@@ -439,7 +439,7 @@ extension FramePacer {
         // (e.g. a format/discontinuity change) can't re-commit a stale old-format frame.
         tickDeficit.lastPresentedSampleBuffer = nil
         liveness.starvedTickStreak = 0
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
 
         for _ in 0..<discarded { stats.recordPresentationLateDrop() }
         log.info("FramePacer clear-queue (\(reason, privacy: .public)) discarded=\(discarded, privacy: .public)")

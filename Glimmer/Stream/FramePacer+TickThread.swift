@@ -71,7 +71,7 @@ final class PacerTickThread: @unchecked Sendable {
     /// before `CFRunLoopRun()`. A stop during bring-up fires CFRunLoopStop into a
     /// not-yet-running loop (lost), so the thread skips the run rather than orphan.
     private var stopRequested = false
-    private var lock = os_unfair_lock_s()
+    private let lock = OSAllocatedUnfairLock()
     /// Released by the thread body once the loop is published, so `start()`
     /// returns only after the run loop can take the link.
     private let ready = DispatchSemaphore(value: 0)
@@ -91,22 +91,22 @@ final class PacerTickThread: @unchecked Sendable {
     /// false, never routing `perform(waitUntilDone:true)` onto an unconfirmed loop.
     @discardableResult
     func start() -> Bool {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let alreadyUp = thread != nil
         let alreadyRunning = loopRunning
         // Fresh exit semaphore for this spawn so a prior run's signal can't
         // satisfy this run's DEBUG join. Set under the same lock as the pointers.
         if !alreadyUp { exited = DispatchSemaphore(value: 0) }
         let exitSignal = exited
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         guard !alreadyUp else { return alreadyRunning }
 
         let tickThread = Thread { [weak self] in
             guard let self else { return }
-            os_unfair_lock_lock(&self.lock)
+            self.lock.lock()
             self.runLoop = RunLoop.current
             self.cfRunLoop = CFRunLoopGetCurrent()
-            os_unfair_lock_unlock(&self.lock)
+            self.lock.unlock()
             // Keep the loop alive with a perpetual source (a bare RunLoop returns
             // immediately with no input source). The link, added later, is the
             // real source; the port is just the keep-alive so the loop blocks
@@ -116,9 +116,9 @@ final class PacerTickThread: @unchecked Sendable {
             // Mark the loop confirmed-running IMMEDIATELY before CFRunLoopRun, so
             // `add()`/`start()` gate on a true "servicing sources" fact, not the
             // pre-run published pointers. Signal ready after, so the waiter sees it.
-            os_unfair_lock_lock(&self.lock)
+            self.lock.lock()
             self.loopRunning = true
-            os_unfair_lock_unlock(&self.lock)
+            self.lock.unlock()
             self.ready.signal()
             // Real-time scheduling: the run loop is now servicing sources, so
             // apply the Mach time-constraint policy from INSIDE the thread (once)
@@ -138,9 +138,9 @@ final class PacerTickThread: @unchecked Sendable {
             // A stop() during bring-up may have fired CFRunLoopStop before the loop
             // ran (lost) - re-check under the lock and skip the run so the thread
             // can't block forever on a missed stop.
-            os_unfair_lock_lock(&self.lock)
+            self.lock.lock()
             let aborted = self.stopRequested
-            os_unfair_lock_unlock(&self.lock)
+            self.lock.unlock()
             if aborted { exitSignal.signal(); return }
             // CFRunLoopRun blocks until CFRunLoopStop breaks it; RunLoop.run()'s
             // no-source early-return is the freeze this avoids.
@@ -151,17 +151,17 @@ final class PacerTickThread: @unchecked Sendable {
         }
         tickThread.name = "Glimmer.pacerTick"
         tickThread.qualityOfService = .userInteractive
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         thread = tickThread
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         tickThread.start()
         // Bounded wait: the run loop comes up in microseconds. The timeout only
         // guards a pathological scheduler stall; on a trip the caller falls back
         // to the main-runloop tick rather than blocking on an unconfirmed loop.
         let signalled = ready.wait(timeout: .now() + .seconds(2)) == .success
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let confirmed = signalled && loopRunning
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         return confirmed
     }
 
@@ -171,11 +171,11 @@ final class PacerTickThread: @unchecked Sendable {
     /// no counterpart: the caller `invalidate()`s the link, which detaches it
     /// from every run loop from any thread.
     func add(_ link: CADisplayLink) {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         let runLoop = runLoop
         let thread = thread
         let running = loopRunning
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         // Gate on the CONFIRMED-running flag, not just the published pointers:
         // a `perform(waitUntilDone:true)` onto an unstarted loop would block the
         // caller (the main actor) with no timeout. Caller falls back to `.main`.
@@ -190,7 +190,7 @@ final class PacerTickThread: @unchecked Sendable {
     /// `invalidate()`d by the caller (which removes it from this loop); we only
     /// break CFRunLoopRun so the thread returns. Idempotent.
     func stop() {
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         stopRequested = true
         let cf = cfRunLoop
         let exitSignal = exited
@@ -198,7 +198,7 @@ final class PacerTickThread: @unchecked Sendable {
         cfRunLoop = nil
         thread = nil
         loopRunning = false
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         // Idempotent: a second stop with no live loop has nothing to break or
         // join - return before touching the (already-signalled-or-unused) exit.
         guard let cf else { return }

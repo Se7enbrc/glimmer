@@ -143,9 +143,9 @@ enum SessionReceiptStore {
     static func captureStreamEnd(rttMs: Double?, collector: StatsCollector?) {
         var videoBytes: UInt64?
         if let collector {
-            os_unfair_lock_lock(&collector.lock)
+            collector.lock.lock()
             videoBytes = collector.receivedBytes
-            os_unfair_lock_unlock(&collector.lock)
+            collector.lock.unlock()
         }
         lock.lock()
         endRttMs = rttMs

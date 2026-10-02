@@ -218,17 +218,17 @@ final class StatsCollector: @unchecked Sendable {
     var windowMaxFrameBytes: Int = 0
     var windowIdrFrameCount: UInt64 = 0
 
-    var lock = os_unfair_lock_s()
+    let lock = OSAllocatedUnfairLock()
 
     func dropPendingDecodeSubmits() {
         // Close abandoned intervals so a session replacement or reset cannot
         // leave DecodeFrame spans open indefinitely.
         var leftover: [OSSignpostIntervalState] = []
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         leftover.reserveCapacity(submitFifo.count)
         for entry in submitFifo { leftover.append(entry.state) }
         submitFifo.removeAll(keepingCapacity: true)
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
         for state in leftover {
             OSSignposter.decode.endInterval(
                 "DecodeFrame", state, "outcome=dropped")
@@ -237,7 +237,7 @@ final class StatsCollector: @unchecked Sendable {
 
     func resetForConnection() {
         dropPendingDecodeSubmits()
-        os_unfair_lock_lock(&lock)
+        lock.lock()
         decodeTimeEmaSeconds = nil
         decoderDroppedFrames = 0
         lastDecodedFrameTime = 0
@@ -268,7 +268,7 @@ final class StatsCollector: @unchecked Sendable {
         lastPresentedPtsSeconds = .nan; hostTimedLatePresents = 0; clientSkipSinceLastPresent = false
         pendingNetworkGapPtsSeconds.removeAll(keepingCapacity: true)
         pendingNetworkGapHead = 0; pendingNetworkGapCount = 0
-        os_unfair_lock_unlock(&lock)
+        lock.unlock()
     }
 
     /// Snapshot the collector for the overlay / telemetry.
@@ -289,8 +289,8 @@ final class StatsCollector: @unchecked Sendable {
     /// so its NDJSON keeps emitting fresh per-tick windows on its own cadence.
     func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
         let now = CACurrentMediaTime()
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
+        lock.lock()
+        defer { lock.unlock() }
 
         var snap = StreamStatsSnapshot()
 

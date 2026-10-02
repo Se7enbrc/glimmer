@@ -40,9 +40,9 @@ struct FramePacerTests {
             pacer.refreshTelemetry.lastRefreshIntervalSeconds = 1.0 / 120
             let now = CFAbsoluteTimeGetCurrent()
             pacer.liveness.lastGapRecoveryTime = now
-            os_unfair_lock_lock(&pacer.lock)
+            pacer.lock.lock()
             let result = pacer.gapAwareTrimLocked(now: now, effectiveTarget: 1)
-            os_unfair_lock_unlock(&pacer.lock)
+            pacer.lock.unlock()
             #expect(result.inGapRecovery)
             #expect(pacer.queue.count == kept)
         }
@@ -79,19 +79,19 @@ struct FramePacerTests {
     @Test func dueGateRecoversFromTimebaseJumps() throws {
         let pacer = try makePacer(fps: 120, queued: 1)
         pacer.lastPresentMediaTime = 1_000
-        os_unfair_lock_lock(&pacer.lock)
+        pacer.lock.lock()
         let result = pacer.dequeueDueFrameLocked(
             targetTimestamp: 5, vsyncInterval: 1.0 / 120, effectiveTarget: 1)
-        os_unfair_lock_unlock(&pacer.lock)
+        pacer.lock.unlock()
         #expect(result.toPresent != nil)
         #expect(pacer.lastPresentMediaTime == 5)
 
         let overdue = try makePacer(fps: 120, queued: 1)
         overdue.lastPresentMediaTime = 0
-        os_unfair_lock_lock(&overdue.lock)
+        overdue.lock.lock()
         let overdueResult = overdue.dequeueDueFrameLocked(
             targetTimestamp: 2, vsyncInterval: 1.0 / 120, effectiveTarget: 1)
-        os_unfair_lock_unlock(&overdue.lock)
+        overdue.lock.unlock()
         #expect(overdueResult.toPresent != nil)
     }
 
@@ -101,11 +101,11 @@ struct FramePacerTests {
         pacer.lastPresentMediaTime = 0
         pacer.adaptiveDepth.adaptiveTargetDepth = 2
         pacer.liveness.releaseCount = 31
-        os_unfair_lock_lock(&pacer.lock)
+        pacer.lock.lock()
         let held = pacer.dequeueDueFrameLocked(
             targetTimestamp: interval - interval / 4, vsyncInterval: interval / 2,
             effectiveTarget: 2)
-        os_unfair_lock_unlock(&pacer.lock)
+        pacer.lock.unlock()
         #expect(held.toPresent == nil)
         #expect(held.heldForGrowth)
 
@@ -113,21 +113,21 @@ struct FramePacerTests {
         startup.lastPresentMediaTime = 0
         startup.adaptiveDepth.adaptiveTargetDepth = 2
         startup.liveness.releaseCount = 10
-        os_unfair_lock_lock(&startup.lock)
+        startup.lock.lock()
         let released = startup.dequeueDueFrameLocked(
             targetTimestamp: interval - interval / 4, vsyncInterval: interval / 2,
             effectiveTarget: 2)
-        os_unfair_lock_unlock(&startup.lock)
+        startup.lock.unlock()
         #expect(released.toPresent != nil)
     }
 
     @Test func dueGateForcesBacklogAboveTrimSlack() throws {
         let pacer = try makePacer(fps: 120, queued: 4)
         pacer.lastPresentMediaTime = 0
-        os_unfair_lock_lock(&pacer.lock)
+        pacer.lock.lock()
         let result = pacer.dequeueDueFrameLocked(
             targetTimestamp: 0.001, vsyncInterval: 1.0 / 120, effectiveTarget: 2)
-        os_unfair_lock_unlock(&pacer.lock)
+        pacer.lock.unlock()
         #expect(result.toPresent != nil)
         #expect(result.forcedOverTarget)
     }
@@ -135,7 +135,7 @@ struct FramePacerTests {
     @Test func adaptiveDepthUsesSelfDecidePath() {
         let pacer = FramePacer(stats: StatsCollector(), configuredFps: 120)
         #expect(pacer.adaptiveDepth.reconciledDecisionGeneration == 0)
-        os_unfair_lock_lock(&pacer.lock)
+        pacer.lock.lock()
         pacer.adaptiveDepth.measuredJitterMs = 0.09
         #expect(pacer.justifiedDepthLocked() == 1)
         pacer.adaptiveDepth.measuredJitterMs = 22
@@ -150,7 +150,7 @@ struct FramePacerTests {
         #expect(pacer.decayTargetLocked() == 3)
         pacer.adaptiveDepth.lastTargetShrinkTime = CFAbsoluteTimeGetCurrent() - 0.3
         #expect(pacer.decayTargetLocked() == 2)
-        os_unfair_lock_unlock(&pacer.lock)
+        pacer.lock.unlock()
 
         #expect(pacer.skipRobustInterval([
             1.0 / 120, 1.0 / 120, 1.0 / 120, 1.0 / 120, 1.0 / 120, 1.0 / 120,
