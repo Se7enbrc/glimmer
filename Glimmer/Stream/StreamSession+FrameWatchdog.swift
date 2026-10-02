@@ -1,18 +1,30 @@
 //
 //  StreamSession+FrameWatchdog.swift
 //
-//  The FRAME-DECODE watchdog - the "did the user see a frame?" gate - and the
-//  stall handlers it drives: the decode-only-stall diagnostic, the latch
-//  clears, the active IDR recovery, and the hold-or-tear-down timeout path.
-//  Split out of StreamSession+Watchdog.swift (pure move) to keep each unit
-//  under the length limit; that file keeps the PRESENT-path watchdog, which
-//  covers the stalls DOWNSTREAM of decode this one is structurally blind to.
-//  See StreamSession.swift for the actor's stored state and lifetime contract.
+//  The frame-decode watchdog ("did the user see a frame?") and the stall handlers it drives: the
+//  decode-only diagnostic, the backed-off keyframe nudge, the hold-or-tear-down timeout, and the one
+//  reconnect that rebuilds a decoder fed packets it never decodes. +Watchdog covers the present path.
 //
 
 import Foundation
 import AppKit
 import os
+
+/// Keyframe nudges for one decode stall: at 2 s, then 4, 8, 16 and every 16 s after. A paused encoder
+/// answers the first; repeats only push more keyframes into whatever is already failing.
+struct DecodeStallNudge: Equatable {
+    static let maxIntervalSeconds: Double = 16
+    private(set) var nextAt = StreamSession.decodeStallRecoveryThreshold
+    private var interval = StreamSession.decodeStallRecoveryThreshold
+
+    /// True once per schedule point as `decodeIdle` (seconds without a decoded frame) crosses it.
+    mutating func due(at decodeIdle: Double) -> Bool {
+        guard decodeIdle >= nextAt else { return false }
+        nextAt += interval
+        interval = min(interval * 2, Self.maxIntervalSeconds)
+        return true
+    }
+}
 
 extension StreamSession {
 
@@ -21,6 +33,9 @@ extension StreamSession {
     static let noVideoTrafficTerminationCode: Int32 = -100
     /// ML_ERROR_NO_VIDEO_FRAME: video arrived, but not one frame decoded.
     static let noVideoFrameTerminationCode: Int32 = -101
+    /// Packets arriving while nothing decodes for this long, on a live control link, earns one reconnect
+    /// in place: it rebuilds the receiver and the decode session, which the hold alone never would.
+    static let decodeOnlyReconnectSeconds: Double = 30
 
     /// The terminate code a watchdog teardown reports. A bring-up that never
     /// showed a frame names why, so the user gets the right fix; a stall
@@ -32,116 +47,70 @@ extension StreamSession {
         return receiveIdleSeconds.isFinite ? noVideoFrameTerminationCode : noVideoTrafficTerminationCode
     }
 
-    /// Only a gate lift since this connection's arm can shorten decode silence.
-    /// An older lift belongs to the previous connection.
+    /// Decode silence for this connection. A reconnect inherits the old connection's decoded-frame
+    /// clock, so it is floored at this connection's arm; a gate lift since the arm also restarts it.
     static func watchdogDecodeIdle(sinceDecoded: Double, sinceGateLift: Double, sinceArm: Double) -> Double {
-        min(sinceDecoded, sinceGateLift <= sinceArm ? sinceGateLift : .infinity)
+        let gateLift = sinceGateLift <= sinceArm ? sinceGateLift : .infinity
+        let decoded = sinceDecoded.isFinite ? min(sinceDecoded, sinceArm) : .infinity
+        return min(decoded, gateLift)
     }
 
-    /// Install the frame-arrival watchdog. Polls every 1s on the main run
-    /// loop; gates on `VideoDecoder.secondsSinceLastDecodedFrame()` so a
-    /// host sending us packets we can't decode (corrupt bitstream, missing
-    /// IDR, codec mismatch) trips the watchdog instead of leaving the user
-    /// staring at a black screen while reception looks healthy.
+    /// Install the frame-arrival watchdog: 1 Hz on the main run loop, gated on decoded frames rather
+    /// than bytes, so video the Mac can't decode ends in an error instead of a black screen.
     func startFrameWatchdog() async {
         let dec = videoDecoder
         await MainActor.run {
             self.frameWatchdogTimer?.invalidate()
             self.frameWatchdogArmedAt = CACurrentMediaTime()
-            let timer = Timer.scheduledTimer(
-                withTimeInterval: 1.0, repeats: true
-            ) { [weak self, weak dec] _ in
-                guard let dec else { return }
-                // GATED ≠ STALLED. While the hidden-window decode gate is
-                // engaged the decoder is deliberately fed nothing (receive/
-                // RFI and audio keep flowing) - healthy-by-design, the exact
-                // mirror of tickPresentWatchdog bailing while suppressed.
-                // Bail BEFORE reading the idle clocks so a long gated span
-                // can't trip the decode-only diagnostic or the teardown
-                // timeout. No trip condition is loosened: an UNGATED decode
-                // stall still trips on the unchanged thresholds below. And the
-                // gate can never block TEARDOWN: stopConnection's sink-stop
-                // clears it (clearDecodeGateForConnectionStop), so a host
-                // terminate while the window is hidden still reaches the hard
-                // trip below on the normal post-gate envelope.
-                if dec.decodeGated { return }
-                guard let self else { return }
-                let sinceArm = CACurrentMediaTime() - self.frameWatchdogArmedAt
-                let decodeIdle = StreamSession.watchdogDecodeIdle(
-                    sinceDecoded: dec.secondsSinceLastDecodedFrame(),
-                    sinceGateLift: dec.secondsSinceDecodeGateLifted(),
-                    sinceArm: sinceArm)
-                guard decodeIdle.isFinite else {
-                    // Nothing decoded yet: moonlight's FIRST_FRAME_TIMEOUT_SEC runs from the arm
-                    // instant, exempt from the ENet-alive hold (a broken bring-up, not a paused desktop).
-                    if self.frameWatchdogArmedAt > 0,
-                       sinceArm > StreamSession.frameWatchdogTimeout {
-                        let receiveIdle = dec.secondsSinceLastReceivedFrame()
-                        Task { [weak self] in
-                            await self?.handleWatchdogTimeout(
-                                decodeIdleSeconds: sinceArm,
-                                receiveIdleSeconds: receiveIdle,
-                                neverDecodedFirstFrame: true)
-                        }
-                    }
-                    return
-                }
-                let receiveIdle = dec.secondsSinceLastReceivedFrame()
-
-                // Soft trip: reception healthy but decode silent → log a
-                // public-privacy diagnostic so the user-visible black-
-                // screen symptom shows up in the unified log with an
-                // actionable cause. Hard trip below still runs.
-                if decodeIdle > StreamSession.decodeOnlyStallThreshold,
-                   receiveIdle.isFinite,
-                   receiveIdle < StreamSession.decodeOnlyStallThreshold {
-                    Task { [weak self] in
-                        await self?.handleDecodeOnlyStall(
-                            decodeIdle: decodeIdle, receiveIdle: receiveIdle)
-                    }
-                } else if decodeIdle < StreamSession.decodeOnlyStallThreshold {
-                    // Decode healthy this tick - clear the latch so a
-                    // future stall logs a fresh diagnostic.
-                    Task { [weak self] in await self?.clearDecodeOnlyStallLatch() }
-                }
-
-                // ACTIVE RECOVERY: decode silent past the recovery
-                // threshold - request an IDR each tick to prompt a host that
-                // paused video (e.g. the Windows sign-in → desktop transition)
-                // to resume, rather than freezing until a manual reconnect.
-                // Covers the host-went-fully-silent case the soft trip above
-                // (which needs reception alive) misses. Fires for the WHOLE
-                // stall, not just up to frameWatchdogTimeout: when the control
-                // link is alive the hard trip below now HOLDS rather than tears
-                // down, so we must keep nudging the host for a keyframe past 10s
-                // so video resumes promptly once the desktop returns. If frames
-                // resume, decodeIdle drops and the latch clears.
-                if decodeIdle > StreamSession.decodeStallRecoveryThreshold {
-                    Task { [weak self] in await self?.attemptDecodeStallRecovery(decodeIdle: decodeIdle) }
-                }
-
-                // Past the IDR nudge: bits arriving, none decoding, long enough
-                // that keyframes have plainly failed - on a remote path the rate
-                // is the only thing left to change (see +Downshift).
-                if decodeIdle >= BitrateDownshiftController.stallSecondsBeforeDownshift {
-                    Task { [weak self] in await self?.considerBitrateDownshift(
-                        decodeIdle: decodeIdle, receiveIdle: receiveIdle) }
-                }
-
-                // Hard trip: decode silent past the teardown threshold.
-                // Regardless of reception state - bytes-only-no-decode for
-                // 10s is just as broken as silent-everything from the
-                // user's point of view.
-                guard decodeIdle > StreamSession.frameWatchdogTimeout else { return }
-                Task { [weak self] in
-                    guard let self else { return }
-                    await self.handleWatchdogTimeout(
-                        decodeIdleSeconds: decodeIdle,
-                        receiveIdleSeconds: receiveIdle)
-                }
+            let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self, weak dec] _ in
+                guard let self, let dec else { return }
+                self.frameWatchdogTick(decoder: dec)
             }
             timer.tolerance = 0.1
             self.frameWatchdogTimer = timer
+        }
+    }
+
+    /// One watchdog tick, on the main thread. A gated decoder (hidden window) is healthy by design and
+    /// trips nothing; stopConnection clears the gate, so it can never shield a dead session from teardown.
+    nonisolated func frameWatchdogTick(decoder dec: VideoDecoder) {
+        if dec.decodeGated { return }
+        let sinceArm = CACurrentMediaTime() - frameWatchdogArmedAt
+        let sinceDecoded = dec.secondsSinceLastDecodedFrame()
+        let decodeIdle = Self.watchdogDecodeIdle(
+            sinceDecoded: sinceDecoded, sinceGateLift: dec.secondsSinceDecodeGateLifted(), sinceArm: sinceArm)
+        let receiveIdle = dec.secondsSinceLastReceivedFrame()
+        guard decodeIdle.isFinite else {
+            // Nothing decoded yet: moonlight's FIRST_FRAME_TIMEOUT_SEC runs from the arm, with no
+            // ENet-alive hold (a broken bring-up, not a paused desktop).
+            if frameWatchdogArmedAt > 0, sinceArm > Self.frameWatchdogTimeout {
+                Task { [weak self] in
+                    await self?.handleWatchdogTimeout(
+                        decodeIdleSeconds: sinceArm, receiveIdleSeconds: receiveIdle, neverDecodedFirstFrame: true)
+                }
+            }
+            return
+        }
+        if decodeIdle > Self.decodeOnlyStallThreshold, receiveIdle < Self.decodeOnlyStallThreshold {
+            Task { [weak self] in await self?.handleDecodeOnlyStall(decodeIdle: decodeIdle, receiveIdle: receiveIdle) }
+        } else if sinceDecoded < Self.decodeOnlyStallThreshold {
+            Task { [weak self] in await self?.clearDecodeOnlyStallLatch() }
+        }
+        if decodeIdle > Self.decodeStallRecoveryThreshold {
+            Task { [weak self] in
+                await self?.attemptDecodeStallRecovery(decodeIdle: decodeIdle, receiveIdle: receiveIdle)
+            }
+        }
+        // Past the keyframe nudges: bits arriving, none decoding, long enough that the rate is the only
+        // thing left to change on a remote path (see +Downshift).
+        if decodeIdle >= BitrateDownshiftController.stallSecondsBeforeDownshift {
+            Task { [weak self] in
+                await self?.considerBitrateDownshift(decodeIdle: decodeIdle, receiveIdle: receiveIdle)
+            }
+        }
+        guard decodeIdle > Self.frameWatchdogTimeout else { return }
+        Task { [weak self] in
+            await self?.handleWatchdogTimeout(decodeIdleSeconds: decodeIdle, receiveIdleSeconds: receiveIdle)
         }
     }
 
@@ -154,6 +123,7 @@ extension StreamSession {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
         if didLogDecodeOnlyStall { return }
         didLogDecodeOnlyStall = true
+        stallStartPackets = (TelemetryCounters.shared.videoPacketsTotal.value, ProcessInfo.processInfo.systemUptime)
         // .public privacy so this lands in `log show` without --info - the
         // user reproducing "black screen, no error" needs this line.
         log.error("""
@@ -170,11 +140,11 @@ extension StreamSession {
             "Stream")
     }
 
-    /// Clear the stall latches when decode resumes, so a later stall logs a
-    /// fresh diagnostic and re-attempts recovery.
+    /// Decode resumed: clear the stall latches so a later stall logs and recovers afresh, and hide the
+    /// hold banner. A reconnect episode owns its banner until it resumes or gives up.
     fileprivate func clearDecodeOnlyStallLatch() async {
         resetStallLatches()
-        // The reconnect episode owns its banner until it resumes or gives up.
+        didReconnectForDecodeStall = false
         guard !isReconnecting else { return }
         let winForHide = window
         await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
@@ -185,81 +155,47 @@ extension StreamSession {
         didAttemptStallRecovery = false
         didLogWatchdogHold = false
         didLogDownshiftDecision = false
+        stallNudge = DecodeStallNudge()
+        stallStartPackets = nil
     }
 
-    /// Active stall recovery: request an IDR to prompt the host to resume
-    /// the video stream after it paused (e.g. the Windows sign-in → desktop
-    /// transition stops the encoder briefly). Called each watchdog tick for the
-    /// whole stall once past `decodeStallRecoveryThreshold`; the request is
-    /// coalesced on the control channel so re-firing per tick is cheap, and we
-    /// log once per episode (latched). If the host resumes, decode flows and
-    /// `clearDecodeOnlyStallLatch` re-arms us. Teardown is NOT time-bound here:
-    /// while the control link is alive the watchdog holds and keeps nudging;
-    /// only a genuinely-gone host (ENet dead-peer detection) ends the session.
-    fileprivate func attemptDecodeStallRecovery(decodeIdle: Double) async {
+    /// Ask for a keyframe on the nudge schedule while decode is silent. Teardown is not time-bound here:
+    /// the hold keeps the session while the control link lives, and dead-peer detection ends it.
+    fileprivate func attemptDecodeStallRecovery(decodeIdle: Double, receiveIdle: Double) async {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
-        backend.requestIdrFrame()
+        // Packets arriving on a remote path mean overload, and a keyframe only adds to it; the downshift
+        // tier owns that case. A silent PC is a paused encoder that a keyframe can wake.
+        let overloaded = isRemotePathSession && receiveIdle < Self.decodeOnlyStallThreshold
+        if !overloaded, stallNudge.due(at: decodeIdle) { backend.requestIdrFrame() }
         if didAttemptStallRecovery { return }
         didAttemptStallRecovery = true
-        Diag.notice(
-            "Video stalled \(String(format: "%.0f", decodeIdle))s - requesting IDR to recover "
-            + "(host may have paused video, e.g. the Windows sign-in → desktop transition); "
-            + "holding the session while the control link stays alive.",
-            "Stream")
+        let stalled = String(format: "%.0f", decodeIdle)
+        if overloaded {
+            Diag.notice("Video stalled \(stalled)s with packets still arriving on a remote path - not asking for "
+                + "keyframes (they would only add load); the bitrate downshift decides at "
+                + "\(Int(BitrateDownshiftController.stallSecondsBeforeDownshift))s.", "Stream")
+        } else {
+            Diag.notice("Video stalled \(stalled)s - asking for a keyframe now, then at 4, 8 and every 16 s "
+                + "(the PC may have paused video, as at the Windows sign-in screen); holding the session "
+                + "while the control link stays alive.", "Stream")
+        }
     }
 
     private func handleWatchdogTimeout(
         decodeIdleSeconds: Double, receiveIdleSeconds: Double,
         neverDecodedFirstFrame: Bool = false
     ) async {
-        // While a reconnect episode is running the connection is deliberately
-        // down (we're rebuilding it under the frozen frame); the episode owns
-        // the bounded retry/give-up, so the watchdog must NOT race it to a
-        // teardown. It re-arms naturally once frames resume.
+        // A reconnect episode has the connection down on purpose and owns the bounded give-up.
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
 
-        // HOLD-IF-ALIVE: a 10s video stall is NOT proof the session is
-        // dead. During a Windows sign-in → desktop transition the host pauses
-        // the encoder (Sunshine can't capture the secure desktop) while its
-        // ENet control loop keeps ACKing our 100ms keepalives - so the link is
-        // plainly alive, only video is absent. Tearing down here would kill the
-        // session exactly as the user finishes typing their password and the
-        // desktop loads. Moonlight rides this out and resumes; so do we. If the
-        // control link is unambiguously alive (ACK silence well under ENet's
-        // 10s dead-peer timeout), HOLD: the recovery branch keeps requesting
-        // IDRs every tick, and we wait for the desktop to return. The genuine
-        // "host is gone" teardown is owned by ENet's own dead-peer detection
-        // (EnetControlChannel+ControlLoop fires onTerminated(-1) once keepalives
-        // stop being ACKed) - a connection-loss signal, not a video-stall one.
-        // The pre-first-frame trip is EXEMPT from the hold: "sign-in desktop
-        // paused the encoder" presupposes video once flowed. A host that never
-        // delivered frame ONE on a healthy control link is a broken bring-up -
-        // holding it just pins the black screen the trip exists to end.
+        // HOLD-IF-ALIVE: a 10 s stall with fresh ENet ACKs is a paused encoder (the Windows sign-in
+        // desktop), not a dead session; ENet's dead-peer detection owns that teardown. A connection
+        // that never showed frame one is a broken bring-up and gets no hold.
         if !neverDecodedFirstFrame,
            let health = backend.enetHealth(),
            health.sinceLastAckMs < StreamSession.enetAliveHoldThresholdMs {
-            // Hold banner over the frozen frame: the control link is alive and
-            // only video paused ("Reconnecting…" is the real reconnect episode).
-            // Hidden by clearDecodeOnlyStallLatch.
-            let winForHold = window
-            await MainActor.run {
-                winForHold?.reconnectBanner.setText("Waiting for video…")
-                winForHold?.reconnectBanner.setVisible(true)
-            }
-            if !didLogWatchdogHold {
-                didLogWatchdogHold = true
-                log.notice("""
-                    Frame watchdog: no decoded frame in \(decodeIdleSeconds)s but control link is alive (ACK \
-                    \(health.sinceLastAckMs, privacy: .public)ms ago) - holding, not tearing down (host likely paused video for a \
-                    sign-in/desktop transition); requesting IDRs until it resumes
-                    """)
-                Diag.notice(
-                    "Video stalled \(Int(decodeIdleSeconds))s but the connection is "
-                    + "alive - holding and requesting keyframes (host likely paused "
-                    + "video for a sign-in / desktop transition). Will reconnect "
-                    + "only if the host goes silent.",
-                    "Stream")
-            }
+            await holdForAliveLink(
+                decodeIdle: decodeIdleSeconds, receiveIdle: receiveIdleSeconds, ackMs: health.sinceLastAckMs)
             return
         }
 
@@ -270,22 +206,72 @@ extension StreamSession {
             Frame watchdog tripped - no decoded frame in \(decodeIdleSeconds)s (last byte reception \
             \(receiveDesc, privacy: .public)); tearing down
             """)
-        // Also surface to the in-app LogStore (the user's Troubleshooting → Logs
-        // view reads ONLY Diag.*, not os.Logger), so a watchdog-triggered stop
-        // shows WHY it ran instead of a bare "Stream session stopping".
+        // Troubleshooting → Logs reads only Diag.*, so the stop says why it ran.
         Diag.error(
             "Frame watchdog tripped: no decoded frame in \(decodeIdleSeconds)s "
             + "(last byte reception \(receiveDesc)) - tearing down",
             "Stream")
-        // P2 DISCONNECT REASON: a watchdog teardown is a decode/present STALL -
-        // latch it before the synthetic terminate + stop so the cause is attributed
-        // to the stall, not the host-error code the synthetic terminate carries.
+        // Latch the stall before the synthetic terminate so the cause is the stall, not the code.
         noteTelemetryDisconnect(.watchdogStall)
-        // Reuse `connectionTerminated` with a synthetic code so the UI can
-        // say why the stream ended (see watchdogTerminationCode).
         let code = Self.watchdogTerminationCode(
             neverDecodedFirstFrame: neverDecodedFirstFrame, receiveIdleSeconds: receiveIdleSeconds)
         bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
         await stop()
+    }
+
+    /// The control link is alive, so hold. Nothing received means the PC paused video; packets that never
+    /// decode mean a fault on this side, which one reconnect in place rebuilds.
+    private func holdForAliveLink(decodeIdle: Double, receiveIdle: Double, ackMs: UInt32) async {
+        let winForHold = window
+        await MainActor.run {
+            winForHold?.reconnectBanner.setText("Waiting for video…")
+            winForHold?.reconnectBanner.setVisible(true)
+        }
+        let receiving = receiveIdle < Self.decodeOnlyStallThreshold
+        if receiving, decodeIdle >= Self.decodeOnlyReconnectSeconds, !didReconnectForDecodeStall {
+            didReconnectForDecodeStall = true
+            Diag.warn("Receiving \(stallPacketRate()) but nothing decoded for \(Int(decodeIdle))s "
+                + "(\(decoderStateSummary())) - rebuilding the decoder with a reconnect in place.", "Stream")
+            await runSelfInitiatedReconnect(cause: "video arrived for \(Int(decodeIdle))s without decoding")
+            return
+        }
+        guard !didLogWatchdogHold else { return }
+        didLogWatchdogHold = true
+        if receiving {
+            let state = decoderStateSummary()
+            log.notice("""
+                Frame watchdog: receiving \(self.stallPacketRate(), privacy: .public) but not decoding for \
+                \(decodeIdle)s (receive idle \(receiveIdle)s; \(state, privacy: .public)); control link alive (ACK \
+                \(ackMs, privacy: .public)ms ago) - holding, reconnect at \(Self.decodeOnlyReconnectSeconds)s
+                """)
+            Diag.notice("Receiving \(stallPacketRate()) but not decoding for \(Int(decodeIdle))s (\(state)); the "
+                + "connection is alive, so holding and rebuilding the decoder with a reconnect at "
+                + "\(Int(Self.decodeOnlyReconnectSeconds))s.", "Stream")
+        } else {
+            log.notice("""
+                Frame watchdog: no decoded frame in \(decodeIdle)s and no video packets for \(receiveIdle)s, but \
+                control link alive (ACK \(ackMs, privacy: .public)ms ago) - holding, not tearing down (the PC likely \
+                paused video for a sign-in or desktop switch); keyframe requests back off
+                """)
+            Diag.notice("Video stalled \(Int(decodeIdle))s with no packets for \(Int(receiveIdle))s, but the "
+                + "connection is alive - holding and asking for keyframes (the PC likely paused video for a "
+                + "sign-in or desktop switch). Will reconnect only if the PC goes silent.", "Stream")
+        }
+    }
+
+    /// Video packets per second since the stall was first logged, for the hold line.
+    private func stallPacketRate() -> String {
+        guard let start = stallStartPackets else { return "video packets" }
+        let elapsed = ProcessInfo.processInfo.systemUptime - start.uptime
+        guard elapsed >= 1 else { return "video packets" }
+        let rate = Double(TelemetryCounters.shared.videoPacketsTotal.value &- start.total) / elapsed
+        return "\(Int(rate)) video pkts/s"
+    }
+
+    private func decoderStateSummary() -> String {
+        guard let dec = videoDecoder else { return "decoder gone" }
+        let stats = dec.telemetryStatsSnapshot()
+        return "decoder: \(dec.inFlightDecodeBacklog()) in flight, \(Int(stats.receivedFps ?? 0)) fps assembled, "
+            + "\(Int(stats.decodedFps ?? 0)) fps decoded, \(dec.telemetryDecoderDrops()) dropped"
     }
 }

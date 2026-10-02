@@ -145,4 +145,23 @@ struct StreamReconnectTests {
         #expect(StreamSession.watchdogDecodeIdle(
             sinceDecoded: 100, sinceGateLift: 3, sinceArm: 200) == 3)
     }
+
+    /// A reconnect inherits the old connection's decoded-frame clock. Counted from there, the first tick
+    /// after the resume read a 6 s stall and asked for a keyframe Sunshine was already sending.
+    @Test func reconnectArmFloorsTheInheritedDecodeClock() {
+        #expect(StreamSession.watchdogDecodeIdle(
+            sinceDecoded: 6, sinceGateLift: .infinity, sinceArm: 0.3) == 0.3)
+    }
+
+    // MARK: - Keyframe nudges back off
+
+    /// One keyframe request at 2 s, then at 4, 8, 16 and every 16 s: a paused encoder answers the first,
+    /// and a stalled path is not helped by one every second.
+    @Test func keyframeNudgesBackOffThenHoldAtSixteenSeconds() {
+        var nudge = DecodeStallNudge()
+        var asked: [Double] = []
+        for tick in stride(from: 0.5, through: 70, by: 1.0) where nudge.due(at: tick) { asked.append(tick) }
+        #expect(asked == [2.5, 4.5, 8.5, 16.5, 32.5, 48.5, 64.5])
+        #expect(DecodeStallNudge().nextAt == StreamSession.decodeStallRecoveryThreshold)
+    }
 }

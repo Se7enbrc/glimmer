@@ -67,6 +67,8 @@ extension StreamSession {
             after \(decodeIdle, privacy: .public)s decode-only stall on a remote path
             """)
 
-        await runDownshiftReconnect(toKbps: toKbps)
+        await runSelfInitiatedReconnect(
+            cause: "lowering the bitrate to \(toKbps / 1000) Mbps",
+            bannerText: "Weak connection. Lowering quality to \(toKbps / 1000) Mbps…")
     }
 }

@@ -167,22 +167,20 @@ public actor StreamSession {
     /// correctness issue for a rate-limited log.
     nonisolated(unsafe) var didLogDecodeOnlyStall = false
 
-    /// Decode silent for this long → start actively trying to RECOVER (request
-    /// an IDR each tick to prompt the host to resume the video stream), instead
-    /// of waiting passively for the host to come back on its own. This is the
-    /// fix for "stream freezes when the host's desktop switches (Windows
-    /// sign-in / secure desktop) and stays frozen until you manually reconnect"
-    /// The host pauses video across the switch and needs a keyframe
-    /// request to resume - nothing else fires one when reception simply stops.
-    /// We nudge from here up to `frameWatchdogTimeout` (the give-up), matching
-    /// moonlight's recover-then-terminate behavior. Below the soft/hard
-    /// thresholds so recovery is attempted BEFORE either logs/tears down.
+    /// Decode silent for this long starts the keyframe nudges (DecodeStallNudge): a PC that paused video
+    /// across a Windows sign-in or desktop switch resumes only when asked for a keyframe.
     static let decodeStallRecoveryThreshold: Double = 2.0
     /// Latched once per stall episode so the recovery IDR-request logs once
     /// (the request itself is coalesced on the control channel). Cleared when
     /// decode resumes. Same bare-Bool `nonisolated(unsafe)` rationale as
     /// `didLogDecodeOnlyStall`.
     nonisolated(unsafe) var didAttemptStallRecovery = false
+    /// The current stall's keyframe schedule; a fresh one per stall via `resetStallLatches`.
+    var stallNudge = DecodeStallNudge()
+    /// Video packet total and uptime when the current stall was first logged, for the hold line's rate.
+    var stallStartPackets: (total: UInt64, uptime: Double)?
+    /// One reconnect per stall for packets that arrive but never decode; cleared once a frame decodes.
+    var didReconnectForDecodeStall = false
 
     /// ENet ACK-silence below which the control link is UNAMBIGUOUSLY alive, so
     /// a video stall is the host pausing the encoder (a Windows sign-in /

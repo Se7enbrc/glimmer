@@ -243,7 +243,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         stateLock.unlock()
         batcher?.stop()   // cancels the 1ms flush timer + drops the enet ref
         receiver?.stop()
-        audio?.stop()   // closes the audio socket + tears down the audio sink
+        audio?.stop()   // ends the audio loops + tears down the audio sink; deinit closes the socket
         rtsp?.interrupt()
         enet?.close()
         // Tear down the decoder VT state (idempotent with the C-path cleanup).
