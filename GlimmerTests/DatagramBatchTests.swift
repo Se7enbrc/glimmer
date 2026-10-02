@@ -53,6 +53,9 @@ struct DatagramBatchTests {
             }
             try #require(sent == size)
         }
+        // Loopback delivers on its own thread: wait until all five are queued, or a busy machine
+        // hands the one call only the first few.
+        try #require(waitForQueuedDatagrams(Int32(sizes.count), on: receiver))
 
         let batch = DatagramBatch(capacity: 32, stride: 1500)
         #expect(batch.receive(from: receiver) == sizes.count)
@@ -62,5 +65,16 @@ struct DatagramBatchTests {
             let bytes = UnsafeBufferPointer(start: datagram.bytes, count: datagram.length)
             #expect(bytes.allSatisfy { $0 == UInt8(index + 1) })
         }
+    }
+
+    private func waitForQueuedDatagrams(_ count: Int32, on socket: Int32) -> Bool {
+        let deadline = Date().addingTimeInterval(1)
+        var queued: Int32 = 0
+        var size = socklen_t(MemoryLayout<Int32>.size)
+        while Date() < deadline {
+            if getsockopt(socket, SOL_SOCKET, SO_NUMRCVPKT, &queued, &size) == 0, queued >= count { return true }
+            usleep(1_000)
+        }
+        return false
     }
 }
