@@ -76,15 +76,17 @@ struct RtspClientTests {
         func cancelAll() { lock.lock(); conns.forEach { $0.cancel() }; lock.unlock() }
     }
 
-    @Test func oversizedResponseIsRefused() async throws {
+    /// A loopback TCP server whose accepted connections `respond` drives; returns once it is listening.
+    private static func loopbackListener(
+        respond: @escaping @Sendable (NWConnection) -> Void
+    ) async throws -> (listener: NWListener, accepted: Accepted, port: UInt16) {
         let listener = try NWListener(using: .tcp, on: .any)
         let accepted = Accepted()
         let queue = DispatchQueue(label: "RtspClientTests.listener")
-        let blob = Data(repeating: 0x41, count: RtspClient.maxResponseBytes + 64 * 1024)
         listener.newConnectionHandler = { conn in
             accepted.keep(conn)
             conn.start(queue: queue)
-            conn.send(content: blob, isComplete: true, completion: .contentProcessed { _ in })
+            respond(conn)
         }
         let port: UInt16 = try await withCheckedThrowingContinuation { cont in
             listener.stateUpdateHandler = { state in
@@ -101,14 +103,44 @@ struct RtspClientTests {
             }
             listener.start(queue: queue)
         }
-        defer { accepted.cancelAll(); listener.cancel() }
+        return (listener, accepted, port)
+    }
+
+    @Test func oversizedResponseIsRefused() async throws {
+        let blob = Data(repeating: 0x41, count: RtspClient.maxResponseBytes + 64 * 1024)
+        let server = try await Self.loopbackListener { conn in
+            conn.send(content: blob, isComplete: true, completion: .contentProcessed { _ in })
+        }
+        defer { server.accepted.cancelAll(); server.listener.cancel() }
 
         do {
-            _ = try await Self.makeClient(port: port).oneShot(Data("OPTIONS".utf8))
+            _ = try await Self.makeClient(port: server.port).oneShot(Data("OPTIONS".utf8))
             Issue.record("a response past the cap was accepted")
         } catch RtspError.responseTooLarge {
         } catch {
             Issue.record("expected RtspError.responseTooLarge, got \(error)")
+        }
+    }
+
+    /// A PC that takes the connection and never answers fails at the response deadline, and that
+    /// failure reaches the launcher as the shared couldn't-reach copy rather than a hang.
+    @Test func silentPeerFailsAtTheResponseDeadline() async throws {
+        let server = try await Self.loopbackListener { _ in }
+        defer { server.accepted.cancelAll(); server.listener.cancel() }
+        let started = DispatchTime.now()
+        do {
+            _ = try await Self.makeClient(port: server.port).oneShot(Data("OPTIONS".utf8), responseTimeout: 0.3)
+            Issue.record("a silent peer was waited on past the deadline")
+        } catch let error as RtspError {
+            guard case .responseTimeout = error else {
+                Issue.record("expected RtspError.responseTimeout, got \(error)")
+                return
+            }
+            let waitedMs = (DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000
+            #expect(waitedMs < 3_000)
+            let failure = AppModel.connectFailure(for: NativeBackend.mapToStreamError(error), hostName: "Tower")
+            #expect(failure.kind == .unreachable)
+            #expect(failure.message == AppModel.unreachableMessage("Tower"))
         }
     }
 

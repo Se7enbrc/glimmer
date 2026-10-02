@@ -202,8 +202,12 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     static func mapToStreamError(_ error: Error) -> StreamError {
         if let streamError = error as? StreamError { return streamError }
-        if case .connectTimeout(let port) = error as? RtspError { return .streamPortsBlocked(proto: "TCP", port: port) }
-        return .sessionFailed(rtspCode(error))
+        switch error as? RtspError {
+        case .connectTimeout(let port): return .streamPortsBlocked(proto: "TCP", port: port)
+        // The PC took the connection and went quiet: the shared couldn't-reach copy, not a stream code.
+        case .responseTimeout(let seconds): return .hostUnreachable("no RTSP response in \(Int(seconds)) s")
+        default: return .sessionFailed(rtspCode(error))
+        }
     }
 
     func checkInterrupted() -> Bool {

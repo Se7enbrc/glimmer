@@ -509,7 +509,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     public var description: String {
         switch self {
         case .binaryNotFound: return "Streaming library not available."
-        case .hostUnreachable(let host): return "Couldn't reach \(host)."
+        case .hostUnreachable(let detail): return "Couldn't reach the PC: \(detail)."
         case .pairingFailed(let reason): return "Pairing failed: \(reason)"
         // SECURITY: uniform user-visible message regardless of
         // whether the host rejected because the PIN was wrong or because

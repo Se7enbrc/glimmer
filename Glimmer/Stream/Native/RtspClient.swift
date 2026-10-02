@@ -70,6 +70,8 @@ enum RtspError: Error, CustomStringConvertible {
     case nonOK(step: String, code: Int)
     case noSdp
     case responseTooLarge(Int)
+    /// The PC took the connection but never answered within the response deadline.
+    case responseTimeout(TimeInterval)
 
     var description: String {
         switch self {
@@ -80,6 +82,7 @@ enum RtspError: Error, CustomStringConvertible {
         case .nonOK(let step, let code): return "RTSP \(step) returned \(code)"
         case .noSdp: return "RTSP DESCRIBE returned no SDP payload"
         case .responseTooLarge(let bytes): return "RTSP response passed \(bytes) bytes"
+        case .responseTimeout(let seconds): return "no RTSP response within \(Int(seconds)) s"
         }
     }
 }
@@ -133,6 +136,9 @@ final class RtspClient: @unchecked Sendable {
     static let clientVersion = 14
     /// SDP responses are a few KiB; anything past this is a hostile or broken peer.
     static let maxResponseBytes = 256 * 1024
+    /// Sunshine answers each message in milliseconds; moonlight waits 10 s. Without this a PC that accepts
+    /// the connection and never replies holds the first connect until the user cancels.
+    static let responseTimeoutSeconds: TimeInterval = 10
 
     init(
         host: NWEndpoint.Host,
@@ -283,8 +289,8 @@ final class RtspClient: @unchecked Sendable {
         }
     }
 
-    /// A single connect → send → recv-until-EOF → close cycle.
-    func oneShot(_ bytes: Data) async throws -> Data {
+    /// A single connect → send → recv-until-EOF → close cycle, the reply bounded by `responseTimeout`.
+    func oneShot(_ bytes: Data, responseTimeout: TimeInterval = RtspClient.responseTimeoutSeconds) async throws -> Data {
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.noDelay = true
         tcpOptions.connectionTimeout = 5
@@ -310,18 +316,34 @@ final class RtspClient: @unchecked Sendable {
             connection.start(queue: queue)
         }
 
-        // 2) Send the request.
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            connection.send(content: bytes, completion: .contentProcessed { err in
-                if let err {
-                    cont.resume(throwing: RtspError.transportFailure("send: \(err)"))
-                } else {
-                    cont.resume()
-                }
-            })
+        // 2-3) Send, then read to EOF. The deadline cancels the connection, which ends the pending receive
+        // (an error or a bare EOF); the flag tells that apart from a transport failure sendAndReceive retries.
+        let timedOut = ManagedAtomicFlag()
+        let deadline = DispatchWorkItem { timedOut.set(); connection.cancel() }
+        queue.asyncAfter(deadline: .now() + responseTimeout, execute: deadline)
+        defer { deadline.cancel() }
+        let response: Data
+        do {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                connection.send(content: bytes, completion: .contentProcessed { err in
+                    if let err {
+                        cont.resume(throwing: RtspError.transportFailure("send: \(err)"))
+                    } else {
+                        cont.resume()
+                    }
+                })
+            }
+            response = try await receiveToEnd(connection)
+        } catch {
+            guard timedOut.isSet else { throw error }
+            throw RtspError.responseTimeout(responseTimeout)
         }
+        if timedOut.isSet { throw RtspError.responseTimeout(responseTimeout) }
+        return response
+    }
 
-        // 3) Receive until the server closes (isComplete) - EOF delimits.
+    /// Receive until the server closes (isComplete): EOF delimits the response.
+    private func receiveToEnd(_ connection: NWConnection) async throws -> Data {
         var accumulated = Data()
         while true {
             let (chunk, isComplete) = try await receiveChunk(connection)
@@ -329,9 +351,8 @@ final class RtspClient: @unchecked Sendable {
             guard accumulated.count <= Self.maxResponseBytes else {
                 throw RtspError.responseTooLarge(accumulated.count)
             }
-            if isComplete { break }
+            if isComplete { return accumulated }
         }
-        return accumulated
     }
 
     /// How the connect wait ends for one state change; nil keeps waiting.
