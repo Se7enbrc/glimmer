@@ -1,55 +1,13 @@
 //
 //  InputBatcher.swift
 //
-//  Input queue + merge + bounded-flush for the native input uplink, ported from
-//  moonlight-common-c's InputStream.c (inputSendThreadProc + the per-type merge
-//  state). The native path previously sent ONE reliable ENet command per raw
-//  input event (~150-250/s across the mouse + controller channels). That flood
-//  saturated the single serial NWConnection send path and delayed our outbound
-//  ACKs for the host's reliable rumble/LED/adaptive-trigger control messages past
-//  Sunshine ENet's ~5-7s un-ACKed deadline, so the host silently reset our peer
-//  (no DISCONNECT/TERMINATION) and the stream died at ~16-18s.
+//  Merges high-rate input between sends at least 1 ms apart and passes edge events through
+//  in order, as moonlight-common-c's InputStream.c does: one send per event once overran
+//  Sunshine's ENet peer. Ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
-//  This batcher collapses high-rate input into ~1 packet per ~1ms tick, exactly
-//  the way moonlight does:
-//    - relative mouse: ACCUMULATE deltas, send the running total once per tick,
-//      splitting only when the accumulated delta exceeds Int16 range
-//      (InputStream.c:366-435).
-//    - absolute mouse: latest-only per tick (InputStream.c:437-467).
-//    - multiController: latest state per gamepad slot; a buttonFlags CHANGE ends
-//      the batch (flush the slot first) so the host sees the exact axes present
-//      at the press edge (InputStream.c:1048-1059).
-//    - controller motion: latest sample per (slot, sensor) - moonlight's
-//      currentGamepadSensorState. A superseded sample is replaced, never
-//      queued; see updateMotion for the reliability deviation note.
-//    - keyboard / mouse button / scroll / hscroll / controller arrival /
-//      controller touch: low-rate edge events, passed straight through, but still
-//      serialized on the batcher queue and flushed AFTER any pending merged state
-//      so ordering vs. a queued mouse/controller packet is preserved (mirrors how
-//      a buttonFlags change flushes the controller slot before the new state).
-//    - controller battery: same pass-through ordering, but via the REPORT
-//      variant that skips the input-activity stamp (a device report, not input).
-//
-//  Mouse / sticks / triggers / buttons / keyboard / scroll stay RELIABLE -
-//  moonlight ships those reliable (the "TODO: send unreliable once we have
-//  delayed retransmit" comments at InputStream.c:740-741, 805, 1075 confirm
-//  reliable is the shipping behavior); the cure for their flood is the RATE,
-//  not the reliability flag. Controller MOTION (gyro/accel), however, ships
-//  UNRELIABLE to match current upstream (InputStream.c:525-534) - a superseded
-//  sensor sample is worthless, so a lost one is harmless and must never
-//  HOL-block the reliable stream - EXCEPT a gyro null (0,0,0), which stays
-//  RELIABLE so the "sensors stopped" state survives loss. See updateMotion /
-//  flushLocked for the gyro-null special case.
-//
-//  Threading: a single serial DispatchQueue owns ALL merge state and a single
-//  1ms repeating DispatchSourceTimer drives flush(). Every public method hops
-//  onto that queue, so no extra locking is needed. The EnetControlChannel is
-//  held weakly - when the connection tears down (stop/interrupt) the batcher is
-//  released and the timer cancelled.
-//
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
 import Foundation
+import Synchronization
 
 /// Return codes mirroring the NativeBackend.dispatchInput contract
 /// (Li* convention): 0 = queued OK, -1 = seal/send failed, -2 = input not ready.
@@ -59,20 +17,26 @@ enum InputBatcherResult {
     static let notReady: Int32 = -2
 }
 
-/// MOUSE_BATCHING_INTERVAL_MS (InputStream.c:43) - flush cadence.
+/// `@unchecked Sendable`: merge state, the timer and `enet` are touched only on `queue`;
+/// `stopped` is the one field producers read from other threads.
 final class InputBatcher: @unchecked Sendable {
     private static let logCategory = "NativeConnection"
 
-    /// Flush cadence - MOUSE_BATCHING_INTERVAL_MS = 1ms (InputStream.c:43).
-    private static let batchIntervalNs: UInt64 = 1_000_000
+    /// MOUSE_BATCHING_INTERVAL_MS (InputStream.c:43): the minimum gap between merged sends.
+    private static let batchInterval: DispatchTimeInterval = .milliseconds(1)
 
     private weak var enet: EnetControlChannel?
+    private let stopped = Atomic<Bool>(false)
 
     // QoS .userInteractive so the merge/flush context isn't a default-QoS queue
     // starved behind high-QoS main-thread UI/input - it carries latency-sensitive
     // input toward the wire.
     private let queue = DispatchQueue(label: "io.ugfugl.Glimmer.inputBatcher", qos: .userInteractive)
     private var timer: DispatchSourceTimer?
+    /// The one-shot flush is armed only while state is dirty, so an idle stream costs no
+    /// wakeups; deadlines stay 1 ms apart, as the old repeating tick's did.
+    private var flushArmed = false
+    private var flushDeadline = DispatchTime.now()
 
     // MARK: Merge state (only ever touched on `queue`)
 
@@ -140,21 +104,15 @@ final class InputBatcher: @unchecked Sendable {
     init(enet: EnetControlChannel) {
         self.enet = enet
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        // Repeating 1ms tick (the wire-rate cap that fixed the peer-reset - keep
-        // it). Leeway is 250us, not the full interval: ~1ms of slack let macOS
-        // defer each flush up to a tick, adding input latency; 250us trades a few
-        // more wakeups for a tighter queue→wire age.
-        timer.schedule(deadline: .now() + .nanoseconds(Int(Self.batchIntervalNs)),
-                       repeating: .nanoseconds(Int(Self.batchIntervalNs)),
-                       leeway: .nanoseconds(250_000))
-        timer.setEventHandler { [weak self] in self?.flush() }
+        timer.setEventHandler { [weak self] in self?.flushTimerFired() }
         self.timer = timer
-        timer.resume()
+        timer.resume()  // Never fires until armFlush() schedules it.
         Diag.notice("input batcher started (1ms merge/flush)", Self.logCategory)
     }
 
     /// Stop the flush timer and release the channel reference. Idempotent.
     func stop() {
+        stopped.store(true, ordering: .relaxed)
         queue.sync {
             timer?.cancel()
             timer = nil
@@ -168,7 +126,7 @@ final class InputBatcher: @unchecked Sendable {
     /// LiSendMouseMoveEvent (InputStream.c:707-771): ADD into the running delta
     /// and mark dirty; a timer flush or ordering barrier sends the total.
     func accumulateMouseMove(dx: Int16, dy: Int16) -> Int32 {
-        guard enet != nil else { return InputBatcherResult.notReady }
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
@@ -179,13 +137,14 @@ final class InputBatcher: @unchecked Sendable {
             self.relMouseDX += Int(dx)
             self.relMouseDY += Int(dy)
             self.relMouseDirty = true
+            self.armFlush()
         }
         return InputBatcherResult.ok
     }
 
     /// LiSendMousePositionEvent (InputStream.c:437-467) - latest-only.
     func setAbsMouse(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
-        guard enet != nil else { return InputBatcherResult.notReady }
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
@@ -200,6 +159,7 @@ final class InputBatcher: @unchecked Sendable {
             self.absMouseRefW = refW
             self.absMouseRefH = refH
             self.absMouseDirty = true
+            self.armFlush()
         }
         return InputBatcherResult.ok
     }
@@ -211,7 +171,7 @@ final class InputBatcher: @unchecked Sendable {
     /// batch with the new state.
     func updateController(num: Int16, mask: Int16, buttons: Int32,
                           analog: GamepadAnalog) -> Int32 {
-        guard enet != nil else { return InputBatcherResult.notReady }
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
@@ -238,6 +198,7 @@ final class InputBatcher: @unchecked Sendable {
             self.controllers[slot].buttons = safeButtons
             self.controllers[slot].analog = analog
             self.controllers[slot].dirty = true
+            self.armFlush()
         }
         return InputBatcherResult.ok
     }
@@ -264,7 +225,7 @@ final class InputBatcher: @unchecked Sendable {
     /// (where the sample's values are known); this merge just keeps the
     /// latest sample per (slot, sensor).
     func updateMotion(num: UInt8, motionType: UInt8, x: Float, y: Float, z: Float) -> Int32 {
-        guard enet != nil else { return InputBatcherResult.notReady }
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         // LI_MOTION_TYPE_* is 1-based (ACCEL=1, GYRO=2); anything else has no
         // state slot (the LC_ASSERT in LiSendControllerMotionEvent, folded
         // into -1 - no caller distinguishes the C's -3 here).
@@ -284,6 +245,7 @@ final class InputBatcher: @unchecked Sendable {
             self.motionStates[idx].x = x
             self.motionStates[idx].y = y
             self.motionStates[idx].z = z
+            self.armFlush()
         }
         return InputBatcherResult.ok
     }
@@ -298,7 +260,7 @@ final class InputBatcher: @unchecked Sendable {
     /// keyboard/UTF-8 events). Bytes are the InputEncoder plaintext; channel is
     /// the input class's ENet channel.
     func passThrough(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
-        guard enet != nil else { return InputBatcherResult.notReady }
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
@@ -317,7 +279,7 @@ final class InputBatcher: @unchecked Sendable {
     /// would otherwise mark an idle-hands stream input-active and break the
     /// idle/active counters' honesty (the updateMotion rule).
     func passThroughReport(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
-        guard enet != nil else { return InputBatcherResult.notReady }
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         queue.async { [weak self] in
             guard let self else { return }
             self.flushLocked()
@@ -330,7 +292,7 @@ final class InputBatcher: @unchecked Sendable {
     /// + its mandatory fallback multiController, InputStream.c:1471). Both ride
     /// the same gamepad channel; ordering vs. pending merged state is preserved.
     func passThroughPair(_ first: [UInt8], _ second: [UInt8], channel: UInt8) -> Int32 {
-        guard enet != nil else { return InputBatcherResult.notReady }
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
         queue.async { [weak self] in
@@ -348,9 +310,25 @@ final class InputBatcher: @unchecked Sendable {
         relMouseDirty || absMouseDirty || motionDirtyCount > 0 || controllers.contains { $0.dirty }
     }
 
-    /// Timer tick. Idle ticks return before reading either backlog signal; while one is up,
-    /// merged state waits dirty and latest-only for a clear tick. The reliableBacklogged
-    /// gate is the mouse-spin fix, mirroring moonlight's ack-wait (ControlStream.c:787-789).
+    /// Arm the one-shot flush no sooner than 1 ms after the last one. Leeway is 250 us, not
+    /// the interval: more slack let macOS defer a flush and added input latency. On `queue`.
+    private func armFlush() {
+        guard !flushArmed, let timer else { return }
+        flushArmed = true
+        flushDeadline = max(flushDeadline + Self.batchInterval, .now())
+        timer.schedule(deadline: flushDeadline, leeway: .microseconds(250))
+    }
+
+    /// Re-arms while state is still dirty, as when backpressure held it back.
+    private func flushTimerFired() {
+        flushArmed = false
+        flush()
+        if hasPendingState { armFlush() }
+    }
+
+    /// While either backlog signal is up, merged state waits dirty and latest-only for a
+    /// clear tick. The reliableBacklogged gate is the mouse-spin fix, mirroring moonlight's
+    /// ack-wait (ControlStream.c:787-789).
     private func flush() {
         guard hasPendingState, let enet else { return }
         if enet.sendBacklogged || enet.reliableBacklogged {
