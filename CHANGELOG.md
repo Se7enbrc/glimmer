@@ -28,10 +28,9 @@ is no longer for the rest of the session. Moving to another network restores the
 full quality on the next reconnect, and after five clean minutes at the lower
 quality Glimmer steps it back up under a short "Connection improved" hold.
 
-After a burst of packet loss, Glimmer asks the PC for a fresh picture as soon as
-the missing piece can't be rebuilt, rather than a frame later. Steady streams
-can reach the screen a refresh sooner, and a short burst of frames no longer
-leaves every later frame waiting an extra refresh.
+Frames reach the screen sooner. On a 240 Hz stream, the share of frames that
+waited more than one refresh fell from about half to under a fifth, and a short
+burst of frames no longer leaves every later frame waiting an extra refresh.
 
 A damaged audio packet is smoothed over instead of leaving a gap, one stray
 packet can no longer switch off audio repair for the rest of a stream, and the
