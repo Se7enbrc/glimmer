@@ -51,26 +51,17 @@ INSTRUMENTS_DIR := $(HOME)/Library/Developer/Xcode/Instruments
 DEVELOPER_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null | \
                  sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
 # notarytool keychain profile name (created by `make setup-notary`).
-NOTARY_PROFILE  ?= glimmer-notary
-# Signing credentials file - the ONE secret store the release pipeline reads.
-# Plain KEY=value, mode 0600, OUTSIDE the repo (gitleaks never even sees it);
-# scripts/signing-creds.sh is the sole reader/writer and refuses loose
-# permissions. This replaces the old 1Password-at-build-time flow: `op read`
-# needs an interactive signin and the login keychain is locked in SSH/cron/CI
-# sessions, so neither can back a non-interactive `make dist`. The owner fills
-# the file ONCE (`make creds-init`, see docs/RELEASE.md); everything after that
-# is automatic. Override the path per-invocation with
-# `make dist SIGNING_CREDS=/path/to/creds` (or GLIMMER_SIGNING_CREDS in env).
-SIGNING_CREDS   ?= $(HOME)/.config/glimmer/signing.env
+NOTARY_PROFILE  ?= notary
+# Signing secrets: one KEY=value file, mode 0600, outside the repo, read and
+# written only by scripts/signing-creds.sh. Like the keychain below, it belongs
+# to your Developer ID rather than to Glimmer, so other projects can share both.
+SIGNING_CREDS   ?= $(HOME)/.config/developer-id/signing.env
 export GLIMMER_SIGNING_CREDS := $(SIGNING_CREDS)
 CREDS           := scripts/signing-creds.sh
-# Dedicated signing keychain - kept SEPARATE from the login keychain so signing
-# setup never touches the user's personal credentials, and so the Developer ID
-# key can be imported with `-T /usr/bin/codesign` baked into its ACL (the only
-# reliable way to get non-interactive codesign; set-key-partition-list alone
-# can't retrofit that onto an already-imported login-keychain key). This is the
-# standard CI/CD pattern. Created by `make codesign-setup`.
-SIGN_KEYCHAIN   := $(HOME)/Library/Keychains/glimmer-signing.keychain-db
+# Dedicated keychain for the Developer ID identity and notary profile. Importing
+# with `-T /usr/bin/codesign` is the only way codesign runs without prompting,
+# which the login keychain can't promise. Created by `make codesign-setup`.
+SIGN_KEYCHAIN   ?= $(HOME)/Library/Keychains/developer-id.keychain-db
 # Version single source of truth: Glimmer/Version.xcconfig (NOT pbxproj).
 MARKETING_VERSION := $(shell sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' Glimmer/Version.xcconfig | tr -d ' ')
 DMG_NAME        := Glimmer-$(MARKETING_VERSION).dmg
@@ -156,27 +147,15 @@ app:
 # per nested bundle - the `sign` target re-signs --force --deep right after,
 # so xcodebuild's own signatures were pure prompt-noise.
 
-# Make signing robust without prompts, every build:
-#  (a) the dedicated signing keychain can lock after the Mac sleeps - re-unlock
-#      it with the password from the credentials file (works from ANY session:
-#      SSH, cron, CI). Legacy fallback: the login-keychain stash that the old
-#      codesign-setup wrote (GUI sessions only - the login keychain is locked
-#      elsewhere), kept so pre-creds-file machines don't regress; and
-#  (b) a sibling project's keychain (e.g. mx4-signing) can jump ahead in the
-#      search list and shadow our partition-list-authorized cert with an
-#      identically-named copy that prompts - re-assert ours first.
-# No-op (and no prompt) if the signing keychain isn't set up yet - run
-# `make codesign-setup` once to create it.
+# Before every signing: put the signing keychain first in the search list and
+# unlock it from the creds file (sleep locks it), re-importing the .p12 if it was
+# emptied. Never prompts; a no-op until `make codesign-setup` has run.
 ensure-signing:
 	@test -n "$(strip $(DEVELOPER_ID))" || exit 0; \
 	test -f "$(SIGN_KEYCHAIN)" || exit 0; \
 	others=$$(security list-keychains -d user | sed 's/[" ]//g' | grep -vF "$(SIGN_KEYCHAIN)" || true); \
 	security list-keychains -d user -s "$(SIGN_KEYCHAIN)" $$others >/dev/null 2>&1 || true; \
 	KCPW=$$($(CREDS) get SIGN_KEYCHAIN_PASSWORD --optional 2>/dev/null || true); \
-	if [ -z "$$KCPW" ]; then \
-		KCPW=$$(security find-generic-password -a "$(USER)" -s glimmer-signing-kc-pw -w \
-			"$$HOME/Library/Keychains/login.keychain-db" 2>/dev/null || true); \
-	fi; \
 	if [ -n "$$KCPW" ]; then \
 		security unlock-keychain -p "$$KCPW" "$(SIGN_KEYCHAIN)" 2>/dev/null || true; \
 		if ! security find-identity -p codesigning "$(SIGN_KEYCHAIN)" 2>/dev/null | grep -q "Developer ID"; then \
@@ -363,7 +342,7 @@ codesign-setup:
 codesign-teardown:
 	@echo "▶ Removing $(SIGN_KEYCHAIN)..."
 	@security list-keychains -d user -s \
-		$$(security list-keychains -d user | sed 's/[" ]//g' | grep -v glimmer-signing) 2>/dev/null || true
+		$$(security list-keychains -d user | sed 's/[" ]//g' | grep -vF "$(SIGN_KEYCHAIN)") 2>/dev/null || true
 	@security delete-keychain "$(SIGN_KEYCHAIN)" 2>/dev/null || true
 	@echo "  ✓ removed"
 
@@ -388,31 +367,17 @@ setup-notary:
 		--keychain "$(SIGN_KEYCHAIN)"; \
 	echo "  ✓ notary profile stored (dedicated keychain - readable from any session)"
 
-# Notarize the already-signed bundle: zip → submit (waits) → staple. Requires a
-# Developer ID signature (the adhoc fallback can't notarize) and a stored
-# notary profile (run `make setup-notary` first). Re-runs ensure-signing right
-# before the submit because the Release build that precedes it is long enough
-# for a sleep to re-lock the keychain holding the profile. The profile lookup
-# probes the dedicated keychain first (where the current setup-notary stores
-# it, readable any session) and falls back to notarytool's default search
-# (login keychain) for profiles stored by the old setup-notary - a metadata
-# probe only, so it never prompts.
+# Notarize the signed bundle: zip, submit and wait, then staple. Re-runs
+# ensure-signing first: the Release build before it is long enough for a sleep
+# to re-lock the keychain holding the notary profile.
 notarize: sign
 	@test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: no Developer ID cert - can't notarize" >&2; exit 1; }
 	@$(MAKE) --no-print-directory ensure-signing
 	@echo "▶ Notarizing $(GLIMMER_APP_SRC)..."
 	@rm -f "$(DERIVED)/Glimmer-notarize.zip"
 	ditto -c -k --sequesterRsrc --keepParent "$(GLIMMER_APP_SRC)" "$(DERIVED)/Glimmer-notarize.zip"
-	@NKC=""; \
-	if security find-generic-password -s com.apple.gke.notary.tool "$(SIGN_KEYCHAIN)" >/dev/null 2>&1 \
-		|| security dump-keychain "$(SIGN_KEYCHAIN)" 2>/dev/null | grep -q notary; then \
-		NKC="--keychain $(SIGN_KEYCHAIN)"; \
-		echo "  ▶ notary profile '$(NOTARY_PROFILE)' (dedicated keychain)"; \
-	else \
-		echo "  ▶ notary profile '$(NOTARY_PROFILE)' (default keychain search - legacy)"; \
-	fi; \
 	xcrun notarytool submit "$(DERIVED)/Glimmer-notarize.zip" \
-		--keychain-profile "$(NOTARY_PROFILE)" $$NKC --wait
+		--keychain-profile "$(NOTARY_PROFILE)" --keychain "$(SIGN_KEYCHAIN)" --wait
 	xcrun stapler staple "$(GLIMMER_APP_SRC)"
 	@rm -f "$(DERIVED)/Glimmer-notarize.zip"
 	@echo "  ✓ notarized + stapled"
@@ -460,15 +425,8 @@ preflight:
 		exit 1; \
 	fi; \
 	echo "  ✓ creds file: $$($(CREDS) path)"; \
-	if ! $(CREDS) get SIGN_KEYCHAIN_PASSWORD --optional | grep -q . ; then \
-		if KCPW="$$(security find-generic-password -a "$(USER)" -s glimmer-signing-kc-pw -w \
-				"$$HOME/Library/Keychains/login.keychain-db" 2>/dev/null)"; then \
-			$(CREDS) set SIGN_KEYCHAIN_PASSWORD "$$KCPW"; \
-			echo "  ✓ migrated keychain password from the legacy login-keychain stash"; \
-		fi; \
-	fi; \
-	if ! security find-generic-password -s com.apple.gke.notary.tool >/dev/null 2>&1 \
-		&& ! security dump-keychain "$(SIGN_KEYCHAIN)" 2>/dev/null | grep -q notary; then \
+	if ! security find-generic-password \
+		-a "com.apple.gke.notary.tool.saved-creds.$(NOTARY_PROFILE)" "$(SIGN_KEYCHAIN)" >/dev/null 2>&1; then \
 		echo "  ▶ no notary profile yet - storing it now (automatic setup-notary)..."; \
 		$(CREDS) missing NOTARY_KEY_PATH NOTARY_KEY_ID NOTARY_ISSUER_ID 2>/dev/null \
 			|| $(CREDS) fill-from-op || true; \

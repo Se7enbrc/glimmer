@@ -11,7 +11,7 @@
 # owned by the caller, mode 0600/0400. This script refuses anything looser, and
 # every Makefile consumer goes through it so the policy has a single home.
 #
-# Default path: ~/.config/glimmer/signing.env
+# Default path: ~/.config/developer-id/signing.env
 # Override:     GLIMMER_SIGNING_CREDS env var (the Makefile exports it from its
 #               SIGNING_CREDS variable, so `make dist SIGNING_CREDS=...` works).
 #
@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-CREDS="${GLIMMER_SIGNING_CREDS:-$HOME/.config/glimmer/signing.env}"
+CREDS="${GLIMMER_SIGNING_CREDS:-$HOME/.config/developer-id/signing.env}"
 
 die() { echo "signing-creds: $*" >&2; exit 1; }
 
@@ -177,7 +177,7 @@ cmd_init() {
     umask 077
     mkdir -p "$(dirname "$CREDS")"
     cat > "$CREDS" <<'EOF'
-# Glimmer signing credentials - keep mode 0600, OUTSIDE the repo.
+# Developer ID signing credentials - keep mode 0600, OUTSIDE any repo.
 # Read/written ONLY by scripts/signing-creds.sh (see its header for the rules).
 # One KEY=VALUE per line; the value is everything after the first '=' (no
 # quotes - they would become part of the value).

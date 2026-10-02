@@ -49,12 +49,19 @@ Fresh machine, one-time: `make creds-init`, fill in the file it prints (or set
 its `OP_SOURCE`), then `make codesign-setup setup-notary sparkle-keys`. Secrets
 live in that 0600 file and its 1Password item, never in the repo.
 
+These belong to your Developer ID, not to Glimmer: `~/.config/developer-id/` and
+`~/Library/Keychains/developer-id.keychain-db` hold one identity and one
+`notary` profile, and any other project can sign and notarize with them. Exactly
+one Developer ID Application identity should be reachable, or signing by name
+fails as ambiguous.
+
 - The **Developer ID Application certificate** (`P12_PATH`, `P12_PASSWORD`)
-  signs the app. Create it on the G2 Sub-CA. Its certificates last one year, so
-  this is a yearly renewal; the previous sub-CA ends 2027-02-01, and nothing it
-  issued signs after that. Shipped builds keep working after their certificate
-  expires, because every signature is timestamped. Never revoke a certificate
-  that signed a release: Gatekeeper would then block those builds.
+  signs the app. Create it on the G2 Sub-CA; the previous sub-CA ends
+  2027-02-01, and nothing it issued signs after that. Apple says G2 certificates
+  expire yearly, though the first one issued here runs to 2031-09-17, so go by
+  the date `make dist` prints. Shipped builds keep working after their
+  certificate expires, because every signature is timestamped. Never revoke a
+  certificate that signed a release: Gatekeeper would then block those builds.
 - The **App Store Connect team API key** (`NOTARY_KEY_PATH`, `NOTARY_KEY_ID`,
   `NOTARY_ISSUER_ID`) notarizes. Developer access is enough. It doesn't expire
   and doesn't depend on the Apple ID password.
@@ -62,7 +69,7 @@ live in that 0600 file and its 1Password item, never in the repo.
 `make dist` prints the certificate's expiry and warns 60 days ahead. To renew:
 
 ```bash
-D=~/.config/glimmer; umask 077
+D=~/.config/developer-id; umask 077
 /usr/bin/openssl req -new -newkey rsa:2048 -nodes -keyout $D/developer-id.key \
     -out ~/Downloads/Glimmer-Developer-ID.certSigningRequest -subj "/CN=Glimmer Developer ID/C=US"
 # developer.apple.com → Certificates → + → Developer ID Application → G2 Sub-CA → upload it
