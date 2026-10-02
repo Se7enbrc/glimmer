@@ -522,6 +522,34 @@ struct FuzzTests {
         out.append(contentsOf: ciphertext)
         return out
     }
+
+    // ============================================================
+    // 7. Opus packet framing (OpusPacket.parse): splits the PC's surround packets per stream.
+    // ============================================================
+
+    @Test func fuzzOpusPacketParse() {
+        var rng = SplitMix64(seed: 0x0905_5EED_0000_0010)
+        // A self-delimited 5 ms CELT frame, and a padded two-frame VBR packet.
+        let single: [UInt8] = [0xEC, 0x03, 0xAA, 0xBB, 0xCC]
+        let padded: [UInt8] = [0xEB, 0xC2, 0x02, 0x01, 0x10, 0x20, 0x30, 0x40]
+        #expect(Self.opusPacket(single, at: 0, selfDelimited: true)?.end == 5)
+        #expect(Self.opusPacket(padded, at: 0, selfDelimited: false)?.end == 8)
+        for _ in 0..<kIterations {
+            for bytes in [rng.randomData(maxLen: 1_500), rng.mutate(single), rng.mutate(padded)] {
+                let start = rng.int(bytes.count + 1)
+                for delimited in [false, true] {
+                    guard let packet = Self.opusPacket(bytes, at: start, selfDelimited: delimited) else { continue }
+                    #expect(packet.end <= bytes.count && packet.lengthField.upperBound <= packet.end,
+                            "parsed past the bytes at \(start): \(hex(bytes))")
+                    #expect((1...5_760).contains(packet.samplesAt48kHz))
+                }
+            }
+        }
+    }
+
+    private static func opusPacket(_ bytes: [UInt8], at start: Int, selfDelimited: Bool) -> OpusPacket? {
+        bytes.withUnsafeBytes { OpusPacket.parse($0, at: start, selfDelimited: selfDelimited) }
+    }
 }
 
 // MARK: - Tiny CryptoKit shims for the StreamCrypto seed (kept off the main type)

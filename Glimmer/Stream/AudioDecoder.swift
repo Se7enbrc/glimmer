@@ -1,20 +1,6 @@
-//
-//  AudioDecoder.swift
-//
-//  Opus → AVAudioEngine. Wraps an OpusMSDecoder and routes the decoded
-//  PCM into an AVAudioPlayerNode attached to AVAudioEngine.mainMixerNode.
-//  The Swift-native engine drives this through the `NativeAudioSink`
-//  conformance (AudioDecoder+Decode.swift).
-//
-//  This file is the STORED STATE plus its design narrative - stored properties
-//  can't live in extensions, so every word the machinery keeps lives here while
-//  the machinery itself is split by topic across siblings: the opus/engine
-//  lifecycle + mid-stream recovery in AudioDecoder+Engine.swift, the per-packet
-//  decode + NativeAudioSink entry points in AudioDecoder+Decode.swift, the
-//  playout meter in AudioDecoder+Meter.swift, its pre-roll arbiter in
-//  AudioDecoder+Prime.swift, the output-route sampler in AudioDecoder+Route.swift,
-//  the cushion loss floor + per-host memory in AudioDecoder+CushionMemory.swift,
-//  and the drift-tracking resampler in AudioDecoder+Resampler.swift.
+// OpusDecoder's PCM into an AVAudioPlayerNode on the main mixer. Stored state lives here,
+// since extensions can't hold it; the machinery lives in the AudioDecoder+*.swift
+// siblings by topic: engine, decode, meter, prime, route, cushion memory, resampler.
 
 import Foundation
 import AVFoundation
