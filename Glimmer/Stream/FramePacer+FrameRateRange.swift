@@ -109,39 +109,16 @@ extension FramePacer {
         return maxFps > 0 ? Double(maxFps) : 60.0
     }
 
-    /// Build the CADisplayLink frame-rate range that forbids throttling the
-    /// present callback below the stream cadence on a static layer.
-    /// `minimum` is pinned to the stream Hz so macOS keeps the callback firing
-    /// at stream cadence even on a flat scene; `maximum` is the panel max. The
-    /// floor is CLAMPED to `min(streamHz, panelMaxHz)` so a sub-stream-fps
-    /// panel never gets an impossible floor. Pure + nonisolated so it's
-    /// unit-checkable.
-    ///
-    /// EXPERIMENT(preferred=panelMax): `preferred` is the PANEL MAX, not the
-    /// floor. With preferred==minimum==streamHz (~170 on a 240Hz panel), macOS
-    /// quantized the callback grid down to exact panel DIVISORS - sustained
-    /// 119.996Hz / 79.997Hz callback seconds on a wired 4K240 session - so the
-    /// pacer ran a 170fps stream against a 120Hz-effective grid: standing depth
-    /// 3-4 and the o2p p99 tail (~4.8% of frames waited ≥2 vsyncs). Asking for
-    /// the full grid (preferred=240) while keeping the anti-throttle floor
-    /// (minimum=min(streamHz,panelMax)) costs nothing on the release side - the
-    /// due gate already caps at one frame per stream interval, so faster
-    /// callbacks only align releases more finely, never release more frames.
-    /// JUDGED BY the next wired 240Hz session's realized-tick telemetry
-    /// (refresh_min / pacer_ticks_per_s): if the 119.996/79.997Hz callback
-    /// seconds vanish, divisor quantization is confirmed; if they persist, the
-    /// co-suspect is main-thread tick latency - instrument that next. The same
-    /// change doubles as the battery-governor probe (AC vs battery on the
-    /// internal panel): a governor that quantizes down from `preferred` may
-    /// hold a higher callback rate when preferred reads the panel max.
+    /// The link's frame-rate range: the floor pinned to min(streamHz, panelMax) so macOS cannot
+    /// throttle the present callback on a static layer; preferred and maximum at the panel max.
+    /// Asking for the full grid is settled by telemetry, see docs/PROFILING.md "Variable refresh".
     static func preferredRange(
         forStreamIntervalSeconds intervalSeconds: Double, panelMaxHz: Double
     ) -> CAFrameRateRange {
         let panel = panelMaxHz.isFinite && panelMaxHz > 0 ? panelMaxHz : 60.0
         let rawStreamHz = intervalSeconds.isFinite && intervalSeconds > 0
             ? 1.0 / intervalSeconds : 60.0
-        // Floor never exceeds the panel max (a 60Hz panel can't honor a 120Hz
-        // floor); preferred asks for the full panel grid (see EXPERIMENT above).
+        // Floor never exceeds the panel max (a 60Hz panel can't honor a 120Hz floor).
         let floorHz = min(rawStreamHz, panel)
         let maxHz = max(panel, floorHz)
         return CAFrameRateRange(

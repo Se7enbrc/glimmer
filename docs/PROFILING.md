@@ -155,7 +155,22 @@ telemetry NDJSON when telemetry is on.
 
 ### "Stream feels laggy"
 
-`make profile-signposts`. In Instruments:
+Start with the telemetry, not Instruments: the wait in the frame pacer is the
+largest client-side stage and no signpost covers it (`EnqueueFrame` stops at the
+pacer's submit; a frame that queues there waits outside any interval). Turn
+telemetry on (see "Opt-in telemetry" below), stream for a minute, and read
+`output_to_present` in the scorecard's `latency` block, then the per-second
+`pacing_depth` and `pacing_target_depth`:
+
+| Field                         | Healthy (wired, fps ≈ refresh)   | Means                                                                    |
+| ----------------------------- | -------------------------------- | ------------------------------------------------------------------------ |
+| `output_to_present` p50       | under one vsync (3-4 ms, 240 Hz) | how long a decoded frame waits for its vsync                             |
+| `output_to_present` p95 / p99 | 7-10 ms / 8-12 ms at 240 Hz      | a p99 past two vsyncs is a standing extra frame or skipped ticks         |
+| `pacing_depth`                | 0-1                              | frames queued at each tick; a steady 2 at target 1 is the standing frame |
+| `pacing_target_depth`         | 1 on a clean link                | the jitter buffer the env-signal headroom level asked for                |
+
+The full field list is under "Pacing fields" below. If `output_to_present` is
+fine, move upstream with `make profile-signposts`. In Instruments:
 
 1. Filter `os_signpost` track by category **Stream.Decode**.
 2. Aggregate the `DecodeFrame` intervals (right-click → "Show in summary").
@@ -289,6 +304,39 @@ template asks for.
 
 `make enable-telem` / `make disable-telem` flip the same preference from the
 command line.
+
+### Pacing fields
+
+The per-second rows and the scorecard carry the frame pacer's own numbers. The
+measured column is from wired 4K240 AV1 sessions on a 240 Hz panel (2026-09-28,
+1.9 h; 2026-10-02, 100 s); a pacing change needs these before and after.
+
+| Field                                                 | Where                                                  | Measures                                                                                   | Measured (wired, 240 Hz)                 |
+| ----------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `output_to_present` p50 / p95 / p99                   | scorecard `latency`; rows `lat_output_to_present_*_ms` | VT output to renderer enqueue: the wait for a vsync                                        | 3.1-4.4 ms / 7.8-9.8 ms / 8.9-12.0 ms    |
+| `pacing_depth`                                        | rows; scorecard `peak_pacing_depth`                    | frames queued at the tick, after the trim                                                  | avg 0.6-0.8, peak 2-3                    |
+| `pacing_target_depth`                                 | rows                                                   | the adaptive target: 1 at rest, +1 per env-signal headroom level                           | 1                                        |
+| `present_cadence_err_ms`                              | rows; scorecard `worst_windows`                        | mean distance of presents from the stream's frame grid                                     | 0.2 ms, worst window 1.1 ms              |
+| `refresh_min_hz`, `refresh_avg_hz`, `refresh_max_hz`  | rows                                                   | realized tick cadence that second: ProMotion ramps and skipped callbacks show as a low min | 238-240 / 240 / 240                      |
+| `pacer_ticks_per_s`, `pacer_releases_per_s`           | rows                                                   | display-link ticks, and frames released from the tick path                                 | 240; releases track fps (202 at 201 fps) |
+| `present_stale_repeat_total`                          | rows (+ `_per_s`); scorecard `events`                  | ticks that put no new frame on screen; fps below refresh is the benign case                | 40/s at 201 fps on 240 Hz                |
+| `pacer_over_target_release_total`, `_per_s`, `_ratio` | rows; scorecard `events`                               | releases forced because a backlog above target survived the trim; a spike is oscillation   | 31 in 100 s                              |
+| `drops_presentation_late`                             | rows                                                   | frames the pacer trimmed or overflowed (a standing-frame trim counts one)                  | 9 in 100 s                               |
+
+Variable refresh: the display link asks for `preferred = maximum = panel max`
+with the floor at the stream rate (`FramePacer+FrameRateRange.swift`). The
+question that setting shipped to answer, whether `preferred = floor` made macOS
+quantize callbacks to panel divisors (120 Hz and 80 Hz seconds on a 240 Hz
+panel), is settled: every wired 240 Hz session since (2026-09-28, 1.9 h;
+2026-09-29; 2026-10-02) shows `refresh_min_hz` at or above 237 and
+`pacer_ticks_per_s` at 239-241 while active, so the divisor grid is gone and the
+setting stays. What the recorded sessions cannot answer is whether a VRR panel
+should instead be asked to pace at the content rate (`preferred` = stream fps),
+so a 161 fps stream stops alternating one- and two-vsync holds on a 240 Hz grid:
+they are all fixed 240 Hz or 120 Hz ProMotion with the stream at or below
+refresh. Deciding it needs a session on a VRR panel with the stream below the
+panel max, judged on `refresh_avg_hz` tracking `fps_received` and
+`output_to_present` p99 staying under one vsync.
 
 ### "A movement or press I didn't make"
 

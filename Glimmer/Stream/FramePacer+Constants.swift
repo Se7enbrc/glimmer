@@ -39,15 +39,9 @@ extension FramePacer {
     /// the lower-quartile estimate is meaningful. ~8 frames ≈ 67ms at 120fps.
     static let minCadenceRefineSamples = 8
 
-    /// Baseline (clean-link) REST depth. On a clean link the pacer rests here -
-    /// one frame of slack, essentially direct enqueue (output_to_present
-    /// ~0.1-0.3ms, the direct path's measured ideal): at fps<refresh the queue
-    /// already sits at ~1 because frames arrive slower than vsyncs, so depth-1 is
-    /// the NATURAL rest state and adds zero latency (the layer re-shows the last
-    /// frame on idle ticks). This is the FLOOR the adaptive target decays back to
-    /// once the link is clean. With the rest depth == target, the grow-hold gate
-    /// (which keys on `adaptiveTargetDepth > targetDepth`) self-disables on a
-    /// clean link, so the startup present-stall wedge cannot form.
+    /// Baseline REST depth: one frame of slack, the floor the adaptive target decays back to.
+    /// Measured at fps ≈ refresh on a wired 240 Hz panel: output_to_present p50 3-4 ms (under
+    /// one vsync), p95 7-10 ms. At fps < refresh the queue sits at 0-1 anyway.
     static let targetDepth = 1
 
     /// Upper bound on the adaptive target depth. EnvSignalController's headroom ladder tops
