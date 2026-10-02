@@ -40,7 +40,7 @@ extension TelemetryExporter {
         let tracker = FrameTimingTracker.shared
         let report = SessionReport(
             sessionId: sessionId,
-            client: TelemetryRenderer.clientNameRaw,
+            client: TelemetryRenderer.clientLabel,
             host: serverLabel,
             buildCommit: BuildInfo.commit,
             buildDate: BuildInfo.date,

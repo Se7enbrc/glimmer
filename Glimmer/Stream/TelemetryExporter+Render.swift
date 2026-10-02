@@ -1,25 +1,12 @@
 //
 //  TelemetryExporter+Render.swift
 //
-//  The PROMETHEUS core of the telemetry renderer (the NDJSON half + the
-//  process-level CPU/thread sampler live in TelemetryExporter+RenderNDJSON.swift)
-//  plus the shared histogram-quantile estimator both halves use: the
-//  `prometheus(_:extras:)` entry point and the `PromBuilder` accumulator that
-//  render a `TelemetrySnapshot` into the Prometheus text exposition form. The
-//  metric-family sections live in TelemetryExporter+RenderVideo / +RenderNetwork /
-//  +RenderAudio / +RenderSystem / +RenderP2.swift (pure moves - they append to
-//  the same builder). Split out of TelemetryExporter.swift to keep each unit
-//  focused; see that file for the exporter, gate, counters, and snapshot type.
-//
-//  PROMETHEUS NAMING: every metric is `glimmer_<area>_<name>`; gauges carry no
-//  suffix, monotonic counters end `_total` (Prometheus convention). The shared
-//  label set is `{session="<id>",host="<hostname>"}` so a scraper can split a
-//  multi-session capture AND tell multiple scraped Macs apart by name (a remote
-//  metrics sink's auto-attached `instance` label is just an IP:port). The
-//  connect-relative offset is its own gauge so the INITIAL-CONNECTION phase is
-//  visible on the timeline.
+//  The Prometheus core of the telemetry renderer: `prometheus(_:extras:)`, the
+//  `PromBuilder` every metric section appends to, and the per-install pseudonyms that
+//  stand in for the PC and Mac names. Metrics are `glimmer_<area>_<name>`; counters end `_total`.
 //
 
+import CryptoKit
 import Foundation
 import SystemConfiguration
 
@@ -27,29 +14,33 @@ import SystemConfiguration
 
 enum TelemetryRenderer {
 
-    /// This Mac's name - the `client` label on every emitted series (the box
-    /// doing the watching). Paired with `host` (the Sunshine server we connect
-    /// TO, per-session) so a multi-client rig splits both ways: which Mac, and
-    /// which gaming PC. Reads the LocalHostName rather than the kernel hostname:
-    /// a default macOS setup answers gethostname() with a generic "Mac", useless
-    /// across clients - and LocalHostName is the same source a metrics shipper
-    /// would bake into its labels, so the two always agree. Resolved ONCE on
-    /// first render (a 1Hz utility-queue tick, never the hot path),
-    /// `.local`-trimmed, pre-escaped for the exposition format so builders can
-    /// splice it into a label set verbatim.
-    /// Raw LocalHostName (JSON/display use - the NDJSON `client` field escapes
-    /// it itself). `clientLabelValue` is the Prometheus-escaped form.
-    static let clientNameRaw: String = {
-        var name = (SCDynamicStoreCopyLocalHostName(nil) as String?)
-            ?? ProcessInfo.processInfo.hostName
+    /// This Mac's `client` label: its LocalHostName as a pseudonym, so files people
+    /// attach to issues tell Macs apart without naming them. Resolved once.
+    static let clientLabel: String = {
+        var name = (SCDynamicStoreCopyLocalHostName(nil) as String?) ?? ProcessInfo.processInfo.hostName
         if name.hasSuffix(".local") { name.removeLast(".local".count) }
-        return name
+        return pseudonym(name)
     }()
-    static let clientLabelValue: String = escapeLabel(clientNameRaw)
+
+    /// A PC or Mac name as 8 hex digits, keyed by a random per-install salt: stable
+    /// across sessions, but no one without the salt can match it to a name.
+    static func pseudonym(_ name: String, salt: SymmetricKey = installSalt) -> String {
+        HMAC<SHA256>.authenticationCode(for: Data(name.utf8), using: salt)
+            .prefix(4).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static let installSalt: SymmetricKey = {
+        let key = "telemetryNameSalt"
+        if let stored = UserDefaults.standard.data(forKey: key), stored.count == 32 {
+            return SymmetricKey(data: stored)
+        }
+        let salt = SymmetricKey(size: .bits256)
+        UserDefaults.standard.set(salt.withUnsafeBytes { Data($0) }, forKey: key)
+        return salt
+    }()
 
     /// Escape a label VALUE per the Prometheus text exposition format
-    /// (backslash, double-quote, newline). Static so both `clientLabelValue`
-    /// and `PromBuilder.init` (the per-session `host`) can pre-escape.
+    /// (backslash, double-quote, newline).
     static func escapeLabel(_ value: String) -> String {
         value.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
@@ -108,9 +99,9 @@ enum TelemetryRenderer {
         let labels: String
         /// The shared pairs WITHOUT braces, for emitters that append extra labels.
         let sharedPairs: String
-        /// - host: the Sunshine server name (per-session), already raw; escaped here.
+        /// - host: the PC's pseudonym for this session; escaped here.
         init(session: String, host: String) {
-            sharedPairs = "session=\"\(session)\",client=\"\(TelemetryRenderer.clientLabelValue)\""
+            sharedPairs = "session=\"\(session)\",client=\"\(TelemetryRenderer.clientLabel)\""
                 + ",host=\"\(TelemetryRenderer.escapeLabel(host))\""
             labels = "{\(sharedPairs)}"
         }

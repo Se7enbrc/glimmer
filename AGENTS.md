@@ -125,7 +125,8 @@ Each of these gets a pull request sent back.
 - **Logging** uses `Logger` on subsystem `io.ugfugl.Glimmer`, never `print` (the
   CLI's own output excepted). Host addresses, names and error text stay
   `.private`. `Diag` takes the same `privacy:` argument (public by default):
-  private values reach the viewer and the session file but not the system log.
+  private values reach only the in-app viewer, never the session file or the
+  system log. Telemetry names the PC and the Mac by per-install pseudonyms.
   Never log keystrokes, keys, PINs, certificates or the URL parameters
   `NetworkClient.sensitiveQueryKeys` lists. Nothing per-frame at `.info`. The
   root helper is its own process and logs on `io.ugfugl.glimmer.helper`.

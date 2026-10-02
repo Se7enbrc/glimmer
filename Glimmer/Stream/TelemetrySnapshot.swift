@@ -332,11 +332,8 @@ struct TelemetrySnapshot: Sendable {
     var buildCommit: String = ""
     var buildDate: String = ""
 
-    // The Sunshine server this session streams FROM (its /serverinfo hostname).
-    // Emitted as the `host` Prometheus label + an NDJSON field so a multi-client
-    // setup splits not just by which Mac (`client`) but by which gaming PC.
-    // Session-constant; the exporter copies it from its stored server label each
-    // tick.
+    // The PC's per-install pseudonym (the `host` label and NDJSON field), never its name.
+    // Session-constant; the exporter copies it from its stored server label each tick.
     var serverName: String = ""
 
     // P1 AUDIO (the OTHER stream). All read off the always-live audio

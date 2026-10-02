@@ -1,9 +1,9 @@
 //
 //  LogStore.swift
 //
-//  The troubleshooting log: a ring buffer the viewer reads (OSLogStore can't read
-//  this process back reliably), mirrored to os_log and the session file. Private
-//  values reach the viewer and the file; the os_log copy shows "<private>".
+//  The troubleshooting log: a ring the in-app viewer reads, mirrored to os_log and
+//  the session file. Private values reach only the viewer; os_log and the file,
+//  which people attach to issues, show "<private>".
 //
 
 import Foundation
@@ -93,18 +93,8 @@ final class LogStore: @unchecked Sendable {
         case .error: logger.error("\(redacted, privacy: .public)")
         }
 
-        // Third sink (gate-checked, default OFF): when telemetry/debug is enabled
-        // for a streaming session, ALSO mirror the line to a per-session text file
-        // so the rich os_log/Diag record - not just the telemetry NDJSON - is
-        // persisted and shippable into a remote log sink. The
-        // append is a single optional load when off (no file, no lock, no
-        // allocation) and, when on, only pushes a pre-rendered line into an
-        // in-memory buffer drained by a background timer - never an I/O (or fsync)
-        // on the producing thread, so a slow disk can never serialise a hot-path
-        // logger against the file. Mirrors the FrameTraceWriter discipline.
-        if let sink = SessionLogFileSink.shared {
-            sink.append(level: level, category: category, message: message)
-        }
+        // The session file gets the redacted line: people attach it to public issues.
+        SessionLogFileSink.shared?.append(level: level, category: category, message: redacted)
     }
 
     /// Newest-last snapshot for the viewer.
@@ -120,7 +110,7 @@ final class LogStore: @unchecked Sendable {
 
 /// Terse façade: `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
 /// Interpolations take Logger's `privacy:` argument and default to public; a
-/// private value reaches the viewer and the session file, never the system log.
+/// private value reaches only the in-app viewer, never the system log or session file.
 enum Diag {
     static func debug(_ message: DiagMessage, _ category: String) { LogStore.shared.log(.debug, message, category: category) }
     static func info(_ message: DiagMessage, _ category: String) { LogStore.shared.log(.info, message, category: category) }
@@ -134,9 +124,9 @@ enum DiagPrivacy: Sendable {
     case `public`, `private`
 }
 
-/// One Diag line in two renderings: `text` for the viewer, export and session
-/// file, `systemLogText` for os_log. The redacted copy is built only once a
-/// private value appears.
+/// One Diag line in two renderings: `text` for the in-app viewer and its export,
+/// `systemLogText` for os_log and the session file. The redacted copy is built
+/// only once a private value appears.
 struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
     let text: String
     private let redacted: String?
@@ -201,7 +191,7 @@ struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
 
 // MARK: - Per-session file sink (gate-checked, buffered, off the hot path)
 
-/// While a telemetry session runs, mirrors Diag's full text (INFO+, DEBUG with
+/// While a telemetry session runs, mirrors Diag's redacted text (INFO+, DEBUG with
 /// `diagFileLogDebug`) to Logs/Glimmer. `@unchecked Sendable`: the lock guards
 /// `pending`; the file and timer live on `flushQueue`, so loggers never touch disk.
 final class SessionLogFileSink: @unchecked Sendable {
@@ -212,11 +202,9 @@ final class SessionLogFileSink: @unchecked Sendable {
     private static let sharedBox = OSAllocatedUnfairLock<SessionLogFileSink?>(initialState: nil)
     static var shared: SessionLogFileSink? { sharedBox.withLock { $0 } }
 
-    /// Install a fresh sink iff the gate is on. Called from the session's
-    /// telemetry wiring. No-op (nothing installed, `shared` stays nil ⇒ hot path
-    /// stays zero-cost) when off. The gate is resolved by the caller and passed in
-    /// so this type has no dependency direction into the Stream module.
-    static func startIfEnabled(enabled: Bool) {
+    /// Install a fresh sink iff the caller's gate is on; off, nothing is installed
+    /// and the logging path pays one nil load.
+    static func startIfEnabled(enabled: Bool, directory: URL = TelemetryExporter.logsDirectory) {
         guard enabled else { return }
         // Check-and-install under the lock so concurrent enables can't both create
         // a sink. open() runs off-lock; it only dispatches onto flushQueue.
@@ -226,7 +214,7 @@ final class SessionLogFileSink: @unchecked Sendable {
             box = created
             return created
         }
-        sink?.open()
+        sink?.open(in: directory)
     }
 
     /// Tear down + clear the singleton. Flushes whatever is pending and closes the
@@ -282,7 +270,7 @@ final class SessionLogFileSink: @unchecked Sendable {
 
     /// Open the per-session file + arm the flush timer. Mirrors the telemetry
     /// NDJSON path so both land in one directory a log shipper can mount.
-    private func open() {
+    private func open(in dir: URL) {
         flushQueue.async { [weak self] in
             guard let self else { return }
             let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
@@ -292,7 +280,6 @@ final class SessionLogFileSink: @unchecked Sendable {
             self.flushTimer = timer
             timer.resume()
 
-            let dir = TelemetryExporter.logsDirectory
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             } catch {

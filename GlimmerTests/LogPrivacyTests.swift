@@ -1,10 +1,11 @@
 //
 //  LogPrivacyTests.swift
 //
-//  Diag's two renderings (the full line for the viewer and session file, the
-//  redacted line LogStore hands os_log) and the launch-response XML redactor.
+//  Diag's two renderings (the full line for the viewer, the redacted line for os_log
+//  and the session file), telemetry's name pseudonyms, and the launch-response redactor.
 //
 
+import CryptoKit
 import Foundation
 import Testing
 @testable import Glimmer
@@ -84,6 +85,37 @@ struct DiagMessageTests {
         let marker = UUID().uuidString
         Diag.info("\(marker) at \("192.0.2.10", privacy: .private)", "Tests")
         #expect(LogStore.shared.snapshot().contains { $0.message == "\(marker) at 192.0.2.10" })
+    }
+}
+
+struct SessionFilePrivacyTests {
+
+    @Test func privateValuesNeverReachTheSessionFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let marker = UUID().uuidString
+        SessionLogFileSink.startIfEnabled(enabled: true, directory: dir)
+        Diag.notice("\(marker) connecting to \("192.0.2.10", privacy: .private)", "Tests")
+        SessionLogFileSink.stop()
+
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        let text = try files.map { try String(contentsOf: $0, encoding: .utf8) }.joined()
+        #expect(text.contains("\(marker) connecting to <private>"))
+        #expect(!text.contains("192.0.2.10"))
+        #expect(LogStore.shared.snapshot().contains { $0.message == "\(marker) connecting to 192.0.2.10" })
+    }
+}
+
+struct TelemetryPseudonymTests {
+
+    @Test func namesBecomeStableSaltedCodes() {
+        let salt = SymmetricKey(size: .bits256)
+        let code = TelemetryRenderer.pseudonym("Den PC", salt: salt)
+        #expect(code.count == 8)
+        #expect(code.filter(\.isHexDigit).count == 8)
+        #expect(TelemetryRenderer.pseudonym("Den PC", salt: salt) == code)
+        #expect(TelemetryRenderer.pseudonym("Office PC", salt: salt) != code)
+        #expect(TelemetryRenderer.pseudonym("Den PC", salt: SymmetricKey(size: .bits256)) != code)
     }
 }
 

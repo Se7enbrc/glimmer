@@ -167,8 +167,7 @@ final class TelemetryExporter: @unchecked Sendable {
     var fileHandle: FileHandle?
 
     let sessionId: String
-    /// Sunshine server name for this session (the `host` label). Set once at
-    /// construction; copied onto every snapshot in capture.
+    /// The PC's pseudonym for this session (the `host` label), copied onto every snapshot.
     let serverLabel: String
     let connectInstant = DispatchTime.now()
 
@@ -236,10 +235,7 @@ final class TelemetryExporter: @unchecked Sendable {
 
     private init(source: TelemetrySource, serverName: String) {
         self.source = source
-        // The Sunshine server this session streams from - the `host` label
-        // (vs `client` = this Mac). Falls back to "unknown" so the series is
-        // never label-less. See TelemetryExporter+Render.swift.
-        self.serverLabel = serverName.isEmpty ? "unknown" : serverName
+        self.serverLabel = TelemetryRenderer.pseudonym(serverName)
         // 64-bit random hex - opaque, not a host identifier.
         self.sessionId = String(format: "%016x", UInt64.random(in: .min ... .max))
         // The DISPLAY sampler reads the main-actor probe from the source. Built

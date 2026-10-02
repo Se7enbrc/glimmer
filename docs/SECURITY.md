@@ -326,10 +326,12 @@ their session use the host PC's recording tools, not the Mac's.
 - VT decode errors and codec configuration ints (`videoFormat=0x...`, `bytes=N`,
   `idr=true/false`).
 - `Diag` lines, which take Logger's `privacy:` argument (`LogStore.swift`).
-  Private values (PC names and addresses, uniqueids, error text) reach the
-  Troubleshooting viewer, its export and the session file, and show as
-  `<private>` in the unified log. Keys, PINs and certificates stay out of the
+  Private values (PC names and addresses, uniqueids, error text) reach only the
+  in-app log viewer and what you copy from it, and show as `<private>` in the
+  unified log and the session file. Keys, PINs and certificates stay out of the
   message entirely.
+- Telemetry files, which name the PC and the Mac only by pseudonyms keyed to a
+  random per-install salt.
 - Pin-mismatch events (no fingerprints).
 - Pairing-step transitions (no payload data).
 

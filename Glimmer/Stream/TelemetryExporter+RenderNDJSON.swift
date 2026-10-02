@@ -53,10 +53,8 @@ extension TelemetryRenderer {
         var builder = NDJSONBuilder()
         builder.fields.append("\"ts\":\"\(snap.wallClockISO8601)\"")
         builder.fields.append("\"session\":\"\(snap.sessionId)\"")
-        // Identity: which Mac (`client`) streaming from which Sunshine PC
-        // (`host`) - mirrors the Prometheus label pair so the NDJSON splits the
-        // same way offline.
-        builder.addString("client", TelemetryRenderer.clientNameRaw)
+        // Which Mac streamed from which PC, as the same pseudonyms Prometheus labels carry.
+        builder.addString("client", TelemetryRenderer.clientLabel)
         builder.addString("host", snap.serverName)
         // Build attribution (signal 5a) as an NDJSON header field on every line,
         // so a single line is enough to tie a sample to a build.

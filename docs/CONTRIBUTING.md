@@ -322,8 +322,10 @@ the comment at `StreamBridgeContext.eventContinuation` (in
   - `Diag.*` takes the same `privacy:` argument as `Logger`, but defaults to
     `.public`, so mark those values `.private` there too:
     `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
-    Private values reach the Troubleshooting viewer, its export and the session
-    file; the system-log copy shows `<private>` in their place.
+    Private values reach only the in-app log viewer and what you copy from it.
+    The system log and the session file, which people attach to public issues,
+    show `<private>` in their place. Telemetry names the PC and the Mac by
+    per-install pseudonyms, never their names.
   - Never log:
     - Key characters from `keyDown` events (a later change fixed the regression
       where chars=... leaked at `.public`).
