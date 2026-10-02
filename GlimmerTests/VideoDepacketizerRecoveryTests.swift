@@ -79,6 +79,21 @@ struct VideoDepacketizerRecoveryTests {
         #expect(recorder.losses.map(\.to) == [2])
     }
 
+    /// A first packet shorter than its frame header carries no bitstream: it is dropped
+    /// at the parser and recovery is requested, not fed to the decoder as video.
+    @Test(arguments: [[1, 0, 0, 1, 5], [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]] as [[UInt8]])
+    func firstPacketShorterThanItsHeaderIsCorrupt(payload: [UInt8]) {
+        let recorder = RecordingDepacketizerDelegate()
+        let dp = depacketizer(recorder)
+        dp.process(packet(frame: 1, spi: 0, type: 2))
+        dp.process(VideoDepacketizer.CompletedPacket(
+            frameIndex: 2, flags: 0x07, extraFlags: 0, fecCurrentBlock: 0, fecLastBlock: 0,
+            streamPacketIndex: 1 << 8, rtpTimestamp: 2, presentationTimeUs: 2_000,
+            receiveTimeUs: 2_000, payload: payload))
+        #expect(recorder.units.map(\.frameNumber) == [1])
+        #expect(recorder.losses.map(\.to) == [2])
+    }
+
     @Test func spiGapRequestsIdrBeforeFirstKeyFrameAndRfiAfterIt() {
         let before = RecordingDepacketizerDelegate()
         let first = depacketizer(before)

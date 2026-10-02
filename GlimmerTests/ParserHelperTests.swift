@@ -172,13 +172,16 @@ struct ParserHelperTests {
     }
 
     /// Sunshine's short header (0x01) is 8 bytes; any other first byte takes its 7.1.431 length, 24.
+    /// A payload shorter than its own header is refused.
     @Test func frameHeaderLengthFollowsSunshinesVersion() {
-        var short: [UInt8] = [0x01, 0, 0, 1] + [UInt8](repeating: 0, count: 60)
-        #expect(depacketizer(hevc: true).parseFrameHeader(&short, frameIndex: 1) == 8)
-        var long: [UInt8] = [0x81, 0, 0, 1] + [UInt8](repeating: 0, count: 60)
-        #expect(depacketizer(hevc: true).parseFrameHeader(&long, frameIndex: 1) == 24)
-        var runt: [UInt8] = [0x01, 0, 0]
-        #expect(depacketizer(hevc: true).parseFrameHeader(&runt, frameIndex: 1) == -1)
+        func headerSize(_ payload: [UInt8]) -> Int {
+            payload.withUnsafeBytes { depacketizer(hevc: true).parseFrameHeader($0, frameIndex: 1) }
+        }
+        #expect(headerSize([0x01, 0, 0, 1] + [UInt8](repeating: 0, count: 60)) == 8)
+        #expect(headerSize([0x81, 0, 0, 1] + [UInt8](repeating: 0, count: 60)) == 24)
+        #expect(headerSize([0x01, 0, 0]) == -1)
+        #expect(headerSize([0x01, 0, 0, 1, 0, 0, 0]) == -1)
+        #expect(headerSize([0x81, 0, 0, 1] + [UInt8](repeating: 0, count: 19)) == -1)
     }
 
     @Test func splitAnnexBNoStartCodeIsSinglePicData() {

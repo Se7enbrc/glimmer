@@ -16,9 +16,12 @@ extension VideoDepacketizer {
 
     // Internal (not private) so `process(_:)` in VideoDepacketizer.swift can call
     // across the split.
-    /// Returns the frame header size to skip, or -1 on parse failure.
-    func parseFrameHeader(_ payload: inout [UInt8], frameIndex: UInt32) -> Int {
+    /// Returns the frame header size to skip, or -1 when the payload is shorter than
+    /// its header: Sunshine reports 7.1.431, the [7.1.415, 7.1.446) rung of c:914-965.
+    func parseFrameHeader(_ payload: UnsafeRawBufferPointer, frameIndex: UInt32) -> Int {
         guard payload.count >= 4 else { return -1 }
+        let headerSize = payload[0] == 0x01 ? 8 : 24
+        guard payload.count >= headerSize else { return -1 }
 
         // Frame type from data[offset+3] (offset==0 here) (c:857-887).
         let typeByte = payload[3]
@@ -48,17 +51,12 @@ extension VideoDepacketizer {
         }
 
         // Sunshine host processing latency = u16 LE at offset+1 (c:899-903).
-        if payload.count >= 3 {
-            frameHostProcessingLatency = UInt16(payload[1]) | (UInt16(payload[2]) << 8)
-        }
+        frameHostProcessingLatency = UInt16(payload[1]) | (UInt16(payload[2]) << 8)
 
-        // AV1 (non-H264/HEVC) lastPacketPayloadLength = u16 LE at offset+4
-        // (c:908-912).
-        if isAV1 && payload.count >= 6 {
+        // AV1 (non-H264/HEVC) lastPacketPayloadLength = u16 LE at offset+4 (c:908-912).
+        if isAV1 {
             lastPacketPayloadLength = UInt16(payload[4]) | (UInt16(payload[5]) << 8)
         }
-
-        // Sunshine reports 7.1.431, the [7.1.415, 7.1.446) rung of c:914-965; the others were GameStream's.
-        return payload[0] == 0x01 ? 8 : 24
+        return headerSize
     }
 }
