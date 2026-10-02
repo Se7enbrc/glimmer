@@ -1,12 +1,17 @@
 <!--
-Thanks for contributing! Please read docs/CONTRIBUTING.md first - it covers
-setup, build (`make`), lint posture, the Swift 6 concurrency rules, and the
-commit-message conventions this repo uses.
+Thanks for contributing. Pull requests start as an issue the maintainer has
+agreed to; one without an agreed issue is closed. Please read
+docs/CONTRIBUTING.md first - it covers setup, build (`make`), lint posture, the
+Swift 6 concurrency rules, and the commit-message conventions this repo uses.
 -->
+
+## Issue
+
+<!-- Link the issue where the maintainer agreed to this change. -->
 
 ## What
 
-<!-- What does this PR change, and why? Link the issue if there is one. -->
+<!-- What does this PR change, and why? -->
 
 ## How verified
 
@@ -27,6 +32,6 @@ numbers (before/after) are the house currency - see docs/PROFILING.md.
 - [ ] Comments explain the WHY for any non-obvious decision (see
       docs/CONTRIBUTING.md → Style)
 - [ ] UI change: before and after screenshots at the smallest and largest window
-- [ ] `CHANGELOG.md` entry and `Glimmer/Version.xcconfig` bump for anything a
-      person will notice
+- [ ] Links an issue the maintainer agreed to
+- [ ] Leaves `CHANGELOG.md` and `Glimmer/Version.xcconfig` to the maintainer
 - [ ] No tool or AI attribution in commits, this description or the changelog

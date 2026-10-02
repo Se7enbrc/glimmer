@@ -396,11 +396,15 @@ Practically, before you call something done:
 
 ## Pull requests
 
+- Start with an issue. Describe the problem or the change, and wait for the
+  maintainer to agree on the approach before you write code. A pull request that
+  doesn't link an agreed issue is closed.
 - `main` is the active development branch; releases are tags on it.
 - Fork, push your branch to the fork, and open the PR from there against `main`.
   Only the maintainer can push branches to this repository or merge into `main`.
 - Keep a PR scoped to one area, so it can land independently.
-- Bump `Glimmer/Version.xcconfig` and add a CHANGELOG entry in the same PR. See
+- Leave `CHANGELOG.md` and `Glimmer/Version.xcconfig` alone: the maintainer
+  writes release notes and picks the version when a change ships. See
   [RELEASE.md](RELEASE.md).
 - Before you ask for a merge, run the thing and look at it. [The bar](#the-bar)
   is the checklist.

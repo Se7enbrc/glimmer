@@ -244,12 +244,16 @@ anyone else:
 - **Sign as yourself.** The Makefile uses whatever Developer ID is in your
   keychain. Without one, builds are ad hoc and not notarized.
 - **Keep `LICENSE` and `CREDITS.md`**, including the moonlight-common-c credit.
-- **A change offered back** comes as a pull request from the fork: only the
-  maintainer can push branches here or merge into `main`. It follows every rule
-  above, one area per pull request, on top of current `main`.
+- **A change offered back starts as an issue** the maintainer agrees to; a pull
+  request without one is closed. Then it comes as a pull request from the fork
+  (only the maintainer can push branches here or merge into `main`), follows
+  every rule above, one area per pull request, on top of current `main`, and
+  leaves `CHANGELOG.md` and `Glimmer/Version.xcconfig` to the maintainer.
 
 ## What gets rejected
 
+- A pull request from outside that doesn't link an issue the maintainer agreed
+  to.
 - Warnings, lint suppressions, raised thresholds, or skipped and disabled tests.
 - A file over 600 lines or a comment over 3 lines.
 - "Add a setting" as the answer to a design problem. A toggle that exists
