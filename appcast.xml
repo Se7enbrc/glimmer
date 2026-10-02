@@ -6,6 +6,24 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.10.3</title>
+      <description><![CDATA[
+<p>Glimmer offers its Wi-Fi stutter protection the first time it opens on every Mac, whatever the network, and asks again each launch until it's on or you decline it for good. A MacBook first opened on Ethernet used to never see it.</p>
+<p>The Stream menu now offers the same action as the launcher and the menu bar: Back to Stream, Wake and Connect, Stop Waiting or Pair Again…, instead of a greyed-out Stream. While a stream is hidden, its app button reads "Back to Stream". Resolutions read the way players say them (4K, 1440p, 1080p) or as their size, never as a Mac model name, and the empty "Glimmer Help" item is gone.</p>
+<p>A PC that answered the launch but then went quiet could leave Glimmer on "Connecting…" until you cancelled. Each step of the connection now gives up after ten seconds and tells you the PC couldn't be reached.</p>
+<p>When a PC falls asleep mid-stream and Glimmer can't get it back, the banner now says it couldn't reach the PC and offers Wake and Connect, instead of "ended unexpectedly" and Try Again. Every way a stream can fail to start or end on its own now says the one thing to do next, including Sunshine stopping the stream for protected content.</p>
+<p>A weak remote link lowers the quality to keep the picture moving; that lowering is no longer for the rest of the session. Moving to another network restores the full quality on the next reconnect, and after five clean minutes at the lower quality Glimmer steps it back up under a short "Connection improved" hold.</p>
+<p>Frames reach the screen sooner. On a 240 Hz stream, the share of frames that waited more than one refresh fell from about half to under a fifth, and a short burst of frames no longer leaves every later frame waiting an extra refresh.</p>
+<p>A damaged audio packet is smoothed over instead of leaving a gap, one stray packet can no longer switch off audio repair for the rest of a stream, and the extra audio delay a stutter adds on Wi-Fi settles back down sooner. An idle stream no longer wakes the Mac a thousand times a second to check for input.</p>
+<p>The session log and telemetry files no longer contain your PC's address or the PC's and Mac's names, which appear as short codes instead, and Copy in the Diagnostics log copies lines the same way. They're safe to attach to an issue.</p>
+]]></description>
+      <pubDate>Fri, 02 Oct 2026 17:30:05 GMT</pubDate>
+      <sparkle:version>20261006</sparkle:version>
+      <sparkle:shortVersionString>2026.10.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.10.3/Glimmer-2026.10.3.zip" type="application/octet-stream" sparkle:edSignature="yuqbCClgHqLg5rDoeQh2RhKbcBxWm4xOWe/LICcbUo8juerZ8abj4Q2pllJijyNxNsFSkT5PkIqpxquFN4TGAg==" length="6190685" />
+    </item>
+    <item>
       <title>2026.10.2</title>
       <description><![CDATA[
 <p>Some H.264 and HEVC streams connected but never showed a picture, then ended after ten seconds, because their key frames began with information Glimmer didn't expect. Glimmer now recognises them, and the picture appears.</p>
