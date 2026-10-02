@@ -86,6 +86,19 @@ struct DiagMessageTests {
         Diag.info("\(marker) at \("192.0.2.10", privacy: .private)", "Tests")
         #expect(LogStore.shared.snapshot().contains { $0.message == "\(marker) at 192.0.2.10" })
     }
+
+    /// The viewer shows the address; Copy, which people paste into issues, doesn't.
+    @Test func copiedLinesAreRedacted() throws {
+        let marker = UUID().uuidString
+        Diag.info("\(marker) at \("192.0.2.10", privacy: .private)", "Tests")
+        Diag.info("\(marker) plain", "Tests")
+        let entries = LogStore.shared.snapshot().filter { $0.message.hasPrefix(marker) }
+        let addressed = try #require(entries.first { $0.message.hasSuffix("192.0.2.10") })
+        #expect(addressed.shareable.hasSuffix("\(marker) at <private>"))
+        #expect(addressed.plain.hasSuffix("\(marker) at 192.0.2.10"))
+        let plain = try #require(entries.first { $0.message.hasSuffix("plain") })
+        #expect(plain.redactedMessage == nil && plain.shareable == plain.plain)
+    }
 }
 
 struct SessionFilePrivacyTests {

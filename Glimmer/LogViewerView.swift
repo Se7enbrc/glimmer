@@ -77,7 +77,7 @@ struct LogViewer: View {
 
     private func copyAll() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(visible.map(\.plain).joined(separator: "\n"), forType: .string)
+        NSPasteboard.general.setString(visible.map(\.shareable).joined(separator: "\n"), forType: .string)
     }
 }
 

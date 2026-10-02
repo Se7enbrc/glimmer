@@ -46,6 +46,8 @@ struct LogEntry: Identifiable, Sendable {
     let level: LogLevel
     let category: String
     let message: String
+    /// The message with private values as "<private>"; nil when nothing in it was private.
+    let redactedMessage: String?
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -55,8 +57,13 @@ struct LogEntry: Identifiable, Sendable {
 
     var timeString: String { Self.timeFormatter.string(from: date) }
 
-    /// Plain one-line form for copy/export.
+    /// Plain one-line form, full detail.
     var plain: String { "\(timeString)  \(level.label.uppercased())  [\(category)]  \(message)" }
+
+    /// What Copy puts on the pasteboard: copied lines end up in public issues, like the session file.
+    var shareable: String {
+        "\(timeString)  \(level.label.uppercased())  [\(category)]  \(redactedMessage ?? message)"
+    }
 }
 
 /// O(1) ring under a short lock; the viewer reads newest-last snapshots. Each session's
@@ -91,7 +98,8 @@ final class LogStore: Sendable {
         guard level > .debug || captureDebug.load(ordering: .relaxed) else { return }
         let date = Date()
         state.withLock { ring in
-            let entry = LogEntry(id: ring.nextID, date: date, level: level, category: category, message: diag.text)
+            let entry = LogEntry(id: ring.nextID, date: date, level: level, category: category, message: diag.text,
+                                 redactedMessage: redacted == diag.text ? nil : redacted)
             ring.nextID &+= 1
             if ring.entries.count < capacity {
                 ring.entries.append(entry)
