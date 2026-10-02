@@ -85,6 +85,9 @@ final class RtpAudioQueue {
     /// Layout mismatches in a row before audio FEC turns off for the session: isolated odd
     /// packets never trip it, while a PC whose layout truly differs does within seconds.
     static let layoutMismatchStreakLimit = 8
+    /// Most FEC blocks held at once: 160 ms of 5 ms packets, well past the longest
+    /// out-of-order wait (`oosWaitTimeMaxMs` plus one block), so it only binds on a stall.
+    static let maxQueuedBlocks = 8
 
     static let payloadTypeAudio: UInt8 = 97   // RTP_PAYLOAD_TYPE_AUDIO
     static let payloadTypeFec: UInt8 = 127    // RTP_PAYLOAD_TYPE_FEC

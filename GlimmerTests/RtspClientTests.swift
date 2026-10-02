@@ -285,6 +285,18 @@ struct RtspClientTests {
         #expect(receiver.queue.incompatibleServer)
     }
 
+    /// Blocks that each miss a packet, after out-of-order history, all wait out the give-up window.
+    @Test func audioQueueNeverHoldsMoreThanItsCap() {
+        let receiver = Self.audioReceiver(sink: NullAudioSink())
+        let sync = Self.parityDatagram(sequence: 0, base: 0)
+        receiver.handleDatagram(sync, count: sync.count)
+        receiver.queue.receivedOosData = true
+        for block in 1...(3 * RtpAudioQueue.maxQueuedBlocks) {
+            Self.feed(receiver, dataSequences: [UInt16(block * RtpAudioQueue.dataShards + 1)])
+            #expect(receiver.queue.blocks.count <= RtpAudioQueue.maxQueuedBlocks)
+        }
+    }
+
     private final class BlockingAudioSink: NativeAudioSink, @unchecked Sendable {
         // The semaphores coordinate initialization; cleanup count is lock-guarded.
         private let lock = NSLock()

@@ -157,6 +157,12 @@ extension RtpAudioQueue {
             }
         }
 
+        // At the cap, play the head out with concealment for its gaps, so a stalled
+        // head or a far-ahead stream can't grow the queue without bound.
+        if blocks.count >= Self.maxQueuedBlocks, let head = blocks.first {
+            head.allowDiscontinuity = true
+        }
+
         // Allocate a new block and insert in seq order (:334-392).
         let block = FecBlock()
         block.queueTimeUs = UInt64(DispatchTime.now().uptimeNanoseconds / 1000)
