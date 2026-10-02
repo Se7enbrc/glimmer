@@ -343,18 +343,12 @@ extension AudioDecoder {
                 quietWindowMinFillMs = .infinity
             } else if learnedFloorMs > 0,
                       candidate < learnedFloorMs + Self.playoutCushionStepMs {
-                // FLOOR HOLD: below floor+step needs the floor to decay first.
-                // WIRED RELEASE: on a quiet, healthy resolved-wired link, walk the
-                // floor DOWN one step in step with the target instead of waiting on
-                // the ~10min floor clock (skew under-runs keep re-arming it, so it
-                // never releases). Same quiet window + near-miss evidence the target
-                // decay uses; wifi/tunnel/unknown keep the slow clock untouched.
-                // GATE (Change 3): only release while the resampler is CARRYING the
-                // skew (|integral| + drift bounded). If it's railing, the standing
-                // skew is draining the cushion - that depth is load-bearing, so hold
-                // it and let the slow floor clock govern as before.
-                if cushionLinkClass == "wired",
-                   resamplerSkewConverged {
+                // FLOOR HOLD, unless a quiet window walks floor and target down together instead of
+                // waiting ~10 min per step. Wired trusts the near-miss margin; other links need the
+                // trough two steps clear. A railing resampler means the depth is carrying skew: hold.
+                let troughClear = cushionLinkClass == "wired"
+                    || quietWindowMinFillMs >= 2 * Self.playoutCushionStepMs
+                if troughClear, resamplerSkewConverged {
                     learnedFloorMs = max(learnedFloorMs - Self.playoutCushionStepMs,
                                          Self.playoutCushionBaseMs)
                     playoutTargetMs = max(candidate, Self.playoutCushionBaseMs)
