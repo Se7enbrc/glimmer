@@ -200,7 +200,7 @@ struct RtspClientTests {
 
     private final class NullAudioSink: NativeAudioSink {
         func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 { 0 }
-        func decodeAndPlay(_ opus: [UInt8]) {}
+        func decodeAndPlay(_ opus: UnsafeRawBufferPointer) {}
         func decodeAndPlayPLC() {}
         func cleanup() {}
     }
@@ -212,7 +212,7 @@ struct RtspClientTests {
         private var cleanups = 0
 
         func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 { 0 }
-        func decodeAndPlay(_ opus: [UInt8]) { lock.lock(); packets.append(opus); lock.unlock() }
+        func decodeAndPlay(_ opus: UnsafeRawBufferPointer) { lock.lock(); packets.append(Array(opus)); lock.unlock() }
         func decodeAndPlayPLC() {}
         func cleanup() { lock.lock(); cleanups += 1; lock.unlock() }
         func recordedPackets() -> [[UInt8]] { lock.lock(); defer { lock.unlock() }; return packets }
@@ -309,7 +309,7 @@ struct RtspClientTests {
             finishInitialization.wait()
             return 0
         }
-        func decodeAndPlay(_ opus: [UInt8]) {}
+        func decodeAndPlay(_ opus: UnsafeRawBufferPointer) {}
         func decodeAndPlayPLC() {}
         func cleanup() { lock.lock(); cleanups += 1; lock.unlock() }
         func cleanupCount() -> Int { lock.lock(); defer { lock.unlock() }; return cleanups }
@@ -386,14 +386,18 @@ struct RtspClientTests {
     func encryptedAudioDecryptsToTheOpusBytes(length: Int) throws {
         // keyId + seq wraps past UInt32.max, as the host's u32 add does.
         let ivId: [UInt8] = [0xFF, 0xFF, 0xFF, 0xF0] + [UInt8](repeating: 0, count: 12)
+        let sink = RecordingAudioSink()
         let receiver = RtpAudioReceiver(
             host: "127.0.0.1", audioPort: 48000, pingPayload: [],
             audioPacketDuration: 5, opusConfig: RtspHandshakeResult.defaultOpusConfig,
             audioConfig: 0, audioEncryption: true, aesKey: Self.key, aesIvId: ivId,
-            sink: NullAudioSink())
+            sink: sink)
         let opus = (0..<length).map { UInt8(truncatingIfNeeded: $0 &* 7) }
         let seq: UInt16 = 0x0123
         let ciphertext = try #require(Self.hostEncrypt(opus, seq: seq, keyId: 0xFFFF_FFF0))
-        #expect(receiver.decryptCbc(ciphertext, sequenceNumber: seq) == opus)
+        // Through the hand-off: the payload is read in place, after the 12-byte RTP header.
+        receiver.decodePacket(Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: seq,
+                                                 timestamp: 0, payload: ciphertext))
+        #expect(sink.recordedPackets() == [opus])
     }
 }

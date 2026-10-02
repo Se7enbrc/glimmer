@@ -29,7 +29,8 @@ extension RtpAudioReceiver {
         AudioVideoSkewStore.shared.noteAudioScheduled(
             rtp: UInt32(packet[4]) << 24 | UInt32(packet[5]) << 16
                 | UInt32(packet[6]) << 8 | UInt32(packet[7]))
-        let payload = Array(packet[RtpAudioQueue.fixedRtpHeaderSize...])
+        // A slice, not a copy: the sink reads it in place.
+        let payload = packet[RtpAudioQueue.fixedRtpHeaderSize...]
 
         if audioEncryption {
             // The host's seq lives in the assembled header (host built it BE).
@@ -42,16 +43,16 @@ extension RtpAudioReceiver {
                 }
                 return
             }
-            sink?.decodeAndPlay(opus)
+            opus.withUnsafeBytes { sink?.decodeAndPlay($0) }
         } else {
-            sink?.decodeAndPlay(payload)
+            payload.withUnsafeBytes { sink?.decodeAndPlay($0) }
         }
     }
 
     /// AES-128-CBC decrypt one audio payload (AudioStream.c:178-219) with remoteInputAesKey
     /// and IV = BE32(avRiKeyId &+ seq) plus 12 zero bytes. Strips the host's PKCS7 padding
     /// (Sunshine's cbc_t) so opus never sees it. Returns nil on failure.
-    func decryptCbc(_ ciphertext: [UInt8], sequenceNumber seq: UInt16) -> [UInt8]? {
+    func decryptCbc(_ ciphertext: ArraySlice<UInt8>, sequenceNumber seq: UInt16) -> [UInt8]? {
         guard aesKey.count == 16, !ciphertext.isEmpty else { return nil }
 
         // IV first 4 bytes = BE32(avRiKeyId &+ seq); remaining 12 bytes zero.
@@ -69,7 +70,7 @@ extension RtpAudioReceiver {
 /// AES-128-CBC via CommonCrypto with PKCS7 padding removal, the host's audio
 /// cipher (moonlight's OpenSSL/mbedTLS decrypt strips the same padding).
 private enum AesCbc {
-    static func decryptPkcs7(_ ciphertext: [UInt8], key: [UInt8], iv: [UInt8]) -> [UInt8]? {
+    static func decryptPkcs7(_ ciphertext: ArraySlice<UInt8>, key: [UInt8], iv: [UInt8]) -> [UInt8]? {
         guard key.count == kCCKeySizeAES128, iv.count == kCCBlockSizeAES128 else { return nil }
         // One spare block, like the C's ROUND_TO_PKCS7_PADDED_LEN buffer.
         let outCapacity = ciphertext.count + kCCBlockSizeAES128
@@ -91,7 +92,8 @@ private enum AesCbc {
                 }
             }
         }
-        guard status == kCCSuccess else { return nil }
-        return Array(out[0..<outMoved])
+        guard status == kCCSuccess, outMoved <= outCapacity else { return nil }
+        out.removeLast(outCapacity - outMoved)   // in place: no second buffer
+        return out
     }
 }

@@ -41,38 +41,30 @@ extension AudioDecoder {
     @discardableResult
     private func decodeOneFrame(decoder: OpusDecoder, fmt: AVAudioFormat, packet: UnsafeRawBufferPointer?) -> Bool {
         let frameCount = AVAudioFrameCount(samplesPerFrame)
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frameCount) else { return false }
+        guard let pcm = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frameCount),
+              let channelData = pcm.floatChannelData else { return false }
 
-        // The decoder writes interleaved float; the player's format is non-interleaved, so decode into a
-        // scratch and demux into channelData[i].
-        var interleaved = [Float](repeating: 0, count: samplesPerFrame * channelCount)
-        let decoded = interleaved.withUnsafeMutableBufferPointer { scratch in
-            scratch.baseAddress.map { decoder.decodeOrConceal(packet, into: $0) } ?? 0
+        // The decoder writes interleaved float; the player's format is non-interleaved, so decode into the
+        // scratch and demux into channelData[i]. 7.1's reorder swaps surround pairs into AVAudio's layout.
+        let channels = channelCount
+        let reorder = outputReorder
+        if decodeScratch.count != samplesPerFrame * channels {
+            decodeScratch = [Float](repeating: 0, count: samplesPerFrame * channels)
+        }
+        let decoded = decodeScratch.withUnsafeMutableBufferPointer { scratch -> Int in
+            guard let interleaved = scratch.baseAddress else { return 0 }
+            let frames = decoder.decodeOrConceal(packet, into: interleaved)
+            for source in 0..<channels {
+                let dst = channelData[reorder?[source] ?? source]
+                for i in 0..<frames { dst[i] = interleaved[i * channels + source] }
+            }
+            return frames
         }
         guard decoded > 0 else {
             // A loss, or a packet that won't decode, before any good packet: nothing to play.
             return false
         }
         pcm.frameLength = AVAudioFrameCount(decoded)
-
-        guard let channelData = pcm.floatChannelData else { return false }
-        if let reorder = outputReorder {
-            // 7.1 path - swap surround pairs into AVAudio's expected layout.
-            for srcChannel in 0..<channelCount {
-                let dstChannel = reorder[srcChannel]
-                let dst = channelData[dstChannel]
-                for i in 0..<Int(decoded) {
-                    dst[i] = interleaved[i * channelCount + srcChannel]
-                }
-            }
-        } else {
-            for channel in 0..<channelCount {
-                let dst = channelData[channel]
-                for i in 0..<Int(decoded) {
-                    dst[i] = interleaved[i * channelCount + channel]
-                }
-            }
-        }
 
         // P1 AUDIO meter: account this buffer for the buffer-fill / under-run /
         // over-run / A/V-drift signals. Two backlog guards run first, both dropping
@@ -132,9 +124,9 @@ extension AudioDecoder: NativeAudioSink {
             mapping: opus.mapping)
     }
 
-    public func decodeAndPlay(_ opus: [UInt8]) {
+    public func decodeAndPlay(_ opus: UnsafeRawBufferPointer) {
         guard !opus.isEmpty else { decodeAndPlayPLC(); return }
-        opus.withUnsafeBytes { decodeCore($0) }
+        decodeCore(opus)
     }
 
     public func decodeAndPlayPLC() {
