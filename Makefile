@@ -50,8 +50,6 @@ INSTRUMENTS_DIR := $(HOME)/Library/Developer/Xcode/Instruments
 # fall back to adhoc (local dev keeps working). Override on the CLI if needed.
 DEVELOPER_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null | \
                  sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
-# Team ID = the 10-char code in the identity's trailing parens, e.g. 5T7M4RH3F8.
-TEAM_ID      := $(shell printf '%s' '$(DEVELOPER_ID)' | sed -n 's/.*(\([A-Z0-9]\{10\}\))$$/\1/p')
 # notarytool keychain profile name (created by `make setup-notary`).
 NOTARY_PROFILE  ?= glimmer-notary
 # Signing credentials file - the ONE secret store the release pipeline reads.
@@ -371,29 +369,22 @@ codesign-teardown:
 
 # --- Notarization / distribution -------------------------------------------
 
-# One-time setup: store the Apple ID app-specific password as a notarytool
-# credential profile IN THE DEDICATED SIGNING KEYCHAIN (--keychain). The default
-# would be the login keychain, which is locked in SSH/cron/CI sessions - the
-# dedicated keychain is the one ensure-signing already knows how to unlock from
-# the credentials file, so `notarytool submit` works from any session. Reads
-# APPLE_ID / APPLE_APP_PASSWORD (+ optional APPLE_TEAM_ID) from the credentials
-# file. Re-run only if the app-specific password rotates (edit the creds file
-# first). Requires `make codesign-setup` to have created the keychain.
+# Store the App Store Connect API key as the notary profile, in the signing
+# keychain so any session can read it. Unlike an app-specific password, the key
+# survives Apple ID password changes. Re-run after replacing it; validates online.
 setup-notary:
 	@echo "▶ Storing notary profile '$(NOTARY_PROFILE)' in the signing keychain..."
 	@set -eu; \
 	test -f "$(SIGN_KEYCHAIN)" || { echo "ERR: no signing keychain - run 'make codesign-setup' first (the profile lives there)" >&2; exit 1; }; \
-	$(CREDS) missing APPLE_ID APPLE_APP_PASSWORD SIGN_KEYCHAIN_PASSWORD \
+	$(CREDS) missing NOTARY_KEY_PATH NOTARY_KEY_ID NOTARY_ISSUER_ID SIGN_KEYCHAIN_PASSWORD \
 		|| { echo "  fill those in ($$($(CREDS) path)), then re-run - 'make dist' runs this automatically" >&2; exit 1; }; \
-	APPLE_ID="$$($(CREDS) get APPLE_ID)"; \
-	APP_PW="$$($(CREDS) get APPLE_APP_PASSWORD)"; \
-	TEAM="$$($(CREDS) get APPLE_TEAM_ID --optional)"; \
-	[ -n "$$TEAM" ] || TEAM='$(TEAM_ID)'; \
-	[ -n "$$TEAM" ] || { echo "ERR: no team id - set APPLE_TEAM_ID in the creds file (no Developer ID cert to derive it from)" >&2; exit 1; }; \
-	KCPW="$$($(CREDS) get SIGN_KEYCHAIN_PASSWORD)"; \
-	security unlock-keychain -p "$$KCPW" "$(SIGN_KEYCHAIN)"; \
+	KEY="$$($(CREDS) get NOTARY_KEY_PATH)"; \
+	test -s "$$KEY" || { echo "ERR: NOTARY_KEY_PATH '$$KEY' missing or empty" >&2; exit 1; }; \
+	KEY_ID="$$($(CREDS) get NOTARY_KEY_ID)"; \
+	ISSUER="$$($(CREDS) get NOTARY_ISSUER_ID)"; \
+	security unlock-keychain -p "$$($(CREDS) get SIGN_KEYCHAIN_PASSWORD)" "$(SIGN_KEYCHAIN)"; \
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" \
-		--apple-id "$$APPLE_ID" --team-id "$$TEAM" --password "$$APP_PW" \
+		--key "$$KEY" --key-id "$$KEY_ID" --issuer "$$ISSUER" \
 		--keychain "$(SIGN_KEYCHAIN)"; \
 	echo "  ✓ notary profile stored (dedicated keychain - readable from any session)"
 
@@ -447,37 +438,28 @@ dmg:
 dmg-background:
 	@scripts/generate-dmg-background.swift
 
-# Fail-fast gate for `make dist`: verify every non-interactive ingredient
-# BEFORE the long Release build, so a missing cert/creds/profile surfaces in
-# seconds instead of after minutes of compiling. SELF-BOOTSTRAPPING: the first
-# run writes the creds template itself and says exactly
-# which keys to fill; once the file is complete, the notary profile is stored
-# automatically and a legacy login-keychain stash migrates into the file on
-# the spot - the whole first-run flow is "make dist, fill 4 values, make dist".
-# Human input is required ONLY for the secrets themselves. All probes are
-# prompt-free: identity listing and generic-password lookups are metadata
-# searches that work on locked keychains.
+# Fail-fast gate for `make dist`: a missing cert, creds file or notary profile
+# surfaces in seconds, not after the Release build. Every probe is a metadata
+# lookup that works on a locked keychain, so it never prompts.
 preflight:
 	@set -eu; \
 	echo "▶ Preflight (release signing)..."; \
 	test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: no 'Developer ID Application' identity - run 'make codesign-setup' (docs/RELEASE.md)" >&2; exit 1; }; \
 	echo "  ✓ identity: $(DEVELOPER_ID)"; \
+	PEM="$$(security find-certificate -c "$(DEVELOPER_ID)" -p "$(SIGN_KEYCHAIN)" 2>/dev/null || true)"; \
+	if [ -n "$$PEM" ]; then \
+		echo "  ✓ valid until $$(printf '%s\n' "$$PEM" | /usr/bin/openssl x509 -noout -enddate | cut -d= -f2)"; \
+		printf '%s\n' "$$PEM" | /usr/bin/openssl x509 -noout -checkend 5184000 >/dev/null \
+			|| echo "  ⚠ the Developer ID certificate expires within 60 days - renew it (docs/RELEASE.md)" >&2; \
+	fi; \
 	if ! $(CREDS) check >/dev/null 2>&1; then \
 		$(CREDS) init >/dev/null; \
 		echo "ERR: first run - signing credentials needed." >&2; \
 		echo "  A template was just written to: $$($(CREDS) path)" >&2; \
-		echo "  Fill in: APPLE_ID APPLE_APP_PASSWORD (and P12_PATH P12_PASSWORD if the" >&2; \
-		echo "  signing keychain ever needs rebuilding), then re-run 'make dist' -" >&2; \
-		echo "  notary setup and keychain migration are automatic from there." >&2; \
+		echo "  Fill it in (docs/RELEASE.md), then re-run 'make dist'." >&2; \
 		exit 1; \
 	fi; \
 	echo "  ✓ creds file: $$($(CREDS) path)"; \
-	if ! $(CREDS) missing APPLE_ID APPLE_APP_PASSWORD 2>/dev/null; then \
-		echo "  ▶ fetching missing keys from 1Password (approve the prompt)..."; \
-		$(CREDS) fill-from-op || true; \
-		$(CREDS) missing APPLE_ID APPLE_APP_PASSWORD \
-			|| { echo "  fill those in (or set OP_SOURCE - see the template), then re-run 'make dist'" >&2; exit 1; }; \
-	fi; \
 	if ! $(CREDS) get SIGN_KEYCHAIN_PASSWORD --optional | grep -q . ; then \
 		if KCPW="$$(security find-generic-password -a "$(USER)" -s glimmer-signing-kc-pw -w \
 				"$$HOME/Library/Keychains/login.keychain-db" 2>/dev/null)"; then \
@@ -488,6 +470,8 @@ preflight:
 	if ! security find-generic-password -s com.apple.gke.notary.tool >/dev/null 2>&1 \
 		&& ! security dump-keychain "$(SIGN_KEYCHAIN)" 2>/dev/null | grep -q notary; then \
 		echo "  ▶ no notary profile yet - storing it now (automatic setup-notary)..."; \
+		$(CREDS) missing NOTARY_KEY_PATH NOTARY_KEY_ID NOTARY_ISSUER_ID 2>/dev/null \
+			|| $(CREDS) fill-from-op || true; \
 		$(MAKE) --no-print-directory setup-notary; \
 	fi; \
 	echo "  ✓ notary profile present"
