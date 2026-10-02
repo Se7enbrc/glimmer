@@ -252,6 +252,8 @@ Rules:
   - `StreamBridgeContext` (the receive-thread callback target).
 
 XPC lifecycle tests use a live anonymous listener and assert request outcomes.
+Bootstrap the listener with an untimed native request before exercising a
+client's request deadline; resuming the listener does not prove it is ready.
 Invalidation handlers run on Foundation's message-handling queue; their delivery
 time is not the connection's invalidation time.
 

@@ -152,6 +152,12 @@ struct HelperClientTests {
             withExtendedLifetime(delegate) {}
         }
         let endpoint = listener.endpoint
+        let bootstrap = HelperTestConnection(value: NSXPCConnection(listenerEndpoint: endpoint))
+        bootstrap.value.remoteObjectInterface = NSXPCInterface(with: Glimmer.GlimmerHelperProtocol.self)
+        bootstrap.value.resume()
+        defer { bootstrap.value.invalidate() }
+        // Listener startup is not part of the request deadline this test exercises.
+        try #require(await Self.ping(bootstrap) == .reply("test"))
         let client = HelperClient(makeConnection: {
             let connection = NSXPCConnection(listenerEndpoint: endpoint)
             let probe = HelperTestConnection(value: connection)
@@ -240,8 +246,7 @@ struct HelperClientTests {
     }
 }
 
-// Only HelperClient configures or invalidates the connection; probes run after its call returns.
-// Foundation serializes proxy messages on the connection's message-handling queue.
+// Configuration and invalidation never overlap a probe; Foundation owns message-queue synchronisation.
 private struct HelperTestConnection: @unchecked Sendable {
     let value: NSXPCConnection
 }
