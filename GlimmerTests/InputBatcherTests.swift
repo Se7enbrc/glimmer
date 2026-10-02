@@ -91,6 +91,30 @@ struct InputBatcherTests {
         #expect(try await Self.waitForMotion(channel, dx: 180, dy: -60))
     }
 
+    private static func waitForPayload(_ channel: EnetControlChannel, _ expected: [UInt8]) async throws -> Bool {
+        for _ in 0..<500 {
+            if try sentPayloads(channel).contains(expected) { return true }
+            try await Task.sleep(for: .milliseconds(4))
+        }
+        return false
+    }
+
+    /// A pad's held stick reaches the wire on the timer, and a press after it carries the same axes.
+    @Test func controllerStateReachesTheWire() async throws {
+        let channel = try Self.makeChannel(backlogged: false)
+        let batcher = InputBatcher(enet: channel)
+        defer { batcher.stop() }
+        let held = GamepadAnalog(leftTrigger: 0, rightTrigger: 40, leftStickX: 12_000, leftStickY: -3_000,
+                                 rightStickX: 0, rightStickY: 0)
+        _ = batcher.updateController(num: 0, mask: 1, buttons: 0, analog: held)
+        #expect(try await Self.waitForPayload(
+            channel, InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: held)))
+        try await Task.sleep(for: .milliseconds(20))
+        _ = batcher.updateController(num: 0, mask: 1, buttons: 0x1000, analog: held)
+        #expect(try await Self.waitForPayload(
+            channel, InputEncoder.multiController(num: 0, mask: 1, buttons: 0x1000, analog: held)))
+    }
+
     @Test func clickFollowsEveryEarlierMove() throws {
         let channel = try Self.makeChannel(backlogged: false)
         let batcher = InputBatcher(enet: channel)
