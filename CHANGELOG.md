@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.10.3 - Unreleased
+
+A PC that answered the launch but then went quiet could leave Glimmer on
+"Connecting…" until you cancelled. Each step of the connection now gives up
+after ten seconds and tells you the PC couldn't be reached.
+
+When a PC falls asleep mid-stream and Glimmer can't get it back, the banner now
+says it couldn't reach the PC and offers Wake and Connect, instead of "ended
+unexpectedly" and Try Again. Every way a stream can fail to start or end on its
+own now says the one thing to do next, including Sunshine stopping the stream
+for protected content.
+
+A weak remote link lowers the quality to keep the picture moving; that lowering
+is no longer for the rest of the session. Moving to another network restores the
+full quality on the next reconnect, and after five clean minutes at the lower
+quality Glimmer steps it back up under a short "Connection improved" hold.
+
 ## 2026.10.2 - 2026-10-02
 
 Some H.264 and HEVC streams connected but never showed a picture, then ended
