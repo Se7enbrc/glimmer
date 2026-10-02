@@ -2,6 +2,17 @@
 
 ## 2026.10.3 - Unreleased
 
+Glimmer offers its Wi-Fi stutter protection the first time it opens on every
+Mac, whatever the network, and asks again each launch until it's on or you
+decline it for good. A MacBook first opened on Ethernet used to never see it.
+
+The Stream menu now offers the same action as the launcher and the menu bar:
+Back to Stream, Wake and Connect, Stop Waiting or Pair Again…, instead of a
+greyed-out Stream. While a stream is hidden, its app button reads "Back to
+Stream". Resolutions read the way players say them (4K, 1440p, 1080p) or as
+their size, never as a Mac model name, and the empty "Glimmer Help" item is
+gone.
+
 A PC that answered the launch but then went quiet could leave Glimmer on
 "Connecting…" until you cancelled. Each step of the connection now gives up
 after ten seconds and tells you the PC couldn't be reached.
@@ -16,6 +27,20 @@ A weak remote link lowers the quality to keep the picture moving; that lowering
 is no longer for the rest of the session. Moving to another network restores the
 full quality on the next reconnect, and after five clean minutes at the lower
 quality Glimmer steps it back up under a short "Connection improved" hold.
+
+After a burst of packet loss, Glimmer asks the PC for a fresh picture as soon as
+the missing piece can't be rebuilt, rather than a frame later. Steady streams
+can reach the screen a refresh sooner, and a short burst of frames no longer
+leaves every later frame waiting an extra refresh.
+
+A damaged audio packet is smoothed over instead of leaving a gap, one stray
+packet can no longer switch off audio repair for the rest of a stream, and the
+extra audio delay a stutter adds on Wi-Fi settles back down sooner. An idle
+stream no longer wakes the Mac a thousand times a second to check for input.
+
+The session log and telemetry files no longer contain your PC's address or the
+PC's and Mac's names, which appear as short codes instead, and Copy in the
+Diagnostics log copies lines the same way. They're safe to attach to an issue.
 
 ## 2026.10.2 - 2026-10-02
 
