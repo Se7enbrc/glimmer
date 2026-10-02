@@ -2,6 +2,7 @@
 
 import AVFoundation
 import CoreMedia
+import QuartzCore
 import os
 
 extension FramePacer {
@@ -9,7 +10,8 @@ extension FramePacer {
     // MARK: - Submit (decode queue)
 
     /// Queue in presentation order; hidden windows retain only the newest frame.
-    /// Presentation happens on the next due vsync, except during warm handover.
+    /// Presentation happens on the next due vsync, except during warm handover and at rest,
+    /// where a frame the cadence gate already calls due goes out from here.
     func submit(_ sampleBuffer: CMSampleBuffer, hostPTS: CMTime) {
         let ptsSeconds = hostPTS.isValid ? CMTimeGetSeconds(hostPTS) : Double.nan
         var droppedStale: CMSampleBuffer?
@@ -26,6 +28,14 @@ extension FramePacer {
         if tickDeficit.warmingUp && !presentSuppressed {
             lock.unlock()
             presentWarmHandoverFrame(entry)
+            return
+        }
+
+        // At rest a due frame waited for the next tick plus a queue hop: up to a vsync of
+        // output_to_present for nothing. The gate still spaces presents one interval apart.
+        if let vsync = passthroughVsyncLocked() {
+            lock.unlock()
+            presentGateRelease(entry, vsyncInterval: vsync)
             return
         }
 
@@ -67,6 +77,37 @@ extension FramePacer {
                 "PacerOverflowDrop",
                 "depth=\(FramePacer.maxQueuedFrames, privacy: .public)")
         }
+    }
+
+    /// At rest (target 1, nothing queued, ticks owning the release, no gap recovery), decide
+    /// whether the cadence gate calls a frame submitted now due on its next scanout. If so,
+    /// claim that scanout as the present time and return the vsync interval. Under `lock`.
+    private func passthroughVsyncLocked() -> CFTimeInterval? {
+        guard !presentSuppressed, queue.isEmpty,
+              adaptiveDepth.adaptiveTargetDepth == FramePacer.targetDepth,
+              !tickDeficit.deficitModeActive, !tickDeficit.floorAssistActive,
+              lastPresentMediaTime.isFinite, liveness.lastTickTargetMediaTime.isFinite else { return nil }
+        let vsync = refreshTelemetry.lastRefreshIntervalSeconds
+        let hostNow = CFAbsoluteTimeGetCurrent()
+        guard vsync.isFinite, vsync > 0, !inGapRecoveryLocked(now: hostNow) else { return nil }
+        let scanout = Self.nextScanout(
+            now: CACurrentMediaTime(), lastTickTarget: liveness.lastTickTargetMediaTime, vsync: vsync)
+        // The tick gate's test (interval minus half a vsync); a timebase jump is left to the tick.
+        let sinceLast = scanout - lastPresentMediaTime
+        guard sinceLast >= 0, sinceLast <= 1.0,
+              sinceLast >= streamFrameIntervalSeconds - vsync * 0.5 else { return nil }
+        lastPresentMediaTime = scanout
+        tickDeficit.tickScanoutMediaTime = scanout
+        updateGapRecoveryLocked(presented: true, empty: true, now: hostNow)
+        return vsync
+    }
+
+    /// The panel vsync a frame released at `now` lands on: the last tick's target, or the first
+    /// grid step past `now` when the next tick is late. Pure, so the test can pin it.
+    static func nextScanout(now: CFTimeInterval, lastTickTarget: CFTimeInterval, vsync: CFTimeInterval)
+        -> CFTimeInterval {
+        guard now > lastTickTarget else { return lastTickTarget }
+        return lastTickTarget + vsync * ((now - lastTickTarget) / vsync).rounded(.up)
     }
 
     // The caller holds the queue lock so epoch and cadence advance with the entry.

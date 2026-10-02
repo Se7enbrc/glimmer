@@ -62,6 +62,9 @@ extension FramePacer {
         /// A 240Hz link ticks every ~4.17ms; if this stops advancing the link has
         /// died (a same-screen HDR/VRR/mode switch that posts no didChangeScreen).
         var lastTickHostTime: CFTimeInterval = .nan
+        /// `CADisplayLink.targetTimestamp` of the most recent tick: the vsync grid a submit-time
+        /// release predicts its scanout on. `.nan` until the first tick and across a link rebind.
+        var lastTickTargetMediaTime: CFTimeInterval = .nan
         /// `CFAbsoluteTimeGetCurrent()` when a frame last actually reached the
         /// renderer (`willPresent` returned true). If this stops advancing while
         /// the queue is non-empty, the present path is wedged.

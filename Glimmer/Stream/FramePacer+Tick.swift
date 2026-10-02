@@ -101,6 +101,7 @@ extension FramePacer {
         lock.lock()
         let hostNow = CFAbsoluteTimeGetCurrent()
         liveness.lastTickHostTime = hostNow
+        liveness.lastTickTargetMediaTime = target
         liveness.tickCount &+= 1
         if realizedInterval.isFinite, realizedInterval > 0,
            realizedInterval <= Self.maxRealizedTickDeltaSeconds {
