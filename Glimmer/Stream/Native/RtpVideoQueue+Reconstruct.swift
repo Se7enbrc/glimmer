@@ -3,6 +3,36 @@
 //  FEC reconstruction and frame submission on the single RTP receive thread.
 import Foundation
 
+/// A run of frames that needed Reed-Solomon recovery, summarized once the run
+/// has been quiet for a while instead of logging a line per frame.
+struct FecRecoveryEpisode {
+    private(set) var frames = 0
+    private var shards = 0
+    private var minMargin = Int.max
+    private var firstFrame: UInt32 = 0
+    private var startUs: UInt64 = 0
+    private var lastUs: UInt64 = 0
+
+    mutating func note(frame: UInt32, shards rebuilt: Int, margin: Int, nowUs: UInt64) {
+        if frames == 0 {
+            firstFrame = frame
+            startUs = nowUs
+        }
+        frames += 1
+        shards += rebuilt
+        minMargin = min(minMargin, margin)
+        lastUs = nowUs
+    }
+
+    /// The summary once no frame has needed recovery for `idleUs`; nil while the run is live.
+    mutating func summaryIfIdle(nowUs: UInt64, idleUs: UInt64) -> String? {
+        guard frames > 0, nowUs &- lastUs >= idleUs else { return nil }
+        defer { self = FecRecoveryEpisode() }
+        return "\(frames) frames from \(firstFrame), \(shards) shards rebuilt, "
+            + "worst parity margin \(minMargin), over \((lastUs &- startUs) / 1000) ms"
+    }
+}
+
 extension RtpVideoQueue {
 
     // MARK: - reconstructFrame (c:193-463). Returns 0 if complete.
@@ -121,22 +151,17 @@ extension RtpVideoQueue {
         return (shards, marks)
     }
 
-    /// Latch and log Reed-Solomon recovery for the periodic recovery metric.
+    /// Count this frame's recovery for the metrics and the open episode. The first
+    /// recovery of a stream logs on its own; later ones log as an episode summary.
     private func logFecRecovery() {
-        // This frame needed Reed-Solomon recovery - count it once for the
-        // periodic FEC-recovery-rate metric (latched; tallied at submit time).
         currentFrameNeededFec = true
         let recovered = bufferDataPackets - receivedDataPackets
-        // FEC observability (read-only): track the worst parity headroom this window
-        // - how many spare parity shards remained after this frame's deficit.
-        // Published + reset in maybeLogMetrics. Pure book-keeping, no control effect.
-        windowMinParityMargin = min(windowMinParityMargin, bufferParityPackets - recovered)
+        let margin = bufferParityPackets - recovered
+        windowMinParityMargin = min(windowMinParityMargin, margin)
+        fecEpisode.note(frame: currentFrameNumber, shards: recovered, margin: margin, nowUs: bufferFirstRecvTimeUs)
         if !loggedFirstFecRecovery {
             loggedFirstFecRecovery = true
             Diag.notice("NativeVideo first FEC recovery: \(recovered) shards, frame \(currentFrameNumber)", Self.cat)
-        } else {
-            Diag.info("NativeVideo FEC recovery: \(recovered) shards, frame \(currentFrameNumber) "
-                + "block \(multiFecCurrentBlockNumber)", Self.cat)
         }
     }
 

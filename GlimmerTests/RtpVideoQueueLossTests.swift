@@ -145,6 +145,19 @@ struct RtpVideoQueueLossTests {
         #expect(geometryLines() == before + 1)
     }
 
+    /// A run of recovered frames logs once, after it has been quiet for the idle time.
+    @Test func recoveryEpisodeSummarizesOnceIdle() {
+        var episode = FecRecoveryEpisode()
+        #expect(episode.summaryIfIdle(nowUs: 5_000_000, idleUs: 2_000_000) == nil)
+        episode.note(frame: 40, shards: 2, margin: 1, nowUs: 1_000_000)
+        episode.note(frame: 41, shards: 1, margin: 2, nowUs: 1_100_000)
+        episode.note(frame: 45, shards: 3, margin: 0, nowUs: 1_500_000)
+        #expect(episode.summaryIfIdle(nowUs: 3_400_000, idleUs: 2_000_000) == nil)
+        #expect(episode.summaryIfIdle(nowUs: 3_500_000, idleUs: 2_000_000)
+            == "3 frames from 40, 6 shards rebuilt, worst parity margin 0, over 500 ms")
+        #expect(episode.frames == 0)
+    }
+
     /// Dropping a frame for a lost FEC block must not silence the report for the frame after it.
     @Test func lossAfterADroppedBlockIsStillReported() {
         let queue = makeQueue()

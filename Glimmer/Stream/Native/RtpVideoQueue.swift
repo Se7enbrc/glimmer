@@ -103,6 +103,8 @@ final class RtpVideoQueue {
 
     var loggedFirstFecRecovery = false
     var loggedBadFecGeometry = false
+    /// The open run of FEC-recovered frames; summarized from maybeLogMetrics once idle.
+    var fecEpisode = FecRecoveryEpisode()
     /// Cauchy matrices by shard geometry: consecutive frames mostly share one, so a
     /// recovery reuses it instead of rebuilding it. Cleared at the cap.
     var reedSolomonCache: [Int: ReedSolomon] = [:]
@@ -408,6 +410,9 @@ final class RtpVideoQueue {
         // keep it for live debugging; the file sink takes INFO+ by default.
         Diag.debug("NativeVideo METRIC recv-jitter=\(jitterMs)ms fec-recovery-rate=\(fecPct)% "
             + "(\(fecRecoveredFramesInWindow)/\(framesInWindow) frames) pkts/s=\(ppsStr)", Self.cat)
+        if let summary = fecEpisode.summaryIfIdle(nowUs: nowUs, idleUs: Self.metricsWindowUs) {
+            Diag.info("NativeVideo FEC recovery episode: \(summary)", Self.cat)
+        }
 
         // Feed the opt-in telemetry exporter. Monotonic window deltas (so the
         // exporter derives pkts/s + fec-recovery-rate from total-deltas) plus the
