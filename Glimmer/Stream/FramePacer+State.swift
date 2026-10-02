@@ -25,28 +25,14 @@ extension FramePacer {
 
     // MARK: - Adaptive jitter buffer + reconciler-target state
     //
-    // THREAD ISOLATION: the reconciler's desired depth comes from
-    // EnvSignalController's published `headroomLevel`. To honor never-hold-two-
-    // locks, `refreshReconciledTargetLocked()` PULLS it into this plain field
-    // OUTSIDE the pacer lock; the grow/decay math (under the pacer lock) reads only
-    // the field, never the controller. Cached `generation` no-ops the refresh when
-    // unchanged. Reconciler OFF: stays at `targetDepth`; the self-decide jitter path
-    // drives the target.
+    // THREAD ISOLATION: `refreshReconciledTarget()` pulls EnvSignalController's published
+    // headroom level into `reconciledTargetDepth` OUTSIDE the pacer lock (never hold both);
+    // the grow/decay math under the pacer lock reads only that field, never the controller.
 
     /// Adaptive target-depth + reconciler-snapshot state (guarded by `lock`).
     struct AdaptiveDepthState {
-        /// The most recent SMOOTHED RFC-3550 reorder jitter (ms) measured by the RTP
-        /// receive path (`RtpVideoQueue` → `TelemetryCounters.recvJitterMs`), refreshed
-        /// each tick from the shared gauge. This is the signal that drives grow/decay
-        /// - 0.09ms on a clean wired link, ~22ms on lossy wifi - read instead of the
-        /// old wall-clock submit-spacing estimator (which was dominated by VT/FEC
-        /// drain unevenness on a clean link and falsely pinned the target at the cap).
-        var measuredJitterMs: Double = 0.0
-        /// The current adaptive target depth. Rests at the baseline (1) on a clean
-        /// link, grows by at most one frame per call when SUSTAINED measured jitter
-        /// (above the dead-zone) demands more, and decays back to 1 during clean
-        /// running. Read on the pacing queue (trim + due-gate floor); written on the
-        /// pacing queue (decay/grow) under `lock`.
+        /// The current adaptive target depth: 1 at rest, grown one frame per 2 s window tick
+        /// toward `reconciledTargetDepth`, decayed one frame per `targetShrinkInterval`.
         var adaptiveTargetDepth: Int = FramePacer.targetDepth
         /// Last time (`CFAbsoluteTimeGetCurrent()`) the adaptive target shrank by a
         /// frame, so the decay is rate-limited to one frame per `targetShrinkInterval`.

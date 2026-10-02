@@ -1,21 +1,18 @@
 //
 //  EnvSignalController+Evidence.swift
 //
-//  The EVIDENCE half of the env-signal layer: the ~1Hz capture-tick feed,
-//  the ~2s window fold (gap-counter deltas + worst radio/jitter readings),
+//  The EVIDENCE half of the env-signal layer: the 2 s session-tick feed,
+//  the window fold (gap-counter deltas + worst radio/jitter readings),
 //  the window classifier and the sustained/hysteresis state machine it
 //  advances, the RECONCILE phase that publishes the shared jitter->headroom
 //  decision, the session-relative RSSI/tx-rate percentiles, and the
-//  per-session reset. Split out of EnvSignalController.swift (pure move) to
+//  session lifecycle. Split out of EnvSignalController.swift (pure move) to
 //  keep each unit under the length limit; see that file for the full
 //  contract, the stored evidence state, and the lock-guarded outputs.
 //
-//  THREADING is unchanged: everything here runs on the telemetry exporter's
-//  serial workQueue (the only `observeCaptureTick` caller, and exactly one
-//  exporter exists at a time), so the evidence state stays queue-confined.
-//  Only the published outputs - state, stream link, feed freshness, and the
-//  reconciler decision - are touched under the controller's `lock`, and the
-//  reconciler never calls into its consumers while holding it.
+//  THREADING: everything here runs on the controller's `feedQueue` (StreamSession's 2 s tick posts
+//  there), so the evidence state stays queue-confined. Only the published outputs are touched
+//  under the controller's `lock`, and the reconciler never calls into its consumers holding it.
 //
 
 import Foundation
@@ -23,11 +20,19 @@ import Synchronization
 
 extension EnvSignalController {
 
-    // MARK: - Feed (one exporter capture tick)
+    // MARK: - Feed (one 2 s session tick)
 
-    /// Fold one ~1Hz capture tick into the evidence layer and publish the
-    /// route + freshness for the cadence decision. Exporter workQueue ONLY.
-    /// NWPathMonitor participates through `route`: the probe re-probes on
+    /// One tick from StreamSession's present-metric timer. Samples the route and the radio on
+    /// `feedQueue`, so the main actor never waits on CoreWLAN. No-op between sessions.
+    func observeStreamTick() {
+        guard let probe = routeProbe else { return }
+        feedQueue.async { [self] in
+            observeCaptureTick(route: probe.current(), wifi: radio.sample())
+        }
+    }
+
+    /// Fold one 2 s tick into the evidence layer and publish the route + freshness for the
+    /// cadence decision. `feedQueue` only (tests call it directly). The probe re-probes on
     /// every path change, so a mid-session undock lands here on the next tick.
     func observeCaptureTick(route: StreamRouteSnapshot?, wifi: WiFiSnapshot?) {
         let link = LinkClass(label: route?.linkLabel)
@@ -339,13 +344,22 @@ extension EnvSignalController {
 
     // MARK: - Session lifecycle
 
-    /// Reset for a fresh session: state to CLEAR, baselines/window/runs
-    /// emptied, the transition counter zeroed. Called from the exporter's
-    /// `start()` on its workQueue (the same confinement as the feed; the
-    /// first capture tick is at least a second away, so nothing races it).
-    /// No transition event is emitted - a fresh session starting at CLEAR is
-    /// a baseline, not a recovery. The ping counters reset at their own
-    /// loop-start edges instead (see the counter docs above).
+    /// Session start, once the connect edge has latched the host: a fresh route probe, then
+    /// a CLEAR state and empty baselines on `feedQueue` ahead of the first tick.
+    func beginSession() {
+        let probe = StreamRouteProbe()
+        lock.lock()
+        let previous = routeProbeValue
+        routeProbeValue = probe
+        lock.unlock()
+        previous?.stop()
+        probe.start()
+        feedQueue.async { [self] in resetForNewSession() }
+    }
+
+    /// Reset for a fresh session: state to CLEAR, baselines/window/runs emptied, the transition
+    /// counter zeroed. Runs on `feedQueue` ahead of the first tick (`beginSession`). No transition
+    /// event: a session starting at CLEAR is a baseline. Ping counters reset at their loop edges.
     func resetForNewSession() {
         lock.lock()
         stateValue = .clear
@@ -366,15 +380,17 @@ extension EnvSignalController {
         publishRestDecision()
     }
 
-    /// Withdraw the published decision when the feed stops (exporter stop):
-    /// generation 0 is "never published", so every pacer goes back to deciding
-    /// from live jitter instead of freezing on this session's last level.
+    /// Session end: stop the route probe and withdraw the published decision (generation 0 is
+    /// "never published"), so the next session's pacer starts at REST, not on a stale level.
     func endSession() {
         lock.lock()
+        let probe = routeProbeValue
+        routeProbeValue = nil
         headroomLevelValue = 0
         smoothedJitterMsValue = 0
         decisionGeneration = 0
         lock.unlock()
+        probe?.stop()
     }
 
     private func resetRuns() {

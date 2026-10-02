@@ -50,31 +50,13 @@ extension FramePacer {
     /// clean link, so the startup present-stall wedge cannot form.
     static let targetDepth = 1
 
-    /// Upper bound on the adaptive target depth under SUSTAINED MEASURED jitter.
-    /// 5 frames is the jitter ceiling for the genuine lossy-link (wifi ~22ms)
-    /// case - deep enough to absorb a real reorder-jitter envelope. Because the
-    /// floor is now 1 and grow keys off the smoothed RFC-3550 recv-jitter through
-    /// a 3ms dead-zone, this cap is ONLY ever reached under real sustained
-    /// measured jitter; a clean link never leaves depth 1. Kept under
-    /// `maxQueuedFrames` so an overflow slot remains at the cap.
+    /// Upper bound on the adaptive target depth. EnvSignalController's headroom ladder tops
+    /// out at level 3 (depth 4), so this only backstops it; kept under `maxQueuedFrames` so an
+    /// overflow slot remains at the cap.
     static let maxTargetDepth = 5
 
-    /// Milliseconds of SUSTAINED measured reorder jitter (above the dead-zone)
-    /// that buys one extra frame of buffering:
-    /// extra = ceil((jitterMs - jitterDeadZoneMs) / jitterMsPerExtraFrame).
-    static let jitterMsPerExtraFrame = 8.0
-
-    /// Dead-zone (ms) below which measured reorder jitter buys NO extra depth, so
-    /// the buffer rests at 1. Set well above the wired link's 0.31ms p95 (so a
-    /// pristine link maps to depth 1) and well below the wifi ~22ms case (so a
-    /// genuinely lossy link still grows). 0.09ms wired → extra 0 → depth 1;
-    /// sustained 22ms → extra ceil(19/8)=3 → grows toward the cap.
-    static let jitterDeadZoneMs = 3.0
-
-    /// How quickly the adaptive target shrinks back toward the baseline (depth 1)
-    /// once the link is clean: at most one frame per this many seconds of clean
-    /// running. 250ms: because the measured-jitter signal is the ~1s-smoothed
-    /// RFC-3550 metric, the depth returns to 1 within ~1s of the link clearing.
+    /// How quickly the adaptive target shrinks back to depth 1 once the published level drops:
+    /// at most one frame per this many seconds, so a stale depth is gone within ~1 s.
     static let targetShrinkInterval = 0.25
 
     /// POST-GAP LENIENCY. Consecutive empty ticks that mark a real delivery GAP

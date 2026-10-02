@@ -62,7 +62,7 @@ extension TelemetryExporter {
         extras.dualSenseHidReportsPerSecond = DualSenseHID.isEnabled ? DualSenseHID.shared.reportsPerSecond : nil
         // Stream ROUTE (stream_link/stream_if): the lock-guarded cached probe
         // value - no syscalls on this tick (re-probes run on the probe queue).
-        extras.streamRoute = route.current()
+        extras.streamRoute = route?.current()
         // Per-socket gap-event totals (video/audio/ENet × 20/50/100ms).
         extras.videoGapOver20msTotal = counters.videoGapOver20msTotal.value
         extras.videoGapOver50msTotal = counters.videoGapOver50msTotal.value
@@ -121,7 +121,7 @@ extension TelemetryExporter {
 
     /// Sample the ENV-SIGNAL state + the keepalive cadence + the
     /// per-socket pings_sent counters for this tick. Called AFTER
-    /// `observeCaptureTick` so the row carries the state the tick produced.
+    /// The state comes from the session's own 2 s feed (`EnvSignalController.observeStreamTick`).
     /// The pings/s rates derive from deltas like every other per_s field, but
     /// re-arm on a counter reset (the loops reset at their own start edges -
     /// a reconnect mid-session restarts them at zero, and a wrapped delta

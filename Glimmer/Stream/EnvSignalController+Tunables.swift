@@ -19,21 +19,6 @@ import Foundation
 
 extension EnvSignalController {
 
-    // MARK: - Reconciler kill-switch (the A/B flag)
-
-    /// When TRUE (the default) the unified LINK RECONCILER is live: this
-    /// controller publishes ONE jitter→headroom decision (`headroomLevel` +
-    /// `smoothedJitterMs`) and the FramePacer adaptive depth CONSUMES it
-    /// instead of reading `TelemetryCounters.recvJitterMs` on its own.
-    ///
-    /// When FALSE the pacer falls back to its CURRENT self-deciding
-    /// behavior, unchanged - the old code path stays reachable behind this flag,
-    /// so the build compiles to "identical to today" with the flag off. A simple
-    /// process-global flag, read on the actuators' own ticks. A compile-time
-    /// constant (`let`): there is no runtime writer, so the A/B is a flip-and-
-    /// rebuild dial - concurrency-safe by immutability, no `nonisolated(unsafe)`.
-    static let reconcilerEnabled = true
-
     // MARK: - Link class
 
     /// The stream route class. `rawValue` IS the wire/persistence label
@@ -69,9 +54,9 @@ extension EnvSignalController {
 
     // MARK: - Tunables (the sustained/hysteresis contract numbers)
 
-    /// Capture ticks folded into one evidence window (~2s at the exporter's
-    /// 1Hz - the same cadence as the RTP receive-metrics window).
-    static let ticksPerWindow = 2
+    /// Session ticks folded into one evidence window: the tick is 2 s, the cadence the RTP
+    /// receive path refreshes `recvJitterMs` on, so one tick is one window.
+    static let ticksPerWindow = 1
     /// Consecutive evidence windows before an escalation when the run carried
     /// CO-GAP evidence (~6s) - actual delivery impact earns the faster entry.
     static let escalateWindows = 3
@@ -95,10 +80,10 @@ extension EnvSignalController {
     /// (higher) relax fraction.
     static let txRateDegradeFraction = 0.5
     static let txRateRelaxFraction = 0.6
-    /// Radio samples (~seconds) before the session-relative baseline is
-    /// trusted: no radio evidence can fire in the first ~minute, so a cold
-    /// session can never escalate off an unwarmed percentile.
-    static let radioBaselineMinSamples = 60
+    /// Radio samples (2 s ticks) before the session-relative baseline is trusted: no radio
+    /// evidence can fire in the first ~minute, so a cold session never escalates off an
+    /// unwarmed percentile.
+    static let radioBaselineMinSamples = 30
 
     // MARK: - Jitter/loss window thresholds
 
@@ -141,11 +126,9 @@ extension EnvSignalController {
     /// NOT TelemetryCounters.idleGapSeconds, which is a 2s telemetry-UX edge,
     /// not a radio constant).
     static let keepaliveIdleSeconds = 1.0
-    /// How long a published stream_link stays trusted without a fresh feed.
-    /// The exporter feeds every ~1s while telemetry is on; once feeds stop
-    /// (telemetry off, session over) the route claim expires and the cadence
-    /// falls back to the validated fast dial - stale knowledge never relaxes
-    /// the countermeasure.
+    /// How long a published stream_link stays trusted without a fresh feed. The session feeds
+    /// every 2 s; once feeds stop the route claim expires and the cadence falls back to the
+    /// validated fast dial - stale knowledge never relaxes the countermeasure.
     static let routeTrustHorizonNanos: UInt64 = 30_000_000_000
     /// Wi-Fi keepalive WARM-UP window (ns), measured from the ping-loop
     /// bring-up edge (stream start or silent reconnect). For its duration the

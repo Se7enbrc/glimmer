@@ -103,17 +103,11 @@ extension VideoDecoder {
         framePacer?.screenDidChange()
     }
 
-    /// Forward the latest SMOOTHED RFC-3550 reorder jitter (ms) to the pacer so it
-    /// grows the adaptive buffer only for SUSTAINED MEASURED jitter (the lossy
-    /// wifi case) and rests at depth 1 on a clean link. Driven on the present-
-    /// metric timer's ~2s cadence (StreamSession), matching the cadence on which
-    /// `TelemetryCounters.recvJitterMs` is refreshed by the RTP receive path. The
-    /// pacer ALSO reads the shared gauge on its own tick path, so this is the
-    /// explicit, cadence-aligned grow signal rather than the sole one. No-op if
-    /// pacing isn't up. `nonisolated` so the metric timer can call without an
-    /// actor hop; `livenessSnapshot()`/`noteMeasuredJitter` are lock-guarded.
-    nonisolated func pacingNoteMeasuredJitter(_ ms: Double) {
-        framePacer?.noteMeasuredJitter(ms)
+    /// Grow the pacer's adaptive depth one step toward the level EnvSignalController publishes.
+    /// Driven by StreamSession's 2 s present-metric timer, the pacer's only grow path. No-op
+    /// while pacing is down; `nonisolated` so the timer needs no actor hop.
+    nonisolated func pacingGrowDepthTowardTarget() {
+        framePacer?.growDepthTowardTarget()
     }
 
     // MARK: - Present-path self-heal (watchdog hooks)

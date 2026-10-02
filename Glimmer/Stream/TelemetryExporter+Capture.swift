@@ -123,12 +123,8 @@ extension TelemetryExporter {
             extras.latencyRolling60s = Self.captureBaselines.latencyRolling.advance(with: histograms)
         }
 
-        // ENV-SIGNAL: fold this tick's route/radio/gap evidence
-        // into the CLEAR/CAUTION/DISTRESS state machine (transitions Diag-log
-        // and emit `env_state` events with their evidence vector; the ONLY
-        // live actuation is the conditional keepalive cadence), then carry
-        // its state + the pings_sent counters on this row.
-        EnvSignalController.shared.observeCaptureTick(route: extras.streamRoute, wifi: snap.wifi)
+        // ENV-SIGNAL state + pings_sent on this row. The state machine is fed by the session's
+        // own 2 s tick (EnvSignalController.observeStreamTick), never by this capture.
         fillEnvSignal(into: &extras, now: now)
 
         foldSessionAggregate(snap: snap, extras: extras)

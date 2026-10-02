@@ -132,20 +132,22 @@ struct FramePacerTests {
         #expect(result.forcedOverTarget)
     }
 
-    @Test func adaptiveDepthUsesSelfDecidePath() {
+    /// Depth follows the published level only: the per-tick decay never grows the buffer,
+    /// the 2 s window tick grows it one frame at a time, and decay is rate-limited.
+    @Test func adaptiveDepthGrowsOnlyOnTheWindowTick() {
         let pacer = FramePacer(stats: StatsCollector(), configuredFps: 120)
-        #expect(pacer.adaptiveDepth.reconciledDecisionGeneration == 0)
         pacer.lock.lock()
-        pacer.adaptiveDepth.measuredJitterMs = 0.09
         #expect(pacer.justifiedDepthLocked() == 1)
-        pacer.adaptiveDepth.measuredJitterMs = 22
+        pacer.adaptiveDepth.reconciledTargetDepth = 4
         #expect(pacer.justifiedDepthLocked() == 4)
-        pacer.adaptiveDepth.adaptiveTargetDepth = 1
-        pacer.bumpTargetForJitterLocked()
+        #expect(pacer.decayTargetLocked() == 1)
+        pacer.growTargetOneStepLocked()
         #expect(pacer.adaptiveDepth.adaptiveTargetDepth == 2)
+        pacer.growTargetOneStepLocked()
+        #expect(pacer.adaptiveDepth.adaptiveTargetDepth == 3)
+        #expect(pacer.decayTargetLocked() == 3)
 
-        pacer.adaptiveDepth.measuredJitterMs = 0
-        pacer.adaptiveDepth.adaptiveTargetDepth = 3
+        pacer.adaptiveDepth.reconciledTargetDepth = 1
         pacer.adaptiveDepth.lastTargetShrinkTime = CFAbsoluteTimeGetCurrent() - 0.1
         #expect(pacer.decayTargetLocked() == 3)
         pacer.adaptiveDepth.lastTargetShrinkTime = CFAbsoluteTimeGetCurrent() - 0.3

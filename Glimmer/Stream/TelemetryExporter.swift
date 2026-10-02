@@ -119,14 +119,10 @@ final class TelemetryExporter: @unchecked Sendable {
     /// only (no scan), so it can't disrupt the link.
     let wifi = WiFiTelemetry()
 
-    /// Stream-ROUTE probe: which interface the stream's packets actually
-    /// traverse (`stream_link`/`stream_if`), as opposed to the association
-    /// sampler above which describes the Wi-Fi RADIO whether or not the stream
-    /// rides it. Gate-on construction only; probes on its own utility queue
-    /// (started in `start()`, path-monitor re-probes + route_change events),
-    /// read lock-guarded once per capture tick. This field gates the env-signal
-    /// adaptive layer, so it must be the ROUTE truth, not the radio truth.
-    let route = StreamRouteProbe()
+    /// Stream-ROUTE probe (`stream_link`/`stream_if`): the interface the stream's packets
+    /// traverse, as opposed to the radio sampler above. Owned by EnvSignalController's always-on
+    /// session feed so one path monitor serves both; nil between sessions.
+    var route: StreamRouteProbe? { EnvSignalController.shared.routeProbe }
 
     /// PRESENT/DISPLAY sampler (P1): EDR-headroom trend + HDR-engaged + screen +
     /// ProMotion. Its main-actor 1Hz timer is built ONLY on the gate-on path (see
@@ -289,19 +285,12 @@ final class TelemetryExporter: @unchecked Sendable {
                     + "\"session\":\"\(self.sessionId)\","
                 self.appendNDJSON("{" + header + event.fields.joined(separator: ",") + "}")
             }
-            // Fresh ENV-SIGNAL session: state machine to CLEAR, session-relative
-            // radio baselines + evidence runs emptied. On this workQueue - the
-            // same confinement as the capture ticks that will feed it (the
-            // first of which is at least a second away, so nothing races).
-            EnvSignalController.shared.resetForNewSession()
             self.startListener()
             self.startCaptureTimer()
             // Arm the PRESENT/DISPLAY sampler (P1): a MAIN-queue 1Hz timer reading
             // EDR/HDR/screen/ProMotion. Gate-on path only (this whole exporter is),
             // so off-path it is never scheduled.
             self.display.start()
-            // Arm the stream-route probe (first sample + NWPathMonitor re-probes).
-            self.route.start()
             self.log.notice("Telemetry exporter started (session \(self.sessionId, privacy: .public))")
             let bind = self.lanBindEnabled ? "0.0.0.0" : "127.0.0.1"
             let scope = self.lanBindEnabled ? "all-interfaces" : "loopback-only"
@@ -322,9 +311,6 @@ final class TelemetryExporter: @unchecked Sendable {
             Self.eventSinkBox.withLock { $0 = nil }
             self.captureTimer?.cancel()
             self.captureTimer = nil
-            // The feed just stopped: withdraw the published decision so pacers
-            // go back to live jitter instead of this session's last level.
-            EnvSignalController.shared.endSession()
             self.listener?.cancel()
             self.listener = nil
             // Sweep still-open /metrics connections (silent/half-open peers
@@ -334,8 +320,6 @@ final class TelemetryExporter: @unchecked Sendable {
             self.connectionSlots = TelemetryConnectionSlots()
             // Stop the DISPLAY sampler's main-queue timer (idempotent).
             self.display.stop()
-            // Stop the route probe's path monitor (idempotent).
-            self.route.stop()
             // One-shot SESSION REPORT (signal 5b) - written BEFORE tearing the
             // latency tracker down so it can read the final cumulative histograms
             // for the session-wide p50/p95/p99. A glanceable scorecard per run.

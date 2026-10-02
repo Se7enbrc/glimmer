@@ -42,16 +42,9 @@
 //      between vsyncs; the adaptive trim drops the stale excess so only the
 //      freshest DUE frame presents, bounding wall-clock latency.
 //
-//  Adaptive depth - passthrough on a clean link, absorb only MEASURED jitter
-//  --------------------------------------------------------------------------
-//  The baseline target depth RESTS AT 1 frame (o2p median ~10.8ms at fps==refresh;
-//  moonlight's fixed 3-frame buffer is ~25ms) and GROWS only for genuine MEASURED
-//  jitter - the RtpVideoQueue's ~1s-smoothed RFC-3550 reorder jitter (0.09ms wired
-//  / ~22ms wifi) through a dead-zone, never wall-clock submit spacing. It DECAYS
-//  back to 1 over a ~250ms clean window; the grow-without-a-hitch hold is OFF on a
-//  clean link (target == 1). Every release also TRIMS the FIFO drop-to-newest
-//  toward `effectiveTarget + 1`. Full schedule + tuning in FramePacer+Constants.swift
-//  / FramePacer+AdaptiveDepth.swift.
+//  Adaptive depth: the target rests at 1 frame (measured output_to_present p50 3-4 ms at 240 Hz,
+//  under one vsync) and grows one frame per 2 s window toward the headroom level EnvSignalController
+//  publishes from sustained recv jitter, decaying back to 1 within ~1 s of the level dropping.
 //
 //  Code map (this type is split across same-module extension files)
 //  ----------------------------------------------------------------
@@ -68,7 +61,7 @@
 //                                    (+ the BackoffBeat/DueGateResult types).
 //    * FramePacer+Recovery.swift   - the self-heal watchdog actions + snapshots
 //                                    (+ the LivenessSnapshot/RefreshWindowSnapshot types).
-//    * FramePacer+AdaptiveDepth.swift - measured-jitter input + depth math.
+//    * FramePacer+AdaptiveDepth.swift - the 2 s window tick + depth math.
 //    * FramePacer+FrameRateRange.swift - the present-callback throttle floor.
 //    * FramePacer+TickDeficit.swift - the tick-deficit degraded mode's measured-
 //                                    rate state machine, the warm re-enable
@@ -423,7 +416,6 @@ final class FramePacer: @unchecked Sendable {
         // Reset the adaptive jitter buffer so a restart begins at the low-latency
         // baseline (depth 1) rather than inheriting a stale deepened target.
         adaptiveDepth.adaptiveTargetDepth = FramePacer.targetDepth
-        adaptiveDepth.measuredJitterMs = 0.0
         adaptiveDepth.lastTargetShrinkTime = .nan
         // Reset the reconciler snapshot so a restart begins at the REST target
         // (depth 1, generation 0) and re-pulls the live decision on its first tick.
@@ -498,10 +490,9 @@ final class FramePacer: @unchecked Sendable {
     /// `anchorCadenceBaseOnGridLocked` clear it alongside `lastPresentMediaTime`.
     var prevPresentMediaTimeForMetric: CFTimeInterval = .nan
 
-    // The pure metric helpers (`lastPresentInterPresentDelta`, `median`), the
-    // measured-jitter input (`noteMeasuredJitter`), and the adaptive target depth
-    // math (`justifiedDepthLocked`, `bumpTargetForJitterLocked`,
-    // `decayTargetLocked`) live in FramePacer+AdaptiveDepth.swift.
+    // The cadence helpers, the 2 s window tick (`growDepthTowardTarget`) and the adaptive
+    // target depth math (`justifiedDepthLocked`, `decayTargetLocked`) live in
+    // FramePacer+AdaptiveDepth.swift.
 
     // The `DisplayLinkProxy` @objc tick shim lives in FramePacer+Tick.swift with
     // the tick handler it forwards to.

@@ -2,7 +2,7 @@
 //  EnvSignalController.swift
 //
 //  The ENV-SIGNAL adaptive layer. A CLEAR/CAUTION/DISTRESS
-//  link-condition state machine fed once per telemetry capture tick (~1Hz)
+//  link-condition state machine fed once per 2 s session tick
 //  with the stream ROUTE (StreamRouteProbe - the honest stream_link, re-probed
 //  on every NWPathMonitor change), the associated-radio physics (RSSI / PHY
 //  tx-rate), and the per-socket gap-event counters. Its safety contract:
@@ -33,14 +33,9 @@
 //   * radio: RSSI ≤ session-p50 − 8dB, or tx-rate ≤ 0.5× session-p95 -
 //     armed only on a wifi stream route, only after a ~1min baseline warmup.
 //
-//  LIVE ACTUATIONS (the shadow-mode contract of the original pass is
-//  superseded): the state machine RUNS, EXPORTS (env_state /
-//  env_state_changes_total / pings_sent counters, plus an `env_state` NDJSON
-//  event with the evidence vector + a Diag NOTICE on every transition), and
-//  moves TWO dials - the conditional keepalive cadence (#1 below) and, with
-//  `reconcilerEnabled`, the unified jitter→headroom decision consumed by the
-//  FramePacer adaptive depth. Anything further stays dark; see "Future
-//  actuations".
+//  LIVE ACTUATIONS: the state machine runs every session, exports (env_state, pings_sent,
+//  an `env_state` NDJSON event + Diag NOTICE per transition) and moves two dials: the
+//  conditional keepalive cadence (#1) and the jitter→headroom level the FramePacer depth follows.
 //
 //  LIVE ACTUATION #1 - CONDITIONAL KEEPALIVE (`steadyPingInterval()`):
 //  75ms steady ping cadence only when stream_link == wifi AND (input-idle OR
@@ -55,22 +50,16 @@
 //  Unknown/tunnel/stale routes FAIL TOWARD 75ms: wrongly fast costs a few
 //  kbps; wrongly slow on a dozing radio costs a felt multi-frame gap.
 //
-//  THREADING: evidence/baseline state is confined to the exporter's serial
-//  workQueue (the only `observeCaptureTick` caller; exactly one exporter
-//  exists at a time - the CaptureBaselines discipline). The few outputs that
-//  cross threads (state, stream link, feed freshness) sit behind one lock;
-//  the ping counters are self-locked. When telemetry is OFF the state
-//  machine is never fed, the cadence reads "unknown route", and the loops
-//  hold the validated 75ms everywhere - gate-off behavior is byte-identical
-//  to the pre-conditional shipped dial.
+//  THREADING: evidence/baseline state is confined to `feedQueue`, where StreamSession's 2 s tick
+//  folds every window whether telemetry is on or off, so one policy runs for everyone. Outputs
+//  that cross threads (state, stream link, freshness, decision) sit behind one lock.
 //
 
 import Foundation
 
-/// Process-global env-signal state machine + the conditional-keepalive dial.
-/// Fed by the telemetry exporter (gate-on only); read by the always-live RTP
-/// ping loops. `@unchecked Sendable`: cross-thread fields are lock-guarded,
-/// evidence state is exporter-queue-confined (see the header).
+/// Process-global env-signal state machine + the conditional-keepalive dial. Fed by every
+/// session's 2 s tick; read by the RTP ping loops and the pacer. `@unchecked Sendable`:
+/// cross-thread fields are lock-guarded, evidence state is `feedQueue`-confined.
 final class EnvSignalController: @unchecked Sendable {
     static let shared = EnvSignalController()
     // Module-internal (not private) so the transition breadcrumb in
@@ -95,7 +84,7 @@ final class EnvSignalController: @unchecked Sendable {
     /// Last published stream route class (a `LinkClass.rawValue`:
     /// "wired"/"wifi"/"tunnel"/"unknown").
     var streamLinkValue = LinkClass.unknown.rawValue
-    /// Monotonic instant of the last exporter feed (0 = never) - the cadence
+    /// Monotonic instant of the last session feed (0 = never) - the cadence
     /// only trusts the route within `routeTrustHorizonNanos` of this.
     var lastFedNanos: UInt64 = 0
     /// Monotonic instant of the most recent ping-loop bring-up edge (stream
@@ -104,6 +93,21 @@ final class EnvSignalController: @unchecked Sendable {
     /// A reconnect re-earns the warm-up deliberately: the radio renegotiates
     /// its power-save posture on every fresh flow. 0 = no session yet.
     private var pingLoopStartNanos: UInt64 = 0
+
+    // MARK: - Session feed (StreamSession's 2 s present-metric tick)
+
+    /// Serial home of the evidence state: every fold runs here, whatever thread posts it.
+    let feedQueue = DispatchQueue(label: "io.ugfugl.Glimmer.envsignal", qos: .utility)
+    /// Radio sampler for the feed; touched on `feedQueue` only.
+    let radio = WiFiTelemetry()
+    /// The session's stream-route probe, nil between sessions (lock-guarded slot). The
+    /// telemetry exporter reads the same probe for `stream_link`, so one path monitor runs.
+    var routeProbeValue: StreamRouteProbe?
+
+    var routeProbe: StreamRouteProbe? {
+        lock.lock(); defer { lock.unlock() }
+        return routeProbeValue
+    }
 
     // MARK: - Published reconciler decision (lock-guarded)
     //
@@ -259,12 +263,11 @@ final class EnvSignalController: @unchecked Sendable {
         return nowNanos &- last >= UInt64(Self.keepaliveIdleSeconds * 1_000_000_000)
     }
 
-    // MARK: - Evidence state (exporter-workQueue-confined)
+    // MARK: - Evidence state (feedQueue-confined)
     //
-    // Module-internal (not private) so the feed / window fold / classifier
-    // in EnvSignalController+Evidence.swift - the ONLY writers, all on the
-    // exporter workQueue - can reach this state across the file split. The
-    // queue confinement is unchanged: nothing else touches these.
+    // Module-internal (not private) so the feed / window fold / classifier in
+    // EnvSignalController+Evidence.swift - the ONLY writers, all on `feedQueue` -
+    // can reach this state across the file split. Nothing else touches these.
 
     /// Session-relative RSSI distribution: 1dB buckets over 0...−100dBm
     /// (index = −dBm). Integer histogram so the p50 is exact and the memory
@@ -309,10 +312,9 @@ final class EnvSignalController: @unchecked Sendable {
     var severeRun = 0
     var quietRun = 0
     var windowsSinceChange = Int.max
-    /// EWMA of the per-window recv-jitter (ms) driving the published headroom's
-    /// smoothed jitter - exporter-queue-confined like the rest of the evidence
-    /// state; copied into the lock-guarded `smoothedJitterMsValue` at reconcile.
-    /// 0 until the first window.
+    /// EWMA of the per-window recv-jitter (ms) driving the published headroom's smoothed
+    /// jitter - `feedQueue`-confined like the rest of the evidence state; copied into the
+    /// lock-guarded `smoothedJitterMsValue` at reconcile. 0 until the first window.
     var reconcileSmoothedJitterMs: Double = 0
 
     /// One evidence window's facts - kept whole so a state transition can
@@ -358,11 +360,9 @@ final class EnvSignalController: @unchecked Sendable {
         }
     }
 
-    // The capture-tick FEED, the window fold + classifier, the state
-    // machine, the RECONCILE publish, the session-relative percentiles and
-    // the per-session reset live in EnvSignalController+Evidence.swift -
-    // moved there to keep THIS file under the length limit. They run on the
-    // exporter workQueue and mutate the evidence state declared above.
+    // The session FEED, the window fold + classifier, the state machine, the RECONCILE
+    // publish, the session-relative percentiles and the session lifecycle live in
+    // EnvSignalController+Evidence.swift. They run on `feedQueue` and mutate the evidence above.
 
     // MARK: - Future actuations (LISTED BUT DARK)
     //

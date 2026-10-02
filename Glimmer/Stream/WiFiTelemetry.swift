@@ -203,12 +203,9 @@ struct StreamRouteSnapshot: Sendable {
 /// mid-session hot-undock case) plus a lazy 15s revalidation, and emits a
 /// `route_change` EVENT row + Diag NOTICE on every classification flip.
 ///
-/// GATING + HOT-PATH SAFETY (the WiFiTelemetry contract): constructed ONLY by
-/// the exporter (gate-on path), all probing on its own utility queue - never a
-/// hot path, a handful of cheap syscalls per probe, no DNS (the host address is
-/// the IP literal RTSP already resolved; a hostname degrades to `unknown` with
-/// a NOTICE rather than a blocking lookup). The always-live cost when telemetry
-/// is off is exactly one latched String per connect.
+/// HOT-PATH SAFETY: one probe per session (EnvSignalController's feed owns it; the exporter reads
+/// it), all probing on its own utility queue: a handful of cheap syscalls per probe and no DNS
+/// (the host is the IP literal RTSP resolved; a hostname degrades to `unknown` with a NOTICE).
 final class StreamRouteProbe: @unchecked Sendable {
 
     // ---- Host latch (always-live, written at the CONNECT edge) ----

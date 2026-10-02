@@ -1,14 +1,9 @@
 //
 //  FramePacer+AdaptiveDepth.swift
 //
-//  The measured-jitter input + adaptive-target depth math + the small pure
-//  metric helpers. Split out of FramePacer.swift to keep that file under the
-//  length limit; this is the grow/decay of the jitter-driven target depth off
-//  the smoothed RFC-3550 recv-jitter signal, plus the inter-present cadence
-//  delta and median estimator the release / submit paths consume. The companion
-//  stored field `prevPresentMediaTimeForMetric` stays declared in
-//  FramePacer.swift with the rest of the core state. All `*Locked` methods run
-//  under `lock`.
+//  The adaptive target depth: it rests at 1 and walks toward the headroom level EnvSignalController
+//  publishes from its 2 s jitter windows, growing one frame per window tick and shrinking one frame
+//  per `targetShrinkInterval`. Plus the small cadence helpers. All `*Locked` methods run under `lock`.
 //
 
 import CoreMedia
@@ -16,42 +11,21 @@ import os
 
 extension FramePacer {
 
-    // MARK: - Measured-jitter input (decode/receive path → pacer)
+    // MARK: - Window tick (StreamSession's 2 s present-metric timer → pacer)
 
-    /// Feed the pacer the latest SMOOTHED RFC-3550 reorder jitter (ms) measured by
-    /// the RTP receive path, and walk the grow path one step toward the desired
-    /// target. Driven on the same ~2s metric cadence that updates
-    /// `TelemetryCounters.recvJitterMs`, so a deeper buffer requires SUSTAINED
-    /// real jitter across several windows - a lone spike (already ~1s-smoothed)
-    /// can't ratchet it. Grows one step per call when the desired target exceeds
-    /// the current depth; shrinking stays rate-limited in `decayTargetLocked`.
-    ///
-    /// RECONCILER ON (default): `ms` is recorded but the desired target comes from
-    /// the published headroom level (see `justifiedDepthLocked`), so this call is
-    /// just a cadence-aligned GROW TICK toward that level - it no longer self-
-    /// decides off `ms`. RECONCILER OFF: `ms` IS the self-decide signal (the
-    /// original behavior). Either way `bumpTargetForJitterLocked` does the
-    /// one-step grow.
-    func noteMeasuredJitter(_ ms: Double) {
+    /// Grow the target one step toward the published headroom level. Called once per 2 s
+    /// window and the only grow path, so a deeper buffer needs several sustained windows.
+    func growDepthTowardTarget() {
         refreshReconciledTarget()
         lock.lock()
-        if ms.isFinite, ms >= 0 { adaptiveDepth.measuredJitterMs = ms }
-        bumpTargetForJitterLocked()
+        growTargetOneStepLocked()
         lock.unlock()
     }
 
-    /// Pull the reconciler's latest published headroom level into
-    /// `adaptiveDepth.reconciledTargetDepth` (mapped `targetDepth + level`, clamped). MUST be
-    /// called WITHOUT the pacer lock held - it takes EnvSignalController's lock
-    /// (via `.decision`), so calling it under the pacer lock would nest two locks.
-    /// No-ops on an unchanged decision generation (the common path costs one
-    /// short controller-lock read + a `UInt64` compare). When the reconciler is
-    /// off this leaves `adaptiveDepth.reconciledTargetDepth` untouched - `justifiedDepthLocked`
-    /// ignores it and self-decides off `adaptiveDepth.measuredJitterMs` instead.
+    /// Pull the published headroom level into `adaptiveDepth.reconciledTargetDepth`. Takes
+    /// EnvSignalController's lock, so it MUST run off the pacer lock (never nest the two); an
+    /// unchanged generation costs one locked compare.
     func refreshReconciledTarget() {
-        guard EnvSignalController.reconcilerEnabled else { return }
-        // NEVER-NEST invariant: `.decision` takes EnvSignalController's lock, so
-        // this MUST run off the pacer lock (DEBUG-only trap on a future violation).
         assertLockNotHeld()
         let decision = EnvSignalController.shared.decision
         lock.lock()
@@ -66,111 +40,39 @@ extension FramePacer {
 
     // MARK: - Adaptive target depth. All run under `lock`.
 
-    /// The depth the CURRENT desired target justifies - the value the rate-limited
-    /// grow/decay actuator walks `adaptiveDepth.adaptiveTargetDepth` toward. Clamped to
-    /// [targetDepth, maxTargetDepth].
-    ///
-    /// RECONCILER ON, *after it has published a decision*: the desired depth comes
-    /// from the UNIFIED jitter→headroom decision EnvSignalController publishes - `targetDepth +
-    /// headroomLevel` - so the pacer walks off the ONE shared level instead of
-    /// reading `recvJitterMs` on its own. headroomLevel 0
-    /// (clear / jitter under the dead-zone) → depth 1 (REST), each level up → +1
-    /// depth, capped at `maxTargetDepth`. Only the TARGET changes; the grow/decay
-    /// rate-limiter and the depth-1 floor below are untouched (they are the
-    /// actuator).
-    ///
-    /// RECONCILER OFF (the kill-switch A/B fallback): the ORIGINAL self-decide -
-    /// compute the depth off the SMOOTHED RFC-3550 `recvJitterMs` through a
-    /// DEAD-ZONE: jitter at/below `jitterDeadZoneMs` (3ms) earns NO extra depth, so
-    /// a clean link rests at 1; above it, +1 frame per `jitterMsPerExtraFrame` of
-    /// excess. 0.09ms wired → depth 1 (passthrough); ~22ms wifi → grows toward the
-    /// cap. Byte-identical to today.
+    /// The depth the published decision justifies: headroom level 0 (CLEAR, or a wired route)
+    /// is depth 1 and each level adds one frame, capped at `maxTargetDepth`. Reads only the
+    /// off-lock-refreshed snapshot so the pacer holds exactly one lock.
     func justifiedDepthLocked() -> Int {
         assertLockHeld()
-        // Use the reconciler's published depth ONLY after it has published a real
-        // decision (generation > 0). Telemetry-off builds never run the reconciler
-        // (it's fed only by the opt-in exporter), so generation stays 0 - fall
-        // through to the always-live self-decide path so the buffer still adapts.
-        if EnvSignalController.reconcilerEnabled, adaptiveDepth.reconciledDecisionGeneration > 0 {
-            // Read ONLY the off-lock-refreshed snapshot - never the controller -
-            // so the pacer holds exactly one lock (its own). Already clamped to
-            // [targetDepth, maxTargetDepth] by the refresh.
-            return adaptiveDepth.reconciledTargetDepth
-        }
-        let j = adaptiveDepth.measuredJitterMs
-        let extra: Int = j <= FramePacer.jitterDeadZoneMs
-            ? 0
-            : Int(((j - FramePacer.jitterDeadZoneMs)
-                   / FramePacer.jitterMsPerExtraFrame).rounded(.up))
-        return min(FramePacer.maxTargetDepth,
-                   max(FramePacer.targetDepth, FramePacer.targetDepth + extra))
+        return adaptiveDepth.reconciledTargetDepth
     }
 
-    /// Recompute the adaptive target from the current measured jitter and RAISE
-    /// it - by AT MOST one frame per call - if SUSTAINED measured jitter demands
-    /// more depth. Stepping one frame at a time, driven on the ~2s metric / tick
-    /// cadence off the ~1s-smoothed signal, means a deeper buffer requires real
-    /// sustained jitter, never a lone spike. Never lowers here - shrinking is
-    /// rate-limited in `decayTargetLocked`. Called under the lock.
-    func bumpTargetForJitterLocked() {
+    /// Raise the target by at most one frame when the justified depth is higher, and arm the
+    /// shrink clock so the new depth holds for one shrink interval. Never lowers.
+    func growTargetOneStepLocked() {
         let justified = justifiedDepthLocked()
         guard justified > adaptiveDepth.adaptiveTargetDepth else { return }
-        // Grow ONE step per call so a deeper buffer requires SUSTAINED jitter
-        // across multiple windows, never a lone spike.
         adaptiveDepth.adaptiveTargetDepth = min(adaptiveDepth.adaptiveTargetDepth + 1, justified)
-        // Arm the shrink clock so the new (higher) depth holds for at least one
-        // shrink interval before it can start decaying.
         adaptiveDepth.lastTargetShrinkTime = CFAbsoluteTimeGetCurrent()
     }
 
-    /// Decay the adaptive target back toward the baseline (depth 1) during clean
-    /// running: at most one frame per `targetShrinkInterval`, and only when the
-    /// measured jitter no longer justifies the current depth. Called once per tick
-    /// from `releaseDueFrame` under the lock. Returns the (possibly updated)
-    /// effective target so the caller uses one consistent value.
+    /// Decay the target toward depth 1 once the decision no longer justifies it: one frame per
+    /// `targetShrinkInterval`. Called once per tick from `releaseDueFrame`; it never grows, so
+    /// no tick can ratchet depth. Returns the effective target the caller trims against.
     func decayTargetLocked() -> Int {
         assertLockHeld()
-        // RECONCILER OFF (kill-switch fallback): refresh the measured-jitter
-        // signal from the shared gauge each tick, so grow/decay track the live
-        // RFC-3550 recv-jitter (0.09ms wired / ~22ms wifi) even if the explicit
-        // noteMeasuredJitter path isn't wired. This is the self-decide read the
-        // diagnosis endorsed. RECONCILER ON: the pacer does NOT self-read the
-        // shared gauge - `justifiedDepthLocked()` pulls the published headroom
-        // level instead (the whole point of the unification: ONE reader of the
-        // jitter signal, not two racing). `adaptiveDepth.measuredJitterMs` then just goes stale
-        // (it feeds only the OFF path), which is harmless.
-        // Self-decide whenever the reconciler isn't actually driving us - disabled,
-        // OR enabled-but-not-yet-published (telemetry off): refresh the live jitter
-        // so grow/decay track recvJitterMs instead of going stale pinned at REST.
-        if !EnvSignalController.reconcilerEnabled || adaptiveDepth.reconciledDecisionGeneration == 0 {
-            let liveJitter = TelemetryCounters.shared.recvJitterMs
-            if liveJitter.isFinite, liveJitter >= 0 { adaptiveDepth.measuredJitterMs = liveJitter }
-        }
-        // A rising signal/level must be able to GROW the buffer on the tick path
-        // too (not only via the explicit note path), so a lossy link absorbs
-        // jitter even if the setter is never called. Grow keys off
-        // justifiedDepthLocked(), which is the published level when reconciling.
-        bumpTargetForJitterLocked()
-
-        guard adaptiveDepth.adaptiveTargetDepth > FramePacer.targetDepth else {
+        guard adaptiveDepth.adaptiveTargetDepth > FramePacer.targetDepth,
+              justifiedDepthLocked() < adaptiveDepth.adaptiveTargetDepth else {
             return adaptiveDepth.adaptiveTargetDepth
         }
-        // What does CURRENT measured jitter justify? If it still wants the present
-        // depth, hold - don't shrink into ongoing, sustained jitter. Because the
-        // signal is the ~1s-smoothed RFC-3550 metric, a transient spike clears
-        // quickly and the guard below releases, letting the rate-limited shrink
-        // run back to 1.
-        guard justifiedDepthLocked() < adaptiveDepth.adaptiveTargetDepth else {
-            return adaptiveDepth.adaptiveTargetDepth
-        }
-
         let now = CFAbsoluteTimeGetCurrent()
         if !adaptiveDepth.lastTargetShrinkTime.isFinite {
             adaptiveDepth.lastTargetShrinkTime = now
             return adaptiveDepth.adaptiveTargetDepth
         }
         if now - adaptiveDepth.lastTargetShrinkTime >= FramePacer.targetShrinkInterval {
-            adaptiveDepth.adaptiveTargetDepth -= 1            // one frame per interval
+            adaptiveDepth.adaptiveTargetDepth -= 1
             adaptiveDepth.lastTargetShrinkTime = now
         }
         return adaptiveDepth.adaptiveTargetDepth

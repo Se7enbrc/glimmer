@@ -109,8 +109,7 @@ extension StreamSession {
             self.frameWatchdogTimer = nil
             self.presentWatchdogTimer?.invalidate()
             self.presentWatchdogTimer = nil
-            self.presentMetricTimer?.invalidate()
-            self.presentMetricTimer = nil
+            self.stopPresentMetricTimer()
             winForOverlay?.statsOverlay.setVisible(false)
             // Key-ups go out while the uplink is still live; once not ready, a
             // quit chord's late modifier releases send nothing into a closed link.
