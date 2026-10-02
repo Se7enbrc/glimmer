@@ -6,7 +6,7 @@
 //  and FramePacer splits - to keep each file under the SwiftLint
 //  length limit. Ports the block lookup/creation path (getFecBlockForRtpPacket:
 //  key synthesis from data packets, AUDIO_FEC_HEADER parsing/validation from
-//  parity packets, the size-mismatch streak escape hatch) and the Reed-Solomon
+//  parity packets, the layout-mismatch streak escape hatch) and the Reed-Solomon
 //  recovery step (completeFecBlock).
 //
 //  These run on the SAME single receive thread as the queue/reorder core in
@@ -87,16 +87,11 @@ extension RtpAudioQueue {
             return nil
         }
 
-        // FEC blocks MUST start on a dataShards boundary (:267-278). A violation
-        // is a structural layout difference (not a transient fault), so the
-        // escape hatch stays - but it must flip LOUDLY, never silently.
+        // FEC blocks start on a dataShards boundary (:267-278). One stray packet
+        // costs only itself; only a streak marks the PC's layout incompatible.
         if baseSeqNum % UInt16(Self.dataShards) != 0 {
             stats.packetCountFecInvalid += 1
-            incompatibleServer = true
-            Diag.notice("NativeAudio FEC DISABLED for this session: parity block base seq "
-                + "\(baseSeqNum) is not \(Self.dataShards)-aligned - host violates the FEC-block "
-                + "invariant. Audio continues WITHOUT FEC (data straight through, parity dropped, "
-                + "lost packets fall to PLC).", Self.cat)
+            noteLayoutMismatch("parity base seq \(baseSeqNum) is not \(Self.dataShards)-aligned")
             return nil
         }
 
@@ -143,38 +138,17 @@ extension RtpAudioQueue {
         var insertAt = blocks.count
         for (i, existing) in blocks.enumerated() {
             if existing.fecHeader.baseSequenceNumber == fecBlockBaseSeqNum {
-                // Block size must match to safely copy shards (:311-321). On a
-                // mismatch, drop THIS contribution and count it - do NOT flip
-                // incompatibleServer on first contact (the C does, but here that
-                // one-strike flip silently killed audio FEC for a whole session
-                // off a single odd block). The streak below keeps the GFE-era
-                // escape hatch reachable: a host whose layout GENUINELY differs
-                // mismatches on every contact and degrades within seconds,
-                // loudly, while one bad block on a jittery link costs only that
-                // block (its missing packets fall to PLC like any other gap).
+                // Block size must match to safely copy shards (:311-321). The C
+                // disables FEC on the first mismatch; here only a streak does.
                 if existing.blockSize != blockSize {
                     stats.packetCountFecInvalid += 1
                     TelemetryCounters.shared.audioFecMismatchTotal.increment()
-                    if !loggedSizeMismatch {
-                        loggedSizeMismatch = true
-                        Diag.warn("NativeAudio FEC block-size mismatch: block \(existing.blockSize)B "
-                            + "vs packet \(blockSize)B (base seq \(fecBlockBaseSeqNum)) - dropping this "
-                            + "contribution (logged once; volume in audio_fec_mismatch_total)", Self.cat)
-                    }
-                    sizeMismatchStreak += 1
-                    if sizeMismatchStreak >= Self.sizeMismatchStreakLimit {
-                        incompatibleServer = true
-                        Diag.notice("NativeAudio FEC DISABLED for this session: "
-                            + "\(sizeMismatchStreak) consecutive block-size mismatches - the host's "
-                            + "AUDIO_FEC_HEADER layout looks incompatible (GFE-era?). Audio continues "
-                            + "WITHOUT FEC: data passes straight through, parity is dropped, lost "
-                            + "packets fall to PLC.", Self.cat)
-                    }
+                    noteLayoutMismatch("a \(existing.blockSize)B block got a \(blockSize)B shard "
+                        + "(base seq \(fecBlockBaseSeqNum))")
                     return nil
                 }
-                // Sizes agree - direct counter-evidence of a compatible layout;
-                // the safeguard RECOVERS rather than ratcheting toward the kill.
-                sizeMismatchStreak = 0
+                // Sizes agree: evidence of a compatible layout, so the streak starts over.
+                layoutMismatchStreak = 0
                 // Don't return a completed block (:324).
                 return existing.fullyReassembled ? nil : existing
             } else if Self.isBefore16(fecBlockBaseSeqNum, existing.fecHeader.baseSequenceNumber) {
@@ -193,6 +167,22 @@ extension RtpAudioQueue {
         block.fecHeader.ssrc = fecBlockSsrc
         blocks.insert(block, at: insertAt)
         return block
+    }
+
+    /// Counts a packet dropped for a FEC layout disagreement. Only `layoutMismatchStreakLimit` in a row,
+    /// with no size-agreeing contact between them, turn audio FEC off for the session.
+    private func noteLayoutMismatch(_ detail: String) {
+        if !loggedLayoutMismatch {
+            loggedLayoutMismatch = true
+            Diag.warn("NativeAudio FEC layout mismatch: \(detail); dropping that packet (logged once; "
+                + "size mismatches count in audio_fec_mismatch_total)", Self.cat)
+        }
+        layoutMismatchStreak += 1
+        guard layoutMismatchStreak >= Self.layoutMismatchStreakLimit else { return }
+        incompatibleServer = true
+        Diag.notice("NativeAudio FEC DISABLED for this session: \(layoutMismatchStreak) FEC layout "
+            + "mismatches in a row (last: \(detail)). Audio continues without FEC: data passes "
+            + "straight through, parity is dropped, lost packets fall to PLC.", Self.cat)
     }
 
     // MARK: - Reed-Solomon recovery (completeFecBlock, :399-505)

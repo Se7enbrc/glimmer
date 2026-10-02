@@ -2,8 +2,8 @@
 //  RtspClientTests.swift
 //
 //  The RTSP client's connect/cancel contract and response cap (against real loopback sockets),
-//  its sealed RTSP framing and the encryption it negotiates, and the audio decrypt that
-//  negotiation turns on, each checked against the PC's side of the cipher.
+//  its sealed framing and the encryption it negotiates (checked against the PC's side of the
+//  cipher), and the audio receiver and FEC queue that negotiation sets up.
 //
 
 import CommonCrypto
@@ -226,25 +226,63 @@ struct RtspClientTests {
          UInt8(truncatingIfNeeded: timestamp), 0, 0, 0, 1] + payload
     }
 
-    @Test func filledAudioReorderGapDrainsReadyPackets() {
-        let sink = RecordingAudioSink()
-        let receiver = RtpAudioReceiver(
+    private static func audioReceiver(sink: NativeAudioSink) -> RtpAudioReceiver {
+        RtpAudioReceiver(
             host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
             opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
             audioEncryption: false, aesKey: [], aesIvId: [], sink: sink)
-        let fec = Self.audioDatagram(type: RtpAudioQueue.payloadTypeFec, sequence: 0, timestamp: 0,
-                                     payload: [0, RtpAudioQueue.payloadTypeAudio, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-        receiver.handleDatagram(fec, count: fec.count)
-        for sequence: UInt16 in [4, 6, 5] {
-            let payload = [UInt8](repeating: UInt8(sequence), count: 8)
-            let packet = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: sequence,
-                                            timestamp: UInt32(sequence) * 5, payload: payload)
+    }
+
+    /// A parity datagram whose AUDIO_FEC_HEADER names `base` as its block's first sequence number.
+    private static func parityDatagram(sequence: UInt16, base: UInt16) -> [UInt8] {
+        audioDatagram(type: RtpAudioQueue.payloadTypeFec, sequence: sequence, timestamp: 0,
+                      payload: [0, RtpAudioQueue.payloadTypeAudio, UInt8(base >> 8), UInt8(truncatingIfNeeded: base),
+                                0, 0, 0, 0, 0, 0, 0, 1])
+    }
+
+    private static func feed(_ receiver: RtpAudioReceiver, dataSequences: [UInt16]) {
+        for sequence in dataSequences {
+            let payload = [UInt8](repeating: UInt8(truncatingIfNeeded: sequence), count: 8)
+            let packet = audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: sequence,
+                                       timestamp: UInt32(sequence) * 5, payload: payload)
             receiver.handleDatagram(packet, count: packet.count)
         }
+    }
+
+    @Test func filledAudioReorderGapDrainsReadyPackets() {
+        let sink = RecordingAudioSink()
+        let receiver = Self.audioReceiver(sink: sink)
+        let fec = Self.parityDatagram(sequence: 0, base: 0)
+        receiver.handleDatagram(fec, count: fec.count)
+        Self.feed(receiver, dataSequences: [4, 6, 5])
         #expect(sink.recordedPackets() == [
             [UInt8](repeating: 4, count: 8), [UInt8](repeating: 5, count: 8),
             [UInt8](repeating: 6, count: 8)
         ])
+    }
+
+    /// One stray misaligned parity packet used to turn audio FEC, and with it reordering, off for the session.
+    @Test func oneMisalignedParityPacketLeavesAudioFecOn() {
+        let sink = RecordingAudioSink()
+        let receiver = Self.audioReceiver(sink: sink)
+        for parity in [Self.parityDatagram(sequence: 0, base: 0), Self.parityDatagram(sequence: 1, base: 6)] {
+            receiver.handleDatagram(parity, count: parity.count)
+        }
+        Self.feed(receiver, dataSequences: [4, 6, 5])
+        #expect(!receiver.queue.incompatibleServer)
+        #expect(sink.recordedPackets().map(\.first) == [4, 5, 6])
+    }
+
+    @Test func aStreakOfMisalignedParityTurnsAudioFecOff() {
+        let receiver = Self.audioReceiver(sink: NullAudioSink())
+        let sync = Self.parityDatagram(sequence: 0, base: 0)
+        receiver.handleDatagram(sync, count: sync.count)
+        for index in 1...RtpAudioQueue.layoutMismatchStreakLimit {
+            #expect(!receiver.queue.incompatibleServer)
+            let parity = Self.parityDatagram(sequence: UInt16(index), base: 6)
+            receiver.handleDatagram(parity, count: parity.count)
+        }
+        #expect(receiver.queue.incompatibleServer)
     }
 
     private final class BlockingAudioSink: NativeAudioSink, @unchecked Sendable {

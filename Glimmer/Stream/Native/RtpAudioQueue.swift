@@ -21,9 +21,9 @@
 //  + opus payload) or a size-0 placeholder (PLC marker) for an unrecovered gap
 //  when the block is played out with discontinuities.
 //
-//  COMPATIBILITY: FEC starts on (Sunshine's 7.1.431 clears the C's 7.1.415 gate). A block-alignment break
-//  (non-4-aligned base seq) or a streak of block-size mismatches sets `incompatibleServer` and logs why:
-//  data then passes straight through (HANDLE_NOW) and FEC is dropped. One mismatched block is only dropped.
+//  COMPATIBILITY: FEC starts on (Sunshine's 7.1.431 clears the C's 7.1.415 gate). A streak of layout
+//  mismatches (non-4-aligned parity, block-size disagreements) sets `incompatibleServer` and logs why:
+//  data then passes straight through (HANDLE_NOW) and FEC is dropped. One odd packet is only dropped.
 //
 //  THREADING: single-receive-thread access (RtpAudioReceiver's serial queue), so
 //  this class needs no internal locking - exactly like the C single receive
@@ -82,12 +82,9 @@ final class RtpAudioQueue {
     /// prior value of 8 skewed the parity blockSize/offset by 4 bytes, so the
     /// first parity packet to meet a live block "mismatched" and killed FEC.)
     static let audioFecHeaderSize = 12
-    /// Consecutive size-mismatch contacts before concluding the host's FEC
-    /// layout is genuinely incompatible (GFE-era) and disabling audio FEC for
-    /// the session. Big enough that isolated corrupt/odd blocks on a jittery
-    /// link can never trip it; small enough that a truly incompatible host
-    /// stops churning within seconds.
-    static let sizeMismatchStreakLimit = 8
+    /// Layout mismatches in a row before audio FEC turns off for the session: isolated odd
+    /// packets never trip it, while a PC whose layout truly differs does within seconds.
+    static let layoutMismatchStreakLimit = 8
 
     static let payloadTypeAudio: UInt8 = 97   // RTP_PAYLOAD_TYPE_AUDIO
     static let payloadTypeFec: UInt8 = 127    // RTP_PAYLOAD_TYPE_FEC
@@ -145,13 +142,10 @@ final class RtpAudioQueue {
     var receivedOosData = false
     var synchronizing = true
     var incompatibleServer = false
-    /// CONSECUTIVE block-size-mismatch contacts; reset by any size-agreeing
-    /// contact, so isolated mismatches can never accumulate into the FEC kill
-    /// switch (see the mismatch handling in `getFecBlock`).
-    var sizeMismatchStreak = 0
-    /// One-shot latch so the size-mismatch warning logs once per session, not
-    /// once per packet (the totals carry the volume).
-    var loggedSizeMismatch = false
+    /// Layout mismatches since the last size-agreeing contact (see `noteLayoutMismatch`).
+    var layoutMismatchStreak = 0
+    /// The mismatch warning logs once per session, not once per packet.
+    var loggedLayoutMismatch = false
 
     /// Diag category - shared with RtpAudioReceiver so the queue's (rare) FEC
     /// compatibility lines co-locate with the receiver's in the log.
