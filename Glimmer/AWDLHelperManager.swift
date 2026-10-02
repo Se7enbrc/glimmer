@@ -17,7 +17,7 @@ enum HelperConstants {
 
 /// An XPC call can complete via its reply OR via the connection's error handler.
 /// The lock protects the continuation and allows exactly one resume.
-private final class SingleResume<T: Sendable>: @unchecked Sendable {
+final class SingleResume<T: Sendable>: @unchecked Sendable {
     private var cont: CheckedContinuation<T, Never>?
     private let lock = NSLock()
     init(_ cont: CheckedContinuation<T, Never>) { self.cont = cont }

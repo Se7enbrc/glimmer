@@ -167,6 +167,8 @@ struct HelperClientTests {
         for attempt in 1...3 {
             #expect(await client.currentStatus()?.0 == false)
             let connection = try #require(connections.withLock { $0.last })
+            // No interruption handler: interrupted connections stay up for launchd's relaunch.
+            #expect(connection.value.interruptionHandler == nil)
             #expect(await Self.ping(connection) == .reply("test"))
             if duringCount {
                 #expect(await client.reSuppressCount() == nil)
@@ -191,15 +193,16 @@ struct HelperClientTests {
 
     private static func ping(_ connection: HelperTestConnection) async -> Ping {
         await withCheckedContinuation { continuation in
+            let once = SingleResume(continuation)
             let remote = connection.value.remoteObjectProxyWithErrorHandler { error in
                 let cocoa = error as NSError
-                continuation.resume(returning: .error(cocoa.domain, cocoa.code))
+                once.resume(.error(cocoa.domain, cocoa.code))
             }
             guard let proxy = remote as? Glimmer.GlimmerHelperProtocol else {
-                continuation.resume(returning: .noProxy)
+                once.resume(.noProxy)
                 return
             }
-            proxy.ping { continuation.resume(returning: .reply($0)) }
+            proxy.ping { once.resume(.reply($0)) }
         }
     }
 
