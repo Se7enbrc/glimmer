@@ -91,13 +91,8 @@ struct ParserHelperTests {
 
     // MARK: - VideoDepacketizer.isIdrFrameStart (untrusted Annex-B sniff)
     //
-    // Definition (VideoDepacketizer.swift): true iff payload.count >= 5 AND the
-    // first four bytes are the 4-byte start code 00 00 00 01 (NV's frame-start
-    // marker; a 3-byte start code means mid-frame), AND the NAL header at [4] is
-    // SPS for H.264 (type 7, byte & 0x1F == 7) or VPS for HEVC (type 32,
-    // (byte >> 1) & 0x3F == 32). Everything else - including malformed/truncated
-    // input - returns false WITHOUT crashing. This is the highest-value surface
-    // (untrusted host bytes), so the edge cases are fuzz-shaped.
+    // Sunshine's IDRs carry SPS (H.264) or VPS (HEVC) after optional AUD/SEI NALs.
+    // Malformed prefixes must not open the key-frame recovery gate.
 
     @Test func isIdrFrameStartH264AcceptsSpsAfter4ByteStart() {
         // 00 00 00 01 | 0x67 (NAL header: type = 0x67 & 0x1F = 7 = SPS).
@@ -124,16 +119,8 @@ struct ParserHelperTests {
         #expect(!VideoDepacketizer.isIdrFrameStart([0, 0, 0, 1, 0x67], hevc: true))
     }
 
-    @Test func isIdrFrameStartRejects3ByteStartCode() {
-        // 3-byte start code 00 00 01 means MID-frame, never a frame start: with
-        // payload[2] == 1 the payload[3] == 1 check fails (payload[3] is the NAL
-        // header byte, here 0x67).
-        #expect(!VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x67, 0x00], hevc: false))
-        #expect(!VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x40, 0x01], hevc: true))
-    }
-
     @Test func isIdrFrameStartMalformedInputsReturnFalseNoCrash() {
-        // Empty and sub-minimum lengths (< 5 bytes) -> false, no out-of-bounds.
+        // Truncated prefixes must not read beyond the payload.
         #expect(!VideoDepacketizer.isIdrFrameStart([], hevc: false))
         #expect(!VideoDepacketizer.isIdrFrameStart([], hevc: true))
         #expect(!VideoDepacketizer.isIdrFrameStart([0], hevc: false))

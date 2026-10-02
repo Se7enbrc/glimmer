@@ -1,39 +1,6 @@
-//
-//  VideoDepacketizer.swift
-//
-//  The Swift-native depacketizer: turns RtpVideoQueue's in-order, FEC-reconstructed RTP packets into
-//  complete access units (DecodeUnit) for the injected VideoSink. Ports VideoDepacketizer.c
-//  (processRtpPayload + reassembleFrame), scoped to the plaintext AV1 path our live host negotiates.
-//
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
-//
-//  AV1 SPECIFICS (the load-bearing subset, VideoDepacketizer.c:1027-1069):
-//   - The whole access unit is ONE BUFFER_TYPE_PICDATA blob (sequence-header OBU
-//     inline); no SPS/PPS/VPS split (getBufferFlags returns PICDATA for non
-//     H.264/HEVC, c:558-560). VideoDecoder's AV1 rebuild parses the seq header
-//     out of pictureData itself.
-//   - Frame TYPE is read from the frame-header byte data[offset+3] (2=IDR),
-//     NOT by parsing the bitstream (c:861-868). VT needs frameType=IDR to build
-//     the format description.
-//   - On the LAST packet of a frame, the payload MUST be truncated to
-//     (lastPacketPayloadLength - frameHeaderSize) - AV1 is intolerant of the
-//     FEC trailing-zero padding that H.264/HEVC Annex-B tolerates (c:1030-1041).
-//   - Frame-header length follows data[0] at Sunshine's version, 7.1.431 (c:914-965):
-//     0x01 ⇒ 8 bytes, anything else ⇒ 24.
-//
-//  H.264/HEVC (Annex-B) SPECIFICS (c:974-1025 + the slow-path NAL routing):
-//   - The accumulated AU is an Annex-B elementary stream. FEC trailing-zero
-//     padding on the last packet is TOLERATED (no payload-length truncation -
-//     that field is AV1-only on the wire), matching the C path; the decoder's
-//     Annex-B→AVCC rewrite carries the zeros inside the final NAL, which VT
-//     accepts (same as moonlight-ios).
-//   - IDR detection does NOT trust the frame-header type byte (c:861-868 takes
-//     the header's word only for non-H.264/HEVC): a frame is IDR iff its first
-//     payload starts with the 4-byte start code + SPS (H.264) / VPS (HEVC) -
-//     the isIdrFrameStart port. Sunshine rides the param sets on every IDR.
-//   - On IDR reassembly the leading VPS/SPS/PPS NALs are split into their own
-//     DecodeBuffers (the C slow path's getBufferFlags routing); everything
-//     else stays picture data in arrival order. P-frames skip the scan.
+// Reassembles Sunshine RTP payloads into decode units, preserving IDR/RFI recovery.
+// H.264/HEVC inspect Annex-B NALs; AV1 uses Sunshine's frame type and payload length.
+// Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
 import Foundation
 

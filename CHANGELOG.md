@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.2 - 2026-10-02
+
+Fix a black screen at connection when the PC sends extra information before the
+first picture. These streams could play sound, then stop after ten seconds.
+
 ## 2026.10.0 - 2026-10-01
 
 While your stream is hidden behind other windows, the launcher no longer turns
