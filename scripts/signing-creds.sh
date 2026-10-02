@@ -11,7 +11,7 @@
 # owned by the caller, mode 0600/0400. This script refuses anything looser, and
 # every Makefile consumer goes through it so the policy has a single home.
 #
-# Default path: ~/.config/glimmer/signing.env
+# Default path: ~/.config/developer-id/signing.env
 # Override:     GLIMMER_SIGNING_CREDS env var (the Makefile exports it from its
 #               SIGNING_CREDS variable, so `make dist SIGNING_CREDS=...` works).
 #
@@ -34,14 +34,13 @@
 #                           (auto-generated + stored by `make codesign-setup`)
 #   P12_PATH                absolute path to the Developer ID .p12 export
 #   P12_PASSWORD            passphrase of that .p12
-#   APPLE_ID                Apple ID email for notarytool
-#   APPLE_APP_PASSWORD      app-specific password for notarytool
-#   APPLE_TEAM_ID           (optional) 10-char team id; derived from the
-#                           Developer ID cert name when absent
+#   NOTARY_KEY_PATH         absolute path to the App Store Connect API key (.p8)
+#   NOTARY_KEY_ID           that key's ID
+#   NOTARY_ISSUER_ID        the team's issuer ID
 
 set -euo pipefail
 
-CREDS="${GLIMMER_SIGNING_CREDS:-$HOME/.config/glimmer/signing.env}"
+CREDS="${GLIMMER_SIGNING_CREDS:-$HOME/.config/developer-id/signing.env}"
 
 die() { echo "signing-creds: $*" >&2; exit 1; }
 
@@ -125,12 +124,11 @@ cmd_fill_from_op() {
     local source
     source="$(sed -n 's/^OP_SOURCE=//p' "$CREDS" | tail -n 1)"
     [ -n "$source" ] || die "OP_SOURCE not set in $CREDS (e.g. op://<vault>/<item>)"
-    local pair key field val filled=""
+    local pair key field val dest filled=""
     for pair in \
-        "APPLE_ID:username" \
-        "APPLE_APP_PASSWORD:glimmer-app-pass" \
-        "APPLE_TEAM_ID:team-id" \
-        "P12_PASSWORD:developer-id-p12-pass"; do
+        "P12_PASSWORD:developer-id-p12-pass" \
+        "NOTARY_KEY_ID:notary-key-id" \
+        "NOTARY_ISSUER_ID:notary-issuer-id"; do
         key="${pair%%:*}"; field="${pair##*:}"
         # Skip keys that already have a value - fill, never overwrite.
         [ -z "$(sed -n "s/^${key}=//p" "$CREDS" | tail -n 1)" ] || continue
@@ -139,23 +137,20 @@ cmd_fill_from_op() {
             filled="$filled $key"
         fi
     done
-    # Materialize the Developer ID .p12 itself (a FILE field on the item) so the
-    # cert+key come from the vault, not a loose file in ~/Downloads. Binary -
-    # use `op read --out-file`, NEVER $(...) (command substitution corrupts
-    # binary + drops NULs). Fill only when P12_PATH is unset, mirroring the
-    # never-overwrite rule; clear P12_PATH to re-pull from the vault. The field
-    # label `developer-id-p12` parallels the `developer-id-p12-pass` password
-    # field - adjust here if the item names the attachment differently.
-    if [ -z "$(sed -n 's/^P12_PATH=//p' "$CREDS" | tail -n 1)" ]; then
-        local p12dest; p12dest="$(dirname "$CREDS")/developer-id.p12"
-        if op read --out-file "$p12dest" "${source}/developer-id-p12" >/dev/null 2>&1 && [ -s "$p12dest" ]; then
-            chmod 600 "$p12dest"
-            cmd_set P12_PATH "$p12dest"
-            filled="$filled P12_PATH"
+    # File fields land beside this file, never in ~/Downloads. `op read --out-file`,
+    # not $(...), which corrupts binary. Clear the *_PATH key to re-pull one.
+    for pair in "P12_PATH:developer-id-p12:developer-id.p12" "NOTARY_KEY_PATH:notary-key:notary-key.p8"; do
+        key="${pair%%:*}"; field="${pair#*:}"; field="${field%%:*}"
+        dest="$(dirname "$CREDS")/${pair##*:}"
+        [ -z "$(sed -n "s/^${key}=//p" "$CREDS" | tail -n 1)" ] || continue
+        if op read --out-file "$dest" "${source}/${field}" >/dev/null 2>&1 && [ -s "$dest" ]; then
+            chmod 600 "$dest"
+            cmd_set "$key" "$dest"
+            filled="$filled $key"
         else
-            rm -f "$p12dest"
+            rm -f "$dest"
         fi
-    fi
+    done
     [ -n "$filled" ] && echo "signing-creds: filled from 1Password:$filled" \
         || echo "signing-creds: nothing fetched (op authorization declined/timed out, or fields absent)" >&2
 }
@@ -182,7 +177,7 @@ cmd_init() {
     umask 077
     mkdir -p "$(dirname "$CREDS")"
     cat > "$CREDS" <<'EOF'
-# Glimmer signing credentials - keep mode 0600, OUTSIDE the repo.
+# Developer ID signing credentials - keep mode 0600, OUTSIDE any repo.
 # Read/written ONLY by scripts/signing-creds.sh (see its header for the rules).
 # One KEY=VALUE per line; the value is everything after the first '=' (no
 # quotes - they would become part of the value).
@@ -192,20 +187,18 @@ cmd_init() {
 P12_PATH=
 # Passphrase chosen at .p12 export time.
 P12_PASSWORD=
-# Apple ID email the app-specific password belongs to.
-APPLE_ID=
-# App-specific password for notarytool (appleid.apple.com → App-Specific
-# Passwords). Re-run `make setup-notary` after rotating it.
-APPLE_APP_PASSWORD=
-# Optional: 10-char team id. Leave empty to derive it from the cert name.
-#APPLE_TEAM_ID=
+# App Store Connect team API key for notarytool (Users and Access → Integrations
+# → Team Keys, Developer access). Re-run `make setup-notary` after replacing it.
+NOTARY_KEY_PATH=
+NOTARY_KEY_ID=
+NOTARY_ISSUER_ID=
 
 # Optional: 1Password item REFERENCE for auto-fill (a pointer, not a secret).
 # With this set, `make dist` fetches any EMPTY keys above via `op read`
 # (1Password will ask for approval). Expected item fields:
-#   username → APPLE_ID, glimmer-app-pass → APPLE_APP_PASSWORD,
-#   team-id → APPLE_TEAM_ID, developer-id-p12-pass → P12_PASSWORD, and a FILE
-#   field developer-id-p12 (the .p12 itself) → materialized to P12_PATH.
+#   developer-id-p12-pass → P12_PASSWORD, notary-key-id → NOTARY_KEY_ID,
+#   notary-issuer-id → NOTARY_ISSUER_ID, and FILE fields developer-id-p12 and
+#   notary-key, saved beside this file as P12_PATH and NOTARY_KEY_PATH.
 #OP_SOURCE=op://<vault>/<item>     e.g. op://private/apple-developer-creds
 
 # Filled in automatically by `make codesign-setup`:
