@@ -91,6 +91,7 @@ extension AppModel {
                 + "- a session is already in flight", "Stream")
             return
         }
+        LogStore.shared.beginSession()
         Diag.notice("Starting stream → \(host.displayName, privacy: .private) · \(app.name)", "Stream")
         armLaunchState(app: app, host: host)
         // NB: the "last played" timestamp is intentionally NOT written here.

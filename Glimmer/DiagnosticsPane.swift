@@ -21,12 +21,8 @@ import SwiftUI
 struct DiagnosticsPane: View {
     @Environment(AppModel.self) private var model
 
-    /// DEBUG opt-in for the per-session Diag FILE sink (`SessionLogFileSink`).
-    /// The file mirrors INFO+ by default (testing measured 30-105k lines/hr
-    /// with debug included - the log-diet fix); this key lets a deep-dive
-    /// session opt the file back into everything. The in-app ring and os_log
-    /// always carry every level regardless. Resolved at session start, like
-    /// the telemetry gate.
+    /// Debug lines reach the in-app log and session file only with this on (a debug
+    /// session once ran 30-105k lines an hour). Resolved at session start, like telemetry.
     @AppStorage("diagFileLogDebug") private var fileLogDebug = false
 
     var body: some View {
@@ -77,10 +73,9 @@ struct DiagnosticsPane: View {
                     Toggle(isOn: $fileLogDebug) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Verbose session log file").fontWeight(.medium)
-                            Text("Mirrors debug-level lines into the per-session "
-                                + "diagnostic log file too (info and above by "
-                                + "default). The in-app log and Console always "
-                                + "carry everything.")
+                            Text("Keeps debug-level lines in the in-app log and the "
+                                + "per-session diagnostic log file too (info and "
+                                + "above by default). Console always carries everything.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }

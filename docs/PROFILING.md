@@ -351,7 +351,7 @@ keys are escape hatches for chasing a regression, not tuning advice.
 | `bitrateBoostWifi`       | float, 1.5    | Highest quality's multiplier on the Wi-Fi bitrate ask. The Wi-Fi cap and the radio gate still apply.                                      |
 | `hidGamepadClaimAll`     | bool, NO      | The raw-HID path also takes pads GameController owns, for testing without odd hardware. Reconnect the pad or relaunch to apply.           |
 | `telemetryListenLAN`     | bool, NO      | Serves the Prometheus endpoint (port 9847) on every interface instead of loopback, so anyone on your network can read it.                 |
-| `diagFileLogDebug`       | bool, NO      | Debug lines in `glimmer-<timestamp>.log` too. Same as the Verbose session log file toggle in the hidden Telemetry section.                |
+| `diagFileLogDebug`       | bool, NO      | Debug lines in the in-app log and `glimmer-<timestamp>.log`. Same as the Verbose session log file toggle in the hidden Telemetry section. |
 | `pacerTickOffMain`       | bool, YES     | NO moves the present tick back onto the main run loop.                                                                                    |
 | `pacerTickRealtime`      | bool, YES     | NO drops the tick thread's real-time scheduling.                                                                                          |
 | `cruiseTraversalEnabled` | bool, NO      | Boosts fast mouse flicks on streams wider than 1920 pixels. Off because aim and flicks overlap in speed.                                  |

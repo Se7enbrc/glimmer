@@ -8,6 +8,7 @@
 
 import Foundation
 import os
+import Synchronization
 
 extension Array where Element == String {
     mutating func trimOldestOverflow(maxCount: Int) {
@@ -58,33 +59,55 @@ struct LogEntry: Identifiable, Sendable {
     var plain: String { "\(timeString)  \(level.label.uppercased())  [\(category)]  \(message)" }
 }
 
-/// Thread-safe ring buffer. Entries arrive from many threads (stream callbacks,
-/// the backend's connection listener, controller handlers); reads happen on the
-/// main thread (the viewer). Guarded by one lock; the mirror-to-os_log happens
-/// outside the lock so logging never serialises hot paths against each other.
-final class LogStore: @unchecked Sendable {
+/// O(1) ring under a short lock; the viewer reads newest-last snapshots. Each session's
+/// opening lines stay pinned so 1 Hz health lines can't evict the connect, codec and route.
+final class LogStore: Sendable {
     static let shared = LogStore()
 
-    private let lock = NSLock()
-    private var buffer: [LogEntry] = []
-    private var nextID: UInt64 = 0
-    private let capacity = 2000
+    private struct Ring {
+        var entries: [LogEntry] = []
+        /// The oldest entry once `entries` is full, and the next one overwritten.
+        var head = 0
+        var pinned: [LogEntry] = []
+        var nextID: UInt64 = 0
+    }
 
-    private init() { buffer.reserveCapacity(capacity) }
+    private let capacity: Int
+    private let pinnedCapacity: Int
+    private let state = Mutex(Ring())
+    private let captureDebug: Atomic<Bool>
+
+    init(capacity: Int = 2000, pinnedCapacity: Int = 200,
+         captureDebug: Bool = UserDefaults.standard.bool(forKey: "diagFileLogDebug")) {
+        self.capacity = capacity
+        self.pinnedCapacity = pinnedCapacity
+        self.captureDebug = Atomic(captureDebug)
+    }
 
     func log(_ level: LogLevel, _ diag: DiagMessage, category: String) {
-        let message = diag.text
-        lock.lock()
-        let id = nextID
-        nextID &+= 1
-        buffer.append(LogEntry(id: id, date: Date(), level: level, category: category, message: message))
-        if buffer.count > capacity { buffer.removeFirst(buffer.count - capacity) }
-        lock.unlock()
-
-        // Private values are already "<private>" here, so .public keeps the
-        // wording greppable in Console and `log show`.
-        let logger = Logger(subsystem: "io.ugfugl.Glimmer", category: category)
         let redacted = diag.systemLogText
+        mirrorToSystemLog(level, redacted, category: category)
+        // A debug flood stays out of the ring and the file unless verbose capture is on.
+        guard level > .debug || captureDebug.load(ordering: .relaxed) else { return }
+        let date = Date()
+        state.withLock { ring in
+            let entry = LogEntry(id: ring.nextID, date: date, level: level, category: category, message: diag.text)
+            ring.nextID &+= 1
+            if ring.entries.count < capacity {
+                ring.entries.append(entry)
+            } else {
+                ring.entries[ring.head] = entry
+                ring.head = (ring.head + 1) % capacity
+            }
+            if ring.pinned.count < pinnedCapacity { ring.pinned.append(entry) }
+        }
+        // The session file gets the redacted line: people attach it to public issues.
+        SessionLogFileSink.shared?.append(level: level, category: category, message: redacted)
+    }
+
+    /// Private values are already "<private>" here, so .public keeps the wording greppable.
+    private func mirrorToSystemLog(_ level: LogLevel, _ redacted: String, category: String) {
+        let logger = Logger(subsystem: "io.ugfugl.Glimmer", category: category)
         switch level {
         case .debug: logger.debug("\(redacted, privacy: .public)")
         case .info: logger.info("\(redacted, privacy: .public)")
@@ -92,19 +115,32 @@ final class LogStore: @unchecked Sendable {
         case .warning: logger.warning("\(redacted, privacy: .public)")
         case .error: logger.error("\(redacted, privacy: .public)")
         }
-
-        // The session file gets the redacted line: people attach it to public issues.
-        SessionLogFileSink.shared?.append(level: level, category: category, message: redacted)
     }
 
-    /// Newest-last snapshot for the viewer.
+    /// A stream is starting: pin its opening lines in place of the last session's, and
+    /// resolve verbose capture once, the way the session file does.
+    func beginSession(captureDebug debug: Bool = UserDefaults.standard.bool(forKey: "diagFileLogDebug")) {
+        captureDebug.store(debug, ordering: .relaxed)
+        state.withLock { $0.pinned.removeAll(keepingCapacity: true) }
+    }
+
+    /// Newest-last: pinned lines the ring has since dropped, then the ring in order.
     func snapshot() -> [LogEntry] {
-        lock.lock(); defer { lock.unlock() }
-        return buffer
+        state.withLock { ring in
+            let oldestKept = ring.entries.isEmpty ? UInt64.max : ring.entries[ring.head].id
+            var out = Array(ring.pinned.prefix { $0.id < oldestKept })
+            out += ring.entries[ring.head...]
+            out += ring.entries[..<ring.head]
+            return out
+        }
     }
 
     func clear() {
-        lock.lock(); buffer.removeAll(keepingCapacity: true); lock.unlock()
+        state.withLock { ring in
+            ring.entries.removeAll(keepingCapacity: true)
+            ring.head = 0
+            ring.pinned.removeAll()
+        }
     }
 }
 
@@ -248,8 +284,7 @@ final class SessionLogFileSink: @unchecked Sendable {
     private var droppedOverflow = false
 
     /// INFO+ by default: a per-ACK DEBUG line once made up most of a session file.
-    /// The ring buffer and os_log keep every level. Immutable, so the check is a
-    /// plain compare on the logging path.
+    /// Immutable, so the check is a plain compare on the logging path.
     private let minimumLevel: LogLevel
 
     private let lineFormatter: DateFormatter = {
