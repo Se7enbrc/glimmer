@@ -49,6 +49,7 @@ extension FramePacer {
         lastPresentMediaTime = .nan
         prevPresentMediaTimeForMetric = .nan
         liveness.lastTickTargetMediaTime = .nan
+        liveness.staleCandidateTarget = .nan
     }
 
     /// In-place sibling of `resetCadenceBaseLocked`: re-anchor the cadence base ON
@@ -414,9 +415,14 @@ extension FramePacer {
         let logThreshold = FramePacer.starvationLogThreshold(streamInterval: streamFrameIntervalSeconds, vsync: vsyncInterval)
         let shouldLogStarvation = wedgedThisTick && liveness.starvedTickStreak >= logThreshold && !liveness.loggedStarvation
         if shouldLogStarvation { liveness.loggedStarvation = true }
-        // A submit-time release already claimed this tick's vsync: the screen shows a new frame.
+        // A refresh is stale only if neither its tick nor a submit release filled it. A submit can
+        // claim the target after its tick ran, so the previous tick's candidate is judged now.
+        let staleRefresh = liveness.staleCandidateTarget.isFinite
+        let staleRefreshQueueEmpty = liveness.staleCandidateQueueEmpty
         let claimedBySubmit = toPresent == nil && lastPresentMediaTime.isFinite
             && abs(targetTimestamp - lastPresentMediaTime) < vsyncInterval * 0.5
+        liveness.staleCandidateTarget = toPresent == nil && !claimedBySubmit ? targetTimestamp : .nan
+        liveness.staleCandidateQueueEmpty = sampledDepth == 0
         let starvationSnapshot = StarvationSnapshot(
             streak: liveness.starvedTickStreak, depth: sampledDepth,
             sinceLastMs: sinceLastForLog * 1000, targetTimestamp: targetTimestamp,
@@ -427,7 +433,8 @@ extension FramePacer {
         // over-target force-release telemetry). Folded into one helper so neither
         // branch grows this already-large function's complexity/body; see
         // `recordPerTickPresentSignals` for the two signals' rationale.
-        recordPerTickPresentSignals(gate, depth: sampledDepth, claimedBySubmit: claimedBySubmit)
+        recordPerTickPresentSignals(gate, depth: sampledDepth, staleRefresh: staleRefresh,
+                                    staleRefreshQueueEmpty: staleRefreshQueueEmpty)
 
         emitStarvationDiagnostics(
             shouldLog: shouldLogStarvation, forcedSelfHeal: forcedSelfHeal,
@@ -483,8 +490,9 @@ extension FramePacer {
     /// The two per-tick PRESENT-signal recordings, folded into one call so neither
     /// grows `releaseDueFrame`'s complexity/body: the stale-frame REPEAT counter
     /// and the over-target force-release telemetry. Called OFF the gate's lock.
-    func recordPerTickPresentSignals(_ gate: DueGateResult, depth: Int, claimedBySubmit: Bool) {
-        recordStaleRepeatIfNeeded(gate.toPresent == nil && !claimedBySubmit, queueEmpty: depth == 0)
+    func recordPerTickPresentSignals(_ gate: DueGateResult, depth: Int, staleRefresh: Bool,
+                                     staleRefreshQueueEmpty: Bool) {
+        recordStaleRepeatIfNeeded(staleRefresh, queueEmpty: staleRefreshQueueEmpty)
         recordOverTargetReleaseIfNeeded(gate, depth: depth)
     }
 

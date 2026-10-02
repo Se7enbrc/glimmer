@@ -65,6 +65,10 @@ extension FramePacer {
         /// `CADisplayLink.targetTimestamp` of the most recent tick: the vsync grid a submit-time
         /// release predicts its scanout on. `.nan` until the first tick and across a link rebind.
         var lastTickTargetMediaTime: CFTimeInterval = .nan
+        /// A tick's target that tick filled with no frame: stale unless a submit-time release
+        /// claims it before the next tick decides. `.nan` when nothing is pending.
+        var staleCandidateTarget: CFTimeInterval = .nan
+        var staleCandidateQueueEmpty = false
         /// `CFAbsoluteTimeGetCurrent()` when a frame last actually reached the
         /// renderer (`willPresent` returned true). If this stops advancing while
         /// the queue is non-empty, the present path is wedged.

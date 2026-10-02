@@ -83,6 +83,26 @@ struct FramePacerTests {
         #expect(pacer.queue.count == 1)
     }
 
+    /// A submit release fills the refresh its tick left empty, so that refresh isn't counted
+    /// stale; an earlier empty refresh still is.
+    @Test func submitReleaseClaimsOnlyItsOwnRefreshFromTheStaleCount() throws {
+        let (pacer, presents) = try makeRestingPacer()
+        let tickTarget = CACurrentMediaTime() + 0.05
+        pacer.liveness.lastTickTargetMediaTime = tickTarget
+        pacer.lastPresentMediaTime = tickTarget - 1.0 / 120
+        pacer.liveness.staleCandidateTarget = tickTarget - 1.0 / 60
+        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 0, timescale: 90_000))
+        #expect(presents.withLock { $0 } == 1)
+        #expect(pacer.liveness.staleCandidateTarget == tickTarget - 1.0 / 60)
+
+        let (claiming, _) = try makeRestingPacer()
+        claiming.liveness.lastTickTargetMediaTime = tickTarget
+        claiming.lastPresentMediaTime = tickTarget - 1.0 / 120
+        claiming.liveness.staleCandidateTarget = tickTarget
+        try claiming.submit(emptySampleBuffer(), hostPTS: CMTime(value: 0, timescale: 90_000))
+        #expect(claiming.liveness.staleCandidateTarget.isNaN)
+    }
+
     /// Passthrough stays off while a jitter buffer is wanted and before the first tick,
     /// so the tick path keeps owning those cases.
     @Test func submitReleaseNeedsRestConditions() throws {

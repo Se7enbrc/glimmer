@@ -97,6 +97,7 @@ extension FramePacer {
         guard sinceLast >= 0, sinceLast <= 1.0,
               sinceLast >= streamFrameIntervalSeconds - vsync * 0.5 else { return nil }
         lastPresentMediaTime = scanout
+        if abs(scanout - liveness.staleCandidateTarget) < vsync * 0.5 { liveness.staleCandidateTarget = .nan }
         tickDeficit.tickScanoutMediaTime = scanout
         updateGapRecoveryLocked(presented: true, empty: true, now: hostNow)
         return vsync
