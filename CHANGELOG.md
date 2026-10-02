@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.10.1 - 2026-10-02
+
+Glimmer is now signed with Apple's current Developer ID certificate, ahead of
+the older one's retirement in February. Updates, paired PCs and the permissions
+you've granted all carry over; there's nothing to do.
+
 ## 2026.10.0 - 2026-10-01
 
 While your stream is hidden behind other windows, the launcher no longer turns
