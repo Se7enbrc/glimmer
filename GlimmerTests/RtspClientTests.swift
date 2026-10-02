@@ -352,12 +352,14 @@ struct RtspClientTests {
             try #require(await stopDone.waitAsync(for: .seconds(2)) == .success)
             try await startup.value
             try await stop.value
+            // Stop leaves the socket open for deinit, so a loop still in recvfrom or sendto
+            // can never reach a descriptor number a reconnect has reused.
             #expect(receiver.initialized == false)
-            #expect(receiver.fd == -1)
+            #expect(fcntl(receiver.fd, F_GETFD) != -1)
             #expect(sink.cleanupCount() == 1)
             receiver.stop()
             #expect(receiver.initialized == false)
-            #expect(receiver.fd == -1)
+            #expect(fcntl(receiver.fd, F_GETFD) != -1)
             #expect(sink.cleanupCount() == 1)
         }.value
     }
