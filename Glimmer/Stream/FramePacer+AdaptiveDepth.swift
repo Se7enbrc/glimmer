@@ -155,9 +155,9 @@ extension FramePacer {
         return nominalVsyncSeconds < streamIntervalSeconds * postGapDrainableRateRatio
     }
 
-    /// Trim the FIFO toward the drop ceiling, returning the stalest dropped buffers
-    /// and the gap-recovery flag. The cap while a drainable catch-up plays through
-    /// (see `postGapCatchUpDrains`), else `effectiveTarget + 1`. Under `lock`.
+    /// Trim the FIFO toward the drop ceiling, returning the stalest dropped buffers and the
+    /// gap-recovery flag. The ceiling is the cap while a drainable catch-up plays through, else
+    /// `effectiveTarget + 1`; a depth above target for a whole history window trims to target.
     func gapAwareTrimLocked(now: CFTimeInterval, effectiveTarget: Int)
         -> (trimmed: [CMSampleBuffer], inGapRecovery: Bool) {
         let inGapRecovery = inGapRecoveryLocked(now: now)
@@ -168,6 +168,19 @@ extension FramePacer {
             : min(FramePacer.maxQueuedFrames, effectiveTarget + 1)
         var trimmed: [CMSampleBuffer] = []
         while queue.count > dropTarget { trimmed.append(queue.removeFirst().sampleBuffer) }
+        // The +1 slack tolerates bunching, but at fps≈refresh a two-frame burst leaves one frame
+        // standing above target on every later tick: one extra vsync of latency until a frame
+        // happens to be missed. A whole window of that is latency, so drop to target.
+        if !lenient, queue.count > effectiveTarget {
+            if !liveness.overTargetSince.isFinite {
+                liveness.overTargetSince = now
+            } else if now - liveness.overTargetSince >= FramePacer.standingExtraFrameSeconds {
+                trimmed.append(queue.removeFirst().sampleBuffer)
+                liveness.overTargetSince = .nan
+            }
+        } else {
+            liveness.overTargetSince = .nan
+        }
         return (trimmed, inGapRecovery)
     }
 

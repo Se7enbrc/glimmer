@@ -73,6 +73,9 @@ extension FramePacer {
     /// fraction of the panel's nominal rate: at fps≈refresh frames arrive one
     /// per tick, so a parked catch-up never drains and rides as ~5 frames of lag.
     static let postGapDrainableRateRatio = 0.9
+    /// A depth above target on every tick for this long is a standing extra frame of latency,
+    /// not benign bunching, and trims to target (moonlight's ~500 ms pacing history).
+    static let standingExtraFrameSeconds = 0.5
 
     /// After this many consecutive ticks with frames queued but nothing
     /// released, the in-pacer failsafe re-seeds the cadence base to force a

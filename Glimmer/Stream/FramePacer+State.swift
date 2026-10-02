@@ -79,6 +79,9 @@ extension FramePacer {
         var emptyTickStreak: Int = 0
         /// `CFAbsoluteTime` of the last gap-recovery edge; lenient window measures from here.
         var lastGapRecoveryTime: CFTimeInterval = 0
+        /// Host time since which every post-trim depth exceeded the target (`.nan` = none):
+        /// moonlight's pacing-history rule trims the standing extra frame once this spans a window.
+        var overTargetSince: CFTimeInterval = .nan
         /// Count of consecutive ticks the OVER-TARGET short-circuit had to force a
         /// release (a genuine backlog above the adaptive target the due gate would
         /// otherwise have latched not-due - the no-network present-stall fix). Reset

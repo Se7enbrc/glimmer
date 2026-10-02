@@ -364,6 +364,7 @@ final class FramePacer: @unchecked Sendable {
         liveness.starvedTickStreak = 0
         liveness.overTargetReleaseStreak = 0
         liveness.presentRejectStreak = 0
+        liveness.overTargetSince = .nan
         liveness.loggedStarvation = false
         // Seed the realized-rate window from "now" too, so the first deficit /
         // floor-violation verdicts measure from start - never from a stale or
@@ -412,6 +413,7 @@ final class FramePacer: @unchecked Sendable {
         liveness.starvedTickStreak = 0
         liveness.overTargetReleaseStreak = 0
         liveness.presentRejectStreak = 0
+        liveness.overTargetSince = .nan
         liveness.loggedStarvation = false
         // Reset the adaptive jitter buffer so a restart begins at the low-latency
         // baseline (depth 1) rather than inheriting a stale deepened target.
