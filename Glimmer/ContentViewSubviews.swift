@@ -97,8 +97,10 @@ struct AppIconsRow: View {
         return model.isReconnecting ? .reconnecting : .connecting
     }
 
-    /// Icon, name, and a quiet play glyph: a click streams this app at once.
-    private func tileLabel(systemImage: String, title: String, trailing: String, launching: Bool = false) -> some View {
+    /// Icon, name, and a quiet play glyph: a click streams this app at once. A hidden stream's
+    /// tile says where it goes instead, so the way back doesn't look like the way in.
+    private func tileLabel(systemImage: String, title: String, trailing: String, trailingText: String? = nil,
+                           launching: Bool = false) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 20, weight: .semibold))
@@ -110,6 +112,11 @@ struct AppIconsRow: View {
             if launching {
                 // Dark so the spinner draws light on the violet in both appearances.
                 ProgressView().controlSize(.small).environment(\.colorScheme, .dark)
+            } else if let trailingText {
+                Text(trailingText)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize()
             } else {
                 Image(systemName: trailing)
                     .font(.footnote.weight(.bold))
@@ -132,8 +139,8 @@ struct AppIconsRow: View {
             case .hiddenStream: model.resumeStreamWindow()
             }
         } label: {
-            tileLabel(systemImage: app.systemImage, title: app.name,
-                      trailing: state == .hiddenStream ? "play.tv.fill" : "play.fill",
+            tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill",
+                      trailingText: state == .hiddenStream ? "Back to Stream" : nil,
                       launching: state == .connecting || state == .reconnecting)
         }
         .buttonStyle(AppTileStyle())

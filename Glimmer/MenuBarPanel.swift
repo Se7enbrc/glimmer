@@ -156,7 +156,7 @@ struct MenuBarPanel: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Divider()
-            actionRow("Back to Stream", systemImage: "play.fill") {
+            actionRow("Back to Stream", systemImage: "play.tv.fill") {
                 if model.isMiniPlayer { model.toggleMiniPlayer() }
                 handToStream()
             }
@@ -376,7 +376,7 @@ struct MenuBarPanel: View {
                 #endif
                 Button("Quit Glimmer") { NSApp.terminate(nil) }
             } label: {
-                Image(systemName: "ellipsis")
+                Label("More", systemImage: "ellipsis").labelStyle(.iconOnly)
             }
             .menuStyle(.button)
             .buttonStyle(.glass)

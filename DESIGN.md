@@ -335,8 +335,9 @@ Tactile and confident: the things on screen that ask to be pressed.
   launching or streaming carries its own state, with the readiness chip as the
   status: during a slow connect or a reconnect its play glyph becomes a spinner
   and a click or Escape is the way out; while its stream window is hidden it
-  stays violet with a TV glyph and a click or Return goes back to the stream.
-  The other app buttons dim while a stream exists.
+  stays violet, reads “Back to Stream” in place of its play glyph, and a click
+  or Return goes back to the stream. The other app buttons dim while a stream
+  exists.
 - **State button (`StreamButtonStyle`):** a capsule at least 46pt tall, with
   22pt of horizontal and 12pt of vertical padding, white title2 semibold label.
   It appears under the app buttons only when the PC needs something other than a
@@ -354,9 +355,9 @@ Tactile and confident: the things on screen that ask to be pressed.
 ### Chips
 
 - **Readiness chip:** a glass capsule with 4 by 10pt of padding, a 7pt status
-  dot, a caption-medium label and an optional 9pt route glyph (bolt for wired,
-  Wi-Fi arcs for wireless). The dot pulses while your own stream is live, unless
-  Reduce Motion is on.
+  dot, a caption-medium label and an optional 9pt route glyph (a cable plug for
+  wired, Wi-Fi arcs for wireless). The dot pulses while your own stream is live,
+  unless Reduce Motion is on.
 - **Spec line:** not a chip. Resolution, refresh rate and codec are a single
   line of body text in secondary colour under the PC's name, separated by middle
   dots, so nothing that is a fact looks pressable.

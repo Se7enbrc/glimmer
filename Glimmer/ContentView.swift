@@ -60,9 +60,9 @@ struct MainWindow: View {
         } message: {
             Text(AppModel.hidPermissionExplanation)
         }
-        // One-time launch nudge to enable Wi-Fi stutter protection. Only for
-        // users who've paired a PC (skips first-run onboarding), never while the
-        // rawHID prompt is up; "Don't ask again" inside silences it for good.
+        // Wi-Fi stutter protection is offered at first open on every Mac, whatever the
+        // route: awdl0 wrecks streams, and a MacBook first opened on Ethernet goes to the
+        // couch. It returns each launch until enabled or "Don't ask again".
         .sheet(isPresented: $showAWDLPrompt) {
             AWDLEnablePrompt(manager: AWDLHelperManager.shared)
         }
@@ -74,17 +74,16 @@ struct MainWindow: View {
         .task {
             guard !awdlPromptChecked else { return }
             awdlPromptChecked = true
-            // Let the window and route settle before deciding whether the
-            // Wi-Fi helper offer applies.
-            try? await Task.sleep(for: .seconds(1.0))
+            // Let the window settle, then wait out a controller alert or the pair sheet:
+            // one sheet at a time, so the offer follows them instead of being skipped.
+            do {
+                try await Task.sleep(for: .seconds(1.0))
+                while model.showRawHIDPrompt || model.showHIDPermissionPrompt || model.pairSheetShown {
+                    try await Task.sleep(for: .milliseconds(250))
+                }
+            } catch { return }
             AWDLHelperManager.shared.refresh()
-            // Parking awdl0 only smooths Wi-Fi; on a confirmed wired route it's
-            // a privileged-helper install for nothing. Suppress ONLY on .wired -
-            // Wi-Fi / tunnel / still-resolving unknown still prompt.
-            guard !model.hosts.isEmpty,
-                  !model.showRawHIDPrompt, !model.showHIDPermissionPrompt,
-                  model.hostRoute.routeClass != .wired,
-                  AWDLHelperManager.shared.shouldPromptToEnable else { return }
+            guard AWDLHelperManager.shared.shouldPromptToEnable else { return }
             showAWDLPrompt = true
         }
         // No .frame: forcing either axis to .infinity gives the window an
@@ -134,17 +133,14 @@ struct MainWindow: View {
     }
 }
 
-/// The Stream menu: the launcher's verbs where ⌘? finds them, and the PCs on ⌘1-⌘9
-/// (nine at most; ⌘0 reads as reset). PCs lock while streaming, since ⌘ stays with the Mac.
+/// The Stream menu: the launcher's one action in its words, where ⌘? finds it, and the PCs
+/// on ⌘1-⌘9 (nine at most; ⌘0 reads as reset). PCs lock while streaming, since ⌘ stays with the Mac.
 struct StreamMenu: View {
     let model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        if case .stream(let app) = model.menuBarPrimaryAction {
-            Button("Stream \(app)") { model.streamHeroApp() }
-        } else {
-            Button("Stream") {}.disabled(true)
-        }
+        primaryItem
         Toggle("Mini Player", isOn: Binding(get: { model.isMiniPlayer }, set: { _ in model.toggleMiniPlayer() }))
             .disabled(!model.isStreaming)
         Button("Stop Streaming") { model.stopStreamFromMenu(source: "the Stream menu") }
@@ -155,6 +151,28 @@ struct StreamMenu: View {
                 get: { model.selectedHost?.id == host.id }, set: { if $0 { model.selectHost(host) } }))
                 .keyboardShortcut(index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))) : nil)
                 .disabled(model.isStreaming)
+        }
+    }
+
+    /// The same resolver as the launcher and the menu bar, so all three offer one action.
+    @ViewBuilder private var primaryItem: some View {
+        let host = model.selectedHost
+        switch model.menuBarPrimaryAction {
+        case .stream(let app): Button("Stream \(app)") { model.streamHeroApp() }
+        case .wake: Button("Wake and Connect") { if let host { model.wakeHost(host, thenConnect: true) } }
+        case .waking: Button("Stop Waiting") { if let host { model.cancelWake(host) } }
+        case .pairAgain:
+            Button("Pair Again…") {
+                model.requestPairing(for: host)
+                openWindow(id: "main")
+            }
+        case .cancelConnection: Button("Cancel Connection") { model.cancelConnect() }
+        case .backToStream:
+            Button("Back to Stream") {
+                if model.isMiniPlayer { model.toggleMiniPlayer() }
+                model.resumeStreamWindow()
+            }
+        case .stopStreaming, .none: Button("Stream") {}.disabled(true)
         }
     }
 }

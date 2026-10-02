@@ -68,11 +68,11 @@ final class HostRouteMonitor {
     /// Called when the route leaves wired; AppModel parks AWDL if a stream is up.
     @ObservationIgnored var onLeftWired: (() -> Void)?
 
-    /// Chip glyph for the current route - bolt for wired, arcs for Wi-Fi,
-    /// nothing when the route is a tunnel or unknown.
+    /// Chip glyph for the current route: a cable plug for wired (a bolt reads as power on a Mac),
+    /// arcs for Wi-Fi, nothing when the route is a tunnel or unknown.
     var glyphSystemName: String? {
         switch routeClass {
-        case .wired: return "bolt.fill"
+        case .wired: return "cable.connector.horizontal"
         case .wifi: return "wifi"
         case .tunnel, .unknown: return nil
         }

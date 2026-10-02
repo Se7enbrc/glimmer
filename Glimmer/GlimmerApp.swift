@@ -132,6 +132,8 @@ struct GlimmerApp: App {
         .defaultLaunchBehavior(launchedAtLogin ? .suppressed : .automatic)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            // No help book, so no dead "Glimmer Help" item; the Help menu keeps macOS's ⌘? menu search.
+            CommandGroup(replacing: .help) {}
             #if canImport(Sparkle)
             // Standard macOS "Check for Updates..." under the app menu (after the
             // About item). Sparkle drives the rest: a check on every open

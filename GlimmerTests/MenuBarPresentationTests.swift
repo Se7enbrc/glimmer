@@ -93,7 +93,9 @@ struct MenuBarPresentationTests {
 
     @Test func readingsAreWordedPlainly() {
         #expect(MenuBarPresentation.modeLine(width: 3024, height: 1964, fps: 120, hdr: true) == "3024 × 1964 · 120 Hz · HDR")
-        #expect(MenuBarPresentation.modeLine(width: 1920, height: 1080, fps: 60, hdr: false) == "1920 × 1080 · 60 Hz")
+        // The launcher's own words: a standard mode by its name, a Mac panel by its size.
+        #expect(MenuBarPresentation.modeLine(width: 1920, height: 1080, fps: 60, hdr: false) == "1080p · 60 Hz")
+        #expect(AppModel.resolutionLabel(width: 2560, height: 1664) == "2560 × 1664")
     }
 
     @Test func metricsUseWhatArrivesAndDashTheRest() {

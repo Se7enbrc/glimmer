@@ -118,7 +118,7 @@ enum MenuBarPresentation {
 
     /// The mode line under the stream card's header, in the launcher's wording.
     static func modeLine(width: Int, height: Int, fps: Int, hdr: Bool) -> String {
-        "\(width) × \(height) · \(fps) Hz" + (hdr ? " · HDR" : "")
+        "\(AppModel.resolutionLabel(width: width, height: height)) · \(fps) Hz" + (hdr ? " · HDR" : "")
     }
 
     /// The big numbers: frames arriving (true even with the window hidden),

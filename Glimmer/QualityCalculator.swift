@@ -378,21 +378,16 @@ extension AppModel {
         return (w, h, native.fps)
     }
 
-    /// Friendly label for common Mac and external panel native resolutions.
-    static func resolutionLabel(width w: Int, height h: Int) -> String {
+    /// The names players use for standard modes; anything else, Mac panels included, reads as its size.
+    nonisolated static func resolutionLabel(width w: Int, height h: Int) -> String {
         switch (w, h) {
         case (7680, 4320): return "8K"
         case (5120, 2880): return "5K"
         case (3840, 2160): return "4K"
-        case (3456, 2234): return "MBP 16″"
-        case (3024, 1964): return "MBP 14″"
-        case (2880, 1864): return "MBA 15″"
-        case (2560, 1664): return "MBA 13″"  // M3+ Air variant
-        case (2560, 1600): return "MBA 13″"
         case (2560, 1440): return "1440p"
         case (1920, 1080): return "1080p"
         case (1280, 720): return "720p"
-        default: return "\(w)×\(h)"
+        default: return "\(w) × \(h)"
         }
     }
 }

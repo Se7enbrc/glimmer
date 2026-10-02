@@ -315,7 +315,7 @@ private struct HostChooser: View {
 
             if showManual {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Hostname or IP")
+                    Text("Name or address")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                     HStack {

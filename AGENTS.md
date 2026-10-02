@@ -140,6 +140,10 @@ These are settled. A pull request is not the place to reopen them.
 
 - The renderer is `AVSampleBufferDisplayLayer`. Not Metal.
 - Glimmer does not use or recommend macOS Game Mode.
+- The Wi-Fi helper, which parks awdl0, is offered at first open on every Mac,
+  whatever the network route, and again each launch until it's on or declined
+  for good. awdl0 wrecks streams; deferring, gating, burying or hiding the offer
+  is not an option.
 - Fidelity comes first. Pacing, bitrate, buffering and decode defaults are tuned
   against real-stream telemetry; changing them needs before and after numbers
   ([PROFILING.md](docs/PROFILING.md)). Safeguards back off under stress and

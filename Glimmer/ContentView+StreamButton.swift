@@ -143,22 +143,12 @@ struct StreamButton: View {
                         .font(.title2.weight(.semibold))
                         .contentTransition(.opacity)
                 case .connecting, .reconnecting:
-                    // Steady primary line; engine-stage churn flows through
-                    // the subtext - calmer than swapping the whole label.
+                    // One steady line naming the PC; engine stages stay in the log.
                     ProgressView()
                         .controlSize(.small)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(connectingPrimary)
-                            .font(.system(size: 16, weight: .semibold))
-                            .lineLimit(1)
-                        if let stage = connectingSubtext {
-                            Text(stage)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .contentTransition(.opacity)
-                        }
-                    }
+                    Text(connectingPrimary)
+                        .font(.system(size: 16, weight: .semibold))
+                        .lineLimit(1)
                     // The whole capsule is the cancel button - say so, quietly.
                     Text(role == .reconnecting ? "Stop Streaming" : "Cancel")
                         .font(.body.weight(.semibold))
@@ -301,10 +291,6 @@ struct StreamButton: View {
         Self.connectingPrimary(stage: connectingStage, selectedName: model.selectedHost?.displayName)
     }
 
-    private var connectingSubtext: String? {
-        Self.connectingSubtext(stage: connectingStage, primary: connectingPrimary)
-    }
-
     /// Steady primary line. Prefers the SESSION's own stage (connect, reconnect
     /// or "Cancelling…"), which names the PC it's dialling even after ⌘1-⌘9
     /// re-points `selectedHost` mid-handshake.
@@ -315,13 +301,5 @@ struct StreamButton: View {
         }
         if let selectedName { return "Connecting to \(selectedName)…" }
         return "Connecting…"
-    }
-
-    /// Engine-stage subtext below the primary line, only when it adds
-    /// something the primary doesn't already say ("RTSP handshake").
-    static func connectingSubtext(stage: String?, primary: String) -> String? {
-        guard let stage, !stage.isEmpty, stage != primary else { return nil }
-        if stage.hasPrefix("Connecting to ") || stage == "Connecting…" { return nil }
-        return stage
     }
 }

@@ -54,7 +54,6 @@ struct StreamButtonTests {
         let stage = "Reconnecting to Tower…"
         let primary = StreamButton.connectingPrimary(stage: stage, selectedName: "Den")
         #expect(primary == stage)
-        #expect(StreamButton.connectingSubtext(stage: stage, primary: primary) == nil)
     }
 
     /// The engine re-runs its connect stages during a reconnect; they mustn't
@@ -66,10 +65,9 @@ struct StreamButtonTests {
         #expect(model.streamPhase == .connecting(stage: "Reconnecting to Tower…"))
     }
 
-    @Test func engineStagesSitUnderTheConnectingLine() {
+    @Test func engineStagesReadAsConnectingToThePC() {
         let primary = StreamButton.connectingPrimary(stage: "RTSP handshake", selectedName: "Tower")
         #expect(primary == "Connecting to Tower…")
-        #expect(StreamButton.connectingSubtext(stage: "RTSP handshake", primary: primary) == "RTSP handshake")
         #expect(StreamButton.connectingPrimary(stage: "Cancelling…", selectedName: "Tower") == "Cancelling…")
         #expect(StreamButton.connectingPrimary(stage: nil, selectedName: nil) == "Connecting…")
     }
