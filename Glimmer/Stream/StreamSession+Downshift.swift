@@ -2,9 +2,9 @@
 //  StreamSession+Downshift.swift
 //
 //  The watchdog escalation tier that ends an unproductive HOLD by lowering the
-//  session bitrate. Split out of StreamSession+Watchdog.swift to keep that file
-//  focused on detection; the POLICY (remote-only, sustained, bounded, cooled
-//  down) lives in BitrateDownshiftController, and this owns the side effects.
+//  session bitrate, and the step back up once the lowered rate has run clean.
+//  The POLICY (remote-only, sustained, bounded, cooled down, clean window) lives
+//  in BitrateDownshiftController; this owns the side effects.
 //
 //  See BitrateDownshiftController for why a reconnect is the mechanism rather
 //  than a control message: bitrate is fixed per session and the SDP is the only
@@ -16,16 +16,9 @@ import os
 
 extension StreamSession {
 
-    /// Consider walking the bitrate down because a remote path demonstrably
-    /// cannot carry the negotiated rate. The decision (remote-only, sustained,
-    /// bounded, cooled-down) is the controller's; this owns the side effects -
-    /// rewriting the config the reconnect will rebuild from, and driving the
-    /// reconnect episode itself.
-    ///
-    /// `reconnectConfig` is the SAME value `reconnectInPlace` reads to build the
-    /// next SDP, so lowering `bitrateKbps` here IS the downshift - there is no
-    /// separate channel to push a rate through. The reconnect holds the frozen
-    /// frame, so the user sees a brief hold rather than a bounce to the launcher.
+    /// Consider walking the bitrate down because a remote path demonstrably cannot carry the negotiated
+    /// rate. `reconnectConfig` is what `reconnectInPlace` builds the next SDP from, so lowering its
+    /// bitrate IS the downshift; the reconnect holds the frozen frame rather than bouncing to the launcher.
     func considerBitrateDownshift(
         decodeIdle: Double, receiveIdle: Double
     ) async {
@@ -51,17 +44,19 @@ extension StreamSession {
             return
         }
 
-        // Spend the budget BEFORE the await so a second watchdog tick landing
+        // Spend the budget BEFORE any await so a second watchdog tick landing
         // mid-reconnect can't book a second downshift off the same evidence.
         downshift.recordDownshift(atUptime: ProcessInfo.processInfo.systemUptime)
         reconnectConfig?.bitrateKbps = toKbps
         didLogDownshiftDecision = true
+        // The route the stall was judged on, so a later route change can set the downshift aside.
+        downshift.route = await currentRouteAsk()?.route
+        guard isStreaming, !stopInProgress, !isReconnecting else { return }
 
         Diag.warn(
             "Link cannot carry \(current / 1000) Mbps - \(String(format: "%.0f", decodeIdle))s of "
             + "received-but-undecodable video on a remote path. Downshifting to \(toKbps / 1000) Mbps "
-            + "and reconnecting in place (step \(downshift.downshiftCount)/"
-            + "\(BitrateDownshiftController.maxDownshifts)).", "Stream")
+            + "and reconnecting in place (step \(downshift.stepsDown) down).", "Stream")
         log.error("""
             Bitrate downshift: \(current, privacy: .public) → \(toKbps, privacy: .public) kbps \
             after \(decodeIdle, privacy: .public)s decode-only stall on a remote path
@@ -70,5 +65,32 @@ extension StreamSession {
         await runSelfInitiatedReconnect(
             cause: "lowering the bitrate to \(toKbps / 1000) Mbps",
             bannerText: "Weak connection. Lowering quality to \(toKbps / 1000) Mbps…")
+    }
+
+    /// After a clean window at a lowered rate, one step back toward the route's ask, applied the way the
+    /// downshift was: a reconnect in place under a banner that says why. Called on healthy watchdog ticks.
+    func considerBitrateStepUp() async {
+        guard isStreaming, !stopInProgress, !isReconnecting, downshift.isDownshifted,
+              let current = reconnectConfig?.bitrateKbps else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        // The clean window is checked before the main-actor hop for the route, so the hop is rare.
+        guard downshift.stepUp(currentKbps: current, routeKbps: .max, nowUptime: now) != nil else { return }
+        let route = await currentRouteAsk()
+        guard isStreaming, !stopInProgress, !isReconnecting, let route, downshift.covers(route: route.route),
+              let toKbps = downshift.stepUp(currentKbps: current, routeKbps: route.kbps, nowUptime: now)
+        else { return }
+        let clean = downshift.cleanSeconds(nowUptime: now) ?? 0
+        downshift.recordStepUp(atUptime: now, reachedRoute: toKbps >= route.kbps)
+        reconnectConfig?.bitrateKbps = toKbps
+
+        Diag.notice("Link clean for \(Int(clean / 60)) min at \(current / 1000) Mbps - stepping back up to "
+            + "\(toKbps / 1000) Mbps and reconnecting in place.", "Stream")
+        log.notice("""
+            Bitrate step-up: \(current, privacy: .public) → \(toKbps, privacy: .public) kbps after \
+            \(clean, privacy: .public)s clean at the lowered rate
+            """)
+        await runSelfInitiatedReconnect(
+            cause: "raising the bitrate to \(toKbps / 1000) Mbps",
+            bannerText: "Connection improved. Raising quality to \(toKbps / 1000) Mbps…")
     }
 }

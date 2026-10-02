@@ -93,7 +93,8 @@ extension AppModel {
     nonisolated static func routeAsk(_ decision: BitrateDecision, route: HostRouteMonitor.RouteClass) -> RouteAsk {
         RouteAsk(kbps: StreamPathMTU.wifiAskKbps(ask: routeAskKbps(decision, route: route),
                                                  phyRateMbps: decision.radioGatePhyMbps),
-                 boost: rttWithdrawableBoost(decision, route: route))
+                 boost: rttWithdrawableBoost(decision, route: route),
+                 route: "\(route)")
     }
 
     /// Every reconnect asks this: the launch's decision on the route the Mac is on

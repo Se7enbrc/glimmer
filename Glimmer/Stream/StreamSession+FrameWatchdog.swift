@@ -140,14 +140,15 @@ extension StreamSession {
             "Stream")
     }
 
-    /// Decode resumed: clear the stall latches so a later stall logs and recovers afresh, and hide the
-    /// hold banner. A reconnect episode owns its banner until it resumes or gives up.
+    /// Decode resumed: clear the stall latches so a later stall logs and recovers afresh, hide the hold
+    /// banner, and let a lowered bitrate earn its step back up. A reconnect episode owns its banner.
     fileprivate func clearDecodeOnlyStallLatch() async {
         resetStallLatches()
         didReconnectForDecodeStall = false
         guard !isReconnecting else { return }
         let winForHide = window
         await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
+        await considerBitrateStepUp()
     }
 
     func resetStallLatches() {
@@ -163,6 +164,7 @@ extension StreamSession {
     /// the hold keeps the session while the control link lives, and dead-peer detection ends it.
     fileprivate func attemptDecodeStallRecovery(decodeIdle: Double, receiveIdle: Double) async {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
+        downshift.noteStall(atUptime: ProcessInfo.processInfo.systemUptime)
         // Packets arriving on a remote path mean overload, and a keyframe only adds to it; the downshift
         // tier owns that case. A silent PC is a paused encoder that a keyframe can wake.
         let overloaded = isRemotePathSession && receiveIdle < Self.decodeOnlyStallThreshold

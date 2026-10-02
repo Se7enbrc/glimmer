@@ -4,17 +4,17 @@
 
 import Foundation
 
-/// Policy + budget for walking the session bitrate down when a remote path
-/// demonstrably cannot carry the negotiated rate. Pure: `evaluate` decides,
-/// `recordDownshift` books it. Wiring lives in StreamSession+Watchdog.
+/// Policy + budget for walking the session bitrate down when a remote path demonstrably cannot carry
+/// the negotiated rate, and one step back up once it has run clean. Pure: `evaluate` and `stepUp`
+/// decide, the `record` calls book. Wiring lives in StreamSession+Downshift.
 struct BitrateDownshiftController: Sendable {
 
     // MARK: - Policy
 
-    /// Two `stepFactor` steps reach ~36% of the ask, from a slightly tight tunnel to one carrying a fifth;
-    /// more steps would only churn reconnects. No automatic upshift: unused headroom can't be measured,
-    /// and guessing risks repeated reconnects.
+    /// Downshifts allowed inside one budget window: two steps reach ~36% of the ask, and more at a
+    /// time would only churn reconnects. A downshift stops counting after `budgetWindowSeconds`.
     static let maxDownshifts = 2
+    static let budgetWindowSeconds: Double = 1800
 
     /// Multiplier per step. 0.6 is a decisive cut, not a nibble - a 10-15% trim
     /// would cost a reconnect and still leave the path overrun, which is the
@@ -36,13 +36,33 @@ struct BitrateDownshiftController: Sendable {
     /// judge it, so two downshifts can never fire on one episode's evidence.
     static let cooldownSeconds: Double = 90.0
 
+    /// Clean streaming at a lowered rate before one step back up. A step-up that stalls again inside
+    /// its own window doubles the next one, up to the cap, so a failing link is probed less and less.
+    static let stepUpCleanSeconds: Double = 300
+    static let stepUpCleanCapSeconds: Double = 2400
+
     // MARK: - State
 
-    /// Downshifts performed this session.
-    private(set) var downshiftCount = 0
-
-    /// Monotonic seconds of the last downshift; nil until the first.
+    private var downshiftUptimes: [Double] = []
     private var lastDownshiftUptime: Double?
+    private var lastStallUptime: Double?
+    private var lastStepUpUptime: Double?
+    private var cleanSecondsRequired = BitrateDownshiftController.stepUpCleanSeconds
+    /// Steps the ask sits below the route's; 0 means no downshift is in force.
+    private(set) var stepsDown = 0
+    /// The route the downshift was judged on (HostRouteMonitor's class); another route starts fresh.
+    /// The session sets it after booking, since learning the route takes a main-actor hop.
+    var route: String?
+
+    var isDownshifted: Bool { stepsDown > 0 }
+
+    /// Downshifts still counted against the budget.
+    func downshiftCount(nowUptime: Double) -> Int {
+        downshiftUptimes.count { nowUptime - $0 < Self.budgetWindowSeconds }
+    }
+
+    /// Whether the downshift in force was judged on `route`; one judged elsewhere says nothing here.
+    func covers(route: String) -> Bool { isDownshifted && self.route == route }
 
     // MARK: - Decision
 
@@ -85,24 +105,52 @@ struct BitrateDownshiftController: Sendable {
            nowUptime - last < Self.cooldownSeconds {
             return .coolingDown
         }
-        guard downshiftCount < Self.maxDownshifts else { return .budgetExhausted }
+        guard downshiftCount(nowUptime: nowUptime) < Self.maxDownshifts else { return .budgetExhausted }
         let next = Int((Double(currentKbps) * Self.stepFactor).rounded())
         guard next >= Self.floorKbps, next < currentKbps else { return .budgetExhausted }
         return .downshift(toKbps: next)
     }
 
-    /// Book a downshift that actually happened. Only the caller knows whether the
-    /// reconnect was really initiated, so the budget is spent here, not in
-    /// `evaluate`.
-    ///
-    /// There is deliberately no `reset`: the budget is per-session by
-    /// CONSTRUCTION, because `StreamSession` is built fresh for every stream
-    /// launch (AppModel+Streaming) and this is one of its stored properties. A
-    /// reconnect - including a downshift's own - reuses the same session, which
-    /// is exactly right: the budget must survive it, or a link that keeps
-    /// failing would downshift forever.
-    mutating func recordDownshift(atUptime: Double) {
-        downshiftCount += 1
-        lastDownshiftUptime = atUptime
+    /// Book a downshift that actually happened, judged on `route`. Only the caller knows whether the
+    /// reconnect was really initiated, so the budget is spent here, not in `evaluate`.
+    mutating func recordDownshift(atUptime now: Double, route: String? = nil) {
+        downshiftUptimes.append(now)
+        lastDownshiftUptime = now
+        stepsDown += 1
+        self.route = route
+        // A stall inside a step-up's own clean window means the step-up failed; one that outlived it
+        // proved the link, and the backoff starts over.
+        if let stepUp = lastStepUpUptime {
+            let failed = now - stepUp < cleanSecondsRequired
+            cleanSecondsRequired = failed
+                ? min(cleanSecondsRequired * 2, Self.stepUpCleanCapSeconds) : Self.stepUpCleanSeconds
+            lastStepUpUptime = nil
+        }
+    }
+
+    /// Decode stalled past the nudge threshold: the clean window starts over.
+    mutating func noteStall(atUptime now: Double) { lastStallUptime = now }
+
+    /// Seconds the lowered rate has run clean: since the latest of the downshift, the last stall and
+    /// the last step-up. Nil while nothing is downshifted.
+    func cleanSeconds(nowUptime: Double) -> Double? {
+        guard isDownshifted,
+              let since = [lastDownshiftUptime, lastStallUptime, lastStepUpUptime].compactMap({ $0 }).max()
+        else { return nil }
+        return nowUptime - since
+    }
+
+    /// The ask to step back up to once the clean window has passed: one `stepFactor` toward
+    /// `routeKbps`, capped there. Nil while not downshifted, not yet clean enough, or already there.
+    func stepUp(currentKbps: Int, routeKbps: Int, nowUptime: Double) -> Int? {
+        guard let clean = cleanSeconds(nowUptime: nowUptime), clean >= cleanSecondsRequired,
+              currentKbps < routeKbps else { return nil }
+        return min(routeKbps, Int((Double(currentKbps) / Self.stepFactor).rounded()))
+    }
+
+    /// Book a step-up; `reachedRoute` means the ask is back at the route's and nothing is downshifted.
+    mutating func recordStepUp(atUptime now: Double, reachedRoute: Bool) {
+        lastStepUpUptime = now
+        stepsDown = reachedRoute ? 0 : max(0, stepsDown - 1)
     }
 }

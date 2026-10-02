@@ -248,6 +248,8 @@ final class RttSampler: @unchecked Sendable {
 struct RouteAsk: Sendable, Equatable {
     var kbps: Int
     var boost: Double
+    /// The route class the ask was judged on (wired, wifi, tunnel); a downshift is tied to it.
+    var route: String = ""
 }
 
 /// What the connect-time gate actually decided, latched for the telemetry
@@ -356,15 +358,15 @@ enum StreamPathMTU {
         return Int((Double(capped) / boost).rounded())
     }
 
-    /// The ask a reconnect rebuilds from: the current route's, but never above a
-    /// downshift. Downshifted, it takes the lower of the two both before and after
-    /// the RTT withdraws the wired boost, so neither outcome can raise either ask.
+    /// The ask a reconnect rebuilds from: the current route's, but never above a downshift still in
+    /// force (`BitrateDownshiftController.covers`). Downshifted, it takes the lower of the two both
+    /// before and after the RTT withdraws the wired boost, so neither outcome can raise either ask.
     static func reconnectAsk(current: RouteAsk, route: RouteAsk?, downshifted: Bool) -> RouteAsk {
         guard let route else { return current }
         guard downshifted else { return route }
         let kbps = min(current.kbps, route.kbps)
         let withdrawn = min(Double(current.kbps) / current.boost, Double(route.kbps) / route.boost)
-        return RouteAsk(kbps: kbps, boost: Double(kbps) / withdrawn)
+        return RouteAsk(kbps: kbps, boost: Double(kbps) / withdrawn, route: route.route)
     }
 
     /// Fewer samples than this cannot cap: "consistently high" needs a sample.

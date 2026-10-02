@@ -319,15 +319,25 @@ extension StreamSession {
         return true
     }
 
-    /// Re-derive the ask for the route the Mac is on now, which may have changed
-    /// since the start. A downshift stays the ceiling (StreamPathMTU.reconnectAsk).
+    /// The ask for the route the Mac is on now, or nil when unknown (no provider, another PC selected).
+    func currentRouteAsk() async -> RouteAsk? {
+        guard let provider = routeAskProvider else { return nil }
+        return await MainActor.run { provider() }
+    }
+
+    /// Re-derive the ask for the route the Mac is on now. A downshift judged on this route stays the
+    /// ceiling; one judged on another route is set aside, since it says nothing about this one.
     private func refreshReconnectAsk() async {
-        var route: RouteAsk?
-        if let provider = routeAskProvider { route = await MainActor.run { provider() } }
+        let route = await currentRouteAsk()
         guard let config = reconnectConfig else { return }
+        if let route, downshift.isDownshifted, !downshift.covers(route: route.route) {
+            Diag.notice("Route changed since the downshift (\(downshift.route ?? "unknown") → \(route.route)) - "
+                + "asking for its full \(route.kbps / 1000) Mbps again.", "Stream")
+            downshift = BitrateDownshiftController()
+        }
         let ask = StreamPathMTU.reconnectAsk(
             current: RouteAsk(kbps: config.bitrateKbps, boost: config.bitrateBoost),
-            route: route, downshifted: downshift.downshiftCount > 0)
+            route: route, downshifted: downshift.isDownshifted)
         if ask.kbps != config.bitrateKbps {
             Diag.notice("Reconnect ask for the current route: \(ask.kbps / 1000) Mbps "
                 + "(was \(config.bitrateKbps / 1000)).", "Stream")

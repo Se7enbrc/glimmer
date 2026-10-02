@@ -93,7 +93,7 @@ struct WiredBitrateTests {
         let start = model.nativeStreamConfig(for: pc)
         let decision = try #require(start.bitrateDecision)
         let ask = AppModel.routeAsk(decision, route: model.hostRoute.routeClass)
-        #expect(ask == RouteAsk(kbps: start.bitrateKbps, boost: start.bitrateBoost))
+        #expect(ask == RouteAsk(kbps: start.bitrateKbps, boost: start.bitrateBoost, route: "\(model.hostRoute.routeClass)"))
         #expect(ask.kbps == model.wireBitrateKbps(forFormats: model.offeredVideoFormats(for: pc)))
     }
 
@@ -104,11 +104,11 @@ struct WiredBitrateTests {
             BitrateDecision(mode: mode, dialKbps: 226_000, codecMultiplier: 0.8, boost: boost, radioGatePhyMbps: phy)
         }
         let wired = decision(.highestQuality, boost: AppModel.wiredBitrateMultiplier, phy: nil)
-        #expect(AppModel.routeAsk(wired, route: .wired) == RouteAsk(kbps: 361_600, boost: 2))
+        #expect(AppModel.routeAsk(wired, route: .wired) == RouteAsk(kbps: 361_600, boost: 2, route: "wired"))
         let wifi = decision(.highestQuality, boost: AppModel.wifiBitrateMultiplier, phy: 600)
-        #expect(AppModel.routeAsk(wifi, route: .wifi) == RouteAsk(kbps: 210_000, boost: 1))
+        #expect(AppModel.routeAsk(wifi, route: .wifi) == RouteAsk(kbps: 210_000, boost: 1, route: "wifi"))
         #expect(AppModel.routeAsk(decision(.bandwidthSaver, boost: 1, phy: nil), route: .wired)
-            == RouteAsk(kbps: 180_800, boost: 1))
+            == RouteAsk(kbps: 180_800, boost: 1, route: "wired"))
     }
 
     /// The route monitor follows the launcher's selection: another PC selected, or
@@ -120,7 +120,7 @@ struct WiredBitrateTests {
             AppModel.reconnectRouteAsk(wired, route: route, phyRateMbps: nil,
                                        selectedHostID: selected, sessionHostID: "pc-a")
         }
-        #expect(ask(.wired, selected: "pc-a") == RouteAsk(kbps: 361_600, boost: 2))
+        #expect(ask(.wired, selected: "pc-a") == RouteAsk(kbps: 361_600, boost: 2, route: "wired"))
         #expect(ask(.unknown, selected: "pc-a") == nil)
         #expect(ask(.tunnel, selected: "pc-b") == nil)
         #expect(ask(.wired, selected: nil) == nil)
@@ -136,12 +136,12 @@ struct WiredBitrateTests {
             AppModel.reconnectRouteAsk(decision, route: route, phyRateMbps: phy,
                                        selectedHostID: "pc-a", sessionHostID: "pc-a")
         }
-        #expect(ask(launch, .wired) == RouteAsk(kbps: 361_600, boost: 2))
-        #expect(ask(launch, .tunnel) == RouteAsk(kbps: 180_800, boost: 1))
-        #expect(ask(launch, .wifi, phy: 144) == RouteAsk(kbps: 50_400, boost: 1))
+        #expect(ask(launch, .wired) == RouteAsk(kbps: 361_600, boost: 2, route: "wired"))
+        #expect(ask(launch, .tunnel) == RouteAsk(kbps: 180_800, boost: 1, route: "tunnel"))
+        #expect(ask(launch, .wifi, phy: 144) == RouteAsk(kbps: 50_400, boost: 1, route: "wifi"))
         // A Bandwidth saver launch stays unboosted on any route.
         var saver = launch
         saver.mode = .bandwidthSaver
-        #expect(ask(saver, .wired) == RouteAsk(kbps: 180_800, boost: 1))
+        #expect(ask(saver, .wired) == RouteAsk(kbps: 180_800, boost: 1, route: "wired"))
     }
 }
