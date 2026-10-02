@@ -48,17 +48,18 @@ final class RtpVideoQueue {
     // Return codes (RtpVideoQueue.h).
     enum AddResult { case queued, rejected }
 
-    /// One pending/completed packet. We hold the full RTP packet bytes (so FEC
-    /// can reconstruct headers) plus the decoded fields.
-    final class Entry {
-        var bytes: [UInt8]          // full RTP packet (RTP+NV+payload), host-order seq/ts/ssrc
-        var length: Int             // valid length within bytes
-        var sequenceNumber: UInt16
-        var rtpTimestamp: UInt32
-        var ssrc: UInt32
-        var header: UInt8
-        var isParity: Bool
-        var presentationTimeUs: UInt64
+    /// One pending/completed packet: the full RTP packet bytes (so FEC can
+    /// reconstruct headers) plus the decoded fields. A struct, so queuing a
+    /// packet costs no allocation beyond the datagram itself.
+    struct Entry {
+        let bytes: [UInt8]          // full RTP packet (RTP+NV+payload), host-order seq/ts/ssrc
+        let length: Int             // valid length within bytes
+        let sequenceNumber: UInt16
+        let rtpTimestamp: UInt32
+        let ssrc: UInt32
+        let header: UInt8
+        let isParity: Bool
+        let presentationTimeUs: UInt64
         var receiveTimeUs: UInt64 = 0
         init(bytes: [UInt8], length: Int, seq: UInt16, ts: UInt32, ssrc: UInt32,
              header: UInt8, isParity: Bool) {

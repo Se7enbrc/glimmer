@@ -31,7 +31,7 @@ struct VideoDepacketizerRecoveryTests {
             frameIndex: frame, flags: flags, extraFlags: 0, fecCurrentBlock: 0, fecLastBlock: 0,
             streamPacketIndex: spi << 8, rtpTimestamp: frame,
             presentationTimeUs: UInt64(frame) * 1_000, receiveTimeUs: UInt64(frame) * 1_000,
-            payload: header + body)
+            payload: (header + body)[...])
     }
 
     @Test func rfiWaitDropsPFramesUntilRecoveryFrame() {
@@ -89,7 +89,7 @@ struct VideoDepacketizerRecoveryTests {
         dp.process(VideoDepacketizer.CompletedPacket(
             frameIndex: 2, flags: 0x07, extraFlags: 0, fecCurrentBlock: 0, fecLastBlock: 0,
             streamPacketIndex: 1 << 8, rtpTimestamp: 2, presentationTimeUs: 2_000,
-            receiveTimeUs: 2_000, payload: payload))
+            receiveTimeUs: 2_000, payload: payload[...]))
         #expect(recorder.units.map(\.frameNumber) == [1])
         #expect(recorder.losses.map(\.to) == [2])
     }

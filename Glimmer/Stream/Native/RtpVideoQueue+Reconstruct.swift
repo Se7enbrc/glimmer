@@ -229,7 +229,7 @@ extension RtpVideoQueue {
                 return da < db
             }
         }
-        for entry in dataEntries {
+        for var entry in dataEntries {
             entry.receiveTimeUs = bufferFirstRecvTimeUs
             completed.append(entry)
         }
@@ -266,11 +266,11 @@ extension RtpVideoQueue {
         let fecCurrentBlock = (multiFecBlocks >> 4) & 0x3
         let fecLastBlock = (multiFecBlocks >> 6) & 0x3
 
-        // Payload = bytes after the 16-byte NV header.
+        // Payload = bytes after the 16-byte NV header, as a slice of the packet: the
+        // depacketizer copies it into the frame before this call returns.
         let payloadStart = nv + 16
         let payloadEnd = entry.length
-        let payload: [UInt8] = payloadStart <= payloadEnd
-            ? Array(entry.bytes[payloadStart..<payloadEnd]) : []
+        let payload: ArraySlice<UInt8> = payloadStart <= payloadEnd ? entry.bytes[payloadStart..<payloadEnd] : []
 
         let pkt = VideoDepacketizer.CompletedPacket(
             frameIndex: frameIndex,
