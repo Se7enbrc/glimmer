@@ -119,6 +119,28 @@ struct ParserHelperTests {
         #expect(!VideoDepacketizer.isIdrFrameStart([0, 0, 0, 1, 0x67], hevc: true))
     }
 
+    @Test func isIdrFrameStartAccepts3ByteStartCode() {
+        // Moonlight's getAnnexBStartSequence takes either start-code length.
+        #expect(VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x67, 0x42], hevc: false))
+        #expect(VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x40, 0x01], hevc: true))
+    }
+
+    @Test func isIdrFrameStartSkipsAudAndSeiBeforeParameterSets() {
+        let h264: [UInt8] = [0, 0, 0, 1, 0x09, 0xF0, 0, 0, 1, 0x06, 0x80, 0, 0, 0, 1, 0x67, 0x42]
+        #expect(VideoDepacketizer.isIdrFrameStart(h264, hevc: false))
+        let hevc: [UInt8] = [0, 0, 0, 1, 0x46, 0x01, 0x50, 0, 0, 1, 0x4E, 0x01, 0x80, 0, 0, 0, 1, 0x40, 0x01]
+        #expect(VideoDepacketizer.isIdrFrameStart(hevc, hevc: true))
+    }
+
+    @Test func isIdrFrameStartNeedsParameterSetsAfterMetadata() {
+        // SEI before an ordinary slice is not a key frame.
+        let seiThenSlice: [UInt8] = [0, 0, 0, 1, 0x06, 0x80, 0, 0, 1, 0x41, 0x9A]
+        #expect(!VideoDepacketizer.isIdrFrameStart(seiThenSlice, hevc: false))
+        // Only HEVC's prefix SEI (39) is skipped, as in Moonlight; a suffix SEI (40) ends the scan.
+        let suffixSeiThenVps: [UInt8] = [0, 0, 0, 1, 0x50, 0x01, 0x80, 0, 0, 0, 1, 0x40, 0x01]
+        #expect(!VideoDepacketizer.isIdrFrameStart(suffixSeiThenVps, hevc: true))
+    }
+
     @Test func isIdrFrameStartMalformedInputsReturnFalseNoCrash() {
         // Truncated prefixes must not read beyond the payload.
         #expect(!VideoDepacketizer.isIdrFrameStart([], hevc: false))

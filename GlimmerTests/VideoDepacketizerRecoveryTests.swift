@@ -102,42 +102,43 @@ struct VideoDepacketizerRecoveryTests {
         #expect(recorder.losses.count == 119)
     }
 
-    @Test(arguments: [false, true], [0, 1, 2, 3])
-    func annexBKeyFramesOpenRecoveryGate(hevc: Bool, prefix: Int) throws {
-        for startLength in [3, 4] {
-            let recorder = RecordingDepacketizerDelegate()
-            let dp = VideoDepacketizer(delegate: recorder, negotiatedVideoFormat: hevc
-                ? StreamProtocol.VIDEO_FORMAT_H265 : StreamProtocol.VIDEO_FORMAT_H264, colorSpace: 0)
-            let start = [UInt8](repeating: 0, count: startLength - 1) + [1]
-            let aud = start + (hevc ? [UInt8(0x46), 1, 0x50] : [0x09, 0x10])
-            let sei = start + (hevc ? [UInt8(0x4E), 1, 0x80] : [0x06, 0x80])
-            let metadata: [UInt8]
-            switch prefix {
-            case 1: metadata = aud
-            case 2: metadata = sei
-            case 3: metadata = aud + sei + sei
-            default: metadata = []
-            }
-            let sps = start + (hevc ? [UInt8(0x42), 1, 0x20] : [0x67, 0x20])
-            let pps = start + (hevc ? [UInt8(0x44), 1, 0x30] : [0x68, 0x30])
-            let vps = hevc ? start + [UInt8(0x40), 1, 0x10] : []
-            let slice = start + (hevc ? [UInt8(0x26), 1, 0x40] : [0x65, 0x40])
-            let body = metadata + vps + sps + pps + slice
-            dp.process(packet(frame: 1, spi: 0, type: 2, body: body))
-            let first = try #require(recorder.units.first)
-            #expect(first.frameType == StreamProtocol.FRAME_TYPE_IDR)
-            #expect(first.buffers.first { $0.kind == .sps }?.data == Data(sps))
-            #expect(first.buffers.first { $0.kind == .pps }?.data == Data(pps))
-            #expect(first.buffers.first { $0.kind == .picData }?.data == Data(metadata + slice))
-            if hevc { #expect(first.buffers.first { $0.kind == .vps }?.data == Data(vps)) }
-            dp.requestDecoderRefresh()
-            dp.process(packet(frame: 2, spi: 1, type: 1, body: metadata + slice))
-            #expect(recorder.units.map(\.frameNumber) == [1])
-            dp.process(packet(frame: 3, spi: 2, type: 2, body: body))
-            #expect(recorder.units.map(\.frameNumber) == [1, 3])
-            #expect(recorder.keyFrames == [1, 3])
-            #expect(recorder.idrRequests == 1)
+    /// Every metadata prefix (none, AUD, SEI, AUD+SEI+SEI) with each start-code length.
+    static let keyFrameShapes = [0, 1, 2, 3].flatMap { prefix in [3, 4].map { (prefix: prefix, startLength: $0) } }
+
+    @Test(arguments: [false, true], keyFrameShapes)
+    func annexBKeyFramesOpenRecoveryGate(hevc: Bool, shape: (prefix: Int, startLength: Int)) throws {
+        let recorder = RecordingDepacketizerDelegate()
+        let dp = VideoDepacketizer(delegate: recorder, negotiatedVideoFormat: hevc
+            ? StreamProtocol.VIDEO_FORMAT_H265 : StreamProtocol.VIDEO_FORMAT_H264, colorSpace: 0)
+        let start = [UInt8](repeating: 0, count: shape.startLength - 1) + [1]
+        let aud = start + (hevc ? [UInt8(0x46), 1, 0x50] : [0x09, 0x10])
+        let sei = start + (hevc ? [UInt8(0x4E), 1, 0x80] : [0x06, 0x80])
+        let metadata: [UInt8]
+        switch shape.prefix {
+        case 1: metadata = aud
+        case 2: metadata = sei
+        case 3: metadata = aud + sei + sei
+        default: metadata = []
         }
+        let sps = start + (hevc ? [UInt8(0x42), 1, 0x20] : [0x67, 0x20])
+        let pps = start + (hevc ? [UInt8(0x44), 1, 0x30] : [0x68, 0x30])
+        let vps = hevc ? start + [UInt8(0x40), 1, 0x10] : []
+        let slice = start + (hevc ? [UInt8(0x26), 1, 0x40] : [0x65, 0x40])
+        let body = metadata + vps + sps + pps + slice
+        dp.process(packet(frame: 1, spi: 0, type: 2, body: body))
+        let first = try #require(recorder.units.first)
+        #expect(first.frameType == StreamProtocol.FRAME_TYPE_IDR)
+        #expect(first.buffers.first { $0.kind == .sps }?.data == Data(sps))
+        #expect(first.buffers.first { $0.kind == .pps }?.data == Data(pps))
+        #expect(first.buffers.first { $0.kind == .picData }?.data == Data(metadata + slice))
+        if hevc { #expect(first.buffers.first { $0.kind == .vps }?.data == Data(vps)) }
+        dp.requestDecoderRefresh()
+        dp.process(packet(frame: 2, spi: 1, type: 1, body: metadata + slice))
+        #expect(recorder.units.map(\.frameNumber) == [1])
+        dp.process(packet(frame: 3, spi: 2, type: 2, body: body))
+        #expect(recorder.units.map(\.frameNumber) == [1, 3])
+        #expect(recorder.keyFrames == [1, 3])
+        #expect(recorder.idrRequests == 1)
     }
 
     @Test(arguments: [false, true])

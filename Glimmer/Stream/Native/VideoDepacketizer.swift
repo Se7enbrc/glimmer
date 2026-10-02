@@ -194,8 +194,8 @@ final class VideoDepacketizer {
 
         if isAV1 {
             if lastPacket {
-                // Truncate to the exact AV1 length (c:1030-1041). The payload
-                // length includes the frame header, so subtract it.
+                // AV1 can't take the FEC zero padding Annex-B tolerates, so cut to the
+                // exact length (c:1030-1041). It includes the frame header: subtract it.
                 let plen = Int(lastPacketPayloadLength)
                 if plen > frameHeaderSize && (plen - frameHeaderSize) <= payload.count {
                     payload = Array(payload.prefix(plen - frameHeaderSize))
@@ -215,9 +215,9 @@ final class VideoDepacketizer {
             }
             nalChain.append(contentsOf: payload)
         } else {
-            // H.264/HEVC Annex-B path. IDR detection by NAL inspection, not
-            // the header type byte (see file header). No last-packet
-            // truncation: Annex-B tolerates the FEC trailing-zero padding.
+            // H.264/HEVC: the NALs decide IDR, not the header's type byte, which
+            // moonlight-common-c trusts only for AV1 (c:861-868). No last-packet cut:
+            // Annex-B tolerates the FEC zero padding.
             if firstPacket && Self.isIdrFrameStart(payload, hevc: isHEVC) {
                 frameType = Self.FRAME_TYPE_IDR
                 waitingForIdrFrame = false
