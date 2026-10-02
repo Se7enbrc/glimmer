@@ -111,6 +111,9 @@ extension RtpVideoQueue {
         if !queuePacket(entry, isFecRecovery: false) {
             return .rejected
         }
+        if Self.isBefore16(receivedHighestSequenceNumber, seq) {
+            receivedHighestSequenceNumber = seq
+        }
 
         if isParity {
             receivedParityPackets += 1
@@ -180,10 +183,11 @@ extension RtpVideoQueue {
                     purgeAll()
                     if !reportedLostFrame {
                         depacketizer.queueLostFrame(Int(currentFrameNumber))
-                        reportedLostFrame = true
                     }
+                    // The report covered this frame only; the next one's loss must still be heard.
                     currentFrameNumber &+= 1
                     multiFecCurrentBlockNumber = 0
+                    reportedLostFrame = false
                     return .finished(.rejected)
                 }
             } else {
@@ -201,10 +205,10 @@ extension RtpVideoQueue {
             purgeAll()
             if !reportedLostFrame {
                 depacketizer.queueLostFrame(Int(currentFrameNumber))
-                reportedLostFrame = true
             }
             currentFrameNumber = frameIndex &+ 1
             multiFecCurrentBlockNumber = 0
+            reportedLostFrame = false
             return .finished(.rejected)
         }
 
@@ -239,6 +243,7 @@ extension RtpVideoQueue {
         bufferFirstRecvTimeUs = receiveTimeUs
         bufferLowestSequenceNumber = Self.u16(Int(rtp.seq) - Int(fields.fecIndex))
         nextContiguousSequenceNumber = bufferLowestSequenceNumber
+        receivedHighestSequenceNumber = rtp.seq
         receivedDataPackets = 0
         receivedParityPackets = 0
         useFastQueuePath = true

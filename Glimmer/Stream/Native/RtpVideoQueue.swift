@@ -88,6 +88,9 @@ final class RtpVideoQueue {
     var bufferLowestSequenceNumber: UInt16 = 0
     var bufferFirstParitySequenceNumber: UInt16 = 0
     var bufferHighestSequenceNumber: UInt16 = 0
+    /// Highest seq received for this block off the wire; with the block's low seq
+    /// and pending.count it gives the gaps the speculative loss report weighs.
+    var receivedHighestSequenceNumber: UInt16 = 0
     var nextContiguousSequenceNumber: UInt16 = 0
     var bufferDataPackets = 0
     var bufferParityPackets = 0
