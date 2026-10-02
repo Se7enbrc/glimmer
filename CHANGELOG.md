@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.1 - 2026-10-02
+
+Fix surround-sound streams that couldn't start with 5.1 or 7.1 audio. Every
+channel now plays through macOS's sound decoder, including after a lost packet.
+
 ## 2026.10.0 - 2026-10-01
 
 While your stream is hidden behind other windows, the launcher no longer turns

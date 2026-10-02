@@ -1,22 +1,5 @@
-//
-//  AudioDecoder+Engine.swift
-//
-//  The decoder + AVAudioEngine LIFECYCLE: `initDecoderCore` (decoder create,
-//  channel layout, graph wiring, engine start, session state reset), the
-//  `shutdown()` teardown, and the mid-stream RECOVERY family that keeps playout
-//  alive - the H3/H4 configuration-change hop, the bounded engine-restart retry
-//  ladder, the exception-safe prime-edge start, and the playout-stall rebuild.
-//  Split from AudioDecoder.swift - same idiom as the FramePacer split, to keep
-//  that file under the length limit. They belong together: every one of them is
-//  an AV-node call serialized on `stateLock`, and they share the same "no AV
-//  calls from a completion handler" discipline.
-//
-//  Split cost (the ControllerForwarder.swift note, applied here): stored
-//  properties cannot live in an extension, so the decoder/engine core state stays
-//  on `AudioDecoder` and is `internal` rather than `private` for the methods in
-//  this file (and AudioDecoder+Decode.swift) to reach. See the property docs in
-//  AudioDecoder.swift for the locking rationale each one carries.
-//
+// Decoder and AVAudioEngine lifecycle, recovery and exception-safe playback startup.
+// AV node calls hold AudioDecoder.stateLock; completion handlers only update the meter.
 
 import AVFoundation
 import Foundation
@@ -353,8 +336,7 @@ extension AudioDecoder {
     /// Sleep can stop the engine or make play() raise despite isRunning.
     /// Caller holds stateLock, never audioMeterLock, across AV calls.
     /// Failed edges remain un-primed and retry after 100 ms.
-    func startPlayoutAtPrimeEdge() -> Bool {
-        let now = DispatchTime.now().uptimeNanoseconds
+    func startPlayoutAtPrimeEdge(now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Bool {
         guard now >= primeEdgeRetryAtNanos else { return false }
         if !engine.isRunning {
             // Guarded start: the test suite's empty-graph decoder proved an
