@@ -1,15 +1,5 @@
-//
-//  VideoDepacketizer+AnnexB.swift
-//
-//  The H.264/HEVC Annex-B helpers: the isIdrFrameStart sniff that decides IDR by
-//  NAL inspection (the C path takes the frame-header type byte only for
-//  non-H.264/HEVC), and the IDR parameter-set split that routes leading
-//  VPS/SPS/PPS NALs into their own DecodeBuffers (the C slow path's
-//  getBufferFlags routing). Split out of VideoDepacketizer.swift to keep each
-//  unit focused; see that file for the depacketizer's stored state.
-//
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
-//
+// H.264/HEVC key-frame detection and parameter-set routing for Sunshine payloads.
+// Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
 import Foundation
 
@@ -17,19 +7,23 @@ extension VideoDepacketizer {
 
     // MARK: - H.264/HEVC Annex-B helpers
 
-    // internal for testability
-    /// isIdrFrameStart port: the frame's first payload must open with the
-    /// 4-byte start code (NV's frame-start marker; 3-byte means mid-frame)
-    /// followed by SPS (H.264, nal_unit_type 7) or VPS (HEVC, type 32) -
-    /// the host rides parameter sets on every IDR.
+    /// Sunshine can prepend AUD and SEI NALs before an IDR's parameter sets.
+    /// Inspect past those without copying or removing valid metadata.
     static func isIdrFrameStart(_ payload: [UInt8], hevc: Bool) -> Bool {
-        guard payload.count >= 5,
-              payload[0] == 0, payload[1] == 0, payload[2] == 0, payload[3] == 1
-        else { return false }
-        if hevc {
-            return (payload[4] >> 1) & 0x3F == 32      // H265_NAL_TYPE_VPS
+        var offset = 0
+        while offset < payload.count {
+            let startLength = annexBStartCodeLength(payload, at: offset)
+            let headerIndex = offset + startLength
+            guard startLength > 0, headerIndex < payload.count else { return false }
+            let type = hevc ? (payload[headerIndex] >> 1) & 0x3F : payload[headerIndex] & 0x1F
+            if type == (hevc ? 32 : 7) { return true }   // HEVC VPS / H.264 SPS
+            guard type == (hevc ? 35 : 9) || type == (hevc ? 39 : 6) else { return false }
+            offset = headerIndex + 1
+            while offset < payload.count && annexBStartCodeLength(payload, at: offset) == 0 {
+                offset += 1
+            }
         }
-        return payload[4] & 0x1F == 7                  // H264_NAL_TYPE_SPS
+        return false
     }
 
     // internal for testability
@@ -71,26 +65,23 @@ extension VideoDepacketizer {
         return out
     }
 
-    /// NAL boundaries: each starts at a 00 00 01 / 00 00 00 01 start code
-    /// and runs to the next start code (or end of AU). Returns the index OF
-    /// each start code, in order. Split out of `splitAnnexBParamSets` so the
-    /// byte scan and the NAL routing stay separately readable; the scan order
-    /// and the 3-vs-4-byte precedence are unchanged.
+    /// Share the three- and four-byte Annex-B boundaries with IDR detection.
     private static func annexBStartCodeOffsets(_ bytes: [UInt8]) -> [Int] {
-        var starts: [Int] = []           // index OF the start code
-        var i = 0
-        while i + 2 < bytes.count {
-            if bytes[i] == 0 && bytes[i + 1] == 0 {
-                if bytes[i + 2] == 1 {
-                    starts.append(i); i += 3; continue
-                }
-                if i + 3 < bytes.count && bytes[i + 2] == 0 && bytes[i + 3] == 1 {
-                    starts.append(i); i += 4; continue
-                }
-            }
-            i += 1
+        var starts: [Int] = []
+        var offset = 0
+        while offset < bytes.count {
+            let length = annexBStartCodeLength(bytes, at: offset)
+            if length > 0 { starts.append(offset) }
+            offset += max(1, length)
         }
         return starts
+    }
+
+    private static func annexBStartCodeLength(_ bytes: [UInt8], at offset: Int) -> Int {
+        guard offset + 2 < bytes.count, bytes[offset] == 0, bytes[offset + 1] == 0 else { return 0 }
+        if bytes[offset + 2] == 1 { return 3 }
+        if offset + 3 < bytes.count, bytes[offset + 2] == 0, bytes[offset + 3] == 1 { return 4 }
+        return 0
     }
 
     /// Route one NAL to its DecodeBuffer kind off its first post-start-code
