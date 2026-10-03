@@ -230,51 +230,41 @@ struct SentReliable {
     var attempts: Int
 }
 
-/// ENet's in-order delivery (enet_peer_queue_incoming_command) holds authenticated
-/// messages behind missing reliables; bounded recovery ensures a gap never wedges
-/// control delivery for the rest of the session.
+/// ENet's in-order delivery (enet_peer_queue_incoming_command): authenticated messages wait behind
+/// a missing reliable until the PC resends it, which ENet always does. Skipping ahead instead would
+/// acknowledge the late resend as stale and lose that message for good.
 struct EnetInboundOrder {
-    // Rumble runs about 135/s, so 256 is about two seconds; the 1 s gap clock normally decides first.
-    static let maxHeld = 256
-    static let maxGapMs: UInt32 = 1000
+    // Rumble runs about 135/s, so 2048 is about 15 s: a backstop for a reliable that never comes.
+    static let maxHeld = 2048
     var next: UInt16 = 1
     private(set) var held: [UInt16: [UInt8]] = [:]
-    var gapStartedMs: UInt32 = 0
 
     func isDuplicate(_ seq: UInt16) -> Bool {
         held[seq] != nil || (seq != next && !EnetControlChannel.reliableSeqIsNewer(seq, than: next))
     }
 
-    mutating func accept(_ seq: UInt16, payload: [UInt8], nowMs: UInt32) -> (due: [[UInt8]], skipped: Int) {
+    mutating func accept(_ seq: UInt16, payload: [UInt8]) -> (due: [[UInt8]], skipped: Int) {
         if seq == next {
             next &+= 1
-            return ([payload] + drain(nowMs: nowMs), 0)
+            return ([payload] + drain(), 0)
         }
-        if held.isEmpty { gapStartedMs = nowMs }
         held[seq] = payload
-        return held.count >= Self.maxHeld ? skipGap(nowMs: nowMs) : ([], 0)
+        return held.count >= Self.maxHeld ? skipGap() : ([], 0)
     }
 
-    mutating func releaseStaleGap(nowMs: UInt32) -> (due: [[UInt8]], skipped: Int) {
-        guard !held.isEmpty,
-              EnetControlChannel.msSince(gapStartedMs, now: nowMs) > Self.maxGapMs else { return ([], 0) }
-        return skipGap(nowMs: nowMs)
-    }
-
-    private mutating func skipGap(nowMs: UInt32) -> (due: [[UInt8]], skipped: Int) {
+    private mutating func skipGap() -> (due: [[UInt8]], skipped: Int) {
         guard let first = held.keys.min(by: { ($0 &- next) < ($1 &- next) }) else { return ([], 0) }
         let skipped = Int(first &- next)
         next = first
-        return (drain(nowMs: nowMs), skipped)
+        return (drain(), skipped)
     }
 
-    private mutating func drain(nowMs: UInt32) -> [[UInt8]] {
+    private mutating func drain() -> [[UInt8]] {
         var due: [[UInt8]] = []
         while let payload = held.removeValue(forKey: next) {
             due.append(payload)
             next &+= 1
         }
-        if !held.isEmpty { gapStartedMs = nowMs }
         return due
     }
 }

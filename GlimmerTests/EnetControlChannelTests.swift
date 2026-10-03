@@ -81,7 +81,6 @@ struct EnetControlChannelTests {
     @Test func forgedFragmentDoesNotMakeGenuineMessagesStale() throws {
         let (channel, codes) = try Self.makeChannel()
         channel.onDatagram([0, 0] + Self.prefix(Enet.cmdSendFragment, relSeq: 0x7FFF))
-        channel.inboundOrder[0]?.gapStartedMs = channel.serviceTimeMs &- (EnetInboundOrder.maxGapMs + 1)
         channel.onDatagram([0, 0])
         channel.onDatagram(Self.reliable(relSeq: 1, try Self.termination(seq: 0)))
         #expect(codes.values == [Self.hostCode])
@@ -281,28 +280,17 @@ struct EnetControlChannelTests {
         #expect(codes.values == [Self.hostCode])
     }
 
-    @Test func expiredGapReleasesOnAnyDatagram() throws {
+    /// A Wi-Fi blackout longer than a second, then unrelated traffic, then the PC's resend of the
+    /// missing reliable: it still arrives in order instead of being acknowledged as stale and lost.
+    @Test func aGapWaitsThroughABlackoutForTheResend() throws {
         let (channel, _) = try Self.makeChannel()
         let events = Events()
         channel.onRumble = { _, low, _ in events.values.append(low) }
         channel.onDatagram(Self.reliable(relSeq: 1, try Self.rumble(1, seq: 1)))
         channel.onDatagram(Self.reliable(relSeq: 3, try Self.rumble(3, seq: 3)))
-        #expect(events.values == [1])
-        let now = channel.serviceTimeMs
-        channel.inboundOrder[0]?.gapStartedMs = now &- (EnetInboundOrder.maxGapMs + 1)
+        Thread.sleep(forTimeInterval: 1.1)
         channel.onDatagram([0, 0])
-        #expect(events.values == [1, 3])
-    }
-
-    @Test func missingReliableArrivingAfterGapExpiryKeepsOrder() throws {
-        let (channel, _) = try Self.makeChannel()
-        let events = Events()
-        channel.onRumble = { _, low, _ in events.values.append(low) }
-        channel.onDatagram(Self.reliable(relSeq: 1, try Self.rumble(1, seq: 1)))
-        channel.onDatagram(Self.reliable(relSeq: 3, try Self.rumble(3, seq: 3)))
         #expect(events.values == [1])
-        let now = channel.serviceTimeMs
-        channel.inboundOrder[0]?.gapStartedMs = now &- (EnetInboundOrder.maxGapMs + 1)
         channel.onDatagram(Self.reliable(relSeq: 2, try Self.rumble(2, seq: 2)))
         #expect(events.values == [1, 2, 3])
     }
@@ -320,15 +308,15 @@ struct EnetControlChannelTests {
 
     @Test func inboundOrderHandlesGapsDuplicatesAndWrap() {
         var order = EnetInboundOrder()
-        #expect(order.accept(1, payload: [1], nowMs: 10).due == [[1]])
+        #expect(order.accept(1, payload: [1]).due == [[1]])
         #expect(order.isDuplicate(1))
-        #expect(order.accept(3, payload: [3], nowMs: 20).due.isEmpty)
+        #expect(order.accept(3, payload: [3]).due.isEmpty)
         #expect(order.isDuplicate(3))
         #expect(!order.isDuplicate(2))
-        #expect(order.accept(2, payload: [2], nowMs: 30).due == [[2], [3]])
+        #expect(order.accept(2, payload: [2]).due == [[2], [3]])
         order.next = 0xFFFF
-        #expect(order.accept(0, payload: [0], nowMs: 40).due.isEmpty)
-        #expect(order.accept(0xFFFF, payload: [255], nowMs: 50).due == [[255], [0]])
+        #expect(order.accept(0, payload: [0]).due.isEmpty)
+        #expect(order.accept(0xFFFF, payload: [255]).due == [[255], [0]])
         #expect(order.next == 1)
         #expect(order.isDuplicate(0xFFFF))
     }
@@ -336,27 +324,14 @@ struct EnetControlChannelTests {
     @Test func fullOrderSkipsOnlyTheMissingRange() {
         var order = EnetInboundOrder()
         for seq in 3..<UInt16(EnetInboundOrder.maxHeld + 2) {
-            let result = order.accept(seq, payload: [], nowMs: 10)
+            let result = order.accept(seq, payload: [])
             #expect(result.due.isEmpty && result.skipped == 0)
         }
-        let result = order.accept(UInt16(EnetInboundOrder.maxHeld + 2), payload: [], nowMs: 10)
+        let result = order.accept(UInt16(EnetInboundOrder.maxHeld + 2), payload: [])
         #expect(result.skipped == 2)
         #expect(result.due == [[UInt8]](repeating: [], count: EnetInboundOrder.maxHeld))
         #expect(order.held.isEmpty)
         #expect(order.next == UInt16(EnetInboundOrder.maxHeld + 3))
-    }
-
-    @Test func gapClockRestartsAfterAnAdvanceAndWraps() {
-        var order = EnetInboundOrder()
-        _ = order.accept(3, payload: [3], nowMs: UInt32.max - 500)
-        _ = order.accept(5, payload: [5], nowMs: UInt32.max - 400)
-        #expect(order.releaseStaleGap(nowMs: 499).due.isEmpty)
-        let first = order.releaseStaleGap(nowMs: 500)
-        #expect(first.due == [[3]] && first.skipped == 2)
-        #expect(order.gapStartedMs == 500)
-        #expect(order.releaseStaleGap(nowMs: 1500).due.isEmpty)
-        let second = order.releaseStaleGap(nowMs: 1501)
-        #expect(second.due == [[5]] && second.skipped == 1)
     }
 
     // MARK: - Coalesced commands keep their framing

@@ -35,7 +35,6 @@ extension EnetControlChannel {
 
     func onDatagram(_ bytes: [UInt8]) {
         guard bytes.count >= 2 else { return }
-        defer { releaseStaleInboundGaps() }
         var reader = ByteReader(bytes)
         guard let rawPeerID = reader.u16BE() else { return }
         let flags = rawPeerID & (Enet.headerFlagCompressed | Enet.headerFlagSentTime)
@@ -133,16 +132,8 @@ extension EnetControlChannel {
         }
         guard let inner = openInboundControl(bytes) else { return }
         let result = inboundOrder[channelID, default: EnetInboundOrder()]
-            .accept(relSeq, payload: inner, nowMs: serviceTimeMs)
+            .accept(relSeq, payload: inner)
         dispatchInboundDue(result, channelID: channelID, reason: "hold full")
-    }
-
-    private func releaseStaleInboundGaps() {
-        for (channelID, order) in inboundOrder where !order.held.isEmpty {
-            let result = inboundOrder[channelID, default: EnetInboundOrder()]
-                .releaseStaleGap(nowMs: serviceTimeMs)
-            dispatchInboundDue(result, channelID: channelID, reason: "gap timed out")
-        }
     }
 
     private func dispatchInboundDue(_ result: (due: [[UInt8]], skipped: Int),
