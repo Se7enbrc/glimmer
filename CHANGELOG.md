@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.10.4 - Unreleased
+
+- Quitting while Glimmer is reconnecting ends the game on the PC, instead of
+  leaving it running and asking to take it over on the next connect.
+- On a remote connection, a quality step-up that doesn't hold drops back to the
+  quality that worked, instead of ending the stream or waiting on “Waiting for
+  video…” for up to 20 minutes.
+- After a Wi-Fi dropout, a paused game or a quiet PC, the audio delay no longer
+  grows from one session to the next.
+- Glimmer no longer lowers the audio delay back to a level that just stuttered.
+- A failure's Wake and Connect or Pair Again… acts on the PC the message names,
+  even if you picked another PC while it was connecting.
+- Cancelling a slow start on one PC and then streaming from another no longer
+  leaves the game running on the first.
+- A change the PC sends during a Wi-Fi dropout of more than a second, such as
+  switching HDR on, is no longer lost.
+
 ## 2026.10.3 - 2026-10-02
 
 - Glimmer offers its Wi-Fi stutter protection the first time it opens on every
