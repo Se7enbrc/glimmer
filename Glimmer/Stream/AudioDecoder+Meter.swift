@@ -165,7 +165,12 @@ extension AudioDecoder {
         // accrued while the queue sat drained is NOT folded into drift (the
         // +6448ms step-jump). Cheap: a couple of stores under the lock we already
         // hold, at the schedule edge only.
+        var settled: (memoryWrite: CushionMemoryWrite?, deadAirGapMs: Double?) = (nil, nil)
         if !playoutStarted || playoutDrained {
+            if let failedTargetMs = pendingUnderrunTargetMs {
+                pendingUnderrunTargetMs = nil
+                settled = settleUnderrunLocked(failedTargetMs: failedTargetMs, now: DispatchTime.now().uptimeNanoseconds)
+            }
             // COLD-START arm vs mid-stream RE-prime - captured BEFORE the start
             // flag flips. The cold path keeps its paused pre-roll + buffer-count
             // fallback; a re-prime instead takes the grace-then-backfill rebuild
@@ -215,6 +220,11 @@ extension AudioDecoder {
         // the under-run edge so the NEXT drain counts.
         playoutDrained = false
         audioMeterLock.unlock()
+        if let gapMs = settled.deadAirGapMs {
+            TelemetryCounters.shared.audioUnderrunDeadairTotal.increment()
+            Diag.notice("audio under-run was dead air: \(Int(gapMs.rounded()))ms arrival gap, cushion unchanged", "Stream")
+        }
+        if let write = settled.memoryWrite { commitCushionMemory(write) }
         return false
     }
 
@@ -276,30 +286,12 @@ extension AudioDecoder {
         var noticeTargetMs = 0.0
         var noticeSuppressed: UInt64 = 0
         var memoryWrite: CushionMemoryWrite?
-        var deadAirGapMs: Double?
         if isUnderrunEdge {
             let now = DispatchTime.now().uptimeNanoseconds
-            // DEAD AIR: the arrival gap that ended with the newest packet outlasted
-            // the deepest cushion this link may hold, so this drain says nothing
-            // about depth - no grow, no floor learning.
-            let arrivalGapMs = Double(lastArrivalGapNanos.load()) / 1_000_000
-            if arrivalGapMs > effectiveCushionMaxMs {
-                deadAirGapMs = arrivalGapMs
-            } else {
-                // ADAPTIVE cushion: a real drain is evidence this link needs more
-                // headroom - grow the target one step (capped, rate-limited). The
-                // next re-prime builds the deeper cushion (clump or backfill).
-                let failedTargetMs = playoutTargetMs
-                if playoutTargetMs < effectiveCushionMaxMs,
-                   now &- lastCushionGrowNanos >= Self.cushionGrowMinIntervalNanos {
-                    playoutTargetMs = min(playoutTargetMs + Self.playoutCushionStepMs,
-                                          effectiveCushionMaxMs)
-                    lastCushionGrowNanos = now
-                }
-                // The level that just FAILED feeds the loss floor + per-host memory
-                // (the limit-cycle fix - see AudioDecoder+CushionMemory.swift).
-                memoryWrite = cushionNoteUnderrunLocked(now: now, failedTargetMs: failedTargetMs)
-            }
+            // The gap that caused this drain is still open: grow or dead air is settled at the next
+            // schedule, once the packet that ends it has said how long it was.
+            pendingUnderrunTargetMs = playoutTargetMs
+            underrunArrivalGapNanos = 0
             // Every under-run (capped or not) restarts the decay quiet window: depth
             // is held by recurring evidence, decayed only by its sustained absence.
             quietSinceNanos = now
@@ -334,10 +326,8 @@ extension AudioDecoder {
         }
         if isUnderrunEdge {
             TelemetryCounters.shared.audioUnderrunTotal.increment()
-            if deadAirGapMs != nil { TelemetryCounters.shared.audioUnderrunDeadairTotal.increment() }
             if emitNotice {
-                emitUnderrunNotice(route: noticeRoute, targetMs: noticeTargetMs,
-                                   suppressed: noticeSuppressed, deadAirGapMs: deadAirGapMs)
+                emitUnderrunNotice(route: noticeRoute, targetMs: noticeTargetMs, suppressed: noticeSuppressed)
             }
         }
         // Rare learn/decay edges persist off the lock (UserDefaults + gauge).
@@ -349,13 +339,11 @@ extension AudioDecoder {
     /// + os_log, never an AV/CoreAudio call; this runs on the player's completion
     /// thread). The ordinal reads the just-incremented session counter so log
     /// lines and `audio_underrun_total` cross-reference 1:1.
-    private func emitUnderrunNotice(route: String, targetMs: Double, suppressed: UInt64,
-                                    deadAirGapMs: Double?) {
+    private func emitUnderrunNotice(route: String, targetMs: Double, suppressed: UInt64) {
         let ordinal = TelemetryCounters.shared.audioUnderrunTotal.value
         let backlog = suppressed > 0 ? " (+\(suppressed) since last line)" : ""
-        let deadAir = deadAirGapMs.map { " (dead air: \(Int($0.rounded()))ms arrival gap, cushion unchanged)" } ?? ""
         Diag.notice(
-            "audio under-run #\(ordinal)\(backlog) - playout drained to empty\(deadAir); route \(route, privacy: .private), "
+            "audio under-run #\(ordinal)\(backlog) - playout drained to empty; route \(route, privacy: .private), "
             + "cushion target \(Int(targetMs))ms",
             "Stream")
     }
@@ -512,9 +500,23 @@ extension AudioDecoder {
         }
     }
 
-    /// The receiver's inter-arrival gap that ended with its newest datagram, kept
-    /// for the next under-run edge's dead-air test. Receive thread: no AV calls.
+    /// The receiver's inter-arrival gap that ended with its newest datagram. While an under-run waits,
+    /// the longest one is its outage: packets held for repair can arrive before the next schedule.
     public func noteArrivalGap(nanos: UInt64) {
-        lastArrivalGapNanos.store(nanos)
+        audioMeterLock.lock()
+        if pendingUnderrunTargetMs != nil { underrunArrivalGapNanos = max(underrunArrivalGapNanos, nanos) }
+        audioMeterLock.unlock()
+    }
+
+    /// The first schedule after an under-run knows the gap that ended it. One longer than the deepest
+    /// cushion this link may hold was dead air and teaches nothing; otherwise grow a step and learn.
+    private func settleUnderrunLocked(failedTargetMs: Double, now: UInt64) -> (CushionMemoryWrite?, Double?) {
+        let gapMs = Double(underrunArrivalGapNanos) / 1_000_000
+        if gapMs > effectiveCushionMaxMs { return (nil, gapMs) }
+        if playoutTargetMs < effectiveCushionMaxMs, now &- lastCushionGrowNanos >= Self.cushionGrowMinIntervalNanos {
+            playoutTargetMs = min(playoutTargetMs + Self.playoutCushionStepMs, effectiveCushionMaxMs)
+            lastCushionGrowNanos = now
+        }
+        return (cushionNoteUnderrunLocked(now: now, failedTargetMs: failedTargetMs), nil)
     }
 }

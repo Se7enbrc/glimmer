@@ -335,9 +335,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// above it for the floor's slow decay window. Guarded by `audioMeterLock`.
     var lastFailedTargetMs: Double = 0
     var lastUnderrunNanos: UInt64 = 0
-    /// The receiver's inter-arrival gap that ended with its newest datagram - the
-    /// dead-air test at an under-run edge (`noteArrivalGap`).
-    let lastArrivalGapNanos = AtomicUInt64()
+    /// An under-run waiting for the gap that ends it: the target that failed, and the longest arrival
+    /// gap since. The next schedule settles it. Guarded by `audioMeterLock`.
+    var pendingUnderrunTargetMs: Double?
+    var underrunArrivalGapNanos: UInt64 = 0
 
     // MARK: - P1 AUDIO playout-stall watchdog (the 2026-08-12 overnight wedge)
     //

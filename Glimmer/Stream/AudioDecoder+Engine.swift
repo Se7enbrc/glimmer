@@ -119,7 +119,6 @@ extension AudioDecoder {
     private func resetPlayoutStateForSession(seed: CushionSeed, sampleRate: Int32,
                                              skewSeedPpm: Double, skewKey: String) {
         let seedNowNanos = DispatchTime.now().uptimeNanoseconds
-        lastArrivalGapNanos.store(0)
         // AV call BEFORE the meter lock (leaf-lock discipline, audit remainder
         // 2026-08-26): varispeed.rate is an AVAudio node property - writing it
         // under audioMeterLock inverted the documented ordering that keeps node
@@ -169,6 +168,7 @@ extension AudioDecoder {
         nearMissLatched = false
         quietSinceNanos = seedNowNanos
         lastCushionGrowNanos = 0
+        pendingUnderrunTargetMs = nil; underrunArrivalGapNanos = 0
         floorQuietSinceNanos = seedNowNanos
         rebuildIsReprime = false
         lastUnderrunNoticeNanos = 0; underrunNoticesSuppressed = 0
