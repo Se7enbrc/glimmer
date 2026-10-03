@@ -152,5 +152,7 @@ struct BitrateDownshiftController: Sendable {
     mutating func recordStepUp(atUptime now: Double, reachedRoute: Bool) {
         lastStepUpUptime = now
         stepsDown = reachedRoute ? 0 : max(0, stepsDown - 1)
+        // A probe up must always be able to come back down; the step-up backoff bounds the cycling.
+        if !downshiftUptimes.isEmpty { downshiftUptimes.removeLast() }
     }
 }

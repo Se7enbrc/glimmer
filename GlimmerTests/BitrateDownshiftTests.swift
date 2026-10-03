@@ -166,6 +166,19 @@ struct BitrateDownshiftTests {
         #expect(controller.stepUp(currentKbps: 50_400, routeKbps: configuredKbps, nowUptime: proven + clean) == configuredKbps)
     }
 
+    /// A step-up gives back one downshift, so a probe that fails after the budget was spent can still
+    /// drop back to the rate that worked, and that failure doubles the next clean window.
+    @Test func aFailedStepUpCanAlwaysRollBack() {
+        var controller = BitrateDownshiftController()
+        controller.recordDownshift(atUptime: 100, route: "tunnel")
+        controller.recordDownshift(atUptime: 300, route: "tunnel")
+        controller.recordStepUp(atUptime: 600, reachedRoute: false)
+        #expect(controller.evaluate(isRemote: true, decodeIdle: stalled, receiveIdle: receiving,
+                                    currentKbps: 50_400, nowUptime: 625) == .downshift(toKbps: 30_240))
+        controller.recordDownshift(atUptime: 625, route: "tunnel")
+        #expect(controller.stepUp(currentKbps: 30_240, routeKbps: configuredKbps, nowUptime: 925) == nil)
+    }
+
     /// The window never grows past the cap however often a step-up fails.
     @Test func stepUpBackoffStopsAtTheCap() {
         var controller = BitrateDownshiftController()
