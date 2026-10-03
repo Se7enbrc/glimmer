@@ -328,13 +328,9 @@ extension AudioDecoder {
         return lastFailedTargetMs + Self.playoutCushionStepMs
     }
 
-    /// QUIET completion while elevated: arbitrate the two decay clocks.
-    /// Floor decay first (the slow ~10min clock), then the target step gated
-    /// on (a) the elapsed quiet window, (b) the near-miss margin - a held
-    /// window consumes its evidence and starts a fresh one - and (c) the
-    /// floor cutoff, which leaves the window STANDING so the step fires the
-    /// moment the floor's own decay unblocks it. Returns a memory write when
-    /// anything moved; nil on the (overwhelmingly common) no-op.
+    /// QUIET completion while elevated: the floor decays on its ~10 min clock, then the target steps
+    /// down unless the window nearly drained, a recent failure is a step away, or the floor blocks it.
+    /// The last two leave the window standing. Returns a memory write when anything moved.
     func cushionQuietAdjustLocked(now: UInt64) -> CushionMemoryWrite? {
         var changed = false
         if learnedFloorMs > 0,
@@ -350,6 +346,8 @@ extension AudioDecoder {
                 // would starve - keep depth, pay nothing audible.
                 quietSinceNanos = now
                 quietWindowMinFillMs = .infinity
+            } else if candidate < recentFailureFloorMs(now: now) {
+                // RECENT-FAILURE HOLD, on every path down: the window stands until the hold expires.
             } else if learnedFloorMs > 0,
                       candidate < learnedFloorMs + Self.playoutCushionStepMs {
                 // FLOOR HOLD, unless a quiet window walks floor and target down together instead of
@@ -357,7 +355,7 @@ extension AudioDecoder {
                 // trough two steps clear. A railing resampler means the depth is carrying skew: hold.
                 let troughClear = cushionLinkClass == "wired"
                     || quietWindowMinFillMs >= 2 * Self.playoutCushionStepMs
-                if troughClear, resamplerSkewConverged, candidate >= recentFailureFloorMs(now: now) {
+                if troughClear, resamplerSkewConverged {
                     learnedFloorMs = max(learnedFloorMs - Self.playoutCushionStepMs,
                                          Self.playoutCushionBaseMs)
                     playoutTargetMs = max(candidate, Self.playoutCushionBaseMs)

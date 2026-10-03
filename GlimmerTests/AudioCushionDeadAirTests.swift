@@ -105,4 +105,28 @@ extension AudioPlayoutStallTests {
         #expect(decoder.cushionQuietAdjustLocked(now: now) != nil)
         #expect(decoder.playoutTargetMs == 44)
     }
+
+    /// The ordinary walk-down, far above the floor, holds a step above a recent failure too: a grow
+    /// that never taught the floor must not walk straight back to the level that under-ran.
+    @Test func ordinaryWalkDownHoldsAboveARecentFailure() {
+        let decoder = AudioDecoder()
+        let now = DispatchTime.now().uptimeNanoseconds
+        decoder.audioMeterLock.lock()
+        defer { decoder.audioMeterLock.unlock() }
+        decoder.cushionLinkClass = "wifi"
+        decoder.resamplerSkewConverged = true
+        decoder.playoutTargetMs = 70
+        decoder.learnedFloorMs = 45
+        decoder.lastFailedTargetMs = 60
+        decoder.lastUnderrunNanos = now &- 60_000_000_000
+        decoder.quietSinceNanos = now &- AudioDecoder.playoutDecayQuietNanos
+        decoder.floorQuietSinceNanos = now
+        decoder.quietWindowMinFillMs = 25
+        #expect(decoder.cushionQuietAdjustLocked(now: now) == nil)
+        #expect(decoder.playoutTargetMs == 70)
+
+        decoder.lastUnderrunNanos = now &- AudioDecoder.cushionFloorDecayQuietNanos
+        #expect(decoder.cushionQuietAdjustLocked(now: now) != nil)
+        #expect(decoder.playoutTargetMs == 60)
+    }
 }
