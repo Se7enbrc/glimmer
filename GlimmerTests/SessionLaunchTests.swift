@@ -134,6 +134,21 @@ struct SessionLaunchTests {
         #expect(cancelledAgain)
     }
 
+    /// A pipeline's events go to the session it started for, whichever is current when they fire,
+    /// so a late callback from a timed-out pipeline can't land in the next session.
+    @Test func eventsGoToTheSessionTheirPipelineStartedFor() async {
+        let session = StreamSession()
+        let bridge = StreamBridgeContext(session: session, videoDecoder: await VideoDecoder(),
+                                         audioDecoder: AudioDecoder(), inputForwarder: await InputForwarder())
+        let (stream, continuation) = AsyncStream<StreamEvent>.makeStream()
+        bridge.eventContinuation = continuation
+        NativeConnectionEvents(bridge: bridge).stageStarting("name resolution")
+        continuation.finish()
+        var received = 0
+        for await _ in stream { received += 1 }
+        #expect(received == 1)
+    }
+
     /// Quitting during "Reconnecting…" after an attempt failed: stop still has a client for the PC
     /// it launched on, so the owned session gets its /cancel instead of leaving the game running.
     @Test func stopCanCancelAfterAFailedReconnectAttempt() async {

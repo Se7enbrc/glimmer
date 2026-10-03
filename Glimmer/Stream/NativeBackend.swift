@@ -17,7 +17,7 @@
 //
 //  STAGE/EVENT WIRING: the native stack emits StreamEvents
 //  (stageStarting/stageComplete/stageFailed/connectionEstablished) by yielding
-//  to StreamBridgeContext.current.eventContinuation, so the Troubleshooting →
+//  to the continuation of the session it started for, so the Troubleshooting →
 //  Logs + connection UI light up from the connection lifecycle. Diag lines
 //  under category "NativeConnection" trace each sub-stage so progress is
 //  watchable live.
@@ -274,12 +274,16 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 // MARK: - ConnectionEvents adapter for the native stack
 
 /// Bridges the native stack's stage callbacks onto the event channel: it yields
-/// StreamEvents to StreamBridgeContext.current's continuation (FIFO,
+/// StreamEvents to its own session's continuation (FIFO,
 /// thread-safe) and emits matching Diag lines, driving the Troubleshooting →
 /// Logs view + connection UI. Conforms to the ConnectionEvents protocol from
 /// StreamingBackend.swift; the native backend owns its own sinks.
 final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
     private static let logCategory = "NativeConnection"
+    /// The session this pipeline started for, not whichever is current when a late event fires.
+    weak let bridge: StreamBridgeContext?
+
+    init(bridge: StreamBridgeContext? = StreamBridgeContext.current) { self.bridge = bridge }
 
     func stageStarting(_ name: String) {
         Diag.info("stage starting: \(name)", Self.logCategory)
@@ -291,7 +295,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         let p2 = TelemetryCounters.shared.p2
         if name == "name resolution" { p2.markRtspStart(now) }
         if name == "ENET_CONNECT" { p2.markEnetStart(now) }
-        StreamBridgeContext.current?.eventContinuation?.yield(.stageStarting(name: name))
+        bridge?.eventContinuation?.yield(.stageStarting(name: name))
     }
 
     func stageComplete(_ name: String) {
@@ -302,12 +306,12 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         if name == "RTSP handshake" {
             TelemetryCounters.shared.p2.markRtspDone(TelemetryCounters.monotonicNowNanos())
         }
-        StreamBridgeContext.current?.eventContinuation?.yield(.stageComplete(name: name))
+        bridge?.eventContinuation?.yield(.stageComplete(name: name))
     }
 
     func stageFailed(_ name: String, code: Int32) {
         Diag.error("stage FAILED: \(name) (code \(code))", Self.logCategory)
-        StreamBridgeContext.current?.eventContinuation?.yield(.stageFailed(name: name, errorCode: code))
+        bridge?.eventContinuation?.yield(.stageFailed(name: name, errorCode: code))
     }
 
     func connectionStarted() {
@@ -316,7 +320,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         // leg. Reconnect is NOT inferred here (silent-reconnect resets the timeline
         // per attempt) - it's counted at the recovery site (runReconnectEpisode).
         TelemetryCounters.shared.p2.markEstablished()
-        let bridge = StreamBridgeContext.current
+        let bridge = self.bridge
         // If the continuation is gone at yield time, this established edge fires
         // into the void and the UI's connecting→streaming promotion falls back to
         // .firstFrame; log it so a torn yield is diagnosable (not load-bearing).
@@ -344,7 +348,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         // recoverable terminate may be silently reconnected (would over-count).
         TelemetryCounters.shared.p2.setDisconnectReason(
             code == 0 ? .hostClosedClean : .hostError)
-        let bridge = StreamBridgeContext.current
+        let bridge = self.bridge
         // Don't yield `.connectionTerminated` directly: handleHostTerminate
         // classifies it (a recoverable live-session close drives a silent reconnect
         // under the frozen frame). No session → fall back so it's never swallowed.
@@ -357,13 +361,13 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
 
     func connectionStatus(poor: Bool) {
         let quality: ConnectionQuality = poor ? .poor : .good
-        StreamBridgeContext.current?.eventContinuation?.yield(.connectionStatus(quality))
+        bridge?.eventContinuation?.yield(.connectionStatus(quality))
     }
 
     func setHdrMode(_ enabled: Bool) {
         // Intent signal only - the native video path engages HDR through
         // EnetControlChannel.onHdrMode (see startVideoStage). This yields the
         // matching UI event for ConnectionEvents parity with the C bridge.
-        StreamBridgeContext.current?.eventContinuation?.yield(.hdrModeChanged(enabled))
+        bridge?.eventContinuation?.yield(.hdrModeChanged(enabled))
     }
 }

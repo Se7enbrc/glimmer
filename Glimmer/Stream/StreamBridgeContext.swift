@@ -51,17 +51,9 @@ public final class StreamBridgeContext: @unchecked Sendable {
     nonisolated(unsafe) public weak var audioDecoder: AudioDecoder?
     nonisolated(unsafe) public weak var inputForwarder: InputForwarder?
 
-    /// The session's event-stream continuation. Stored here so backend
-    /// receive-thread callbacks (stageStarting/stageComplete/connectionStarted/
-    /// etc.) can yield events directly without an actor hop. AsyncStream.Continuation
-    /// is Sendable and guarantees thread-safe FIFO ordering of yield()
-    /// calls, so emitting from the backend receive thread preserves the order
-    /// the backend invoked us in. Hopping through `Task { await deliver(...) }`
-    /// would lose ordering because consecutive Tasks land on the global
-    /// concurrent executor without inter-Task happens-before. Living on the
-    /// bridge also captures stageStarting/stageComplete callbacks fired
-    /// synchronously during startConnection itself, which a session-local
-    /// continuation created post-startConnection would miss.
+    /// The session's event stream, yielded to straight from backend threads so events keep the order
+    /// the backend fired them (a Task hop would not). Invariant: written once in start() before any
+    /// pipeline runs, and never cleared; stop() finishes it instead.
     nonisolated(unsafe) public var eventContinuation: AsyncStream<StreamEvent>.Continuation?
 
     /// Weak-static fallback for callbacks that don't take a context pointer

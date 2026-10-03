@@ -170,13 +170,9 @@ extension StreamSession {
             Unmanaged<StreamBridgeContext>.fromOpaque(ptr).release()
         }
         bridgePtr = nil
-        // Finish the event stream BEFORE we drop the bridge - once
-        // bridge.eventContinuation goes nil, any final yields from C-thread
-        // callbacks become no-ops. finish() signals end-of-stream to the
-        // consumer's `for await` loop, which is how AppModel learns
-        // a stream is over.
+        // finish() ends AppModel's `for await`, which is how it learns the stream is over, and turns
+        // any late yield from a callback thread into a no-op. Clearing the field instead would race them.
         bridge?.eventContinuation?.finish()
-        bridge?.eventContinuation = nil
         bridge = nil
 
         // 6. Release the keep-awake assertion taken in start(). Balanced 1:1

@@ -75,7 +75,7 @@ extension NativeBackend {
             // Audio receive after the video ping (moonlight's control, video,
             // audio order): the host answers that ping with its first frame, so
             // the 35-130 ms decoder and engine bring-up no longer delays it.
-            startAudioReceive(handshake: handshake, config: config, server: server, host: host)
+            startAudioReceive(handshake: handshake, config: config, server: server, host: host, events: events)
         } catch {
             // Any failure after the audio ping may have started must not leak the
             // ping thread/socket (and recv loop, if it reached startAudioReceive).
@@ -310,7 +310,7 @@ extension NativeBackend {
     /// if it somehow wasn't running. Best-effort - non-fatal.
     func startAudioReceive(
         handshake: RtspHandshakeResult, config: BackendStreamConfig,
-        server: BackendServerInfo, host: NWEndpoint.Host
+        server: BackendServerInfo, host: NWEndpoint.Host, events: NativeConnectionEvents
     ) {
         guard let receiver = withState({ audioReceiver }) else {
             // No early-ping receiver (e.g. no audio sink). Nothing to receive.
@@ -324,7 +324,7 @@ extension NativeBackend {
             // H7: surface the video-only state instead of swallowing it - a
             // queryable counter + a non-fatal event (the visual stream is fine).
             TelemetryCounters.shared.audioReceiveFailedTotal.increment()
-            StreamBridgeContext.current?.eventContinuation?.yield(
+            events.bridge?.eventContinuation?.yield(
                 .audioFailed("\(error)"))
         }
     }
