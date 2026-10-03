@@ -2,6 +2,9 @@
 
 ## 2026.10.4 - Unreleased
 
+- On a 16-inch MacBook Pro, the HiDPI quality asks the PC for 1728 × 1116
+  instead of 1728 × 1117, so a PC that builds its display to order, such as one
+  running Apollo, shows a picture instead of ending after ten seconds. (#110)
 - Quitting while Glimmer is reconnecting ends the game on the PC, instead of
   leaving it running and asking to take it over on the next connect.
 - On a remote connection, a quality step-up that doesn't hold drops back to the

@@ -335,6 +335,18 @@ extension AppModel {
     /// What (width, height, fps, bitrate) a preset resolves to right now: the
     /// one resolver behind the effective config and the Custom prefill.
     func effectiveValuesForPreset(_ preset: QualityPreset) -> PresetSnapshot {
+        let raw = rawValuesForPreset(preset)
+        let size = Self.encodableSize(width: raw.width, height: raw.height)
+        return PresetSnapshot(width: size.width, height: size.height, fps: raw.fps, bitrateKbps: raw.bitrateKbps)
+    }
+
+    /// Encoders need even dimensions for 4:2:0 video. A 16" MacBook Pro halves to 1728x1117, which a
+    /// PC that builds its display to order (Apollo) took as asked and then never encoded (issue #110).
+    nonisolated static func encodableSize(width: Int, height: Int) -> (width: Int, height: Int) {
+        (width & ~1, height & ~1)
+    }
+
+    private func rawValuesForPreset(_ preset: QualityPreset) -> PresetSnapshot {
         let display = smartDefaultsForCurrentDisplay()
         switch preset {
         case .matchDisplay:

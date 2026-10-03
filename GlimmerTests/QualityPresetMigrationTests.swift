@@ -57,4 +57,12 @@ struct QualityPresetMigrationTests {
             #expect(once == twice)
         }
     }
+
+    /// Every preset asks for even dimensions: the 16" MacBook Pro's HiDPI size, 1728x1117, reached a
+    /// PC that builds its display to order and never encoded (issue #110). Even sizes pass unchanged.
+    @Test func streamSizesAreAlwaysEven() {
+        #expect(AppModel.encodableSize(width: 1728, height: 1117) == (1728, 1116))
+        #expect(AppModel.encodableSize(width: 1512, height: 982) == (1512, 982))
+        #expect(AppModel.encodableSize(width: 1365, height: 767) == (1364, 766))
+    }
 }
