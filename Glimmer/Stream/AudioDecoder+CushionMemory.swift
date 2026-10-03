@@ -68,6 +68,9 @@ extension AudioDecoder {
     /// slow clock that lets an improved link re-earn shallow cushions - and
     /// the liveness guarantee for every floor-blocked decay.
     static let cushionFloorDecayQuietNanos: UInt64 = 600_000_000_000
+    /// How long a walk-down stays a step above the level that last under-ran. Long enough to stop
+    /// the one-minute retry; 10 min held a Wi-Fi storm's cushion ~70 ms deep for 20 min after it.
+    static let recentFailureHoldNanos: UInt64 = 180_000_000_000
     /// Near-miss margin (ms): the decay window's MIN fill must clear this
     /// (one full step above empty) before a step down is allowed - a window
     /// that nearly drained proves the NEXT step down would under-run.
@@ -321,10 +324,10 @@ extension AudioDecoder {
                                   floorMs: learnedFloorMs)
     }
 
-    /// A step above the level that last under-ran, until the floor's slow decay window has passed:
-    /// on Wi-Fi the walk-down otherwise retried the failed level a minute later.
+    /// A step above the level that last under-ran, until the hold has passed: on Wi-Fi the
+    /// walk-down otherwise retried the failed level a minute later.
     func recentFailureFloorMs(now: UInt64) -> Double {
-        guard lastUnderrunNanos > 0, now &- lastUnderrunNanos < Self.cushionFloorDecayQuietNanos else { return 0 }
+        guard lastUnderrunNanos > 0, now &- lastUnderrunNanos < Self.recentFailureHoldNanos else { return 0 }
         return lastFailedTargetMs + Self.playoutCushionStepMs
     }
 

@@ -90,8 +90,8 @@ extension AudioPlayoutStallTests {
         #expect(decoder.learnedFloorMs == (releases ? 95 : 105))
     }
 
-    /// For the floor's decay window after an under-run, a quiet window won't walk the target back
-    /// below a step above the level that failed; once the window passes, it may.
+    /// For the recent-failure hold after an under-run, a quiet window won't walk the target back
+    /// below a step above the level that failed; once the hold passes, it may.
     @Test func walkDownHoldsAboveARecentFailure() {
         let decoder = AudioDecoder()
         let now = DispatchTime.now().uptimeNanoseconds
@@ -109,7 +109,7 @@ extension AudioPlayoutStallTests {
         #expect(decoder.cushionQuietAdjustLocked(now: now) == nil)
         #expect(decoder.playoutTargetMs == 54)
 
-        decoder.lastUnderrunNanos = now &- AudioDecoder.cushionFloorDecayQuietNanos
+        decoder.lastUnderrunNanos = now &- AudioDecoder.recentFailureHoldNanos
         #expect(decoder.cushionQuietAdjustLocked(now: now) != nil)
         #expect(decoder.playoutTargetMs == 44)
     }
@@ -133,7 +133,7 @@ extension AudioPlayoutStallTests {
         #expect(decoder.cushionQuietAdjustLocked(now: now) == nil)
         #expect(decoder.playoutTargetMs == 70)
 
-        decoder.lastUnderrunNanos = now &- AudioDecoder.cushionFloorDecayQuietNanos
+        decoder.lastUnderrunNanos = now &- AudioDecoder.recentFailureHoldNanos
         #expect(decoder.cushionQuietAdjustLocked(now: now) != nil)
         #expect(decoder.playoutTargetMs == 60)
     }
