@@ -36,7 +36,10 @@ extension FramePacer {
         if let vsync = passthroughVsyncLocked() {
             lock.unlock()
             TelemetryCounters.shared.pacerSubmitReleaseTotal.increment()
-            presentGateRelease(entry, vsyncInterval: vsync)
+            // Present on the tick's own queue: from this decoder thread it could reach the layer
+            // ahead of an older frame a late tick has already dequeued.
+            let handoff = SubmitRelease(entry: entry)
+            pacingQueue.async { [weak self] in self?.presentGateRelease(handoff.entry, vsyncInterval: vsync) }
             return
         }
 
@@ -208,4 +211,10 @@ extension FramePacer {
         // the same discipline as every other caller of the service pass.
         handleTickDeficitEvents(events)
     }
+}
+
+/// A release-at-submit frame on its way to the pacing queue. @unchecked: the decoder thread hands
+/// the frame over and never touches it again, so the pacing queue is its only user.
+private struct SubmitRelease: @unchecked Sendable {
+    let entry: FramePacer.Entry
 }

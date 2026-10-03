@@ -75,6 +75,7 @@ struct FramePacerTests {
         pacer.liveness.lastTickTargetMediaTime = tickTarget
         pacer.lastPresentMediaTime = tickTarget - 1.0 / 120
         try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 0, timescale: 90_000))
+        pacer.pacingQueue.sync {}
         #expect(presents.withLock { $0 } == 1)
         #expect(pacer.queue.isEmpty)
         #expect(pacer.lastPresentMediaTime == tickTarget)
@@ -92,6 +93,7 @@ struct FramePacerTests {
         pacer.lastPresentMediaTime = tickTarget - 1.0 / 120
         pacer.liveness.staleCandidateTarget = tickTarget - 1.0 / 60
         try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 0, timescale: 90_000))
+        pacer.pacingQueue.sync {}
         #expect(presents.withLock { $0 } == 1)
         #expect(pacer.liveness.staleCandidateTarget == tickTarget - 1.0 / 60)
 
@@ -101,6 +103,36 @@ struct FramePacerTests {
         claiming.liveness.staleCandidateTarget = tickTarget
         try claiming.submit(emptySampleBuffer(), hostPTS: CMTime(value: 0, timescale: 90_000))
         #expect(claiming.liveness.staleCandidateTarget.isNaN)
+    }
+
+    /// A late tick has dequeued frame A and is handing it to the layer when frame B arrives and is
+    /// due at once: B is presented after A, never ahead of it.
+    @Test func aSubmitReleaseNeverOvertakesATicksFrame() throws {
+        let pacer = try makePacer(fps: 120, queued: 1)
+        pacer.refreshTelemetry.lastRefreshIntervalSeconds = 1.0 / 120
+        let frameA = try ObjectIdentifier(#require(pacer.queue.first?.sampleBuffer))
+        let order = OSAllocatedUnfairLock(initialState: [String]())
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        pacer.willPresent = { buffer in
+            let label = ObjectIdentifier(buffer) == frameA ? "A" : "B"
+            if label == "A" {
+                entered.signal()
+                _ = release.wait(timeout: .now() + 2)
+            }
+            order.withLock { $0.append(label) }
+            return true
+        }
+        let target = CACurrentMediaTime() - 0.05
+        pacer.liveness.lastTickTargetMediaTime = target
+        pacer.pacingQueue.async {
+            pacer.releaseDueFrame(targetTimestamp: target, vsyncInterval: 1.0 / 120, tickScanout: target)
+        }
+        #expect(entered.wait(timeout: .now() + 2) == .success)
+        try pacer.submit(emptySampleBuffer(), hostPTS: CMTime(value: 750, timescale: 90_000))
+        release.signal()
+        pacer.pacingQueue.sync {}
+        #expect(order.withLock { $0 } == ["A", "B"])
     }
 
     /// Passthrough stays off while a jitter buffer is wanted and before the first tick,
