@@ -11,9 +11,10 @@ import Foundation
 extension AppModel {
 
     /// Show a failure on the launcher banner and the menu bar.
-    func showStreamFailure(_ failure: (message: String, kind: StreamErrorKind)) {
+    func showStreamFailure(_ failure: (message: String, kind: StreamErrorKind), on host: Host) {
         nativeStreamError = failure.message
         nativeStreamErrorKind = failure.kind
+        nativeStreamErrorHostID = host.id
     }
 
     /// A connect the user stopped (Cancel, the quit chord, the close button)

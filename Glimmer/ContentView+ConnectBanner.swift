@@ -40,18 +40,25 @@ enum ConnectBannerAction: Equatable {
 }
 
 extension AppModel {
-    /// The recovery the current stream error offers for the selected PC.
-    var streamErrorAction: ConnectBannerAction {
-        ConnectBannerAction(kind: nativeStreamErrorKind, canWake: selectedHost.map(canWake) ?? false)
+    /// The PC the error names, not whichever one is selected now.
+    var streamErrorHost: Host? {
+        hosts.first { $0.id == nativeStreamErrorHostID } ?? selectedHost
     }
 
-    /// Clears the error and runs its recovery.
+    /// The recovery the current stream error offers for the PC it names.
+    var streamErrorAction: ConnectBannerAction {
+        ConnectBannerAction(kind: nativeStreamErrorKind, canWake: streamErrorHost.map(canWake) ?? false)
+    }
+
+    /// Clears the error and runs its recovery on the PC it names, selecting that PC first.
     func runStreamErrorAction() {
         let action = streamErrorAction
+        let host = streamErrorHost
+        if let host, host.id != selectedHost?.id { selectHost(host) }
         nativeStreamError = nil
         switch action {
-        case .wakeAndConnect: if let host = selectedHost { wakeHost(host, thenConnect: true) }
-        case .pairAgain: requestPairing(for: selectedHost)
+        case .wakeAndConnect: if let host { wakeHost(host, thenConnect: true) }
+        case .pairAgain: requestPairing(for: host)
         case .tryAgain: retryLastLaunch()
         }
     }
@@ -89,7 +96,7 @@ struct ConnectBanner: View {
                     }
                     .buttonStyle(.glass)
                     .controlSize(.small)
-                    .disabled(model.selectedHost == nil || model.isStreaming)
+                    .disabled(model.streamErrorHost == nil || model.isStreaming)
                     // The action is disabled with no host selected or mid-
                     // stream, so without this the banner could otherwise
                     // become permanent.

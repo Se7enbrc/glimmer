@@ -239,7 +239,7 @@ extension AppModel {
             let localized = (caughtError as NSError).localizedDescription
             self.log.error("Stream start failed for \(hostName, privacy: .private): \(localized, privacy: .private)")
             Diag.error("Stream start failed for \(hostName, privacy: .private): \(localized, privacy: .private)", "Stream")
-            self.showStreamFailure(Self.connectFailure(for: caughtError, hostName: hostName))
+            self.showStreamFailure(Self.connectFailure(for: caughtError, hostName: hostName), on: host)
         }
         // M3: do NOT unconditionally clear nativeStreamError here. A host-side
         // "ended unexpectedly" terminate (code != 0) already set the banner on
@@ -380,9 +380,9 @@ extension AppModel {
     /// PC that stopped answering); a bare nonzero code gets the ended-stream toast.
     private func showStreamEnded(code: Int32, error: StreamError?, host: Host) {
         if let error {
-            showStreamFailure(Self.connectFailure(for: error, hostName: host.displayName))
+            showStreamFailure(Self.connectFailure(for: error, hostName: host.displayName), on: host)
         } else if code != 0 {
-            showStreamFailure((Self.streamEndedMessage(code: code, hostName: host.displayName), .other))
+            showStreamFailure((Self.streamEndedMessage(code: code, hostName: host.displayName), .other), on: host)
         }
     }
 

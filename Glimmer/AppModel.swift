@@ -142,6 +142,9 @@ final class AppModel {
     /// matching action instead of parsing the message text.
     var nativeStreamErrorKind: StreamErrorKind = .other
 
+    /// The PC the error is about, which a mid-connect switch can leave unselected.
+    var nativeStreamErrorHostID: String?
+
     enum StreamErrorKind {
         case unreachable, pairing, other
     }
