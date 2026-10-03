@@ -65,15 +65,11 @@ final class RtpAudioQueue {
     static let dataShards = 4         // RTPA_DATA_SHARDS
     static let fecShards = 2          // RTPA_FEC_SHARDS
     static let totalShards = 6        // RTPA_TOTAL_SHARDS
-    /// OOS give-up SLACK floor (ms) - the wired figure (RTPQ_OOS_WAIT_TIME_MS).
-    /// Late-but-arriving shards on a wired NIC land within a few ms, so the LAN
-    /// figure is right there; `oosWaitTimeMs` scales UP from here on a jittery
-    /// link (see below).
+    /// The wired give-up window (ms), RTPQ_OOS_WAIT_TIME_MS: late shards on a wired NIC land within a
+    /// few ms. `oosWaitTimeMs` widens it on a jittery link.
     static let oosWaitTimeBaseMs = 10
-    /// OOS give-up SLACK ceiling (ms) on a tunnel/wifi link. A VPN delivers
-    /// late audio shards 25-50ms behind the block; the fixed 10ms LAN window
-    /// gave up on them and forced PLC (audible glitching). Bounded so a wedged
-    /// route can't grow the give-up window without limit.
+    /// The give-up window (ms) on Wi-Fi or a tunnel, where late shards arrive 25-50 ms behind; the
+    /// wired 10 ms gave up on them and forced PLC. Longer would drain a shallow cushion instead.
     static let oosWaitTimeMaxMs = 45
 
     static let fixedRtpHeaderSize = 12   // sizeof(RTP_PACKET)
@@ -154,20 +150,11 @@ final class RtpAudioQueue {
     /// compatibility lines co-locate with the receiver's in the log.
     static let cat = "NativeAudio"
 
-    /// AudioPacketDuration in ms (5 by default; 10 for slow/low-bitrate). Used to
-    /// synthesize timestamps and to size the OOS give-up window.
+    /// AudioPacketDuration in ms (5 by default; 10 for slow/low-bitrate), for synthesized timestamps.
     let audioPacketDuration: Int
 
-    /// OOS give-up SLACK (ms) added past the block's own playout duration before a
-    /// missing shard is conceded to PLC. LINK-SCALED, not a magic constant: the
-    /// audio receive path has no clean per-stream jitter signal of its own, so -
-    /// like the cushion seed (AudioDecoder+CushionMemory.swift:134) - it scales off
-    /// the resolved stream-link class. A wired NIC delivers late shards within a
-    /// few ms (keep the ~10ms LAN floor); a wifi/tunnel link delivers them 25-50ms
-    /// behind, so a too-short window gives up on shards that WOULD have arrived and
-    /// forces audible PLC glitching. Bounded by `oosWaitTimeMaxMs`. Re-read each
-    /// give-up check (once per missing-packet decision, off the per-datagram fast
-    /// path) so a route that resolves mid-stream takes effect without re-init.
+    /// How long (ms) a missing shard may hold its block before it's conceded to PLC, by link class.
+    /// Re-read at each give-up check, so a route that resolves mid-stream applies without re-init.
     private var oosWaitTimeMs: Int {
         switch EnvSignalController.shared.streamLink {
         case "wired":
@@ -373,7 +360,8 @@ final class RtpAudioQueue {
 
         // Give up if we've never seen OOS data, or the wait window elapsed (:542-561).
         let nowUs = UInt64(DispatchTime.now().uptimeNanoseconds / 1000)
-        let windowUs = UInt64(audioPacketDuration * Self.dataShards) + UInt64(oosWaitTimeMs * 1000)
+        // Upstream also adds the block's 20 ms here, in µs units, so 20 µs: the window is the slack alone.
+        let windowUs = UInt64(oosWaitTimeMs * 1000)
         if !receivedOosData || (nowUs &- head.queueTimeUs) > windowUs {
             stats.packetCountFecFailed += 1
             // Play out the block with PLC placeholders for the missing packets.
