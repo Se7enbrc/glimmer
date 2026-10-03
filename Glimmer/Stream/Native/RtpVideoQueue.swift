@@ -275,10 +275,13 @@ final class RtpVideoQueue {
     /// Seconds since the last video datagram arrived; `.infinity` before the
     /// first one on this connection. Any thread.
     static func secondsSinceLastDatagram() -> Double {
-        let last = lastDatagramUs.load(ordering: .relaxed)
-        guard last > 0 else { return .infinity }
-        let nowUs = DispatchTime.now().uptimeNanoseconds / 1000
-        return Double(nowUs &- min(last, nowUs)) / 1_000_000
+        secondsSince(lastUs: lastDatagramUs.load(ordering: .relaxed),
+                     nowUs: DispatchTime.now().uptimeNanoseconds / 1000)
+    }
+
+    static func secondsSince(lastUs: UInt64, nowUs: UInt64) -> Double {
+        guard lastUs > 0 else { return .infinity }
+        return Double(nowUs &- min(lastUs, nowUs)) / 1_000_000
     }
 
     // MARK: - 16-bit wraparound (Limelight-internal.h)

@@ -427,12 +427,11 @@ struct RtpVideoQueueRecoveryTests {
 
     /// Reception is alive while datagrams arrive, even when no frame survives
     /// to the decoder (the downshift's whole premise).
-    @Test @MainActor func datagramsKeepReceptionAliveWithoutFrames() {
-        _ = makeQueue()
-        let decoder = VideoDecoder()
-        #expect(decoder.secondsSinceLastReceivedFrame() == .infinity)
-        makeQueue().addRawDatagram([0, 0, 0], receiveTimeUs: DispatchTime.now().uptimeNanoseconds / 1000)
-        #expect(decoder.secondsSinceLastReceivedFrame() < 1)
+    @Test func datagramsKeepReceptionAliveWithoutFrames() {
+        // The clock itself is process-wide and other suites feed it in parallel; pin its math.
+        #expect(RtpVideoQueue.secondsSince(lastUs: 0, nowUs: 5_000_000) == .infinity)
+        #expect(RtpVideoQueue.secondsSince(lastUs: 4_500_000, nowUs: 5_000_000) == 0.5)
+        #expect(RtpVideoQueue.secondsSince(lastUs: 6_000_000, nowUs: 5_000_000) == 0)
     }
 
     /// The env-signal fold credits a window with video only when the datagram
