@@ -78,7 +78,7 @@ that inspired Glimmer; it is not the protocol's name.
 ## Evidence on Hand
 
 - `README.md`: features and install; `docs/assets/launcher.png`: the launcher.
-- `CHANGELOG.md`: every release in plain prose.
+- `CHANGELOG.md`: every release as plain-language bullets.
 - `docs/PROFILING.md` and per-session telemetry under `~/Library/Logs/Glimmer`
   back the tuning claims.
 - There are no published benchmarks against Moonlight, no user counts and no

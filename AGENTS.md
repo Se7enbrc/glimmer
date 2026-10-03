@@ -223,10 +223,10 @@ numbers or a new platform API, never as cleanup.
 - Scope a pull request to one area. No drive-by reformatting, renames or
   unrelated cleanup riding along.
 - Follow [RELEASE.md](docs/RELEASE.md): a change a person will notice carries a
-  `CHANGELOG.md` entry in plain prose about what changed for them, and the
-  `Glimmer/Version.xcconfig` bump goes in the same pull request. Bump both
-  lines: Sparkle orders updates by `CURRENT_PROJECT_VERSION`, so a release whose
-  build number doesn't rise past the last one is never offered.
+  `CHANGELOG.md` bullet under its release, in plain words about what changed for
+  them, and the `Glimmer/Version.xcconfig` bump goes in the same pull request.
+  Bump both lines: Sparkle orders updates by `CURRENT_PROJECT_VERSION`, so a
+  release whose build number doesn't rise past the last one is never offered.
 - The pull request says what changed and why, what you ran and looked at, and
   what you did not verify. An honest gap beats a confident guess.
 - Don't push, open or merge a pull request unless the person you're working for
