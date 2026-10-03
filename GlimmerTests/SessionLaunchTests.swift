@@ -106,6 +106,15 @@ struct SessionLaunchTests {
         #expect(await cancelled.value == 1)
     }
 
+    /// Quitting during "Reconnecting…" after an attempt failed: stop still has a client for the PC
+    /// it launched on, so the owned session gets its /cancel instead of leaving the game running.
+    @Test func stopCanCancelAfterAFailedReconnectAttempt() async {
+        let session = StreamSession()
+        await session.loseNetworkAfterReconnect(to: ServerInfo(address: "192.0.2.1", uniqueId: "pc", serverName: "Den PC"))
+        let cleanup = await session.cleanupNetwork
+        #expect(await cleanup?.server.uniqueId == "pc")
+    }
+
     @Test func stopFinishesWhileLaunchRemainsPending() async {
         let session = StreamSession()
         await session.prepareLaunchTestSession()
@@ -217,6 +226,11 @@ struct SessionLaunchTests {
 
 private extension StreamSession {
     func prepareLaunchTestSession() { isStreaming = true }
+
+    func loseNetworkAfterReconnect(to server: ServerInfo) {
+        reconnectServer = server
+        network = nil
+    }
 
     func publishLaunchTestBridge() async {
         let decoder = await VideoDecoder()

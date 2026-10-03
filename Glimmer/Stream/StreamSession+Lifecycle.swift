@@ -144,7 +144,7 @@ extension StreamSession {
 
         // 4. Briefly wait for ownership, then cancel. A late successful launch
         //    gets its own cleanup without holding the launcher open.
-        let net = network
+        let net = cleanupNetwork
         await settlePendingLaunch {
             if let net { await Self.cancelOwnedSession(net) }
         }
@@ -190,6 +190,12 @@ extension StreamSession {
         window = nil
         videoDecoder = nil
         stopInProgress = false
+    }
+
+    /// The client stop cancels with. A failed reconnect attempt clears `network`, but the session
+    /// may still own a launch on `reconnectServer`, and that game must not be left running.
+    var cleanupNetwork: NetworkClient? {
+        network ?? reconnectServer.map { NetworkClient(server: $0) }
     }
 
     private static func cancelOwnedSession(_ network: NetworkClient) async {
