@@ -1,10 +1,10 @@
-# Host setup: display modes (Sunshine + VDD)
+# PC setup: display modes (Sunshine + VDD)
 
-Glimmer asks the host for an **exact** `width × height @ refresh`, whatever you
+Glimmer asks the PC for an **exact** `width × height @ refresh`, whatever you
 pick in **Settings ▸ Quality**. The presets there are _Sharpest_ (your panel's
-own pixel grid), _Balanced_ (half that in each direction), and _Custom_. The
-host can only honor a mode it can actually present, so the host's display has to
-be able to produce every mode you might request. On Windows that means a
+own pixel grid), _Balanced_ (half that in each direction), and _Custom_.
+Sunshine can only honor a mode the PC can actually present, so the PC's display
+has to be able to produce every mode you might request. On Windows that means a
 **Virtual Display Driver**; on Linux a current Sunshine that resizes the
 session. Without one, the stream falls back to a wrong size or fails to start.
 
@@ -23,15 +23,18 @@ needs a virtual display that can.
    `C:\IddSampleDriver\vdd_settings.xml` or `C:\VirtualDisplayDriver\`). Then:
    - set `<gpu><friendlyname>` to your GPU exactly as Device Manager ▸ Display
      adapters shows it;
-   - make sure every resolution/refresh you'll pick in Glimmer has a
+   - make sure every resolution and refresh rate you'll pick in Glimmer has a
      `<resolution>` entry. The sample already covers the common Mac panels plus
-     720p/1080p/1440p/4K at 60/120/240. **Add a block for anything missing.**
+     720p, 1080p, 1440p and 4K at 60, 120 and 240 Hz. **Add a block for anything
+     missing.**
 4. **Let Sunshine drive it.** On a current Sunshine, point it at the virtual
-   display and it enables the VDD on stream start, sets it to the resolution the
-   client asked for, and tears it down on disconnect. If your build doesn't do
-   this automatically, use the VDD project's enable/disable scripts as Sunshine
-   **Prep Commands**: Do on connect, Undo on disconnect.
-5. In Glimmer, pick a resolution/refresh that exists in the config above.
+   display and it enables the VDD on stream start, sets it to the resolution
+   Glimmer asked for, and tears it down on disconnect. If your build doesn't do
+   this automatically, add the VDD project's enable and disable scripts to
+   Sunshine's “Command Preparations”: enable as the “Do Command”, disable as the
+   “Undo Command”.
+5. In Glimmer, pick a resolution and refresh rate that exist in the config
+   above.
 
 ## Linux: Sunshine dynamic resize
 
@@ -51,6 +54,6 @@ the streaming resolution.
 
 ## The one rule
 
-Whatever Glimmer requests must exist on the host. Glimmer accepts any
+Whatever Glimmer requests must exist on the PC. Glimmer accepts any
 `640-7680 × 480-4320 @ 30-240`, so if you stream an unusual mode, add it to the
 VDD config (Windows) or the display server's mode list (Linux) first.

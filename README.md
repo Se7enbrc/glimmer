@@ -4,44 +4,47 @@
 
 # Glimmer
 
-A Mac-native client for [Sunshine](https://github.com/LizardByte/Sunshine). Pure
-Swift, Apple Silicon only, built so a gaming PC in the other room feels plugged
-into your Mac.
+A Mac-native client for [Sunshine](https://github.com/LizardByte/Sunshine),
+written in Swift for Apple Silicon so a gaming PC in the other room feels
+plugged into your Mac.
 
 ![The Glimmer launcher](docs/assets/launcher.png)
 
-The whole pipeline - socket, decoder, display, audio, input - runs in one Swift
-process. No external player, no C engine.
+Socket, decoder, display, audio and input all run in one Swift process, with no
+external player and no C engine.
 
 ## What you get
 
-- **Video.** Hardware-decoded H.264, HEVC, and AV1, 8- and 10-bit, with a real
+- **Video.** Hardware-decoded H.264, HEVC and AV1, 8- and 10-bit, with a real
   HDR10 pipeline. Up to 4K 240 Hz.
 - **Pacing.** Locks the display to the stream cadence, runs passthrough on a
   clean link, buffers only for measured jitter. Tuned against per-frame
   telemetry.
-- **Audio.** Opus through AVAudioEngine with a small adaptive cushion, so device
-  switches and rough Wi-Fi don't crackle.
+- **Audio.** Stereo, 5.1 and 7.1, decoded by macOS and played through
+  AVAudioEngine with a small adaptive cushion, so device switches and rough
+  Wi-Fi don't crackle.
 - **Controllers.** Xbox, DualSense and every other pad macOS supports, plus
   other USB and Bluetooth HID gamepads through SDL's controller database (those
   need Input Monitoring). Rumble, trigger rumble, gyro, touchpad, battery and
   light bar, whatever the pad has. Hold-to-stop chord. An optional raw-input
   mode (off by default, needs Input Monitoring) adds the DualSense buttons macOS
-  hides and the host's adaptive-trigger effects.
+  hides and the game's adaptive-trigger effects.
 - **Mouse and keyboard.** Raw 1:1 aim at your Mac's tracking speed with the
   acceleration curve removed, an optional velocity-gated boost on fast flicks,
   optional ⌘-shortcut forwarding.
-- **Wi-Fi.** An optional helper parks AWDL (AirDrop's radio time-share) during a
-  stream - the usual cause of multi-second Wi-Fi freezes.
-- **Hosts.** mDNS discovery, PIN pairing, hosts by IP or name (Tailscale works),
-  one-time import of moonlight-qt pairings.
-- **Mac things.** Menu bar item, display-matched quality presets, stats overlay,
-  hotkeys, notarized, self-updating. Shortcuts, Siri and Spotlight actions
-  stream from a PC, wake it, or quit the app it's running.
+- **Wi-Fi.** A helper parks AWDL (AirDrop's radio time-share), the usual cause
+  of multi-second Wi-Fi freezes, while you stream. Glimmer offers it the first
+  time it opens.
+- **PCs.** mDNS discovery, PIN pairing, PCs by address or name (Tailscale
+  works), Wake on LAN and a one-time import of moonlight-qt pairings.
+- **Mac things.** Menu bar item, mini player, display-matched quality presets,
+  stats overlay, hotkeys, notarized, self-updating. Shortcuts, Siri and
+  Spotlight actions stream from a PC, wake it, or quit the app it's running.
 
 No accounts, no analytics. Glimmer talks to your own PC and, if you leave
-updates on, to the update feed; nothing else. Diagnostics are off by default and
-write local files under `~/Library/Logs/Glimmer`.
+updates on, to the update feed; nothing else. Diagnostics are off by default,
+write local files under `~/Library/Logs/Glimmer`, and show your PC's address and
+names as short codes.
 
 ## Install
 
@@ -60,14 +63,14 @@ gets it with `brew upgrade --greedy glimmer` (or
 `brew reinstall --cask glimmer`), because the app updates itself outside
 Homebrew.
 
-Signed and notarized, not sandboxed, not on the App Store - the Wi-Fi helper
+Signed and notarized, not sandboxed, not on the App Store: the Wi-Fi helper
 needs that freedom ([docs/SECURITY.md](docs/SECURITY.md)).
 
-Your host needs Sunshine and a display that can present the exact mode you ask
+Your PC needs Sunshine and a display that can present the exact mode you ask
 for: a virtual display driver on Windows, a current Sunshine on Linux.
-[docs/HOST_SETUP.md](docs/HOST_SETUP.md).
+[docs/HOST_SETUP.md](docs/HOST_SETUP.md) walks through it.
 
-The Wi-Fi helper lives in Settings > Quality > Wi-Fi; macOS asks for one
+The Wi-Fi helper lives in Settings › Quality › Wi-Fi; macOS asks for one
 approval under Login Items & Extensions. If it reports `rejected by BTM`, run
 `sudo sfltool resetbtm` once.
 
@@ -127,8 +130,8 @@ removes it. The engine is under `Glimmer/Stream/`, no submodules.
 
 Moonlight is excellent and Glimmer would not exist without it. But moonlight-qt
 is a Qt port of cross-platform C++, one layer from the hardware. Glimmer talks
-to VideoToolbox, AVAudioEngine, and GameController directly - that is where the
-pacing, HDR, and controller work comes from - and it behaves like a Mac app
+to VideoToolbox, AVAudioEngine and GameController directly, which is where the
+pacing, HDR and controller work comes from, and it behaves like a Mac app
 because it is one.
 
 ## Support

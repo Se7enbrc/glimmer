@@ -1,13 +1,12 @@
 # Architecture
 
 Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
-process. No external player, no linked C streaming library - the
-GameStream/Sunshine transport is implemented in Swift under
-`Glimmer/Stream/Native/` (ported from `moonlight-common-c`, GPLv3; see
-[CREDITS.md](../CREDITS.md)). The only code that crosses the bridging header is
-an Objective-C exception guard in `CHelpers.h`, which Swift can't express;
-crypto, TLS and audio decode run on CryptoKit, CommonCrypto, Security,
-Network.framework and AudioToolbox.
+process. No external player, no linked C streaming library: Sunshine's streaming
+protocol is implemented in Swift under `Glimmer/Stream/Native/` (ported from
+`moonlight-common-c`, GPLv3; see [CREDITS.md](../CREDITS.md)). The only code
+that crosses the bridging header is an Objective-C exception guard in
+`CHelpers.h`, which Swift can't express; crypto, TLS and audio decode run on
+CryptoKit, CommonCrypto, Security, Network.framework and AudioToolbox.
 
 There is one other process, and it is not in the stream path: an opt-in root
 LaunchDaemon under `helper/` that parks the AirDrop radio (`awdl0`) for the
@@ -16,14 +15,13 @@ See [SECURITY.md](SECURITY.md) for why it exists and what it is allowed to do.
 
 ## Overview
 
-The user picks a host in the SwiftUI launcher, clicks Stream, and a borderless
-NSWindow takes over the screen. Decoded H.264 / HEVC / AV1 (8- or 10-bit, SDR or
+The user picks a PC in the SwiftUI launcher, clicks Stream, and a borderless
+NSWindow takes over the screen. Decoded H.264, HEVC or AV1 (8- or 10-bit, SDR or
 HDR10) is paced by a display-link-driven `FramePacer` onto an
-`AVSampleBufferDisplayLayer` for the OS to paint. Mouse / keyboard / gamepad
-input is forwarded to the host through the `StreamingBackend` input methods
-(coalesced by an `InputBatcher` onto the reliable control channel). When the
-user hits the quit hotkey, the backend is told to disconnect and the window
-comes down.
+`AVSampleBufferDisplayLayer` for the OS to paint. Mouse, keyboard and gamepad
+input goes to the PC through the `StreamingBackend` input methods (coalesced by
+an `InputBatcher` onto the reliable control channel). When the user hits the
+quit hotkey, the backend is told to disconnect and the window comes down.
 
 ## Process model
 
@@ -55,11 +53,12 @@ Top-level pieces:
 | `StatsCollector`      | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StatsCollector.swift`                   |
 | Telemetry (opt-in)    | exporter + counters                                      | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
 
-> The control/HTTP path runs over `ControlTransport` (`ControlTransport.swift`):
-> mutual TLS on Network.framework, deliberately **not** `URLSession`. The client
-> identity is built in memory from its PEM files (`SecIdentityCreate`), so the
-> (sleep-locking) keychain is never in the path, and the PC's self-signed cert
-> is pinned by exact DER in the TLS verify block instead of CA-validated.
+> The control and HTTP path runs over `ControlTransport`
+> (`ControlTransport.swift`): mutual TLS on Network.framework, deliberately
+> **not** `URLSession`. The client identity is built in memory from its PEM
+> files (`SecIdentityCreate`), so the keychain, which locks on sleep, is never
+> in the path, and the PC's self-signed cert is pinned by exact DER in the TLS
+> verify block instead of CA-validated.
 
 **Command line.** The same binary is the `glimmer` command. `GlimmerMain`
 (`Glimmer/CLI/`) is the entry point: run as `glimmer` (the cask's link), or with
@@ -86,26 +85,26 @@ renamed or removed.
 ## The `StreamingBackend` boundary
 
 `Glimmer/Stream/StreamingBackend.swift` is **the** streaming-engine abstraction:
-one protocol for lifecycle / telemetry / input uplink, plus sink protocols for
+one protocol for lifecycle, telemetry and input uplink, plus sink protocols for
 the inbound direction (`VideoSink`, `AudioSink`, `ConnectionEvents`), plus
 Glimmer-owned value types (`BackendServerInfo`, `BackendStreamConfig`,
 `DecodeUnit`, `DecodeBuffer`, `OpusConfig`, `HdrMetadata`, `GamepadAnalog`) so
 nothing outside the engine sees wire-level types. `NativeBackend` is the sole
 conformer.
 
-The method set deliberately mirrors the GameStream protocol surface - the
-outbound input methods map 1:1 to the `LiSend*` family the protocol defines, and
-doc comments keep the `Li*` names as spec citations - so the protocol itself
-documents the wire contract the engine satisfies.
+The method set deliberately mirrors the protocol's own surface: the outbound
+input methods map 1:1 to its `LiSend*` family, and doc comments keep the `Li*`
+names as spec citations, so the protocol itself documents the wire contract the
+engine satisfies.
 
 Protocol constants live in a Swift mirror (`StreamProtocolConstants.swift`,
 `enum StreamProtocol`); nothing imports a `Limelight.h`.
 
 ## The native engine (`Glimmer/Stream/Native/`)
 
-`NativeBackend.startConnection` drives the whole bring-up:
+`NativeBackend` runs the whole bring-up on a dedicated connect thread:
 
-```
+```text
 name resolution → RTSP/SDP handshake over TCP (OPTIONS, DESCRIBE,
 SETUP audio/video/control, ANNOUNCE, PLAY) → ENet-subset reliable-UDP
 CONTROL channel CONNECT / VERIFY_CONNECT / ACK → START_A → START_B →
@@ -114,167 +113,176 @@ connected → stream pings + RTP receive → FEC → depacketize → sinks
 
 Components:
 
-- **`RtspClient`** (+`+Handshake`) - the RTSP/SDP rounds, including Sunshine's
-  encrypted-RTSP variant. `SdpCodec` builds/parses the SDP payloads.
-- **`EnetControlChannel`** (+`+Handshake`, `+ControlLoop`, `+Inbound`, `+Send`)
-  - a focused, single-peer, client-only ENet subset over UDP: the CONNECT
-    handshake, reliable sends with ACK tracking, and the inbound control
-    dispatch (rumble, HDR mode, motion enable, lightbar, termination).
-    `EnetWire.swift` owns the byte layout (enet wire format; see CREDITS.md).
-- **`StreamCrypto`** - control-V2 AES-GCM encryption for control messages and
-  the media-stream decrypt paths.
-- **Video receive** - `VideoRtpReceiver` (socket + ping loop) → `RtpVideoQueue`
-  (+`+AddPacket`, `+Reconstruct`, `+ReceiveQuality`, `+ReorderStats`) which
-  reorders, FEC-recovers, and assembles packets → `VideoDepacketizer` which
+- **`RtspClient`** (+`+Handshake`): the RTSP/SDP rounds, including Sunshine's
+  encrypted-RTSP variant. `SdpCodec` builds and parses the SDP payloads.
+- **`EnetControlChannel`** (+`+Handshake`, `+ControlLoop`, `+Inbound`,
+  `+ControlMessages`, `+Send`): a focused, single-peer, client-only ENet subset
+  over UDP. It runs the CONNECT handshake, reliable sends with ACK tracking, and
+  the inbound control dispatch (rumble, HDR mode, motion enable, lightbar,
+  termination). `EnetWire.swift` owns the byte layout (ENet wire format; see
+  [CREDITS.md](../CREDITS.md)).
+- **`StreamCrypto`**: AES-GCM for the control-V2 envelope and for video the PC
+  requires encrypted.
+- **Video receive**: `VideoRtpReceiver` (socket and ping loop) → `RtpVideoQueue`
+  (+`+AddPacket`, `+Reconstruct`, `+ReceiveQuality`, `+ReorderStats`), which
+  reorders, FEC-recovers and assembles packets → `VideoDepacketizer`, which
   emits `DecodeUnit`s to the `VideoSink` (the `VideoDecoder`).
-  `ReedSolomon.swift` is the GF(256) erasure decoder (see CREDITS.md). Once a
-  link has shown reordering, the queue may hold back one datagram of the next
-  frame while the current frame is incomplete and FEC can still recover it, and
-  only within 24 ms of that frame's first packet. It is replayed as soon as the
-  frame completes, a datagram for another frame arrives, or the 24 ms window
-  runs out, so the hold is one datagram deep and adds no buffer depth.
-- **Audio receive** - `RtpAudioReceiver` (+`+Socket`, `+Decrypt`, `+Ping`,
-  `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`) /
-  `AudioFecDecoder` → Opus decode in `AudioDecoder` (AVAudioEngine playout with
-  an adaptive cushion).
-- **`StreamPathMTU`** - a connect-time egress path-MTU probe. It resolves
+  `ReedSolomon.swift` is the GF(256) erasure decoder (see
+  [CREDITS.md](../CREDITS.md)). Once a link has shown reordering, the queue may
+  hold back one datagram of the next frame while the current frame is incomplete
+  and FEC can still recover it, and only within 24 ms of that frame's first
+  packet. It is replayed as soon as the frame completes, a datagram for another
+  frame arrives, or the 24 ms window runs out, so the hold is one datagram deep
+  and adds no buffer depth.
+- **Audio receive**: `RtpAudioReceiver` (+`+Socket`, `+Receive`, `+Decrypt`,
+  `+Ping`, `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`)
+  / `AudioFecDecoder` → `OpusDecoder` (Opus on AudioToolbox) → `AudioDecoder`
+  (AVAudioEngine playout with an adaptive cushion).
+- **`StreamPathMTU`**: a connect-time egress path-MTU probe. It resolves
   `StreamConfig.remoteness == .auto` from the real route, so the SDP packet-size
   clamp (1392 down to 1024 on a tunnelled path) fires on the paths that need it.
-- **Input uplink** - `InputBatcher` + `InputEncoder`: queue + merge + ~1ms flush
-  coalescing high-rate mouse / controller deltas so the reliable channel carries
-  ~1 packet per change per tick instead of 150-250/s.
-- **`UdpPinger`** - stream-keepalive ping plumbing and the single steady-cadence
-  dial both live receive loops ride.
+- **Input uplink**: `InputBatcher` + `InputEncoder`. High-rate mouse and
+  controller state merges between sends at least 1 ms apart, on a one-shot flush
+  timer armed only while input is pending, so an idle stream costs no wakeups;
+  edge events pass through in order.
+- **`UdpPinger`**: the keepalive ping plumbing and cadences the video and audio
+  receivers share; each pings from its own socket.
 
 Inbound callbacks fire on the engine's receive threads and are routed through
-`StreamBridgeContext` (below). Stage events (`stageStarting` / `stageComplete` /
+`StreamBridgeContext` (below). Stage events (`stageStarting`, `stageComplete`,
 `stageFailed`) yield through the bridge's event continuation so the connection
 UI lights up live.
 
 ## Stream session lifecycle
 
-`StreamSession.start(server:config:appID:...)` returns an
+`StreamSession.start(server:config:appID:…)` returns an
 `AsyncStream<StreamEvent>` that drives the launcher's UI state. The phases:
 
-1. **Verify pairing** - `NetworkClient.fetchServerInfo()` (over HTTPS if a host
+1. **Verify pairing**: `NetworkClient.fetchServerInfo()` (over HTTPS if the PC's
    cert is already pinned, plain HTTP otherwise). If `pairStatus != .paired`,
-   throw - the launcher's pair sheet runs first, not us.
-2. **Launch or cancel+launch** - `launchWithBusyRecovery()` always renegotiates:
-   if the host's `currentgame` is 0 we send `/launch`, otherwise `/cancel` +
-   poll-until-idle + `/launch`. The previous "auto-resume if it's our app" path
-   was removed because it preserved the host's previous stream configuration
-   (resolution, FPS, HDR mode) across machines - a resume from a laptop after
-   starting on a desktop would carry over the desktop's 4K@240 settings. See
-   `launchWithBusyRecovery()` for the polling detail (the host's per-stream Undo
-   command has to finish before our next `/launch` runs, or display-resolution
-   lands on whichever of Do/Undo wrote last).
-3. **Build `BackendStreamConfig`** - width / height / fps / bitrate / codec
-   bitmask / colorspace / colorRange / encryptionFlags. The remote-input AES
-   key + IV are copied in from the launch response.
-4. **Build window + decoder + input on the main actor** - `StreamWindow`,
-   `VideoDecoder`, `InputForwarder` are all `@MainActor`. The decoder is
+   throw: the launcher's pair sheet runs first, not us.
+2. **Launch, or cancel and launch**: `launchWithBusyRecovery()` always
+   renegotiates. If the PC is idle we send `/launch`; otherwise `/cancel`, then
+   poll `/serverinfo` until idle (`waitForHostIdle`, up to 5 s), then `/launch`.
+   The old “auto-resume if it's our app” path was removed because it preserved
+   the PC's previous stream configuration (resolution, FPS, HDR mode) across
+   machines: a resume from a laptop after starting on a desktop would carry over
+   the desktop's 4K@240 settings. The poll matters because the PC's per-stream
+   Undo command has to finish before our `/launch` runs, or display resolution
+   lands on whichever of Do and Undo wrote last.
+3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
+   `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
+   `encryptionFlags`. The remote-input AES key and IV are copied in from the
+   launch response.
+4. **Build window, decoder and input on the main actor**: `StreamWindow`,
+   `VideoDecoder` and `InputForwarder` are all `@MainActor`. The decoder is
    attached to the window's `AVSampleBufferDisplayLayer` before the connection
    starts so the first decoded frame has somewhere to land.
-5. **Build `StreamBridgeContext`** - holds weak references to session, decoder,
-   audio decoder, input forwarder, plus the `AsyncStream.Continuation`.
-   `Unmanaged.passRetained` keeps the bridge alive for the connection lifetime;
-   `StreamBridgeContext.current` is a weak static for context-less callback
-   paths.
-6. **Build the event stream before `startConnection`** - the backend fires
-   `stageStarting` / `stageComplete` synchronously while `startConnection` runs.
-   The continuation has to exist before the call or those early events are
-   dropped. (Regression fixed.)
-7. **`backend.startConnection(server:config:)`** - blocks while the native
-   engine runs the RTSP + control + media bring-up described above; throws on
-   failure.
-8. **Install timers** - four on the main run loop: the stats-overlay refresh,
-   the 1 Hz frame watchdog, the present-path watchdog, and the present-metric
-   sampler (`StreamSession+Watchdog.swift`, `+PresentMetric.swift`). The frame
-   watchdog starts recovery after 2s. At `frameWatchdogTimeout` = 10s (matching
-   upstream moonlight's `FIRST_FRAME_TIMEOUT_SEC`), mid-stream it holds while
-   ENet ACKs are recent and downshifts only on remote paths; first-frame timeout
-   bypasses that hold. Otherwise it tears down if decode stops. The watchdogs
-   are suppression- and gating-aware: a hidden window legitimately stops
-   presenting, so they read the decode gate too (see `VideoDecoder` decode
-   gating).
+5. **Build `StreamBridgeContext`**: holds weak references to the session,
+   decoder, audio decoder and input forwarder, plus the
+   `AsyncStream.Continuation`. `Unmanaged.passRetained` keeps the bridge alive
+   for the connection lifetime; `StreamBridgeContext.current` is a weak static
+   for context-less callback paths.
+6. **Build the event stream before connecting**: the backend fires
+   `stageStarting` and `stageComplete` while the connect runs, so the
+   continuation has to exist before the call or those early events are dropped.
+7. **`backend.startConnectionAsync(server:config:)`**: awaits the RTSP, control
+   and media bring-up described above, which runs on the engine's own connect
+   thread; throws on failure.
+8. **Install timers**: four on the main run loop (the stats-overlay refresh, the
+   1 Hz frame watchdog, the present-path watchdog, and the 2 s session tick that
+   also feeds the pacer's depth; see `StreamSession+FrameWatchdog.swift`,
+   `+Watchdog.swift` and `+PresentMetric.swift`). The frame watchdog asks for
+   keyframes from 2 s of decode silence. At `frameWatchdogTimeout` (10 s,
+   moonlight-common-c's `FIRST_FRAME_TIMEOUT_SEC`) it tears down, unless video
+   has already flowed and ENet ACKs are recent: then it holds, and a remote path
+   may downshift the bitrate instead. The watchdogs are suppression- and
+   gating-aware: a hidden window legitimately stops presenting, so they read the
+   decode gate too (see `VideoDecoder` decode gating).
 
-Teardown (`stop()`) is re-entrant by design - any two of {quit hotkey,
-`connectionTerminated` callback, `AsyncStream.onTermination`, `startConnection`
-error path} can fire back-to-back. The `isStreaming` + `stopInProgress` flag
-pair both have to flip before further callers fall through.
+Teardown (`stop()`) is re-entrant by design: any two of {quit hotkey,
+`connectionTerminated` callback, `AsyncStream.onTermination`, connect error
+path} can fire back-to-back. `stop()` flips `isStreaming` and `stopInProgress`
+before its first await, and later callers wait on the same `SharedTeardown`
+instead of running it again.
 
 Teardown order is load-bearing:
 
-1. Invalidate the four main-run-loop timers (stats overlay, frame watchdog,
-   present watchdog, present metric) and hide the overlay.
-2. `backend.stopConnection()` - synchronous; drains the engine's receive /
+1. Invalidate the four main-run-loop timers, hide the overlay, and release held
+   input while the uplink is still live.
+2. `backend.stopConnection()`: synchronous; drains the engine's receive and
    control threads. After this returns, no further backend callbacks can fire.
-3. `network.cancel()` - tell the host the session is over so its `currentgame`
+3. Main-actor teardowns: `input.detach()`, `videoDecoder.teardown()`,
+   `window.close()`, so a dead link can't hold a frozen full-screen frame while
+   `/cancel` waits.
+4. `audioDecoder.shutdown()` (AVAudioEngine drain).
+5. `network.cancel()`: tell the PC the session is over so its `currentgame`
    clears.
-4. MainActor teardowns: `input.detach()`, `videoDecoder.teardown()`,
-   `window.close()`.
-5. `audioDecoder.shutdown()` (AVAudioEngine drain).
 6. Clear `StreamBridgeContext.current`, release the bridge's
    `Unmanaged.passRetained` +1, then `finish()` the event stream.
 7. Release the `beginActivity` power assertion.
 
 The bridge holds weak refs to every subsystem, so a callback firing against a
-torn-down subsystem just no-ops - but "no UAF" isn't "well-behaved", and the
-order above keeps the engine's receive threads from racing AVAudioEngine /
-AVSampleBufferDisplayLayer teardowns.
+torn-down subsystem just no-ops. But “no use-after-free” isn't “well-behaved”,
+and the order above keeps the engine's receive threads from racing the
+AVAudioEngine and AVSampleBufferDisplayLayer teardowns.
 
 ## Video pipeline
 
 Owned by `VideoDecoder` (`Glimmer/Stream/VideoDecoder.swift`), with HDR
 specifics in `+HDR.swift` and bitstream parsing in `+Bitstream.swift`.
 
-**Packet ingest.** The native engine's depacketizer invokes
-`submitDecodeUnit(_:)` on its receive thread with an Annex-B elementary-stream
-`DecodeUnit`. We assemble it into a single `Data` buffer, watch for SPS/PPS/VPS
-NALs (or the AV1 sequence header OBU), rebuild the `CMVideoFormatDescription` on
-IDR, and submit the sample to `VTDecompressionSessionDecodeFrame`.
+**Packet ingest.** The native engine's depacketizer calls `submitDecodeUnit(_:)`
+on its receive thread with an Annex-B elementary-stream `DecodeUnit`, which hops
+asynchronously to `decodeQueue` (a serial, user-interactive `DispatchQueue`) so
+the receive thread never blocks on VideoToolbox. There we assemble it into a
+single `Data` buffer, watch for SPS/PPS/VPS NALs (or the AV1 sequence header
+OBU), rebuild the `CMVideoFormatDescription` on IDR, and submit the sample to
+`VTDecompressionSessionDecodeFrame`.
 
 **VT decode.** `VTDecompressionSession` is built with hardware acceleration
 required (`VTIsHardwareDecodeSupported` is checked per codec at setup).
 `kVTDecompressionPropertyKey_RealTime` is set so VT prefers latency over peak
-quality. The output callback fires on our `decodeQueue` (a user-interactive
-`DispatchQueue`) with a `CVPixelBuffer`.
+quality. Frames decode asynchronously, and the output callback fires on a
+VideoToolbox thread with a `CVPixelBuffer`.
 
-**Pacing + enqueue.** The VT output callback wraps the pixel buffer + format
-description in a `CMSampleBuffer` and submits it to the `FramePacer` - a
-display-clock pacer (a two-queue model on `AVSampleBufferDisplayLayer` +
-`CADisplayLink`). Frames land in a bounded, hostPTS-ordered jitter/reorder FIFO;
-a `CADisplayLink` bound to the stream window's screen releases at most one due
-frame per vsync to `displayLayer.sampleBufferRenderer.enqueue(_:)`
+**Pacing and enqueue.** The VT output callback wraps the pixel buffer and format
+description in a `CMSampleBuffer` and submits it to the `FramePacer`, a
+display-clock pacer (a two-queue model on `AVSampleBufferDisplayLayer` and
+`CADisplayLink`). Frames land in a bounded, hostPTS-ordered jitter and reorder
+FIFO; a `CADisplayLink` bound to the stream window's screen releases at most one
+due frame per vsync to `displayLayer.sampleBufferRenderer.enqueue(_:)`
 (`AVSampleBufferVideoRenderer`, the macOS 15+ replacement for the deprecated
-`enqueueSampleBuffer`). The release path runs on a dedicated serial queue, never
-the main actor. The pacer's queue depth is adaptive: it rests at 1 frame on a
-clean link and grows only under measured (RFC-3550) reorder jitter, decaying
-back when the link is clean - see the rationale comments in `FramePacer.swift`
-and `FramePacer+Constants.swift`. There is no Metal shader - the OS owns
-color/EDR handling end-to-end.
+`enqueueSampleBuffer`). The tick fires on a private real-time thread and the
+release runs on a dedicated serial queue, never the main actor; at rest, a frame
+that is already due is released straight from the submit. The target depth rests
+at 1 frame and grows one frame per 2 s session tick toward the headroom level
+`EnvSignalController` publishes from sustained receive jitter, then decays back
+once the level drops (`FramePacer+AdaptiveDepth.swift`). There is no Metal
+shader: the OS owns color and EDR handling end to end.
 
 The Metal-shader rewrite this used to be is documented in the top-of-file
 comment in `VideoDecoder.swift`. Short version: with a custom MSL fragment
-shader doing the YUV→RGB + PQ EOTF, HDR was visibly wrong (washed highlights,
-milky blacks) on real HDR displays. Apple's Metal docs explicitly say "don't
-tone-map in your shader, the layer applies tone mapping based on the current EDR
-headroom." The OS owns the pipeline end-to-end, and HDR works.
+shader doing the YUV→RGB and PQ EOTF, HDR was visibly wrong (washed highlights,
+milky blacks) on real HDR displays. Apple's Metal docs say it outright: “Don't
+perform tone mapping in your shader. AVSampleBufferDisplayLayer applies tone
+mapping based on the current EDR headroom.” The OS owns the pipeline end to end,
+and HDR works.
 
 **HDR pipeline.** Active when all three preconditions hold:
 
-1. Host signalled HDR via the control channel's HDR-mode message.
-2. Stream is 10-bit (`streamVideoFormat & VIDEO_FORMAT_MASK_10BIT != 0`).
-3. The bitstream's VUI / AV1 sequence-header `color_config` declares PQ (SMPTE
-   ST 2084) - or, for untagged Sunshine bitstreams, we infer PQ from the
-   10-bit + HDR-mode pair.
+1. The PC signalled HDR via the control channel's HDR-mode message.
+2. The stream is 10-bit (`streamVideoFormat & VIDEO_FORMAT_MASK_10BIT != 0`).
+3. The bitstream's VUI or AV1 sequence-header `color_config` declares PQ (SMPTE
+   ST 2084), or, for untagged Sunshine bitstreams, we infer PQ from the 10-bit
+   and HDR-mode pair.
 
 When active, `VideoDecoder+HDR.configureLayerColorspace` sets:
 
 - `layer.preferredDynamicRange = .high` (macOS 26+ API; replaces the older
   `wantsExtendedDynamicRangeContent` Bool).
-- `layer.setValue(CGColorSpace(name: .itur_2100_PQ), forKey: "colorspace")` -
-  via KVC because the Swift overlay elides the property on the
+- `layer.setValue(CGColorSpace(name: .itur_2100_PQ), forKey: "colorspace")`, via
+  KVC because the Swift overlay elides the property on the
   `AVSampleBufferDisplayLayer` subclass.
 
 Per-frame attachments on the `CVPixelBuffer`:
@@ -283,39 +291,40 @@ Per-frame attachments on the `CVPixelBuffer`:
 - `kCVImageBufferTransferFunctionKey` = `SMPTE_ST_2084_PQ`.
 - `kCVImageBufferYCbCrMatrixKey` = `ITU_R_2020`.
 
-HDR10 static metadata comes from the host (the native engine surfaces it via
-`StreamingBackend.hdrMetadata()`, filled from the SDP mastering metadata) and is
-attached as `CMFormatDescription` extensions in the exact HDR10 wire layout
-(MDCV: GBR ordering, big-endian; CLL: 4 bytes big-endian). See
+HDR10 static metadata comes from the PC (the native engine surfaces it via
+`StreamingBackend.hdrMetadata()`, parsed from the control channel's HDR message)
+and is attached as `CMFormatDescription` extensions in the exact HDR10 wire
+layout (MDCV: GBR ordering, big-endian; CLL: 4 bytes big-endian). See
 `VideoDecoder+HDR.refreshHDRMetadataFromHost()` for the byte-by-byte build. The
-cached HDR format description is rebuilt whenever metadata changes (host
-re-signals HDR with new values, e.g. a game changes EOTF or the host display is
+cached HDR format description is rebuilt whenever metadata changes (the PC
+re-signals HDR with new values, e.g. a game changes EOTF or the PC's display is
 hot-swapped).
 
 When HDR drops back to SDR, `preferredDynamicRange` returns to `.standard`, the
 layer's `colorspace` is cleared, and the next-frame fallback attaches BT.709
 primaries.
 
-**Backpressure + recovery.** `AVSampleBufferVideoRenderer.status == .failed`
-latches after a bad sample (mid-stream SPS change, dirty AV1 OBU). We watch for
-that on each enqueue: on failure, `renderer.flush()` and
-`backend.requestIdrFrame()`. `RendererFailed` OSSignpost event fires so it shows
-in Instruments. `isReadyForMoreMediaData` is also honored - when the renderer's
-internal queue fills, frames drop (counted) rather than queueing unbounded
-latency. A hidden/occluded stream window suppresses presentation and, after a
-sustained window, gates VideoToolbox decode entirely (the host cannot pause;
-audio/network/FEC keep running); resume reuses the wait-for-IDR recovery path.
+**Backpressure and recovery.** `AVSampleBufferVideoRenderer.status == .failed`
+latches after a bad sample (mid-stream SPS change, dirty AV1 OBU). The present
+path checks it on every frame: on failure the main actor flushes the renderer,
+swaps in a fresh display layer (a flush can't clear the latch), and calls
+`backend.requestIdrFrame()`. A `RendererFailed` OSSignpost event fires so it
+shows in Instruments. `isReadyForMoreMediaData` is also honored: when the
+renderer's internal queue fills, frames drop (counted) rather than queueing
+unbounded latency. A hidden or occluded stream window suppresses presentation
+and, after a sustained window, gates VideoToolbox decode entirely (the PC can't
+pause; audio, network and FEC keep running); resume reuses the wait-for-IDR
+recovery path.
 
 **Stream-format coverage.** H.264 (8-bit and 4:4:4), HEVC (Main / Main10 / RExt
 4:4:4), AV1 (Main / Main10 / High 4:4:4). The default set is not a hardcoded
 list: `VideoFormats.probedSupported` (`Types.swift`) asks
-`VTIsHardwareDecodeSupported` per codec at runtime, with an Apple-Silicon gate
-on the 4:4:4 profiles, and the per-host `HostCodecPreference` narrows it
-further. Codec negotiation then goes through
-`BackendStreamConfig.supportedVideoFormats` (our preferences) and
-`BackendServerInfo.serverCodecModeRaw` (raw `SCM_*` bitmask from `/serverinfo`,
-passed verbatim - see the landmine note in `StreamProtocolConstants.swift` for
-why we don't remap it).
+`VTIsHardwareDecodeSupported` per codec at runtime, with an Apple Silicon gate
+on the 4:4:4 profiles, and the per-PC `HostCodecPreference` narrows it further.
+Codec negotiation then goes through `BackendStreamConfig.supportedVideoFormats`
+(our preferences) and `BackendServerInfo.serverCodecModeRaw` (the raw `SCM_*`
+bitmask from `/serverinfo`, passed verbatim; see the landmine note in
+`StreamProtocolConstants.swift` for why we don't remap it).
 
 ## Input forwarding
 
@@ -326,40 +335,39 @@ Earlier revisions used `NSEvent.addLocalMonitorForEvents`, but macOS 26's
 responder chain consumes events for content views that accept first responder
 before the local-monitor block fires.
 
-All uplink goes through the `StreamingBackend` send methods (`sendKeyboard` /
-`sendMouseMove` / `sendMultiController` / ...), which the native engine batches
-(`InputBatcher`, ~1ms merge+flush) onto the reliable control channel.
+All uplink goes through the `StreamingBackend` send methods (`sendKeyboard`,
+`sendMouseMove`, `sendMultiController`, …), which the native engine merges
+(`InputBatcher`, sends at least 1 ms apart) onto the reliable control channel.
 
 **Mouse.** `CGAssociateMouseAndMouseCursorPosition(false)` freezes the OS cursor
 at its current position the moment the window becomes key. Raw HID deltas come
 from the underlying `CGEvent`'s `kCGMouseEventDeltaX/Y` fields
 (`NSEvent.deltaX/Y` goes to zero when the cursor is frozen). A sub-pixel
 residual accumulator carries fractional motion forward so slow trackpad moves
-don't round to zero. Cursor warp to screen center before associate-false defends
-against hot corners triggering during a stream - there's no public API to
-disable hot corners, so the workaround is keeping the frozen cursor away from
-them.
+don't round to zero. A cursor warp to screen center before associate-false keeps
+hot corners from triggering during a stream: there's no public API to disable
+hot corners, so the workaround is keeping the frozen cursor away from them.
 
 **Keyboard.** Positional scancodes via `sendKeyboard`, with the high bit
-(`0x8000`) set to ask the host to skip layout correction (GFE otherwise remaps
+(`0x8000`) set to ask the PC to skip layout correction (it otherwise remaps
 AZERTY → QWERTY; we want the user's physical key position to win). Every
-physical key-down / key-up emits one keyboard event - no per-event modifier
-reset, no "release before press" coalescing. NKRO works because AppKit delivers
+physical key-down and key-up emits one keyboard event: no per-event modifier
+reset, no “release before press” coalescing. NKRO works because AppKit delivers
 each transition as its own `NSEvent` and the responder chain hands each to
 `keyDown(with:)` / `keyUp(with:)` independently. Held keys, mouse buttons and
 modifiers are released on focus loss, a paste, a reconnect and `detach()`.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and
-`.command` `flagsChanged` events so ⌘-Tab, ⌘-Space, ⌘-Q stay local-Mac chords.
-`captureSysKeys = true` forwards everything as a Win-key chord. The configured
-quit / stats hotkeys are detected before the captureSysKeys gate so a
-Cmd-bearing custom quit chord keeps working in either mode.
+`.command` `flagsChanged` events so ⌘-Tab, ⌘-Space and ⌘-Q stay local-Mac
+chords. `captureSysKeys = true` forwards everything as a Win-key chord. The
+configured quit and stats hotkeys are detected before the `captureSysKeys` gate
+so a Cmd-bearing custom quit chord keeps working in either mode.
 
 **Controller.** GameController framework. `GCControllerDidConnect` /
 `Disconnect` are observed; per-controller state is kept in
 `attachedControllers: [ObjectIdentifier: AttachedController]`. Slot assignment
-is a 16-bit `gamepadMask` - bit N == 1 means slot N is in use. Arrival is
+is a 16-bit `gamepadMask`: bit N == 1 means slot N is in use. Arrival is
 announced via `sendControllerArrival` with probed capabilities (some Sunshine
 builds silently drop multi-controller events without it). Sunshine keeps a
 paired client's virtual pads across a reconnect and ignores an arrival for a
@@ -367,33 +375,33 @@ slot it holds, so the forwarder remembers each slot's last arrival
 (`announcedControllers`) and, when input is ready again, removes every slot
 whose pad left or changed before it replays the arrivals. An entry is cleared
 only there, since a removal sent into a link that has already died is lost.
-State updates go through `sendMultiController`. Host-driven feedback comes back
+State updates go through `sendMultiController`. Feedback from the PC comes back
 through `ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`),
-motion-sensor enable (`0x5501` - answered with `sendControllerMotion` samples),
-and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`, and
-`ControllerBattery` own the actuator/sampler sides.
+motion-sensor enable (`0x5501`, answered with `sendControllerMotion` samples),
+and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion` and
+`ControllerBattery` own the actuator and sampler sides.
 
-**Raw-HID gamepads.** Pads GameController doesn't own reach the host through
+**Raw-HID gamepads.** Pads GameController doesn't own reach the PC through
 `HIDGamepadManager` (`Glimmer/Stream/HIDGamepad/`). It enumerates joysticks,
 gamepads and multi-axis controllers with `IOHIDManager` and skips any device
 GameController owns: `GCController.supportsHIDDevice` on macOS 27, a
 platform-vendor and product-name check before that, and a recheck whenever a
 GameController pad connects. The hidden `hidGamepadClaimAll` default takes those
-pads too, for testing (see [PROFILING.md](PROFILING.md)). Each pad is mapped
-from the macOS section of SDL's GameControllerDB (`GameControllerDB+Data.swift`,
-generated by `scripts/gen-gamecontrollerdb.py`), with a heuristic layout as the
-fallback; a keyboard's gamepad interface with no known mapping is ignored. The
-forwarder gives each pad a free bit in the same `gamepadMask`
-(`ControllerForwarder+HID.swift`), and the manager keeps its own slot map so
-host rumble reaches the right pad through ForceFeedback, never one that took the
-slot after the host sent it. Input Monitoring is asked for only once such a pad
-is present, never at stream start.
+pads too, for testing (see [PROFILING.md](PROFILING.md#hidden-defaults)). Each
+pad is mapped from the macOS section of SDL's GameControllerDB
+(`GameControllerDB+Data.swift`, generated by `scripts/gen-gamecontrollerdb.py`),
+with a heuristic layout as the fallback; a keyboard's gamepad interface with no
+known mapping is ignored. The forwarder gives each pad a free bit in the same
+`gamepadMask` (`ControllerForwarder+HID.swift`), and the manager keeps its own
+slot map so rumble from the PC reaches the right pad through ForceFeedback,
+never one that took the slot after the PC sent it. Input Monitoring is asked for
+only once such a pad is present, never at stream start.
 
 **DualSense side channel.** GameController never delivers a DualSense's Options,
-Create or mute buttons. With raw input on (`rawHIDControllerEnabled`, Settings ›
+Create or mute buttons. With raw input on (`rawHIDControllerEnabled`, Settings →
 Input), `DualSenseHID` opens the pad non-exclusively next to gamecontrollerd,
 which keeps sticks, face buttons, triggers, touchpad, rumble and light. It reads
-those buttons and the battery from the input report, and writes the host's
+those buttons and the battery from the input report, and writes the PC's
 adaptive-trigger effects in one merged output report that re-emits rumble and
 light bar with them. `DualSenseRouting` pairs each raw device with its
 `GCController` by matching face-button presses (`DualSenseBinder`), so with two
@@ -401,11 +409,11 @@ DualSenses each keeps its own buttons and feedback.
 
 **Gesture suppression.** An `NSEvent.addLocalMonitorForEvents` for the narrow
 mask `[.magnify, .smartMagnify, .swipe, .rotate]` swallows that gesture family
-while the stream window is key. The broader gesture/pressure types (`.gesture` /
-`.beginGesture` / `.endGesture` / `.pressure`) are deliberately EXCLUDED: they
-carry the trackpad pan/scroll the OS synthesizes `mouseMoved` from, so
-swallowing them would kill cursor + scroll on trackpad-only Macs. Scroll wheel
-is NOT swallowed - scrolls forward as host scroll events.
+while the stream window is key. The broader gesture and pressure types
+(`.gesture` / `.beginGesture` / `.endGesture` / `.pressure`) are deliberately
+excluded: they carry the trackpad pan and scroll the OS synthesizes `mouseMoved`
+from, so swallowing them would kill cursor and scroll on trackpad-only Macs. The
+scroll wheel is not swallowed either; it forwards to the PC as scroll events.
 
 **Input gating.** The engine refuses input until the control channel is up: the
 backend's `send*` methods return -2 before then (mirroring upstream
@@ -415,183 +423,185 @@ flooding the log with -2s.
 
 ## Window model
 
-`StreamWindow` (`Glimmer/Stream/StreamWindow.swift`). One borderless
-`KeyableWindow` per session. `KeyableWindow` is a thin `NSWindow` subclass that
-returns true for `canBecomeKeyWindow` + `canBecomeMainWindow` - borderless
-windows default to false, which silently breaks `makeKeyAndOrderFront` and the
-responder chain.
+`StreamWindow` (`Glimmer/Stream/StreamWindow.swift`). One `KeyableWindow` per
+session, borderless in full screen. `KeyableWindow` is a thin `NSWindow`
+subclass that returns true for `canBecomeKeyWindow` and `canBecomeMainWindow`:
+borderless windows default to false, which silently breaks
+`makeKeyAndOrderFront` and the responder chain.
 
-**Window level.** `.normal`. We tried shielding-window level
-(`CGShieldingWindowLevel()`) - AppKit marks it as key, the responder points at
-our view, but `sendEvent:` silently drops keyDown/keyUp. Menu bar suppression
-happens via `NSApp.presentationOptions = [.hideMenuBar, .hideDock]` instead.
-(When `coversNotch == true` we temporarily raise level to
+**Window level.** `.normal`. We tried the shielding-window level
+(`CGShieldingWindowLevel()`): AppKit marks the window key and the responder
+points at our view, but `sendEvent:` silently drops keyDown and keyUp. Menu bar
+suppression happens via `NSApp.presentationOptions = [.hideMenuBar, .hideDock]`
+instead. (When `coversNotch == true`, `show()` raises the level to
 `NSWindow.Level(rawValue: CGWindowLevelForKey(.mainMenuWindow) + 1)` so the
-window paints over the menu-bar zone and notch reserve; it drops back to
-`.normal` on `didResignKey` so other apps surface above us when the user
-Cmd-Tabs away.)
+window paints over the menu-bar zone and notch reserve; when the user Cmd-Tabs
+away, the window is ordered out, as Backgrounding describes.)
 
 **Display layer as root.** `AVSampleBufferDisplayLayer` is installed as the
-content view's root layer (`view.layer = layer` BEFORE
+content view's root layer (`view.layer = layer` before
 `view.wantsLayer = true`), not a sublayer of a default backing layer.
 Compositing through an intermediate sRGB layer flattens EDR back to SDR before
 the panel sees it.
 
 **Stats overlay.** A `StatsOverlayLayer` is attached as a sublayer of the
-display layer (not a sibling - root-layer status is the precondition). The OS
+display layer (not a sibling: root-layer status is the precondition). The OS
 composites the sRGB text against the HDR content correctly.
 
-**Dual-path fullscreen - the `coversNotch` toggle.** Two paths picked per
+**Dual-path fullscreen: the `coversNotch` toggle.** Two paths, picked per
 session config:
 
-- **`coversNotch == true`** (default): borderless covering window at
-  `.mainMenu + 1` level,
-  `collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]`.
-  NO Space-based fullscreen. The window owns the full physical panel including
-  the notch reserve on notched MacBooks. Bitstreams at the panel's true native
-  resolution render 1:1.
+- **`coversNotch == true`** (default): a borderless covering window at the
+  `mainMenuWindow + 1` level,
+  `collectionBehavior = [.fullScreenPrimary, .stationary]`. No Space-based
+  fullscreen. The window owns the full physical panel, including the notch
+  reserve on notched MacBooks. Bitstreams at the panel's true native resolution
+  render 1:1.
 - **`coversNotch == false`**: `toggleFullScreen(nil)` for Space-based
-  fullscreen. AppKit handles the Space creation and reserves the menu-bar /
+  fullscreen. AppKit handles the Space creation and reserves the menu-bar and
   notch area as safe inset. Same path SDL's
   `SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES=1` uses.
 
-The `coversNotch == true` path is the default because borderless +
-`.hideMenuBar` engages display HDR mode without needing a Space (NSScreen's
-`maximumExtendedDynamicRangeColorComponentValue` lifts above 1.0 for any
-layer-host that owns the panel - Space ownership isn't the gating condition we
-thought it was).
+The `coversNotch == true` path is the default because borderless plus
+`.hideMenuBar` engages display HDR without needing a Space: EDR follows the
+layer's PQ content, not the window's Space membership, which isn't the gating
+condition we once thought it was.
 
-**Backgrounding.** On `didResignKey`, the window is `orderOut`'d entirely and
-the cursor is unhidden. The stream session keeps running - the decode pipeline
+**Backgrounding.** On a genuine resign (debounced 200 ms, so the key flicker of
+a controller connecting doesn't count), the window is `orderOut`'d entirely and
+the cursor is unhidden. The stream session keeps running: the decode pipeline
 and display layer are independent of window visibility (with presentation
 suppressed and decode gated while hidden; see Video pipeline). On the launcher
-side, the `Back to Stream` affordance calls `StreamSession.resumeWindow()` to
-bring it back. We deliberately do NOT auto-reorder-front on
-`NSApp.didBecomeActive` - that fired on every app activation (clicking the
+side, the “Back to Stream” affordance calls `StreamSession.resumeWindow()` to
+bring it back. We deliberately do not auto-reorder-front on
+`NSApp.didBecomeActive`: that fired on every app activation (clicking the
 launcher, Dock-clicking) and yanked the user back into the stream whenever they
 tried to change a setting.
 
 **`NSWindow.sharingType`** = `.none`. The stream window opts out of
-ScreenCaptureKit and `screencapture(1)`; third-party recording / conferencing
-apps see a black surface where the stream is. Threat-model rationale is in
-`SECURITY.md` → Runtime hardening.
+ScreenCaptureKit and `screencapture(1)`; third-party recording and conferencing
+apps see a black surface where the stream is. The threat-model rationale is in
+[SECURITY.md](SECURITY.md#runtime-hardening).
 
-## Crossing isolation - receive threads ↔ Swift actors
+## Crossing isolation: receive threads ↔ Swift actors
 
-The native engine delivers frames, audio, and control events on its own receive
-threads - threads neither the actor system nor `@MainActor` knows about, and the
-latency cost of round-tripping every frame through an actor is unacceptable. The
-bridge handles this:
+The native engine delivers frames, audio and control events on its own receive
+threads, which neither the actor system nor `@MainActor` knows about, and
+round-tripping every frame through an actor costs too much latency. The bridge
+handles this:
 
 - **`StreamBridgeContext`** (`Glimmer/Stream/StreamBridgeContext.swift`) is the
   single instance allocated per session. It holds _weak_ references to the
   session and every subsystem, plus the `AsyncStream<StreamEvent>.Continuation`.
   A subsystem torn down before the receive threads drain just becomes nil at the
-  callback site - no UAF, no order dependency.
+  callback site: no use-after-free, no order dependency.
 - `Unmanaged.passRetained(bridge)` keeps the bridge alive across the
   connection's lifetime regardless of which subsystem nils out.
 - **`StreamBridgeContext.current`** is a weak static, guarded by a lock, for
-  context-less callback paths. Single in-flight session means a single global
+  context-less callback paths. A single in-flight session means a single global
   slot is correct.
 - **Event yield.** Receive-thread callbacks yield directly through
   `bridge.eventContinuation?.yield(...)`. `AsyncStream.Continuation` is Sendable
-  and FIFO-ordered, so ordering of consecutive callbacks is preserved on the
-  consumer side. The previous `Task { await deliver(...) }` pattern lost
-  ordering because unstructured Tasks land on the global concurrent executor
-  without inter-Task happens-before - `stageStarting` and `stageComplete`
-  arriving back-to-back from a receive thread could surface in either order on
-  the consumer side.
+  and FIFO-ordered, so consecutive callbacks keep their order on the consumer
+  side. The previous `Task { await deliver(...) }` pattern lost ordering because
+  unstructured Tasks land on the global concurrent executor without inter-Task
+  happens-before: `stageStarting` and `stageComplete` arriving back-to-back from
+  a receive thread could surface in either order on the consumer side.
 
 **Swift 6 strict concurrency posture.** `SWIFT_STRICT_CONCURRENCY = complete` on
-every configuration. Where the alternative is "synthesize an actor hop the hot
-path can't afford," we use `nonisolated(unsafe)` with the invariant documented
+every configuration. Where the alternative is “synthesize an actor hop the hot
+path can't afford”, we use `nonisolated(unsafe)` with the invariant documented
 at the property and the synchronisation justified inline. Examples:
 
 - `StreamBridgeContext.session/videoDecoder/audioDecoder/inputForwarder` are
-  weak refs; Swift's weak storage is atomic per spec, and the engine serialises
-  its callbacks per-stream.
-- `VideoDecoder._displayLayer` is guarded by an `NSLock` (the layer itself is
-  `AVSampleBufferDisplayLayer.enqueue`-thread-safe per Apple's header, but the
-  pointer load/store races against MainActor's nil-out on teardown).
+  weak refs; Swift's weak storage is atomic, and the engine serialises its
+  callbacks per stream.
+- `VideoDecoder._displayLayer` is guarded by an `NSLock` (the renderer's
+  `enqueue` is thread-safe, but the pointer load and store race the main actor's
+  nil-out at teardown).
 - `VideoDecoder.decompressionSession` / `formatDescription` / SPS / PPS / VPS /
   stream parameters all live on `decodeQueue` and are serialised by it.
 
-See `docs/CONTRIBUTING.md` for the rule on when `nonisolated(unsafe)` is
-acceptable.
+See [CONTRIBUTING.md](CONTRIBUTING.md#nonisolatedunsafe) for the rule on when
+`nonisolated(unsafe)` is acceptable.
 
 ## Identity & pairing
 
-`Identity.swift`: per-machine 32-hex `uniqueID`, an RSA-2048 keypair, and a
-20-year self-signed cert (CN `NVIDIA GameStream Client` - every GameStream
-client identifies as this string). Three mode-0600 files under
+`Identity.swift`: a per-machine 32-hex `uniqueID`, an RSA-2048 keypair, and a
+20-year self-signed cert (CN `NVIDIA GameStream Client`, the string every client
+of this protocol identifies as). Three mode-0600 files under
 `~/Library/Application Support/Glimmer/Identity/`:
 
 - `client-cert.pem`
 - `client-key.pem`
 - `client-uniqueid.txt`
 
-Not the keychain. The top-of-file comment in `Identity.swift` explains why:
-adhoc-signed builds re-derive their CDHash on every rebuild, the keychain ACL
-pins to the CDHash, every rebuild trips a "Glimmer wants to use its key" prompt.
-Files don't have that problem. Mode 0600 + atomic writes + stat-after-chmod
-verification (some FUSE / NFS backends silently ignore the chmod).
+Not the keychain. The top-of-file comment in `Identity.swift` explains why: the
+data-protection keychain needs a provisioning profile a Developer ID app doesn't
+carry, and the login keychain would buy only encryption at rest for a LAN
+streaming identity. Files get mode 0600, atomic writes and a stat-after-chmod
+check (some FUSE and NFS backends silently ignore the chmod).
 
-`Pairing.swift`: the GameStream PIN handshake, four HTTP rounds plus a final
-HTTPS liveness check. AES-128-ECB on raw 16-byte buffers (no padding - the
-protocol pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]`, with
-SHA-256 for the challenge hashes too; a GameStream PC is refused before the
+`Pairing.swift`: the PIN handshake, four HTTP rounds plus a final HTTPS
+`pairchallenge`. AES-128-ECB on raw 16-byte buffers (no padding; the protocol
+pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]`, with SHA-256 for
+the challenge hashes too; a PC running NVIDIA GameStream is refused before the
 handshake starts. RSA signatures using the long-lived client cert prove
 possession of the private key.
 
-Critically: the host cert is pinned (`NetworkClient.setPinnedHostCert`) ONLY
-after the RSA signature in step 5 verifies AND the PIN-correctness check passes.
-`NetworkClient.fetchServerInfo` will NOT auto-pin on first contact. Threat-model
+Critically: the PC's cert is pinned (`NetworkClient.setPinnedHostCert`) only
+after the RSA signature in step 5 verifies and the PIN-correctness check passes.
+`NetworkClient.fetchServerInfo` will not auto-pin on first contact. Threat-model
 details and the pinning lifecycle live in [SECURITY.md](SECURITY.md).
 
 ## Build pipeline
 
 There is no separate native library and no submodule: the entire streaming
-engine compiles as part of the app target. Glimmer links no third-party library,
-so the shipped app needs nothing installed to run.
+engine compiles as part of the app target. Apart from Sparkle, embedded for
+updates, Glimmer links no third-party library, so the shipped app needs nothing
+installed to run.
 
 ### `Glimmer/StreamLib.xcconfig`
 
-Points Xcode at the bridging header and pulls in the version
-single-source-of-truth:
+Points Xcode at the bridging header and pulls in the version's single source of
+truth:
 
-```
+```text
 #include "Version.xcconfig"
-HEADER_SEARCH_PATHS  = $(inherited) $(GLIMMER_REPO_ROOT)
-ARCHS                = arm64
+GLIMMER_REPO_ROOT          = $(SRCROOT)
+HEADER_SEARCH_PATHS        = $(inherited) $(GLIMMER_REPO_ROOT)
+ARCHS                      = arm64
 SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
 ```
 
 `ARCHS = arm64` is pinned so the Release build stays Apple Silicon only, the
 platform Glimmer ships for. `Glimmer/Version.xcconfig` is the single source of
-truth for `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` - the version is NOT
+truth for `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`; the version is not
 set in `project.pbxproj`.
 
 ### `Makefile`
 
-Every build below Release-publish goes through the same pipeline the shipped
-build does, so there is no adhoc/Debug divergence in signing, notarization, or
+Every build that gets installed goes through the same pipeline the shipped build
+does, so there is no ad hoc or Debug divergence in signing, notarization or
 library validation to chase. Without a Developer ID cert on the machine the
-pipeline falls back to an adhoc Release build.
+pipeline falls back to an ad hoc Release build. `make app` and `make test` build
+Debug and never sign.
 
-| Target                   | What it does                                                 |
-| ------------------------ | ------------------------------------------------------------ |
-| `make app`               | Compile-only check, no signing or notarization               |
-| `make test`              | Build + run the `GlimmerTests` bundle                        |
-| `make release`           | Notarized Release build, no install                          |
-| `make` / `make install`  | `release` + copy to `/Applications/Glimmer.app`              |
-| `make reinstall`         | `install` + quit and relaunch the running app                |
-| `make dev`               | Inner loop: `test`, then `reinstall`                         |
-| `make profile`           | Launch under Instruments (Time Profiler)                     |
-| `make profile-signposts` | Launch under Instruments (Logging template)                  |
-| `make dist`              | Clean Release → Developer ID sign → notarize → staple → DMG  |
-| `make release-publish`   | `dist` + EdDSA-signed ZIP → GitHub release + Sparkle appcast |
-| `make uninstall`         | Remove `/Applications/Glimmer.app`                           |
-| `make clean`             | `rm -rf build/`                                              |
+| Target                   | What it does                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `make app`               | Compile-only check, no signing or notarization                               |
+| `make test`              | Build + run the `GlimmerTests` bundle                                        |
+| `make verify`            | `swiftlint lint --strict` + `make test`, the gate `dist` runs                |
+| `make release`           | Notarized Release build, no install                                          |
+| `make` / `make install`  | `release` + copy to `/Applications/Glimmer.app`                              |
+| `make reinstall`         | `install` + quit and relaunch the running app                                |
+| `make dev`               | Inner loop: `test`, then `reinstall`                                         |
+| `make profile`           | Launch under Instruments (Time Profiler)                                     |
+| `make profile-signposts` | Launch under Instruments (Logging template)                                  |
+| `make dist`              | `verify`, then clean Release → Developer ID sign → notarize → staple → DMG   |
+| `make release-publish`   | `dist` + EdDSA-signed ZIP → GitHub release + Sparkle appcast → Homebrew cask |
+| `make uninstall`         | Remove `/Applications/Glimmer.app`                                           |
+| `make clean`             | `rm -rf build/`                                                              |
 
 Signing and notarization details (the dedicated signing keychain, the notary
 profile, the credentials file) are documented in the Makefile itself and in

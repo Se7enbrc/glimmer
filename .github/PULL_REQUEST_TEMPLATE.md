@@ -1,7 +1,7 @@
 <!--
 Thanks for contributing. Pull requests start as an issue the maintainer has
 agreed to; one without an agreed issue is closed. Please read
-docs/CONTRIBUTING.md first - it covers setup, build (`make`), lint posture, the
+docs/CONTRIBUTING.md first: it covers setup, build (`make`), lint posture, the
 Swift 6 concurrency rules, and the commit-message conventions this repo uses.
 -->
 
@@ -16,9 +16,9 @@ Swift 6 concurrency rules, and the commit-message conventions this repo uses.
 ## How verified
 
 <!--
-How did you check it works? `make app` + a real stream against a Sunshine host
-is the bar for engine changes; for streaming-quality changes, telemetry
-numbers (before/after) are the house currency - see docs/PROFILING.md.
+How did you check it works? `make verify` plus a real stream from a PC running
+Sunshine is the bar for engine changes; for streaming-quality changes, telemetry
+numbers (before and after) are the house currency. See docs/PROFILING.md.
 -->
 
 ## Not verified

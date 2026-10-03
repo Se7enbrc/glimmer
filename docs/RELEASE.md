@@ -4,11 +4,11 @@ Continuous off `main`, CalVer `YYYY.M.MICRO`. Bump both lines of
 `Glimmer/Version.xcconfig` and nothing else; the version is not set in
 `project.pbxproj`. Every change ships through a PR.
 
-## 1. Branch + build
+## 1. Branch and build
 
 ```bash
 git switch main && git pull && git switch -c my-change
-# ...edit; bump Glimmer/Version.xcconfig + add a CHANGELOG entry...
+# edit; bump Glimmer/Version.xcconfig and add a CHANGELOG entry
 make dev     # tests, then build + install + relaunch (notarized = what ships)
 ```
 
@@ -17,7 +17,7 @@ without publishing. Both `dist` and `release-publish` refuse to run against a
 dirty worktree, so commit or stash first: a release built from uncommitted
 changes would not reproduce from the source at the tag.
 
-## 2. PR + release
+## 2. PR and release
 
 ```bash
 git push -u origin my-change && gh pr create --fill
@@ -32,16 +32,18 @@ day). New installs come from the Releases DMG or the Homebrew cask,
 `brew install --cask se7enbrc/glimmer/glimmer`.
 
 Last, `release-publish` runs `scripts/homebrew-bump.sh` to checksum the
-published DMG and push version + sha256 to the
-[tap](https://github.com/Se7enbrc/homebrew-glimmer) - if only that step fails
-the release is still live, so just re-run `make brew-bump`.
+published DMG and push version and sha256 to the
+[tap](https://github.com/Se7enbrc/homebrew-glimmer). If only that step fails,
+the release is still live: re-run `make brew-bump`.
 
-Release notes come from `CHANGELOG.md`, so write that section before publishing:
-`scripts/changelog.py` lifts the `## <version>` block into the GitHub release
-body and, as HTML, into the appcast `<description>` Sparkle shows as "what's
-new" (`update-appcast.py --backfill` adds it to older items). The DMG is styled
-by `scripts/make-dmg.sh` - background, window bounds, icon positions, baked-in
-`.DS_Store`; re-run `make dmg-background` after changing that layout.
+Release notes come from `CHANGELOG.md`, so write that section before publishing.
+Each release is a `## <version> - <date>` heading followed by a flat list of
+bullets, one per change a player will notice, written for them.
+`scripts/changelog.py` lifts that block into the GitHub release body and, as
+HTML, into the appcast `<description>` Sparkle shows as “what's new”
+(`update-appcast.py --backfill` adds it to older items). The DMG is styled by
+`scripts/make-dmg.sh` (background, window bounds, icon positions, baked-in
+`.DS_Store`); re-run `make dmg-background` after changing that layout.
 
 ## 3. Signing credentials
 
@@ -63,8 +65,9 @@ fails as ambiguous.
   certificate expires, because every signature is timestamped. Never revoke a
   certificate that signed a release: Gatekeeper would then block those builds.
 - The **App Store Connect team API key** (`NOTARY_KEY_PATH`, `NOTARY_KEY_ID`,
-  `NOTARY_ISSUER_ID`) notarizes. Developer access is enough. It doesn't expire
-  and doesn't depend on the Apple ID password.
+  `NOTARY_ISSUER_ID`) notarizes through the `notary` notarytool profile that
+  `make setup-notary` stores in the signing keychain. Developer access is
+  enough. It doesn't expire and doesn't depend on the Apple ID password.
 
 `make dist` prints the certificate's expiry and warns 60 days ahead. To renew:
 

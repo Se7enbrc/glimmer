@@ -7,8 +7,8 @@ the core protocol library written by the
 implementation of the GameStream/Sunshine wire protocol is hard-won work, and
 Glimmer would not exist without it. Thank you.
 
-A few higher-level pieces, the pairing handshake, the nvhttp control client, and
-the frame pacer, were likewise ported from the same team's
+A few higher-level pieces (the pairing handshake, the nvhttp control client and
+the frame pacer) were likewise ported from the same team's
 [moonlight-qt](https://github.com/moonlight-stream/moonlight-qt) (also GPLv3).
 
 These are faithful ports, so Glimmer is a derivative work and is distributed
@@ -22,20 +22,20 @@ Two of the components ported into the Swift engine originate from separately
 licensed (MIT) projects that moonlight-common-c vendors. Their copyright and
 permission notices are preserved here, as the MIT license requires:
 
-- **[enet](https://github.com/lsalzman/enet)** - Copyright (c) 2002-2024 Lee
+- **[enet](https://github.com/lsalzman/enet)**: Copyright (c) 2002-2024 Lee
   Salzman. MIT License. `Glimmer/Stream/Native/EnetControlChannel*.swift` and
   `EnetWire.swift` port the protocol logic of the enet sources vendored in
   moonlight-common-c (`protocol.h` / `host.c` / `protocol.c`).
-- **[nanors](https://github.com/sleepybishop/nanors)** - Copyright (c) 2021
+- **[nanors](https://github.com/sleepybishop/nanors)**: Copyright (c) 2021
   Joseph Calderon. MIT License. `Glimmer/Stream/Native/ReedSolomon.swift` ports
   `nanors/rs.c` plus the scalar GF(256) math from nanors' vendored
   `deps/obl/oblas_lite.c` (covered by the same nanors license).
 
 ## Controller mappings
 
-- **[SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB)** -
-  Copyright (C) 1997-2025 Sam Lantinga and contributors. zlib license. The "Mac
-  OS X" section is embedded as
+- **[SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB)**:
+  Copyright (C) 1997-2025 Sam Lantinga and contributors. zlib license. The “Mac
+  OS X” section is embedded as
   `Glimmer/Stream/HIDGamepad/GameControllerDB+Data.swift` (regenerate with
   `scripts/gen-gamecontrollerdb.py`) so pads that macOS's GameController
   framework does not expose get the same button and axis layout Moonlight uses.

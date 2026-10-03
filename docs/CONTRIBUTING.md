@@ -5,8 +5,8 @@
 Required:
 
 - macOS 26 or newer
-- Xcode 27 or later, for the macOS 27 SDK (full toolchain - Swift 6 strict
-  concurrency, `swiftc`, `xcodebuild`, `xcrun`); the app still runs on macOS 26
+- Xcode 27 or later, for the macOS 27 SDK and its toolchain (Swift 6, `swiftc`,
+  `xcodebuild`, `xcrun`); the app still runs on macOS 26
 - Homebrew
 
 Brew prerequisites:
@@ -15,9 +15,10 @@ Brew prerequisites:
 brew install swiftlint trufflehog pre-commit
 ```
 
-The app links no third-party library: crypto, TLS and audio decode use the
-platform frameworks. There are no submodules and no vendored C library.
-`swiftlint` and `trufflehog` back pre-commit hooks and the commit fails without
+The app links no third-party library: crypto, TLS and audio decode use Apple's
+frameworks (CryptoKit, CommonCrypto, Security, Network, AudioToolbox), not
+OpenSSL or libopus. There are no submodules and no vendored C library.
+`swiftlint` and `trufflehog` back pre-commit hooks, and the commit fails without
 them.
 
 Clone:
@@ -39,16 +40,17 @@ pre-commit install --hook-type pre-push # `make test`, per push
 ```bash
 make app        # compile-only check (Debug), no signing
 make test       # unit tests
+make verify     # strict lint + unit tests: the gate
 make            # notarized Release build, installed to /Applications
 make open       # same, then open it
 ```
 
 `make` and `make open` run the full shipping pipeline: Developer ID signing,
-notarization, strict library validation. That is deliberate. There is no
-adhoc/Debug divergence in daemon registration, TCC, or library validation to
-chase, because you are always running what ships. Without a Developer ID cert on
-the machine it falls back to an adhoc Release build (un-notarized, and TCC
-re-prompts).
+notarization, strict library validation. That is deliberate: there is no ad hoc
+or Debug divergence in daemon registration, TCC or library validation to chase,
+because you always run what ships. Without a Developer ID certificate on the
+machine it falls back to an ad hoc Release build (not notarized, and TCC asks
+again).
 
 The canonical xcodebuild invocation (what `make app` runs) is:
 
@@ -67,16 +69,16 @@ script has run once. `CODE_SIGNING_ALLOWED=NO` leaves signing to the Makefile's
 `sign` target; without it, Xcode's Automatic signing asks for the keychain once
 per nested bundle.
 
-For an inner-loop edit cycle, either use `make dev` (unit tests, then the
-notarized Release build, installed and relaunched - same signing path as
+To run what you're working on, either use `make dev` (unit tests, then the
+notarized Release build, installed and relaunched on the same signing path as
 `make install`), or work in Xcode against `Glimmer.xcodeproj`:
 
 1. Run `scripts/generate-build-info.sh` once so
    `Glimmer/BuildInfo.generated.swift` exists (`make app` and `make test` run it
    for you).
-2. Set the Glimmer scheme's Run xcconfig to `Glimmer/StreamLib.xcconfig` (Edit
-   Scheme → Run → Info). It supplies the bridging header and the version from
-   `Glimmer/Version.xcconfig`.
+2. Base the Debug configuration on `Glimmer/StreamLib.xcconfig` (project editor
+   → Info → Configurations), and keep that change out of commits. It supplies
+   the bridging header and the version from `Glimmer/Version.xcconfig`.
 3. Build and run.
 
 Useful log tails:
@@ -87,26 +89,26 @@ log stream --predicate 'subsystem == "io.ugfugl.Glimmer"' --level info
 
 See [PROFILING.md](PROFILING.md) for per-category predicates.
 
-### Build hygiene - don't mint app copies
+### Build hygiene: don't mint app copies
 
 **Build once per thing you actually want to look at.** Not once per edit.
 
 macOS gives every distinct copy of the bundle its own privacy identity. Anything
-that registers a `Glimmer.app` with LaunchServices - and `make app` re-registers
-its Debug bundle on _every_ run - earns a separate row under **System Settings →
+that registers a `Glimmer.app` with LaunchServices (and `make app` re-registers
+its Debug bundle on _every_ run) earns a separate row under **System Settings →
 Privacy & Security → Local Network**. Those rows are TCC records: they survive
 deleting the app, and they survive a reboot.
 
 One session of rebuild-on-every-edit produced **nine** registered copies (two
 checkouts' `build/`, two DerivedData trees, `/Applications`, Trash, Downloads)
-and eight Local Network entries. The app then could not reach a host on the LAN,
-and the failure surfaced as `Couldn't reach <ip>` - which reads as a network
+and eight Local Network entries. The app then could not reach a PC on the LAN,
+and the failure surfaced as `Couldn't reach <ip>`, which reads as a network
 problem and is not one.
 
 Keep the inner loop cheap and batch the install:
 
 ```bash
-make app     # compile-only check - fast, no install
+make app     # compile-only check: fast, no install
 make test    # unit tests
 make dev     # ONLY when you want to actually use the build
 ```
@@ -128,7 +130,7 @@ the user can run it:
 sudo tccutil reset All io.ugfugl.Glimmer
 ```
 
-`tccutil reset LocalNetwork <bundle-id>` is rejected - `LocalNetwork` is not a
+`tccutil reset LocalNetwork <bundle-id>` is rejected: `LocalNetwork` is not a
 service name `tccutil` accepts. `All` is the working form, and it also clears
 Input Monitoring (the DualSense raw-HID grant), so expect to re-approve that.
 
@@ -141,20 +143,20 @@ idioms load-bearing in a way that is easy to miss:
 
 - `minHeight:` / `minWidth:` are **floors, not sizes**. A view with a floor
   accepts any larger size it is offered, so one of them anywhere in the column
-  hands the window something to grow into - the window becomes resizable again
+  hands the window something to grow into: the window becomes resizable again
   and the offending view stretches to fill whatever the user drags out.
 - `.frame(maxWidth: .infinity)` has no size of its own to measure.
 - A trailing `Spacer()` exists to push content against a container taller than
   itself. In a content-sized window there is no such space, so it can only
   invent some.
 - `ConnectSurface` and `EmptyPairingState` therefore end in
-  `.fixedSize(horizontal: false, vertical: true)` - they take their ideal height
+  `.fixedSize(horizontal: false, vertical: true)`: they take their ideal height
   rather than the offered one. Keep it that way.
 
 The window's `minWidth` in `GlimmerApp` must equal the connect surface's real
-width (card width + 2x its horizontal padding). A floor _below_ the true content
-width leaves the window that much range to be dragged through, and it opens at
-the bottom of that range with the margins squeezed flat.
+width (card width plus twice its horizontal padding). A floor _below_ the true
+content width leaves the window that much range to be dragged through, and it
+opens at the bottom of that range with the margins squeezed flat.
 
 **Verify geometry against the running app, not the source.** Every one of the
 above was shipped at least once on a source reading that looked right. Build,
@@ -179,13 +181,13 @@ EOS
 ```
 
 If `after_grow` differs from the opening size, something in the column is still
-flexible. This takes about a minute and is not optional for a geometry change -
-a resize regression once survived two releases because it was only ever read,
+flexible. This takes about a minute and is not optional for a geometry change: a
+resize regression once survived two releases because it was only ever read,
 never run.
 
 A UI pull request should say which of these it touches, and include a
 before/after screenshot at the smallest and largest window the change allows.
-"Builds clean" is not evidence about layout.
+“Builds clean” is not evidence about layout.
 
 ## Lint
 
@@ -196,17 +198,16 @@ to the product lint bar. The commit hook blocks only on errors, but
 build runs it. Treat a warning as a failure. Thresholds worth knowing from
 `.swiftlint.yml`:
 
-- `force_unwrapping`, `force_cast`, `force_try` - warnings, so strict fails
-  them.
+- `force_unwrapping`, `force_cast`, `force_try`: warnings, so strict fails them.
 - File length and type body warn at 600, function body at 80, and strict holds
   every file to that.
 - `line_length` warns at 140, errors at 280, ignoring URLs and comments.
 
-The pre-commit wrapper runs `swiftlint --fix` first; if it modifies any staged
-file, the commit is **refused** and you are told to re-stage the diff.
-Auto-staging by the hook is avoided so you see what changed.
+The pre-commit wrapper runs `swiftlint --fix` first; if it rewrites any Swift
+file, the commit is **refused** and you are told to re-stage the diff. The hook
+never stages for you, so you see what changed.
 
-`swift-format` is intentionally NOT enforced - Apple's formatter reflows the
+`swift-format` is intentionally NOT enforced: Apple's formatter reflows the
 codebase's trailing-aligned function arguments into a noisier style.
 
 A `trufflehog` secret scan runs per commit against verified detectors, and
@@ -247,16 +248,15 @@ Rules:
   forces callbacks onto its own threads:
   - `AudioDecoder` (AVAudioEngine callbacks on Core Audio threads, internal
     state lock-guarded).
-  - `StatsCollector` (touched from the engine's receive thread, the VT
-    decode-queue, AND the main actor; guarded by an internal `os_unfair_lock`).
+  - `StatsCollector` (touched from the engine's receive thread, the VT decode
+    queue, AND the main actor; guarded by an internal `OSAllocatedUnfairLock`).
   - `StreamBridgeContext` (the receive-thread callback target).
 
 ### `nonisolated(unsafe)`
 
-`nonisolated(unsafe)` IS acceptable in this codebase, and there are currently 74
-of them. Every use must document the invariant in a comment on the property:
-what the synchronisation discipline is, and why a regular actor or lock isn't
-viable.
+`nonisolated(unsafe)` IS acceptable in this codebase, and there are about 70 of
+them. Every use must document the invariant in a comment on the property: what
+the synchronisation discipline is, and why a regular actor or lock isn't viable.
 
 Acceptable patterns:
 
@@ -264,7 +264,7 @@ Acceptable patterns:
   control events on its own receive threads, on hot paths that can't afford an
   actor hop per frame. The weak refs on `StreamBridgeContext` are
   `nonisolated(unsafe)` because Swift weak storage is atomic per spec and the
-  engine serialises its callbacks per-stream - Swift 6 strict-concurrency can't
+  engine serialises its callbacks per stream. Swift 6 strict concurrency can't
   see through to that guarantee, but the load is sound.
 - **VT decode-queue state.** `decompressionSession`, `formatDescription`, SPS /
   PPS / VPS, stream parameters in `VideoDecoder.swift` are touched from the
@@ -283,9 +283,9 @@ Acceptable patterns:
 
 NOT acceptable:
 
-- "It compiled" without an invariant comment.
+- “It compiled” without an invariant comment.
 - Multi-writer races. If two threads can write the same slot,
-  `nonisolated(unsafe)` is wrong - use a lock or hop to an actor.
+  `nonisolated(unsafe)` is wrong: use a lock or hop to an actor.
 - Anything with a Sendable-incomplete type behind it (`CALayer`,
   `AVSampleBufferDisplayLayer`). Wrap with an `NSLock` around the load/store
   (`VideoDecoder._displayLayer` is the reference pattern).
@@ -297,7 +297,7 @@ The canonical place to surface a stream event to the consumer is
 is `Sendable` and FIFO-ordered, so yielding from the engine's receive thread
 preserves the order the native engine delivered them in. The previous
 `Task { await deliver(...) }` pattern lost ordering because consecutive Tasks
-land on the global concurrent executor without inter-Task happens-before - see
+land on the global concurrent executor without inter-Task happens-before; see
 the comment at `StreamBridgeContext.eventContinuation` (in
 `StreamBridgeContext.swift`) for the motivating regression.
 
@@ -317,8 +317,8 @@ the comment at `StreamBridgeContext.eventContinuation` (in
 - Privacy:
   - `privacy: .public` for non-sensitive diagnostic data (stage names, decode
     timings, codec format ints, error codes).
-  - `privacy: .private` (the default) for anything PII-adjacent: host addresses,
-    host names, error message strings, host versions.
+  - `privacy: .private` (the default) for anything PII-adjacent: PC addresses,
+    PC names, error message strings, Sunshine versions.
   - `Diag.*` takes the same `privacy:` argument as `Logger`, but defaults to
     `.public`, so mark those values `.private` there too:
     `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
@@ -328,18 +328,18 @@ the comment at `StreamBridgeContext.eventContinuation` (in
     per-install pseudonyms, never their names.
   - Never log:
     - Key characters from `keyDown` events (a later change fixed the regression
-      where chars=... leaked at `.public`).
+      where `chars=...` leaked at `.public`).
     - URLs carrying `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`, or
       `uniqueid`. `NetworkClient.sensitiveQueryKeys` is the set; the redaction
       that consumes it lives in `NetworkClient+Endpoints.swift`.
     - Cert PEMs or fingerprints at `.public` (a hostile log scraper could read
-      the pinned cert; see SECURITY.md).
+      the pinned cert; see [SECURITY.md](SECURITY.md)).
     - PIN values, AES keys, signed pairing-secret bytes.
 
 The current Swift 6 strict-concurrency posture means
 `Logger.info("\(value, privacy: .public)")` is the standard form. Logging on
 long-running paths (per-frame, per-mouseMoved) is gated behind explicit
-conditions - never log per-frame at `.info`.
+conditions: never log per-frame at `.info`.
 
 ## Commits
 
@@ -348,34 +348,34 @@ CalVer for releases (`YYYY.M.MICRO`). See [RELEASE.md](RELEASE.md).
 Conventional-commit-style prefixes are used in the repo's history; match what's
 there. Common prefixes:
 
-- `fix(area)` - bug fix scoped to a subsystem
-- `perf(area)` - performance fix
-- `refactor(area)` - non-behavioural rework
-- `concurrency` - Swift 6 isolation cleanup
-- `security` - anything in the threat-model surface
-- `build` - Xcode / Makefile / scripts
-- `chore` - repo hygiene
-- `docs` or `docs(area)` - these files
+- `fix(area)`: bug fix scoped to a subsystem
+- `feat(area)`: new behaviour
+- `perf(area)`: performance fix
+- `refactor(area)`: non-behavioural rework
+- `test`: tests only
+- `build`: Xcode, Makefile, scripts
+- `chore`: repo hygiene
+- `docs` or `docs(area)`: these files
 
 Subject line: imperative mood, lowercase after the prefix, no trailing period.
-Body wrapped at ~72 columns when one's needed.
+Body wrapped at about 72 columns when one's needed.
 
 **No attribution to tools or agents.** No `Co-Authored-By` trailer, no session
-trailers or links, no "Generated with" line, no model or tool names: not in
+trailers or links, no “Generated with” line, no model or tool names: not in
 commits, pull request titles or bodies, the changelog, or code comments. Hard
 rule of repo policy. No emoji in commit messages either.
 
 ## The bar
 
-**"It builds clean" is table stakes, not evidence.** Neither is "the tests
-pass". Both are necessary; neither says anything about whether the thing is any
+**“It builds clean” is table stakes, not evidence.** Neither is “the tests
+pass”. Both are necessary; neither says anything about whether the thing is any
 good.
 
 The bar for anything a user can see or feel is: **would someone with taste,
 looking at this for two seconds, be appalled?** If you would not put it in a
-demo, it is not done - however green the checks are.
+demo, it is not done, however green the checks are.
 
-This is not hypothetical. Glimmer shipped a launcher whose host card floated in
+This is not hypothetical. Glimmer shipped a launcher whose PC card floated in
 several hundred points of empty window. It compiled without a warning, the tests
 passed, SwiftLint was clean, and it was obviously wrong to anyone who opened it.
 Walking it back took the rest of a release train: 2026.8.3 pinned the window to
@@ -385,15 +385,16 @@ looking at the app.
 
 Practically, before you call something done:
 
-- **Run it.** Not the test suite - the app, the way a user meets it.
-- **Look at it**, in the states a user will hit: empty, one host, many apps,
-  mid-stream, disconnected, the smallest and largest window you allow.
-- **Prove the claim you are making.** If the claim is "no longer resizable",
+- **Run it.** Not the test suite: the app, the way a user meets it.
+- **Look at it**, in the states a user will hit: empty, one PC, many apps,
+  mid-stream, disconnected, light and dark, the smallest and largest window you
+  allow.
+- **Prove the claim you are making.** If the claim is “no longer resizable”,
   drive the window and read the size back (see [UI changes](#ui-changes)). If it
-  is "reconnects cleanly", pull the cable. A claim you have not exercised is a
+  is “reconnects cleanly”, pull the cable. A claim you have not exercised is a
   guess with a commit message.
-- **Say what you did NOT verify.** An honest "the dropdown has never rendered
-  with more than two apps" is worth more than silence, and it is what lets the
+- **Say what you did NOT verify.** An honest “the dropdown has never rendered
+  with more than two apps” is worth more than silence, and it is what lets the
   next person aim their attention.
 
 ## Pull requests
@@ -406,7 +407,9 @@ Practically, before you call something done:
   Only the maintainer can push branches to this repository or merge into `main`.
 - Keep a PR scoped to one area, so it can land independently.
 - Leave `CHANGELOG.md` and `Glimmer/Version.xcconfig` alone: the maintainer
-  writes release notes and picks the version when a change ships. See
+  picks the version and writes the release notes when a change ships. Each
+  release there is a `## <version> - <date>` heading over a flat list of
+  bullets, one per change a player will notice, written for them. See
   [RELEASE.md](RELEASE.md).
 - Before you ask for a merge, run the thing and look at it. [The bar](#the-bar)
   is the checklist.

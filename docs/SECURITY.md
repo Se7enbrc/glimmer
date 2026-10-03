@@ -3,11 +3,10 @@
 ## Reporting
 
 **Security contact: GitHub Security Advisories.** Use the repository's
-**Security → Report a vulnerability** flow (private vulnerability reporting) -
-it is end-to-end private between you and the maintainer, needs no key exchange,
-and is the channel that is actually monitored. Include a description of the
-issue, reproduction steps, and the affected version (`Glimmer.app` → menu bar →
-About, or
+**Security → Report a vulnerability** flow (private vulnerability reporting). It
+is end-to-end private between you and the maintainer, needs no key exchange, and
+is the channel that is actually monitored. Include a description of the issue,
+reproduction steps, and the affected version (**Glimmer → About Glimmer**, or
 `defaults read /Applications/Glimmer.app/Contents/Info CFBundleShortVersionString`).
 
 Public disclosure on GitHub Issues is acceptable for non-exploitable bugs (UI
@@ -24,42 +23,42 @@ is sized to that.
 
 **In scope:**
 
-- **Same-LAN passive observer** - packet sniffer on the LAN. The HTTP control
+- **Same-LAN passive observer:** a packet sniffer on the LAN. The HTTP control
   requests run mutual TLS once paired. In the stream itself, the ENet control
   channel, which also carries keyboard, mouse and controller input, is
   AES-128-GCM encrypted, and audio is AES-128-CBC encrypted whenever the PC
   offers it (Sunshine always does). Video travels unencrypted unless the PC is
   set to require encryption, and then it is AES-128-GCM too.
-- **Same-LAN active MITM** - an attacker who can intercept or redirect traffic
+- **Same-LAN active MITM:** an attacker who can intercept or redirect traffic
   between the Mac and the host. Defended by RSA-validated pairing handshake +
   post-pairing cert pinning (see Pairing + Pinning sections below). Pre-pairing
-  first contact is HTTP, which is acceptable because there's nothing to MITM yet
-  - the pin is established by an out-of-band PIN the user types into the host's
-    UI, which is what authenticates the cert we then pin.
-- **Same-UID malware on the Mac** - not defended. Glimmer is unsandboxed (see
+  first contact is HTTP, which is acceptable because there's nothing to MITM
+  yet: the pin is established by an out-of-band PIN the user types into the
+  host's UI, which is what authenticates the cert we then pin.
+- **Same-UID malware on the Mac:** not defended. Glimmer is unsandboxed (see
   Runtime hardening below for why), so the identity and pinned-cert files live
   in the home directory at mode 0600 / parent dir 0700 rather than inside a
   sandbox container. Mode 0600 keeps other users on the Mac out, but any process
   running as you can read the client key, impersonate this Mac to every paired
   PC, and rewrite the pinned host certificates. This is an accepted risk that
   moonlight-qt shares.
-- **Local control surface** - the running app takes `glimmer` requests over
+- **Local control surface:** the running app takes `glimmer` requests over
   distributed notifications (`CommandChannel`, `AppModel+Commands.swift`), with
   no authentication. Any process running as you can post one: start a stream
   from a paired PC, end Glimmer's own stream, or post `stream` with takeover
   set, which quits the app running on the PC without asking. There is no URL
   scheme, so a web page can't reach it. This falls under the same-UID risk
   above.
-- **Hostile host** - a host that has somehow been compromised cannot escalate
+- **Hostile host:** a host that has somehow been compromised cannot escalate
   beyond producing bad video / audio / input echoes. The pinned-cert pairing
   limits a hostile host to one the user has explicitly trusted out-of-band.
-- **Untrusted stream input - the in-tree Swift transport parsers.** The
-  streaming engine is pure Swift (`Glimmer/Stream/Native/`): RTSP/SDP response
-  parsing, the ENet-subset control channel, RTP video/audio depacketization,
-  Reed-Solomon FEC reassembly, and the AES-GCM control and AES-CBC audio
-  decrypts all parse bytes that arrive over UDP/TCP from the network.
-  Memory-safety bugs, parser confusion, and malformed-packet crashes in these
-  parsers are **in scope and ours** - report them here, not upstream.
+- **Untrusted stream input: the in-tree Swift transport parsers.** The streaming
+  engine is pure Swift (`Glimmer/Stream/Native/`): RTSP/SDP response parsing,
+  the ENet-subset control channel, RTP video/audio depacketization, Reed-Solomon
+  FEC reassembly, and the AES-GCM control and AES-CBC audio decrypts all parse
+  bytes that arrive over UDP/TCP from the network. Memory-safety bugs, parser
+  confusion, and malformed-packet crashes in these parsers are **in scope and
+  ours**: report them here, not upstream.
 
 **Out of scope:**
 
@@ -68,7 +67,7 @@ is sized to that.
 - Kernel-level attackers / a hostile macOS install.
 - Local attacker with root. Nothing to defend; they already have everything.
 - Protocol-design limitations fixed by GameStream / Sunshine (e.g. the 4-digit
-  PIN, plain-HTTP pre-pairing rounds) - we implement the protocol's defenses
+  PIN, plain-HTTP pre-pairing rounds). We implement the protocol's defenses
   faithfully but cannot change the wire contract. Bugs in
   [Sunshine](https://github.com/LizardByte/Sunshine) itself belong upstream.
 
@@ -80,9 +79,9 @@ client identifier).
 
 **Storage: mode-0600 files**, not the keychain. Three files:
 
-- `client-cert.pem` - X.509 cert in PEM
-- `client-key.pem` - RSA private key in PEM (PKCS#8 unencrypted)
-- `client-uniqueid.txt` - 32-hex-char client unique ID
+- `client-cert.pem`: X.509 cert in PEM
+- `client-key.pem`: RSA private key in PEM (PKCS#8 unencrypted)
+- `client-uniqueid.txt`: 32-hex-char client unique ID
 
 Stored at `~/Library/Application Support/Glimmer/Identity/`.
 
@@ -103,11 +102,11 @@ keychain once builds became Developer ID signed, and stayed on files:
 - The **data-protection keychain** (the clean per-app store) needs a
   `keychain-access-groups` entitlement, which on a Developer ID Mac app with no
   embedded provisioning profile makes the OS refuse to launch the process (AMFI
-  / "Launchd job spawn failed"). It would require shipping a provisioning
-  profile - machinery not worth it here.
+  / “Launchd job spawn failed”). It would require shipping a provisioning
+  profile, machinery not worth it here.
 - The **login keychain** works without a profile and, now that signing is stable
   (Developer ID), no longer hits the per-rebuild ACL prompt that drove us off it
-  before - but it only adds encryption-at-rest for a narrow gain on a LAN
+  before. But it only adds encryption-at-rest for a narrow gain on a LAN
   streaming identity, and the project already tried it once and retreated.
 - The reference implementation (**moonlight-qt**) stores the same RSA key as
   **plaintext PEM in a mode-0644 QSettings plist** under
@@ -149,15 +148,15 @@ liveness check (`Glimmer/Stream/Pairing.swift`).
 `AppModel.generatePairingPIN()` and shown to the user to type into the host. ~13
 bits. Brute-force isn't a worry: the host controls the retry rate and a wrong
 PIN aborts the handshake mid-round (the host returns a hash that doesn't match
-the one our PIN would have produced - see step 4 in `runPairingFlow`).
+the one our PIN would have produced; see step 4 in `runPairingFlow`).
 
 **Pin commit timing.** The host cert is pinned AFTER:
 
 1. The host's RSA signature over its pairing-secret block verifies against the
-   cert it sent us in step 1 - proves the host holds the private key matching
-   the cert.
-2. The PIN-correctness hash check passes - proves the host knew the PIN the user
-   typed out-of-band.
+   cert it sent us in step 1. This proves the host holds the private key
+   matching the cert.
+2. The PIN-correctness hash check passes. This proves the host knew the PIN the
+   user typed out-of-band.
 
 Only then does `NetworkClient.setPinnedHostCert` get called. This is **not**
 trust-on-first-use: first contact never pins. `NetworkClient.fetchServerInfo`
@@ -168,8 +167,8 @@ request that has no pin to check (search for `SECURITY (C2)` in
 `NetworkClient+Endpoints.swift`).
 
 **Failure path.** Any deviation throws `StreamError.pairingFailed` with a
-specific message at `.private` log privacy. The caller sees a uniform "pairing
-failed" - the specific cause (wrong PIN, MITM detected, host mid-pair with
+specific message at `.private` log privacy. The caller sees a uniform “pairing
+failed”; the specific cause (wrong PIN, MITM detected, host mid-pair with
 someone else) is recoverable from logs under our subsystem, not from the UI. The
 causes the UI does name reveal nothing about the handshake: a PIN nobody entered
 in time (our five-minute wait, or Sunshine's status 408), and a PC busy with
@@ -200,17 +199,16 @@ secrecy.
 leaf's DER to the pinned PEM's (no `URLSession`, no CA trust evaluation) and
 fails the handshake unless they are byte-equal. We do NOT silently re-pin on TLS
 error. The previous auto-rebind-on-TLS-error path was the gap a same-LAN
-attacker rode to pin their own cert - closed.
+attacker rode to pin their own cert, and it is closed.
 
-**Rotation UX.** A real cert rotation (Sunshine reinstall, OS reset on the host)
-throws `StreamError.hostUnreachable("pinned host cert mismatch")` out of
-`ControlTransport`. `HostStatusPoller` turns that specific error into a
+**Rotation UX.** A real cert rotation (Sunshine reinstall, OS reset on the PC)
+fails `ControlTransport`'s pin check, and `NetworkClient` maps that to
+`StreamError.hostCertChanged` (“Den PC's certificate changed. Choose Pair Again…
+to trust the new one.”). `HostStatusPoller` turns that error into a
 `certMismatch` host state, and the launcher's readiness chip goes amber and
-reads **Trust needed** with the description "Host certificate changed, re-pair
-to trust it". Clicking the chip opens the pairing sheet, pre-filled with the
-host's address.
+reads **Trust needed**. Clicking the chip opens the pairing sheet for that PC.
 
-There is no "accept the new certificate" button anywhere. Re-pairing is the only
+There is no “accept the new certificate” button anywhere. Re-pairing is the only
 path, which means the user has to read a fresh PIN off the host's own UI to
 replace the pin. The friction is the point: an on-path attacker who can rotate
 the cert cannot also produce the PIN.
@@ -222,7 +220,7 @@ the cert cannot also produce the PIN.
   authenticates the cert we then pin.
 - **Post-pairing:** HTTPS on **47984** for `/serverinfo`, `/launch`, `/cancel`,
   `/applist`, and the final pairing-flow `/pair?phrase=pairchallenge` liveness
-  check. Mutual TLS - our client identity authenticates us to the host, the
+  check. Mutual TLS: our client identity authenticates us to the host, and the
   pinned host cert authenticates the host to us. The system trust store is NOT
   consulted; the pinned PEM is the entire trust anchor.
 - **Stream:** the Swift-native engine's RTP video/audio + ENet-subset control
@@ -239,7 +237,7 @@ the cert cannot also produce the PIN.
 
 **Why no sandbox.** The Wi-Fi-stutter helper registers a root LaunchDaemon via
 `SMAppService.daemon`, and a sandboxed app cannot install or run a system
-daemon - the helper needs root to run `ifconfig awdl0 down`. The Mac App Store
+daemon; the helper needs root to run `ifconfig awdl0 down`. The Mac App Store
 path was already closed independently: the root `SMAppService` daemon cannot be
 shipped sandboxed at all, and a sandboxed build would also need
 `com.apple.security.device.usb` (DualSense raw-HID adaptive triggers / haptics),
@@ -250,26 +248,26 @@ up.
 
 - **Hardened Runtime** (`ENABLE_HARDENED_RUNTIME = YES`): no JIT, library
   validation, no library injection. Xcode emits a note that the runtime is
-  disabled under adhoc signing - expected for development; the setting persists
-  so Developer ID signed Release builds get the full enforcement.
-- **Developer-ID signing + notarization + stapling.** Release builds are signed
-  with the team Developer ID, notarized by Apple, and the ticket is stapled to
-  the app and DMG.
+  disabled under ad hoc signing. That's expected for development; the setting
+  persists so Developer ID signed Release builds get the full enforcement.
+- **Developer ID signing + notarization + stapling.** Release builds are signed
+  with the team Developer ID and notarized by Apple, and the ticket is stapled
+  to the app that the DMG carries.
 - **Minimal-attack-surface helper.** The root daemon's XPC protocol is four
   methods (`helper/Protocol.swift`), and exactly one of them changes anything:
   `setAWDLDown(_:reason:)`. The other three (`currentStatus`, `ping`,
   `reSuppressCount`) are read-only. It is not a run-anything-as-root backdoor.
-  It accepts a connection only from a caller whose code signature satisfies the
-  designated requirement in `helper/HelperService.swift`:
-  `identifier "io.ugfugl.Glimmer" and anchor apple generic and certificate leaf[subject.OU] = "5T7M4RH3F8"`
-  - the signed Glimmer app, not a process that merely claims the bundle id.
+  It accepts a connection only from the signed Glimmer app, not a process that
+  merely claims the bundle id: the caller's code signature must satisfy the
+  designated requirement in `helper/HelperService.swift`,
+  `identifier "io.ugfugl.Glimmer" and anchor apple generic and certificate leaf[subject.OU] = "5T7M4RH3F8"`.
 
 **The defense-in-depth the sandbox used to provide** was containment of a
 memory-safety exploit in the streaming-protocol parsers reachable from a
 malicious host. With the sandbox gone, that is addressed by hardening the
 parsers directly instead:
 
-- **Fuzz the host-reachable parsers** - a deterministic swift-testing suite
+- **Fuzz the host-reachable parsers.** A deterministic swift-testing suite
   (`GlimmerTests/FuzzTests.swift` and `FuzzTests+Stream.swift`) hammers the
   Annex-B, RTSP, SDP, ENet, AES-GCM and HTTP control parsers, the Reed-Solomon
   kernels, the whole video RTP queue (`RtpVideoQueue.addRawDatagram` through FEC
@@ -281,33 +279,34 @@ parsers directly instead:
   first packet shorter than its frame header reaching the decoder as video.
 - **Hardened Runtime library validation is ON for Release.** Glimmer links no
   third-party library, and the Release entitlements drop
-  `disable-library-validation`. Adhoc / Debug builds keep it via
-  `Glimmer-Debug.entitlements` - an adhoc binary has no team id for validation
+  `disable-library-validation`. Ad hoc / Debug builds keep it via
+  `Glimmer-Debug.entitlements`: an ad hoc binary has no team id for validation
   to match.
 
-This is a LAN client connecting to the **user's own host**, so that exploit path
+This is a LAN client connecting to the **user's own PC**, so that exploit path
 is low-likelihood to begin with.
 
 **Entitlements** (`Glimmer/Glimmer.entitlements`, Release):
 
-| Key            | Value | Why                                                                     |
-| -------------- | ----- | ----------------------------------------------------------------------- |
-| `app-sandbox`  | false | Unsandboxed - required to install/run the root AWDL helper (see above). |
-| `cs.allow-jit` | false | No JIT.                                                                 |
+| Key            | Value | Why                                                                        |
+| -------------- | ----- | -------------------------------------------------------------------------- |
+| `app-sandbox`  | false | Unsandboxed: required to install and run the root AWDL helper (see above). |
+| `cs.allow-jit` | false | No JIT.                                                                    |
 
-Unsandboxed builds carry no `device.*` exceptions - those are sandbox
-capabilities; raw-HID, networking, and file access all work without them once
-unsandboxed. The Debug/adhoc variant (`Glimmer/Glimmer-Debug.entitlements`) adds
-`cs.disable-library-validation` = true because an adhoc signature has no team id
-for validation to match; Release omits it (validation enforced).
+Unsandboxed builds carry no `device.*` exceptions: those are sandbox
+capabilities, and raw-HID, networking, and file access all work without them
+once unsandboxed. The Debug/ad hoc variant
+(`Glimmer/Glimmer-Debug.entitlements`) adds `cs.disable-library-validation` =
+true because an ad hoc signature has no team id for validation to match; Release
+omits it (validation enforced).
 
 **NSWindow.sharingType** = `.none`. The stream window opts out of
 ScreenCaptureKit, `screencapture(1)`, and Cmd-Shift-5. Third-party recording /
 conferencing apps (QuickTime, OBS, Loom, Zoom, Teams) see a black surface where
-the stream is - same posture as Apple TV+ and Netflix. Users who want to record
-their session use the host PC's recording tools, not the Mac's.
+the stream is, the same posture as Apple TV+ and Netflix. Users who want to
+record their session use the PC's recording tools, not the Mac's.
 
-## Sensitive material - what we don't log
+## Sensitive material: what we don't log
 
 - **Key characters from `keyDown` events.** Removed; previously logged at
   `.public`, leaked every keystroke (including passwords typed during a stream)
@@ -319,11 +318,11 @@ their session use the host PC's recording tools, not the Mac's.
   lives in `NetworkClient+Endpoints.swift`, and `dumpXMLRedacted` covers the
   response bodies, where `sessionUrl0` carries the PC's address and port.
 - **Cert PEMs / fingerprints at `.public`.** `ControlTransport` logs a
-  pin-mismatch event but not the fingerprints - a hostile log scraper could
+  pin-mismatch event but not the fingerprints; a hostile log scraper could
   otherwise read the pinned cert via `log show`.
 - **PIN values, AES keys, signed pairing-secret bytes.**
 
-## Sensitive material - what we do log
+## Sensitive material: what we do log
 
 - Scan codes + modifier masks (positional, non-PII; needed for responder-chain
   debugging).
