@@ -319,15 +319,13 @@ final class TelemetryCounters: @unchecked Sendable {
     let tickMissPreemptedTotal = Counter()
     let tickMissLinkskipTotal = Counter()
 
-    /// Frames dropped-to-NEWEST while presentation is SUPPRESSED (signal:
-    /// PRESENT): the window is backgrounded/occluded, the display link is
-    /// deliberately suspended, and the pacer keeps only the newest frame ready
-    /// for an instant resume. These are DESIGNED drops - counting them here
-    /// keeps `drops_presentation_late` meaning what it says (frames the pacer
-    /// genuinely failed to present in time) instead of carrying ~120/s of
-    /// suppressed-mode noise. Incremented on the pacer's submit path while the
-    /// suppression gauge below is set; always-live like its sibling drop counters.
+    /// Frames dropped to newest while the window is hidden and the pacer keeps one frame for the
+    /// resume: designed drops, kept out of `drops_presentation_late` so that counter stays about
+    /// real lateness rather than ~120/s of suppressed-mode noise.
     let suppressedDropTotal = Counter()
+    /// Frames the pacer released straight from submit at rest instead of on a display tick. Read
+    /// beside `drops_backpressure`: a fast present that crowds the layer's queue shows in both.
+    let pacerSubmitReleaseTotal = Counter()
 
     /// Frames dropped WITHOUT decode while the DECODE GATE is engaged (stage 2
     /// of hidden-window handling: after ~2s of continuous suppression the

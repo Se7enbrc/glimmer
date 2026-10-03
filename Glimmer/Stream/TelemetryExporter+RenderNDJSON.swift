@@ -314,6 +314,7 @@ extension TelemetryRenderer {
         // drops_presentation_late so that counter stays a genuine-lateness
         // signal while the window is backgrounded.
         builder.addCount("drops_suppressed_total", extras.suppressedDropTotal)
+        builder.addCount("pacer_submit_release_total", extras.pacerSubmitReleaseTotal)
         builder.addBool("present_suppressed", extras.presentSuppressed)
         // The THIRD hidden-window state: gated (decode stopped after ~2s of
         // continuous suppression) + its quiet drops, so fps_decoded=0 with

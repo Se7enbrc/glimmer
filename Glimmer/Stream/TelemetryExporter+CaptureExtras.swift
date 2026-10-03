@@ -34,6 +34,7 @@ extension TelemetryExporter {
         extras.pacerOverTargetReleaseTotal = overTargetTotal
         extras.audioTrimTotal = trimTotal
         extras.suppressedDropTotal = counters.suppressedDropTotal.value
+        extras.pacerSubmitReleaseTotal = counters.pacerSubmitReleaseTotal.value
         extras.presentSuppressed = counters.presentSuppressed
         extras.ctrlIgnoredTotal = counters.ctrlIgnoredTotal.value
         extras.audioFecMismatchTotal = counters.audioFecMismatchTotal.value
@@ -182,6 +183,7 @@ extension TelemetrySnapshot {
         /// live 0/1 suppression gauge that gives them (and every other field on
         /// the same line) their context.
         var suppressedDropTotal: UInt64 = 0
+        var pacerSubmitReleaseTotal: UInt64 = 0
         var presentSuppressed: Bool = false
         /// Unknown inbound control datagrams ignored - the volume signal behind
         /// the once-per-type log suppression.

@@ -35,6 +35,7 @@ extension FramePacer {
         // output_to_present for nothing. The gate still spaces presents one interval apart.
         if let vsync = passthroughVsyncLocked() {
             lock.unlock()
+            TelemetryCounters.shared.pacerSubmitReleaseTotal.increment()
             presentGateRelease(entry, vsyncInterval: vsync)
             return
         }

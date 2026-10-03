@@ -376,6 +376,7 @@ struct SessionReport {
             ("tick_miss_preempted", counters.tickMissPreemptedTotal.value),
             ("tick_miss_linkskip", counters.tickMissLinkskipTotal.value),
             ("suppressed_drop", counters.suppressedDropTotal.value),
+            ("pacer_submit_release", counters.pacerSubmitReleaseTotal.value),
             ("drops_decode_gated", counters.decodeGatedDropTotal.value),
             // Per-socket GAP-EVENT tallies (the honest link-health counts the
             // jitter EWMA was blind to) + host rumble dispatched to actuators.
