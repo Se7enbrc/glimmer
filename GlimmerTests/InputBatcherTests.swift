@@ -11,7 +11,7 @@ struct InputBatcherTests {
     private static func makeChannel(backlogged: Bool = true) throws -> EnetControlChannel {
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: key))
-        channel.reliableBackloggedFlag = backlogged
+        channel.reliableBackloggedFlag.store(backlogged, ordering: .relaxed)
         return channel
     }
 

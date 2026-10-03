@@ -37,6 +37,7 @@
 
 import Foundation
 import Network
+import Synchronization
 
 // (ENet wire primitives - constants, errors, byte writer/reader, SentReliable -
 // live in EnetWire.swift.)
@@ -130,21 +131,10 @@ final class EnetControlChannel: @unchecked Sendable {
     /// host-keeping-up signal for telemetry.
     let unackedReliables = AtomicCounter()
 
-    /// HOST-side reliable backpressure (the mouse-spin fix), now RTT-RELATIVE so it
-    /// is DO-NO-HARM on a stable link. `inFlightSends` keys only on local
-    /// NWConnection send-completion (drains fast even under loss), so it never
-    /// reflects the host falling behind. The first cut gated on a fixed un-ACKed
-    /// COUNT (≥6) - but on a stable link the natural in-flight count is rate×RTT,
-    /// so a fast input stream on a low-but-nonzero-RTT LAN (e.g. 5ms) could brush
-    /// that cap with NO actual problem: a false throttle on a perfect link. The
-    /// gate is now purely evidence-based - the host is "behind" ONLY when it has
-    /// gone ACK-SILENT for longer than a few RTTs WHILE reliables are outstanding.
-    /// On a clean link ACKs return within ~one RTT, so this can never fire
-    /// regardless of latency; it engages only when the host genuinely stops
-    /// draining our backlog. Computed once per ~20ms control-loop tick from the
-    /// live RTT estimate, stored here for the 1ms InputBatcher flush to read
-    /// lock-free (bare-Bool load/store, same discipline as the watchdog latches).
-    nonisolated(unsafe) var reliableBackloggedFlag = false
+    /// HOST-side reliable backpressure (the mouse-spin fix), RTT-relative so a clean link never trips
+    /// it: ACK silence past a few RTTs with reliables outstanding. Written each ~20 ms control tick,
+    /// read by the input flush on its own queue.
+    let reliableBackloggedFlag = Atomic<Bool>(false)
     /// Floor for the ACK-silence threshold (when multiple·RTT is below it on a
     /// sub-10ms LAN): never throttle under this much silence.
     static let backpressureAckSilenceFloorMs: UInt32 = 30
@@ -156,7 +146,7 @@ final class EnetControlChannel: @unchecked Sendable {
     /// > max(floor, multiple·RTT) with reliables outstanding). The InputBatcher
     /// flush coalesces the merged-state drain while this is set. RTT-relative, so a
     /// stable link - wired OR a higher-RTT-but-clean link - never trips it.
-    var reliableBacklogged: Bool { reliableBackloggedFlag }
+    var reliableBacklogged: Bool { reliableBackloggedFlag.load(ordering: .relaxed) }
 
     // Peer state (mirrors the C ENetPeer subset).
     var outgoingPeerID: UInt16 = Enet.maximumPeerID  // until VERIFY_CONNECT

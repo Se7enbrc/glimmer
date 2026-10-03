@@ -109,7 +109,8 @@ extension EnetControlChannel {
             ? max(Self.backpressureAckSilenceFloorMs,
                   Self.backpressureRttMultiple * UInt32(min(health.rttMs, 1000)))
             : Self.backpressureAckSilenceFloorMs
-        reliableBackloggedFlag = health.unackedCount > 0 && health.sinceLastAck > bpThreshold
+        reliableBackloggedFlag.store(health.unackedCount > 0 && health.sinceLastAck > bpThreshold,
+                                     ordering: .relaxed)
 
         // ACK-silence NEAR-MISS: count once per EDGE silence (reliables outstanding)
         // crosses a deep RTT multiple short of the dead-peer cutoff - the recovered
