@@ -182,6 +182,7 @@ enum CommonResolution: CaseIterable {
 
 struct QualityPane: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The privileged AWDL network helper (parks awdl0 during streams). Shared
     /// singleton so this toggle and the stream lifecycle drive one instance.
@@ -244,9 +245,11 @@ struct QualityPane: View {
             } header: {
                 Text("Preset")
             } footer: {
-                // Said once for the pane: every control here is read at session start.
-                Text("Changes here apply to the next stream.")
+                // Said once for the pane, under whichever card ends the preset choice.
+                if model.qualityPreset != .custom { Text("Changes here apply to the next stream.") }
             }
+
+            if model.qualityPreset == .custom { customSection }
 
             // Bandwidth in its own card, segmented like "Show the stream": two
             // values, read at a glance. The number under "Your next stream"
@@ -326,105 +329,6 @@ struct QualityPane: View {
                 }
             }
 
-            if model.qualityPreset == .custom {
-                // "Custom" alone: the section owns the window choice now, not
-                // just overrides of the preset numbers.
-                Section {
-                    // Window is a Custom thing - the panel-native presets are
-                    // full screen by definition - so the choice leads the
-                    // section, segmented (reads instantly; a two-value chevron
-                    // looked cheap next to the radio rows). Persisted as the
-                    // display mode; snapshotted at session start.
-                    Picker("Show the stream", selection: $model.streamDisplayMode) {
-                        ForEach(StreamDisplayMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .help("Window opens the stream as a normal window at the size below; drag it to any size.")
-                    HStack {
-                        Text("Resolution")
-                        Spacer()
-                        // Common resolutions shortcut - one tap fills both
-                        // fields with a standard pair. Saves the user from
-                        // typing 3840×2160 every time and prevents typos
-                        // that would land them at 384×216.
-                        Menu {
-                            ForEach(CommonResolution.allCases, id: \.self) { res in
-                                Button("\(res.width) × \(res.height) · \(res.shortLabel)") {
-                                    model.customWidth = res.width
-                                    model.customHeight = res.height
-                                }
-                            }
-                        } label: {
-                            Text("Presets")
-                        }
-                        .menuStyle(.button)
-                        .help("Common resolutions")
-                        .fixedSize()
-                        TextField("", text: $customWidthText)
-                            .frame(width: 70)
-                            .multilineTextAlignment(.trailing)
-                            .monospacedDigit()
-                            .onChange(of: customWidthText) { _, text in
-                                commitCustomField(text, range: StreamSizeBounds.width) { model.customWidth = $0 }
-                            }
-                            .onChange(of: model.customWidth) { _, value in customWidthText = String(value) }
-                            .onSubmit { settleCustomFieldText() }
-                        Text("×").foregroundStyle(.secondary)
-                        TextField("", text: $customHeightText)
-                            .frame(width: 70)
-                            .multilineTextAlignment(.trailing)
-                            .monospacedDigit()
-                            .onChange(of: customHeightText) { _, text in
-                                commitCustomField(text, range: StreamSizeBounds.height) { model.customHeight = $0 }
-                            }
-                            .onChange(of: model.customHeight) { _, value in customHeightText = String(value) }
-                            .onSubmit { settleCustomFieldText() }
-                    }
-                    HStack {
-                        Text("Refresh rate")
-                        Spacer()
-                        TextField("", text: $customFPSText)
-                            .frame(width: 60)
-                            .multilineTextAlignment(.trailing)
-                            .monospacedDigit()
-                            .onChange(of: customFPSText) { _, text in
-                                commitCustomField(text, range: StreamSizeBounds.fps) { model.customFPS = $0 }
-                            }
-                            .onChange(of: model.customFPS) { _, value in customFPSText = String(value) }
-                            .onSubmit { settleCustomFieldText() }
-                        Text("Hz").foregroundStyle(.secondary)
-                    }
-                    .onAppear { settleCustomFieldText() }
-                    // No bitrate row. Asking someone to pick a wire budget -
-                    // and then to decide whether we should pick it for them -
-                    // is two questions we can answer better ourselves from the
-                    // measured anchors (AppModel.measuredBitrateAnchors). The
-                    // resulting figure is in the next-stream summary below.
-                    HStack {
-                        Text("Currently driving: \(model.currentDisplayDescription)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Use Native Resolution") {
-                            model.snapCustomToDisplay()
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                } header: {
-                    Text("Custom")
-                } footer: {
-                    // The one non-obvious thing about a window: the mouse
-                    // disappears into the game the moment it is over the
-                    // picture, so say up front how to get it back.
-                    if model.streamDisplayMode == .window {
-                        Text("The game takes your mouse while the pointer is over the window. "
-                            + "Hold Esc or switch apps to get it back.")
-                    }
-                }
-            }
-
             Section {
                 Toggle("Stream stats", isOn: $model.showStreamStats)
                 // Footnote tracks the actual configured chord so it stays
@@ -477,7 +381,92 @@ struct QualityPane: View {
             // No Experiments section yet. Don't emit an empty `Section { } header: { Label("Experiments", systemImage: "flask") }` — SwiftUI's grouped Form renders the Section header even over an EmptyView body, leaving a dangling flask card. Add the Section back together with the first real dial.
         }
         .formStyle(.grouped)
+        .animation(reduceMotion ? nil : .snappy, value: model.qualityPreset)
         .onAppear { awdl.refresh() }
+    }
+
+    /// Custom's choices, in a card of their own straight under the preset card: rows inside that
+    /// card read as more presets. Window is a Custom thing; the panel-native presets are full screen.
+    @ViewBuilder private var customSection: some View {
+        @Bindable var model = model
+        Section {
+            Picker("Show the stream", selection: $model.streamDisplayMode) {
+                ForEach(StreamDisplayMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .help("Window opens the stream as a normal window at the size below; drag it to any size.")
+            HStack {
+                Text("Resolution")
+                Spacer()
+                // One tap fills both fields with a standard pair, so nobody lands at 384 × 216.
+                Menu {
+                    ForEach(CommonResolution.allCases, id: \.self) { res in
+                        Button("\(res.width) × \(res.height) · \(res.shortLabel)") {
+                            model.customWidth = res.width
+                            model.customHeight = res.height
+                        }
+                    }
+                } label: {
+                    Text("Presets")
+                }
+                .menuStyle(.button)
+                .help("Common resolutions")
+                .fixedSize()
+                TextField("", text: $customWidthText)
+                    .frame(width: 70)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .onChange(of: customWidthText) { _, text in
+                        commitCustomField(text, range: StreamSizeBounds.width) { model.customWidth = $0 }
+                    }
+                    .onChange(of: model.customWidth) { _, value in customWidthText = String(value) }
+                    .onSubmit { settleCustomFieldText() }
+                Text("×").foregroundStyle(.secondary)
+                TextField("", text: $customHeightText)
+                    .frame(width: 70)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .onChange(of: customHeightText) { _, text in
+                        commitCustomField(text, range: StreamSizeBounds.height) { model.customHeight = $0 }
+                    }
+                    .onChange(of: model.customHeight) { _, value in customHeightText = String(value) }
+                    .onSubmit { settleCustomFieldText() }
+            }
+            HStack {
+                Text("Refresh rate")
+                Spacer()
+                TextField("", text: $customFPSText)
+                    .frame(width: 60)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .onChange(of: customFPSText) { _, text in
+                        commitCustomField(text, range: StreamSizeBounds.fps) { model.customFPS = $0 }
+                    }
+                    .onChange(of: model.customFPS) { _, value in customFPSText = String(value) }
+                    .onSubmit { settleCustomFieldText() }
+                Text("Hz").foregroundStyle(.secondary)
+            }
+            .onAppear { settleCustomFieldText() }
+            // No bitrate row: Glimmer picks it from measured anchors, shown under "Your next stream".
+            HStack {
+                Text("Currently driving: \(model.currentDisplayDescription)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Use Native Resolution") {
+                    model.snapCustomToDisplay()
+                }
+                .buttonStyle(.borderless)
+            }
+        } footer: {
+            // A window's one surprise: the game takes the mouse while the pointer is over it.
+            Text(model.streamDisplayMode == .window
+                ? "Changes here apply to the next stream. The game takes your mouse while the pointer is over "
+                    + "the window. Hold Esc or switch apps to get it back."
+                : "Changes here apply to the next stream.")
+        }
     }
 
     /// Per-preset hint string. Kept inline alongside the picker so the
