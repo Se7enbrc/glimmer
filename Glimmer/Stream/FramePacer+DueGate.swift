@@ -284,8 +284,9 @@ extension FramePacer {
         // (submits direct-present until the rebuilt link proves healthy ticks
         // - FramePacer+TickDeficit.swift), so a tick here has nothing to do.
         // Bailing keeps the priming span from polluting the depth samples and
-        // stale-repeat counter while real frames are demonstrably flowing.
-        guard running, !tickDeficit.warmingUp else {
+        // stale-repeat counter while real frames are demonstrably flowing. A tick already queued when
+        // the window hid presents nothing and keeps the newest frame for the resume.
+        guard running, !tickDeficit.warmingUp, !presentSuppressed else {
             lock.unlock()
             return
         }

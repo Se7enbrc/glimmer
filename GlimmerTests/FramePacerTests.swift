@@ -347,6 +347,17 @@ struct FramePacerTests {
         return (pacer, presents)
     }
 
+    /// A tick already dispatched when the window hides presents nothing and keeps the newest frame
+    /// for the resume, the rule the submit and off-tick paths already follow.
+    @Test func aSuppressedTickPresentsNothing() throws {
+        let (pacer, presents) = try makeCountingPacer(queued: 1)
+        pacer.setPresentSuppressed(true)
+        let now = CACurrentMediaTime()
+        pacer.releaseDueFrame(targetTimestamp: now + 1, vsyncInterval: 1.0 / 120, tickScanout: now + 1)
+        #expect(presents.withLock { $0 } == 0)
+        #expect(pacer.queue.count == 1)
+    }
+
     /// A ticking 120 Hz pacer at rest with nothing queued.
     private func makeRestingPacer() throws -> (FramePacer, OSAllocatedUnfairLock<Int>) {
         let (pacer, presents) = try makeCountingPacer(queued: 0)
