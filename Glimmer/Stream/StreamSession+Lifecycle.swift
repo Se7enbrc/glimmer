@@ -270,7 +270,8 @@ extension StreamSession {
     ) async throws -> LaunchResponse {
         // Keep the response alive after cancellation so a late success can be
         // cleaned up. Only its current waiter may change launch ownership.
-        Self.launchEpoch.withLock { $0 += 1 }
+        let key = launchPCKey
+        Self.launchEpoch.withLock { $0[key, default: 0] += 1 }
         ownsHostSession = true
         hostSessionClientID = client
         hostSessionAppID = appID
@@ -292,13 +293,16 @@ extension StreamSession {
         }
     }
 
-    /// Each launch builds a fresh session, so this count is process-wide: a late
-    /// /cancel from a released session must not end a launch that started after it.
-    static let launchEpoch = OSAllocatedUnfairLock(initialState: 0)
+    /// Launches per PC, kept across sessions: a late /cancel from a released session must not end
+    /// a newer launch on the same PC, and must still reach its own PC when another one launches.
+    static let launchEpoch = OSAllocatedUnfairLock(initialState: [String: Int]())
+
+    private var launchPCKey: String { reconnectServer?.uniqueId ?? "" }
 
     func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
         let task = pendingLaunch
-        let epoch = Self.launchEpoch.withLock { $0 }
+        let key = launchPCKey
+        let epoch = Self.launchEpoch.withLock { $0[key, default: 0] }
         let settled: Bool
         if let task {
             settled = await TerminationGate.runBounded(seconds: Self.stopCancelSeconds) {
@@ -313,7 +317,7 @@ extension StreamSession {
             // late success, unless a newer launch has started and now owns the PC.
             Task.detached {
                 guard case .success = await task.result,
-                      Self.launchEpoch.withLock({ $0 }) == epoch else { return }
+                      Self.launchEpoch.withLock({ $0[key, default: 0] }) == epoch else { return }
                 await cancel()
             }
         }

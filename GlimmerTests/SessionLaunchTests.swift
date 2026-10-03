@@ -106,6 +106,34 @@ struct SessionLaunchTests {
         #expect(await cancelled.value == 1)
     }
 
+    /// A launch on another PC doesn't stand in for this one: the abandoned launch's late success
+    /// still gets its second /cancel, so the first PC isn't left running the game.
+    @Test func lateSuccessIsCancelledWhenAnotherPcLaunches() async {
+        let session = StreamSession()
+        await session.useServer(ServerInfo(address: "192.0.2.1", uniqueId: "pc-a", serverName: "Den PC"))
+        let entered = SafetyTestGate()
+        let response = SafetyTestGate()
+        let cancelled = SafetyTestCounter()
+        let launch = Task {
+            try await session.launchAndRecordOwnership(client: "client", appID: 1) {
+                await entered.open()
+                await response.wait()
+                return Self.response
+            }
+        }
+        await entered.wait()
+        await session.settlePendingLaunch { await cancelled.increment() }
+        let other = StreamSession()
+        await other.useServer(ServerInfo(address: "192.0.2.2", uniqueId: "pc-b", serverName: "Tower"))
+        _ = try? await other.launchAndRecordOwnership(client: "client", appID: 1) { Self.response }
+        await response.open()
+        _ = await launch.result
+        let cancelledAgain = await TerminationGate.runBounded(seconds: 2) {
+            while await cancelled.value < 2, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
+        }
+        #expect(cancelledAgain)
+    }
+
     /// Quitting during "Reconnecting…" after an attempt failed: stop still has a client for the PC
     /// it launched on, so the owned session gets its /cancel instead of leaving the game running.
     @Test func stopCanCancelAfterAFailedReconnectAttempt() async {
@@ -226,6 +254,8 @@ struct SessionLaunchTests {
 
 private extension StreamSession {
     func prepareLaunchTestSession() { isStreaming = true }
+
+    func useServer(_ server: ServerInfo) { reconnectServer = server }
 
     func loseNetworkAfterReconnect(to server: ServerInfo) {
         reconnectServer = server
