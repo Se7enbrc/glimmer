@@ -1,10 +1,11 @@
 # Changelog
 
-## 2026.10.4 - Unreleased
+## 2026.10.4 - 2026-10-03
 
 - On a 16-inch MacBook Pro, the HiDPI quality asks the PC for 1728 × 1116
-  instead of 1728 × 1117, so a PC that builds its display to order, such as one
-  running Apollo, shows a picture instead of ending after ten seconds. (#110)
+  instead of 1728 × 1117, a size PCs couldn't encode, so the stream shows a
+  picture instead of ending after ten seconds. Custom sizes are kept even too.
+  (#110)
 - Quitting while Glimmer is reconnecting ends the game on the PC, instead of
   leaving it running and asking to take it over on the next connect.
 - On a remote connection, a quality step-up that doesn't hold drops back to the
@@ -12,13 +13,17 @@
   video…” for up to 20 minutes.
 - After a Wi-Fi dropout, a paused game or a quiet PC, the audio delay no longer
   grows from one session to the next.
-- Glimmer no longer lowers the audio delay back to a level that just stuttered.
+- Glimmer no longer lowers the audio delay back to a level that just stuttered,
+  and after a stretch of Wi-Fi trouble it starts bringing the delay back down
+  after 3 minutes instead of 10.
 - A failure's Wake and Connect or Pair Again… acts on the PC the message names,
   even if you picked another PC while it was connecting.
 - Cancelling a slow start on one PC and then streaming from another no longer
   leaves the game running on the first.
 - A change the PC sends during a Wi-Fi dropout of more than a second, such as
   switching HDR on, is no longer lost.
+- In Settings › Quality, Custom's options open right under the preset choices
+  instead of further down the page.
 
 ## 2026.10.3 - 2026-10-02
 
