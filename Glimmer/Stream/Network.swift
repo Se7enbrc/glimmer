@@ -63,7 +63,8 @@ public enum HostReachability {
     public static func measureRTT(host: String,
                                   port: Int = 47989,
                                   timeoutMs: Int = 2_000) async -> Outcome {
-        guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+        guard let rawPort = UInt16(exactly: port), rawPort > 0,
+              let nwPort = NWEndpoint.Port(rawValue: rawPort) else {
             return .unreachable
         }
         // Tighter TCP knobs so a dead host folds to .unreachable in seconds
@@ -288,13 +289,10 @@ public actor NetworkClient {
     /// down. Kept only so the existing `await net.shutdown()` call sites don't churn.
     public func shutdown() {}
 
-    /// Called by `PairingClient` once the host has proven possession of its
-    /// private key (the RSA-signature step in /pair's pairingsecret round-trip).
-    /// The cert installed here is fully validated and is what subsequent HTTPS
-    /// connections must match - ControlTransport pins `server.serverCertPEM` by
-    /// exact DER. This is the ONE write path for the pin - `fetchServerInfo` no
-    /// longer auto-pins.
-    public func setPinnedHostCert(pem: String) {
+    /// Pairing calls this after the PIN and signature proof. Reject unsupported keys before
+    /// replacing a pin; subsequent TLS connections must present this exact certificate.
+    public func setPinnedHostCert(pem: String) throws {
+        _ = try PEM.certificateKey(pem, context: "PC certificate")
         server.serverCertPEM = pem
         log.info("Host cert pinned (length \(pem.count, privacy: .public) bytes)")
     }

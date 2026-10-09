@@ -41,6 +41,7 @@ extension StreamSession {
         if stopCause == nil { stopCause = cause }
         stopInProgress = true
         isStreaming = false
+        initialServerInfoTask?.cancel()
         launchTask?.cancel()
         await teardown.run { await self.performStop(cause: cause) }
     }
@@ -267,7 +268,8 @@ extension StreamSession {
         // Keep the response alive after cancellation so a late success can be
         // cleaned up. Only its current waiter may change launch ownership.
         let key = launchPCKey
-        Self.launchEpoch.withLock { $0[key, default: 0] += 1 }
+        hostLaunchEpoch = try await Self.launchMutations.beginLaunch(for: key)
+        try Task.checkCancellation()
         ownsHostSession = true
         hostSessionClientID = client
         hostSessionAppID = appID
@@ -289,16 +291,15 @@ extension StreamSession {
         }
     }
 
-    /// Launches per PC, kept across sessions: a late /cancel from a released session must not end
-    /// a newer launch on the same PC, and must still reach its own PC when another one launches.
-    static let launchEpoch = OSAllocatedUnfairLock(initialState: [String: Int]())
+    /// An old /cancel finishes before a new /launch on that PC, or skips the newer owner entirely.
+    static let launchMutations = HostLaunchMutations()
 
     private var launchPCKey: String { reconnectServer?.uniqueId ?? "" }
 
     func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
         let task = pendingLaunch
         let key = launchPCKey
-        let epoch = Self.launchEpoch.withLock { $0[key, default: 0] }
+        let epoch = hostLaunchEpoch
         let settled: Bool
         if let task {
             settled = await TerminationGate.runBounded(seconds: Self.stopCancelSeconds) {
@@ -307,14 +308,15 @@ extension StreamSession {
         } else {
             settled = true
         }
-        if ownsHostSession { await cancel() }
+        if ownsHostSession {
+            await Self.launchMutations.cancelIfCurrent(pc: key, epoch: epoch, operation: cancel)
+        }
         if let task, !settled {
             // The first /cancel can arrive before prep commands finish. Cancel again on a
             // late success, unless a newer launch has started and now owns the PC.
             Task.detached {
-                guard case .success = await task.result,
-                      Self.launchEpoch.withLock({ $0[key, default: 0] }) == epoch else { return }
-                await cancel()
+                guard case .success = await task.result else { return }
+                await Self.launchMutations.cancelIfCurrent(pc: key, epoch: epoch, operation: cancel)
             }
         }
     }

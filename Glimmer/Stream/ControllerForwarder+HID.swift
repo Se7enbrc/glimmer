@@ -35,7 +35,7 @@ extension InputForwarder {
     }
 
     func pushHID(_ pad: HIDGamepadDevice) {
-        guard isReady, let attached = attachedHIDControllers[pad.id] else { return }
+        guard forwardsControllerEvents, let attached = attachedHIDControllers[pad.id] else { return }
         let state = pad.state
         if matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
                                       rightTrigger: state.analog.rightTrigger) {

@@ -161,6 +161,7 @@ extension StreamWindow {
         }
 
         installLifecycleObservers()
+        refreshPresentationVisibility()
         // The first show leaves the cursor and the menu bar to the fade-in.
         if !firstShow {
             setCursorHidden(true)
@@ -272,20 +273,10 @@ extension StreamWindow {
                         self.log.info("Stream window resign was a transient key blip - teardown cancelled (stream stays foregrounded)")
                         return
                     }
-                    // The app is still active (an in-process key flutter from a
-                    // BT/HID connect does NOT deactivate the app) OR the window
-                    // re-took key - not a real Cmd-Tab-away. Bail. A genuine
-                    // background flips NSApp.isActive false and leaves the
-                    // window non-key, so this only short-circuits the blip case.
-                    guard !NSApp.isActive, !self.window.isKeyWindow else {
-                        self.log.info("""
-                            Stream window still active/key after resign debounce - teardown cancelled \
-                            (stream stays foregrounded)
-                            """)
-                        return
-                    }
-                    // Confirmed genuine background (Cmd-Tab-away / app
-                    // deactivate): run the teardown.
+                    guard !self.window.isKeyWindow else { return }
+                    // A Space may lose key to our launcher without deactivating the app.
+                    // Borderless controller-connect blips retain their existing protection.
+                    guard !NSApp.isActive || !self.coversNotch else { return }
                     self.backgroundStreamWindow()
                 }
             }
@@ -328,6 +319,7 @@ extension StreamWindow {
     /// the same point in the same order) so the windowed bring-up can install
     /// exactly these without the fullscreen-only key/activation observers.
     func installDisplayObservers(nc: NotificationCenter) {
+        installPresentationVisibilityObserver(nc: nc)
         // Screen-change: the window was dragged to another display (or its
         // backing display's mode changed / woke from sleep). Notify the owner
         // so the FramePacer rebinds its CADisplayLink to the new screen's
@@ -432,51 +424,14 @@ extension StreamWindow {
         })
     }
 
-    /// Background the stream window: restore the cursor, order the window off
-    /// screen, restore the host's presentation options, and notify the owner.
-    ///
-    /// Called ONLY from the resign observer's debounced deferred block, after it
-    /// has confirmed a genuine Cmd-Tab-away / app deactivation. It is NOT run on
-    /// the sub-second key flutter a Bluetooth controller connect produces
-    /// mid-stream - that path is short-circuited by the resign-generation token
-    /// + NSApp.isActive guard, so the still-alive (dimmed) launcher window is
-    /// never uncovered for a frame. didBecomeKey's reengageForeground() reverses
-    /// all of this on the way back in.
+    /// Release focus without removing a native fullscreen Space from the window manager.
     func backgroundStreamWindow() {
-        // Cursor: restore so the user can interact with whatever app they
-        // Cmd-Tabbed to. Idempotent + latch-balanced via the single owner -
-        // shows iff currently hidden, bringing the count to 0.
         setCursorHidden(false)
-        // Window level: in the borderless-covering path we parked the window
-        // above the menu-bar level so it covers the notch. That also keeps it
-        // painted ON TOP of any other app the user Cmd-Tabs to, which makes
-        // Cmd-Tab / Cmd-Space feel broken - they think their selected app didn't
-        // surface.
-        //
-        // Cleanest possible passivity while the user is in another app: orderOut
-        // the entire window. A fullscreen-covering window at `.normal` level with
-        // `ignoresMouseEvents = true` is supposed to let everything pass through,
-        // but in practice the Dock's bottom-edge hover-show heuristic and a few
-        // other macOS window-manager behaviours stop firing because our window
-        // still owns the geometry. orderOut removes us from screen entirely - the
-        // stream session keeps running (the AVSampleBufferDisplayLayer is
-        // independent of window visibility, and StreamSession owns the
-        // lifecycle), and the user can use the Dock / Settings / any other app
-        // without Glimmer being part of the picture. On didBecomeKey we
-        // orderFront + restore level / cursor.
-        window.orderOut(nil)
-        // Restore the app's presentation options so the user gets their menu bar
-        // and Dock back while interacting with the launcher / Settings / any
-        // other app. Without this, the [.hideMenuBar, .hideDock] flags we set in
-        // show() stick around - the launcher window appears with the menu bar
-        // still hidden and the Dock still auto-hidden, which reads as "Glimmer is
-        // still in fullscreen even though I clicked away". didBecomeKey re-applies
-        // the streaming flags when we come back.
+        if coversNotch { window.orderOut(nil) }
         if let saved = previousPresentationOptions {
             NSApp.presentationOptions = saved
         }
-        userBackgrounded = true
-        onBackgroundedChanged?(true)
-        log.info("Stream window resigned key - cursor restored, window ordered out (stream continues in background)")
+        setBackgrounded(true)
+        log.info("Stream window resigned key - cursor restored (stream continues in background)")
     }
 }

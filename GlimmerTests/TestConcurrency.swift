@@ -24,6 +24,29 @@ func onTestThread<Value: Sendable>(_ operation: @escaping @Sendable () throws ->
     }
 }
 
+// Start synchronously so a fixture deadline never races a queued launch Task.
+func startTestThread(_ operation: @escaping @Sendable () throws -> Void) -> AsyncThrowingStream<Void, Error> {
+    AsyncThrowingStream { continuation in
+        Thread {
+            do {
+                try operation()
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }.start()
+    }
+}
+
+// Timing fixtures must resume independently of the suite's cooperative worker pool.
+final class TestTaskExecutor: TaskExecutor {
+    func enqueue(_ job: consuming ExecutorJob) {
+        let unownedJob = UnownedJob(job)
+        let executor = asUnownedTaskExecutor()
+        Thread { unownedJob.runSynchronously(on: executor) }.start()
+    }
+}
+
 extension DispatchQueue {
     func drainForTest() async {
         await withCheckedContinuation { continuation in
@@ -32,20 +55,60 @@ extension DispatchQueue {
     }
 }
 
+// The peer handles the whole exchange on its own thread, including the reply.
+func withControlPeer(
+    host: String, port: LoopbackPort, handle: @escaping @Sendable (Int32) throws -> Void
+) async throws -> ControlTransport.Response {
+    let started = DispatchSemaphore(value: 0)
+    let finished = ManagedAtomicFlag()
+    let listener = port.fd
+    let peerResult = AsyncThrowingStream<Void, Error> { continuation in
+        Thread {
+            started.wait()
+            do {
+                let peer = try acceptControlPeer(on: listener, requestFinished: finished)
+                defer { close(peer) }
+                try handle(peer)
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }.start()
+    }
+    let response: Result<ControlTransport.Response, Error>
+    started.signal()
+    do {
+        response = .success(try await ControlTransport.get(
+            host: host, port: Int(port.port), target: "/serverinfo", userAgent: "GlimmerTests", tls: false,
+            credential: .init(clientCertPEM: nil, clientKeyPEM: nil, pinnedCertPEM: nil), timeout: 5))
+    } catch {
+        response = .failure(error)
+    }
+    finished.set()
+    for try await _ in peerResult {}
+    return try response.get()
+}
+
 // Only cancellation-to-EOF is a latency assertion; the generous setup limit
 // just keeps a request that stalls before sending from hanging the suite.
 func acceptControlConnection(on listener: Int32, requestFinished: ManagedAtomicFlag) async throws -> Int32 {
+    try await onTestThread {
+        try acceptControlPeer(on: listener, requestFinished: requestFinished)
+    }
+}
+
+private func acceptControlPeer(on listener: Int32, requestFinished: ManagedAtomicFlag) throws -> Int32 {
     let deadline = ContinuousClock.now + .seconds(10)
     let flags = fcntl(listener, F_GETFL, 0)
     guard flags >= 0, fcntl(listener, F_SETFL, flags | O_NONBLOCK) == 0 else {
         throw TestSocketError.setupFailed
     }
-    try await waitForControlReadability(listener, requestFinished: requestFinished, until: deadline)
+    try waitForControlReadability(listener, requestFinished: requestFinished, until: deadline)
     let peer = accept(listener, nil, nil)
     guard peer >= 0 else { throw TestSocketError.setupFailed }
     // Seeing request bytes proves cancellation interrupts a read, not just connection setup.
     do {
-        try await waitForControlReadability(peer, requestFinished: requestFinished, until: deadline)
+        try waitForControlReadability(peer, requestFinished: requestFinished, until: deadline)
     } catch {
         close(peer)
         throw error
@@ -53,16 +116,21 @@ func acceptControlConnection(on listener: Int32, requestFinished: ManagedAtomicF
     return peer
 }
 
-private func waitForControlReadability(
+func waitForControlReadability(
     _ fd: Int32, requestFinished: ManagedAtomicFlag, until deadline: ContinuousClock.Instant
-) async throws {
+) throws {
     while !requestFinished.isSet {
-        guard ContinuousClock.now < deadline else { throw TestSocketError.setupTimedOut }
+        let remaining = ContinuousClock.now.duration(to: deadline) / .milliseconds(1)
+        let milliseconds = Int32(max(0, min(100, remaining.rounded(.up))))
         var pending = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-        let ready = poll(&pending, 1, 0)
+        let ready = poll(&pending, 1, milliseconds)
+        if ready < 0, errno == EINTR { continue }
         guard ready >= 0 else { throw TestSocketError.setupFailed }
         if ready > 0, pending.revents & Int16(POLLIN) != 0 { return }
-        try await Task.sleep(for: .milliseconds(1))
+        guard pending.revents & Int16(POLLERR | POLLHUP | POLLNVAL) == 0 else {
+            throw TestSocketError.setupFailed
+        }
+        guard ContinuousClock.now < deadline else { throw TestSocketError.setupTimedOut }
     }
     throw TestSocketError.requestEndedBeforeCancellation
 }
@@ -84,7 +152,7 @@ func controlPeerReachesEOF(_ fd: Int32, before deadline: ContinuousClock.Instant
     return false
 }
 
-private enum TestSocketError: Error {
+enum TestSocketError: Error {
     case setupFailed, setupTimedOut, requestEndedBeforeCancellation
 }
 

@@ -113,13 +113,11 @@ extension StreamSession {
         win.streamPixelSize = CGSize(width: config.width, height: config.height)
         let dec = VideoDecoder()
         dec.attach(to: win.displayLayer)
-        // Suppression prevents intentional presentation backlog from requesting
-        // IDR/RFI while hidden and resynchronizes the decoder on return.
-        // The same visibility edge updates power and the caller's return state.
-        win.onBackgroundedChanged = { [weak self, weak dec] backgrounded in
-            dec?.setPresentSuppressed(backgrounded)
+        // Focus drives the launcher; actual visibility drives decode presentation and power.
+        win.onBackgroundedChanged = onBackgroundedChanged
+        win.onPresentationSuppressedChanged = { [weak self, weak dec] suppressed in
+            dec?.setPresentSuppressed(suppressed)
             Task { [weak self] in await self?.refreshPowerAssertion() }
-            onBackgroundedChanged?(backgrounded)
         }
         let inp = InputForwarder()
         // Hotkey chords need to be readable LIVE on every keyDown so

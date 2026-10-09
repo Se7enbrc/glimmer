@@ -1,0 +1,110 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 9 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group:
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: swift
+            runner: macos-26
+            build-mode: manual
+          - language: python
+            runner: ubuntu-latest
+            build-mode: none
+          - language: actions
+            runner: ubuntu-latest
+            build-mode: none
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare Swift analysis
+        if: matrix.language == 'swift'
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+        run: |
+          test "$(uname -m)" = arm64
+          # CodeQL's compiled-language tracer requires Rosetta on Apple Silicon.
+          # Install before initialization so the installer itself is not traced.
+          if ! /usr/bin/arch -x86_64 /usr/bin/true 2>/dev/null; then
+            sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+          fi
+          /usr/bin/arch -x86_64 /usr/bin/true
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          xcrun swift --version
+          printf 'DEVELOPER_DIR=%s\n' "$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          printf 'GLIMMER_SWIFTC=%s\n' "$(xcrun --find swiftc)" >> "$GITHUB_ENV"
+          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-codeql.xcconfig"
+          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
+          SWIFT_USE_INTEGRATED_DRIVER = NO
+          SWIFT_ENABLE_COMPILE_CACHE = NO
+          COMPILATION_CACHE_ENABLE_CACHING = NO
+          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+          GCC_TREAT_WARNINGS_AS_ERRORS = YES
+          SWIFT_EXEC = $(SRCROOT)/scripts/codeql-swiftc.sh
+          XCCONFIG
+          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          db-location: ${{ runner.temp }}/codeql-databases
+          queries: security-extended
+          dependency-caching: false
+          trap-caching: false
+
+      - name: Build app, login item and privileged helper
+        if: matrix.language == 'swift'
+        env:
+          # Keep package resolution outside the compiler tracer.
+          # The compiler wrapper restores tracing for every production target.
+          DYLD_INSERT_LIBRARIES: ""
+        run:
+          make app helper-build CONFIG=Debug
+          SWIFTC="$PWD/scripts/codeql-swiftc.sh"
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:${{ matrix.language }}
+          output: ${{ runner.temp }}/codeql-results
+          upload-database: false
+
+      - name: Require complete Swift extraction
+        if: matrix.language == 'swift'
+        run: |
+          python3 scripts/codeql-coverage.py \
+            --database "$RUNNER_TEMP/codeql-databases/swift"

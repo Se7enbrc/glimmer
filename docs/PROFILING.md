@@ -287,6 +287,14 @@ When enabled, a stream writes to `~/Library/Logs/Glimmer/`:
 - `glimmer-<timestamp>.log`: a richer per-session diagnostic log, with PC names,
   addresses and error text shown as `<private>`.
 
+`audio_output_state` events in the per-second file capture mixer gains, output
+format and available device volume/mute readings after audio configuration
+changes or a bookmark. A bookmark-triggered snapshot names its marker number;
+coalesced snapshots name the first and last markers. Device names and IDs are
+omitted. If the output changes during capture, device volume/mute readings are
+omitted too. To investigate a volume change, bookmark once while it sounds wrong
+and again after adjusting system volume restores it.
+
 The exporter also serves the per-second metrics on a local Prometheus endpoint,
 which is what a maintainer-local dashboard rig would scrape. No such rig is in
 this repository and nothing in the app depends on one; the NDJSON and the

@@ -93,8 +93,10 @@ struct PCTile: View {
                         .foregroundStyle(isDefault ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
-                .help(isDefault ? "The default PC" : "Make this the default PC")
-                .accessibilityLabel("Default PC")
+                .disabled(model.isStreaming)
+                .help(model.isStreaming ? "Finish the current stream first"
+                      : isDefault ? "The default PC" : "Make this the default PC")
+                .accessibilityLabel(isDefault ? "\(host.displayName), default PC" : "Make \(host.displayName) the default PC")
                 .accessibilityAddTraits(isDefault ? .isSelected : [])
                 // The right-click menu's items, visible so per-PC settings are
                 // discoverable without knowing to right-click.
@@ -115,8 +117,8 @@ struct PCTile: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                if let last = host.lastPlayedDescription {
-                    Text(last)
+                if let last = host.lastConnected {
+                    LastPlayedLabel(date: last)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -274,6 +276,7 @@ struct ShortcutsPane: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityLabel("Send Command to the PC as the Windows key")
                 // Help the curious: the change only applies to the next
                 // session, since the InputForwarder snapshots this flag at
                 // attach time.

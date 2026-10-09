@@ -39,7 +39,7 @@ extension FramePacer {
             // Present on the tick's own queue: from this decoder thread it could reach the layer
             // ahead of an older frame a late tick has already dequeued.
             let handoff = SubmitRelease(entry: entry)
-            pacingQueue.async { [weak self] in self?.presentGateRelease(handoff.entry, vsyncInterval: vsync) }
+            pacingQueue.async { [weak self] in self?.presentSubmitRelease(handoff.entry, vsyncInterval: vsync) }
             return
         }
 
@@ -81,6 +81,25 @@ extension FramePacer {
                 "PacerOverflowDrop",
                 "depth=\(FramePacer.maxQueuedFrames, privacy: .public)")
         }
+    }
+
+    /// A queued handoff may outlive stop or hide. Hidden streams keep only their newest frame.
+    private func presentSubmitRelease(_ entry: Entry, vsyncInterval: CFTimeInterval) {
+        lock.lock()
+        guard running else { lock.unlock(); return }
+        if presentSuppressed {
+            if queue.isEmpty { liveness.queueNonEmptySince = CFAbsoluteTimeGetCurrent() }
+            Self.insert(entry, into: &queue)
+            let discarded = queue.count - 1
+            let displaced = Array(queue.prefix(discarded))
+            queue.removeFirst(discarded)
+            lock.unlock()
+            TelemetryCounters.shared.suppressedDropTotal.increment(by: UInt64(discarded))
+            withExtendedLifetime(displaced) {}
+            return
+        }
+        lock.unlock()
+        presentGateRelease(entry, vsyncInterval: vsyncInterval)
     }
 
     /// At rest (target 1, nothing queued, ticks owning the release, no gap recovery), decide
@@ -175,24 +194,8 @@ extension FramePacer {
 
     // MARK: - Suppression flag (suppression edges)
 
-    /// Flip the pacer-side suppression flag (`presentSuppressed`, declared with
-    /// the core state in FramePacer.swift). Called on the suppression EDGES by
-    /// `VideoDecoder.setPresentSuppressed` - BEFORE the enter-edge one-shot
-    /// drain, so a submit racing the edge already takes the suppressed
-    /// drop-to-newest branch above instead of minting an overflow late-drop.
-    ///
-    /// EDGE HYGIENE for the tick-deficit machinery (all 8 false deficit
-    /// engages + the 1 false FLOOR VIOLATION observed were resume-edge
-    /// artifacts - windows spanning by-design-non-ticking suppressed time):
-    /// on EITHER edge any live deficit episode/latch is cleared (the hide
-    /// instant must stop the off-tick timer; a hidden layer is not a fault),
-    /// and on the CLEAR edge the realized-rate window re-seeds from now -
-    /// the machinery measures only un-suppressed time - plus a short verdict
-    /// hold so the rebound link's delayed first ticks can't mint an engage.
-    /// Jittery-link safety: this only ever CLEARS/defers fault verdicts at
-    /// known-benign edges; trip conditions and thresholds are untouched, and
-    /// a genuine collapse after refocus is still measured (windows keep
-    /// rolling) and judged ≤0.5s later - inside the watchdog's 1.75s trip.
+    /// Suppression edges discard stale fault evidence; resuming starts fresh observation windows.
+    /// Keep the retained frame and real release clocks so the next tick can present normally.
     func setPresentSuppressed(_ suppressed: Bool) {
         var events: [TickDeficitEvent] = []
         lock.lock()
@@ -202,6 +205,11 @@ extension FramePacer {
             let now = CFAbsoluteTimeGetCurrent()
             events = clearForSuppressionLocked(now: now)
             if !suppressed {
+                // Hidden time is not stall evidence; retained frames get a fresh observation window.
+                if !queue.isEmpty { liveness.queueNonEmptySince = now }
+                liveness.presentRejectStreak = 0
+                liveness.firstRejectHostTime = .nan
+                liveness.lastRejectHostTime = .nan
                 reseedRateWindowLocked(now: now)
                 tickDeficit.deficitVerdictHoldUntilHostTime =
                     now + FramePacer.resumeVerdictHoldSeconds

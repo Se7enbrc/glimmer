@@ -258,7 +258,8 @@ extension AudioDecoder {
         let fillMs = rate > 0 ? Double(aheadFrames) / rate * 1000.0 : 0
         // The same trough is the decay window's NEAR-MISS evidence (the
         // limit-cycle fix): a dip inside one step of empty must hold depth.
-        if rate > 0, fillMs < quietWindowMinFillMs { quietWindowMinFillMs = fillMs }
+        let stopping = meterShutdown || meterRecovering
+        if !stopping, rate > 0, fillMs < quietWindowMinFillMs { quietWindowMinFillMs = fillMs }
         // Under-run EDGE: this completion drained the backlog to empty while
         // playout is active AND we weren't already drained - a true gap, not a
         // steady 1-deep queue. Latch so we count it once until the next schedule.
@@ -279,7 +280,6 @@ extension AudioDecoder {
         // `meterRecovering` rides the same gate: the stall recovery's stop() fires
         // an identical completion burst, and un-gated it would mint the same
         // synthetic under-run (ratchet + persisted floor) the shutdown gate blocks.
-        let stopping = meterShutdown || meterRecovering
         let drainedNow = framesPlayed >= framesScheduled
         let isUnderrunEdge = drainedNow && !playoutDrained && !stopping
         if drainedNow { playoutDrained = true }

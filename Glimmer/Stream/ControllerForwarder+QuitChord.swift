@@ -147,7 +147,7 @@ extension InputForwarder {
             guard !Task.isCancelled, let self else { return }
             self.quitChordDwellTask = nil
             self.quitChordDwellSlot = nil
-            guard self.isReady, let state = readState() else { return }
+            guard self.forwardsControllerEvents, let state = readState() else { return }
             guard self.matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
                                                   rightTrigger: state.analog.rightTrigger) else {
                 self.quitChordBreadcrumb(.cycle, "not held at dwell expiry (slot \(slot)) - not quitting", pad: pad)

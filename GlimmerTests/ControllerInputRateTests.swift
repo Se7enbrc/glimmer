@@ -6,10 +6,55 @@
 //
 
 import Foundation
+import GameController
 import Testing
 @testable import Glimmer
 
 struct ControllerInputRateTests {
+
+    @MainActor
+    @Test func motionOwnershipSendsGyroNullBlocksLateCallbacksAndResumesRequestedSensors() async throws {
+        let sampler = ControllerMotion()
+        let controller = MotionTestController()
+        let profile = controller.testMotion
+        let backend = InputRecordingBackend()
+        sampler.streamActivated(backend: backend)
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        defer { sampler.unregister(slot: 0) }
+        let caps = sampler.register(slot: 0, controller: controller, inputEnabled: true)
+        #expect(caps & UInt16(StreamProtocol.LI_CCAP_ACCEL | StreamProtocol.LI_CCAP_GYRO) != 0)
+        sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_ACCEL), reportRateHz: 100)
+        sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO), reportRateHz: 100)
+        let lateCallback = try #require(profile.valueChangedHandler)
+        lateCallback(profile)
+        #expect(backend.motions.count == 2)
+        #expect(profile.sensorsActive)
+
+        sampler.setInputEnabled(false, slot: 0)
+        #expect(backend.motions.last == ControllerMotionSend(num: 0,
+            motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO), x: 0, y: 0, z: 0))
+        #expect(profile.valueChangedHandler == nil)
+        #expect(!profile.sensorsActive)
+        let stopped = backend.motions.count
+        lateCallback(profile)
+        sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO), reportRateHz: 50)
+        #expect(backend.motions.count == stopped)
+        #expect(profile.valueChangedHandler == nil)
+
+        sampler.setInputEnabled(true, slot: 0)
+        #expect(profile.sensorsActive)
+        #expect(profile.valueChangedHandler != nil)
+        #expect(backend.motions.count == stopped + 2)
+        #expect(backend.motions.last?.y != 0)
+        sampler.setInputEnabled(false, slot: 0)
+        sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_ACCEL), reportRateHz: 0)
+        sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO), reportRateHz: 0)
+        sampler.setInputEnabled(true, slot: 0)
+        #expect(profile.valueChangedHandler == nil)
+        #expect(!profile.sensorsActive)
+    }
 
     /// Admitted sample count for a pad reporting every `periodMs` for one second.
     private func admitted(periodMs: Double, rateHz: UInt16, jitterMs: (Int) -> Double = { _ in 0 }) -> Int {
@@ -61,4 +106,27 @@ struct ControllerInputRateTests {
             #expect(abs(measured - expected) < 0.5, "period \(period): \(measured)")
         }
     }
+}
+
+private final class MotionTestController: GCController {
+    let testMotion = MotionTestProfile()
+    override var motion: GCMotion? { testMotion }
+}
+
+private final class MotionTestProfile: GCMotion {
+    private var active = false
+    private var handler: GCMotionValueChangedHandler?
+    override var valueChangedHandler: GCMotionValueChangedHandler? {
+        get { handler }
+        set { handler = newValue }
+    }
+    override var hasGravityAndUserAcceleration: Bool { true }
+    override var hasRotationRate: Bool { true }
+    override var sensorsRequireManualActivation: Bool { true }
+    override var sensorsActive: Bool {
+        get { active }
+        set { active = newValue }
+    }
+    override var acceleration: GCAcceleration { GCAcceleration(x: 0, y: -1, z: 0) }
+    override var rotationRate: GCRotationRate { GCRotationRate(x: 1, y: 2, z: 3) }
 }

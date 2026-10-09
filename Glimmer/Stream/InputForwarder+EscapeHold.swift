@@ -41,16 +41,18 @@ enum EscapeHold {
         case cancel
     }
 
-    /// A key going down. Arms only for a first (non-repeat) Esc while a
-    /// windowed session holds the pointer and nothing is already counting.
-    /// macOS auto-repeat fires further key-downs while Esc is held; those say
-    /// nothing the timer does not already know, so they are ignored rather
-    /// than re-arming.
+    /// Only bare, non-repeating Esc starts the windowed capture dwell.
     static func onKeyDown(
-        keyCode: UInt16, isRepeat: Bool, windowMode: Bool, captured: Bool, armed: Bool
+        keyCode: UInt16, isRepeat: Bool, windowMode: Bool, captured: Bool, armed: Bool,
+        modifiers: NSEvent.ModifierFlags = []
     ) -> Action {
-        guard keyCode == Self.keyCode, windowMode, captured, !isRepeat, !armed else { return .none }
+        guard keyCode == Self.keyCode, windowMode, captured, !isRepeat, !armed,
+              isBare(modifiers) else { return .none }
         return .arm
+    }
+
+    static func isBare(_ modifiers: NSEvent.ModifierFlags) -> Bool {
+        modifiers.isDisjoint(with: [.command, .control, .option, .shift, .function])
     }
 
     /// A key coming up. Cancels only the key we are actually counting, and
@@ -72,8 +74,12 @@ extension InputForwarder {
         let action = EscapeHold.onKeyDown(
             keyCode: event.keyCode, isRepeat: event.isARepeat,
             windowMode: isWindowMode, captured: isMouseCaptured,
-            armed: escapeHoldTask != nil)
+            armed: escapeHoldTask != nil, modifiers: event.modifierFlags)
         if action == .arm { armEscapeHold() }
+    }
+
+    func noteEscapeModifiersChanged(_ modifiers: NSEvent.ModifierFlags) {
+        if !EscapeHold.isBare(modifiers) { cancelEscapeHold() }
     }
 
     /// Called on every key-up, before any readiness gate: a tap must behave

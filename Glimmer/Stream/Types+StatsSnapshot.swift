@@ -12,6 +12,8 @@ import Foundation
 /// The HUD uses estimated PC capture FPS while telemetry retains pipeline rates.
 /// Unavailable measurements stay nil so their rows remain neutral.
 public struct StreamStatsSnapshot: Sendable {
+    /// The codec selected for this connection, not the PC's configured preference.
+    public var videoCodec: String?
     /// Estimated PC capture rate, excluding untimed repeats once timing is available.
     /// Falls back to measured reception without timing support. Captured desktop
     /// updates can differ from the game's own render rate.
@@ -140,11 +142,8 @@ public struct StreamStatsSnapshot: Sendable {
     /// felt-stutter signal. Session-cumulative; catch-up discards don't count.
     public var presentationGaps: UInt64?
 
-    /// Live audio-config label ("Stereo", "5.1 surround", "7.1 surround").
-    /// Read from the session-active AudioConfig - post-codec-agent the
-    /// default is `AudioConfig.bestForCurrentOutput()` rather than
-    /// hardcoded `.stereo`, and the overlay needs to reflect that. nil
-    /// pre-session-start.
+    /// Source channel layout for the active session, nil before it starts.
+    /// Playback adapts that source to the current speakers or headphones.
     public var audioConfigDescription: String?
 
     /// Mac-side host vitals sampled per-tick from `MacSystemStats.shared`.
@@ -208,7 +207,7 @@ public struct StreamStatsSnapshot: Sendable {
             .latency, .jitter, .networkDrops,
             .decoderDrops, .smoothness, .decodeTime, .bitrate, .hostProcessing,
             .macCpu, .macRam, .macBattery, .controllerBattery,
-            .audio
+            .codec, .audio
         ]
         for kind in plan where enabled.contains(kind) {
             out.append(buildRow(kind: kind, targetFps: targetFps, thresholds: thresholds))
@@ -233,6 +232,10 @@ public struct StreamStatsSnapshot: Sendable {
             return pipelineRow(kind: kind, targetFps: targetFps, thresholds: thresholds)
         case .macCpu, .macRam, .macBattery, .controllerBattery:
             return macRow(kind: kind)
+        case .codec:
+            return StatsRow(
+                kind: .codec, label: "Codec", value: videoCodec ?? "-",
+                symbolName: "film", health: .neutral, section: .config)
         case .audio:
             return StatsRow(
                 kind: .audio, label: "Audio",

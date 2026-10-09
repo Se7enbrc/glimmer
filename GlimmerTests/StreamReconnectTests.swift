@@ -227,4 +227,72 @@ struct StreamReconnectTests {
         #expect(asked == [2.5, 4.5, 8.5, 16.5, 32.5, 48.5, 64.5])
         #expect(DecodeStallNudge().nextAt == StreamSession.decodeStallRecoveryThreshold)
     }
+
+    @MainActor @Test(arguments: [false, true])
+    func lateEstablishedCannotRearmStoppedInput(stopping: Bool) async {
+        let backend = NativeBackend()
+        let session = StreamSession(backend: backend)
+        let input = InputForwarder()
+        await session.prepareCallbackTest(input: input, streaming: stopping, stopping: stopping)
+        await session.nativeConnectionEstablished(from: backend)
+        await Self.drainMainQueue()
+        #expect(!input.isReady)
+        #expect(await !session.reachedLiveState)
+    }
+
+    @MainActor @Test func oldBackendCannotMutateTheReplacementConnection() async {
+        let old = NativeBackend()
+        let current = NativeBackend()
+        let session = StreamSession(backend: current)
+        let input = InputForwarder()
+        await session.prepareCallbackTest(input: input)
+        await session.nativeConnectionEstablished(from: old)
+        await Self.drainMainQueue()
+        #expect(!input.isReady)
+        #expect(await !session.reachedLiveState)
+        input.setReady(true)
+        await session.handleHostTerminate(code: 0, from: old)
+        await Self.drainMainQueue()
+        #expect(input.isReady)
+        #expect(await session.isStreaming)
+    }
+
+    @MainActor @Test func ignoredTerminationCannotPauseReconnectingInput() async {
+        let backend = NativeBackend()
+        let session = StreamSession(backend: backend)
+        let input = InputForwarder()
+        input.setReady(true)
+        await session.prepareCallbackTest(input: input, reconnecting: true)
+        await session.handleHostTerminate(code: 0, from: backend)
+        await Self.drainMainQueue()
+        #expect(input.isReady)
+        #expect(await session.isStreaming)
+    }
+
+    @MainActor @Test func currentEstablishedArmsLiveInput() async {
+        let backend = NativeBackend()
+        let session = StreamSession(backend: backend)
+        let input = InputForwarder()
+        await session.prepareCallbackTest(input: input)
+        await session.nativeConnectionEstablished(from: backend)
+        await Self.drainMainQueue()
+        #expect(input.isReady)
+        #expect(await session.reachedLiveState)
+    }
+
+    private static func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+}
+
+private extension StreamSession {
+    func prepareCallbackTest(input: InputForwarder, streaming: Bool = true,
+                             stopping: Bool = false, reconnecting: Bool = false) {
+        self.input = input
+        isStreaming = streaming
+        stopInProgress = stopping
+        isReconnecting = reconnecting
+    }
 }

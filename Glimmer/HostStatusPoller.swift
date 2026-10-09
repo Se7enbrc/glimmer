@@ -114,15 +114,15 @@ extension AppModel {
 
     /// Hold a recent answer or established stream through transient misses. At cold start,
     /// delaying Asleep without evidence would hide the wake controls behind Checking.
-    func publishUnreachable(hostID: String, expectedHostID: String) async {
+    func publishUnreachable(hostID: String, expectedHostID: String, now: Date = Date()) async {
         guard !Task.isCancelled, !hostPollingPausedForSleep else { return }
         hostUnreachableStreak += 1
         let holds = Self.holdsGoodStatus(live: hostLiveStatus, provenAwake: hostPolling.provenAwake,
-                                         hostID: hostID, now: Date())
+                                         hostID: hostID, now: now)
         guard Self.missPublishesAsleep(streak: hostUnreachableStreak, holdsGoodStatus: holds,
                                       macHasRoute: true) else { return }
         await publishLiveStatus(HostLiveStatus(
-            hostID: hostID, state: .asleep, rttMs: nil, sunshineVersion: nil, capturedAt: Date()
+            hostID: hostID, state: .asleep, rttMs: nil, sunshineVersion: nil, capturedAt: now
         ), expectedHostID: expectedHostID)
     }
 

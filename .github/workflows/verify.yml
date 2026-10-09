@@ -1,0 +1,96 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group:
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: macOS
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          xcrun swift --version
+          python3 --version
+
+      - name: Prepare verification
+        run: |
+          if ! command -v swiftlint >/dev/null 2>&1; then
+            brew install swiftlint
+          fi
+          if ! command -v actionlint >/dev/null 2>&1; then
+            brew install actionlint
+          fi
+          if ! command -v pre-commit >/dev/null 2>&1; then
+            brew install pre-commit
+          fi
+          scripts/install-ci-scanner.sh
+          swiftlint version
+          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
+          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+          GCC_TREAT_WARNINGS_AS_ERRORS = YES
+          XCCONFIG
+          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
+
+      - name: Pre-commit
+        id: precommit
+        env:
+          GLIMMER_SECRET_SCAN_ALL_FILES: "1"
+          SCAN_FROM:
+            ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$SCAN_FROM" ] && [ "$SCAN_FROM" != 0000000000000000000000000000000000000000 ]; then
+            export PRE_COMMIT_FROM_REF="$SCAN_FROM"
+            export PRE_COMMIT_TO_REF="$GITHUB_SHA"
+          fi
+          pre-commit run --all-files
+
+      - name: Verify
+        id: verify
+        run: make verify
+
+      - name: Failure summary
+        if: failure()
+        env:
+          TESTED_SHA: ${{ github.sha }}
+          PRECOMMIT_OUTCOME: ${{ steps.precommit.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        run: |
+          {
+            printf '## Verification failed\n\n'
+            printf 'Tested commit: %s\n\n' "$TESTED_SHA"
+            printf '| Check | Outcome | Reproduce locally |\n'
+            printf '| --- | --- | --- |\n'
+            printf '| Pre-commit | %s | GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files |\n' "$PRECOMMIT_OUTCOME"
+            printf '| Full gate | %s | make verify |\n\n' "$VERIFY_OUTCOME"
+            printf 'Check out the tested commit and open the failed step for details.\n'
+            printf 'Credential scanner findings are withheld; never paste keys or tokens into an issue.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

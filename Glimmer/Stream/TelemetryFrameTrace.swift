@@ -108,7 +108,7 @@ final class FrameTraceWriter: @unchecked Sendable {
             log.error("Telemetry frames: could not open file: \(error.localizedDescription, privacy: .private)")
             return
         }
-        log.notice("Telemetry per-frame trace → \(url.path, privacy: .public)")
+        log.notice("Telemetry per-frame trace → \(url.lastPathComponent, privacy: .public)")
         bytesWritten = 0
         rolloverIndex += 1
         segmentURLs.append(url)

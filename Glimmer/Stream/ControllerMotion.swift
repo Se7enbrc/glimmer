@@ -76,7 +76,7 @@ final class ControllerMotion: @unchecked Sendable {
     /// StreamSession, not to this singleton.
     @MainActor private weak var uplink: (any StreamingBackend)?
 
-    private init() {}
+    init() {}
 
     // MARK: - Registration (ControllerForwarder, main thread)
 
@@ -87,7 +87,7 @@ final class ControllerMotion: @unchecked Sendable {
     /// we promise are caps we can deliver. Registration alone starts no
     /// sensors and installs no handlers.
     @MainActor
-    func register(slot: UInt8, controller: GCController) -> UInt16 {
+    func register(slot: UInt8, controller: GCController, inputEnabled: Bool) -> UInt16 {
         // A re-attach can reuse a slot before detach bookkeeping settles;
         // halt the stale pad's sampling so the swap can't strand a live handler.
         if let stale = pads.removeValue(forKey: slot) {
@@ -102,8 +102,22 @@ final class ControllerMotion: @unchecked Sendable {
             caps |= UInt16(StreamProtocol.LI_CCAP_GYRO)
         }
         guard caps != 0 else { return 0 }
-        pads[slot] = Pad(controller: controller)
+        pads[slot] = Pad(controller: controller, inputEnabled: inputEnabled)
         return caps
+    }
+
+    /// Retain the PC's sensor requests while ownership is away, then resume from current motion.
+    @MainActor
+    func setInputEnabled(_ enabled: Bool, slot: UInt8) {
+        guard let pad = pads[slot], pad.inputEnabled != enabled else { return }
+        pad.inputEnabled = enabled
+        if !enabled, pad.rates[Int(Self.gyroType) - 1] != 0 { sendGyroNull(slot: slot) }
+        for idx in pad.rates.indices {
+            pad.lastSample[idx] = nil
+            pad.gates[idx] = MotionRateGate()
+        }
+        refreshSampling(pad, slot: slot)
+        if enabled { sample(slot: slot) }
     }
 
     /// Drop a slot's mapping and halt its sampling (controller detach).
@@ -167,7 +181,7 @@ final class ControllerMotion: @unchecked Sendable {
 
     /// Start/retune/stop one sensor's reporting per the host's request.
     @MainActor
-    private func apply(slot: UInt8, motionType: UInt8, reportRateHz: UInt16) {
+    func apply(slot: UInt8, motionType: UInt8, reportRateHz: UInt16) {
         guard let pad = pads[slot] else { return }
         let idx = Int(motionType) - 1
         let rate = min(reportRateHz, Self.maxReportRateHz)
@@ -183,9 +197,7 @@ final class ControllerMotion: @unchecked Sendable {
             // Host-requested stop. Null an active gyro (see halt()'s WHY) and
             // power the IMU down if both sensors are now idle.
             if motionType == Self.gyroType { sendGyroNull(slot: slot) }
-            let anyActive = pad.rates.contains { $0 != 0 }
-            if !anyActive { pad.controller?.motion?.valueChangedHandler = nil }
-            setSensorsActive(pad, anyActive)
+            refreshSampling(pad, slot: slot)
             Diag.info("controller \(slot) \(Self.name(motionType)) reporting stopped (host request)",
                       Self.logCategory)
             return
@@ -193,22 +205,28 @@ final class ControllerMotion: @unchecked Sendable {
 
         // The caps gate means the host only asks for sensors we advertised,
         // but a pad detaching mid-flight reads nil here - then don't start.
-        guard let motion = pad.controller?.motion else { return }
-        setSensorsActive(pad, true)
-        // GameController calls this on its handler queue, main by default.
-        motion.valueChangedHandler = { [weak self] _ in
-            MainActor.assumeIsolated { self?.sample(slot: slot) }
-        }
+        refreshSampling(pad, slot: slot)
         let detail = wasActive ? "retuned to" : "started at"
         Diag.info("controller \(slot) \(Self.name(motionType)) reporting \(detail) \(rate)Hz "
             + "(host requested \(reportRateHz))", Self.logCategory)
+    }
+
+    @MainActor
+    private func refreshSampling(_ pad: Pad, slot: UInt8) {
+        guard let motion = pad.controller?.motion else { return }
+        let active = pad.inputEnabled && pad.rates.contains { $0 != 0 }
+        setSensorsActive(pad, active)
+        guard active else { motion.valueChangedHandler = nil; return }
+        motion.valueChangedHandler = { [weak self] _ in
+            MainActor.assumeIsolated { self?.sample(slot: slot) }
+        }
     }
 
     /// One GCMotion change: convert each active sensor to the wire's SDL
     /// convention, skip unchanged readings, and send what the rate gate admits.
     @MainActor
     private func sample(slot: UInt8) {
-        guard let pad = pads[slot], let motion = pad.controller?.motion,
+        guard let pad = pads[slot], pad.inputEnabled, let motion = pad.controller?.motion,
               let backend = uplink else { return }
         let now = ProcessInfo.processInfo.systemUptime
         for motionType in [Self.accelType, Self.gyroType] {
@@ -295,6 +313,7 @@ final class ControllerMotion: @unchecked Sendable {
         /// Weak: GameController owns the pad's lifetime; a disconnect must
         /// deallocate it even if our unregister is still in flight.
         weak var controller: GCController?
+        var inputEnabled: Bool
         /// Granted report rate per sensor (index = LI_MOTION_TYPE_* - 1,
         /// post-cap); 0 = off.
         var rates: [UInt16] = [0, 0]
@@ -302,7 +321,10 @@ final class ControllerMotion: @unchecked Sendable {
         var lastSample: [(x: Float, y: Float, z: Float)?] = [nil, nil]
         var gates = [MotionRateGate(), MotionRateGate()]
 
-        init(controller: GCController) { self.controller = controller }
+        init(controller: GCController, inputEnabled: Bool) {
+            self.controller = controller
+            self.inputEnabled = inputEnabled
+        }
     }
 }
 

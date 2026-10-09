@@ -1,9 +1,52 @@
 import Foundation
+import Darwin
 import Synchronization
 import Testing
 @testable import Glimmer
 
 struct AWDLHelperTests {
+    @Test func oldPeerCannotReleaseItsReplacement() async {
+        let up = Mutex(false)
+        let suppressor = AWDLSuppressor(interfaceIsUp: { up.withLock { $0 } }, runIfconfig: { _ in
+            up.withLock { $0 = true }
+            return true
+        })
+        let service = HelperService(suppressor: suppressor)
+        let first = UUID()
+        let replacement = UUID()
+        service.setAWDLDown(true, reason: "first", peer: first) { _ in }
+        service.setAWDLDown(true, reason: "replacement", peer: replacement) { _ in }
+        service.peerInvalidated(first)
+        service.peerInvalidated(UUID())
+        await withCheckedContinuation { continuation in
+            suppressor.afterPendingChanges { continuation.resume() }
+        }
+        #expect(suppressor.suppressing)
+        #expect(!up.withLock { $0 })
+        service.peerInvalidated(replacement)
+        await withCheckedContinuation { continuation in
+            suppressor.afterPendingChanges { continuation.resume() }
+        }
+        #expect(!suppressor.suppressing)
+        #expect(up.withLock { $0 })
+    }
+
+    @Test func replacementPeerCanExplicitlyReleaseTheOldLease() async {
+        let up = Mutex(false)
+        let suppressor = AWDLSuppressor(interfaceIsUp: { up.withLock { $0 } }, runIfconfig: { _ in
+            up.withLock { $0 = true }
+            return true
+        })
+        let service = HelperService(suppressor: suppressor)
+        service.setAWDLDown(true, reason: "first", peer: UUID()) { _ in }
+        let released = await withCheckedContinuation { continuation in
+            service.setAWDLDown(false, reason: "replacement", peer: UUID()) { continuation.resume(returning: $0) }
+        }
+        #expect(released)
+        #expect(!suppressor.suppressing)
+        #expect(up.withLock { $0 })
+    }
+
     @MainActor @Test func enabledHelperSkipsStatusRefresh() {
         var refreshCount = 0
         AWDLStreamLease.refreshIfNeeded(isEnabled: { true }, refresh: { refreshCount += 1 })
@@ -177,6 +220,140 @@ struct AWDLHelperTests {
         #expect(await heartbeatFinished.waitAsync(for: .seconds(10)) == .success)
         #expect(decisions.withLock { $0 } == [expected])
         #expect(suppressor.suppressing)
+    }
+}
+
+struct AWDLProcessTests {
+    @Test func capturesOutputAndRejectsNonzeroExit() throws {
+        let success = try #require(AWDLProcess.run(arguments: ["-c", "printf ready"], executable: "/bin/sh"))
+        #expect(success.succeeded)
+        #expect(String(data: success.output, encoding: .utf8) == "ready")
+        let failure = try #require(AWDLProcess.run(arguments: ["-c", "exit 7"], executable: "/bin/sh"))
+        #expect(!failure.succeeded)
+        #expect(failure.status == 7 << 8)
+        let stderr = try #require(AWDLProcess.run(arguments: ["-c", "printf failure >&2; exit 7"],
+                                                 executable: "/bin/sh", captureErrors: true))
+        #expect(String(data: stderr.output, encoding: .utf8) == "failure")
+        #expect(AWDLProcess.run(arguments: [], executable: "/nonexistent/glimmer-test") == nil)
+    }
+
+    @Test func capsOutputAndDrainsBeyondTheCap() throws {
+        let result = try #require(AWDLProcess.run(arguments: ["-c", "printf 123456"], executable: "/bin/sh", outputLimit: 3))
+        #expect(result.truncated)
+        #expect(!result.succeeded)
+        #expect(String(data: result.output, encoding: .utf8) == "123")
+        let streaming = try #require(AWDLProcess.run(arguments: [], executable: "/usr/bin/yes",
+                                                    timeout: .milliseconds(100), grace: .milliseconds(100), outputLimit: 3))
+        #expect(streaming.timedOut)
+        #expect(streaming.truncated)
+        #expect(streaming.output.count == 3)
+    }
+
+    @Test(arguments: [false, true])
+    func timeoutReapsTheChildBeforeReturning(ignoreTerm: Bool) throws {
+        let command = ignoreTerm ? "trap '' TERM; printf '%s' $$; exec /bin/sleep 30" : "printf '%s' $$; exec /bin/sleep 30"
+        let start = ContinuousClock.now
+        let result = try #require(AWDLProcess.run(arguments: ["-c", command], executable: "/bin/sh",
+                                                timeout: .milliseconds(500), grace: .milliseconds(100)))
+        #expect(result.timedOut)
+        #expect(!result.succeeded)
+        #expect(result.status & 0x7f == (ignoreTerm ? SIGKILL : SIGTERM))
+        #expect(start.duration(to: .now) < .seconds(5))
+        let pidText = try #require(String(data: result.output, encoding: .utf8))
+        let child = try #require(Int32(pidText))
+        var status: Int32 = 0
+        #expect(waitpid(child, &status, WNOHANG) == -1)
+        #expect(errno == ECHILD)
+    }
+}
+
+@MainActor
+struct AWDLLayoutMigrationTests {
+    @Test(arguments: [false, true], [false, true])
+    func disableWaitsForInitialProbeAndRestoration(cancelBeforeProbe: Bool, currentLayout: Bool) async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        harness.layout = currentLayout ? .current : .legacyActive
+        let probe = HelperGate()
+        let release = HelperGate()
+        harness.layoutGate = probe
+        harness.releaseGate = release
+        let manager = harness.makeManager()
+        manager.reconcileAfterUpdate()
+        if cancelBeforeProbe { manager.disable() }
+        #expect(await probe.entered.waitAsync(for: .seconds(5)) == .success)
+        if !cancelBeforeProbe { manager.disable() }
+        #expect(harness.events.isEmpty)
+        probe.open()
+        #expect(await release.entered.waitAsync(for: .seconds(5)) == .success)
+        #expect(harness.events == ["helper-update"])
+        release.open()
+        #expect(await harness.unregistered.waitAsync(for: .seconds(5)) == .success)
+        #expect(harness.events == ["helper-update", "restored", "invalidate", "unregister"])
+    }
+
+    @Test(arguments: [false, true])
+    func reconciliationMigratesActiveAndIdleLegacyJobs(idle: Bool) async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        harness.layout = idle ? .legacyIdle : .legacyActive
+        let manager = harness.makeManager()
+        manager.reconcileAfterUpdate()
+        #expect(await harness.registered.waitAsync(for: .seconds(5)) == .success)
+        #expect(harness.events == (idle ? ["unregister", "register"] : ["helper-update", "restored", "unregister", "register"]))
+    }
+
+    @Test func cancellationCannotBypassMigrationRestoration() async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        harness.layout = .legacyActive
+        let gate = HelperGate()
+        harness.releaseGate = gate
+        let manager = harness.makeManager()
+        manager.reconcileAfterUpdate()
+        #expect(await gate.entered.waitAsync(for: .seconds(5)) == .success)
+        manager.disable()
+        #expect(harness.events == ["helper-update"])
+        gate.open()
+        #expect(await harness.unregistered.waitAsync(for: .seconds(5)) == .success)
+        #expect(harness.events == ["helper-update", "restored", "invalidate", "unregister"])
+    }
+
+    @Test func unknownLayoutRetriesUntilReleaseIsSafe() async {
+        var probes = 0
+        var releases = 0
+        var retries = 0
+        let replace = await AWDLHelperRecovery.prepareMigration(layout: {
+            probes += 1
+            return probes == 1 ? .unknown : .legacyIdle
+        }, release: { releases += 1; return false }, sleep: { _ in retries += 1 })
+        #expect(replace && releases == 1 && retries == 1)
+        let current = await AWDLHelperRecovery.prepareMigration(layout: { .current },
+                                                                release: { releases += 1; return true }, sleep: { _ in })
+        #expect(!current && releases == 1)
+    }
+
+    @Test func onlyConfirmedCleanLegacyIdleStateSkipsRelease() {
+        let clean = """
+        system/io.ugfugl.glimmer.helper = {
+        \tprogram identifier = Contents/MacOS/io.ugfugl.glimmer.helper (mode: 2)
+        \tstate = not running
+        \tactive count = 0
+        \truns = 8
+        \tlast exit code = 0
+        }
+        """
+        #expect(AWDLHelperRecovery.layout(status: 0, output: clean) == .legacyIdle)
+        for changed in [clean.replacingOccurrences(of: "last exit code = 0", with: "last exit code = 1"),
+                        clean + "\n\tpid = 42", clean + "\n\tlast terminating signal = Killed: 9",
+                        clean.replacingOccurrences(of: "active count = 0", with: "active count = 1")] {
+            #expect(AWDLHelperRecovery.layout(status: 0, output: changed) == .legacyActive)
+        }
+        #expect(AWDLHelperRecovery.layout(status: 1, output: clean) == .unknown)
+        #expect(AWDLHelperRecovery.layout(status: 0, output: "unrecognized") == .unknown)
+        let neverRun = clean.replacingOccurrences(of: "runs = 8", with: "runs = 0")
+            .replacingOccurrences(of: "\tlast exit code = 0\n", with: "")
+        #expect(AWDLHelperRecovery.layout(status: 0, output: neverRun) == .legacyIdle)
     }
 }
 

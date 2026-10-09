@@ -42,6 +42,12 @@ final class ControllerHaptics: @unchecked Sendable {
         var triggers: (UInt8, TriggerRumble) -> Void
     }
 
+    struct ActivationGate {
+        var appActive = true
+        var backgroundPlayers: Set<UUID> = []
+        var shouldSuspend: Bool { !appActive && backgroundPlayers.isEmpty }
+    }
+
     static let shared = ControllerHaptics()
     static let logCategory = "Controller"
 
@@ -87,11 +93,9 @@ final class ControllerHaptics: @unchecked Sendable {
     /// (Internal for the +Actuation split, which owns all mutation of the
     /// PadHaptics boxes; this file only inserts/removes mappings.)
     var pads: [UInt8: PadHaptics] = [:]
-    /// App-background gate: motors must not buzz while the user is in another
-    /// app. Engines are torn down on deactivation; events that arrive while
-    /// suspended are dropped (the next post-resume host event re-establishes
-    /// the true level within one game frame).
+    /// Ordinary background playback parks motors; Mini Player retains feedback while another app is active.
     private var suspended = false
+    private var activationGate = ActivationGate()
     /// DEBOUNCE grace before a resign-active actually suspends. macOS resigns
     /// active for plenty of TRANSIENT reasons (a notification banner, Spotlight,
     /// an OS dialog, a fat-fingered Cmd-Tab) - and a controller player is still
@@ -191,8 +195,8 @@ final class ControllerHaptics: @unchecked Sendable {
                 self.pendingSuspend?.cancel()
                 self.pendingSuspend = nil
                 self.quiesced = false
-                self.applySuspended(!active, why: active ? "app active at stream start"
-                                                         : "app inactive at stream start")
+                self.activationGate.appActive = active
+                self.applySuspended(self.activationGate.shouldSuspend, why: "stream start")
             }
         }
     }
@@ -346,31 +350,41 @@ final class ControllerHaptics: @unchecked Sendable {
     // channel machinery, and the per-pad state types live in
     // ControllerHaptics+Actuation.swift - the topic split.)
 
+    @MainActor
+    func setBackgroundPlayEnabled(_ enabled: Bool, for owner: UUID) {
+        let active = NSApplication.shared.isActive
+        queue.async { [weak self] in
+            guard let self else { return }
+            let changed = enabled ? self.activationGate.backgroundPlayers.insert(owner).inserted
+                : self.activationGate.backgroundPlayers.remove(owner) != nil
+            guard changed else { return }
+            self.activationGate.appActive = active
+            self.reconcileSuspension()
+        }
+    }
+
     private func setSuspended(_ suspended: Bool) {
         queue.async { [weak self] in
             guard let self else { return }
-            // Any fresh activation edge supersedes a still-pending debounced
-            // suspend - cancel it first so a quick resign→become can't strand a
-            // teardown that fires AFTER the user is already back.
-            self.pendingSuspend?.cancel()
-            self.pendingSuspend = nil
-            guard suspended else {
-                // Resume is immediate: becoming active restores rumble at once
-                // (the next host event re-actuates and lazily rebuilds engines).
-                self.applySuspended(false, why: "app became active")
-                return
-            }
-            // DEBOUNCE the suspend - only tear down if the app stays inactive past
-            // the grace window (a transient focus loss never reaches here).
-            let work = DispatchWorkItem { [weak self] in
-                guard let self else { return }
-                self.pendingSuspend = nil
-                self.applySuspended(true,
-                                    why: "app inactive \(Int(Self.suspendGraceSeconds))s")
-            }
-            self.pendingSuspend = work
-            self.queue.asyncAfter(deadline: .now() + Self.suspendGraceSeconds, execute: work)
+            self.activationGate.appActive = !suspended
+            self.reconcileSuspension()
         }
+    }
+
+    private func reconcileSuspension() {
+        pendingSuspend?.cancel()
+        pendingSuspend = nil
+        guard activationGate.shouldSuspend else {
+            applySuspended(false, why: "controller playback active")
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.activationGate.shouldSuspend, !self.quiesced else { return }
+            self.pendingSuspend = nil
+            self.applySuspended(true, why: "app inactive \(Int(Self.suspendGraceSeconds))s")
+        }
+        pendingSuspend = work
+        queue.asyncAfter(deadline: .now() + Self.suspendGraceSeconds, execute: work)
     }
 
     /// Queue-confined gate write, shared by the notification edges and the

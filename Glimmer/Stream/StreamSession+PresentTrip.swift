@@ -52,21 +52,8 @@ extension StreamSession {
         /// touch a latched `isReadyForMoreMediaData`. Never a trip condition
         /// on its own - it only re-aims recovery inside a tripped episode.
         let rendererRejecting: Bool
-        /// RENDERER-STARVATION trip (the depth-0 wedge, audit 2026-08-17): a
-        /// DEEP consecutive reject streak IS a trip in its own right, because
-        /// every other trip is structurally blind at depth 0. During warm
-        /// handover (and the pre-first-release stretch of a fresh pacer) every
-        /// submit bypasses the queue and direct-presents: depth pins at 0 and
-        /// totalReleases at 0, so `presentStalled`/`tickDeficit` can never
-        /// open, `linkDead` stays false on a ticking link, and warm-up itself
-        /// only exits on healthy tick windows a frozen screen may never
-        /// produce - a latched renderer then discarded EVERY decoded frame
-        /// indefinitely with healthy-looking fps_decoded. The streak is
-        /// jitter-proof by construction: it is consecutive (any accepted
-        /// present resets it), renderer-side (network jitter cannot move it),
-        /// and each increment is PROOF a decoded frame reached `willPresent` -
-        /// so no "frames are flowing" guard is needed and `totalReleases > 0`
-        /// is deliberately NOT required.
+        /// Sustained renderer refusals trip even when every attempt empties the queue.
+        /// This covers warm handover and a fresh pacer before its first accepted frame.
         let rendererStarved: Bool
         var tripped: Bool { linkDead || presentStalled || tickDeficit || rendererStarved }
     }
@@ -133,23 +120,21 @@ extension StreamSession {
     /// only ever re-aims recovery INSIDE an episode the jitter-proof trips
     /// already opened.
     static let rendererRejectStreakTrip: Int = 8
-    /// Consecutive rejections at which the streak becomes a TRIP in its own
-    /// right (`rendererStarved`), not just a medicine selector - the only
-    /// signal that can open an episode at depth 0 (warm handover / fresh
-    /// pacer). 90 in a row ≈ 750ms of continuous refusal at 120fps (3s at
-    /// 30fps) with not one accepted present - an order of magnitude past the
-    /// ~8-reject transients healthy operation produces and comfortably past
-    /// the ~40 a latched renderer racks up before the paced trips could fire.
-    /// Deliberately far above `rendererRejectStreakTrip`: classification
-    /// re-aims an already-open episode cheaply at 8; OPENING an episode from
-    /// this signal alone demands the deep-wedge shape.
+    /// Deep-streak fallback retained alongside the timed refusal window. It also
+    /// catches a high-rate refusal burst before the normal freeze window expires.
     static let rendererStarvationStreakTrip: Int = 90
 
-    /// The renderer-starvation trip predicate, pure (unit-tested): a deep
-    /// consecutive reject streak outside the startup grace. See the
-    /// `PresentTrip.rendererStarved` doc for why no depth/release guard exists.
-    static func rendererStarvationTripped(rejectStreak: Int, inStartupGrace: Bool) -> Bool {
-        !inStartupGrace && rejectStreak >= rendererStarvationStreakTrip
+    /// Refusals can empty the queue at every tick. Measure their duration as well as
+    /// count, so recovery doesn't wait for 90 frames at a lower stream rate.
+    /// A stale last attempt cannot turn a network drought into a renderer freeze.
+    static func rendererStarvationTripped(
+        rejectStreak: Int, inStartupGrace: Bool,
+        refusalSeconds: Double = 0, sinceLastReject: Double = .infinity
+    ) -> Bool {
+        guard !inStartupGrace, sinceLastReject <= presentStallThreshold else { return false }
+        return rejectStreak >= rendererStarvationStreakTrip
+            || (rejectStreak >= rendererRejectStreakTrip
+                && refusalSeconds > presentStallThreshold)
     }
 
     /// The present-freeze trip predicate, pure (unit-tested); rationale inline
@@ -266,7 +251,8 @@ extension StreamSession {
         // medicine (the proven cure for the latched-renderer class) is always
         // selected for episodes this trip opens.
         let rendererStarved = StreamSession.rendererStarvationTripped(
-            rejectStreak: live.presentRejectStreak, inStartupGrace: inStartupGrace)
+            rejectStreak: live.presentRejectStreak, inStartupGrace: inStartupGrace,
+            refusalSeconds: live.rendererRefusalSeconds, sinceLastReject: live.secondsSinceLastReject)
 
         return PresentTrip(
             linkDead: linkDead, presentStalled: presentStalled, tickDeficit: tickDeficit,

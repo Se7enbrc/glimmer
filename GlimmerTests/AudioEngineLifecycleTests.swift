@@ -127,6 +127,33 @@ struct AudioEngineLifecycleTests {
         decoder.stateLock.unlock()
     }
 
+    @Test(arguments: [false, true])
+    func recoveryReconnectsAPartiallyDisconnectedGraph(primeEdge: Bool) throws {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        decoder.inputFormat = format
+        decoder.engine.attach(decoder.playerNode)
+        decoder.engine.attach(decoder.varispeed)
+        decoder.engine.connect(decoder.playerNode, to: decoder.varispeed, format: format)
+        decoder.connectOutputGraph(format: format, route: AudioOutputRoute())
+        try decoder.engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 240)
+        try decoder.engine.start()
+        decoder.engine.stop()
+        // A route-change exception after disconnecting leaves this exact repair state.
+        decoder.engine.disconnectNodeOutput(decoder.varispeed)
+        decoder.outputGraphNeedsReconnect = true
+        if primeEdge {
+            decoder.stateLock.withLock { #expect(decoder.startPlayoutAtPrimeEdge()) }
+        } else {
+            decoder.retryEngineStart(attempt: 1, generation: decoder.engineRestartGeneration)
+        }
+        #expect(decoder.engine.isRunning)
+        #expect(!decoder.outputGraphNeedsReconnect)
+        #expect(decoder.engine.outputConnectionPoints(for: decoder.varispeed, outputBus: 0)
+            .contains { $0.node === decoder.engine.mainMixerNode })
+    }
+
     private static let rawListenerFired = DispatchSemaphore(value: 0)
 
     /// The per-session listener leak: Swift hands a C API a fresh block per call, so a block remove never matched.
@@ -194,5 +221,109 @@ struct AudioEngineLifecycleTests {
         #expect(released != nil)
         backend.stopConnection()
         #expect(released == nil)
+    }
+}
+
+extension AudioPlayoutStallTests {
+    @Test(arguments: [false, true])
+    func graphReplacementDiscardsPendingDrainEvidence(replaceGraph: Bool) throws {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        decoder.inputFormat = format
+        decoder.engine.attach(decoder.playerNode)
+        decoder.engine.attach(decoder.varispeed)
+        decoder.engine.connect(decoder.playerNode, to: decoder.varispeed, format: format)
+        decoder.connectOutputGraph(format: format, route: AudioOutputRoute())
+        try decoder.engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 240)
+        try decoder.engine.start()
+        decoder.lastOutputFormat = decoder.engine.outputNode.outputFormat(forBus: 0)
+        decoder.outputGraphNeedsReconnect = replaceGraph
+        decoder.meterSampleRate = 48_000
+        decoder.framesScheduled = 240
+        decoder.playoutStarted = true
+        decoder.primed = true
+        decoder.playoutTargetMs = 60
+        decoder.cushionLinkResolved = true
+        decoder.meterCompleteOnePlayout(frames: 240)
+        decoder.noteArrivalGap(nanos: 5_000_000)
+        #expect(decoder.pendingUnderrunTargetMs == 60)
+
+        decoder.handleEngineConfigurationChange()
+        #expect(decoder.engine.isRunning)
+        #expect(decoder.pendingUnderrunTargetMs == (replaceGraph ? nil : 60))
+        #expect(decoder.underrunArrivalGapNanos == (replaceGraph ? 0 : 5_000_000))
+        #expect(!decoder.meterRegisterScheduleOrOverrun(frames: 240))
+
+        #expect(decoder.playoutTargetMs == (replaceGraph ? 60 : 70))
+        #expect(decoder.learnedFloorMs == (replaceGraph ? 0 : 60))
+        #expect(decoder.framesPlayed == 240)
+        #expect(decoder.framesScheduled == 480)
+    }
+}
+
+struct AudioOutputDiagnosticTests {
+    @Test func coalescingRetainsBookmarkRangesAndBoundsQueuedWork() {
+        var requests = AudioOutputDiagnosticRequests()
+        let initialQueued = requests.request(bookmark: nil)
+        #expect(initialQueued)
+        for marker in UInt64(1)...100 {
+            let queued = requests.request(bookmark: marker)
+            #expect(!queued)
+        }
+        let first = requests.take()
+        #expect(first.first == 1)
+        #expect(first.last == 100)
+        // Requests arriving during the HAL read become exactly one successor capture.
+        let bookmarkQueued = requests.request(bookmark: 101)
+        let automaticQueued = requests.request(bookmark: nil)
+        #expect(!bookmarkQueued)
+        #expect(!automaticQueued)
+        let successorNeeded = requests.finish()
+        #expect(successorNeeded)
+        let next = requests.take()
+        #expect(next.first == 101)
+        #expect(next.last == 101)
+        let successorFinished = requests.finish()
+        #expect(!successorFinished)
+        let laterQueued = requests.request(bookmark: nil)
+        #expect(laterQueued)
+        let automatic = requests.take()
+        #expect(automatic.last == nil)
+        let laterFinished = requests.finish()
+        #expect(!laterFinished)
+    }
+
+    @Test func diagnosticFieldsAreFiniteAndContainOnlyOutputState() throws {
+        let snapshot = AudioOutputDiagnostic(
+            playerGain: 1, mainGain: 0, spatialGain: .nan, sampleRate: 48_000,
+            channels: 2, muted: true, running: true, halVolume: 0.75, halMuted: false)
+        let fields = snapshot.fields(bookmarks: .init(first: 7, last: 9))
+        let data = Data(("{" + fields.joined(separator: ",") + "}").utf8)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(Set(object.keys) == Set([
+            "event", "reason", "output_channels", "stream_muted", "engine_running", "default_route_changed",
+            "player_gain", "main_mixer_gain", "output_rate_hz", "hal_output_volume", "hal_output_muted",
+            "bookmark_first", "bookmark_total"]))
+        #expect(object["hal_output_volume"] as? Double == 0.75)
+        #expect(object["main_mixer_gain"] as? Double == 0)
+        #expect(object["reason"] as? String == "bookmark")
+        #expect(object["bookmark_total"] as? Int == 9)
+    }
+
+    @Test(arguments: [false, true])
+    func unavailableOrChangingRouteOmitsVolume(changed: Bool) throws {
+        let snapshot = AudioOutputDiagnostic(
+            playerGain: 1, mainGain: 1, spatialGain: nil, sampleRate: 48_000,
+            channels: 2, muted: false, running: true, halVolume: changed ? 0.8 : nil,
+            halMuted: changed ? false : nil, routeChanged: changed)
+        let fields = snapshot.fields(bookmarks: .init())
+        let data = Data(("{" + fields.joined(separator: ",") + "}").utf8)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["hal_output_volume"] == nil)
+        #expect(object["hal_output_muted"] == nil)
+        #expect(object["spatial_mixer_gain"] == nil)
+        #expect(object["default_route_changed"] as? Bool == changed)
+        #expect(object["reason"] as? String == "configuration")
     }
 }

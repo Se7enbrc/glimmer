@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Insert or replace a single <item> in a Sparkle appcast.xml.
+"""Insert a new release into a Sparkle appcast.xml, preserving published items.
 
 Usage:
   update-appcast.py <appcast.xml> \
@@ -10,9 +10,8 @@ Usage:
 
   update-appcast.py <appcast.xml> --backfill [--dry-run]
 
-Idempotent on <sparkle:version> (the build number): an existing item with the
-same build number is replaced, and the new item is inserted ahead of the others
-(newest first). The file is written back in place.
+New build numbers must exceed every published build. An exact retry leaves
+the file unchanged; a reused build or changed published enclosure is refused.
 
 Each item carries that version's CHANGELOG.md section as HTML inside a CDATA
 <description>, which is what Sparkle's update dialog shows as "what's new". A
@@ -31,6 +30,7 @@ from email.utils import formatdate
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import changelog  # noqa: E402  (sibling module, path set above)
+from release_validation import validate_feed  # noqa: E402
 
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 ET.register_namespace("sparkle", SPARKLE)
@@ -133,6 +133,9 @@ def main() -> None:
     ap.add_argument("appcast")
     ap.add_argument("--short-version")
     ap.add_argument("--version", help="build number (CFBundleVersion)")
+    ap.add_argument("--channel", choices=("rc",), default="")
+    ap.add_argument("--title", help="display title, independent of the bundle version")
+    ap.add_argument("--promote", action="store_true", help="move an existing candidate to the stable channel")
     ap.add_argument("--url")
     ap.add_argument("--ed-signature")
     ap.add_argument("--length")
@@ -144,6 +147,10 @@ def main() -> None:
     a = ap.parse_args()
 
     insert = a.short_version is not None
+    if a.promote and (not insert or a.channel or a.backfill):
+        ap.error("--promote requires item arguments and cannot combine with --channel or --backfill")
+    if (a.channel or a.title) and not insert:
+        ap.error("--channel and --title require item arguments")
     if insert:
         missing = [n for n in ("version", "url", "ed_signature", "length") if getattr(a, n) is None]
         if missing:
@@ -161,17 +168,43 @@ def main() -> None:
     if channel is None:
         print("ERR: no <channel> in appcast", file=sys.stderr)
         sys.exit(1)
+    if insert:
+        try:
+            existing = validate_feed(channel, a.short_version, a.version, a.channel, a.promote)
+            if existing is not None:
+                enclosure = existing.find("enclosure")
+                expected = {"url": a.url, sk("edSignature"): a.ed_signature, "length": a.length}
+                if enclosure is None or any(enclosure.get(key) != value for key, value in expected.items()):
+                    raise ValueError("published update bytes are immutable; bump the version")
+                if existing.findtext(sk("minimumSystemVersion")) != a.min_system:
+                    raise ValueError("published minimum system version is immutable")
+                insert = False
+                if a.promote and existing.find(sk("channel")) is not None:
+                    existing.remove(existing.find(sk("channel")))
+                    title = existing.find("title")
+                    if title is None:
+                        title = ET.SubElement(existing, "title")
+                    title.text = a.short_version
+                    retag_descriptions(channel)
+                    write(tree, a.appcast, a.dry_run)
+                    print(f"  ✓ promoted {a.short_version} ({a.version})",
+                          file=sys.stderr if a.dry_run else sys.stdout)
+                    return
+                if not a.backfill:
+                    if a.dry_run:
+                        with open(a.appcast, encoding="utf-8") as source:
+                            sys.stdout.write(source.read())
+                    else:
+                        print("  = appcast already current")
+                    return
+        except ValueError as error:
+            ap.error(str(error))
+
     retag_descriptions(channel)
 
     if insert:
-        # Drop any existing item with the same build number (re-publish / re-sign).
-        for item in channel.findall("item"):
-            v = item.find(sk("version"))
-            if v is not None and v.text == a.version:
-                channel.remove(item)
-
         item = ET.Element("item")
-        ET.SubElement(item, "title").text = a.short_version
+        ET.SubElement(item, "title").text = a.title or a.short_version
         html_text = description_for(cl_text, a.short_version) if cl_text else None
         if html_text is not None:
             ET.SubElement(item, "description").text = html_text
@@ -182,6 +215,8 @@ def main() -> None:
         ET.SubElement(item, "pubDate").text = formatdate(usegmt=True)
         ET.SubElement(item, sk("version")).text = a.version
         ET.SubElement(item, sk("shortVersionString")).text = a.short_version
+        if a.channel:
+            ET.SubElement(item, sk("channel")).text = a.channel
         ET.SubElement(item, sk("minimumSystemVersion")).text = a.min_system
         if a.release_notes_url:
             ET.SubElement(item, sk("releaseNotesLink")).text = a.release_notes_url

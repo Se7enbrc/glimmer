@@ -29,6 +29,8 @@ node_modules/
 *.hmap
 
 ## App packaging
+*.provisionprofile
+*.mobileprovision
 *.ipa
 *.dSYM.zip
 *.dSYM

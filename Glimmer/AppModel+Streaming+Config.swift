@@ -187,8 +187,12 @@ extension AppModel {
     /// snapshot names one that is in the applist. Host truth is the one thing
     /// allowed to override the Default action: the button then restarts it.
     var resumableAppName: String? {
-        guard let host = selectedHost, let live = hostLiveStatus,
-              Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
+        guard let host = selectedHost else { return nil }
+        return resumableAppName(on: host)
+    }
+
+    private func resumableAppName(on host: Host) -> String? {
+        guard let live = hostLiveStatus, HostLiveStatus.isFresh(live, for: host.id),
               case .streamingApp(let name) = live.state,
               host.apps.contains(where: { $0.name == name }) else { return nil }
         return name
@@ -212,7 +216,12 @@ extension AppModel {
     /// Default action does. `glimmer stream <pc>` launches the same one.
     var heroTargetApp: LibraryApp? {
         guard let host = selectedHost else { return nil }
-        return host.apps.first { $0.name == heroTargetAppName }
+        return heroTargetApp(on: host)
+    }
+
+    func heroTargetApp(on host: Host) -> LibraryApp? {
+        let targetName = resumableAppName(on: host) ?? defaultLaunchApp
+        return host.apps.first { $0.name == targetName }
             ?? host.apps.first { $0.name == "Desktop" }
             ?? host.apps.first
     }
@@ -232,9 +241,7 @@ extension AppModel {
                                fps: effectiveFPS, bitrateKbps: effectiveBitrateKbps)
         cfg.captureSysKeys = captureSysKeys
         cfg.playAudioOnHost = muteMacWhileStreaming
-        // The notch choice only means something on a notched panel; elsewhere
-        // the session always takes the borderless cover (see
-        // effectiveStreamCoversNotch for the issue this closes).
+        // Each display type retains its own choice of borderless cover or native Space.
         cfg.coversNotch = effectiveStreamCoversNotch
         cfg.displayMode = effectiveDisplayMode
         cfg.videoFormats = offeredVideoFormats(for: host)

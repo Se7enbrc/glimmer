@@ -84,8 +84,9 @@ enum ControlTransport {
         let exchange = Exchange(host: host, port: port, request: Data(request.utf8), lifetime: lifetime)
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
-            guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else {
-                throw StreamError.hostUnreachable("connect to \(host):\(port) failed or timed out")
+            guard let rawPort = UInt16(exactly: port), rawPort > 0,
+                  let endpointPort = NWEndpoint.Port(rawValue: rawPort) else {
+                throw StreamError.hostUnreachable("invalid control port \(port)")
             }
             let parameters = try exchange.parameters(tls: tls, credential: credential)
             return try await exchange.run(NWConnection(host: NWEndpoint.Host(host), port: endpointPort,
@@ -129,6 +130,7 @@ enum ControlTransport {
                 sec_protocol_options_set_local_identity(security, try clientIdentity(certPEM: certPEM, keyPEM: keyPEM))
             }
             let pinned = try credential.pinnedCertPEM.map { pem in
+                _ = try PEM.certificateKey(pem, context: "paired PC certificate")
                 guard let der = PEM.der(pem) else { throw StreamError.crypto("could not parse pinned host cert") }
                 return der
             }
@@ -140,7 +142,13 @@ enum ControlTransport {
                     rejection.withLock { $0 = "host presented no certificate" }
                     return complete(false)
                 }
-                let matches = pinned.map { SecCertificateCopyData(leaf) as Data == $0 } ?? true
+                let matches: Bool
+                do {
+                    matches = try acceptsHostCertificate(leaf, pinnedDER: pinned)
+                } catch {
+                    rejection.withLock { $0 = "PC certificate requires an RSA key of at least 2048 bits" }
+                    return complete(false)
+                }
                 if !matches { rejection.withLock { $0 = "pinned host cert mismatch" } }
                 complete(matches)
             }, queue)
@@ -220,12 +228,16 @@ enum ControlTransport {
 
     // MARK: - Client identity (PEM to an in-memory identity, no keychain)
 
+    static func acceptsHostCertificate(_ certificate: SecCertificate, pinnedDER: Data?) throws -> Bool {
+        _ = try PEM.certificateKey(certificate, context: "PC certificate")
+        return pinnedDER.map { SecCertificateCopyData(certificate) as Data == $0 } ?? true
+    }
+
     /// The client identity from its PEM files, held in memory only.
     static func clientIdentity(certPEM: String, keyPEM: String) throws -> sec_identity_t {
-        guard let cert = PEM.certificate(certPEM) else { throw StreamError.crypto("could not parse client cert PEM") }
-        guard let key = PEM.privateKey(keyPEM) else { throw StreamError.crypto("could not parse client key PEM") }
-        guard let identity = SecIdentityCreate(nil, cert, key), let secIdentity = sec_identity_create(identity) else {
-            throw StreamError.crypto("client cert/key mismatch")
+        let identity = try PEM.identity(certPEM: certPEM, keyPEM: keyPEM)
+        guard let secIdentity = sec_identity_create(identity) else {
+            throw StreamError.crypto("could not create TLS client identity")
         }
         return secIdentity
     }

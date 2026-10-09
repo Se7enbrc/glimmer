@@ -79,7 +79,7 @@ struct EnvSignalEvidenceTests {
 
 // MARK: - RTP queue: reorder hold, FEC rebuild and datagram clock
 
-/// Serialized: the hold counters and the datagram clock are process-global.
+/// Serialized within this suite because the datagram clock is process-global.
 @Suite(.serialized)
 struct RtpVideoQueueRecoveryTests {
 
@@ -120,19 +120,19 @@ struct RtpVideoQueueRecoveryTests {
     /// On a reordering link, the next frame's first packet is held while the
     /// current frame's late shard lands; the frame completes and counts as rescued.
     @Test func reorderHoldIsTakenAndRescued() {
-        let counters = TelemetryCounters.shared
-        let taken = counters.reorderHoldTakenTotal.value, rescued = counters.reorderHoldRescuedTotal.value
         let queue = makeQueue(av1: true)
         queue.receivedOosData = true
         queue.addRawDatagram(datagram(seq: 0, frame: 1, fecIndex: 0, flags: RtpVideoQueue.FLAG_SOF),
                              receiveTimeUs: 1_000)
         queue.addRawDatagram(datagram(seq: 3, frame: 2, fecIndex: 0, flags: RtpVideoQueue.FLAG_SOF),
                              receiveTimeUs: 2_000)
-        #expect(counters.reorderHoldTakenTotal.value == taken + 1)
-        #expect(counters.reorderHoldRescuedTotal.value == rescued)
+        // Other suites also update shared telemetry; prove this queue's hold and rescue directly.
+        #expect(queue.deferredDatagram != nil)
+        #expect(queue.currentFrameNumber == 1)
+        #expect(delegate.units.isEmpty)
         queue.addRawDatagram(datagram(seq: 1, frame: 1, fecIndex: 1, flags: RtpVideoQueue.FLAG_EOF),
                              receiveTimeUs: 3_000)
-        #expect(counters.reorderHoldRescuedTotal.value == rescued + 1)
+        #expect(queue.deferredDatagram == nil)
         #expect(queue.currentFrameNumber == 2)
         queue.addRawDatagram(datagram(seq: 4, frame: 2, fecIndex: 1, flags: RtpVideoQueue.FLAG_EOF),
                              receiveTimeUs: 4_000)

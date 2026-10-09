@@ -5,23 +5,21 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug. Glimmer's debugging culture
-        is telemetry-first: a session scorecard plus the session log usually
-        localizes a streaming problem in minutes, where a prose description
-        alone can take days. Telemetry is **opt-in and stays on your Mac until
-        you attach it.** The files carry performance numbers and Glimmer's log
-        lines, including the app you streamed and your display and network
-        setup. Your PC and Mac appear as short codes, not names, and addresses
-        and error details read `<private>`. Encryption keys, PINs and the text
-        you type are never recorded.
+        Describe what went wrong and how to reproduce it. For streaming
+        problems, an optional session scorecard and log can help. Telemetry
+        **stays on your Mac until you attach it.** The files include performance
+        numbers, the app you streamed, and your display and network setup.
+        PC and Mac names appear as short codes; addresses and private error
+        details are redacted. Review every attachment before posting, and never
+        include keys, PINs, certificates or provisioning profiles.
   - type: input
     id: version
     attributes:
       label: Glimmer version
       description:
-        Menu bar → About, or `defaults read
+        Settings → About, or `defaults read
         /Applications/Glimmer.app/Contents/Info CFBundleShortVersionString`
-      placeholder: "2026.8.15 (20260830)"
+      placeholder: "2026.10.6"
     validations:
       required: true
   - type: input
@@ -34,17 +32,17 @@ body:
   - type: input
     id: host
     attributes:
-      label: Host (Sunshine/GFE version + OS + GPU)
+      label: PC (Sunshine version, OS and GPU)
       placeholder: "Sunshine 2026.8.26, Windows 11, RTX 4080"
     validations:
       required: true
   - type: dropdown
     id: link
     attributes:
-      label: Network link between Mac and host
+      label: Network link between Mac and PC
       options:
         - Wired Ethernet (both ends)
-        - Wi-Fi (Mac) → wired host
+        - Wi-Fi (Mac) → wired PC
         - Wi-Fi both ends
         - VPN / tailnet / remote
         - Not sure
@@ -79,8 +77,8 @@ body:
            - (optionally) `telemetry-<timestamp>.ndjson` - per-second metrics,
              if the file isn't too large to attach
 
-        Lines copied from Settings → Diagnostics → Logs keep full detail,
-        including your PC's name and address. Remove those before pasting.
+        Copied logs and session files redact private fields. Review them before
+        uploading; streamed app names and display or network details may remain.
       placeholder: Drag and drop the files here.
   - type: textarea
     id: extra

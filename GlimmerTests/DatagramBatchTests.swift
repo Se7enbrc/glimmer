@@ -26,8 +26,8 @@ struct DatagramBatchTests {
         #expect(MemoryLayout<Record>.offset(of: \.dataLength) == 48)
     }
 
-    /// Five queued datagrams come back from one call, each with its own length and bytes.
-    @Test func receivesQueuedDatagramsInOneCall() throws {
+    /// Each receive path preserves payloads and reports the sender's address independently of its port.
+    @Test(arguments: [true, false]) func receivesQueuedDatagrams(batched: Bool) throws {
         let receiver = socket(AF_INET, SOCK_DGRAM, 0)
         let sender = socket(AF_INET, SOCK_DGRAM, 0)
         defer { close(receiver); close(sender) }
@@ -58,9 +58,15 @@ struct DatagramBatchTests {
         try #require(waitForQueuedDatagrams(Int32(sizes.count), on: receiver))
 
         let batch = DatagramBatch(capacity: 32, stride: 1500)
-        #expect(batch.receive(from: receiver) == sizes.count)
+        let expected = try #require(UdpPinger.makeSockaddr(for: .init("127.0.0.1"), port: 1))
+        let other = try #require(UdpPinger.makeSockaddr(for: .init("127.0.0.2"), port: 1))
+        if batched { #expect(batch.receive(from: receiver) == sizes.count) }
         for (index, size) in sizes.enumerated() {
-            let datagram = batch.datagram(index)
+            if !batched { #expect(batch.receiveOne(from: receiver) == 1) }
+            let slot = batched ? index : 0
+            #expect(batch.isExpectedPeer(at: slot, expected: expected.0, expectedLength: expected.1))
+            #expect(!batch.isExpectedPeer(at: slot, expected: other.0, expectedLength: other.1))
+            let datagram = batch.datagram(slot)
             #expect(datagram.length == size)
             let bytes = UnsafeBufferPointer(start: datagram.bytes, count: datagram.length)
             #expect(bytes.allSatisfy { $0 == UInt8(index + 1) })

@@ -44,4 +44,18 @@ struct ModifierSidesTests {
         #expect(ModifierSides.held(in: flags(command | 0x8), includeCommand: true) == [0x5B])
         #expect(ModifierSides.held(in: flags(command | 0x10), includeCommand: true) == [0x5C])
     }
+
+    @Test func keyFlagsRecoverMissingModifierReleases() {
+        #expect(ModifierSides.released(from: [0xA2, 0xA3, 0x5B], in: [], includeCommand: true)
+                == [0xA2, 0xA3, 0x5B])
+        #expect(ModifierSides.released(from: [0xA0, 0xA1], in: flags(shift | 0x4), includeCommand: false)
+                == [0xA0])
+        #expect(ModifierSides.released(from: [0x5B], in: flags(command | 0x8), includeCommand: false)
+                == [0x5B])
+    }
+
+    @Test func syntheticFlagsPreserveHeldRightModifierWithoutPressingLeft() {
+        #expect(ModifierSides.released(from: [0xA3], in: flags(control), includeCommand: false).isEmpty)
+        #expect(ModifierSides.released(from: [], in: flags(control), includeCommand: false).isEmpty)
+    }
 }

@@ -9,59 +9,175 @@
 import AppKit
 import GameController
 import Testing
-import os
 @testable import Glimmer
-
-private struct ControllerSend: Sendable {
-    let num: Int16
-    let mask: Int16
-    let buttons: Int32
-    let analog: GamepadAnalog
-}
-
-private final class RecordingBackend: StreamingBackend {
-    private let sends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
-
-    var calls: [ControllerSend] { sends.withLock { $0 } }
-
-    func startConnection(server: BackendServerInfo, config: BackendStreamConfig) throws {}
-    func stopConnection() {}
-    func interruptConnection() {}
-    func attachVideoSink(_ sink: VideoSink) {}
-    func attachAudioSink(_ sink: NativeAudioSink) {}
-    func estimatedRtt() -> (rttMs: Double, varianceMs: Double)? { nil }
-    func requestIdrFrame() {}
-    func hdrMetadata() -> HdrMetadata? { nil }
-    func launchUrlQueryParameters() -> String { "" }
-    func stageName(for stage: Int32) -> String { "" }
-    func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 { 0 }
-    func sendMouseMove(dx: Int16, dy: Int16) -> Int32 { 0 }
-    func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 { 0 }
-    func sendMouseButton(action: Int8, button: Int32) -> Int32 { 0 }
-    func sendScroll(_ amount: Int16) -> Int32 { 0 }
-    func sendHScroll(_ amount: Int16) -> Int32 { 0 }
-    func sendMultiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> Int32 {
-        sends.withLock { $0.append(ControllerSend(num: num, mask: mask, buttons: buttons, analog: analog)) }
-        return 0
-    }
-    func sendControllerArrival(
-        num: UInt8, mask: UInt16, type: UInt8,
-        supportedButtons: UInt32, caps: UInt16
-    ) -> Int32 { 0 }
-    func sendControllerTouch(
-        num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
-        pointerId: UInt32, x: Float, y: Float, pressure: Float
-    ) -> Int32 { 0 }
-    func sendControllerMotion(
-        num: UInt8, motionType: UInt8, x: Float, y: Float, z: Float
-    ) -> Int32 { 0 }
-    func sendUtf8Text(_ text: String) -> Int32 { 0 }
-}
 
 @MainActor
 struct ControllerArrivalTests {
 
     private typealias Arrival = InputForwarder.ControllerArrival
+
+    @Test func touchContactsEndOnFocusLossAndRestartWithNewIDsInMiniPlayer() throws {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        let window = ControllerFocusTestWindow()
+        window.focused = true
+        forwarder.attach(to: window)
+        forwarder.isReady = true
+        let backend = InputRecordingBackend()
+        forwarder.setBackend(backend)
+        let primary: (Float, Float) = (0.5, -0.25)
+        let secondary: (Float, Float) = (-0.5, 0.25)
+        forwarder.forwardTouchpad(slot: 0, primary: primary, secondary: secondary)
+        let original = backend.touches
+        #expect(original.count == 2)
+        #expect(original.allSatisfy { $0.eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_DOWN) })
+
+        window.focused = false
+        forwarder.windowResignedKey()
+        #expect(backend.touches.suffix(2).allSatisfy { $0.eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_UP) })
+        #expect(backend.touches.suffix(2).map(\.pointerId) == original.map(\.pointerId))
+        #expect(forwarder.touchpadStates.isEmpty)
+        let afterRelease = backend.touches.count
+        forwarder.forwardTouchpad(slot: 0, primary: primary, secondary: secondary)
+        #expect(backend.touches.count == afterRelease)
+
+        forwarder.setMiniPlayer(true)
+        forwarder.forwardTouchpad(slot: 0, primary: primary, secondary: secondary)
+        #expect(backend.touches.suffix(2).allSatisfy { $0.eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_DOWN) })
+        #expect(Set(backend.touches.suffix(2).map(\.pointerId)).isDisjoint(with: original.map(\.pointerId)))
+        let inMiniPlayer = backend.touches.count
+        forwarder.windowResignedKey()
+        #expect(backend.touches.count == inMiniPlayer)
+        forwarder.setMiniPlayer(false)
+        #expect(backend.touches.count == inMiniPlayer + 2)
+        #expect(backend.touches.suffix(2).allSatisfy { $0.eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_UP) })
+    }
+
+    @Test(arguments: [false, true])
+    func controllerTouchesRetireOnConnectionLossOrTeardown(teardown: Bool) {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        let backend = InputRecordingBackend()
+        forwarder.setBackend(backend)
+        forwarder.isReady = true
+        forwarder.forwardTouchpad(slot: 0, primary: (0.5, 0.5), secondary: (0, 0))
+        if teardown { forwarder.detach() } else { forwarder.setReady(false) }
+        #expect(forwarder.touchpadStates.isEmpty)
+        #expect(backend.touches.count == 2)
+        #expect(backend.touches.last?.eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_UP))
+        #expect(backend.touches.last?.pressure == 0)
+        forwarder.forwardTouchpad(slot: 0, primary: (0.75, 0.5), secondary: (0, 0))
+        #expect(backend.touches.count == 2)
+    }
+
+    @Test func miniPlayerKeepsRumbleWhenTheAppIsInactiveWithoutBypassingStreamTeardown() {
+        var gate = ControllerHaptics.ActivationGate(appActive: false)
+        let owner = UUID()
+        #expect(gate.shouldSuspend)
+        gate.backgroundPlayers.insert(owner)
+        #expect(!gate.shouldSuspend)
+        var motors = 0
+        let actions = ControllerHaptics.DrainActions(light: { _, _ in }, playerLEDs: { _, _ in },
+                                                     hidRumble: { _, _ in motors += 1 },
+                                                     rumble: { _, _ in motors += 1 }, triggers: { _, _ in motors += 1 })
+        var drain = ControllerHaptics.PendingDrain(rumble: [0: (10, 20)], submittedAt: [:],
+                                                   triggers: [0: (30, 40)], lights: [:], playerLEDs: [:],
+                                                   gameControllerSlots: [], suspended: gate.shouldSuspend, quiesced: false)
+        ControllerHaptics.processDrain(drain, actions: actions)
+        #expect(motors == 3)
+        gate.appActive = true
+        gate.appActive = false
+        #expect(!gate.shouldSuspend)
+        drain.quiesced = true
+        ControllerHaptics.processDrain(drain, actions: actions)
+        #expect(motors == 3)
+        gate.backgroundPlayers.remove(owner)
+        drain.suspended = gate.shouldSuspend
+        drain.quiesced = false
+        ControllerHaptics.processDrain(drain, actions: actions)
+        #expect(motors == 3)
+    }
+
+    @Test func miniPlayerKeepsHeldControllerInputWhileKeyboardAndMouseRelease() throws {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        let window = ControllerFocusTestWindow()
+        forwarder.attach(to: window)
+        forwarder.setWindowMode(true)
+        let pad = GCController.withExtendedGamepad()
+        let gamepad = try #require(pad.extendedGamepad)
+        gamepad.buttonA.setValue(1)
+        forwarder.attach(gamepad: pad)
+        let slot = try #require(forwarder.attachedControllers[ObjectIdentifier(pad)]?.slot)
+        let backend = InputRecordingBackend()
+        forwarder.setBackend(backend)
+        forwarder.isReady = true
+        forwarder.sendGamepadUpdate(pad: gamepad, slot: slot)
+        #expect(backend.calls.isEmpty)
+
+        forwarder.setMiniPlayer(true)
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+        let beforeFocusLoss = backend.calls.count
+        forwarder.heldKeys = [0x57]
+        forwarder.heldMouseButtons = [StreamProtocol.BUTTON_LEFT]
+        forwarder.windowResignedKey()
+        #expect(backend.calls.count == beforeFocusLoss)
+        #expect(forwarder.heldKeys.isEmpty)
+        #expect(forwarder.heldMouseButtons.isEmpty)
+        #expect(!forwarder.forwardsMouseEvents)
+        forwarder.sendGamepadUpdate(pad: gamepad, slot: slot)
+        #expect(backend.calls.count == beforeFocusLoss + 1)
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+
+        forwarder.setMiniPlayer(false)
+        let released = try #require(backend.calls.last)
+        #expect(released.buttons == 0)
+        #expect(UInt16(bitPattern: released.mask) & (UInt16(1) << slot) != 0)
+        let afterExit = backend.calls.count
+        forwarder.sendGamepadUpdate(pad: gamepad, slot: slot)
+        #expect(backend.calls.count == afterExit)
+        window.focused = true
+        forwarder.resyncControllers()
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+    }
+
+    @Test func miniPlayerBackgroundDeliveryTracksConnectionAndTeardown() {
+        let prior = GCController.shouldMonitorBackgroundEvents
+        defer { GCController.shouldMonitorBackgroundEvents = prior }
+        GCController.shouldMonitorBackgroundEvents = false
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        forwarder.setMiniPlayer(true)
+        #expect(!GCController.shouldMonitorBackgroundEvents)
+        forwarder.setReady(true)
+        #expect(GCController.shouldMonitorBackgroundEvents)
+        forwarder.setReady(false)
+        #expect(!GCController.shouldMonitorBackgroundEvents)
+        forwarder.setReady(true)
+        #expect(GCController.shouldMonitorBackgroundEvents)
+        forwarder.detach()
+        #expect(!GCController.shouldMonitorBackgroundEvents)
+        #expect(!forwarder.isMiniPlayer)
+        forwarder.setReady(true)
+        #expect(!GCController.shouldMonitorBackgroundEvents)
+    }
+
+    @Test func miniPlayerPreservesQuitDwellUntilControllerOwnershipEnds() {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        let window = ControllerFocusTestWindow()
+        forwarder.attach(to: window)
+        forwarder.isReady = true
+        forwarder.setMiniPlayer(true)
+        forwarder.controllerQuitChordProvider = { .l1r1 }
+        forwarder.armQuitChordDwell(slot: 0) {
+            (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, InputForwarder.neutralControllerAnalog)
+        }
+        forwarder.windowResignedKey()
+        #expect(forwarder.quitChordDwellTask != nil)
+        forwarder.setMiniPlayer(false)
+        #expect(forwarder.quitChordDwellTask == nil)
+    }
 
     /// Detach removes observers before a new pad can attach during stop.
     @Test func detachRemovesGamepadObservers() {
@@ -96,6 +212,31 @@ struct ControllerArrivalTests {
         #expect(pad.extendedGamepad?.valueChangedHandler == nil)
     }
 
+    @Test(arguments: [false, true])
+    func leavingStreamRestoresControllerSystemState(sessionEnded: Bool) throws {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        let pad = GCController.withExtendedGamepad()
+        pad.playerIndex = .index4
+        let options = pad.extendedGamepad?.buttonOptions
+        let home = pad.physicalInputProfile.buttons[GCInputButtonHome]
+        options?.preferredSystemGestureState = .enabled
+        home?.preferredSystemGestureState = .enabled
+        forwarder.attach(gamepad: pad)
+        let state = try #require(forwarder.attachedControllers[ObjectIdentifier(pad)])
+        #expect(state.priorPlayerIndex == .index4)
+        #expect(state.priorOptionsGesture == options.map { _ in .enabled })
+        #expect(pad.playerIndex != .index4)
+        options?.preferredSystemGestureState = .disabled
+        if #available(macOS 27, *) { home?.preferredSystemGestureState = .disabled }
+
+        if sessionEnded { forwarder.detach() } else { forwarder.detach(gamepad: pad) }
+
+        #expect(pad.playerIndex == .index4)
+        #expect(options?.preferredSystemGestureState == options.map { _ in .enabled })
+        #expect(home?.preferredSystemGestureState == home.map { _ in .enabled })
+    }
+
     /// A stick or trigger held at Cmd-Tab must release on the PC without removing the pad.
     @Test func focusLossNeutralizesReadyPadWithoutRemovingItsSlot() throws {
         let forwarder = InputForwarder()
@@ -103,7 +244,7 @@ struct ControllerArrivalTests {
         let pad = GCController.withExtendedGamepad()
         forwarder.attach(gamepad: pad)
         let slot = try #require(forwarder.attachedControllers[ObjectIdentifier(pad)]?.slot)
-        let backend = RecordingBackend()
+        let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 64, height: 64),
                               styleMask: .borderless, backing: .buffered, defer: true)
@@ -122,17 +263,6 @@ struct ControllerArrivalTests {
         #expect([analog.leftTrigger, analog.rightTrigger] == [0, 0])
         #expect([analog.leftStickX, analog.leftStickY, analog.rightStickX, analog.rightStickY] == [0, 0, 0, 0])
         #expect(UInt16(bitPattern: sent.mask) & (UInt16(1) << slot) != 0)
-    }
-
-    /// Leaving the controller test restores background delivery policy.
-    @Test func controllerMonitorRestoresBackgroundMonitoring() {
-        let prior = GCController.shouldMonitorBackgroundEvents
-        defer { GCController.shouldMonitorBackgroundEvents = prior }
-        GCController.shouldMonitorBackgroundEvents = false
-        let monitor = ControllerMonitor(isStreaming: { true })
-        monitor.start()
-        monitor.stop()
-        #expect(GCController.shouldMonitorBackgroundEvents == false)
     }
 
     @Test func suspendedDrainKeepsLightsButDropsMotorUpdates() {
@@ -264,4 +394,10 @@ struct ControllerArrivalTests {
         forwarder.setReady(true)
         #expect(forwarder.announcedControllers[slot] == nil)
     }
+}
+
+@MainActor
+private final class ControllerFocusTestWindow: NSWindow {
+    var focused = false
+    override var isKeyWindow: Bool { focused }
 }

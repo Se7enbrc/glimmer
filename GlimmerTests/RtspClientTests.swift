@@ -352,18 +352,18 @@ struct RtspClientTests {
     }
 
     @Test func stoppingDuringAudioInitializationCleansUp() async throws {
-        try await Task(priority: .high) {
+        try await withTaskExecutorPreference(TestTaskExecutor()) {
             let sink = BlockingAudioSink()
             let receiver = RtpAudioReceiver(
                 host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
                 opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
                 audioEncryption: false, aesKey: [], aesIvId: [], sink: sink)
+            // Prepare the socket before measuring the initialization/stop overlap.
+            try receiver.startPing()
             let startupDone = DispatchSemaphore(value: 0)
-            let startup = Task {
-                try await onTestThread {
-                    defer { startupDone.signal() }
-                    try receiver.startReceive()
-                }
+            let startup = startTestThread {
+                defer { startupDone.signal() }
+                try receiver.startReceive()
             }
             defer { sink.finishInitialization.signal() }
             #expect(await sink.initializationStarted.waitAsync(for: .seconds(2)) == .success)
@@ -371,13 +371,11 @@ struct RtspClientTests {
             let stopThread = OSAllocatedUnfairLock<thread_act_t>(initialState: 0)
             let stopStarted = DispatchSemaphore(value: 0)
             let stopDone = DispatchSemaphore(value: 0)
-            let stop = Task {
-                try await onTestThread {
-                    stopThread.withLock { $0 = pthread_mach_thread_np(pthread_self()) }
-                    stopStarted.signal()
-                    receiver.stop()
-                    stopDone.signal()
-                }
+            let stop = startTestThread {
+                stopThread.withLock { $0 = pthread_mach_thread_np(pthread_self()) }
+                stopStarted.signal()
+                receiver.stop()
+                stopDone.signal()
             }
             #expect(await stopStarted.waitAsync(for: .seconds(2)) == .success)
             #expect(await threadParks(stopThread.withLock { $0 }, within: .seconds(2)))
@@ -386,8 +384,8 @@ struct RtspClientTests {
             sink.finishInitialization.signal()
             try #require(await startupDone.waitAsync(for: .seconds(2)) == .success)
             try #require(await stopDone.waitAsync(for: .seconds(2)) == .success)
-            try await startup.value
-            try await stop.value
+            for try await _ in startup {}
+            for try await _ in stop {}
             // Stop leaves the socket open for deinit, so a loop still in recvfrom or sendto
             // can never reach a descriptor number a reconnect has reused.
             #expect(receiver.initialized == false)
@@ -397,7 +395,7 @@ struct RtspClientTests {
             #expect(receiver.initialized == false)
             #expect(fcntl(receiver.fd, F_GETFD) != -1)
             #expect(sink.cleanupCount() == 1)
-        }.value
+        }
     }
 
     /// The host side: AES-128-CBC with PKCS7 padding and IV = BE32(keyId + seq).

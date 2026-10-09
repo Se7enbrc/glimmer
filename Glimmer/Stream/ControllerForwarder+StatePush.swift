@@ -11,10 +11,24 @@
 //  proper, so the methods here rely on default `internal` access to it.
 //
 
+import AppKit
 import Foundation
 import GameController
 
 extension InputForwarder {
+
+    var forwardsControllerEvents: Bool {
+        isReady && (isMiniPlayer || window?.isKeyWindow != false)
+    }
+
+    func updateControllerBackgroundEvents() {
+        ControllerBackgroundEvents.setEnabled(isMiniPlayer && isReady, for: controllerBackgroundEventsID)
+        ControllerHaptics.shared.setBackgroundPlayEnabled(isMiniPlayer && isReady,
+                                                          for: controllerBackgroundEventsID)
+        for state in attachedControllers.values {
+            ControllerMotion.shared.setInputEnabled(forwardsControllerEvents, slot: state.slot)
+        }
+    }
 
     // MARK: - Per-frame state push
 
@@ -62,7 +76,7 @@ extension InputForwarder {
     /// frame do that separately.
     @discardableResult
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
-        guard isReady else { return false }
+        guard forwardsControllerEvents else { return false }
         let buttons = pressedButtonFlags(pad: pad)
 
         // The chord ends the stream only after the hold dwell (ControllerForwarder+QuitChord.swift),
@@ -155,20 +169,23 @@ extension InputForwarder {
                                                        leftStickX: 0, leftStickY: 0,
                                                        rightStickX: 0, rightStickY: 0)
 
-    /// GameController stops delivering once the app is in the background, so a held stick or
-    /// trigger would stay held on the PC. resyncControllers restores live state on refocus;
-    /// generic HID pads keep delivering, so they are left alone.
+    /// Release every pad when focus leaves ordinary playback; Mini Player keeps its controller ownership.
     func neutralizeControllers() {
         guard isReady else { return }
+        releaseControllerTouches()
         for state in attachedControllers.values {
+            ControllerMotion.shared.setInputEnabled(false, slot: state.slot)
+        }
+        let slots = attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
+        for slot in slots {
             let rc = backend?.sendMultiController(
-                num: Int16(state.slot), mask: Int16(bitPattern: gamepadMask),
+                num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
                 buttons: 0, analog: Self.neutralControllerAnalog
             ) ?? -2
             record("LiSendMultiControllerEvent(focus loss)", rc)
         }
-        if !attachedControllers.isEmpty {
-            Diag.info("input: released \(attachedControllers.count) controller(s) on focus loss", "Stream")
+        if !slots.isEmpty {
+            Diag.info("input: released \(slots.count) controller(s) on focus loss", "Stream")
         }
     }
 }

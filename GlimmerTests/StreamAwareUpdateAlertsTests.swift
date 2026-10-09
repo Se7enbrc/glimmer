@@ -14,6 +14,33 @@ import Testing
 @MainActor
 struct StreamAwareUpdateAlertsTests {
 
+    @Test func releaseCandidateEnrollmentPersistsUntilExplicitlyReset() throws {
+        let domain = "io.ugfugl.Glimmer.tests.update-channel"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defaults.removePersistentDomain(forName: domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let makeAlerts = {
+            StreamAwareUpdateAlerts(isStreaming: { false }, showUpdate: {}, checkInBackground: {},
+                                   updateDefaults: defaults)
+        }
+        let alerts = makeAlerts()
+        #expect(alerts.allowedUpdateChannels.isEmpty)
+        let key = StreamAwareUpdateAlerts.updateChannelPreferenceKey
+        for value in ["stable", "unexpected", "RC", ""] {
+            defaults.set(value, forKey: key)
+            #expect(alerts.allowedUpdateChannels.isEmpty)
+        }
+        defaults.set("rc", forKey: key)
+        #expect(alerts.allowedUpdateChannels == ["rc"])
+        #expect(makeAlerts().allowedUpdateChannels == ["rc"])
+        defaults.set("stable", forKey: key)
+        #expect(alerts.allowedUpdateChannels.isEmpty)
+        #expect(makeAlerts().allowedUpdateChannels.isEmpty)
+        defaults.set("rc", forKey: key)
+        defaults.removeObject(forKey: key)
+        #expect(makeAlerts().allowedUpdateChannels.isEmpty)
+    }
+
     @Test func scheduledAlertShowsNormallyOutsideAStream() {
         let app = FakeApp(isStreaming: false)
         let alerts = app.makeAlerts()

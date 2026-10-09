@@ -95,7 +95,7 @@ struct MoonlightQtIdentityImportTests {
     private static let copyDomain = "io.ugfugl.Glimmer.tests.moonlightqt-copy"
     private static let skipDomain = "io.ugfugl.Glimmer.tests.moonlightqt-skip"
 
-    @Test func importCopiesAndLeavesTheSourceSuiteUntouched() throws {
+    @Test func importCopiesAndLeavesTheSourceSuiteUntouched() async throws {
         let domain = Self.copyDomain
         let suite = try #require(UserDefaults(suiteName: domain))
         suite.removePersistentDomain(forName: domain)   // no crumbs from a prior run
@@ -103,15 +103,14 @@ struct MoonlightQtIdentityImportTests {
 
         // QSettings writes the cert as a String and the key as Data; mirror
         // both shapes so the reader's Data → String path is exercised too.
-        let certPEM = "-----BEGIN CERTIFICATE-----\nqt-cert\n-----END CERTIFICATE-----\n"
-        let keyPEM  = "-----BEGIN PRIVATE KEY-----\nqt-key\n-----END PRIVATE KEY-----\n"
+        let (certPEM, keyPEM) = try await EphemeralCryptoIdentity.make(bits: 2048)
         let keyData = Data(keyPEM.utf8)
         suite.set(certPEM, forKey: "certificate")
         suite.set(keyData, forKey: "key")
         suite.set("qtuniqueid00", forKey: "uniqueid")
 
         let adopted = try #require(
-            IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: "ours"))
+            try IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: "ours"))
         #expect(adopted.certPEM == certPEM)
         #expect(adopted.keyPEM == keyPEM)
         #expect(adopted.uniqueID == "qtuniqueid00")
@@ -132,7 +131,47 @@ struct MoonlightQtIdentityImportTests {
         // Cert but no key - moonlight-qt installed, never paired.
         suite.set("cert-only", forKey: "certificate")
 
-        #expect(IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: nil) == nil)
+        #expect(try IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: nil) == nil)
         #expect(suite.string(forKey: "certificate") == "cert-only")
+    }
+
+    @Test(arguments: [1024, 2048, 3072, 4096])
+    func importEnforcesRSAFloorWithoutChangingItsSource(_ bits: Int) async throws {
+        let domain = "io.ugfugl.Glimmer.tests.moonlightqt-rsa-\(bits)"
+        let suite = try #require(UserDefaults(suiteName: domain))
+        suite.removePersistentDomain(forName: domain)
+        defer { suite.removePersistentDomain(forName: domain) }
+        let identity = try await EphemeralCryptoIdentity.make(bits: bits)
+        suite.set(identity.certPEM, forKey: "certificate")
+        suite.set(Data(identity.keyPEM.utf8), forKey: "key")
+        suite.set("existing-id", forKey: "uniqueid")
+        if bits < 2048 {
+            #expect(throws: StreamError.self) {
+                try IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: "ours")
+            }
+        } else {
+            let imported = try #require(
+                try IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: "ours"))
+            #expect(imported.certPEM == identity.certPEM)
+            #expect(imported.keyPEM == identity.keyPEM)
+            #expect(imported.uniqueID == "existing-id")
+        }
+        #expect(suite.string(forKey: "certificate") == identity.certPEM)
+        #expect(suite.data(forKey: "key") == Data(identity.keyPEM.utf8))
+        #expect(suite.string(forKey: "uniqueid") == "existing-id")
+    }
+
+    @Test func malformedImportIsRejectedWithoutChangingItsSource() throws {
+        let domain = "io.ugfugl.Glimmer.tests.moonlightqt-malformed"
+        let suite = try #require(UserDefaults(suiteName: domain))
+        suite.removePersistentDomain(forName: domain)
+        defer { suite.removePersistentDomain(forName: domain) }
+        suite.set("malformed certificate", forKey: "certificate")
+        suite.set("malformed private key", forKey: "key")
+        #expect(throws: StreamError.self) {
+            try IdentityManager.adoptedIdentity(fromMoonlightQt: suite, currentID: nil)
+        }
+        #expect(suite.string(forKey: "certificate") == "malformed certificate")
+        #expect(suite.string(forKey: "key") == "malformed private key")
     }
 }

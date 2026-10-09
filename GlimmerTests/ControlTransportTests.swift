@@ -12,9 +12,36 @@ import Testing
 
 @Suite struct ControlTransportTests {
 
+    @Test(arguments: [Int.min, -1, 0, 65_536, Int.max])
+    func invalidPortsNeverBecomeAnotherEndpoint(_ port: Int) async throws {
+        do {
+            _ = try await ControlTransport.get(
+                host: "127.0.0.1", port: port, target: "/serverinfo", userAgent: "GlimmerTests", tls: true,
+                credential: .init(clientCertPEM: nil, clientKeyPEM: nil, pinnedCertPEM: nil), timeout: 1)
+            Issue.record("An invalid control port was accepted")
+        } catch StreamError.hostUnreachable(let detail) {
+            #expect(detail == "invalid control port \(port)")
+        }
+    }
+
     @Test func identityLoadsFromItsPEMFiles() async throws {
         let (certPEM, keyPEM) = try await IdentityManager.shared.generateKeyPairAndCert()
         _ = try ControlTransport.clientIdentity(certPEM: certPEM, keyPEM: keyPEM)
+    }
+
+    @Test func weakStoredPinIsRejectedBeforeConnecting() async throws {
+        let identity = try await EphemeralCryptoIdentity.make(bits: 1024)
+        let credential = ControlTransport.TLSCredential(
+            clientCertPEM: nil, clientKeyPEM: nil, pinnedCertPEM: identity.certPEM)
+        do {
+            _ = try await ControlTransport.get(
+                host: "127.0.0.1", port: 9, target: "/serverinfo", userAgent: "GlimmerTests",
+                tls: true, credential: credential, timeout: 1)
+            Issue.record("A weak stored pin reached the connection")
+        } catch StreamError.crypto(let detail) {
+            #expect(detail == "paired PC certificate requires an RSA key of at least 2048 bits")
+        }
+        #expect(credential.pinnedCertPEM == identity.certPEM)
     }
 
     @Test func identityRefusesAKeyFromAnotherCert() async throws {

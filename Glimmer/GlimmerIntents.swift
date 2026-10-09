@@ -74,14 +74,15 @@ struct StreamIntent: AppIntent {
         if target == nil, !HostLiveStatus.isFresh(model.hostLiveStatus, for: host.id) {
             _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
         }
+        guard let launchApp = target ?? model.heroTargetApp(on: host) else {
+            throw PCIntentError.failed("Glimmer doesn't know any apps on \(host.displayName).")
+        }
         await model.awaitRouteSettled(for: host)
         try Task.checkCancellation()
         guard !model.isStreaming else { throw PCIntentError.alreadyStreaming }
-        if let target {
-            model.requestStream(app: target, on: host)
-        } else {
-            model.streamHeroApp()
-        }
+        let currentHost = try model.pairedHost(pc)
+        if model.selectedHost?.id != currentHost.id { model.selectHost(currentHost) }
+        model.requestStream(app: launchApp, on: currentHost)
         return .result()
     }
 }

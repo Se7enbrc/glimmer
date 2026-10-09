@@ -31,7 +31,7 @@ public struct StatsRow: Sendable, Equatable {
         case latency, jitter, networkDrops
         case decoderDrops, bitrate, decodeTime, hostProcessing
         case smoothness
-        case audio
+        case codec, audio
         case macBattery, macCpu, macRam
         case controllerBattery
     }
@@ -82,9 +82,8 @@ public struct StatsRow: Sendable, Equatable {
 // MARK: - Stats overlay preset
 
 /// Which curated row set the stats overlay shows. `.minimal` is the
-/// at-a-glance default for fresh installs - the three numbers that answer
-/// "is my stream OK" (render fps / latency / bitrate) without covering
-/// gameplay. `.micro` adds the full framerate + network breakdown;
+/// at-a-glance default for fresh installs: frame rate, latency, bitrate and codec.
+/// `.micro` adds the full frame-rate and network breakdown;
 /// `.extended` shows the pipeline-plus-network row set minus audio;
 /// `.custom` honours `statsOverlayCustomRows`.
 ///
@@ -100,8 +99,7 @@ public enum StatsOverlayPreset: String, CaseIterable, Codable, Sendable {
     public var displayName: String {
         switch self {
         case .minimal:  return "Minimal"
-        // Display name only - "Micro" read backwards (7 rows vs Minimal's 3).
-        // rawValue stays "micro" so persisted choices don't reset.
+        // Display name only; rawValue stays "micro" so saved choices survive.
         case .micro:    return "Standard"
         case .extended: return "Extended"
         case .custom:   return "Custom"
@@ -113,19 +111,16 @@ public enum StatsOverlayPreset: String, CaseIterable, Codable, Sendable {
 /// constants so AppModel and the SettingsView subtitle / checkbox
 /// code all reach the same values without duplicating the literals.
 public enum StatsOverlayDefaults {
-    /// Minimal preset - exactly three rows: am I getting frames (render
-    /// FPS), how late (latency), how heavy (bitrate). The fresh-install
-    /// default; everything beyond these three is diagnostics, which
-    /// Micro / Extended / Custom exist for.
+    /// The stream's frame rate, latency, bitrate and negotiated codec.
     public static let minimalRows: Set<StatsRow.Kind> = [
-        .renderFps, .latency, .bitrate
+        .renderFps, .latency, .bitrate, .codec
     ]
     /// Micro preset - framerate + network + bitrate, the "what matters
     /// at a glance" diagnostic subset.
     public static let microRows: Set<StatsRow.Kind> = [
         .hostFps, .renderFps, .networkFps,
         .latency, .jitter, .networkDrops,
-        .bitrate
+        .bitrate, .codec
     ]
     /// Every stream-side row. Mac vitals and audio are NOT in Extended -
     /// they're host-Mac sidebar metrics rather than the game-streaming

@@ -11,6 +11,61 @@ import Testing
 
 struct AppShellTests {
 
+    @MainActor private func withQualityDefaults(_ body: () -> Void) {
+        let keys = ["qualityPreset", "customWidth", "customHeight", "customFPS", "streamHDR",
+                    StreamDisplayMode.defaultsKey, BitrateMode.defaultsKey]
+        let defaults = UserDefaults.standard
+        let saved = keys.map { ($0, defaults.object(forKey: $0)) }
+        defer {
+            for (key, value) in saved {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+            }
+        }
+        for key in keys { defaults.removeObject(forKey: key) }
+        body()
+    }
+
+    @Test @MainActor func customResolutionAndRefreshSurviveRelaunch() {
+        withQualityDefaults {
+            for (width, height, fps) in [(1920, 1080, 60), (1280, 720, 90), (2560, 1440, 120)] {
+                let model = AppModel()
+                model.qualityPreset = .custom
+                model.customWidth = width
+                model.customHeight = height
+                model.customFPS = fps
+                model.streamDisplayMode = .fullScreen
+                model.streamHDR = false
+                model.bitrateMode = .bandwidthSaver
+                let expectedBitrate = model.effectiveBitrateKbps
+                let relaunched = AppModel()
+                #expect(relaunched.qualityPreset == .custom)
+                #expect(relaunched.customWidth == width)
+                #expect(relaunched.customHeight == height)
+                #expect(relaunched.customFPS == fps)
+                #expect(relaunched.streamHDR == false)
+                #expect(relaunched.bitrateMode == .bandwidthSaver)
+                #expect(relaunched.effectiveBitrateKbps == expectedBitrate)
+                #expect(UserDefaults.standard.integer(forKey: "customWidth") == width)
+                #expect(UserDefaults.standard.integer(forKey: "customHeight") == height)
+                #expect(UserDefaults.standard.integer(forKey: "customFPS") == fps)
+            }
+        }
+    }
+
+    @Test @MainActor func loadingQualityDoesNotSaveUntouchedCustomValues() {
+        withQualityDefaults {
+            let model = AppModel()
+            for key in ["qualityPreset", "customWidth", "customHeight", "customFPS"] {
+                #expect(UserDefaults.standard.object(forKey: key) == nil)
+            }
+            let expected = model.effectiveValuesForPreset(model.qualityPreset)
+            model.qualityPreset = .custom
+            #expect(model.customWidth == expected.width)
+            #expect(model.customHeight == expected.height)
+            #expect(model.customFPS == expected.fps)
+        }
+    }
+
     @Test @MainActor func testHostRegistersDefaultsWithoutLaunchingTheApp() {
         #expect(AppDelegate.boundManager == nil)
         let registration = UserDefaults.standard.volatileDomain(forName: UserDefaults.registrationDomain)

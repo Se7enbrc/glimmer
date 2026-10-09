@@ -31,14 +31,6 @@ struct Host: Identifiable, Hashable {
 
     var displayName: String { customName ?? name }
 
-    var lastPlayedDescription: String? {
-        guard let last = lastConnected else { return nil }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        // Sentence case at the source: every caller starts a line with it.
-        return "Last played \(formatter.localizedString(for: last, relativeTo: .now))"
-    }
-
     /// The app a spoken or typed name means: an exact match first, then one
     /// that differs only in case, accents or surrounding spaces.
     func app(named name: String) -> LibraryApp? {

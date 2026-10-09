@@ -11,6 +11,11 @@ import Testing
 
 struct HostReachabilityTests {
 
+    @Test(arguments: [Int.min, -1, 0, 65_536, Int.max])
+    func invalidPortsAreUnreachable(_ port: Int) async {
+        #expect(await HostReachability.measureRTT(host: "127.0.0.1", port: port) == .unreachable)
+    }
+
     /// Only the call that resumes the probe learns it won.
     @Test func onlyTheFirstResumeWins() async {
         var wins: [Bool] = []

@@ -14,7 +14,7 @@ extension NativeBackend {
     /// The async native pipeline. Fires ConnectionEvents-equivalent StreamEvents
     /// + Diag at each stage and throws (after stageFailed) on any failure.
     func run(server: BackendServerInfo, config: BackendStreamConfig) async throws {
-        let events = NativeConnectionEvents()
+        let events = NativeConnectionEvents(backend: self)
 
         if server.rtspSessionUrl.lowercased().contains("rtspenc://") {
             Diag.info("native backend: encrypted RTSP (rtspenc://) - sealing messages", Self.logCategory)

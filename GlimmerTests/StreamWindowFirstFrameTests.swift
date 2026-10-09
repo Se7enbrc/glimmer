@@ -13,6 +13,117 @@ import Testing
 @MainActor
 struct StreamWindowFirstFrameTests {
 
+    @Test(arguments: [false, true])
+    func eachDisplayTypeRetainsItsFullScreenChoice(usesSpace: Bool) {
+        #expect(AppModel.streamCoversNotch(displayHasNotch: false, coversNotch: false,
+                                         usesFullScreenSpace: usesSpace) == !usesSpace)
+        #expect(AppModel.streamCoversNotch(displayHasNotch: false, coversNotch: true,
+                                         usesFullScreenSpace: usesSpace) == !usesSpace)
+        #expect(AppModel.streamCoversNotch(displayHasNotch: true, coversNotch: false,
+                                         usesFullScreenSpace: usesSpace) == false)
+        #expect(AppModel.streamCoversNotch(displayHasNotch: true, coversNotch: true,
+                                         usesFullScreenSpace: usesSpace) == true)
+    }
+
+    @Test func onlyHiddenPresentationIsSuppressed() {
+        #expect(!StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false, occlusionVisible: true))
+        #expect(StreamWindow.suppressesPresentation(isVisible: false, isMiniaturized: false, occlusionVisible: true))
+        #expect(StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: true, occlusionVisible: true))
+        #expect(StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false, occlusionVisible: false))
+    }
+
+    @Test func aFirstFrameDuringTheFocusDebounceCannotTakeThePointer() {
+        let stream = StreamWindow()
+        var installs = 0
+        stream.onDidBecomeReadyForInput = { installs += 1 }
+        defer { stream.setCursorHidden(false) }
+        #expect(!stream.window.isKeyWindow)
+        #expect(!stream.userBackgrounded)
+
+        stream.takePointerOnFirstFrame()
+
+        #expect(stream.cursorHideCount == 0)
+        #expect(installs == 0)
+    }
+
+    @Test func aWindowSpaceExitForMiniPlayerRetiresItsVisibilityObservers() {
+        let stream = StreamWindow(displayMode: .window)
+        let center = NotificationCenter.default
+        stream.installDisplayObservers(nc: center)
+        stream.installSpaceExitObservers()
+        defer { for token in stream.spaceExitObservers { center.removeObserver(token) } }
+        stream.miniPlayerPending = true
+        #expect(!stream.keyObservers.isEmpty)
+
+        center.post(name: NSWindow.willExitFullScreenNotification, object: stream.window)
+
+        #expect(stream.keyObservers.isEmpty)
+        #expect(stream.workspaceObservers.isEmpty)
+        #expect(stream.miniPlayerPending)
+        #expect(stream.displayMode == .window)
+    }
+
+    @Test func repeatedSpaceExitRegistrationKeepsOneOwnedObserverPair() {
+        let stream = StreamWindow()
+        stream.installSpaceExitObservers()
+        stream.installSpaceExitObservers()
+        defer { for token in stream.spaceExitObservers { NotificationCenter.default.removeObserver(token) } }
+        #expect(stream.spaceExitObservers.count == 2)
+    }
+
+    @Test func repeatedMiniPlayerRequestDuringSpaceExitKeepsItsOriginalReturnMode() {
+        let stream = StreamWindow(displayMode: .window)
+        stream.miniPlayerPending = true
+        stream.miniPlayerReturnMode = .fullScreen
+        stream.miniPlayerReturnUsesSpace = true
+
+        stream.enterMiniPlayer()
+
+        #expect(!stream.isMiniPlayer)
+        #expect(stream.miniPlayerPending)
+        #expect(stream.miniPlayerReturnMode == .fullScreen)
+        #expect(stream.miniPlayerReturnUsesSpace)
+    }
+
+    @Test func spaceFocusLossReportsTheLauncherWithoutBlockingTheFirstFrame() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        var backgrounded: [Bool] = []
+        var suppressed: [Bool] = []
+        stream.onBackgroundedChanged = { backgrounded.append($0) }
+        stream.onPresentationSuppressedChanged = { suppressed.append($0) }
+
+        stream.backgroundStreamWindow()
+
+        #expect(stream.userBackgrounded)
+        #expect(backgrounded == [true])
+        #expect(suppressed.isEmpty)
+        #expect(stream.cursorHideCount == 0)
+    }
+
+    @Test func occlusionReportsVisibilityIndependentlyAndStopsAfterClose() {
+        let stream = StreamWindow()
+        let center = NotificationCenter()
+        var backgrounded: [Bool] = []
+        var suppressed: [Bool] = []
+        stream.onBackgroundedChanged = { backgrounded.append($0) }
+        stream.onPresentationSuppressedChanged = { suppressed.append($0) }
+        stream.installPresentationVisibilityObserver(nc: center)
+        defer { for token in stream.keyObservers { center.removeObserver(token) } }
+
+        center.post(name: NSWindow.didChangeOcclusionStateNotification, object: stream.window)
+        center.post(name: NSWindow.didChangeOcclusionStateNotification, object: stream.window)
+        #expect(suppressed == [true])
+        #expect(backgrounded.isEmpty)
+
+        stream.didClose = true
+        stream.presentationSuppressed = false
+        center.post(name: NSWindow.didChangeOcclusionStateNotification, object: stream.window)
+        #expect(!stream.presentationSuppressed)
+        #expect(suppressed == [true])
+    }
+
     /// A failing connect leaves the pointer free for the launcher's Cancel: the
     /// invisible window cannot capture it before the first frame.
     @Test func waitingForTheFirstFrameLeavesThePointerFree() {
@@ -68,7 +179,10 @@ struct StreamWindowFirstFrameTests {
             let options = StreamWindow.streamingPresentationOptions(coversNotch: coversNotch)
             #expect(options.contains(.disableCursorLocationAssistance))
             if #available(macOS 27, *) {
+                #expect(options.contains(NSApplication.PresentationOptions(rawValue: 1 << 15)))
+                #if compiler(>=6.4)
                 #expect(options.contains(.disableScreenCornerInteractions))
+                #endif
             }
         }
     }
@@ -103,19 +217,104 @@ struct StreamWindowFirstFrameTests {
         #expect(!StreamCursor.isOnScreen(CGPoint(x: -300, y: 400), frame: screen))
     }
 
-    @Test func aWarpDropsExactlyOneMotionEvent() throws {
+    @Test func aWarpDropsOldMotionThenExactlyOneFreshMotionEvent() throws {
         let view = StreamInputView()
         let recorder = MotionRecorder()
         view.delegate = recorder
-        let move = try #require(NSEvent.mouseEvent(
+        let oldMove = try #require(NSEvent.mouseEvent(
             with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 1,
             windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
-        view.discardsNextMotion = true
+        let move = try #require(NSEvent.mouseEvent(
+            with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 3,
+            windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+        view.resetMotion(after: 2)
+        view.mouseMoved(with: oldMove)
+        view.mouseDragged(with: oldMove)
         view.mouseMoved(with: move)
         #expect(recorder.moves == 0)
         view.mouseMoved(with: move)
         view.mouseMoved(with: move)
         #expect(recorder.moves == 2)
+    }
+
+    @Test(arguments: [StreamDisplayMode.fullScreen, .window])
+    func closeRestoresArrowBeforeFadeAndLateCursorUpdates(mode: StreamDisplayMode) throws {
+        let stream = StreamWindow(displayMode: mode)
+        let forwarder = InputForwarder()
+        forwarder.attach(to: stream.window)
+        defer { forwarder.detach(); NSCursor.arrow.set() }
+        let view = try #require(forwarder.inputView)
+        view.updateTrackingAreas()
+        stream.window.ignoresMouseEvents = false
+        stream.setCursorHidden(true)
+        #expect(NSCursor.current !== NSCursor.arrow)
+
+        stream.close()
+
+        #expect(stream.didClose)
+        #expect(stream.window.ignoresMouseEvents)
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+        view.cursorUpdate(with: try cursorEvent())
+        view.refreshCursor()
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
+    @Test func repeatedDisplayHidesReleaseTheirImageAndCountTogether() throws {
+        let stream = StreamWindow()
+        let view = StreamInputView()
+        stream.window.contentView = view
+        defer { stream.setCursorHidden(false) }
+        stream.setCursorHidden(true)
+        stream.setCursorHidden(true)
+        #expect(stream.cursorHideCount == 2)
+
+        stream.setCursorHidden(false)
+        stream.setCursorHidden(false)
+        view.cursorUpdate(with: try cursorEvent())
+        stream.reassertCursorHiddenIfNeeded()
+
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
+    @Test func newlyAttachedViewLeavesCursorVisibleUntilCaptureStarts() throws {
+        let stream = StreamWindow()
+        let forwarder = InputForwarder()
+        forwarder.attach(to: stream.window)
+        defer { forwarder.detach() }
+        let view = try #require(forwarder.inputView)
+        NSCursor.arrow.set()
+
+        view.cursorUpdate(with: try cursorEvent())
+        view.refreshCursor()
+
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
+    @Test func fullscreenDetachRetiresTransparentImageWithoutWaitingForClose() throws {
+        let stream = StreamWindow()
+        let forwarder = InputForwarder()
+        forwarder.attach(to: stream.window)
+        defer { NSCursor.arrow.set() }
+        let view = try #require(forwarder.inputView)
+        view.setTransparentCursorEnabled(true)
+        #expect(NSCursor.current !== NSCursor.arrow)
+
+        forwarder.detach()
+
+        #expect(view.delegate == nil)
+        #expect(NSCursor.current === NSCursor.arrow)
+        view.cursorUpdate(with: try cursorEvent())
+        view.refreshCursor()
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
+    private func cursorEvent() throws -> NSEvent {
+        try #require(NSEvent.mouseEvent(
+            with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 1,
+            windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
     }
 }
 

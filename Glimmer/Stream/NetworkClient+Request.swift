@@ -206,9 +206,8 @@ extension NetworkClient {
         return name.isEmpty ? "Glimmer" : name
     }
 
-    /// Per-request nonce. GFE uses a Qt UUID's raw 16 bytes hex-encoded; we
-    /// match that exactly so packet captures look the same. Backed by
-    /// SecRandomCopyBytes - not Swift's UInt8.random, which uses a non-CSPRNG.
+    /// Per-request nonce, matching the protocol's hex-encoded 16-byte UUID shape.
+    /// SecRandomCopyBytes supplies the entropy; Swift's system generator is also secure on macOS.
     static func requestNonce() -> String {
         let bytes = secureRandomBytes(16)
         return bytes.map { String(format: "%02x", $0) }.joined()

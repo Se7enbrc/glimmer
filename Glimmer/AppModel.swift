@@ -69,15 +69,8 @@ final class AppModel {
             }
         }
         didSet {
-            // The preset's OWN persistence lives here, not in
-            // persistQualitySettings(). That recompute runs on paths the user
-            // never touched - launch bootstrap, every display-parameter change -
-            // and its unconditional write re-stamped the key with whatever the
-            // load had decoded, so a raw value the decoder didn't recognise was
-            // overwritten before it could ever be migrated (see
-            // `QualityPreset.migrated(fromPersistedRawValue:)`). A didSet is
-            // suppressed during init(), so only a real change - which is only
-            // ever the Settings picker - reaches UserDefaults now.
+            // Persist explicit preset changes here. Recomputing for a display
+            // change must not rewrite the saved choice.
             UserDefaults.standard.set(qualityPreset.rawValue, forKey: "qualityPreset")
             persistQualitySettings()
         }
@@ -220,8 +213,8 @@ final class AppModel {
     }
 
     /// Curated row set for the stats overlay. Fresh installs default to
-    /// `.minimal` (render fps / latency / bitrate - the three-row
-    /// "is my stream OK" check). UserDefaults persistence happens in didSet.
+    /// `.minimal`: frame rate, latency, bitrate and codec.
+    /// UserDefaults persistence happens in didSet.
     var statsOverlayPreset: StatsOverlayPreset = .minimal {
         didSet {
             UserDefaults.standard.set(
@@ -277,8 +270,11 @@ final class AppModel {
     var captureSysKeys: Bool = false {
         didSet { UserDefaults.standard.set(captureSysKeys, forKey: "captureSysKeys") }
     }
-    var streamCoversNotch: Bool = true {
+    var streamCoversNotch: Bool = false {
         didSet { UserDefaults.standard.set(streamCoversNotch, forKey: "streamCoversNotch") }
+    }
+    var streamUsesFullScreenSpace: Bool = true {
+        didSet { UserDefaults.standard.set(streamUsesFullScreenSpace, forKey: "streamUsesFullScreenSpace") }
     }
     /// The Custom preset's "Show the stream in a window" choice: full screen
     /// (the default) or a normal titled window at Custom's own resolution,
@@ -491,27 +487,23 @@ final class AppModel {
     }
 
     init() {
-        // Every line below is a DIRECT property write inside the initializer, so
-        // the properties' `didSet`/`willSet` observers do NOT fire (Swift
-        // suppresses observers during init) - this logic stays in `init` for
-        // exactly that reason. The `?? <currentValue>` form keeps the property's
-        // declared default whenever the persisted key is absent / out of range /
-        // undecodable, which is identical to the prior inline `if let` /
-        // `if x > 0` checks but without a branch per key (so the initializer
-        // stays under the complexity bar). The persisted-key set is unchanged.
+        // Observation setters can run during initialization. Restore quality's
+        // backing storage so entering Custom cannot overwrite saved dimensions
+        // before they are read, or persist defaults the user never chose.
         muteMacWhileStreaming = UserDefaults.standard.bool(forKey: "muteMacWhileStreaming")
         defaultLaunchApp = UserDefaults.standard.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
-        qualityPreset = Self.persistedQualityPreset() ?? qualityPreset
+        _qualityPreset = Self.persistedQualityPreset() ?? _qualityPreset
         // Width/height/fps are clamped on read: builds whose Quality pane
         // clamped on Return only could persist out-of-range values via a
         // focus-loss commit (0 self-heals via persistedPositiveInt; 1000 Hz
         // did not). Bounds mirror QualityPane's clamp helpers.
-        customWidth = min(max(Self.persistedPositiveInt("customWidth") ?? customWidth, 640), 7680)
-        customHeight = min(max(Self.persistedPositiveInt("customHeight") ?? customHeight, 480), 4320)
-        customFPS = min(max(Self.persistedPositiveInt("customFPS") ?? customFPS, 30), 240)
+        _customWidth = min(max(Self.persistedPositiveInt("customWidth") ?? _customWidth, 640), 7680)
+        _customHeight = min(max(Self.persistedPositiveInt("customHeight") ?? _customHeight, 480), 4320)
+        _customFPS = min(max(Self.persistedPositiveInt("customFPS") ?? _customFPS, 30), 240)
         streamHDR = Self.persistedBool("streamHDR") ?? streamHDR
         captureSysKeys = Self.persistedBool("captureSysKeys") ?? captureSysKeys
         streamCoversNotch = Self.persistedBool("streamCoversNotch") ?? streamCoversNotch
+        streamUsesFullScreenSpace = Self.persistedBool("streamUsesFullScreenSpace") ?? streamUsesFullScreenSpace
         // Registered default (GlimmerApp) answers the absent-key case; an
         // unrecognised raw value lands on the default rather than guessing.
         streamDisplayMode = StreamDisplayMode.persisted(

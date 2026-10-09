@@ -54,6 +54,7 @@ extension StreamWindow {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             win.alphaValue = 1.0
             applyPresentationOptions(coversNotch: cover)
+            refreshPresentationVisibility()
             return
         }
         NSAnimationContext.runAnimationGroup({ ctx in
@@ -65,7 +66,10 @@ extension StreamWindow {
             // runAnimationGroup delivers the completion on the main run loop,
             // so we are already on the MainActor - assumeIsolated bridges the
             // SDK's non-isolated @Sendable handler back to MainActor state.
-            MainActor.assumeIsolated { self.applyPresentationOptions(coversNotch: cover) }
+            MainActor.assumeIsolated {
+                self.applyPresentationOptions(coversNotch: cover)
+                self.refreshPresentationVisibility()
+            }
         })
     }
 
@@ -73,7 +77,8 @@ extension StreamWindow {
     /// full-screen cover: a late fade-in completion or a backgrounded window
     /// must not hide the menu bar under the launcher. Window mode keeps both.
     func applyPresentationOptions(coversNotch cover: Bool) {
-        guard displayMode == .fullScreen, !didClose, window.isVisible else { return }
+        guard displayMode == .fullScreen, !didClose, !userBackgrounded,
+              NSApp.isActive, window.isKeyWindow, window.isVisible else { return }
         NSApp.presentationOptions = Self.streamingPresentationOptions(coversNotch: cover)
     }
 
@@ -84,7 +89,12 @@ extension StreamWindow {
         var options: NSApplication.PresentationOptions =
             coversNotch ? [.hideMenuBar, .hideDock] : [.autoHideMenuBar, .autoHideDock]
         options.insert(.disableCursorLocationAssistance)
-        if #available(macOS 27, *) { options.insert(.disableScreenCornerInteractions) }
+        if #available(macOS 27, *) {
+            // NSApplication.h in SDK 27 defines DisableScreenCornerInteractions as bit 15.
+            // Use its public option value so SDK 26 builds retain the same behavior.
+            let disableScreenCornerInteractions = NSApplication.PresentationOptions(rawValue: 1 << 15)
+            options.insert(disableScreenCornerInteractions)
+        }
         return options
     }
 
@@ -92,6 +102,9 @@ extension StreamWindow {
     public func close() {
         guard !didClose else { return }
         didClose = true
+        // The closing surface can outlive input through the Space exit. Let
+        // clicks reach other windows from the moment the stream disconnects.
+        window.ignoresMouseEvents = true
 
         // 1. Display-layer flush is DEFERRED to the fade completion (step 5).
         //    Flushing here (removingDisplayedImage) blanks the layer before the
@@ -100,13 +113,8 @@ extension StreamWindow {
         //    until the fade finishes makes the fade-out land on the actual
         //    stream content, mirroring the first-frame fade-in.
 
-        // 2. Restore the cursor. `setCursorHidden(false)` is idempotent and
-        //    drives the counted CGDisplay latch strictly off `didHideCursor`,
-        //    so this brings the count back to exactly 0 - never negative. The
-        //    old unconditional belt-and-braces `NSCursor.unhide()` is gone:
-        //    with the latch capped at 1 by the single-owner helper it could
-        //    only ever over-show and corrupt the count, which is the very
-        //    failure mode (cursor left invisible / over-visible) we're fixing.
+        // Restore the arrow image and balance all owned display hides before
+        // the fullscreen exit and fade can deliver more tracking callbacks.
         setCursorHidden(false)
 
         // Drop the key-status observers so we don't get a delayed

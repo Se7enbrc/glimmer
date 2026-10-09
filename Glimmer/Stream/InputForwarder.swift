@@ -165,6 +165,7 @@ public final class InputForwarder {
     /// Mini player: no hover grab, a click takes the pointer. Set live by
     /// `setMiniPlayer` (InputForwarder+WindowPointer.swift).
     var isMiniPlayer = false
+    let controllerBackgroundEventsID = UUID()
     /// The pointer entered or left the mini player; the window shows its
     /// close button off this edge.
     var onMiniPlayerHoverChanged: (@MainActor (Bool) -> Void)?
@@ -267,23 +268,18 @@ public final class InputForwarder {
     /// the default ⌃⌥Q, which carries no Cmd and so never reaches the gate.
     public var captureSysKeys: Bool = false
 
-    /// Set to true once the native backend's `connectionStarted` callback has
-    /// fired. Until then send calls return -2 (input stream not yet
-    /// initialized). Honouring this flag avoids a noisy log stream during the
-    /// 200ms-or-so RTSP handshake window between window-show and stream-ready.
-    /// `internal(set)` rather than `private(set)`: `setReady(_:)` and `detach()`
-    /// write it from InputForwarder+Lifecycle.swift. Still read-only outside the
-    /// module.
-    public internal(set) var isReady: Bool = false
+    /// Delayed input belongs to one ready connection and one uninterrupted focus interval.
+    var inputGeneration: UInt64 = 0
 
-    /// The streaming engine input is forwarded to. Injected by StreamSession at
-    /// attach time so the forwarder talks to the protocol (`backend.send*`)
-    /// instead of calling Li* directly. Optional + nil-guarded: until it's set
-    /// (or if a teardown nils it), `send(...)` returns the -2 "input stream not
-    /// ready" contract so nothing crashes. The ControllerForwarder extension
-    /// reads it through the same property. The default-injected backend is the
-    /// proven C path, so behavior is identical to the prior inline LiSend*.
-    var backend: StreamingBackend?
+    /// Opens when the backend can accept input; reconnects invalidate delayed work.
+    public internal(set) var isReady: Bool = false {
+        didSet { if isReady != oldValue { inputGeneration &+= 1 } }
+    }
+
+    /// Supplied by the session; replacing it invalidates text queued for the old connection.
+    var backend: StreamingBackend? {
+        didSet { inputGeneration &+= 1 }
+    }
 
     /// Set the backend the forwarder uses. Called by StreamSession right after
     /// `attach(to:)`.

@@ -122,7 +122,8 @@ struct MainWindow: View {
                 Button {
                     openSettings()
                 } label: {
-                    Image(systemName: "gearshape")
+                    Label("Settings", systemImage: "gearshape")
+                        .labelStyle(.iconOnly)
                         .symbolRenderingMode(.hierarchical)
                 }
                 .keyboardShortcut(",", modifiers: .command)
@@ -191,10 +192,8 @@ private struct ConnectSurface: View {
         return true
     }
 
-    /// The VISIBLE connecting state, held back 400 ms behind the raw edge
-    /// (the `.task(id: isConnecting)` below). A fast LAN connect comes up
-    /// inside the hold and shows NOTHING - no spinner flash, no button morph
-    /// - while a genuinely slow path gets the calm single-capsule treatment.
+    /// Wait 400 ms before showing connection progress, so a fast connection
+    /// doesn't briefly flash a spinner or change the button.
     @State private var showsConnectingUI = false
 
     /// True once the stream is established and the fullscreen window is
@@ -298,11 +297,28 @@ private struct ContextFooter: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let lastPlayed = model.selectedHost?.lastPlayedDescription {
-            Text(lastPlayed)
+        if let lastPlayed = model.selectedHost?.lastConnected {
+            LastPlayedLabel(date: lastPlayed)
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
         }
+    }
+}
+
+/// Relative dates stay current while the launcher or Settings remains open.
+struct LastPlayedLabel: View {
+    let date: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            Text(Self.description(for: date, relativeTo: context.date))
+        }
+    }
+
+    private static func description(for date: Date, relativeTo now: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return "Last played \(formatter.localizedString(for: date, relativeTo: now))"
     }
 }
 

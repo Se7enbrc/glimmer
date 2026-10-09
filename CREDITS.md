@@ -59,3 +59,11 @@ MIT permission notice (applies to both MIT upstreams above):
 > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
+
+## Updates
+
+[Sparkle](https://github.com/sparkle-project/Sparkle) provides automatic
+updates. Its copyright notices, MIT license and bundled component licenses are
+preserved in [ThirdPartyNotices.txt](Glimmer/ThirdPartyNotices.txt), alongside
+the full SDL_GameControllerDB notice. The app includes this file, these credits
+and Glimmer's GPLv3 license in its resources.

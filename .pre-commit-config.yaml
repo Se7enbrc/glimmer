@@ -54,26 +54,29 @@ repos:
         args: ["--prose-wrap=always"]
         exclude: ^third_party/
 
-  # Secret scanning via TruffleHog (replaces gitleaks).
-  # Runs in --pre-commit / --staged mode against verifiable detectors so a
-  # legitimately-rotated test secret doesn't block commits, but real live
-  # credentials (AWS, GCP, GitHub PATs, Stripe keys, etc.) get caught.
+  # Local scans check staged changes; CI also checks tracked files and its commit range.
+  # Both scanners withhold findings from public logs.
   - repo: local
     hooks:
       - id: trufflehog
         name: TruffleHog
-        description: Scan staged changes for verified secrets.
-        entry:
-          bash -c 'trufflehog git "file://$PWD" --since-commit HEAD
-          --only-verified --fail --no-update'
+        description: Scan for verified credentials without printing findings.
+        entry: bash scripts/check-secrets.sh verified
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: private-keys
+        name: Private keys (offline)
+        description: Reject private keys without external verification.
+        entry: bash scripts/check-private-keys.sh
         language: system
         pass_filenames: false
         stages: [pre-commit]
 
   # Swift linting via SwiftLint (Homebrew: `brew install swiftlint`).
   # Runs --fix first to autocorrect what it can, then a strict lint pass that
-  # only treats errors as blocking (warnings are surfaced for review but do
-  # not fail the commit). Skipped automatically when no .swift files are in
+  # blocks warnings as well as errors. Skipped automatically when no .swift files are in
   # the change set.
   #
   # Skipped intentionally: swift-format. Apple's formatter reflows the
@@ -85,7 +88,7 @@ repos:
     hooks:
       - id: swiftlint
         name: SwiftLint
-        description: SwiftLint --fix then lint (errors only).
+        description: SwiftLint --fix then strict lint (zero warnings).
         # If `swiftlint --fix` modifies any file we refuse the commit rather
         # than silently `git add`-ing on the user's behalf: the working tree's
         # Swift diff is hashed before and after, so a rewrite of an already-
@@ -98,23 +101,23 @@ repos:
           shasum -a 256); if [ "$BEFORE" != "$AFTER" ]; then echo "swiftlint
           --fix rewrote files. Review the diff and re-add them:" >&2; git -C
           "$ROOT" diff --stat -- "*.swift" >&2 || true; exit 1; fi; swiftlint
-          lint --quiet --config "$CFG"'
+          lint --strict --quiet --config "$CFG"'
         language: system
         types: [swift]
         pass_filenames: false
         require_serial: true
         stages: [pre-commit]
 
-  # Unit-test gate on PUSH (not commit). `make test` runs the GlimmerTests
-  # suite via xcodebuild - far heavier than the lint/secret hooks, so it's a
-  # pre-push "don't push red" gate rather than pre-commit. Activate once with:
+  # Full local gate before pushing: strict lint, release-tool tests and Swift tests.
+  # Hosted CI repeats this gate. Activate the local hook once with:
   #   pre-commit install --hook-type pre-push
   - repo: local
     hooks:
-      - id: make-test
-        name: make test (unit tests)
-        description: Run the GlimmerTests suite via xcodebuild before pushing.
-        entry: make test
+      - id: make-verify
+        name: make verify (full local gate)
+        description:
+          Run strict lint, release-tool tests and Swift tests before pushing.
+        entry: make verify
         language: system
         pass_filenames: false
         always_run: true

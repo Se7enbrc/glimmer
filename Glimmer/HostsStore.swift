@@ -84,8 +84,7 @@ extension AppModel {
 
     /// Rebuild `hosts` from UserDefaults. Public because Settings → PCs calls
     /// it after the user manually edits the list.
-    func loadHosts() {
-        let defaults = UserDefaults.standard
+    func loadHosts(defaults: UserDefaults = .standard) {
         let count = defaults.integer(forKey: "hosts.size")
         guard count > 0 else {
             hosts = []
@@ -145,12 +144,18 @@ extension AppModel {
             (a.lastConnected ?? .distantPast) > (b.lastConnected ?? .distantPast)
         })
 
-        if let lastID = UserDefaults.standard.string(forKey: "glimmer.selectedHostID"),
+        if let lastID = defaults.string(forKey: "glimmer.selectedHostID"),
            let match = hosts.first(where: { $0.id == lastID }) {
             selectedHost = match
         } else {
             selectedHost = hosts.first
         }
+    }
+
+    /// Refresh the visible PC record immediately; ending a stream need not reactivate the app.
+    func recordLastPlayed(hostID: String, at date: Date = Date(), defaults: UserDefaults = .standard) {
+        defaults.set(date, forKey: "glimmer.lastConnected.\(hostID)")
+        loadHosts(defaults: defaults)
     }
 
     /// Find the `hosts.N` slot index for a host id (uuid, hostname fallback) -
@@ -409,6 +414,7 @@ extension AppModel {
     }
 
     func selectHost(_ host: Host) {
+        guard !isStreaming else { return }
         // A prior PC's red banner would name the wrong machine after a switch.
         nativeStreamError = nil
         UserDefaults.standard.set(host.id, forKey: "glimmer.selectedHostID")

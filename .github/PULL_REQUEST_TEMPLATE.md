@@ -27,8 +27,8 @@ numbers (before and after) are the house currency. See docs/PROFILING.md.
 
 ## Checklist
 
-- [ ] `make app` builds clean
-- [ ] `make verify` passes (strict lint, zero warnings, tests)
+- [ ] `make verify` passes on the exact PR head in a clean worktree; SHA and
+      checks recorded above (strict lint, zero warnings, tests)
 - [ ] Comments explain the WHY for any non-obvious decision (see
       docs/CONTRIBUTING.md → Style)
 - [ ] UI change: before and after screenshots at the smallest and largest window

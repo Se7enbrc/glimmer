@@ -12,6 +12,8 @@
 //  locking rationale.
 //
 
+import AVFoundation
+import AudioToolbox
 import CoreAudio
 import Foundation
 import os
@@ -77,6 +79,7 @@ extension AudioDecoder {
         if fresh.label != previous {
             Diag.notice("audio route changed: \(previous, privacy: .private) → \(fresh.label, privacy: .private)", "Stream")
         }
+        handleEngineConfigurationChange()
     }
 
     /// Remove the route listener. Called from `shutdown()` with `stateLock` held; safe when the install failed
@@ -97,11 +100,8 @@ extension AudioDecoder {
             mElement: kAudioObjectPropertyElementMain)
     }
 
-    /// One blocking sample of the current default-output route, labeled
-    /// "<device name> [<transport>]" (e.g. "MacBook Pro Speakers [builtin]").
-    /// Same probe idiom as `AudioConfig.currentDefaultOutputChannelCount`.
-    /// Returns "unknown" if the HAL won't answer - never throws. Call sites: init
-    /// + the listener's utility queue only, never a hot path.
+    /// Samples the default output as "<device name> [<transport>]", or "unknown".
+    /// Blocks only during initialization or on the listener's utility queue.
     static func sampleAudioRoute() -> AudioRoute {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -156,6 +156,158 @@ extension AudioDecoder {
         case kAudioDeviceTransportTypeVirtual: return "virtual"
         default: return String(format: "0x%08x", transport)
         }
+    }
+}
+
+extension AudioDecoder {
+    func requestOutputDiagnostic(bookmark: UInt64) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        queueOutputDiagnosticLocked(bookmark: bookmark)
+    }
+
+    /// Caller holds stateLock. One queued capture coalesces transitions and bookmark ranges.
+    func queueOutputDiagnosticLocked(bookmark: UInt64? = nil) {
+        guard TelemetryGate.isEnabled, !isShutdown, inputFormat != nil,
+              outputDiagnosticRequests.request(bookmark: bookmark) else { return }
+        enqueueOutputDiagnostic(generation: engineRestartGeneration)
+    }
+
+    private func enqueueOutputDiagnostic(generation: UInt64) {
+        routeListenerQueue.async { [weak self] in self?.captureOutputDiagnostic(generation: generation) }
+    }
+
+    private func captureOutputDiagnostic(generation: UInt64) {
+        stateLock.lock()
+        guard generation == engineRestartGeneration else { stateLock.unlock(); return }
+        guard TelemetryGate.isEnabled, !isShutdown, inputFormat != nil else {
+            outputDiagnosticRequests = AudioOutputDiagnosticRequests()
+            stateLock.unlock()
+            return
+        }
+        stateLock.unlock()
+        let initialDevice = AudioOutputDiagnostic.defaultOutputDevice()
+        stateLock.lock()
+        guard generation == engineRestartGeneration, !isShutdown else { stateLock.unlock(); return }
+        let bookmarks = outputDiagnosticRequests.take()
+        let format = engine.outputNode.outputFormat(forBus: 0)
+        var snapshot = AudioOutputDiagnostic(
+            playerGain: playerNode.volume, mainGain: engine.mainMixerNode.outputVolume,
+            spatialGain: spatialMixer?.outputVolume, sampleRate: format.sampleRate,
+            channels: format.channelCount, muted: outputMuted, running: engine.isRunning)
+        stateLock.unlock()
+
+        // HAL IPC never holds the decoder lock; a changed default invalidates its volume reading.
+        snapshot.readDefaultOutputVolume(initialDevice: initialDevice)
+
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard generation == engineRestartGeneration, !isShutdown else { return }
+        if TelemetryGate.isEnabled {
+            TelemetryExporter.recordLiveEvent(snapshot.fields(bookmarks: bookmarks))
+        }
+        if outputDiagnosticRequests.finish() { enqueueOutputDiagnostic(generation: generation) }
+    }
+}
+
+/// Constant storage regardless of request rate; a snapshot names every coalesced bookmark's range.
+struct AudioOutputDiagnosticRequests {
+    struct Bookmarks {
+        var first: UInt64?
+        var last: UInt64?
+    }
+    private var queued = false
+    private var pending = false
+    private var bookmarks = Bookmarks()
+
+    mutating func request(bookmark: UInt64?) -> Bool {
+        pending = true
+        if let bookmark {
+            bookmarks.first = min(bookmarks.first ?? bookmark, bookmark)
+            bookmarks.last = max(bookmarks.last ?? bookmark, bookmark)
+        }
+        guard !queued else { return false }
+        queued = true
+        return true
+    }
+
+    mutating func take() -> Bookmarks {
+        let result = bookmarks
+        bookmarks = Bookmarks()
+        pending = false
+        return result
+    }
+
+    mutating func finish() -> Bool {
+        queued = pending
+        return pending
+    }
+}
+
+/// Only numeric output state leaves this type; device identifiers remain local to the HAL read.
+struct AudioOutputDiagnostic {
+    var playerGain: Float
+    var mainGain: Float
+    var spatialGain: Float?
+    var sampleRate: Double
+    var channels: UInt32
+    var muted: Bool
+    var running: Bool
+    var halVolume: Float?
+    var halMuted: Bool?
+    var routeChanged = false
+
+    func fields(bookmarks: AudioOutputDiagnosticRequests.Bookmarks) -> [String] {
+        var fields = ["\"event\":\"audio_output_state\"",
+                      "\"reason\":\"\(bookmarks.last == nil ? "configuration" : "bookmark")\"",
+                      "\"output_channels\":\(channels)", "\"stream_muted\":\(muted)",
+                      "\"engine_running\":\(running)", "\"default_route_changed\":\(routeChanged)"]
+        let numbers: [(String, Double?)] = [
+            ("player_gain", Double(playerGain)), ("main_mixer_gain", Double(mainGain)),
+            ("spatial_mixer_gain", spatialGain.map(Double.init)), ("output_rate_hz", sampleRate),
+            ("hal_output_volume", routeChanged ? nil : halVolume.map(Double.init))]
+        for (key, value) in numbers {
+            if let value, value.isFinite { fields.append("\"\(key)\":\(value)") }
+        }
+        if !routeChanged, let halMuted { fields.append("\"hal_output_muted\":\(halMuted)") }
+        if let first = bookmarks.first { fields.append("\"bookmark_first\":\(first)") }
+        if let last = bookmarks.last { fields.append("\"bookmark_total\":\(last)") }
+        return fields
+    }
+
+    mutating func readDefaultOutputVolume(initialDevice: AudioObjectID?) {
+        let before = Self.defaultOutputDevice()
+        if let device = before {
+            halVolume = Self.read(device, selector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+                                  scope: kAudioObjectPropertyScopeOutput, initial: Float32(0))
+                ?? Self.read(device, selector: kAudioDevicePropertyVolumeScalar,
+                             scope: kAudioObjectPropertyScopeOutput, initial: Float32(0))
+            let mute: UInt32? = Self.read(device, selector: kAudioDevicePropertyMute,
+                                         scope: kAudioObjectPropertyScopeOutput, initial: UInt32(0))
+            halMuted = mute.map { $0 != 0 }
+        }
+        routeChanged = initialDevice != before || before != Self.defaultOutputDevice()
+    }
+
+    fileprivate static func defaultOutputDevice() -> AudioObjectID? {
+        let device: UInt32? = read(AudioObjectID(kAudioObjectSystemObject),
+                                  selector: kAudioHardwarePropertyDefaultOutputDevice,
+                                  scope: kAudioObjectPropertyScopeGlobal, initial: UInt32(0))
+        return device == kAudioObjectUnknown ? nil : device
+    }
+
+    private static func read<Value>(_ object: AudioObjectID, selector: AudioObjectPropertySelector,
+                                    scope: AudioObjectPropertyScope, initial: Value) -> Value? {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: scope,
+                                                mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectHasProperty(object, &address) else { return nil }
+        var value = initial
+        var size = UInt32(MemoryLayout<Value>.size)
+        let status = withUnsafeMutableBytes(of: &value) { buffer -> OSStatus in
+            guard let base = buffer.baseAddress else { return kAudioHardwareUnspecifiedError }
+            return AudioObjectGetPropertyData(object, &address, 0, nil, &size, base)
+        }
+        return status == noErr ? value : nil
     }
 }
 

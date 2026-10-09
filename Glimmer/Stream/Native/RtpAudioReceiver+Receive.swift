@@ -39,7 +39,7 @@ extension RtpAudioReceiver {
                         recvfrom(sock, &buf, bufSize, 0, $0, &sourceLength)
                     }
                 }
-                if received >= 0, !Self.isExpectedPeer(source, length: sourceLength,
+                if received >= 0, !UdpPinger.isExpectedPeer(source, length: sourceLength,
                                                        expected: self.destAddr, expectedLength: self.destAddrLen) {
                     continue
                 }

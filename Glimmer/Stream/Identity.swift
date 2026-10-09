@@ -13,28 +13,9 @@
 //  Ported (loosely now) from moonlight-qt's app/backend/identitymanager.{h,cpp}.
 //
 //
-// STORAGE DECISION: mode-0600 files under Application Support, deliberately.
-// We evaluated moving to the keychain once builds went Developer-ID signed,
-// and chose to stay on files:
-//
-//   * The data-protection keychain (the clean per-app store) is gated behind a
-//     `keychain-access-groups` entitlement, which on a Developer-ID Mac app
-//     (no provisioning profile) makes AMFI refuse to LAUNCH the process
-//     (RBSRequestErrorDomain Code=5 / POSIX 163). It needs an embedded
-//     provisioning profile to work at all - not worth that machinery here.
-//
-//   * The login keychain works without a profile, and a stable Developer-ID
-//     signature fixes the adhoc CDHash-ACL re-prompt that drove us off it
-//     before - but it only buys encryption-at-rest for a narrow gain on a LAN
-//     streaming identity, and the project already tried it once and retreated.
-//
-//   * The reference (moonlight-qt) stores PLAINTEXT PEM in a mode-0644
-//     QSettings plist under ~/Library/Preferences - no keychain at all. Our
-//     mode-0600 files are already stricter: 0600 keeps every other user out
-//     (0600 > 0644).
-//
-// So: files. See SECURITY.md for the user-facing version.
-//
+// The pairing identity remains in mode-0600 files. Provisioning profiles now
+// remove a historical keychain packaging obstacle; no identity migration is
+// implied by that signing change. See docs/SECURITY.md for the threat model.
 //
 // THREAT MODEL:
 //

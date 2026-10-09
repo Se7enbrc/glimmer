@@ -9,9 +9,74 @@
 import Foundation
 import Testing
 import CryptoKit
+import Security
 @testable import Glimmer
 
 struct PairingCryptoTests {
+
+    @Test(arguments: [2048, 3072, 4096])
+    func supportedRSAIdentitiesRemainUsable(_ bits: Int) async throws {
+        let identity = try await EphemeralCryptoIdentity.make(bits: bits)
+        let message = Data("host proof".utf8)
+        let signature = try PairingClient.signMessage(message, privateKeyPEM: identity.keyPEM)
+        #expect(try PairingClient.verifySignature(
+            data: message, signature: signature, serverCertPEM: identity.certPEM))
+        _ = try ControlTransport.clientIdentity(certPEM: identity.certPEM, keyPEM: identity.keyPEM)
+        let certificate = try #require(PEM.certificate(identity.certPEM))
+        #expect(try ControlTransport.acceptsHostCertificate(certificate, pinnedDER: PEM.der(identity.certPEM)))
+    }
+
+    @Test func weakRSAProofAndPinnedCertificateAreRejected() async throws {
+        let identity = try await EphemeralCryptoIdentity.make(bits: 1024)
+        let message = Data("valid signature from a weak host key".utf8)
+        let key = try #require(PEM.privateKey(identity.keyPEM))
+        let signature = try #require(SecKeyCreateSignature(
+            key, .rsaSignatureMessagePKCS1v15SHA256, message as CFData, nil) as Data?)
+        #expect(SecKeyVerifySignature(try #require(SecKeyCopyPublicKey(key)),
+                                     .rsaSignatureMessagePKCS1v15SHA256,
+                                     message as CFData, signature as CFData, nil))
+        #expect(throws: StreamError.self) {
+            try PairingClient.verifySignature(data: message, signature: signature, serverCertPEM: identity.certPEM)
+        }
+        #expect(throws: StreamError.self) {
+            try ControlTransport.clientIdentity(certPEM: identity.certPEM, keyPEM: identity.keyPEM)
+        }
+        let certificate = try #require(PEM.certificate(identity.certPEM))
+        let pin = try #require(PEM.der(identity.certPEM))
+        #expect(throws: StreamError.self) {
+            try ControlTransport.acceptsHostCertificate(certificate, pinnedDER: pin)
+        }
+        #expect(PEM.der(identity.certPEM) == pin)
+    }
+
+    @Test func malformedAndNonRSACertificatesAreRejected() async throws {
+        #expect(throws: StreamError.self) {
+            try PEM.certificateKey("malformed certificate", context: "PC certificate")
+        }
+        let identity = try await EphemeralCryptoIdentity.make(bits: 256, ellipticCurve: true)
+        let certificate = try #require(PEM.certificate(identity.certPEM))
+        #expect(throws: StreamError.self) {
+            try ControlTransport.acceptsHostCertificate(certificate, pinnedDER: PEM.der(identity.certPEM))
+        }
+        #expect(throws: StreamError.self) {
+            try PEM.identity(certPEM: identity.certPEM, keyPEM: identity.keyPEM)
+        }
+    }
+
+    @Test func weakPairingCertificateCannotReplaceAnExistingPin() async throws {
+        let previous = try await EphemeralCryptoIdentity.make(bits: 2048)
+        let weak = try await EphemeralCryptoIdentity.make(bits: 1024)
+        var server = ServerInfo(address: "127.0.0.1", uniqueId: "fixture", serverName: "Fixture")
+        server.serverCertPEM = previous.certPEM
+        let network = NetworkClient(server: server)
+        do {
+            try await network.setPinnedHostCert(pem: weak.certPEM)
+            Issue.record("A weak pairing certificate replaced the existing pin")
+        } catch StreamError.crypto(let detail) {
+            #expect(detail == "PC certificate requires an RSA key of at least 2048 bits")
+        }
+        #expect(await network.pinnedServerCertPEM() == previous.certPEM)
+    }
 
     // MARK: - aesKey(forPIN:salt:) known-answer
 
@@ -340,6 +405,44 @@ struct PairingCryptoTests {
         }
         #expect(PairingFailure.timedOut.message(pc: "TOWER") != PairingFailure.rejected.message(pc: "TOWER"))
         #expect(PairingFailure.invalidAddress.message(pc: "TOWER") == PairingFailure.addressHint)
+    }
+}
+
+/// Disposable in-memory certificates, including keys production identity generation refuses to make.
+enum EphemeralCryptoIdentity {
+    static func make(bits: Int, ellipticCurve: Bool = false) async throws -> (certPEM: String, keyPEM: String) {
+        // RSA generation can outlast transport deadlines on a small runner; keep cooperative workers free.
+        try await onTestThread { try generate(bits: bits, ellipticCurve: ellipticCurve) }
+    }
+
+    private static func generate(bits: Int, ellipticCurve: Bool) throws -> (certPEM: String, keyPEM: String) {
+        let attributes: [CFString: Any] = [
+            kSecAttrKeyType: ellipticCurve ? kSecAttrKeyTypeECSECPrimeRandom : kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits: bits
+        ]
+        let key = try #require(SecKeyCreateRandomKey(attributes as CFDictionary, nil))
+        let publicKey = try #require(SecKeyCopyPublicKey(key))
+        let publicBytes = try #require(SecKeyCopyExternalRepresentation(publicKey, nil) as Data?)
+        let privateBytes = try #require(SecKeyCopyExternalRepresentation(key, nil) as Data?)
+        let rsa = DER.sequence(DER.rsaEncryption, DER.null)
+        let ec = DER.sequence([0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01],
+                              [0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07])
+        let signatureAlgorithm = ellipticCurve
+            ? DER.sequence([0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02])
+            : DER.sequence(DER.sha256WithRSA, DER.null)
+        let name = DER.sequence(DER.set(DER.sequence(DER.commonName, DER.utf8String("Ephemeral test identity"))))
+        let now = Date()
+        let tbs = DER.sequence(DER.encode(0xA0, DER.integer(2)), DER.integer(1), signatureAlgorithm, name,
+                               DER.sequence(DER.time(now.addingTimeInterval(-60)),
+                                            DER.time(now.addingTimeInterval(3600))), name,
+                               DER.sequence(ellipticCurve ? ec : rsa, DER.bitString([UInt8](publicBytes))))
+        let algorithm: SecKeyAlgorithm = ellipticCurve
+            ? .ecdsaSignatureMessageX962SHA256 : .rsaSignatureMessagePKCS1v15SHA256
+        let signature = try #require(SecKeyCreateSignature(key, algorithm, Data(tbs) as CFData, nil) as Data?)
+        let certificate = DER.sequence(tbs, signatureAlgorithm, DER.bitString([UInt8](signature)))
+        let privateDER = ellipticCurve ? [UInt8](privateBytes)
+            : DER.sequence(DER.integer(0), rsa, DER.octetString([UInt8](privateBytes)))
+        return (PEM.encode(certificate, label: "CERTIFICATE"), PEM.encode(privateDER, label: "PRIVATE KEY"))
     }
 }
 

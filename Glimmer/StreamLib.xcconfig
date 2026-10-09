@@ -4,7 +4,7 @@
 #include "Version.xcconfig"
 
 // Xcode build settings for the app: the bridging header and its search path, applied via
-// `xcodebuild -xcconfig` from the Makefile. Glimmer links no third-party library.
+// `xcodebuild -xcconfig` from the Makefile. The streaming engine links no third-party library.
 
 // SRCROOT = repo root (directory containing Glimmer.xcodeproj).
 GLIMMER_REPO_ROOT = $(SRCROOT)
@@ -16,5 +16,14 @@ HEADER_SEARCH_PATHS = $(inherited) $(GLIMMER_REPO_ROOT)
 // defaults to ARCHS_STANDARD (universal), and the shared scheme carries no arch narrowing.
 ARCHS = arm64
 
-// Bridging header at repo root (where Xcode looks by convention).
+// Explicit path to the app's sole Objective-C exception boundary.
 SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
+
+// Apply Enhanced Security's compiler protections explicitly while retaining arm64.
+// Pointer authentication requires a separately validated arm64e dependency build.
+CLANG_ENABLE_STACK_ZERO_INIT = YES
+ENABLE_SECURITY_COMPILER_WARNINGS = YES
+GCC_WARN_SHADOW = YES
+CLANG_WARN_EMPTY_BODY = YES
+CLANG_ENABLE_C_TYPED_ALLOCATOR_SUPPORT = YES
+CLANG_ENABLE_CPLUSPLUS_TYPED_ALLOCATOR_SUPPORT = YES

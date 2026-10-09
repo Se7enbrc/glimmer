@@ -40,6 +40,23 @@ struct HostContextMenuTests {
         #expect(model.streamingHostID == host.id)
     }
 
+    @Test func switchingPCsDuringAStreamPreservesSelectionAndStatus() {
+        let model = model(polled: .streamingApp(name: "Desktop"))
+        model.selectedHost = host
+        let live = HostLiveStatus(hostID: host.id, state: .streamingApp(name: "Desktop"), capturedAt: Date())
+        model.hostLiveStatus = live
+        model.nativeStreamError = "Existing stream message"
+        model.isStreaming = true
+        let other = Host(id: "other-pc", name: "other", customName: nil, localAddress: nil, manualAddress: nil,
+                         apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+
+        model.selectHost(other)
+
+        #expect(model.selectedHost?.id == host.id)
+        #expect(model.hostLiveStatus?.hostID == live.hostID)
+        #expect(model.nativeStreamError == "Existing stream message")
+    }
+
     /// Without a pin nothing is sent, and the launcher points at the fix.
     @Test func quittingOnAnUnpairedPCSaysHowToPairAgain() async {
         do {

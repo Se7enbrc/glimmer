@@ -13,11 +13,11 @@ import Testing
 
 @MainActor
 private func key(_ type: NSEvent.EventType, _ keyCode: Int, mods: NSEvent.ModifierFlags = [],
-                 chars: String = "w", at timestamp: TimeInterval = 1) throws -> NSEvent {
+                 chars: String = "w", isRepeat: Bool = false, at timestamp: TimeInterval = 1) throws -> NSEvent {
     try #require(NSEvent.keyEvent(
         with: type, location: .zero, modifierFlags: mods, timestamp: timestamp,
         windowNumber: 0, context: nil, characters: chars, charactersIgnoringModifiers: chars,
-        isARepeat: false, keyCode: UInt16(keyCode)))
+        isARepeat: isRepeat, keyCode: UInt16(keyCode)))
 }
 
 @MainActor
@@ -164,6 +164,139 @@ struct ReconnectHeldInputTests {
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_ANSI_C, mods: [.control], chars: "c", at: 3))
         #expect(forwarder.heldModifierVKs.isEmpty)
         #expect(forwarder.heldKeys == [0x43])
+    }
+}
+
+@MainActor
+struct MissingModifierReleaseTests {
+    @MainActor
+    private final class Tally { var calls = 0 }
+
+    @Test func interruptedMiniPlayerChordReleasesControlBeforeBareEscape() throws {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        let toggles = Tally()
+        forwarder.backend = backend
+        forwarder.isReady = true
+        forwarder.onMiniPlayerHotkey = { toggles.calls += 1 }
+        let view = StreamInputView()
+        forwarder.streamView(view, handleFlagsChanged: try key(.flagsChanged, kVK_Control, mods: [.control]))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_ANSI_M, mods: [.control], chars: "m"))
+        #expect(toggles.calls == 1)
+        #expect(forwarder.heldModifierVKs == [0xA2])
+        #expect(backend.keyboard.count == 1)
+
+        // The posted chord was interrupted before its Control-up arrived.
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, chars: "\u{1b}", at: 2))
+        forwarder.streamView(view, handleKeyUp: try key(.keyUp, kVK_Escape, chars: "\u{1b}", at: 3))
+        #expect(forwarder.heldModifierVKs.isEmpty)
+        #expect(backend.keyboard.map(\.keyCode) == [wire(0xA2), wire(0xA2), wire(0x1B), wire(0x1B)])
+        #expect(backend.keyboard.map(\.action) == [down, up, down, up])
+        #expect(backend.keyboard.suffix(3).allSatisfy { $0.modifiers == 0 })
+    }
+
+    @Test func heldEscapeRepeatRecoversControlWithoutAnotherEscapeDown() throws {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        forwarder.backend = backend
+        forwarder.isReady = true
+        let view = StreamInputView()
+        forwarder.streamView(view, handleFlagsChanged: try key(.flagsChanged, kVK_Control, mods: [.control]))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, mods: [.control]))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, isRepeat: true, at: 2))
+        #expect(forwarder.heldModifierVKs.isEmpty)
+        #expect(backend.keyboard.map(\.keyCode) == [wire(0xA2), wire(0x1B), wire(0xA2)])
+        #expect(backend.keyboard.map(\.action) == [down, down, up])
+    }
+
+    @Test func keyUpRecoversMissingModifierReleaseAndPreservesEscapeTap() throws {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        forwarder.backend = backend
+        forwarder.isReady = true
+        forwarder.isWindowMode = true
+        forwarder.isMouseCaptured = true
+        defer { forwarder.cancelEscapeHold() }
+        let view = StreamInputView()
+        let rightControl = NSEvent.ModifierFlags(rawValue: NSEvent.ModifierFlags.control.rawValue | 0x2000)
+        forwarder.streamView(view, handleFlagsChanged: try key(.flagsChanged, kVK_RightControl, mods: rightControl))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, mods: [.control]))
+        #expect(forwarder.heldModifierVKs == [0xA3])
+        #expect(forwarder.escapeHoldTask == nil)
+        forwarder.streamView(view, handleKeyUp: try key(.keyUp, kVK_Escape, at: 2))
+        #expect(forwarder.escapeHoldTask == nil)
+        #expect(forwarder.heldModifierVKs.isEmpty)
+        #expect(forwarder.heldKeys.isEmpty)
+        #expect(backend.keyboard.map(\.keyCode) == [wire(0xA3), wire(0x1B), wire(0xA3), wire(0x1B)])
+        #expect(backend.keyboard.map(\.action) == [down, down, up, up])
+    }
+
+    private var down: Int8 { Int8(StreamProtocol.KEY_ACTION_DOWN) }
+    private var up: Int8 { Int8(StreamProtocol.KEY_ACTION_UP) }
+    private func wire(_ vk: Int16) -> Int16 { VKScanCode(vk: vk).wireCode }
+}
+
+@MainActor
+struct ModifiedEscapeHoldTests {
+    @Test(arguments: [NSEvent.ModifierFlags.command, .control, .option, .shift, .function])
+    func modifiedEscapeDoesNotArmPointerRelease(modifier: NSEvent.ModifierFlags) throws {
+        let forwarder = capturedForwarder()
+        let view = StreamInputView()
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape, mods: modifier))
+        #expect(forwarder.escapeHoldTask == nil)
+        #expect(forwarder.heldKeys.isEmpty == modifier.contains(.command))
+    }
+
+    @Test(arguments: [NSEvent.ModifierFlags.command, .control])
+    func modifierPressedDuringEscapeHoldCancelsRelease(modifier: NSEvent.ModifierFlags) throws {
+        let forwarder = capturedForwarder()
+        let view = StreamInputView()
+        defer { forwarder.cancelEscapeHold() }
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape))
+        #expect(forwarder.escapeHoldTask != nil)
+        let keyCode = modifier.contains(.command) ? kVK_Command : kVK_Control
+        forwarder.streamView(view, handleFlagsChanged: try key(.flagsChanged, keyCode, mods: modifier, at: 2))
+        #expect(forwarder.escapeHoldTask == nil)
+        #expect(forwarder.heldKeys == [0x1B])
+        forwarder.streamView(view, handleFlagsChanged: try key(.flagsChanged, keyCode, at: 3))
+        #expect(forwarder.escapeHoldTask == nil)
+        forwarder.streamView(view, handleKeyUp: try key(.keyUp, kVK_Escape, at: 4))
+        #expect(forwarder.heldKeys.isEmpty)
+    }
+
+    @Test func clientChordCancelsEscapeHoldBeforeItsEarlyReturn() throws {
+        let forwarder = capturedForwarder()
+        let view = StreamInputView()
+        defer { forwarder.cancelEscapeHold() }
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape))
+        #expect(forwarder.escapeHoldTask != nil)
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_ANSI_M, mods: [.control], chars: "m", at: 2))
+        #expect(forwarder.escapeHoldTask == nil)
+        #expect(forwarder.heldKeys == [0x1B])
+    }
+
+    @Test func bareEscapeTapStillForwardsImmediatelyAndCancelsHold() throws {
+        let forwarder = capturedForwarder()
+        let backend = InputRecordingBackend()
+        forwarder.backend = backend
+        let view = StreamInputView()
+        defer { forwarder.cancelEscapeHold() }
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape))
+        #expect(forwarder.escapeHoldTask != nil)
+        #expect(backend.keyboard.map(\.keyCode) == [VKScanCode(vk: 0x1B).wireCode])
+        #expect(backend.keyboard.first?.action == Int8(StreamProtocol.KEY_ACTION_DOWN))
+        forwarder.streamView(view, handleKeyUp: try key(.keyUp, kVK_Escape, at: 2))
+        #expect(forwarder.escapeHoldTask == nil)
+        #expect(backend.keyboard.last?.action == Int8(StreamProtocol.KEY_ACTION_UP))
+        #expect(backend.keyboard.count == 2)
+    }
+
+    private func capturedForwarder() -> InputForwarder {
+        let forwarder = InputForwarder()
+        forwarder.isReady = true
+        forwarder.isWindowMode = true
+        forwarder.isMouseCaptured = true
+        return forwarder
     }
 }
 

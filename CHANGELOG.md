@@ -1,5 +1,64 @@
 # Changelog
 
+## 2026.10.6 - 2026-10-09
+
+- Returning to a fullscreen stream discards mouse motion from before capture
+  resumed, so moving the pointer in another app cannot snap the game camera.
+- Custom resolution and refresh rate survive restarting Glimmer, including
+  choosing 1080p on a 4K display. (#112)
+- The basic stats overlay shows the codec actually selected by the PC, including
+  when its codec preference is Auto. (#113)
+- Video now rejects UDP packets from addresses other than the paired PC,
+  matching the existing audio check.
+- Pairing and secure connections reject RSA keys smaller than 2048 bits,
+  including imported identities, while preserving existing pairings.
+- Diagnostics no longer record command-key scan codes, unmapped key codes, audio
+  exception details or your home-folder path in system logs.
+- VoiceOver names settings switches, shortcut recorders, PC controls and the
+  telemetry folder button by their purpose.
+- Uncommitted builds refresh their telemetry timestamp so successive test builds
+  can be distinguished.
+- Renderer freeze recovery recognizes sustained refusals even when the frame
+  queue is empty, without waiting for 90 rejected frames.
+- Last played updates when a stream ends and stays current while the launcher or
+  PC settings remain open.
+- Audio joins are smoothed when trimming excess buffered sound, without adding
+  playback delay.
+- Audio follows your output when switching between speakers and headphones, with
+  spatial playback and head tracking on compatible AirPods.
+- A queued paste is cancelled if the stream reconnects or loses focus before the
+  text is sent.
+- Video frames released by the pacer are displayed immediately, so the PC's
+  timestamps aren't interpreted as times on the Mac's clock.
+- Stopping a connection cancels its initial PC check. Late replies from an old
+  connection cannot interrupt a newer stream.
+- Shortcuts keep streaming from the PC they were asked to use, even if the
+  selected PC changes while connecting.
+- Controller button behavior and player assignments are restored when a stream
+  ends. A pending quit chord is cancelled when the stream loses focus.
+- Controller diagnostics resume after streaming ends, and VoiceOver describes
+  button and stick states.
+- If Open at login cannot be registered, Settings explains the problem and
+  offers a retry.
+- Checking Open at login no longer blocks the interface, and an inconclusive
+  check leaves your registration alone.
+- The Wi-Fi helper keeps its current connection in charge when an older one
+  disconnects, and recovers from stalled interface commands.
+- Added macOS memory protections and explicit authorization for the Wi-Fi
+  helper's network monitoring. Installation now checks that both the app and
+  helper can launch after notarization.
+- Controllers keep playing in Mini Player while you use another app. Keyboard
+  and mouse still follow normal focus and capture behavior.
+- Fullscreen defaults to a native macOS Space, preserving saved preferences.
+  Native fullscreen supports Game Mode, with its switch in macOS Game Overlay.
+- Returning from another Space no longer counts intentionally hidden video as a
+  presentation stall.
+- A missed modifier-key release no longer turns later keys into unintended
+  shortcuts, such as Escape opening the Windows Start menu after Mini Player.
+- Stopping a stream restores the Mac pointer before the fullscreen exit
+  animation, including over Glimmer's own windows. The closing stream window
+  stops intercepting clicks immediately.
+
 ## 2026.10.5 - 2026-10-08
 
 - Frames whose timing falls between display refreshes no longer accumulate extra

@@ -27,6 +27,43 @@ enum PEM {
         der(pem).flatMap { SecCertificateCreateWithData(nil, $0 as CFData) }
     }
 
+    static func requireStrongRSA(_ key: SecKey, context: String) throws {
+        let attributes = SecKeyCopyAttributes(key) as? [String: Any]
+        guard attributes?[kSecAttrKeyType as String] as? String == kSecAttrKeyTypeRSA as String,
+              let bits = attributes?[kSecAttrKeySizeInBits as String] as? Int,
+              bits >= 2048 else {
+            throw StreamError.crypto("\(context) requires an RSA key of at least 2048 bits")
+        }
+    }
+
+    static func certificateKey(_ certificate: SecCertificate, context: String) throws -> SecKey {
+        guard let key = SecCertificateCopyKey(certificate) else {
+            throw StreamError.crypto("could not read \(context) certificate key")
+        }
+        try requireStrongRSA(key, context: context)
+        return key
+    }
+
+    static func certificateKey(_ pem: String, context: String) throws -> SecKey {
+        guard let certificate = certificate(pem) else {
+            throw StreamError.crypto("could not parse \(context) certificate")
+        }
+        return try certificateKey(certificate, context: context)
+    }
+
+    /// Validate before migrating or caching an identity, so rejection preserves its source.
+    static func identity(certPEM: String, keyPEM: String) throws -> SecIdentity {
+        guard let certificate = certificate(certPEM), let key = privateKey(keyPEM) else {
+            throw StreamError.crypto("could not parse client certificate or private key")
+        }
+        _ = try certificateKey(certificate, context: "client certificate")
+        try requireStrongRSA(key, context: "client private key")
+        guard let identity = SecIdentityCreate(nil, certificate, key) else {
+            throw StreamError.crypto("client cert/key mismatch")
+        }
+        return identity
+    }
+
     /// An RSA private key from PKCS#8, the form Glimmer and moonlight-qt write, or PKCS#1.
     static func privateKey(_ pem: String) -> SecKey? {
         guard let der = der(pem) else { return nil }

@@ -24,6 +24,12 @@ public final class AudioDecoder: @unchecked Sendable {
     /// Interleaved PCM the decoder writes before the demux, reused for every 5 ms packet.
     /// Guarded by `stateLock`, which already serializes decoding.
     var decodeScratch: [Float] = []
+    /// Retains the first skipped block until its join is smoothed, under `stateLock`.
+    var packetSplice = AudioPacketSplice()
+    // Audio graph state is serialized by `stateLock`, including output-route changes.
+    var spatialMixer: AVAudioEnvironmentNode?
+    var spatialOutputType: AVAudioEnvironmentOutputType?
+    var outputGraphNeedsReconnect = false
     let engine = AVAudioEngine()
     let playerNode = AVAudioPlayerNode()
     /// Drift-tracking resampler, inserted between `playerNode` and the mixer. A
@@ -33,10 +39,8 @@ public final class AudioDecoder: @unchecked Sendable {
     /// one-directional/clicky silence micro-stretch. ε is ppm-scale (the bound is
     /// ±500ppm = ±0.5 cents, inaudible; the slew limit keeps the pitch from stepping).
     let varispeed = AVAudioUnitVarispeed()
-    /// Serial queue for `varispeed.rate` writes — keeps the write (which takes
-    /// AVAudio's engine lock) OFF the completion handler, which holds the messenger
-    /// lock and would deadlock against teardown's `playerNode.stop()`. Non-private:
-    /// `applyVarispeedRate` (the resampler extension) writes through it.
+    /// `varispeed.rate` takes the engine lock. Write on this queue, outside the
+    /// completion handler's messenger lock, to avoid deadlocking with teardown.
     let varispeedRateQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.varispeed-rate")
     var inputFormat: AVAudioFormat?
     /// Last-known engine OUTPUT (hardware) format, captured when the engine
@@ -416,6 +420,8 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `stateLock`; the handler touches only meter state and Diag.
     var routeListenerKey: Int?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
+    /// Coalesced opt-in snapshots; guarded by stateLock and invalidated with engineRestartGeneration.
+    var outputDiagnosticRequests = AudioOutputDiagnosticRequests()
     /// Bounded retry counter for transient route handoffs; guarded by stateLock.
     /// Internal because the ladder lives in AudioDecoder+Engine.swift.
     var engineRestartRetries = 0

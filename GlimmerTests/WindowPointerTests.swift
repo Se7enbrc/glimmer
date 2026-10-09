@@ -387,6 +387,16 @@ struct WindowPointerTests {
         #expect(EscapeHold.keyCode == 53)   // kVK_Escape
     }
 
+    @Test(arguments: [NSEvent.ModifierFlags.command, .control, .option, .shift, .function])
+    func modifiedEscapeNeverArmsPointerRelease(modifier: NSEvent.ModifierFlags) {
+        #expect(EscapeHold.onKeyDown(
+            keyCode: EscapeHold.keyCode, isRepeat: false,
+            windowMode: true, captured: true, armed: false, modifiers: modifier) == .none)
+        #expect(EscapeHold.onKeyDown(
+            keyCode: EscapeHold.keyCode, isRepeat: false,
+            windowMode: true, captured: true, armed: false, modifiers: [.capsLock]) == .arm)
+    }
+
     @MainActor
     @Test func resigningKeyCancelsAnArmedEscapeHold() {
         let forwarder = InputForwarder()
@@ -397,7 +407,126 @@ struct WindowPointerTests {
         #expect(forwarder.escapeHoldTask.map { _ in true } == nil)
     }
 
+    @MainActor
+    @Test func detachedForwarderCannotReenterMouseCapture() {
+        let forwarder = InputForwarder()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 64, height: 64),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        forwarder.attach(to: window)
+        forwarder.detach()
+        let coalescing = NSEvent.isMouseCoalescingEnabled
+        defer { forwarder.exitCapturedMode() }
+
+        forwarder.enterCapturedMode()
+
+        #expect(!forwarder.isMouseCaptured)
+        #expect(forwarder.savedMouseCoalescing == nil)
+        #expect(NSEvent.isMouseCoalescingEnabled == coalescing)
+    }
+
+    @MainActor
+    @Test func staleBecomeKeyNotificationCannotCaptureAnUnfocusedWindow() {
+        let forwarder = InputForwarder()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 64, height: 64),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        forwarder.attach(to: window)
+        forwarder.installFocusObservers(for: window)
+        let coalescing = NSEvent.isMouseCoalescingEnabled
+        defer { forwarder.detach() }
+        #expect(!window.isKeyWindow)
+
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+
+        #expect(!forwarder.isMouseCaptured)
+        #expect(forwarder.savedMouseCoalescing == nil)
+        #expect(NSEvent.isMouseCoalescingEnabled == coalescing)
+    }
+
     // MARK: Capture hint budget
+
+    @MainActor
+    @Test func fullscreenDoesNotReplayBackgroundMotionAfterRecapture() throws {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        let window = PointerFocusTestWindow(contentRect: NSRect(x: 0, y: 0, width: 64, height: 64),
+                                            styleMask: .borderless, backing: .buffered, defer: true)
+        forwarder.setBackend(backend)
+        forwarder.attach(to: window)
+        forwarder.isReady = true
+        defer { forwarder.detach() }
+        let view = try #require(forwarder.inputView)
+        let future = ProcessInfo.processInfo.systemUptime + 3600
+        forwarder.enterCapturedMode()
+        view.mouseMoved(with: try motionEvent(timestamp: future, dx: 0, dy: -1500))
+        view.mouseMoved(with: try motionEvent(timestamp: future + 1, dx: 2, dy: 3))
+        #expect(backend.mouseMoves == [.init(dx: 2, dy: 3)])
+
+        window.focused = false
+        forwarder.windowResignedKey()
+        view.mouseMoved(with: try motionEvent(timestamp: future + 2, dx: 0, dy: -1500))
+        #expect(!forwarder.forwardsMouseEvents)
+        #expect(backend.mouseMoves.count == 1)
+
+        window.focused = true
+        forwarder.enterCapturedMode()
+        view.mouseMoved(with: try motionEvent(timestamp: 1, dx: 0, dy: -1500))
+        view.mouseMoved(with: try motionEvent(timestamp: future + 3, dx: 0, dy: -1500))
+        view.mouseMoved(with: try motionEvent(timestamp: future + 4, dx: 4, dy: 5))
+        #expect(backend.mouseMoves == [.init(dx: 2, dy: 3), .init(dx: 4, dy: 5)])
+    }
+
+    @MainActor
+    @Test func aFreeWindowPointerStillForwardsOnlyWhileKey() {
+        let forwarder = InputForwarder()
+        let window = PointerFocusTestWindow(contentRect: NSRect(x: 0, y: 0, width: 64, height: 64),
+                                            styleMask: .borderless, backing: .buffered, defer: true)
+        forwarder.attach(to: window)
+        defer { forwarder.detach() }
+        #expect(!forwarder.forwardsMouseEvents)
+        forwarder.setWindowMode(true)
+        #expect(forwarder.forwardsMouseEvents)
+        #expect(forwarder.sendsAbsolutePointer)
+        window.focused = false
+        #expect(!forwarder.forwardsMouseEvents)
+        window.focused = true
+        window.ignoresMouseEvents = true
+        #expect(!forwarder.forwardsMouseEvents)
+    }
+
+    @MainActor
+    @Test func coalescedMotionCannotBypassTheCaptureBoundary() throws {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        let window = PointerFocusTestWindow(contentRect: NSRect(x: 0, y: 0, width: 64, height: 64),
+                                            styleMask: .borderless, backing: .buffered, defer: true)
+        forwarder.setBackend(backend)
+        forwarder.attach(to: window)
+        forwarder.isReady = true
+        defer { forwarder.detach() }
+        forwarder.enterCapturedMode()
+        let view = try #require(forwarder.inputView)
+        view.resetMotion(after: 100)
+        view.mouseMoved(with: try motionEvent(timestamp: 101, dx: 0, dy: -1500))
+        let stale = try motionEvent(timestamp: 99, dx: 0, dy: -1500)
+        let fresh = try motionEvent(timestamp: 103, dx: 4, dy: 5)
+        let button = try #require(mouseEvent(.leftMouseDown))
+        window.motionQueue = [stale, fresh, button, fresh]
+        view.mouseMoved(with: try motionEvent(timestamp: 102, dx: 2, dy: 3))
+        #expect(backend.mouseMoves == [.init(dx: 6, dy: 8)])
+        #expect(window.motionQueue.map(\.type) == [.leftMouseDown, .mouseMoved])
+        view.resetMotion(after: 200)
+        view.resumeMotion()
+        #expect(view.acceptsMotion(stale))
+    }
+
+    private func motionEvent(timestamp: TimeInterval, dx: Int64, dy: Int64) throws -> NSEvent {
+        let cg = try #require(CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                                      mouseCursorPosition: .zero, mouseButton: .left))
+        cg.timestamp = UInt64(timestamp * 1_000_000_000)
+        cg.setIntegerValueField(.mouseEventDeltaX, value: dx)
+        cg.setIntegerValueField(.mouseEventDeltaY, value: dy)
+        return try #require(NSEvent(cgEvent: cg))
+    }
 
     /// Three shows, then never again.
     @Test func theHintShowsThreeTimes() {
@@ -427,5 +556,18 @@ struct WindowPointerTests {
         #expect(HintBudget.shouldShow(count: -5))
         #expect(HintBudget.nextCount(after: -5) == 1)
         #expect(HintBudget.nextCount(after: 2) == 3)
+    }
+}
+
+@MainActor
+private final class PointerFocusTestWindow: NSWindow {
+    var focused = true
+    var motionQueue: [NSEvent] = []
+    override var isKeyWindow: Bool { focused }
+
+    override func nextEvent(matching mask: NSEvent.EventTypeMask, until expiration: Date?,
+                            inMode mode: RunLoop.Mode, dequeue: Bool) -> NSEvent? {
+        guard let event = motionQueue.first, mask.contains(NSEvent.EventTypeMask(type: event.type)) else { return nil }
+        return dequeue ? motionQueue.removeFirst() : event
     }
 }

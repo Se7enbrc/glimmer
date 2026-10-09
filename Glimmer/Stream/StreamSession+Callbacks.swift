@@ -14,7 +14,8 @@ extension StreamSession {
 
     /// The input uplink only accepts packets after connection, so the input
     /// forwarder buffers state until `setReady(true)` allows packets through.
-    func nativeConnectionEstablished() {
+    func nativeConnectionEstablished(from source: NativeBackend) {
+        guard source === backend, isStreaming, !stopInProgress else { return }
         // Ground truth that we reached a LIVE state; only a full stop resets it.
         reachedLiveState = true
         let inp = input

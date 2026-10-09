@@ -12,6 +12,37 @@ import Testing
 
 struct TelemetryConfigRowTests {
 
+    @Test @MainActor func codecRowFollowsTheNegotiatedFormatAcrossConnections() throws {
+        let decoder = VideoDecoder()
+        let cases: [(Int32, String)] = [
+            (StreamProtocol.VIDEO_FORMAT_H264, "H.264"),
+            (StreamProtocol.VIDEO_FORMAT_H265, "HEVC"),
+            (StreamProtocol.VIDEO_FORMAT_H265_MAIN10, "HEVC"),
+            (StreamProtocol.VIDEO_FORMAT_AV1_MAIN8, "AV1"),
+            (StreamProtocol.VIDEO_FORMAT_AV1_MAIN10, "AV1")
+        ]
+        for (format, name) in cases {
+            decoder.streamVideoFormat = format
+            let snapshot = decoder.statsSnapshot()
+            let row = try #require(snapshot.rows(enabled: [.codec], targetFps: 60).first)
+            #expect(row.label == "Codec")
+            #expect(row.value == name)
+            #expect(row.health == .neutral)
+        }
+        decoder.streamVideoFormat = 0
+        let unknown = try #require(decoder.statsSnapshot().rows(enabled: [.codec], targetFps: 60).first)
+        #expect(unknown.value == "-")
+        #expect(unknown.health == .neutral)
+    }
+
+    @Test func codecIsVisibleInEveryCuratedPresetAndCanBeOmittedInCustom() {
+        for preset in [StatsOverlayDefaults.minimalRows, StatsOverlayDefaults.microRows,
+                       StatsOverlayDefaults.extendedRows] {
+            #expect(StreamStatsSnapshot().rows(enabled: preset, targetFps: 60).contains { $0.kind == .codec })
+        }
+        #expect(StreamStatsSnapshot().rows(enabled: [.bitrate], targetFps: 60).allSatisfy { $0.kind != .codec })
+    }
+
     private func object(_ fields: [String]) throws -> [String: Any] {
         let data = Data(("{" + fields.joined(separator: ",") + "}").utf8)
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -272,7 +303,7 @@ struct TelemetryConfigRowTests {
         snap.renderedFps = 120
         let rows = snap.rows(enabled: StatsOverlayDefaults.minimalRows, targetFps: 120)
         let render = try #require(rows.first { $0.kind == .renderFps })
-        #expect(rows.map(\.label) == ["Render", "Latency", "Bitrate"])
+        #expect(rows.map(\.label) == ["Render", "Latency", "Bitrate", "Codec"])
         #expect(render.value == "31.5 FPS")
         #expect(render.health == .neutral)
         #expect(snap.receivedFps == 120)

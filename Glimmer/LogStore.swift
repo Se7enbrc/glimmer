@@ -339,7 +339,7 @@ final class SessionLogFileSink: @unchecked Sendable {
             FileManager.default.createFile(atPath: url.path, contents: nil)
             do {
                 self.fileHandle = try FileHandle(forWritingTo: url)
-                self.log.notice("Diag file sink → \(url.path, privacy: .public)")
+                self.log.notice("Diag file sink → \(url.lastPathComponent, privacy: .public)")
             } catch {
                 self.log.error("Diag file sink: could not open file: \(error.localizedDescription, privacy: .private)")
                 return

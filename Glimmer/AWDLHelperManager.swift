@@ -161,6 +161,7 @@ final class AWDLHelperManager: ObservableObject {
         var reachable: () async -> Bool
         var count: () async -> UInt64?
         var daemonJobMissing: () async -> Bool = { false }
+        var daemonLayout: () async -> AWDLHelperRecovery.Layout = { .current }
         var sleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
         var telemetry: (Bool, UInt64) -> Void = {
             TelemetryCounters.shared.setAWDLHelper(.init(suppressing: $0, reSuppressTotal: $1))
@@ -226,7 +227,8 @@ final class AWDLHelperManager: ObservableObject {
             invalidate: { await client.invalidate() },
             reachable: { await client.currentStatus() != nil },
             count: { await client.reSuppressCount() },
-            daemonJobMissing: { await AWDLHelperRecovery.daemonJobMissing() }), defaults: .standard)
+            daemonJobMissing: { await AWDLHelperRecovery.daemonJobMissing() },
+            daemonLayout: { await AWDLHelperRecovery.daemonLayout() }), defaults: .standard)
     }
 
     init(operations: Operations, defaults: UserDefaults) {
@@ -288,7 +290,7 @@ final class AWDLHelperManager: ObservableObject {
 
     /// Register the daemon. The first time, macOS surfaces a one-time approval in
     /// System Settings → General → Login Items & Extensions.
-    func enable() {
+    func enable(migratingLayout: Bool = false) {
         setIntent(true)
         let (previous, restoration, identifier) = prepareRegistration()
         // Capture predecessors before publishing this task: reading serviceTask inside
@@ -296,8 +298,23 @@ final class AWDLHelperManager: ObservableObject {
         // tasks wait for their predecessor so successors cannot bypass older teardown.
         let task = Task { @MainActor in
             await previous?.value
-            guard !Task.isCancelled else { return }
+            guard migratingLayout || !Task.isCancelled else { return }
             await restoration?.value
+            if migratingLayout {
+                let replace = await Task { await AWDLHelperRecovery.prepareMigration(
+                    layout: operations.daemonLayout, release: { await operations.setDown(false, "helper-update") },
+                    sleep: operations.sleep, keepCurrent: {
+                        let reachable = await operations.reachable()
+                        return enabledIntent && requestID == identifier && reachable
+                    }) }.value
+                if !replace, Task.isCancelled {
+                    _ = await Task { await AWDLHelperRecovery.prepareMigration(
+                        layout: operations.daemonLayout, release: { await operations.setDown(false, "helper-update") },
+                        sleep: operations.sleep, keepCurrent: { false }) }.value
+                }
+                guard !Task.isCancelled else { return }
+                if !replace { finishRegistration(identifier); return }
+            }
             guard !Task.isCancelled else { return }
             // Bundle swaps can wedge BTM registration. Clear the old record and let
             // macOS settle before registering the replacement.
@@ -383,16 +400,10 @@ final class AWDLHelperManager: ObservableObject {
         guard enabledIntent, !changingRegistration, !restoring else { return }
         // Migrate a live registration only when no explicit off intent was saved.
         setIntent(true)
-        let identifier = requestID
         switch state {
         case .enabled:
-            // A delete-and-recopy install (Homebrew) can leave `.enabled` with no launchd job
-            // behind it, so every stream's calls fail. Only a reply proves the daemon is there.
-            Task {
-                guard !(await operations.reachable()), enabledIntent, requestID == identifier else { return }
-                log.notice("AWDL daemon enabled but unreachable after an update - self-healing")
-                enable()
-            }
+            // Publish the whole probe and release obligation before another operation can supersede it.
+            enable(migratingLayout: true)
         case .requiresApproval:
             log.notice("AWDL daemon awaiting approval in System Settings ▸ Login Items")
         case .notRegistered, .unavailable:

@@ -1,10 +1,4 @@
-//
-//  AudioDecoder+Decode.swift
-//
-//  The per-packet DECODE path and the `NativeAudioSink` entry points that feed it: Opus decode (or
-//  concealment of a lost packet), the demux into the player's non-interleaved format, the meter's backlog
-//  gates, and the schedule into `AVAudioPlayerNode`. The engine lifecycle lives in AudioDecoder+Engine.swift.
-//
+// Decode, conceal and schedule audio packets. Engine lifecycle lives in AudioDecoder+Engine.swift.
 
 import AVFoundation
 import Foundation
@@ -66,39 +60,53 @@ extension AudioDecoder {
         }
         pcm.frameLength = AVAudioFrameCount(decoded)
 
-        // P1 AUDIO meter: account this buffer for the buffer-fill / under-run /
-        // over-run / A/V-drift signals. Two backlog guards run first, both dropping
-        // this freshly-decoded buffer (which is the NEWEST packet; since an
-        // AVAudioPlayerNode buffer can't be pulled once scheduled, declining to queue
-        // the incoming packet trims the scheduled-ahead backlog by exactly one 5ms
-        // packet - the same net effect as dropping the oldest, with no reschedule
-        // churn): (a) the steady-state TRIM-TOWARD-TARGET, which clips the backlog
-        // back to the adaptive cushion target so it can't pin high, and (b) the hard
-        // OVER-RUN ceiling backstop for genuinely bad links. Both keep latency bounded.
+        // A drained player no longer ends at the skipped block's predecessor.
+        if packetSplice.hasPendingJoin, audioMeterLock.withLock({ playoutDrained }) {
+            packetSplice = AudioPacketSplice()
+        }
+        // Drop excess audio to bound latency, retaining its start to smooth the next join.
         let decodedFrames = UInt64(decoded)
         if meterRegisterScheduleOrOverrun(frames: decodedFrames) {
-            // Trimmed/over-run: do not schedule (keeps A/V latency bounded). If the
-            // meter latched a playout STALL under this drop (node consuming nothing
-            // while every arrival hits the backlog gates), rebuild the output path
-            // now - this is the stateLock-serialized decode path, the one place AV
-            // calls are safe against shutdown (`recoverIfPlayoutStalled`).
+            packetSplice.skip(pcm)
+            // Engine recovery stays on this path, serialized against shutdown.
             recoverIfPlayoutStalled()
             return false
         }
+        packetSplice.apply(to: pcm)
         playerNode.scheduleBuffer(pcm, completionHandler: { [weak self] in
             self?.meterCompleteOnePlayout(frames: decodedFrames)
         })
-        // PRE-ROLL / RE-PRIME: now that this buffer is queued (into a paused node
-        // only before the cold-start prime), decide whether the cushion is deep
-        // enough to (re)declare playback primed - and, on a re-prime whose grace
-        // expired clumpless, schedule the silence backfill (which needs the node
-        // format, hence the parameter). No-op once primed, so this stays one lock
-        // + a compare on the steady-state path.
+        // Rebuild the cushion after a drain; steady playback takes the cheap primed path.
         maybePrime(format: fmt)
         // Drives the drift resampler's PI loop (self-rate-limited to ~4Hz) + the
         // 1Hz audio-state gauge. The resampler replaced the decode-path micro-stretch.
         publishAudioState()
         return true
+    }
+}
+
+/// Overlap the first millisecond of skipped audio with the next scheduled block.
+/// This preserves the old boundary without adding samples or changing steady playback.
+struct AudioPacketSplice {
+    private var skipped: AVAudioPCMBuffer?
+    var hasPendingJoin: Bool { skipped != nil }
+
+    mutating func skip(_ buffer: AVAudioPCMBuffer) {
+        if skipped == nil { skipped = buffer }
+    }
+
+    mutating func apply(to buffer: AVAudioPCMBuffer) {
+        defer { skipped = nil }
+        guard let skipped, skipped.format == buffer.format,
+              let old = skipped.floatChannelData, let new = buffer.floatChannelData else { return }
+        let count = min(Int(skipped.frameLength), Int(buffer.frameLength), Int(buffer.format.sampleRate / 1000))
+        guard count > 1 else { return }
+        for channel in 0..<Int(buffer.format.channelCount) {
+            for frame in 0..<count {
+                let weight = Float(frame) / Float(count - 1)
+                new[channel][frame] = old[channel][frame] * (1 - weight) + new[channel][frame] * weight
+            }
+        }
     }
 }
 

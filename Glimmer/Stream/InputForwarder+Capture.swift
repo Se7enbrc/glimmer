@@ -16,46 +16,9 @@ import os.log
 extension InputForwarder {
 
     // MARK: - Mouse capture & gesture suppression
-    //
-    // SDL ASSOCIATE-FALSE CURSOR MODEL (P0 mouse-snap fix). This is
-    // the SDL_SetRelativeMouseMode(true) recipe on macOS and is the airtight
-    // root-cause fix for the in-game aim snapping to a screen edge/corner.
-    //
-    // Visibility is owned ENTIRELY by StreamWindow (hide via CGDisplayHideCursor,
-    // single source of truth = StreamWindow.didHideCursor). The input layer here
-    // owns relative-aim engagement (now including the associate-false latch),
-    // gesture suppression, and never touches cursor VISIBILITY (that's
-    // StreamWindow's).
-    //
-    // Why associate-false (and why the prior warp-to-centre model was the bug):
-    //   * The previous "reconciled" model kept the cursor ASSOCIATED (the OS
-    //     keeps physically moving it) and warped it back to centre when it
-    //     neared a screen edge. An associate-TRUE warp posts a reconciling
-    //     mouse-moved event whose kCGMouseEventDeltaX/Y carries the FULL
-    //     edge→centre jump (up to ~1500px on a 3024-wide panel). There was NO
-    //     post-warp suppression anywhere, so that reconciliation delta was read
-    //     as pure HID motion and sent to the host → the in-game aim snapped to
-    //     an edge/corner. Intermittent because it only leaked when a warp's
-    //     reconciliation event landed in the motion pipeline.
-    //   * Under associate-false the OS STOPS moving the on-screen cursor. There
-    //     is therefore no edge to warp from, no warp at all, and no
-    //     reconciliation delta to suppress - the entire bug CLASS is structurally
-    //     gone. This is exactly what moonlight-qt/SDL do (SDL_cocoamouse).
-    //   * The two reasons the prior associate-false attempt was abandoned no
-    //     longer apply: (a) "the cursor freezes visibly" - it's hidden by
-    //     CGDisplayHideCursor, so there is no visible pointer to freeze; the
-    //     user only ever sees in-game aim driven by relative deltas. (b) "the OS
-    //     stops reporting deltas" - that was true of NSEvent.deltaX/Y, but we
-    //     read kCGMouseEventDeltaX/Y off the CGEvent layer (mouseDelta(from:)),
-    //     which stays valid AND becomes pure accel-free HID under associate-false
-    //     (the exact field SDL reads in relative mode).
-    //   * Every associate-FALSE is paired with a guaranteed associate-TRUE on
-    //     resign-key / teardown so Cmd-Tab and stream-end always restore a
-    //     normal, OS-controlled pointer.
-    //
-    // Gesture suppression: the local monitor below eats pinch, smart zoom, swipe and rotate; the cursor can't reach a
-    // hot corner under associate-false; Zoom's ⌥⌘8/=/- reach the PC only while ⌘ shortcuts go to the game. Ctrl+scroll
-    // Zoom is interlocked below NSEvent and needs the session event tap the diagnostic-tap comment scopes (not installed).
+
+    // Capture owns cursor association and event coalescing. StreamWindow owns
+    // cursor visibility; focus loss restores the system pointer and held input.
 
     func installFocusObservers(for window: NSWindow) {
         // Tear down any prior observers so re-entry is safe.
@@ -94,10 +57,14 @@ extension InputForwarder {
     }
 
     func windowResignedKey() {
+        inputGeneration &+= 1
         // The physical key-up goes to the newly focused app, so release held
         // input here. Esc's key-up may be lost too, making its timer unsafe.
         raiseAllHeldInputs(reason: "focus loss")
-        neutralizeControllers()
+        if !isMiniPlayer {
+            cancelQuitChordDwell(reason: "focus loss")
+            neutralizeControllers()
+        }
         exitCapturedMode()
         cancelEscapeHold()
         // Focus loss clears suppression so returning under the pointer captures again.
@@ -110,22 +77,12 @@ extension InputForwarder {
         if let observer = didResignKeyObserver { nc.removeObserver(observer); didResignKeyObserver = nil }
     }
 
-    /// Engage relative-aim mode (SDL_SetRelativeMouseMode(true) on macOS).
-    /// DISASSOCIATES the cursor from the pointing device via
-    /// `CGAssociateMouseAndMouseCursorPosition(false)` so the OS stops physically
-    /// moving the on-screen cursor - which is what makes the in-game aim
-    /// impossible to snap to an edge/corner (no cursor travel ⇒ no edge ⇒ no
-    /// warp ⇒ no warp-reconciliation delta). The cursor is already invisible
-    /// (StreamWindow owns `CGDisplayHideCursor`), so there is no visible pointer
-    /// to "freeze". kCGMouseEventDeltaX/Y - the field `mouseDelta(from:)` reads -
-    /// stays valid and becomes pure accel-free HID under associate-false (the
-    /// exact field SDL reads in relative mode); only NSEvent.deltaX/Y goes silent,
-    /// and we don't use it. Resets the sub-pixel residual so the first post-focus
-    /// mouseMoved doesn't carry stale fractional pixels. Re-entrant.
+    /// Disassociate the cursor for relative aim only while this attached view
+    /// owns key focus. Late focus callbacks must not capture after detach.
     func enterCapturedMode() {
-        // A window still passing clicks through (waiting for its first frame)
-        // cannot hold the pointer either; the fade-in engages it.
-        guard !isMouseCaptured, window?.ignoresMouseEvents != true else { return }
+        guard !isMouseCaptured, let window, let inputView,
+              inputView.window === window, window.isKeyWindow,
+              !window.ignoresMouseEvents else { return }
         mouseResidualX = 0
         mouseResidualY = 0
         // Reset the Cruise inter-batch clock AND the windowed-velocity accums
@@ -134,22 +91,11 @@ extension InputForwarder {
         lastMoveTimestamp = 0
         cruiseDistAccum = 0
         cruiseTimeAccum = 0
-        // Disassociate: the OS stops moving the system cursor; HID motion still
-        // arrives as relative deltas on the CGEvent layer. The return value is
-        // a CGError; on the (vanishingly unlikely) failure we still proceed -
-        // the worst case degrades to the OS moving an already-hidden cursor, not
-        // a crash, and the next focus cycle retries.
+        // CGEvent deltas continue while the system pointer stays in place.
         CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-        // Turn OFF NSEvent mouse coalescing so AppKit delivers every raw HID
-        // motion sample (on ProMotion ~120Hz, vs the ~60Hz coalesced default)
-        // instead of merging them. The manual delta-summing coalescer in
-        // streamView(_:handleMouseMoved:) sums these now-more-numerous events
-        // into the same 1ms batch, so host acceleration still applies once per
-        // batch (no twitchiness) - we just feed it finer-grained, more accurate
-        // deltas. Save the prior global value so we restore it on disengage and
-        // stay polite to the rest of the system. Only save once (first engage):
-        // a re-entrant guard above already returns early, but the save is
-        // idempotent-safe regardless.
+        inputView.resetMotion()
+        // Collect uncoalesced motion for the forwarder's ordered batch drain;
+        // restore the previous AppKit setting when capture ends.
         if savedMouseCoalescing == nil {
             savedMouseCoalescing = NSEvent.isMouseCoalescingEnabled
         }
@@ -173,16 +119,12 @@ extension InputForwarder {
         if isWindowMode { onPointerCaptureChanged?(true) }
     }
 
-    /// Disengage relative-aim mode. RE-ASSOCIATES the cursor with the pointing
-    /// device (`CGAssociateMouseAndMouseCursorPosition(true)`) so Cmd-Tab /
-    /// teardown restores a normal, OS-controlled pointer. This is the guaranteed
-    /// `true` that pairs with every `false` from `enterCapturedMode()` - it runs
-    /// from the window's resign-key hook and from `detach()`. Visibility is owned
-    /// by StreamWindow's resign-key / close path, so we deliberately do NOT show
-    /// the cursor here; we only restore association.
+    /// Restore cursor association and the settings capture changed on focus loss
+    /// or detach. StreamWindow separately owns the display hide and cursor image.
     func exitCapturedMode() {
         guard isMouseCaptured else { return }
         isMouseCaptured = false
+        inputView?.resumeMotion()
         releaseCommandSides()
         // Re-associate: hand cursor control back to the OS so the pointer tracks
         // the device again wherever the user goes after leaving the stream.

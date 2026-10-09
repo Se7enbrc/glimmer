@@ -9,17 +9,18 @@ extension VideoDepacketizer {
 
     /// Sunshine can prepend AUD and SEI NALs before an IDR's parameter sets.
     /// Inspect past those without copying or removing valid metadata.
-    static func isIdrFrameStart(_ payload: [UInt8], hevc: Bool) -> Bool {
-        var offset = 0
-        while offset < payload.count {
+    static func isIdrFrameStart<Bytes: RandomAccessCollection>(_ payload: Bytes, hevc: Bool) -> Bool
+    where Bytes.Element == UInt8, Bytes.Index == Int {
+        var offset = payload.startIndex
+        while offset < payload.endIndex {
             let startLength = annexBStartCodeLength(payload, at: offset)
             let headerIndex = offset + startLength
-            guard startLength > 0, headerIndex < payload.count else { return false }
+            guard startLength > 0, headerIndex < payload.endIndex else { return false }
             let type = hevc ? (payload[headerIndex] >> 1) & 0x3F : payload[headerIndex] & 0x1F
             if type == (hevc ? 32 : 7) { return true }   // HEVC VPS / H.264 SPS
             guard type == (hevc ? 35 : 9) || type == (hevc ? 39 : 6) else { return false }
             offset = headerIndex + 1
-            while offset < payload.count && annexBStartCodeLength(payload, at: offset) == 0 {
+            while offset < payload.endIndex && annexBStartCodeLength(payload, at: offset) == 0 {
                 offset += 1
             }
         }
@@ -77,10 +78,11 @@ extension VideoDepacketizer {
         return starts
     }
 
-    private static func annexBStartCodeLength(_ bytes: [UInt8], at offset: Int) -> Int {
-        guard offset + 2 < bytes.count, bytes[offset] == 0, bytes[offset + 1] == 0 else { return 0 }
+    private static func annexBStartCodeLength<Bytes: RandomAccessCollection>(_ bytes: Bytes, at offset: Int) -> Int
+    where Bytes.Element == UInt8, Bytes.Index == Int {
+        guard bytes.endIndex - offset > 2, bytes[offset] == 0, bytes[offset + 1] == 0 else { return 0 }
         if bytes[offset + 2] == 1 { return 3 }
-        if offset + 3 < bytes.count, bytes[offset + 2] == 0, bytes[offset + 3] == 1 { return 4 }
+        if bytes.endIndex - offset > 3, bytes[offset + 2] == 0, bytes[offset + 3] == 1 { return 4 }
         return 0
     }
 

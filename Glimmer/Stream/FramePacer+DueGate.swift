@@ -114,25 +114,23 @@ extension FramePacer {
         liveness.lastReleaseHostTime = CFAbsoluteTimeGetCurrent()
         liveness.releaseCount &+= 1
         liveness.presentRejectStreak = 0
+        liveness.firstRejectHostTime = .nan
+        liveness.lastRejectHostTime = .nan
         tickDeficit.lastPresentedSampleBuffer = sampleBuffer
         lock.unlock()
     }
 
-    /// Count one pacer-path release the renderer REFUSED (`willPresent` false).
-    /// The due gate's missing bookkeeping behind the wired-link present wedge:
-    /// a dequeue that dies at the renderer is neither a release (the
-    /// release clock rightly stays stale) nor a gate wedge (`toPresent` was
-    /// non-nil, so the starvation failsafe rightly stays disarmed) - it is a
-    /// RENDERER fault, and without this streak the episode was indistinguishable
-    /// from a latched gate, so the watchdog spent its cheap stages on cadence/
-    /// link medicine that a latched `isReadyForMoreMediaData` survives (the
-    /// in-ladder rebuild changed nothing; only the stage-3 flush cured it).
-    /// Consecutive-only: any successful present resets it (noteFramePresented),
-    /// so healthy transient backpressure - Apple's "a single late vsync can
-    /// flip the flag for one frame" class, and anything wifi jitter can cause
-    /// upstream - can never accumulate toward the ladder's threshold.
-    func noteGateReleaseRejected() {
+    /// A dequeued frame the renderer refused is neither a release nor a gate wedge.
+    /// Track the count and timed window so the watchdog selects renderer recovery.
+    func noteGateReleaseRejected(at now: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()) {
         lock.lock()
+        // A wire drought breaks the timed refusal window even without an accepted frame.
+        if !liveness.lastRejectHostTime.isFinite
+            || now - liveness.lastRejectHostTime > Self.rendererRefusalWindowSeconds {
+            liveness.firstRejectHostTime = now
+            liveness.presentRejectStreak = 0
+        }
+        liveness.lastRejectHostTime = now
         liveness.presentRejectStreak += 1
         lock.unlock()
     }

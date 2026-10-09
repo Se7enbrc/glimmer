@@ -361,7 +361,7 @@ struct MenuBarPanel: View {
                 openSettings()
                 activate()
             } label: {
-                Image(systemName: "gearshape")
+                Label("Settings", systemImage: "gearshape").labelStyle(.iconOnly)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)

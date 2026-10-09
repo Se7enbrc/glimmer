@@ -19,6 +19,9 @@ import os
 
 extension FramePacer {
 
+    /// Match the present watchdog's freeze window even when refusals leave the queue empty.
+    static let rendererRefusalWindowSeconds: Double = 0.25
+
     // MARK: - Snapshot types
 
     /// A snapshot of the pacer's present-side health, read by the external
@@ -35,8 +38,8 @@ extension FramePacer {
         /// Frames currently waiting in the jitter buffer. A non-empty queue
         /// combined with a stale `secondsSinceLastRelease` is the wedge.
         let depth: Int
-        /// Seconds the queue has held frames without emptying, 0 when empty. A
-        /// wedge keeps it climbing; a burst after a network drought restarts it.
+        /// Seconds the visible queue has held frames without emptying, 0 when empty.
+        /// A refill or suppression-clear starts a fresh stall-evidence window.
         let secondsQueueNonEmpty: Double
         /// Whether the pacer is between start() and stop().
         let running: Bool
@@ -77,6 +80,9 @@ extension FramePacer {
         /// renderer is the wedged organ (the renderer-refusal class) - the
         /// ladder reaches for the flush instead of cadence/link medicine.
         let presentRejectStreak: Int
+        /// Time spanned by observed refusals, excluding silence after the last attempt.
+        let rendererRefusalSeconds: Double
+        let secondsSinceLastReject: Double
     }
 
     /// Per-second display-refresh telemetry: the realized vsync cadence over the
@@ -282,13 +288,9 @@ extension FramePacer {
                                      changed: refreshTelemetry.refreshChangedSinceRead)
     }
 
-    /// One-shot consistent read of the present-side liveness state. ALSO rolls
-    /// the realized-rate window when one is due: the 20Hz watchdog calls this
-    /// continuously, so the tick-deficit measurement keeps advancing even when
-    /// the CADisplayLink has stopped ticking entirely - the one caller that is
-    /// guaranteed alive during the exact failure this machinery measures.
-    func livenessSnapshot() -> LivenessSnapshot {
-        let now = CFAbsoluteTimeGetCurrent()
+    /// Read liveness and advance rate windows even when display ticks stop.
+    /// An explicit clock keeps boundary regressions deterministic without sleeping.
+    func livenessSnapshot(at now: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()) -> LivenessSnapshot {
         lock.lock()
         let events = serviceTickDeficitLocked(now: now)
         let sinceTick = liveness.lastTickHostTime.isFinite ? now - liveness.lastTickHostTime : .infinity
@@ -309,7 +311,9 @@ extension FramePacer {
             tickDeficitSeconds: tickDeficit.tickDeficitSince.isFinite ? now - tickDeficit.tickDeficitSince : 0,
             expectedTickHz: tickDeficit.lastExpectedTickHz,
             tickDeficitModeActive: tickDeficit.deficitModeActive,
-            presentRejectStreak: liveness.presentRejectStreak)
+            presentRejectStreak: liveness.presentRejectStreak,
+            rendererRefusalSeconds: liveness.lastRejectHostTime - liveness.firstRejectHostTime,
+            secondsSinceLastReject: now - liveness.lastRejectHostTime)
         lock.unlock()
         // Emit breadcrumbs / reconcile the off-tick timer OFF the lock (LogStore
         // takes its own lock; timer ops dispatch) - same discipline as handleTick.

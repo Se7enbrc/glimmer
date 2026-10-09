@@ -70,6 +70,7 @@ struct DiagnosticsPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityLabel("Performance telemetry")
                     Toggle(isOn: $fileLogDebug) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Verbose session log file").fontWeight(.medium)
@@ -80,6 +81,7 @@ struct DiagnosticsPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityLabel("Verbose session log file")
                     // The exporter (and the file sink's level) snapshot their gates
                     // when a session starts, so a mid-session flip does nothing
                     // until the next stream.
@@ -122,6 +124,7 @@ struct DiagnosticsPane: View {
                                 Image(systemName: "folder")
                             }
                             .buttonStyle(.borderless)
+                            .accessibilityLabel("Reveal telemetry logs in Finder")
                             .help("Reveal in Finder")
                         }
                     }
