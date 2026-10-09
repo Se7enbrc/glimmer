@@ -30,6 +30,8 @@ struct TelemetrySnapshot: Sendable {
     var receivedFps: Double?
     var decodedFps: Double?
     var renderedFps: Double?
+    /// AVFoundation counters, distinct from enqueue FPS and any physical scanout estimate.
+    var rendererPerformance: RendererPerformanceSnapshot?
 
     // decode time: EMA of decode wall-clock (StatsCollector tracks no per-frame
     // histogram). True quantiles live in glimmer_decode_time_p_ms / _idr_ms.
@@ -481,6 +483,8 @@ struct TelemetrySource: Sendable {
     /// it from a MAIN-queue 1Hz timer built only on the gate-on path (never a hot
     /// path). nil before the layer is bound to a screen.
     var displayProbe: @MainActor @Sendable () -> DisplayProbe?
+    /// Invoked only by the opt-in exporter's existing capture tick and completion checks.
+    var rendererProbe: @Sendable () -> RendererPerformanceSource? = { nil }
     /// How the stream was shown at session start (`StreamDisplayMode` raw
     /// value) - written into the one-shot config event so a windowed capture
     /// is never read as a fullscreen one. Defaulted so callers that predate

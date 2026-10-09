@@ -61,6 +61,7 @@ enum TelemetryRenderer {
                      "Seconds since stream connect (INITIAL-CONNECTION phase visible).",
                      snap.sinceConnectSeconds)
         promFrames(&builder, snap)
+        promRendererPerformance(&builder, snap.rendererPerformance)
         promNetwork(&builder, snap, extras)
         promPacing(&builder, snap, extras)
         promDrops(&builder, snap, extras)

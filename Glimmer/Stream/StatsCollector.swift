@@ -57,6 +57,9 @@ final class StatsCollector: @unchecked Sendable {
     var renderedFrames: UInt64 = 0
     var receivedBytes: UInt64 = 0
 
+    // Keep the HUD estimate's one-second window independent of exporter reads.
+    var hostFrameRate = HostFrameRate()
+
     var windowStart: CFAbsoluteTime = 0
     var windowStartReceivedFrames: UInt64 = 0
     var windowStartDecodedFrames: UInt64 = 0
@@ -243,6 +246,7 @@ final class StatsCollector: @unchecked Sendable {
         lastDecodedFrameTime = 0
         lastPresentTime = 0
         windowStart = CACurrentMediaTime()
+        hostFrameRate = HostFrameRate(now: windowStart)
         windowStartReceivedFrames = receivedFrames
         windowStartDecodedFrames = decodedFrames
         windowStartRenderedFrames = renderedFrames
@@ -293,6 +297,7 @@ final class StatsCollector: @unchecked Sendable {
         defer { lock.unlock() }
 
         var snap = StreamStatsSnapshot()
+        snap.hostFps = hostFrameRate.sample(now: now)
 
         // Slide + recompute the window-relative cache only once the window has
         // accumulated at least `minWindowSeconds` of data (50ms floor for the

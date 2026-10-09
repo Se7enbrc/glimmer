@@ -32,6 +32,7 @@ private final class HelperHarness {
     var unregisterFails = false
     var unregisterGate: HelperGate?
     var reachable = true
+    var daemonJobMissing = false
     var releaseGate: HelperGate?
     var downGate: HelperGate?
     var client: HelperClient?
@@ -89,6 +90,7 @@ private final class HelperHarness {
                 await self.countGate?.wait()
                 return 1
             },
+            daemonJobMissing: { self.daemonJobMissing },
             sleep: { duration in
                 if duration == .milliseconds(600) {
                     await self.registrationGate?.wait()
@@ -111,6 +113,33 @@ private final class HelperHarness {
 
 @MainActor
 struct AWDLHelperManagerTests {
+    @Test(arguments: [false, true])
+    func missingDaemonIsRecreatedBeforeRelease(disable: Bool) async throws {
+        let harness = try HelperHarness()
+        defer { harness.cleanUp() }
+        let manager = harness.makeManager()
+        manager.suppressForStream()
+        #expect(await harness.tick.waitAsync(for: .seconds(10)) == .success)
+        harness.reachable = false
+        harness.daemonJobMissing = true
+        harness.persistentReleaseFailure = true
+        harness.releaseAcknowledged = { harness.events.contains("register") }
+        if disable { manager.disable() } else { manager.releaseForStream() }
+        #expect(await harness.registered.waitAsync(for: .seconds(10)) == .success)
+        for _ in 0..<5 { #expect(await harness.released.waitAsync(for: .seconds(10)) == .success) }
+        let registration = try #require(harness.events.firstIndex(of: "register"))
+        let restoration = try #require(harness.events.firstIndex(of: "restored"))
+        #expect(registration < restoration)
+        #expect(harness.events.contains("restored"))
+        if disable {
+            #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
+            #expect(await harness.unregistered.waitAsync(for: .seconds(10)) == .success)
+            #expect(!manager.isRegistered)
+        } else {
+            #expect(manager.isEnabled)
+        }
+    }
+
     @Test func idleReleaseDoesNotContactHelper() throws {
         let harness = try HelperHarness()
         defer { harness.cleanUp() }
@@ -246,6 +275,7 @@ struct AWDLHelperManagerTests {
         }
         #expect(await started.waitAsync(for: .seconds(10)) == .success)
         harness.releaseAcknowledged = { completed.withLock { $0 } }
+        harness.reachable = false
         harness.persistentReleaseFailure = true
         let recovery = HelperGate()
         harness.recoveryGate = recovery

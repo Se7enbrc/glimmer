@@ -160,6 +160,7 @@ final class AWDLHelperManager: ObservableObject {
         var invalidate: () async -> Void
         var reachable: () async -> Bool
         var count: () async -> UInt64?
+        var daemonJobMissing: () async -> Bool = { false }
         var sleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
         var telemetry: (Bool, UInt64) -> Void = {
             TelemetryCounters.shared.setAWDLHelper(.init(suppressing: $0, reSuppressTotal: $1))
@@ -224,7 +225,8 @@ final class AWDLHelperManager: ObservableObject {
             setDown: { await client.setAWDLDown($0, reason: $1) },
             invalidate: { await client.invalidate() },
             reachable: { await client.currentStatus() != nil },
-            count: { await client.reSuppressCount() }), defaults: .standard)
+            count: { await client.reSuppressCount() },
+            daemonJobMissing: { await AWDLHelperRecovery.daemonJobMissing() }), defaults: .standard)
     }
 
     init(operations: Operations, defaults: UserDefaults) {
@@ -482,9 +484,28 @@ final class AWDLHelperManager: ObservableObject {
         // A watchdog deadline cannot prove that queued interface work finished.
         // Keep registration and new streams waiting for an acknowledged release.
         while true {
+            if await repairMissingDaemon(), await operations.setDown(false, reason) { return }
             try? await operations.sleep(.seconds(10))
             if await operations.setDown(false, reason) { return }
             await operations.invalidate()
+        }
+    }
+
+    /// An XPC timeout alone cannot rule out blocked interface work. Only a
+    /// confirmed missing launchd job permits repair before the release reply;
+    /// the replacement must still acknowledge restoration before teardown.
+    private func repairMissingDaemon() async -> Bool {
+        guard !(await operations.reachable()), await operations.daemonJobMissing() else { return false }
+        do {
+            try? await operations.unregister()
+            try await operations.sleep(.milliseconds(600))
+            try operations.register()
+            await operations.invalidate()
+            refresh()
+            return true
+        } catch {
+            log.error("AWDL helper recovery failed: \(error.localizedDescription, privacy: .private)")
+            return false
         }
     }
 

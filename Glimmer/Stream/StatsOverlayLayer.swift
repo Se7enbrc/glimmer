@@ -224,13 +224,8 @@ public final class StatsOverlayLayer {
         layoutRowsAndDividers(inWidth: boxWidth, height: boxHeight)
     }
 
-    /// Push a new snapshot into the overlay. Builds the row list,
-    /// diffs against the live sublayers, and updates only what changed.
-    /// At the 4 Hz overlay cadence the diff overhead is negligible - and the
-    /// diff is exactly what makes the faster tick free: most ticks only the
-    /// live latency rows (RTT / jitter) change, so we update one
-    /// CATextLayer.string and leave the FPS / bitrate rows (still on their ~1s
-    /// average) untouched - no churn on the steady rows.
+    /// Update changed row content only. Capture FPS and live gauges can change
+    /// each tick; unchanged values avoid unnecessary text-layer updates.
     public func update(
         snapshot: StreamStatsSnapshot,
         enabled: Set<StatsRow.Kind>,

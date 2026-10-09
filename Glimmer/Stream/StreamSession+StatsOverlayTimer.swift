@@ -19,11 +19,8 @@ import os
 
 extension StreamSession {
 
-    /// Build + install the 4 Hz overlay-update timer (latency rows live; FPS
-    /// averaging window decoupled to ~1s via `statsSnapshot(minWindowSeconds:)`).
-    /// Captures the decoder and window by weak reference; if either is torn down
-    /// between ticks, the timer body no-ops on the next fire and we wait for
-    /// `stop()` to invalidate the timer for real.
+    /// Refresh the overlay at 4 Hz. Capture FPS rolls across four samples;
+    /// pipeline rates retain their independent one-second measurement window.
     func startStatsOverlayTimer(
         statsRowsProvider: @escaping @MainActor () -> Set<StatsRow.Kind>,
         statsThresholdsProvider: @escaping @MainActor () -> StatsThresholds
@@ -42,14 +39,8 @@ extension StreamSession {
             // The block closure runs synchronously on the main thread when
             // the timer fires, so `dec` and `win` (both `@MainActor`-
             // isolated) are safe to touch directly.
-            // 4 Hz (250ms) overlay refresh so the latency / jitter / RTT rows
-            // feel LIVE - at 1Hz a momentary spike was a quarter-second stale.
-            // The FPS averaging window stays DECOUPLED from the tick:
-            // `statsSnapshot(minWindowSeconds:)` keeps FPS / bitrate / cadence
-            // on a ~1s average (the collector slides + recomputes the window
-            // only once 1s of data accrues, serving the cached last-good average
-            // between), so 4Hz does NOT reintroduce the ±4fps boundary noise a
-            // literal 250ms window would; the live gauges refresh at full 4Hz.
+            // Capture FPS and live gauges update each tick. Raw pipeline rates
+            // keep a separate one-second window for telemetry and hitch detection.
             let overlayFpsWindowSeconds = 1.0
             // Per-second-rate baselines for the perceived-hitch pill, carried
             // across ticks. Reference type so the timer closure mutates one box.

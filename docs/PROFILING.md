@@ -310,6 +310,38 @@ template asks for.
 `make enable-telem` / `make disable-telem` flip the same preference from the
 command line.
 
+### Renderer performance fields
+
+The existing opt-in exporter samples AVFoundation's renderer metrics at its
+one-second cadence. No renderer sampler or polling exists when telemetry is off.
+These numeric fields use the existing local files and Prometheus endpoint;
+Diagnostics remains hidden by default, and LAN access still needs its separate
+opt-in. Preference changes apply to the next stream.
+
+NDJSON reports `renderer_frames_total`, `renderer_dropped_frames_total`,
+`renderer_optimized_frames_total`, and `renderer_accumulated_frame_delay_s`. The
+optimized count records frames using Apple's efficient compositing path.
+Prometheus exposes the corresponding `glimmer_renderer_*` metrics, with times
+named in seconds. These are renderer counters, not game FPS or physical scanout
+measurements. Accumulated delay is relative to sample presentation timestamps,
+not end-to-end latency.
+
+`renderer_metrics_status` distinguishes unavailable, pending, baseline and ready
+samples. Interval deltas are absent until two valid samples exist; a renderer
+replacement or counter rollback starts a new baseline. Check sample age and the
+reported interval before interpreting cached values. Only one API request may be
+outstanding, and replies after teardown or renderer replacement are ignored.
+
+### Comparing telemetry overhead
+
+Use the same Release executable, fixed scene, display mode, stream settings and
+HUD state. Alternate off/on/on/off sessions, allow startup to settle, and sample
+process CPU and wakeup counters externally so the measurement does not depend on
+telemetry being enabled. Compare memory footprint separately from allocation
+churn; footprint cannot establish the number of allocations. Restore the prior
+telemetry preference afterward. An absent telemetry file or listener in an off
+session is also a useful runtime check of the opt-in boundary.
+
 ### Pacing fields
 
 The per-second rows and the scorecard carry the frame pacer's own numbers. The

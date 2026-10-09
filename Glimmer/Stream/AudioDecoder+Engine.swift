@@ -129,6 +129,8 @@ extension AudioDecoder {
         meterSampleRate = Double(sampleRate)
         framesScheduled = 0; framesPlayed = 0
         driftAnchorNanos = 0; driftAnchorFramesPlayed = 0
+        resamplerDriftWindow = ResamplerDriftWindow()
+        resamplerSkewConverged = false
         resamplerIntegralPpm = skewSeedPpm; resamplerEpsPpm = 0
         resamplerEverEngaged = false
         lastResamplerSkewSaveNanos = 0; lastSavedResamplerSkewPpm = .nan

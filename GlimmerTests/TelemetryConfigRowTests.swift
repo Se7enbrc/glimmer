@@ -155,4 +155,166 @@ struct TelemetryConfigRowTests {
         #expect(snap.receivedFps == 0)
         #expect(snap.decoderDroppedPercent == 10)
     }
+
+    @Test func hostRateFallsBackToReceivedFramesWithoutTimingSupport() {
+        var rate = StatsCollector.HostFrameRate(now: 0)
+        for _ in 0..<120 { rate.record(hostProcessingLatency: 0) }
+        let beforeWindow = rate.sample(now: 0.5)
+        let complete = rate.sample(now: 1)
+        #expect(beforeWindow == nil)
+        #expect(complete == 120)
+    }
+
+    @Test func hostRateExcludesUntimedFramesOnceTimingIsAvailable() {
+        var rate = StatsCollector.HostFrameRate(now: 0)
+        for _ in 0..<60 {
+            rate.record(hostProcessingLatency: 25)
+            rate.record(hostProcessingLatency: 0)
+        }
+        let mixed = rate.sample(now: 1)
+        for _ in 0..<120 { rate.record(hostProcessingLatency: 0) }
+        let repeats = rate.sample(now: 2)
+        #expect(mixed == 60)
+        #expect(repeats == 0)
+    }
+
+    @Test func hostRateRollsAtOverlayCadenceWithoutShortWindowNoise() {
+        var rate = StatsCollector.HostFrameRate(now: 0)
+        for tick in 1...4 {
+            for _ in 0..<60 { rate.record(hostProcessingLatency: 25) }
+            let value = rate.sample(now: Double(tick) * 0.25)
+            #expect(value == (tick == 4 ? 240 : nil))
+        }
+        for tick in 5...8 {
+            for _ in 0..<8 { rate.record(hostProcessingLatency: 25) }
+            let value = rate.sample(now: Double(tick) * 0.25)
+            #expect(value == Double(240 - (tick - 4) * 52))
+        }
+        let cached = rate.sample(now: 2.1)
+        #expect(cached == 32)
+    }
+
+    @Test func timingSupportReplacesFallbackAtNextOverlaySample() {
+        var rate = StatsCollector.HostFrameRate(now: 0)
+        for tick in 1...4 {
+            for _ in 0..<30 { rate.record(hostProcessingLatency: 0) }
+            _ = rate.sample(now: Double(tick) * 0.25)
+        }
+        for _ in 0..<8 { rate.record(hostProcessingLatency: 25) }
+        let early = rate.sample(now: 1.1)
+        let timed = rate.sample(now: 1.25)
+        #expect(early == 120)
+        #expect(timed == 8)
+    }
+
+    @Test func hostRateScalesByElapsedTimeAndFrequentReadersDoNotResetIt() {
+        var rate = StatsCollector.HostFrameRate(now: 10)
+        for _ in 0..<30 { rate.record(hostProcessingLatency: 25) }
+        let early = rate.sample(now: 10.1)
+        for _ in 0..<90 { rate.record(hostProcessingLatency: 25) }
+        let complete = rate.sample(now: 12)
+        let cached = rate.sample(now: 12.1)
+        #expect(early == nil)
+        #expect(complete == 60)
+        #expect(cached == 60)
+    }
+
+    @Test func hostRateToleratesEarlyTimerTicksAndRetiresStaleSamples() {
+        var rate = StatsCollector.HostFrameRate(now: 0)
+        for tick in 1...8 {
+            for _ in 0..<30 { rate.record(hostProcessingLatency: 25) }
+            let value = rate.sample(now: Double(tick) * 0.249)
+            if tick >= 4 { #expect(abs((value ?? 0) - 30 / 0.249) < 0.001) }
+        }
+        let idle = rate.sample(now: 4)
+        #expect(idle == 0)
+    }
+
+    @Test func emptyHostRateWindowReportsZero() {
+        var rate = StatsCollector.HostFrameRate(now: 0)
+        let beforeWindow = rate.sample(now: 0.1)
+        let empty = rate.sample(now: 1)
+        #expect(beforeWindow == nil)
+        #expect(empty == 0)
+    }
+
+    @Test func newHostRateStartsWithoutCachedValueOrTimingSupport() {
+        var rate = StatsCollector.HostFrameRate(now: 0)
+        rate.record(hostProcessingLatency: 25)
+        let timed = rate.sample(now: 1)
+        rate = StatsCollector.HostFrameRate(now: 2)
+        let fresh = rate.sample(now: 2.5)
+        for _ in 0..<120 { rate.record(hostProcessingLatency: 0) }
+        let fallback = rate.sample(now: 3)
+        #expect(timed == 1)
+        #expect(fresh == nil)
+        #expect(fallback == 120)
+    }
+
+    @Test func collectorReconnectClearsHostTimingSupport() {
+        let stats = StatsCollector()
+        stats.hostFrameRate = StatsCollector.HostFrameRate(now: 0)
+        stats.recordReceivedFrame(bytes: 1_000, frameNumber: 0, hostProcessingLatency: 25)
+        let timed = stats.hostFrameRate.sample(now: 1)
+        stats.resetForConnection()
+        let fresh = stats.hostFrameRate.sample(now: 0)
+        for frame in 0..<120 { stats.recordReceivedFrame(bytes: 1_000, frameNumber: Int32(frame)) }
+        let fallback = stats.hostFrameRate.sample(now: CACurrentMediaTime() + 2)
+        #expect(timed == 1)
+        #expect(fresh == nil)
+        #expect((fallback ?? 0) > 0)
+    }
+
+    @Test func minimalRenderRowUsesCaptureEstimateAndPreservesPipelineRates() throws {
+        var snap = StreamStatsSnapshot()
+        snap.hostFps = 31.5
+        snap.receivedFps = 120
+        snap.renderedFps = 120
+        let rows = snap.rows(enabled: StatsOverlayDefaults.minimalRows, targetFps: 120)
+        let render = try #require(rows.first { $0.kind == .renderFps })
+        #expect(rows.map(\.label) == ["Render", "Latency", "Bitrate"])
+        #expect(render.value == "31.5 FPS")
+        #expect(render.health == .neutral)
+        #expect(snap.receivedFps == 120)
+        #expect(snap.renderedFps == 120)
+        let network = try #require(snap.rows(enabled: [.networkFps], targetFps: 120).first)
+        #expect(network.value == "120.0 FPS")
+        #expect(network.health == .neutral)
+    }
+
+    @Test func renderRowFallsBackToPresentationRateWithoutCaptureEstimate() throws {
+        var snap = StreamStatsSnapshot()
+        snap.renderedFps = 120
+        let render = try #require(snap.rows(enabled: [.renderFps], targetFps: 120).first)
+        #expect(render.label == "Render")
+        #expect(render.value == "120.0 FPS")
+        #expect(render.health == .neutral)
+    }
+    @Test @MainActor func fpsThresholdMigrationPreservesCustomValuesAndRunsOnce() throws {
+        let name = "fps-threshold-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        var thresholds = StatsThresholds(fpsWarningBelow: 60, fpsCriticalBelow: 30, latencyWarningAbove: 75)
+        defaults.set(try JSONEncoder().encode(thresholds), forKey: "statsThresholds")
+        let migrated = AppModel.persistedStatsThresholds(defaults: defaults)
+        #expect(migrated.fpsWarningBelow == 0)
+        #expect(migrated.fpsCriticalBelow == 0)
+        #expect(migrated.latencyWarningAbove == 75)
+        defaults.set(try JSONEncoder().encode(thresholds), forKey: "statsThresholds")
+        #expect(AppModel.persistedStatsThresholds(defaults: defaults) == thresholds)
+        defaults.removeObject(forKey: "informationalFpsDefaultsApplied")
+        thresholds.fpsWarningBelow = 45
+        defaults.set(try JSONEncoder().encode(thresholds), forKey: "statsThresholds")
+        #expect(AppModel.persistedStatsThresholds(defaults: defaults) == thresholds)
+    }
+
+    @Test func customFpsWarningsStillApplyToRenderEstimate() throws {
+        var snap = StreamStatsSnapshot()
+        let thresholds = StatsThresholds(fpsWarningBelow: 45, fpsCriticalBelow: 20)
+        for (fps, health): (Double, StatsRow.Health) in [(32, .warning), (15, .critical), (60, .healthy)] {
+            snap.hostFps = fps
+            let row = try #require(snap.rows(enabled: [.renderFps], targetFps: 240, thresholds: thresholds).first)
+            #expect(row.health == health)
+        }
+    }
 }

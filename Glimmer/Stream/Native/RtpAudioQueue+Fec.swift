@@ -120,9 +120,10 @@ extension RtpAudioQueue {
         let fecBlockSsrc = key.ssrc
         let blockSize = key.blockSize
 
-        // Synchronize on connect: start on the NEXT block boundary so we never
-        // half-start a block (:288-295).
-        if synchronizing && oldestRtpBaseSequenceNumber == 0 {
+        // Start on the next whole block once, including when that boundary wraps to zero.
+        if !hasSequenceBaseline {
+            guard rtp.packetType == Self.payloadTypeAudio else { return nil }
+            hasSequenceBaseline = true
             let next = fecBlockBaseSeqNum &+ UInt16(Self.dataShards)
             nextRtpSequenceNumber = next
             oldestRtpBaseSequenceNumber = next
@@ -133,6 +134,7 @@ extension RtpAudioQueue {
         if Self.isBefore16(fecBlockBaseSeqNum, oldestRtpBaseSequenceNumber) {
             return nil
         }
+        guard acceptsSequence(rtp: rtp, baseSequence: fecBlockBaseSeqNum) else { return nil }
 
         // Find an existing block (sorted by baseSeq), or the insertion point.
         var insertAt = blocks.count
@@ -173,6 +175,27 @@ extension RtpAudioQueue {
         block.fecHeader.ssrc = fecBlockSsrc
         blocks.insert(block, at: insertAt)
         return block
+    }
+
+    /// A jump beyond the reorder capacity needs two consecutive data packets.
+    /// Parity cannot confirm a restart; ordinary traffic cancels a stray candidate.
+    private func acceptsSequence(rtp: RtpHeader, baseSequence: UInt16) -> Bool {
+        let distance = baseSequence &- oldestRtpBaseSequenceNumber
+        if distance <= UInt16(Self.maxQueuedBlocks * Self.dataShards) {
+            if rtp.packetType == Self.payloadTypeAudio { pendingSequenceRestart = nil }
+            return true
+        }
+        guard rtp.packetType == Self.payloadTypeAudio else { return false }
+        guard pendingSequenceRestart == rtp.sequenceNumber else {
+            pendingSequenceRestart = rtp.sequenceNumber &+ 1
+            return false
+        }
+        pendingSequenceRestart = nil
+        blocks.removeAll(keepingCapacity: true)
+        nextRtpSequenceNumber = baseSequence
+        oldestRtpBaseSequenceNumber = baseSequence
+        receivedOosData = false
+        return true
     }
 
     /// Counts a packet dropped for a FEC layout disagreement. Only `layoutMismatchStreakLimit` in a row,

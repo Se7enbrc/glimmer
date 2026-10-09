@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.10.5 - 2026-10-08
+
+- Frames whose timing falls between display refreshes no longer accumulate extra
+  waiting in the pacing queue.
+- Audio buffering can return to normal after the connection settles, even when
+  the PC's and Mac's audio clocks run at slightly different rates.
+- The Render and PC FPS readings use timing from the PC to estimate capture rate
+  when available, and refresh about four times a second. FPS warnings are off by
+  default; custom warning thresholds are kept.
+- Stray or damaged audio packets no longer move playback far ahead of the stream
+  and leave valid audio waiting to catch up.
+- The Wi-Fi helper keeps trying if restoring AirDrop fails, and can recover when
+  its background service is missing.
+- Quitting a command-line launch while Glimmer is checking the route to the PC
+  cancels it, so the stream cannot start afterward.
+
 ## 2026.10.4 - 2026-10-03
 
 - On a 16-inch MacBook Pro, the HiDPI quality asks the PC for 1728 × 1116

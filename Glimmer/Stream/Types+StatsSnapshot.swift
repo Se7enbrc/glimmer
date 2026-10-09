@@ -9,25 +9,15 @@
 
 import Foundation
 
-/// Per-tick snapshot of stream performance counters, surfaced to the in-stream
-/// stats overlay (toggled with the user's stats hotkey). The values are read
-/// off the `VideoDecoder` accumulators at a fixed cadence (1 Hz) and rendered
-/// into a multi-row CALayer compositor over the AVSampleBufferDisplayLayer.
-///
-/// Field semantics mirror moonlight-qt's VIDEO_STATS rows in
-/// `ffmpeg.cpp::stringifyVideoStats` - same units, same source data - but
-/// the surface is row-based (`rows(enabled:targetFps:)`) so the overlay can
-/// pick which rows to render and assign per-row health colors. Anything we
-/// can't compute locally and the host doesn't report (e.g. the host's true
-/// encode FPS, network-dropped-frame percentage) is `nil` and renders as an
-/// em-dash row with `neutral` health.
+/// The HUD uses estimated PC capture FPS while telemetry retains pipeline rates.
+/// Unavailable measurements stay nil so their rows remain neutral.
 public struct StreamStatsSnapshot: Sendable {
-    /// Host-side encoder frame rate. We don't have a reliable source for
-    /// this - the host doesn't report its true encode FPS over the protocol -
-    /// so we report the configured stream FPS as the best available proxy.
-    /// Matches what moonlight-qt's "Estimated host PC frame rate" row shows
-    /// when only the configured rate is known.
+    /// Estimated PC capture rate, excluding untimed repeats once timing is available.
+    /// Falls back to measured reception without timing support. Captured desktop
+    /// updates can differ from the game's own render rate.
     public var hostFps: Double?
+    /// Negotiated stream limit, kept separate from measured rates for chart targets.
+    public var configuredFps: Double?
     /// Incoming frame rate from the network - the rate at which decode units
     /// land in our `submitDecodeUnit` callback (after the native receiver
     /// depacketizes and reassembles each frame).
@@ -270,15 +260,15 @@ public struct StreamStatsSnapshot: Sendable {
                 health: fpsHealth(decodedFps, thresholds: thresholds),
                 section: .frameRates)
         case .renderFps:
+            let fps = hostFps ?? renderedFps
             return StatsRow(
                 kind: .renderFps, label: "Render",
-                value: formatFps(renderedFps),
+                value: formatFps(fps),
                 symbolName: "display",
-                health: fpsHealth(renderedFps, thresholds: thresholds),
+                health: fpsHealth(fps, thresholds: thresholds),
                 section: .frameRates)
         default:
-            // .hostFps and any future frame-rate kind: host has no health
-            // source (we report the configured rate as a proxy), so .neutral.
+            // The PC row reports the capture estimate without judging the client.
             return StatsRow(
                 kind: .hostFps, label: "PC",
                 value: formatFps(hostFps),
@@ -439,7 +429,7 @@ public struct StreamStatsSnapshot: Sendable {
     // to feel bad" - see `StatsThresholds.default`.
 
     private func fpsHealth(_ fps: Double?, thresholds: StatsThresholds) -> StatsRow.Health {
-        guard let fps else { return .neutral }
+        guard let fps, thresholds.fpsWarningBelow > 0 || thresholds.fpsCriticalBelow > 0 else { return .neutral }
         if fps < Double(thresholds.fpsCriticalBelow) { return .critical }
         if fps < Double(thresholds.fpsWarningBelow) { return .warning }
         return .healthy

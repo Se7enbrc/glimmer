@@ -52,6 +52,7 @@ extension AppModel {
     /// here too: the engine's own clock starts after HTTPS + window build, so
     /// only the click can answer "did the user wait > 400 ms".
     private func armLaunchState(app: LibraryApp, host: Host) {
+        cancelPendingCommandStream()
         hostPolling.establishedHostID = nil
         lastLaunchAttempt = (app, host)
         Self.connectClickedAt = Date()

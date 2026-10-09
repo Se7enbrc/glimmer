@@ -62,6 +62,7 @@ extension TelemetryRenderer {
         builder.addString("build_date", snap.buildDate)
         builder.add("t_connect_s", snap.sinceConnectSeconds)
         ndjsonFrames(&builder, snap)
+        ndjsonRendererPerformance(&builder, snap.rendererPerformance)
         ndjsonNetwork(&builder, snap, extras)
         ndjsonPacingDrops(&builder, snap, extras)
         ndjsonInputRefresh(&builder, snap, extras)
