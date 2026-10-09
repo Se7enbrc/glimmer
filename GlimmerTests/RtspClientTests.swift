@@ -254,7 +254,7 @@ struct RtspClientTests {
     private static func audioDatagram(type: UInt8, sequence: UInt16, timestamp: UInt32,
                                       payload: [UInt8]) -> [UInt8] {
         [0x80, type, UInt8(sequence >> 8), UInt8(truncatingIfNeeded: sequence),
-         UInt8(timestamp >> 24), UInt8(timestamp >> 16), UInt8(timestamp >> 8),
+         UInt8(timestamp >> 24), UInt8(truncatingIfNeeded: timestamp >> 16), UInt8(truncatingIfNeeded: timestamp >> 8),
          UInt8(truncatingIfNeeded: timestamp), 0, 0, 0, 1] + payload
     }
 
@@ -284,6 +284,7 @@ struct RtspClientTests {
     @Test func filledAudioReorderGapDrainsReadyPackets() {
         let sink = RecordingAudioSink()
         let receiver = Self.audioReceiver(sink: sink)
+        Self.feed(receiver, dataSequences: [0])
         let fec = Self.parityDatagram(sequence: 0, base: 0)
         receiver.handleDatagram(fec, count: fec.count)
         Self.feed(receiver, dataSequences: [4, 6, 5])
@@ -297,6 +298,7 @@ struct RtspClientTests {
     @Test func oneMisalignedParityPacketLeavesAudioFecOn() {
         let sink = RecordingAudioSink()
         let receiver = Self.audioReceiver(sink: sink)
+        Self.feed(receiver, dataSequences: [0])
         for parity in [Self.parityDatagram(sequence: 0, base: 0), Self.parityDatagram(sequence: 1, base: 6)] {
             receiver.handleDatagram(parity, count: parity.count)
         }
@@ -307,6 +309,7 @@ struct RtspClientTests {
 
     @Test func aStreakOfMisalignedParityTurnsAudioFecOff() {
         let receiver = Self.audioReceiver(sink: NullAudioSink())
+        Self.feed(receiver, dataSequences: [0])
         let sync = Self.parityDatagram(sequence: 0, base: 0)
         receiver.handleDatagram(sync, count: sync.count)
         for index in 1...RtpAudioQueue.layoutMismatchStreakLimit {
@@ -320,6 +323,7 @@ struct RtspClientTests {
     /// Blocks that each miss a packet, after out-of-order history, all wait out the give-up window.
     @Test func audioQueueNeverHoldsMoreThanItsCap() {
         let receiver = Self.audioReceiver(sink: NullAudioSink())
+        Self.feed(receiver, dataSequences: [0])
         let sync = Self.parityDatagram(sequence: 0, base: 0)
         receiver.handleDatagram(sync, count: sync.count)
         receiver.queue.receivedOosData = true
@@ -431,5 +435,56 @@ struct RtspClientTests {
         receiver.decodePacket(Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: seq,
                                                  timestamp: 0, payload: ciphertext))
         #expect(sink.recordedPackets() == [opus])
+    }
+
+    @Test func paddingWithoutAudioCannotEstablishSequence() throws {
+        let sink = RecordingAudioSink()
+        let receiver = RtpAudioReceiver(
+            host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
+            opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+            audioEncryption: true, aesKey: Self.key, aesIvId: [UInt8](repeating: 0, count: 16), sink: sink)
+        let payload = try #require(Self.hostEncrypt([], seq: 0, keyId: 0))
+        let packet = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: 0,
+                                       timestamp: 0, payload: payload)
+        receiver.handleDatagram(packet, count: packet.count)
+        #expect(!receiver.queue.hasSequenceBaseline)
+        #expect(sink.recordedPackets().isEmpty)
+    }
+
+    @Test func malformedCiphertextCannotEstablishOrConfirmAudioSequence() throws {
+        let sink = RecordingAudioSink()
+        let receiver = RtpAudioReceiver(
+            host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
+            opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+            audioEncryption: true, aesKey: Self.key, aesIvId: [UInt8](repeating: 0, count: 16), sink: sink)
+        let malformed = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: 20_000,
+                                           timestamp: 100_000, payload: [UInt8](repeating: 0, count: 16))
+        #expect(receiver.decryptCbc(malformed[12...], sequenceNumber: 20_000) == nil)
+        receiver.handleDatagram(malformed, count: malformed.count)
+        #expect(!receiver.queue.hasSequenceBaseline)
+        for sequence: UInt16 in 0...7 {
+            let payload = try #require(Self.hostEncrypt([1, 2, 3], seq: sequence, keyId: 0))
+            let packet = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: sequence,
+                                           timestamp: UInt32(sequence) * 5, payload: payload)
+            receiver.handleDatagram(packet, count: packet.count)
+        }
+        #expect(receiver.queue.nextRtpSequenceNumber == 8)
+        receiver.handleDatagram(malformed, count: malformed.count)
+        #expect(receiver.queue.pendingSequenceRestart == nil)
+        let validJump = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: 20_000,
+            timestamp: 100_000, payload: try #require(Self.hostEncrypt([1, 2, 3], seq: 20_000, keyId: 0)))
+        receiver.handleDatagram(validJump, count: validJump.count)
+        #expect(receiver.queue.pendingSequenceRestart == 20_001)
+        let badConfirmation = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: 20_001,
+            timestamp: 100_005, payload: [UInt8](repeating: 0, count: 16))
+        #expect(receiver.decryptCbc(badConfirmation[12...], sequenceNumber: 20_001) == nil)
+        receiver.handleDatagram(badConfirmation, count: badConfirmation.count)
+        #expect(receiver.queue.nextRtpSequenceNumber == 8)
+        let legitimate = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: 8,
+            timestamp: 40, payload: try #require(Self.hostEncrypt([4, 5, 6], seq: 8, keyId: 0)))
+        receiver.handleDatagram(legitimate, count: legitimate.count)
+        #expect(receiver.queue.nextRtpSequenceNumber == 9)
+        #expect(receiver.queue.pendingSequenceRestart == nil)
+        #expect(sink.recordedPackets().last == [4, 5, 6])
     }
 }

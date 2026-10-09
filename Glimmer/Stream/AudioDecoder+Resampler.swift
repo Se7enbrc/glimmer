@@ -11,6 +11,36 @@ import Foundation
 
 extension AudioDecoder {
 
+    /// A bad drift window holds cushion release until a whole quiet window passes.
+    /// Reuse the cushion's existing time and drift budgets; absolute session offset
+    /// cannot distinguish a corrected clock from a playback stall.
+    struct ResamplerDriftWindow {
+        private var startNanos: UInt64?
+        private var lastObservationNanos: UInt64?
+        private var startMs = 0.0
+        private var failed = false
+        private var previousStable = true
+
+        mutating func observe(driftMs: Double, now: UInt64) -> Bool {
+            // Decode and completion callers may finish publishing out of order.
+            if let lastObservationNanos, now <= lastObservationNanos { return previousStable && !failed }
+            lastObservationNanos = now
+            guard let startNanos else {
+                self.startNanos = now
+                startMs = driftMs
+                return true
+            }
+            if abs(driftMs - startMs) > AudioDecoder.cushionReleaseDriftBoundMs { failed = true }
+            if now &- startNanos >= AudioDecoder.playoutDecayQuietNanos {
+                previousStable = !failed
+                self.startNanos = now
+                startMs = driftMs
+                failed = false
+            }
+            return previousStable && !failed
+        }
+    }
+
     // MARK: - Resampler skew persistence (per host + output device)
 
     /// UserDefaults key prefix; full key = prefix + "host|device UID". The skew is

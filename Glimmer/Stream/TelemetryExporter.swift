@@ -58,10 +58,19 @@ enum TelemetryGate {
     /// True iff telemetry should run. Either the UserDefaults flag or the env
     /// var enables it; default OFF. Read at session start only.
     static var isEnabled: Bool {
-        if getenv("GLIMMER_TELEMETRY").map({ String(cString: $0) }) == "1" {
-            return true
-        }
-        return UserDefaults.standard.bool(forKey: "telemetryEnabled")
+        isEnabled(defaults: .standard, environmentValue: getenv("GLIMMER_TELEMETRY").map { String(cString: $0) })
+    }
+
+    static func isEnabled(defaults: UserDefaults, environmentValue: String?) -> Bool {
+        environmentValue == "1" || defaults.bool(forKey: "telemetryEnabled")
+    }
+
+    static func diagnosticsVisible(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: "showDiagnostics")
+    }
+
+    static func listensOnLAN(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: TelemetryExporter.lanBindDefaultsKey)
     }
 }
 
@@ -108,9 +117,11 @@ final class TelemetryExporter: @unchecked Sendable {
 
     /// LAN-bind opt-in, resolved ONCE at construction (the TelemetryGate
     /// read-at-session-start discipline - no mid-session bind tearing).
-    private let lanBindEnabled = UserDefaults.standard.bool(forKey: lanBindDefaultsKey)
+    private let lanBindEnabled = TelemetryGate.listensOnLAN()
 
     let source: TelemetrySource
+    /// Allocated only when the opt-in exporter starts its capture timer.
+    var rendererTelemetry: RendererTelemetry?
     let counters = TelemetryCounters.shared
 
     /// Wi-Fi radio sampler (signal 3). Exists only on the gate-on path (this
@@ -224,8 +235,9 @@ final class TelemetryExporter: @unchecked Sendable {
 
     /// Returns a ready-to-`start()` exporter iff the opt-in gate is on; nil
     /// otherwise (the default), so the caller allocates NOTHING when off.
-    static func makeIfEnabled(source: TelemetrySource, serverName: String) -> TelemetryExporter? {
-        guard TelemetryGate.isEnabled else { return nil }
+    static func makeIfEnabled(source: TelemetrySource, serverName: String,
+                              enabled: Bool = TelemetryGate.isEnabled) -> TelemetryExporter? {
+        guard enabled else { return nil }
         return TelemetryExporter(source: source, serverName: serverName)
     }
 
@@ -311,6 +323,8 @@ final class TelemetryExporter: @unchecked Sendable {
             Self.eventSinkBox.withLock { $0 = nil }
             self.captureTimer?.cancel()
             self.captureTimer = nil
+            self.rendererTelemetry?.stop()
+            self.rendererTelemetry = nil
             self.listener?.cancel()
             self.listener = nil
             // Sweep still-open /metrics connections (silent/half-open peers
@@ -424,21 +438,20 @@ final class TelemetryExporter: @unchecked Sendable {
 
     // MARK: - HTTP listener (loopback by default; LAN bind is a second opt-in)
 
-    private func startListener() {
+    /// Constructing parameters opens no socket. LAN access needs its own opt-in;
+    /// IPv4 keeps either endpoint on the documented address family.
+    static func listenerParameters(listenOnLAN: Bool) -> NWParameters {
         let params = NWParameters.tcp
-        // LOOPBACK BY DEFAULT: a debug gate alone should not put a live
-        // perf/input-rate endpoint on every interface. The wide bind (0.0.0.0,
-        // for a local monitoring container/pod scraping over a host bridge,
-        // where traffic never arrives on 127.0.0.1) now requires the SECOND
-        // opt-in `telemetryListenLAN` (see SAFETY in the header). IPv4 stays
-        // pinned either way so the endpoint is the familiar `:9847`.
-        if !lanBindEnabled {
-            params.requiredInterfaceType = .loopback
-        }
+        if !listenOnLAN { params.requiredInterfaceType = .loopback }
         params.allowLocalEndpointReuse = true
         if let inetOptions = params.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
             inetOptions.version = .v4
         }
+        return params
+    }
+
+    private func startListener() {
+        let params = Self.listenerParameters(listenOnLAN: lanBindEnabled)
         guard let endpointPort = NWEndpoint.Port(rawValue: Self.port) else { return }
         do {
             let newListener = try NWListener(using: params, on: endpointPort)

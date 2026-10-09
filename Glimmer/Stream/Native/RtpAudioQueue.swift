@@ -140,6 +140,8 @@ final class RtpAudioQueue {
     var lastOosSequenceNumber: UInt16 = 0
     var receivedOosData = false
     var synchronizing = true
+    var hasSequenceBaseline = false
+    var pendingSequenceRestart: UInt16?
     var incompatibleServer = false
     /// Layout mismatches since the last size-agreeing contact (see `noteLayoutMismatch`).
     var layoutMismatchStreak = 0
@@ -200,10 +202,20 @@ final class RtpAudioQueue {
 
     // MARK: - Public API
 
+    /// A normal reorder stays inside the bounded block queue. Establishing order
+    /// or proposing a larger jump requires the receiver to validate the payload.
+    func requiresPayloadValidation(sequence: UInt16) -> Bool {
+        guard hasSequenceBaseline else { return true }
+        let base = sequence - sequence % UInt16(Self.dataShards)
+        return !Self.isBefore16(base, oldestRtpBaseSequenceNumber)
+            && base &- oldestRtpBaseSequenceNumber > UInt16(Self.maxQueuedBlocks * Self.dataShards)
+    }
+
     /// Add one received (host-byteswapped) RTP audio/FEC packet.
     /// `packet` is the full datagram bytes; `rtp` is its already-byteswapped
     /// header. Returns how the receiver should dispatch (RtpaAddPacket, :564-658).
     func addPacket(_ packet: [UInt8], rtp: RtpHeader) -> RtpaResult {
+        guard packet.count >= Self.fixedRtpHeaderSize, rtp.header == 0x80 else { return .none }
         // incompatibleServer shortcut (:565-575): feed data straight through.
         if incompatibleServer {
             if rtp.packetType == Self.payloadTypeAudio {

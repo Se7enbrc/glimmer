@@ -31,8 +31,18 @@ extension RtpAudioReceiver {
             pthread_setname_np("Glimmer.audioRecv")
             defer { pthread_setname_np("") }
             var buf = [UInt8](repeating: 0, count: bufSize)
+            var source = sockaddr_storage()
             while let self, !self.interrupted.isSet {
-                let received = recvfrom(sock, &buf, bufSize, 0, nil, nil)
+                var sourceLength = socklen_t(MemoryLayout<sockaddr_storage>.size)
+                let received = withUnsafeMutablePointer(to: &source) { address in
+                    address.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        recvfrom(sock, &buf, bufSize, 0, $0, &sourceLength)
+                    }
+                }
+                if received >= 0, !Self.isExpectedPeer(source, length: sourceLength,
+                                                       expected: self.destAddr, expectedLength: self.destAddrLen) {
+                    continue
+                }
                 if received > 0 {
                     self.handleDatagram(buf, count: received)
                 } else if received == 0 {
@@ -62,10 +72,9 @@ extension RtpAudioReceiver {
         // is still a socket arrival, and the counters measure the ARRIVAL process).
         noteAudioArrivalGap()
 
-        // Runt check: must be at least a full 12-byte RTP header (AudioStream.c:290).
-        if count < RtpAudioQueue.fixedRtpHeaderSize {
-            return
-        }
+        guard count >= RtpAudioQueue.fixedRtpHeaderSize, count <= buf.count, buf[0] == 0x80,
+              buf[1] == RtpAudioQueue.payloadTypeAudio || buf[1] == RtpAudioQueue.payloadTypeFec else { return }
+        if buf[1] == RtpAudioQueue.payloadTypeAudio, !acceptsAudioPayload(buf, count: count) { return }
 
         if !receivedDataFromPeer {
             receivedDataFromPeer = true

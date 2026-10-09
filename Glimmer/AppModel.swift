@@ -48,6 +48,8 @@ final class AppModel {
     var isStreaming = false
     /// Active native session, retained while streaming.
     @ObservationIgnored var nativeSession: StreamSession?
+    /// A command-line launch waiting for its route, before a session exists.
+    @ObservationIgnored var pendingCommandStream: PendingCommandStream?
 
     // Quality
     // Default `.matchDisplay` (panel-native resolution + refresh) - the option
@@ -367,7 +369,7 @@ final class AppModel {
     /// Telemetry toggle lives INSIDE this pane, so it can't gate its own reveal -
     /// hence a separate, plainly-debug-only UserDefault). Persisted so a power
     /// user who revealed it keeps it across launches.
-    var showDiagnostics: Bool = UserDefaults.standard.bool(forKey: "showDiagnostics") {
+    var showDiagnostics: Bool = TelemetryGate.diagnosticsVisible() {
         didSet {
             UserDefaults.standard.set(showDiagnostics, forKey: "showDiagnostics")
         }
@@ -533,7 +535,7 @@ final class AppModel {
         // missing → keep the default initial set already set on the
         // property.
         statsOverlayCustomRows = Self.persistedCustomRows() ?? statsOverlayCustomRows
-        statsThresholds = Self.persistedDecoded("statsThresholds", StatsThresholds.self) ?? statsThresholds
+        statsThresholds = Self.persistedStatsThresholds()
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self) ?? quitHotkey
         statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self) ?? statsHotkey
         controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self) ?? controllerQuitChord

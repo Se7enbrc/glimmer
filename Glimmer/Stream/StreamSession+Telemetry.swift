@@ -20,6 +20,7 @@ extension StreamSession {
     /// allocation) when the gate is off. Called from `start()` once the
     /// connection is up and the decoder/backend are live.
     func startTelemetryExporter(decoder: VideoDecoder, serverName: String) {
+        guard TelemetryGate.isEnabled else { return }
         // Capture the decoder weakly; its telemetry accessors are all
         // `nonisolated` + lock-guarded, so the exporter's utility queue can call
         // them directly. RTT / ENet health route through the decoder's LIVE
@@ -39,6 +40,9 @@ extension StreamSession {
             inFlightDecodeBacklog: { [weak decoder] in decoder?.inFlightDecodeBacklog() ?? 0 },
             refreshWindow: { [weak decoder] in decoder?.telemetryRefreshWindow() },
             displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() },
+            rendererProbe: { [weak decoder] in
+                decoder?.sampleBufferRenderer.map(RendererPerformanceSource.init)
+            },
             // The mode the session STARTED in (a Path-B Space exit can land it
             // in a window later; the per-second rows don't re-state it).
             displayMode: (reconnectConfig?.displayMode ?? .defaultMode).rawValue,

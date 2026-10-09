@@ -11,6 +11,18 @@ import Foundation
 import Observation
 
 @MainActor
+final class PendingCommandStream {
+    let id: String
+    let hostID: String
+    var task: Task<Void, Never>?
+
+    init(id: String, hostID: String) {
+        self.id = id
+        self.hostID = hostID
+    }
+}
+
+@MainActor
 final class CommandStreamEnd {
     private(set) var ended = false
     private var detail: String?
@@ -107,8 +119,6 @@ enum CommandChannel {
 extension AppModel {
     private static var commandObserver: NSObjectProtocol?
     private static var handledCommandIDs: Set<String> = []
-    /// The PC of an accepted stream request still waiting for its route.
-    private static var commandStreamHostID: String?
 
     /// Installed once the host list is loaded; the CLI re-posts each second
     /// until it hears back, so a request sent before this is simply repeated.
@@ -128,7 +138,7 @@ extension AppModel {
         guard let id = info[CommandChannel.Key.id],
               let decision = CommandChannel.decide(
                 info, handled: &Self.handledCommandIDs, hosts: hosts,
-                streamingFrom: Self.commandStreamHostID ?? streamingHostID)
+                streamingFrom: pendingCommandStream?.hostID ?? streamingHostID)
         else { return }
         switch decision {
         case .stream(let app, let host, let takeover):
@@ -136,8 +146,7 @@ extension AppModel {
             // The terminal settled the takeover; an older unanswered prompt no longer applies.
             pendingTakeover = nil
             selectHost(host)
-            Self.commandStreamHostID = host.id
-            Task { await streamFromCommand(id, app: app, on: host, takeover: takeover) }
+            beginCommandStream(id, app: app, on: host, takeover: takeover)
         case .rejected(let why):
             replyToCommand(id, CommandChannel.Event.rejected, why)
         case .ready:
@@ -149,16 +158,34 @@ extension AppModel {
         }
     }
 
-    private func streamFromCommand(_ id: String, app: LibraryApp, on host: Host, takeover: Bool) async {
-        await awaitRouteSettled(for: host)
-        Self.commandStreamHostID = nil
-        guard !isStreaming else {
-            replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
-            return
+    /// Retain the route wait so quit can invalidate it before any session exists.
+    func beginCommandStream(_ id: String, app: LibraryApp, on host: Host, takeover: Bool,
+                            waitForRoute: (@MainActor () async -> Void)? = nil) {
+        cancelPendingCommandStream()
+        let request = PendingCommandStream(id: id, hostID: host.id)
+        pendingCommandStream = request
+        request.task = Task {
+            defer { request.task = nil }
+            if let waitForRoute { await waitForRoute() } else { await awaitRouteSettled(for: host) }
+            // A cancelled wait may still resume after a newer request took its place.
+            guard !Task.isCancelled, pendingCommandStream === request else { return }
+            pendingCommandStream = nil
+            guard !isStreaming else {
+                replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
+                return
+            }
+            stream(app: app, on: host, takeoverAuthorized: takeover)
+            replyToCommand(id, CommandChannel.Event.accepted)
+            reportCommandSession(id)
         }
-        stream(app: app, on: host, takeoverAuthorized: takeover)
-        replyToCommand(id, CommandChannel.Event.accepted)
-        reportCommandSession(id)
+    }
+
+    /// Clear ownership before cancellation can resume the route task.
+    func cancelPendingCommandStream() {
+        guard let request = pendingCommandStream else { return }
+        pendingCommandStream = nil
+        request.task?.cancel()
+        replyToCommand(request.id, CommandChannel.Event.rejected, "Stream request cancelled.")
     }
 
     /// A new selection re-points the route monitor, and the ask reads its class and,
@@ -167,7 +194,7 @@ extension AppModel {
         let settled = await Self.poll(slices: 20, every: .milliseconds(25)) {
             Self.routeSettled(hostRoute.routeClass, phyMbps: hostRoute.wifiPhyRateMbps)
         }
-        if !settled {
+        if !settled, !Task.isCancelled {
             Diag.notice(hostRoute.routeClass == .wifi
                 ? "No Wi-Fi rate for \(host.displayName, privacy: .private) yet; asking without the radio gate"
                 : "Route to \(host.displayName, privacy: .private) still unknown; asking without a route boost", "Stream")
@@ -184,16 +211,22 @@ extension AppModel {
     /// true answer; false once the budget runs out.
     static func poll(slices: Int, every slice: Duration, until settled: () -> Bool) async -> Bool {
         for _ in 0..<slices {
+            guard !Task.isCancelled else { return false }
             if settled() { return true }
-            try? await Task.sleep(for: slice)
+            do { try await Task.sleep(for: slice) } catch { return false }
         }
-        return settled()
+        return !Task.isCancelled && settled()
     }
 
     /// "notMine" leaves the /cancel to the command line.
     private func stopForCommand(_ id: String) {
+        cancelPendingCommandStream()
+        guard let session = nativeSession else {
+            replyToCommand(id, CommandChannel.Event.notMine)
+            return
+        }
         Task {
-            let quit = await stopOwnStream(source: "the command line")
+            let quit = await stopOwnStream(session, source: "the command line")
             replyToCommand(id, quit ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
         }
     }
@@ -203,7 +236,12 @@ extension AppModel {
     /// session launched it.
     func stopOwnStream(source: String) async -> Bool {
         guard let session = nativeSession else { return false }
+        return await stopOwnStream(session, source: source)
+    }
+
+    private func stopOwnStream(_ session: StreamSession, source: String) async -> Bool {
         let owns = await session.ownsHostSession
+        guard nativeSession === session else { return false }
         stopStreamFromMenu(source: source)
         return owns
     }

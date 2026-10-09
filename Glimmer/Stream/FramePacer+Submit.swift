@@ -98,9 +98,10 @@ extension FramePacer {
             now: CACurrentMediaTime(), lastTickTarget: liveness.lastTickTargetMediaTime, vsync: vsync)
         // The tick gate's test (interval minus half a vsync); a timebase jump is left to the tick.
         let sinceLast = scanout - lastPresentMediaTime
-        guard sinceLast >= 0, sinceLast <= 1.0,
-              sinceLast >= streamFrameIntervalSeconds - vsync * 0.5 else { return nil }
-        lastPresentMediaTime = scanout
+        let remainder = cadenceRemainderLocked(vsyncInterval: vsync)
+        guard sinceLast > 0, sinceLast <= 1.0,
+              sinceLast + remainder >= streamFrameIntervalSeconds - vsync * 0.5 else { return nil }
+        advanceCadenceLocked(to: scanout, vsyncInterval: vsync)
         if abs(scanout - liveness.staleCandidateTarget) < vsync * 0.5 { liveness.staleCandidateTarget = .nan }
         tickDeficit.tickScanoutMediaTime = scanout
         updateGapRecoveryLocked(presented: true, empty: true, now: hostNow)

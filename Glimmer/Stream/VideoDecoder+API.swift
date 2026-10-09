@@ -38,9 +38,8 @@ extension VideoDecoder {
     /// caller's behaviour.
     public func statsSnapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
         var snap = statsCollector.snapshot(minWindowSeconds: minWindowSeconds)
-        // Augment with stream-level values we know on the main actor.
         if streamFps > 0 {
-            snap.hostFps = Double(streamFps)
+            snap.configuredFps = Double(streamFps)
         }
         let kbps = negotiatedBitrateKbps.load(ordering: .relaxed)
         if kbps > 0 {

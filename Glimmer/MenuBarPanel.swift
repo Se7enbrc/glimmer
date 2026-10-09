@@ -147,7 +147,7 @@ struct MenuBarPanel: View {
                             asked: model.menuDetails?.negotiatedBitrateMbps ?? Double(model.displayBitrateKbps) / 1000)
                     .frame(height: 54)
                 FramesChart(values: StreamHistory.shared.fps,
-                            target: model.menuDetails?.hostFps ?? Double(model.effectiveFPS))
+                            target: model.menuDetails?.configuredFps ?? Double(model.effectiveFPS))
                     .frame(height: 22)
             }
             .padding(.top, 2)

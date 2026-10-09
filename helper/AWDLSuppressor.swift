@@ -26,6 +26,8 @@ final class AWDLSuppressor: @unchecked Sendable {
     private var _lastHeartbeat: ContinuousClock.Instant
     private let stateLock = NSLock()
     private var pollTimer: DispatchSourceTimer?
+    private var restorationPending = false
+    private var restorationQueued = false
     private var _initialDownDone = false
     private var _reSuppressCount = 0
     /// PF_ROUTE fast path — re-down awdl0 the instant the kernel re-raises it,
@@ -79,7 +81,11 @@ final class AWDLSuppressor: @unchecked Sendable {
             _initialDownDone = false
             _reSuppressCount = 0
         }
-        if !value { _suppressionSince = nil }
+        if !value {
+            _suppressionSince = nil
+            restorationPending = true
+            enqueueRestorationLocked()
+        }
         stateLock.unlock()
 
         // Log only the on/off TRANSITION - the client heartbeats setSuppressing(true)
@@ -91,10 +97,6 @@ final class AWDLSuppressor: @unchecked Sendable {
         // re-suppressions serialize and can't double-count.
         if value {
             execQueue.async { [weak self] in self?.downIfUp() }
-        } else {
-            // Restore awdl0 - just clearing the flag leaves it down until macOS
-            // re-raises it, breaking AirDrop/Continuity meanwhile.
-            execQueue.async { [weak self] in self?.upIfDown() }
         }
     }
 
@@ -212,15 +214,27 @@ final class AWDLSuppressor: @unchecked Sendable {
         if suppressing { execQueue.async { [weak self] in self?.downIfUp(fast: true) } }
     }
 
-    /// Restore awdl0 to its normal (up) state once suppression ends - mirror of
-    /// downIfUp. macOS resumes managing the interface from there.
-    private func upIfDown() {
-        guard !suppressing, !isInterfaceUp() else { return }
-        guard executeIfconfig(args: [interfaceName, "up"]) else {
-            log.error("Failed to bring \(self.interfaceName, privacy: .public) up")
-            return
+    /// The state lock is held by release and polling; only one retry may wait
+    /// behind blocked interface work, so an unavailable radio cannot fill the queue.
+    private func enqueueRestorationLocked() {
+        guard !restorationQueued else { return }
+        restorationQueued = true
+        execQueue.async { [weak self] in self?.restoreInterface() }
+    }
+
+    private func restoreInterface() {
+        let shouldRestore = !suppressing
+        if shouldRestore, !isInterfaceUp() {
+            _ = executeIfconfig(args: [interfaceName, "up"])
         }
-        log.notice("\(self.interfaceName, privacy: .public) restored (up) - suppression ended")
+        let restored = shouldRestore && isInterfaceUp()
+        stateLock.lock()
+        restorationQueued = false
+        if restored, !_suppressing { restorationPending = false }
+        stateLock.unlock()
+        if shouldRestore, !restored {
+            log.error("Failed to bring \(self.interfaceName, privacy: .public) up; will retry")
+        }
     }
 
     // MARK: Heartbeat poll - state-driven safety net
@@ -236,14 +250,14 @@ final class AWDLSuppressor: @unchecked Sendable {
         pollTimer = timer
     }
 
-    private func poll() {
+    func poll() {
         withHeartbeatDecision(at: clockNow()) { decision in
             switch decision {
             case .stale(let idle):
                 let seconds = Double(idle.components.seconds) + Double(idle.components.attoseconds) / 1e18
                 log.notice("heartbeat stale \(seconds, format: .fixed(precision: 1))s - releasing awdl0")
                 log.notice("suppression OFF (reason: heartbeat-timeout)")
-                execQueue.async { [weak self] in self?.upIfDown() }
+                enqueueRestorationLocked()
             case .exit(let idle):
                 let seconds = Double(idle.components.seconds) + Double(idle.components.attoseconds) / 1e18
                 log.notice("idle \(seconds, format: .fixed(precision: 0))s - exiting for a clean reload")
@@ -252,6 +266,8 @@ final class AWDLSuppressor: @unchecked Sendable {
                 // 1s backstop re-assert (in case the route socket missed an edge) -
                 // on execQueue so this poll on `queue` doesn't block servicing.
                 execQueue.async { [weak self] in self?.downIfUp() }
+            case .restoring:
+                enqueueRestorationLocked()
             case .idle:
                 break
             }
@@ -262,6 +278,7 @@ final class AWDLSuppressor: @unchecked Sendable {
         case stale(Duration)
         case exit(Duration)
         case suppressing
+        case restoring
         case idle
     }
 
@@ -275,8 +292,10 @@ final class AWDLSuppressor: @unchecked Sendable {
         if _suppressing, idle > .seconds(3) {
             _suppressing = false
             _suppressionSince = nil
+            restorationPending = true
             return handle(.stale(idle))
         }
+        if !_suppressing, restorationPending { return handle(.restoring) }
         if !_suppressing, idle > .seconds(8) {
             return handle(.exit(idle))
         }

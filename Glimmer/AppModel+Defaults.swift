@@ -65,6 +65,22 @@ extension AppModel {
         return try? JSONDecoder().decode(type, from: data)
     }
 
+    /// Retire the old default FPS alarms once while preserving custom thresholds.
+    static func persistedStatsThresholds(defaults: UserDefaults = .standard) -> StatsThresholds {
+        var thresholds = defaults.data(forKey: "statsThresholds")
+            .flatMap { try? JSONDecoder().decode(StatsThresholds.self, from: $0) } ?? .default
+        guard !defaults.bool(forKey: "informationalFpsDefaultsApplied") else { return thresholds }
+        if thresholds.fpsWarningBelow == 60 && thresholds.fpsCriticalBelow == 30 {
+            thresholds.fpsWarningBelow = 0
+            thresholds.fpsCriticalBelow = 0
+            if let data = try? JSONEncoder().encode(thresholds) {
+                defaults.set(data, forKey: "statsThresholds")
+            }
+        }
+        defaults.set(true, forKey: "informationalFpsDefaultsApplied")
+        return thresholds
+    }
+
     /// Decode the persisted stats-overlay custom-row set, or nil when the key is
     /// absent or decodes to an empty set (so the default initial set holds).
     static func persistedCustomRows() -> Set<StatsRow.Kind>? {

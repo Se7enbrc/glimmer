@@ -40,6 +40,7 @@ struct StatsThresholdsEditor: View {
                         set: { model.statsThresholds.fpsCriticalBelow = $0 }),
                     unit: "FPS"),
                 range: 0...360, step: 1)
+                .help("Set a frame-rate threshold to 0 to disable that warning.")
 
             metric(
                 title: "Latency",

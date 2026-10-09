@@ -45,7 +45,9 @@ final class HelperService: NSObject, NSXPCListenerDelegate, GlimmerHelperProtoco
         if down {
             reply(!suppressor.isInterfaceUp())
         } else {
-            suppressor.afterPendingChanges { reply(true) }
+            suppressor.afterPendingChanges { [suppressor] in
+                reply(!suppressor.suppressing && suppressor.isInterfaceUp())
+            }
         }
     }
 

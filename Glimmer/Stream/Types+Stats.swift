@@ -143,15 +143,10 @@ public enum StatsOverlayDefaults {
 
 // MARK: - Stats overlay color thresholds
 
-/// User-configurable thresholds that drive the row health colors (white →
-/// yellow → red). Persisted to UserDefaults via AppModel. Defaults
-/// are calibrated to "when does this actually start to feel bad" rather
-/// than to rounding noise above a target - a 60Hz stream measuring 58fps
-/// is fine, a 60Hz stream measuring 29fps is unplayable.
+/// User-configurable row health colors. Low game frame rates are informational
+/// by default; players can opt into absolute FPS warning thresholds.
 public struct StatsThresholds: Sendable, Equatable, Codable {
-    /// Frame rate (FPS). Warn below the higher number, critical below the
-    /// lower one. Absolute values, NOT relative to target FPS - a user
-    /// streaming a 30fps title still wants the same "below 30 = bad" line.
+    /// Zero disables the corresponding frame-rate warning.
     public var fpsWarningBelow: Int
     public var fpsCriticalBelow: Int
 
@@ -174,8 +169,8 @@ public struct StatsThresholds: Sendable, Equatable, Codable {
     public var dropsCriticalAbove: Double
 
     public init(
-        fpsWarningBelow: Int = 60,
-        fpsCriticalBelow: Int = 30,
+        fpsWarningBelow: Int = 0,
+        fpsCriticalBelow: Int = 0,
         latencyWarningAbove: UInt32 = 50,
         latencyCriticalAbove: UInt32 = 100,
         jitterWarningAbove: UInt32 = 10,

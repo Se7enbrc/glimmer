@@ -24,10 +24,117 @@
 //
 
 import Foundation
+import Network
 import Testing
 @testable import Glimmer
 
 struct ParserHelperTests {
+
+    @Test(arguments: [("192.0.2.1", "192.0.2.2"), ("2001:db8::1", "2001:db8::2")])
+    func audioPeerFilterChecksAddressButAllowsDifferentSourcePorts(peer: String, stranger: String) throws {
+        let (expected, expectedLength, _) = try #require(UdpPinger.makeSockaddr(for: NWEndpoint.Host(peer), port: 48_000))
+        let (samePeer, sameLength, _) = try #require(UdpPinger.makeSockaddr(for: NWEndpoint.Host(peer), port: 54_321))
+        let (otherPeer, otherLength, _) = try #require(UdpPinger.makeSockaddr(for: NWEndpoint.Host(stranger), port: 48_000))
+        #expect(RtpAudioReceiver.isExpectedPeer(samePeer, length: sameLength,
+                                              expected: expected, expectedLength: expectedLength))
+        #expect(!RtpAudioReceiver.isExpectedPeer(otherPeer, length: otherLength,
+                                               expected: expected, expectedLength: expectedLength))
+        #expect(!RtpAudioReceiver.isExpectedPeer(samePeer, length: sameLength - 1,
+                                               expected: expected, expectedLength: expectedLength))
+    }
+
+    @Test func audioPeerFilterRejectsWrongFamilyAndIPv6Scope() throws {
+        let (destination, length, _) = try #require(UdpPinger.makeSockaddr(for: "fe80::1", port: 48_000))
+        var expected = destination
+        var source = expected
+        withUnsafeMutableBytes(of: &expected) { $0.storeBytes(of: UInt32(4), toByteOffset: 24, as: UInt32.self) }
+        withUnsafeMutableBytes(of: &source) { $0.storeBytes(of: UInt32(5), toByteOffset: 24, as: UInt32.self) }
+        #expect(!RtpAudioReceiver.isExpectedPeer(source, length: length, expected: expected, expectedLength: length))
+        #expect(RtpAudioReceiver.isExpectedPeer(expected, length: length, expected: expected, expectedLength: length))
+        let (ipv4, ipv4Length, _) = try #require(UdpPinger.makeSockaddr(for: "192.0.2.1", port: 48_000))
+        #expect(!RtpAudioReceiver.isExpectedPeer(ipv4, length: ipv4Length, expected: expected, expectedLength: length))
+    }
+
+    private func feedAudioQueue(_ queue: RtpAudioQueue, sequences: [UInt16]) {
+        for sequence in sequences {
+            var packet: [UInt8] = []
+            queue.appendRtpHeader(&packet, header: 0x80, packetType: RtpAudioQueue.payloadTypeAudio,
+                                  seq: sequence, timestamp: UInt32(sequence) * 5, ssrc: 0)
+            packet += [UInt8](repeating: 0, count: 16)
+            let rtp = RtpAudioQueue.RtpHeader(header: 0x80, packetType: RtpAudioQueue.payloadTypeAudio,
+                                            sequenceNumber: sequence, timestamp: UInt32(sequence) * 5, ssrc: 0)
+            _ = queue.addPacket(packet, rtp: rtp)
+            while queue.getQueuedPacket() != nil {}
+        }
+    }
+
+    @Test func oneDistantAudioPacketCannotPoisonTheReceiveCursor() {
+        let queue = audioQueue()
+        feedAudioQueue(queue, sequences: Array(0...7))
+        #expect(queue.nextRtpSequenceNumber == 8)
+        feedAudioQueue(queue, sequences: [20_000])
+        #expect(queue.nextRtpSequenceNumber == 8)
+        #expect(queue.blocks.isEmpty)
+        feedAudioQueue(queue, sequences: [8])
+        #expect(queue.nextRtpSequenceNumber == 9)
+        #expect(queue.pendingSequenceRestart == nil)
+    }
+
+    @Test func consecutiveDataRecoversFromALargeLossButDuplicatesCannotConfirmIt() {
+        let queue = audioQueue()
+        feedAudioQueue(queue, sequences: Array(0...7))
+        feedAudioQueue(queue, sequences: [20_000, 20_000])
+        #expect(queue.nextRtpSequenceNumber == 8)
+        feedAudioQueue(queue, sequences: [20_001, 20_002, 20_003, 20_004])
+        #expect(queue.nextRtpSequenceNumber == 20_005)
+    }
+
+    @Test func audioSequenceAcceptsOrdinaryLossReorderAndWrap() {
+        let queue = audioQueue()
+        feedAudioQueue(queue, sequences: [65_528, 65_532, 65_534, 65_533, 65_535, 0, 1, 2, 3, 8])
+        #expect(queue.nextRtpSequenceNumber == 9)
+        let wrapAtStartup = audioQueue()
+        feedAudioQueue(wrapAtStartup, sequences: [65_532, 0, 1, 2, 3])
+        #expect(wrapAtStartup.nextRtpSequenceNumber == 4)
+    }
+
+    @Test func parityCannotEstablishOrAdvanceADistantAudioSequence() {
+        let queue = audioQueue()
+        var parity: [UInt8] = []
+        queue.appendRtpHeader(&parity, header: 0x80, packetType: RtpAudioQueue.payloadTypeFec,
+                              seq: 0, timestamp: 0, ssrc: 0)
+        parity += [0, RtpAudioQueue.payloadTypeAudio, 0x4E, 0x20, 0, 1, 0x86, 0xA0, 0, 0, 0, 0]
+        parity += [UInt8](repeating: 0, count: 16)
+        let rtp = RtpAudioQueue.RtpHeader(header: 0x80, packetType: RtpAudioQueue.payloadTypeFec,
+                                        sequenceNumber: 0, timestamp: 0, ssrc: 0)
+        _ = queue.addPacket(parity, rtp: rtp)
+        #expect(!queue.hasSequenceBaseline)
+        feedAudioQueue(queue, sequences: Array(0...7))
+        feedAudioQueue(queue, sequences: [19_999])
+        _ = queue.addPacket(parity, rtp: rtp)
+        #expect(queue.nextRtpSequenceNumber == 8)
+        #expect(queue.blocks.isEmpty)
+        feedAudioQueue(queue, sequences: [8])
+        #expect(queue.nextRtpSequenceNumber == 9)
+    }
+
+    @Test func nearbyAudioParityStillRecoversAMissingDataPacket() {
+        let queue = audioQueue()
+        feedAudioQueue(queue, sequences: [0, 4, 6, 7])
+        #expect(queue.nextRtpSequenceNumber == 5)
+        var parity: [UInt8] = []
+        queue.appendRtpHeader(&parity, header: 0x80, packetType: RtpAudioQueue.payloadTypeFec,
+                              seq: 0, timestamp: 0, ssrc: 0)
+        // Every data shard is zero, so the matching RS parity shard is zero too.
+        parity += [0, RtpAudioQueue.payloadTypeAudio, 0, 4, 0, 0, 0, 20, 0, 0, 0, 0]
+        parity += [UInt8](repeating: 0, count: 16)
+        let rtp = RtpAudioQueue.RtpHeader(header: 0x80, packetType: RtpAudioQueue.payloadTypeFec,
+                                        sequenceNumber: 0, timestamp: 0, ssrc: 0)
+        _ = queue.addPacket(parity, rtp: rtp)
+        while queue.getQueuedPacket() != nil {}
+        #expect(queue.nextRtpSequenceNumber == 8)
+        #expect(queue.stats.packetCountFecRecovered == 1)
+    }
 
     // MARK: - RtpAudioQueue.isBefore16 (wrap-safe 16-bit sequence compare)
     //

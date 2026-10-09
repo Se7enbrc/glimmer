@@ -26,6 +26,7 @@ extension TelemetryExporter {
     // MARK: - Capture
 
     func startCaptureTimer() {
+        rendererTelemetry = RendererTelemetry(queue: workQueue, probe: source.rendererProbe)
         // Fresh cross-tick rate baselines for this session - the same
         // per-session lifetime as the exporter's stored prev*-totals (which
         // reset by being instance state on a fresh exporter). On `workQueue`
@@ -56,6 +57,7 @@ extension TelemetryExporter {
         snap.wallClockISO8601 = isoFormatter.string(from: Date())
 
         fillCoreVideo(into: &snap, stats: stats)
+        snap.rendererPerformance = rendererTelemetry?.sample()
 
         fillNetwork(into: &snap, stats: stats, rtt: rtt, health: health)
 

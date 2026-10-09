@@ -102,6 +102,95 @@ struct AppShellTests {
             == .stop)
     }
 
+    @Test @MainActor func quitCancelsALaunchBeforeItsRouteSettles() async throws {
+        let model = AppModel()
+        let route = CommandRouteWait()
+        let (request, task) = try await pendingStream(model, route: route)
+        let replies = CommandReplies()
+        replies.requestID = request.id
+        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        #expect(model.pendingCommandStream == nil)
+        #expect(task.isCancelled)
+        route.settle()
+        await task.value
+        #expect(request.task == nil)
+        #expect(!model.isStreaming)
+        #expect(model.nativeSession == nil)
+        let deadline = ContinuousClock.now + .seconds(10)
+        let reply = await replies.next(giveUp: { ContinuousClock.now >= deadline })
+        #expect(reply?[CommandChannel.Key.event] == CommandChannel.Event.rejected)
+        #expect(reply?[CommandChannel.Key.detail] == "Stream request cancelled.")
+    }
+
+    @Test @MainActor func quittingAnotherPCLeavesThePendingLaunchAlone() async throws {
+        let model = AppModel()
+        let route = CommandRouteWait()
+        let (request, task) = try await pendingStream(model, route: route)
+        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": "another-pc"])
+        #expect(model.pendingCommandStream === request)
+        #expect(!task.isCancelled)
+        model.cancelPendingCommandStream()
+        route.settle()
+        await task.value
+    }
+
+    @Test @MainActor func aLateRouteCannotClearTheReplacementLaunch() async throws {
+        let model = AppModel()
+        let firstRoute = CommandRouteWait()
+        let (_, firstTask) = try await pendingStream(model, route: firstRoute)
+        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        let nextRoute = CommandRouteWait()
+        let (nextRequest, nextTask) = try await pendingStream(model, route: nextRoute)
+        firstRoute.settle()
+        await firstTask.value
+        #expect(model.pendingCommandStream === nextRequest)
+        #expect(!nextTask.isCancelled)
+        #expect(!model.isStreaming)
+        model.cancelPendingCommandStream()
+        nextRoute.settle()
+        await nextTask.value
+    }
+
+    @Test @MainActor func aLateRouteDoesNotDisturbAReconnectingSession() async throws {
+        let model = AppModel()
+        let route = CommandRouteWait()
+        let (_, task) = try await pendingStream(model, route: route)
+        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        let session = StreamSession()
+        model.nativeSession = session
+        model.isStreaming = true
+        model.isReconnecting = true
+        route.settle()
+        await task.value
+        #expect(model.nativeSession === session)
+        #expect(model.isStreaming)
+        #expect(model.isReconnecting)
+    }
+
+    @Test @MainActor func routePollingStopsWhenCancelledEvenIfTheRouteBecomesReady() async throws {
+        var checks = 0
+        let task = Task { @MainActor in
+            await AppModel.poll(slices: 20, every: .seconds(10)) {
+                checks += 1
+                return checks > 1
+            }
+        }
+        try #require(await AppModel.poll(slices: 2_000, every: .milliseconds(1)) { checks > 0 })
+        task.cancel()
+        #expect(!(await task.value))
+        #expect(checks == 1)
+    }
+
+    @MainActor private func pendingStream(_ model: AppModel, route: CommandRouteWait) async throws
+        -> (PendingCommandStream, Task<Void, Never>) {
+        model.beginCommandStream(UUID().uuidString, app: desktop, on: tower, takeover: false,
+                                 waitForRoute: { await route.wait() })
+        let request = try #require(model.pendingCommandStream)
+        let task = try #require(request.task)
+        try #require(await AppModel.poll(slices: 2_000, every: .milliseconds(1)) { route.started })
+        return (request, task)
+    }
+
     @Test @MainActor func connectTimingsAreWholeMillisecondsOrAbsent() {
         let timing = ConnectTimingTelemetry.shared
         timing.resetForNewSession()
@@ -112,5 +201,20 @@ struct AppShellTests {
         #expect(values["serverinfo_ms"] == "42")
         #expect(values["launch_ms"] == "380")
         #expect(values["cancel_ms"] == nil)
+    }
+}
+
+@MainActor
+private final class CommandRouteWait {
+    private var continuation: CheckedContinuation<Void, Never>?
+    var started: Bool { continuation != nil }
+
+    func wait() async {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func settle() {
+        continuation?.resume()
+        continuation = nil
     }
 }

@@ -7,14 +7,66 @@ import os
 
 extension StatsCollector {
 
+    /// Sunshine's timed captures exclude its repeats when timing is available.
+    /// This estimates captured content, not unique game renders; missing timing
+    /// falls back to received frames until this connection proves support.
+    struct HostFrameRate {
+        private struct Sample {
+            var duration: Double = 0
+            var frames: UInt64 = 0
+            var timedFrames: UInt64 = 0
+        }
+
+        private var windowStart: CFTimeInterval
+        private var frames: UInt64 = 0
+        private var timedFrames: UInt64 = 0
+        private var hasCaptureTiming = false
+        private var value: Double?
+        private var samples = [Sample](repeating: Sample(), count: 4)
+        private var nextSample = 0
+
+        init(now: CFTimeInterval = CACurrentMediaTime()) {
+            windowStart = now
+        }
+
+        mutating func record(hostProcessingLatency: UInt16) {
+            frames &+= 1
+            if hostProcessingLatency > 0 {
+                timedFrames &+= 1
+                hasCaptureTiming = true
+            }
+        }
+
+        mutating func sample(now: CFTimeInterval) -> Double? {
+            let elapsed = now - windowStart
+            // Allow timer jitter around 250 ms without skipping every other tick.
+            guard elapsed >= 0.2 else { return value }
+            if elapsed >= 1 {
+                for index in samples.indices { samples[index] = Sample() }
+            }
+            samples[nextSample] = Sample(duration: elapsed, frames: frames, timedFrames: timedFrames)
+            nextSample = (nextSample + 1) % samples.count
+            windowStart = now
+            frames = 0
+            timedFrames = 0
+            let duration = samples.reduce(0) { $0 + $1.duration }
+            guard duration >= 1 || samples.allSatisfy({ $0.duration > 0 }) || value != nil else { return nil }
+            let count = samples.reduce(UInt64(0)) { $0 + (hasCaptureTiming ? $1.timedFrames : $1.frames) }
+            value = Double(count) / duration
+            return value
+        }
+    }
+
     /// `ptsUs` is the frame's host presentation time (0 = unknown), feeding the
     /// window's host cadence.
     func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0,
-                             frameNumber: Int32) {
+                             frameNumber: Int32, hostProcessingLatency: UInt16 = 0) {
         lock.lock()
         defer { lock.unlock() }
         receivedFrames &+= 1
         totalReceived &+= 1
+        hostFrameRate.record(hostProcessingLatency: hostProcessingLatency)
+        recordHostProcessingLatencyLocked(hostProcessingLatency)
         let consecutive = lastReceivedFrameNumber.map { frameNumber == $0 &+ 1 } ?? false
         if lastReceivedPtsUs > 0, ptsUs < lastReceivedPtsUs {
             pendingNetworkGapCount = 0
@@ -70,15 +122,9 @@ extension StatsCollector {
         return CACurrentMediaTime() - lastPresentTime
     }
 
-    /// Record the host-reported `frameHostProcessingLatency` value from one
-    /// DECODE_UNIT (Limelight.h: capture + encode time measured *on the
-    /// host*, in 1/10 ms units). Zero means the host didn't measure this
-    /// frame (e.g. a repeated frame on Sunshine, or GFE which never fills it
-    /// in) - we skip the count/sum/min update but still let `max` see the
-    /// zero, matching moonlight-qt's exact behavior in ffmpeg.cpp.
-    func recordHostProcessingLatency(_ tenthsOfMs: UInt16) {
-        lock.lock()
-        defer { lock.unlock() }
+    /// Fold timing with its received frame under the same lock so a snapshot
+    /// cannot split their counts. Zero is unmeasured, including Sunshine repeats.
+    private func recordHostProcessingLatencyLocked(_ tenthsOfMs: UInt16) {
         if tenthsOfMs != 0 {
             if minHostProcessingLatency != 0 {
                 minHostProcessingLatency = min(minHostProcessingLatency, tenthsOfMs)

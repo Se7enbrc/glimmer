@@ -60,8 +60,8 @@ struct GlimmerApp: App {
     /// reaches EXISTING users, where a hard-coded `false` fallback only ever
     /// reached fresh installs.
     @MainActor
-    static func registerDefaults() {
-        UserDefaults.standard.register(defaults: [
+    static func registerDefaults(defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [
             // Default-ON prefs. disableMouseAccelWhileStreaming linearizes the
             // system pointer acceleration while the stream window is focused so
             // forwarded mouse deltas are raw 1:1; the non-UI gate reads it via

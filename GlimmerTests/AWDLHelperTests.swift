@@ -33,12 +33,14 @@ struct AWDLHelperTests {
         let allowRestore = DispatchSemaphore(value: 0)
         let replied = DispatchSemaphore(value: 0)
         let operations = Mutex<[String]>([])
+        let interfaceUp = Mutex(false)
         let suppressor = AWDLSuppressor(
-            interfaceIsUp: { false },
+            interfaceIsUp: { interfaceUp.withLock { $0 } },
             runIfconfig: { args in
                 restoreStarted.signal()
                 allowRestore.wait()
                 operations.withLock { $0.append(args.last ?? "") }
+                interfaceUp.withLock { $0 = true }
                 return true
             })
         let service = HelperService(suppressor: suppressor)
@@ -54,6 +56,46 @@ struct AWDLHelperTests {
         #expect(operations.withLock { $0 } == ["up"])
     }
 
+    @Test(arguments: [false, true])
+    func failedRestorationRetriesBeforeIdleExit(commandSucceeded: Bool) async {
+        let start = ContinuousClock.now
+        let clock = Mutex(start)
+        let interfaceUp = Mutex(false)
+        let recover = Mutex(false)
+        let attempts = Mutex(0)
+        let suppressor = AWDLSuppressor(interfaceIsUp: { interfaceUp.withLock { $0 } }, runIfconfig: { _ in
+            attempts.withLock { $0 += 1 }
+            if recover.withLock({ $0 }) { interfaceUp.withLock { $0 = true } }
+            return commandSucceeded
+        }, clockNow: { clock.withLock { $0 } })
+        let service = HelperService(suppressor: suppressor)
+        let released = await withCheckedContinuation { continuation in
+            service.setAWDLDown(false, reason: "test") { continuation.resume(returning: $0) }
+        }
+        #expect(!released)
+        #expect(attempts.withLock { $0 } == 1)
+        clock.withLock { $0 = start + .seconds(10) }
+        #expect(suppressor.withHeartbeatDecision(at: start + .seconds(10)) { $0 } == .restoring)
+        recover.withLock { $0 = true }
+        suppressor.poll()
+        await withCheckedContinuation { continuation in
+            suppressor.afterPendingChanges { continuation.resume() }
+        }
+        #expect(attempts.withLock { $0 } == 2)
+        #expect(interfaceUp.withLock { $0 })
+        #expect(suppressor.withHeartbeatDecision(at: start + .seconds(10)) { $0 } == .exit(.seconds(10)))
+    }
+
+    @Test func onlyExplicitMissingLaunchdJobPermitsRepair() {
+        let missing = "Could not find service \"io.ugfugl.glimmer.helper\" in domain for system"
+        #expect(AWDLHelperRecovery.confirmsMissingJob(status: 113, error: missing))
+        #expect(!AWDLHelperRecovery.confirmsMissingJob(status: nil, error: missing))
+        #expect(!AWDLHelperRecovery.confirmsMissingJob(status: 0, error: missing))
+        #expect(!AWDLHelperRecovery.confirmsMissingJob(status: 113, error: "Operation not permitted"))
+        #expect(!AWDLHelperRecovery.confirmsMissingJob(status: 113,
+                                                     error: "Could not find service \"other\" in domain for system"))
+    }
+
     @Test func monotonicHeartbeatExpiresAtThresholds() {
         let start = ContinuousClock.now
         let clock = Mutex(start)
@@ -66,7 +108,7 @@ struct AWDLHelperTests {
         #expect(suppressor.withHeartbeatDecision(at: start + .seconds(2)) { $0 } == .suppressing)
         #expect(suppressor.withHeartbeatDecision(at: start + .seconds(4)) { $0 } == .stale(.seconds(4)))
         #expect(!suppressor.suppressing)
-        #expect(suppressor.withHeartbeatDecision(at: start + .seconds(9)) { $0 } == .exit(.seconds(9)))
+        #expect(suppressor.withHeartbeatDecision(at: start + .seconds(9)) { $0 } == .restoring)
     }
 
     @Test func renewedHeartbeatWinsBeforeExpiry() {

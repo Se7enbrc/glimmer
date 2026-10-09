@@ -16,6 +16,32 @@ import Darwin
 
 extension RtpAudioReceiver {
 
+    /// Sunshine can send RTP from a different port than the ping destination.
+    /// Pin the resolved address instead, including the interface for scoped IPv6.
+    static func isExpectedPeer(_ source: sockaddr_storage, length: socklen_t,
+                               expected: sockaddr_storage, expectedLength: socklen_t) -> Bool {
+        guard source.ss_family == expected.ss_family else { return false }
+        return withUnsafeBytes(of: source) { sourceBytes in
+            withUnsafeBytes(of: expected) { expectedBytes in
+                switch Int32(source.ss_family) {
+                case AF_INET:
+                    guard length >= MemoryLayout<sockaddr_in>.size,
+                          expectedLength >= MemoryLayout<sockaddr_in>.size else { return false }
+                    return sourceBytes[4..<8].elementsEqual(expectedBytes[4..<8])
+                case AF_INET6:
+                    guard length >= MemoryLayout<sockaddr_in6>.size,
+                          expectedLength >= MemoryLayout<sockaddr_in6>.size else { return false }
+                    let scope = expectedBytes.loadUnaligned(fromByteOffset: 24, as: UInt32.self)
+                    let sourceScope = sourceBytes.loadUnaligned(fromByteOffset: 24, as: UInt32.self)
+                    return sourceBytes[8..<24].elementsEqual(expectedBytes[8..<24])
+                        && (scope == 0 || scope == sourceScope)
+                default:
+                    return false
+                }
+            }
+        }
+    }
+
     func openSocket() throws {
         guard let (dest, destLen, family) = UdpPinger.makeSockaddr(for: host, port: audioPort) else {
             throw EnetError.socketFailure("could not build audio host address for \(host)")
@@ -74,7 +100,7 @@ extension RtpAudioReceiver {
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
         fd = sock
-        Diag.info("NativeAudio UDP socket ready (unconnected, recvfrom-any) → \(host, privacy: .private):\(audioPort)",
+        Diag.info("NativeAudio UDP socket ready (peer IP filtered, any source port) → \(host, privacy: .private):\(audioPort)",
                   Self.cat)
     }
 }
