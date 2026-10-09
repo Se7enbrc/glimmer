@@ -6,6 +6,17 @@
     <description>Glimmer auto-update feed</description>
     <language>en</language>
     <item>
+      <title>2026.10.5</title>
+      <description><![CDATA[
+<ul><li>Frames whose timing falls between display refreshes no longer accumulate extra waiting in the pacing queue.</li><li>Audio buffering can return to normal after the connection settles, even when the PC's and Mac's audio clocks run at slightly different rates.</li><li>The Render and PC FPS readings use timing from the PC to estimate capture rate when available, and refresh about four times a second. FPS warnings are off by default; custom warning thresholds are kept.</li><li>Stray or damaged audio packets no longer move playback far ahead of the stream and leave valid audio waiting to catch up.</li><li>The Wi-Fi helper keeps trying if restoring AirDrop fails, and can recover when its background service is missing.</li><li>Quitting a command-line launch while Glimmer is checking the route to the PC cancels it, so the stream cannot start afterward.</li></ul>
+]]></description>
+      <pubDate>Fri, 09 Oct 2026 03:47:52 GMT</pubDate>
+      <sparkle:version>20261008</sparkle:version>
+      <sparkle:shortVersionString>2026.10.5</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Se7enbrc/glimmer/releases/download/2026.10.5/Glimmer-2026.10.5.zip" type="application/octet-stream" sparkle:edSignature="VTrbKYVJV2yCzF3pjCa1yxqN4loWTlk7h/lyAdh7fP8zCr5WID0eWtQMNHpBAW7+ggks4EfHXpz//c2OZGZXDQ==" length="6216168" />
+    </item>
+    <item>
       <title>2026.10.4</title>
       <description><![CDATA[
 <ul><li>On a 16-inch MacBook Pro, the HiDPI quality asks the PC for 1728 × 1116 instead of 1728 × 1117, a size PCs couldn't encode, so the stream shows a picture instead of ending after ten seconds. Custom sizes are kept even too. (#110)</li><li>Quitting while Glimmer is reconnecting ends the game on the PC, instead of leaving it running and asking to take it over on the next connect.</li><li>On a remote connection, a quality step-up that doesn't hold drops back to the quality that worked, instead of ending the stream or waiting on “Waiting for video…” for up to 20 minutes.</li><li>After a Wi-Fi dropout, a paused game or a quiet PC, the audio delay no longer grows from one session to the next.</li><li>Glimmer no longer lowers the audio delay back to a level that just stuttered, and after a stretch of Wi-Fi trouble it starts bringing the delay back down after 3 minutes instead of 10.</li><li>A failure's Wake and Connect or Pair Again… acts on the PC the message names, even if you picked another PC while it was connecting.</li><li>Cancelling a slow start on one PC and then streaming from another no longer leaves the game running on the first.</li><li>A change the PC sends during a Wi-Fi dropout of more than a second, such as switching HDR on, is no longer lost.</li><li>In Settings › Quality, Custom's options open right under the preset choices instead of further down the page.</li></ul>
