@@ -61,6 +61,9 @@
 - Fullscreen can open in its own macOS Space with “Use a full-screen Space”. The
   default still covers the whole screen, notch included. Both support Game Mode,
   with its switch in macOS Game Overlay.
+- A MacBook's built-in display keeps its own full-screen choice, shown as “Keep
+  picture below the camera”, separate from other displays. Settings shows the
+  one for the display Glimmer is on.
 - Returning from another Space no longer counts intentionally hidden video as a
   presentation stall.
 - A missed modifier-key release no longer turns later keys into unintended
