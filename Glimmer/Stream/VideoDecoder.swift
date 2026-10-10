@@ -78,6 +78,10 @@ public final class VideoDecoder {
         didSet {
             guard oldValue != statsOverlayEnabled else { return }
             log.info("Stats overlay \(self.statsOverlayEnabled ? "ON" : "OFF")")
+            backdropBox.withLock { [enabled = statsOverlayEnabled] in
+                $0.overlayEnabled = enabled
+                if !enabled { $0.luminance = nil }
+            }
             onStatsOverlayEnabledChanged?(statsOverlayEnabled)
         }
     }
@@ -86,6 +90,9 @@ public final class VideoDecoder {
     /// session uses this to show/hide the overlay layer instantly without
     /// having to poll the decoder.
     public var onStatsOverlayEnabledChanged: ((Bool) -> Void)?
+
+    /// HUD backdrop sampling state: set on the main actor, sampled on the present path.
+    nonisolated let backdropBox = OSAllocatedUnfairLock(initialState: HUDBackdropState())
 
     // MARK: - Internal state
     //

@@ -321,6 +321,7 @@ extension VideoDecoder {
         // Keep PTS for pacing and telemetry, but display this decoded image when released.
         Self.markForImmediateDisplay(sampleBuffer)
         renderer.enqueue(sampleBuffer)
+        sampleHUDBackdrop(sampleBuffer)
 
         // Latency telemetry stage t_present (opt-in; nil = zero cost): the frame
         // just reached the renderer. Recover the rtpTimestamp key from the sample
