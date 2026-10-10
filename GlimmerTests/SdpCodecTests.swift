@@ -251,6 +251,21 @@ struct SdpCodecTests {
         #expect(sdp.contains("a=x-nv-video[0].maxNumReferenceFrames:1 \r\n"))
     }
 
+    /// RFI needs the PC's support and a decoder capability for the negotiated codec family.
+    @Test(arguments: [
+        (StreamProtocol.VIDEO_FORMAT_H264, StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_AVC, "0"),
+        (StreamProtocol.VIDEO_FORMAT_H264, StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC, "1"),
+        (StreamProtocol.VIDEO_FORMAT_H265, StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC, "0"),
+        (StreamProtocol.VIDEO_FORMAT_AV1_MAIN8, StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_AV1, "0"),
+        (StreamProtocol.VIDEO_FORMAT_AV1_MAIN8, StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC, "1")
+    ])
+    func buildMaxNumReferenceFramesFollowsDecoderRfi(format: Int32, capability: Int32, frames: String) {
+        var announce = builder(format: format)
+        announce.serverSupportsRfi = true
+        announce.decoderRfiCapabilities = capability
+        #expect(sdpString(announce).contains("a=x-nv-video[0].maxNumReferenceFrames:\(frames) \r\n"))
+    }
+
     @Test func buildAudioQualityFollowsTheNegotiatedTier() {
         var announce = builder(format: StreamProtocol.VIDEO_FORMAT_H264)
         #expect(sdpString(announce).contains("a=x-nv-audio.surround.AudioQuality:1 \r\n"))

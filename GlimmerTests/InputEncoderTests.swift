@@ -186,6 +186,26 @@ struct InputEncoderTests {
         #expect(Array(out[10..<12]) == [0x08, 0x01])
     }
 
+    // MARK: 9-10. Controller touch (28 bytes) and motion (24 bytes): netfloats are raw LE IEEE-754
+
+    @Test func controllerTouchKnownAnswer() {
+        let out = InputEncoder.controllerTouch(num: 2, eventType: 0x01, touchpadIndex: 1,
+                                               pointerId: 0x0102_0304, x: 0.5, y: 0.25, pressure: 1)
+        var expected = header(bodyLength: 24, magicLE: 0x5500_0005) // SS_CONTROLLER_TOUCH
+        expected += [0x02, 0x01, 0x00, 0x01]                         // num, eventType, zero, touchpad
+        expected += [0x04, 0x03, 0x02, 0x01]                         // pointerId LE
+        expected += [0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x80, 0x3E, 0x00, 0x00, 0x80, 0x3F]
+        #expect(out == expected)
+    }
+
+    @Test func controllerMotionKnownAnswer() {
+        let out = InputEncoder.controllerMotion(num: 1, motionType: 0x02, x: 1, y: -2, z: 0.5)
+        var expected = header(bodyLength: 20, magicLE: 0x5500_0006) // SS_CONTROLLER_MOTION
+        expected += [0x01, 0x02, 0x00, 0x00]                         // num, motionType, zero[2]
+        expected += [0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x3F]
+        #expect(out == expected)
+    }
+
     // MARK: 11. Controller battery (12 bytes)
 
     @Test func controllerBatteryKnownAnswer() {
