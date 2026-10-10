@@ -136,19 +136,21 @@ release:
 # Build and run unsigned tests; TEST_SUITE optionally selects one suite or test.
 test:
 	@scripts/generate-build-info.sh
-	trap '$(UNREGISTER_BUILDS)' EXIT; xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
-	  $(if $(strip $(TEST_SUITE)),-only-testing:GlimmerTests/$(TEST_SUITE))
+	  $(if $(strip $(TEST_SUITE)),-only-testing:GlimmerTests/$(TEST_SUITE)); \
+	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
 
 # Exercise untrusted protocol input with memory error detection enabled.
 test-asan:
 	@scripts/generate-build-info.sh
-	trap '$(UNREGISTER_BUILDS)' EXIT; xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
 	  -enableAddressSanitizer YES -only-testing:GlimmerTests/FuzzTests \
-	  -only-testing:GlimmerTests/StreamFuzzTests
+	  -only-testing:GlimmerTests/StreamFuzzTests; \
+	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
 
 app:
 	@echo "▶ Building Glimmer.app ($(CONFIG))..."
