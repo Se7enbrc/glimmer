@@ -273,7 +273,7 @@ final class AppModel {
     var streamCoversNotch: Bool = true {
         didSet { UserDefaults.standard.set(streamCoversNotch, forKey: "streamCoversNotch") }
     }
-    var streamUsesFullScreenSpace: Bool = true {
+    var streamUsesFullScreenSpace: Bool = false {
         didSet { UserDefaults.standard.set(streamUsesFullScreenSpace, forKey: "streamUsesFullScreenSpace") }
     }
     /// The Custom preset's "Show the stream in a window" choice: full screen

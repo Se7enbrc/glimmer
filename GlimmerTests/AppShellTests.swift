@@ -52,18 +52,25 @@ struct AppShellTests {
         }
     }
 
-    @Test @MainActor func notchedPanelsCoverTheNotchUnlessTheUserChoseOtherwise() {
+    @Test @MainActor func fullscreenCoversEveryPanelUnlessTheUserChoseOtherwise() {
+        let keys = ["streamCoversNotch", "streamUsesFullScreenSpace"]
         let defaults = UserDefaults.standard
-        let saved = defaults.object(forKey: "streamCoversNotch")
+        let saved = keys.map { ($0, defaults.object(forKey: $0)) }
         defer {
-            if let saved { defaults.set(saved, forKey: "streamCoversNotch") } else {
-                defaults.removeObject(forKey: "streamCoversNotch")
+            for (key, value) in saved {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
             }
         }
-        defaults.removeObject(forKey: "streamCoversNotch")
-        #expect(AppModel().streamCoversNotch)
+        for key in keys { defaults.removeObject(forKey: key) }
+        let fresh = AppModel()
+        for hasNotch in [true, false] {
+            #expect(AppModel.streamCoversNotch(displayHasNotch: hasNotch, coversNotch: fresh.streamCoversNotch,
+                                               usesFullScreenSpace: fresh.streamUsesFullScreenSpace))
+        }
         defaults.set(false, forKey: "streamCoversNotch")
-        #expect(!AppModel().streamCoversNotch)
+        defaults.set(true, forKey: "streamUsesFullScreenSpace")
+        let chosen = AppModel()
+        #expect(!chosen.streamCoversNotch && chosen.streamUsesFullScreenSpace)
     }
 
     @Test @MainActor func loadingQualityDoesNotSaveUntouchedCustomValues() {

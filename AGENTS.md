@@ -165,10 +165,10 @@ Each of these gets a pull request sent back.
 These are settled. A pull request is not the place to reopen them.
 
 - The renderer is `AVSampleBufferDisplayLayer`. Not Metal.
-- Native full-screen Spaces are the default. On notched displays the picture
-  covers the whole panel, notch included. Preserve saved fullscreen preferences.
-  macOS owns the Game Mode toggle; never use private APIs or rewrite the signed
-  Info.plist to control it.
+- Fullscreen defaults to a borderless window covering the whole panel, notch
+  included; a native full-screen Space is opt-in. Preserve saved fullscreen
+  preferences. macOS owns the Game Mode toggle; never use private APIs or
+  rewrite the signed Info.plist to control it.
 - The Wi-Fi helper, which parks awdl0, is offered at first open on every Mac,
   whatever the network route, and again each launch until it's on or declined
   for good. awdl0 wrecks streams; deferring, gating, burying or hiding the offer

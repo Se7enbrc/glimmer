@@ -35,14 +35,14 @@ choice.
 
 ## Overview
 
-The user picks a PC in the SwiftUI launcher and clicks Stream. A native
-full-screen Space is the default; saved window and screen-covering preferences
-are preserved. Decoded H.264, HEVC or AV1 (8- or 10-bit, SDR or HDR10) is paced
-by a display-link-driven `FramePacer` onto an `AVSampleBufferDisplayLayer` for
-the OS to paint. Mouse, keyboard and gamepad input goes to the PC through the
-`StreamingBackend` input methods (coalesced by an `InputBatcher` onto the
-reliable control channel). When the user hits the quit hotkey, the backend is
-told to disconnect and the window comes down.
+The user picks a PC in the SwiftUI launcher and clicks Stream. A borderless
+window covering the screen is the default; saved window and full-screen Space
+preferences are preserved. Decoded H.264, HEVC or AV1 (8- or 10-bit, SDR or
+HDR10) is paced by a display-link-driven `FramePacer` onto an
+`AVSampleBufferDisplayLayer` for the OS to paint. Mouse, keyboard and gamepad
+input goes to the PC through the `StreamingBackend` input methods (coalesced by
+an `InputBatcher` onto the reliable control channel). When the user hits the
+quit hotkey, the backend is told to disconnect and the window comes down.
 
 ## Process model
 
@@ -542,7 +542,7 @@ session config:
 Both paths support HDR: EDR follows the layer's PQ content, not the window's
 Space membership.
 
-On displays without a notch, “Use a full-screen Space” defaults on. On notched
+On displays without a notch, “Use a full-screen Space” defaults off. On notched
 displays, “Keep picture below the camera” defaults off: a Space can't draw
 beside the camera, so the borderless cover fills the whole panel. Each display
 type keeps its own saved preference, and changes apply to the next stream.

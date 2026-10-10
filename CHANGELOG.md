@@ -49,9 +49,9 @@
   helper can launch after notarization.
 - Controllers keep playing in Mini Player while you use another app. Keyboard
   and mouse still follow normal focus and capture behavior.
-- Fullscreen defaults to a native macOS Space, preserving saved preferences. On
-  a MacBook's built-in display the picture still covers the notch. Both support
-  Game Mode, with its switch in macOS Game Overlay.
+- Fullscreen can open in its own macOS Space with “Use a full-screen Space”. The
+  default still covers the whole screen, notch included. Both support Game Mode,
+  with its switch in macOS Game Overlay.
 - Returning from another Space no longer counts intentionally hidden video as a
   presentation stall.
 - A missed modifier-key release no longer turns later keys into unintended

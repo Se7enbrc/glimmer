@@ -62,9 +62,9 @@ that inspired Glimmer; it is not the protocol's name.
 - No analytics, tracking or third-party network calls. Glimmer talks only to the
   user's PC, the local network for discovery and Wake on LAN, and its update
   feed.
-- The renderer is AVSampleBufferDisplayLayer, not Metal. Native full-screen
-  Spaces are the default and support macOS Game Mode; the player changes Game
-  Mode in the system Game Overlay.
+- The renderer is AVSampleBufferDisplayLayer, not Metal. Fullscreen covers the
+  whole screen, notch included, and supports macOS Game Mode; the player changes
+  Game Mode in the system Game Overlay.
 - UI copy follows the "UI and copy" rules in AGENTS.md, which are binding for
   every contributor.
 
