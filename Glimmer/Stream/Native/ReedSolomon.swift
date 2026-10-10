@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+// SPDX-FileCopyrightText: 2021 Joseph Calderon
+
 // Erasure decoding follows nanors; transport provenance and MIT notices are in CREDITS.md.
 // The field, the Cauchy matrix and the shard kernels are Swift; the kernels work 16 bytes
 // at a time so shard recovery doesn't hold up the receive thread during packet loss.

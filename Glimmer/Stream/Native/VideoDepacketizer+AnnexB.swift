@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
 // H.264/HEVC key-frame detection and parameter-set routing for Sunshine payloads.
 // Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 

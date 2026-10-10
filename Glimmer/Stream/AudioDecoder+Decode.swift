@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Decode, conceal and schedule audio packets. Engine lifecycle lives in AudioDecoder+Engine.swift.
 
 import AVFoundation

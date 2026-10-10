@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 #
 # make-dmg.sh - build the distributable Glimmer DMG, styled the way a normal Mac
 # app installer looks: a background image with an arrow from Glimmer.app to the

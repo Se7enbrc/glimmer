@@ -1,9 +1,9 @@
-//
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
 //  MenuBarPanel.swift
 //
 //  The menu bar item's panel: titled cards, big numbers and a one-minute chart while
 //  streaming, chevron rows for the PC, a controller battery bar, and a footer of round buttons.
-//
 
 import AppKit
 import SwiftUI

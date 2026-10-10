@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Validate the dedicated Homebrew tap checkout before any destructive update."""
 
 import argparse

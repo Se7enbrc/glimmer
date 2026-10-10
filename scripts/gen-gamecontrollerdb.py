@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Regenerate Glimmer/Stream/HIDGamepad/GameControllerDB+Data.swift from SDL_GameControllerDB.
 
 Usage: scripts/gen-gamecontrollerdb.py [path-or-URL to gamecontrollerdb.txt]

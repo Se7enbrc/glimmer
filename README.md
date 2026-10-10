@@ -17,7 +17,7 @@
 <p align="center">
   <a href="https://github.com/Se7enbrc/glimmer/actions/workflows/verify.yml"><img src="https://github.com/Se7enbrc/glimmer/actions/workflows/verify.yml/badge.svg?branch=main" alt="Verification status"></a>
   <a href="https://github.com/Se7enbrc/glimmer/actions/workflows/codeql.yml"><img src="https://github.com/Se7enbrc/glimmer/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL status"></a>
-  <a href="https://github.com/Se7enbrc/glimmer/releases/latest"><img src="https://img.shields.io/github/v/release/Se7enbrc/glimmer?label=release" alt="Latest release"></a>
+  <a href="https://github.com/Se7enbrc/glimmer/releases/latest"><img src="https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fse7enbrc.github.io%2Fglimmer%2Fappcast.xml&amp;query=%2F%2F%2A%5Blocal-name%28%29%3D%27item%27%5D%5Bnot%28%2A%5Blocal-name%28%29%3D%27channel%27%5D%29%5D%5B1%5D%2F%2A%5Blocal-name%28%29%3D%27shortVersionString%27%5D&amp;label=release&amp;prefix=v" alt="Latest release offered to Glimmer"></a>
   <a href="#install"><img src="https://img.shields.io/badge/macOS-26%2B%20%C2%B7%20Apple%20silicon-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later on Apple silicon"></a>
   <a href="https://github.com/Se7enbrc/homebrew-glimmer"><img src="https://img.shields.io/badge/Homebrew-se7enbrc%2Fglimmer-fbb040?logo=homebrew&amp;logoColor=white" alt="Homebrew cask in the se7enbrc/glimmer tap"></a>
   <a href="docs/RELEASE.md"><img src="https://img.shields.io/badge/releases-signed%20%C2%B7%20notarized%20%C2%B7%20attested-2da44e" alt="Releases are signed, notarized and attested"></a>
@@ -88,7 +88,8 @@ Homebrew.
 
 Signed and notarized, distributed outside the App Store. Glimmer runs without
 App Sandbox and offers an optional administrator-approved Wi-Fi helper
-([security details](docs/SECURITY.md)).
+([security details](docs/SECURITY.md)). You can
+[verify a download](docs/SECURITY.md#verifying-a-download) before opening it.
 
 Glimmer has earned the
 [OpenSSF Best Practices Passing badge](https://www.bestpractices.dev/en/projects/15346).
@@ -166,7 +167,8 @@ see [the signing setup](docs/RELEASE.md#3-signing-credentials). `make app`
 compile-checks, `make test` runs the unit tests, `make uninstall` removes it.
 The engine is under `Glimmer/Stream/`, no submodules.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md),
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Why not Moonlight
 

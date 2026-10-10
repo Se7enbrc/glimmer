@@ -1,4 +1,7 @@
 #!/usr/bin/swift
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Generates the Glimmer app icon set in Apple's macOS 26 "Liquid Glass" style.
 // Full design notes, usage, and palette/Icon-Composer rationale live in the
 // companion `scripts/generate-icons.md`; this header stays terse so the script

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 //
 //  AudioDecoder+Meter.swift
 //
@@ -359,10 +362,10 @@ extension AudioDecoder {
     /// is NOT a cross-stream A/V delta (nothing here compares against the video
     /// present clock), so it's named honestly for what it is. A growing positive
     /// value means the audio clock is running slow relative to wall time.
-    func publishAudioState() {
+    func publishAudioState(now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         audioMeterLock.lock()
         // Later route or resampler work must not add its latency to this snapshot's drift.
-        let observedAtNanos = DispatchTime.now().uptimeNanoseconds
+        let observedAtNanos = now
         let aheadFrames = framesScheduled &- framesPlayed
         let residentSilenceFrames = pendingSilenceFrames
         let rate = meterSampleRate

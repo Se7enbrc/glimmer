@@ -1,4 +1,7 @@
 #!/usr/bin/swift
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Renders the Glimmer icon split into separate Background + Foreground
 // PNG layers for the macOS 26 Tahoe `.icon` bundle format. The legacy
 // .appiconset's per-appearance variants are inert on Tahoe; the .icon

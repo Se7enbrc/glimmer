@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Readiness polling holds recent answers through transient network and stream teardown blips.
 
 import AppKit

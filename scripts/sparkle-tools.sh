@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 #
 # sparkle-tools.sh - ensure Sparkle's CLI tools are available locally and print
 # the directory that holds them. Pinned, cached under ~/.cache so the download

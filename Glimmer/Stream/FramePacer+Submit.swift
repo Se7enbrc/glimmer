@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
 // The decode-queue submit path shares the queue lock with the display-link drain.
 
 import AVFoundation

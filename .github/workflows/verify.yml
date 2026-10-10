@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 name: Verify
 
 on:
@@ -9,16 +12,31 @@ on:
 permissions:
   contents: read
 
+# A pull request's newer push replaces its run; every main commit keeps its own.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
+  # The gate's three parts share no build products, so they run side by side.
   verify:
-    name: macOS
+    name: Verify (${{ matrix.part }})
     runs-on: macos-26
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: checks
+            target: check
+            coverage: python
+          - part: tests
+            target: test
+            coverage: swift
+          - part: fuzz
+            target: test-asan
+            coverage: ""
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -41,6 +59,8 @@ jobs:
           python3 --version
 
       - name: Prepare verification
+        env:
+          COVERAGE_KIND: ${{ matrix.coverage }}
         run: |
           if ! command -v swiftlint >/dev/null 2>&1; then
             brew install swiftlint
@@ -52,9 +72,11 @@ jobs:
             brew install pre-commit
           fi
           scripts/install-ci-scanner.sh
-          python3 -m venv "$RUNNER_TEMP/coverage"
-          "$RUNNER_TEMP/coverage/bin/python" -m pip install --quiet --require-hashes \
-            --only-binary :all: -r scripts/coverage-requirements.txt
+          if [ "$COVERAGE_KIND" = python ]; then
+            python3 -m venv "$RUNNER_TEMP/coverage"
+            "$RUNNER_TEMP/coverage/bin/python" -m pip install --quiet --require-hashes \
+              --only-binary :all: -r scripts/coverage-requirements.txt
+          fi
           swiftlint version
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
@@ -65,6 +87,7 @@ jobs:
 
       - name: Pre-commit
         id: precommit
+        if: matrix.part == 'checks'
         env:
           GLIMMER_SECRET_SCAN_ALL_FILES: "1"
           SCAN_FROM:
@@ -79,28 +102,28 @@ jobs:
       - name: Verify
         id: verify
         env:
+          TARGET: ${{ matrix.target }}
+          COVERAGE_KIND: ${{ matrix.coverage }}
           COVERAGE_PY: ${{ runner.temp }}/coverage/bin/python -m coverage
-        run: make verify COVERAGE=1
+        run: make "$TARGET" TEST_SUITE= ${COVERAGE_KIND:+COVERAGE=1}
 
       - name: Coverage summary
+        if: matrix.coverage != ''
         env:
           TESTED_SHA: ${{ github.sha }}
+          COVERAGE_KIND: ${{ matrix.coverage }}
         run: |
           {
             printf 'Measured commit: %s\n\n' "$TESTED_SHA"
-            cat build/coverage/swift/summary.md build/coverage/python/summary.md
+            cat "build/coverage/$COVERAGE_KIND/summary.md"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage
+        if: matrix.coverage != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: coverage
-          path: |
-            build/coverage/swift/*.json
-            build/coverage/swift/summary.md
-            build/coverage/python/coverage.json
-            build/coverage/python/report.txt
-            build/coverage/python/summary.md
+          name: coverage-${{ matrix.coverage }}
+          path: build/coverage/${{ matrix.coverage }}/
           if-no-files-found: error
           retention-days: 30
 
@@ -110,6 +133,8 @@ jobs:
           TESTED_SHA: ${{ github.sha }}
           PRECOMMIT_OUTCOME: ${{ steps.precommit.outcome }}
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          PART: ${{ matrix.part }}
+          TARGET: ${{ matrix.target }}
         run: |
           {
             printf '## Verification failed\n\n'
@@ -117,7 +142,20 @@ jobs:
             printf '| Check | Outcome | Reproduce locally |\n'
             printf '| --- | --- | --- |\n'
             printf '| Pre-commit | %s | GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files |\n' "$PRECOMMIT_OUTCOME"
-            printf '| Full gate | %s | make verify |\n\n' "$VERIFY_OUTCOME"
+            printf '| %s | %s | make %s |\n\n' "$PART" "$VERIFY_OUTCOME" "$TARGET"
             printf 'Check out the tested commit and open the failed step for details.\n'
             printf 'Credential scanner findings are withheld; never paste keys or tokens into an issue.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The required check: green only when every part of the gate passed.
+  gate:
+    name: macOS
+    needs: verify
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every part
+        env:
+          RESULT: ${{ needs.verify.result }}
+        run: test "$RESULT" = success

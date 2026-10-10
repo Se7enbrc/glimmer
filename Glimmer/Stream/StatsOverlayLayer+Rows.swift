@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Reused text layers keep the HUD's refresh independent of video presentation.
 
 import AppKit
