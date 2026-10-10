@@ -94,3 +94,18 @@ jobs:
             printf 'Check out the tested commit and open the failed step for details.\n'
             printf 'Credential scanner findings are withheld; never paste keys or tokens into an issue.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  fuzz:
+    name: libFuzzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fuzz protocol parsers
+        env:
+          FUZZ_SECONDS: "30"
+        run: scripts/fuzz.sh
