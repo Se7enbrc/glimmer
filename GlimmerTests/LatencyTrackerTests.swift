@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 //
 //  LatencyTrackerTests.swift
 //  Latency histogram buckets, the in-flight frame map, cadence and trace lines.

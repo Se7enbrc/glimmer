@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Mouse motion, buttons and scroll from StreamInputView to the backend.
 
 import AppKit
