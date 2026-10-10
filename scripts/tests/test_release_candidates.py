@@ -137,10 +137,25 @@ root = pathlib.Path(os.environ["FIXTURE_ROOT"])
 args = sys.argv[1:]
 with (root / "gh-calls").open("a") as log:
     log.write(json.dumps(args) + "\\n")
-if args[:2] == ["release", "view"]:
-    sys.exit(1)
-if args[0] == "api":
-    print("a" * 40 if "/commits/" in args[1] else "true")
+state = root / "release-state"
+if args[:2] == ["release", "create"]:
+    state.write_text("draft" if "--draft" in args else "published")
+elif args[:2] == ["release", "edit"] and "--draft=false" in args:
+    state.write_text("published")
+elif args[:2] == ["release", "view"]:
+    if not state.exists():
+        sys.exit(1)
+    print(7)
+elif args[0] == "api":
+    # Like GitHub: the by-tag endpoint can't see a draft.
+    if "/releases/tags/" in args[1] and state.read_text() == "draft":
+        sys.exit(1)
+    if "/commits/" in args[1]:
+        print("a" * 40)
+    elif ".draft" in args:
+        print("true" if state.read_text() == "draft" else "false")
+    else:
+        print("true")
 ''')
         (self.root / "scripts/github_signed_commit.py").write_text('''import json, os, pathlib, sys
 root = pathlib.Path(os.environ["FIXTURE_ROOT"])
@@ -180,6 +195,8 @@ print("c" * 40)
         self.assertNotIn("--target", create)
         edit = next(call for call in calls if call[:2] == ["release", "edit"])
         self.assertIn("--latest=false", edit)
+        self.assertIn("--draft=false", edit)
+        self.assertEqual((self.root / "release-state").read_text(), "published")
         self.assertFalse(Path(self.env["FIXTURE_DITTO_MARKER"]).exists())
 
     def test_candidate_requires_hosted_context_and_exact_version_tag_before_credentials(self):

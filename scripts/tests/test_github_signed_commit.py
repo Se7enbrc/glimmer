@@ -112,8 +112,17 @@ if name == "git":
     elif args[0] == "diff":
         sys.exit(1)
 elif name == "gh":
-    if args[:2] == ["release", "view"] and os.environ.get("FIXTURE_NEW_RELEASE"):
+    state = pathlib.Path(os.environ["FIXTURE_LOG"] + ".release")
+    if args[:2] == ["release", "create"]:
+        state.write_text("true" if "--draft" in args else "false")
+    elif args[:2] == ["release", "edit"] and "--draft=false" in args:
+        state.write_text("false")
+    elif args[:2] == ["release", "view"] and os.environ.get("FIXTURE_NEW_RELEASE") and not state.exists():
         sys.exit(1)
+    elif args[:2] == ["release", "view"] and "databaseId" in args:
+        print(7)
+    elif args[0] == "api" and args[1].endswith("/releases/7") and ".draft" in args:
+        print(state.read_text() if state.exists() else "false")
     elif args[:2] == ["release", "view"] and "--json" in args:
         print("false" if os.environ.get("FIXTURE_PRERELEASE") else "true")
     elif args[:2] == ["release", "download"]:
