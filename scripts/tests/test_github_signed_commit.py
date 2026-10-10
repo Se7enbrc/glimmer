@@ -108,7 +108,7 @@ class GitHubSignedCommitTests(unittest.TestCase):
         for message in ("", "a\nb", "a\rb"):
             with self.subTest(message=message), patch("github_signed_commit.subprocess.run") as run:
                 with self.assertRaisesRegex(ValueError, "single-line message"):
-                    commit_file("Se7enbrc/glimmer", HEAD, "appcast.xml", self.file, message)
+                    commit_file("Se7enbrc/glimmer", "appcast", HEAD, "appcast.xml", self.file, message)
                 run.assert_not_called()
         for oid in ("short", COMMIT.upper(), 7, None):
             body = json.dumps({"data": {"createCommitOnBranch": {"commit": {
@@ -119,15 +119,15 @@ class GitHubSignedCommitTests(unittest.TestCase):
                     self.commit()
 
     def test_main_prints_only_the_verified_oid_and_maps_failures_to_exit_one(self):
-        argv = ["x", "Se7enbrc/glimmer", HEAD, "appcast.xml", str(self.file), "msg"]
+        argv = ["x", "Se7enbrc/glimmer", "appcast", HEAD, "appcast.xml", str(self.file), "msg"]
         out = io.StringIO()
         with patch.object(sys, "argv", argv), contextlib.redirect_stdout(out), \
                 patch("github_signed_commit.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, response(), "")
             github_signed_commit.main()
         self.assertEqual(out.getvalue(), COMMIT + "\n")
-        for index, value, message in ((4, "/absent/file", "Couldn't read the release metadata file"),
-                                      (2, "short", "full expected head SHA")):
+        for index, value, message in ((5, "/absent/file", "Couldn't read the release metadata file"),
+                                      (3, "short", "full expected head SHA")):
             args = [*argv[:index], value, *argv[index + 1:]]
             err = io.StringIO()
             with self.subTest(message=message), patch.object(sys, "argv", args), \

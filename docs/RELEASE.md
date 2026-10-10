@@ -142,12 +142,13 @@ notarization, Gatekeeper acceptance and app/helper launch authorization.
 
 ### Website and update feed
 
-GitHub Pages serves `glimmer.ugfugl.io` from the **Pages** workflow, which
-uploads `main`'s files as they are (no Jekyll) plus `appcast.xml` from the
-`appcast` branch. `index.html` and `website/` are the static landing page. The
-`appcast` branch holds only the machine-written feed: releases and promotions
-commit there, so they never move `main` or put open pull requests behind it.
-Preview the site with `python3 -m http.server 8765` from the repository root.
+GitHub Pages serves `https://se7enbrc.github.io/glimmer/`, the address
+`SUFeedURL` reads, from the **Pages** workflow, which uploads `main`'s files as
+they are (no Jekyll) plus `appcast.xml` from the `appcast` branch. `index.html`
+and `website/` are the static landing page. The `appcast` branch holds only the
+machine-written feed: releases and promotions commit there, so they never move
+`main` or put open pull requests behind it. Preview the site with
+`python3 -m http.server 8765` from the repository root.
 
 The workflow deploys on every push to `main`, after every **Release** run and on
 demand. A push to `appcast` cannot start it, because push events run the
@@ -183,12 +184,12 @@ Until step 2 the legacy build keeps serving `main`'s feed, and between steps 2
 and 3 its last deployment stays live, so publish nothing in between. Merging
 before step 2 would let the legacy build publish a site without `appcast.xml`.
 
-Configure Cloudflare with a DNS-only CNAME to `se7enbrc.github.io` and GitHub's
-domain verification TXT record. Keep the TXT record and the root `CNAME` file; a
-workflow deploy takes the domain from the Pages settings, not from that file.
-After any domain or Pages change, verify that the website has valid HTTPS and
-that `https://se7enbrc.github.io/glimmer/appcast.xml` still resolves to the
-update feed. Released apps use that original URL.
+The site has no custom domain. A custom domain makes Pages redirect the
+github.io address, which every released app reads, so add one only after a
+release that reads the feed from the custom domain directly has reached users.
+After any Pages change, confirm that
+`https://se7enbrc.github.io/glimmer/appcast.xml` answers 200 over HTTPS with no
+redirect.
 
 ### Hosted release
 
