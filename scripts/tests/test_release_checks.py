@@ -97,6 +97,7 @@ class RequiredChecksTests(unittest.TestCase):
         data = analyses()
         next(entry for entry in data if entry["category"] == "/language:swift")["created_at"] = "2026-10-09T21:01:00Z"
         alerts = []
+        alert_queries = []
 
         def objects(path):
             if path.startswith("actions/workflows/"):
@@ -114,12 +115,14 @@ class RequiredChecksTests(unittest.TestCase):
                                                   "status": "completed", "conclusion": "success"}]}]
             if "analyses?" in path:
                 return [data]
+            alert_queries.append(path)
             return [alerts]
 
         with patch.object(CHECKS, "object_api", side_effect=objects), patch.object(CHECKS, "api", side_effect=pages):
             CHECKS.check(SHA)
+            self.assertIn("tool_name=CodeQL", alert_queries[0])
             alerts.append({"number": 42})
-            with self.assertRaisesRegex(ValueError, "open code-scanning alerts"):
+            with self.assertRaisesRegex(ValueError, "open CodeQL alerts"):
                 CHECKS.check(SHA)
 
 
