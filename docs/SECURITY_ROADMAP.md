@@ -97,15 +97,22 @@ own evidence and any applicable qualification.
    enabled and retain hosted results for each release. This addresses
    `dynamic_analysis` and strengthens `dynamic_analysis_unsafe` evidence around
    unsafe buffers and `Glimmer/Stream/CHelpers.h`.
-3. **Prove build repeatability.** `scripts/generate-build-info.sh` embeds the
-   current time on a fresh checkout. Reusing a stamp locally does not make two
-   clean builds identical. Make release metadata deterministic, pin the exact
-   toolchain and dependency inputs, then compare two independent clean builds.
-   Record differences in paths, UUIDs and archive metadata. Define the
-   comparison boundary for signing and notarization, and how shipped artifacts
-   bind to the reproducible payload. An unsigned comparison alone must not be
-   presented as proof that the whole distributed package is reproducible.
-   Criteria: `build_repeatable`, `build_reproducible`.
+3. **Build repeatability: proved for the unsigned payload.** Two clean clones of
+   the same commit build byte-identical `Glimmer.app` bundles
+   (`scripts/compare-builds.sh`; first run 2026-10-10 with Xcode 27.0 on macOS
+   27.0.1, 69 files identical), except that `Assets.car` is compared through
+   `assetutil` because actool stamps it and names Icon Composer renditions after
+   temporary files. The build stamp now records the commit time, Release
+   binaries drop the debug map that named build paths, App Intents metadata is
+   written in a fixed order, and the linker's UUIDs and ad-hoc signatures derive
+   from content. [RELEASE](RELEASE.md) section 4 defines the boundary:
+   signatures, profiles, the notarization ticket, dSYMs and the DMG and ZIP
+   containers stay outside it, and `--normalize` binds a shipped bundle to the
+   payload. Still to do: run the **Reproducible build** workflow on the hosted
+   Xcode 26.6 runner for a release commit, and normalize a published Developer
+   ID-signed candidate against a local rebuild on that same Xcode. An unsigned
+   comparison must not be presented as proof that the whole distributed package
+   is reproducible. Criteria: `build_repeatable`, `build_reproducible`.
 4. **Finish source and release evidence.** Audit `copyright_per_file` and
    `license_per_file` against actual ownership, including ported code. Root GPL
    licensing does not supply every source-file notice. Check `signed_releases`

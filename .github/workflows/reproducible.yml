@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: Reproducible build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 11 1 * *"
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Build twice and compare
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check toolchain
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          sw_vers
+
+      - name: Build twice from fresh clones and compare
+        run: scripts/compare-builds.sh "$RUNNER_TEMP/reproducible"
