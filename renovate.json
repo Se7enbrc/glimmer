@@ -5,15 +5,58 @@
   "automerge": false,
   "timezone": "America/New_York",
   "schedule": ["before 9am on monday"],
+  "separateMajorMinor": false,
+  "separateMultipleMajor": false,
+  "separateMinorPatch": false,
+  "prConcurrentLimit": 1,
+  "branchConcurrentLimit": 1,
   "pre-commit": {
     "enabled": true
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Sparkle, pinned outside a Package.swift: build tools, notices and the resolved package",
+      "managerFilePatterns": [
+        "/^Makefile$/",
+        "/^scripts/sparkle-tools\\.sh$/",
+        "/^Glimmer/ThirdPartyNotices\\.txt$/"
+      ],
+      "matchStrings": [
+        "SPARKLE_VERSION \\?= (?<currentValue>\\d+\\.\\d+\\.\\d+)",
+        "SPARKLE_VERSION=\"\\$\\{SPARKLE_VERSION:-(?<currentValue>\\d+\\.\\d+\\.\\d+)\\}\"",
+        "Sparkle (?<currentValue>\\d+\\.\\d+\\.\\d+)\\n",
+        "sparkle-project/Sparkle/blob/(?<currentValue>\\d+\\.\\d+\\.\\d+)/LICENSE"
+      ],
+      "matchStringsStrategy": "any",
+      "depNameTemplate": "sparkle-project/Sparkle",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "description": "Sparkle's resolved revision and version in the Xcode workspace",
+      "managerFilePatterns": [
+        "/^Glimmer\\.xcodeproj/project\\.xcworkspace/xcshareddata/swiftpm/Package\\.resolved$/"
+      ],
+      "matchStrings": [
+        "\"location\" : \"https://github\\.com/sparkle-project/Sparkle\",\\s*\"state\" : \\{\\s*\"revision\" : \"(?<currentDigest>[0-9a-f]{40})\",\\s*\"version\" : \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "sparkle-project/Sparkle",
+      "datasourceTemplate": "github-tags"
+    }
+  ],
   "packageRules": [
     {
       "matchPackageNames": ["*"],
       "groupName": "dependencies",
       "groupSlug": "all",
       "commitMessagePrefix": "build(deps):"
+    },
+    {
+      "matchPackageNames": ["sparkle-project/Sparkle"],
+      "prBodyNotes": [
+        "Sparkle changed. Verify the new `Sparkle-<version>.tar.xz` release archive and add its SHA-256 to `scripts/sparkle-tools.sh` (the release-tool tests fail until you do), and check `Glimmer/ThirdPartyNotices.txt` against the new LICENSE."
+      ]
     }
   ]
 }
