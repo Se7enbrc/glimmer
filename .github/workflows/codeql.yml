@@ -98,6 +98,23 @@ jobs:
           make app helper-build CONFIG=Debug
           SWIFTC="$PWD/scripts/codeql-swiftc.sh"
 
+      - name: Profile Swift traps
+        if: matrix.language == 'swift'
+        run: |
+          trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
+          out="$RUNNER_TEMP/swift-profile"
+          mkdir -p "$out"
+          find "$trap" -type f -print0 | xargs -0 stat -f '%z %N' > "$out/trap-files.txt"
+          du -sk "$trap"/* > "$out/trap-kinds.txt"
+
+      - name: Upload Swift trap profile
+        if: matrix.language == 'swift'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: swift-trap-profile
+          path: ${{ runner.temp }}/swift-profile
+          retention-days: 3
+
       - name: Analyze
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
