@@ -177,9 +177,9 @@ tooling already on `main`, then:
 3. Merge the pull request that adds the workflow. Its push to `main` deploys the
    site; confirm the run passed and the live feed still matches the branch.
 
-Until step 3, `main` keeps serving the feed through the legacy build, so the
-order matters: merging before steps 1 and 2 would publish a site without
-`appcast.xml`.
+Until step 2 the legacy build keeps serving `main`'s feed, and between steps 2
+and 3 its last deployment stays live, so publish nothing in between. Merging
+before step 2 would let the legacy build publish a site without `appcast.xml`.
 
 Configure Cloudflare with a DNS-only CNAME to `se7enbrc.github.io` and GitHub's
 domain verification TXT record. Keep the TXT record and the root `CNAME` file; a
