@@ -492,5 +492,6 @@ The maintainer's GitHub account uses a passkey for two-factor authentication,
 and only the maintainer has write access. Release secrets live in Doppler, which
 is reached through that GitHub account. A designated successor has emergency
 access to the maintainer's password manager, which holds the credentials for
-GitHub, Doppler and the project's domain, so the repository, releases and update
-feed can continue if the maintainer becomes unavailable.
+GitHub, Doppler and the project's domain, and holds the account recovery codes,
+so the repository, releases and update feed can continue if the maintainer
+becomes unavailable or loses a device.
