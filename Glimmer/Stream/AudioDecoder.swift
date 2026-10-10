@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // OpusDecoder's PCM into an AVAudioPlayerNode on the main mixer. Stored state lives here,
 // since extensions can't hold it; the machinery lives in the AudioDecoder+*.swift
 // siblings by topic: engine, decode, meter, prime, route, cushion memory, resampler.

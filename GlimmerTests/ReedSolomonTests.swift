@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Independent field arithmetic pins wire compatibility for video and audio FEC.
 // Round trips also exercise shard mutation and erasure geometry.
 

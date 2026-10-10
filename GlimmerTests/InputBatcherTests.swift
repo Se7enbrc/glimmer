@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Input ordering under a stalled reliable channel, and the one-shot flush timer.
 
 import CryptoKit

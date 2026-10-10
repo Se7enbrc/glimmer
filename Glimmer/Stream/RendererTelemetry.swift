@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // AVFoundation performance counters, sampled only by the opt-in exporter.
 
 import AVFoundation

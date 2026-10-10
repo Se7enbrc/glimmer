@@ -1,4 +1,7 @@
 #!/usr/bin/swift
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Renders the DMG window background: a dark neutral gradient with a thin arrow
 // pointing from where Finder draws Glimmer.app to where it draws the
 // /Applications alias. The app icon is deliberately NOT painted here - Finder

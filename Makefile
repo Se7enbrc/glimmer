@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Glimmer - Mac-native game-streaming client.
 #
 # EVERYTHING BUT PUBLISH (the dev tier - notarized Release, installed, NOT
@@ -497,6 +500,7 @@ verify: check
 check:
 	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
 	@actionlint
+	@scripts/check-spdx.sh
 	@swiftlint lint --strict --quiet
 	@$(MAKE) test-scripts
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Sunshine surround packets contain separately framed mono/stereo Opus streams.
 // AudioToolbox decodes each stream; the negotiated mapping restores PC channel order.
 
