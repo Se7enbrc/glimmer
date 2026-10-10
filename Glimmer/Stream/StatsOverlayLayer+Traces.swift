@@ -56,6 +56,37 @@ struct StatsTraceHistory {
     }
 }
 
+/// Thirty seconds of unflagged readings at 4 Hz. The median ignores a single bad
+/// second, and leaving flagged readings out keeps a sustained dip from becoming normal.
+struct StatsBaseline {
+    static let capacity = 121
+    static let minimumReadings = 8
+    private var storage = Array(repeating: 0.0, count: capacity)
+    private var scratch = Array(repeating: 0.0, count: capacity)
+    private var next = 0
+    private(set) var count = 0
+
+    mutating func add(_ value: Double) {
+        storage[next] = value
+        next = (next + 1) % Self.capacity
+        count = min(count + 1, Self.capacity)
+    }
+
+    /// Nil until enough readings exist to call anything a dip.
+    mutating func median() -> Double? {
+        guard count >= Self.minimumReadings else { return nil }
+        for index in 0..<count { scratch[index] = storage[index] }
+        scratch[0..<count].sort()
+        let middle = count / 2
+        return count.isMultiple(of: 2) ? (scratch[middle - 1] + scratch[middle]) / 2 : scratch[middle]
+    }
+
+    mutating func reset() {
+        next = 0
+        count = 0
+    }
+}
+
 @MainActor
 final class StatsTrace {
     enum Metric {
@@ -90,6 +121,8 @@ final class StatsTrace {
     let layer = CALayer()
     let metric: Metric
     private var history = StatsTraceHistory()
+    private var dipBaseline = StatsBaseline()
+    private var reference: Double?
     private let baseline = CAShapeLayer()
     private let line = CAShapeLayer()
     private let cautions = CAShapeLayer()
@@ -123,7 +156,10 @@ final class StatsTrace {
 
     func append(snapshot: StreamStatsSnapshot, targetFps: Double, thresholds: StatsThresholds) {
         let now = CACurrentMediaTime()
-        if !history.isEmpty, now - history[history.count - 1].time > 1 { history.reset() }
+        if !history.isEmpty, now - history[history.count - 1].time > 1 {
+            history.reset()
+            dipBaseline.reset()
+        }
         let value: Double?
         switch metric {
         case .render: value = snapshot.hostFps ?? snapshot.renderedFps
@@ -131,13 +167,15 @@ final class StatsTrace {
         case .bitrate: value = snapshot.measuredBitrateMbps
         }
         target = targetFps.isFinite && targetFps > 0 ? targetFps : 60
-        let severity = metric.severity(value: value, reference: history.mean,
+        reference = metric == .latency ? history.mean : dipBaseline.median()
+        let severity = metric.severity(value: value, reference: reference,
                                        latencyWarning: Double(thresholds.latencyWarningAbove))
         history.append(value: value, severity: severity, time: now)
+        if let value, value.isFinite, value >= 0, severity == .none { dipBaseline.add(value) }
     }
 
     private var scale: (lower: Double, upper: Double, reference: Double) {
-        let reference = history.mean ?? 0
+        let reference = self.reference ?? history.mean ?? 0
         switch metric {
         case .render:
             let level = reference > 0 ? reference : target

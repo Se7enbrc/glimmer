@@ -169,6 +169,19 @@ struct StatsOverlayVisibilityTests {
         #expect(StatsTraceHistory.segmentSeverity(from: missing, to: critical) == .none)
     }
 
+    @Test func baselineIsAMedianThatNeedsHistoryAndForgetsOldReadings() {
+        var baseline = StatsBaseline()
+        for _ in 0..<7 { baseline.add(190) }
+        #expect(baseline.median() == nil)
+        baseline.add(30)
+        #expect(baseline.median() == 190)
+        for _ in 0..<StatsBaseline.capacity { baseline.add(60) }
+        #expect(baseline.count == StatsBaseline.capacity)
+        #expect(baseline.median() == 60)
+        baseline.reset()
+        #expect(baseline.median() == nil)
+    }
+
     @Test func sampleRectTracksEveryCornerAndLetterboxOnBothAxes() {
         let overlay = StatsOverlayLayer()
         #expect(overlay.backdropSampleRect == .zero)
