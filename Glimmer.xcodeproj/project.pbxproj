@@ -350,6 +350,11 @@
 		DEC0DE202609221400000005 /* PasteTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221400000006 /* PasteTextTests.swift */; };
 		DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */; };
 		DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221800000003 /* TelemetryRowTests.swift */; };
+		DEC0DE26101013000000000A /* TelemetrySessionReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */; };
+		DEC0DE261010130000000008 /* TelemetrySessionAggregateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */; };
+		DEC0DE261010130000000006 /* TelemetryPrometheusRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */; };
+		DEC0DE261010130000000004 /* TelemetryNDJSONRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */; };
+		DEC0DE261010130000000002 /* TelemetryRenderFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */; };
 		DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */; };
 		DA2026100900000000000017 /* TelemetryGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000018 /* TelemetryGateTests.swift */; };
 		DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000016 /* RendererTelemetryTests.swift */; };
@@ -800,6 +805,11 @@
 		DEC0DE202609221400000006 /* PasteTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PasteTextTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLANTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221800000003 /* TelemetryRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRowTests.swift"; sourceTree = "<group>"; };
+		DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySessionReportTests.swift"; sourceTree = "<group>"; };
+		DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySessionAggregateTests.swift"; sourceTree = "<group>"; };
+		DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryPrometheusRenderTests.swift"; sourceTree = "<group>"; };
+		DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryNDJSONRenderTests.swift"; sourceTree = "<group>"; };
+		DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRenderFixtures.swift"; sourceTree = "<group>"; };
 		DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DecodeTimeSplitTests.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000018 /* TelemetryGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryGateTests.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000016 /* RendererTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RendererTelemetryTests.swift"; sourceTree = "<group>"; };
@@ -1290,6 +1300,11 @@
 				DEC0DE202609221400000006 /* PasteTextTests.swift */,
 				DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */,
 				DEC0DE202609221800000003 /* TelemetryRowTests.swift */,
+				DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */,
+				DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */,
+				DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */,
+				DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */,
+				DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */,
 				DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */,
 				DA2026100900000000000018 /* TelemetryGateTests.swift */,
 				DA2026100900000000000016 /* RendererTelemetryTests.swift */,
@@ -1823,6 +1838,11 @@
 				DEC0DE202609221400000005 /* PasteTextTests.swift in Sources */,
 				DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */,
 				DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */,
+				DEC0DE26101013000000000A /* TelemetrySessionReportTests.swift in Sources */,
+				DEC0DE261010130000000008 /* TelemetrySessionAggregateTests.swift in Sources */,
+				DEC0DE261010130000000006 /* TelemetryPrometheusRenderTests.swift in Sources */,
+				DEC0DE261010130000000004 /* TelemetryNDJSONRenderTests.swift in Sources */,
+				DEC0DE261010130000000002 /* TelemetryRenderFixtures.swift in Sources */,
 				DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */,
 				DA2026100900000000000017 /* TelemetryGateTests.swift in Sources */,
 				DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */,
