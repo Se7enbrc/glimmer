@@ -406,6 +406,69 @@ provide DRM or a screen-recording privacy boundary.
 - Pin-mismatch events (no fingerprints).
 - Pairing-step transitions (no payload data).
 
+## Verifying a download
+
+None of these checks installs or opens Glimmer. They were run on 2026-10-10
+against 2026.10.5, the latest stable release, and 2026.10.6-rc.1.
+
+**Build provenance.** Releases built by the hosted Release workflow carry a
+GitHub artifact attestation for the DMG and the Sparkle ZIP. The first is
+2026.10.6-rc.1. Earlier releases have none: for 2026.10.5,
+`gh attestation verify` fails with HTTP 404.
+
+```bash
+gh attestation verify Glimmer-2026.10.6.dmg --repo Se7enbrc/glimmer \
+  --signer-workflow Se7enbrc/glimmer/.github/workflows/release.yml \
+  --source-ref refs/heads/release-candidate --deny-self-hosted-runners
+```
+
+Exit status 0 means the file's SHA-256 matches a Sigstore-signed provenance
+statement issued to that workflow on a GitHub-hosted runner. Add `--format json`
+to see the source commit. Run the same command on the ZIP. To check against a
+saved bundle instead of GitHub's attestation API, pass it with `--bundle`: use a
+release's `.intoto.jsonl` asset where one is attached, otherwise fetch the
+bundle once with `gh attestation download FILE --repo Se7enbrc/glimmer`.
+
+**Apple signature and notarization.** The DMG itself is not code signed.
+`codesign --verify --deep --strict` reports “code object is not signed at all”
+for it, and `spctl --assess --type open --context context:primary-signature`
+rejects it with “no usable signature”. The signature and the stapled
+notarization ticket are on the app inside. Mount the image read-only and check
+the app:
+
+```bash
+mkdir -p /tmp/glimmer-check
+hdiutil attach -readonly -nobrowse -mountpoint /tmp/glimmer-check Glimmer-2026.10.5.dmg
+codesign --verify --deep --strict --verbose=2 /tmp/glimmer-check/Glimmer.app
+spctl -a -vv /tmp/glimmer-check/Glimmer.app
+xcrun stapler validate /tmp/glimmer-check/Glimmer.app
+hdiutil detach /tmp/glimmer-check
+```
+
+Expect “satisfies its Designated Requirement”, then `accepted`,
+`source=Notarized Developer ID` and
+`origin=Developer ID Application: steven Miller (5T7M4RH3F8)`. `5T7M4RH3F8` is
+the team the root helper requires of its caller (`helper/HelperService.swift`).
+
+**Sparkle updates.** Each appcast enclosure carries `sparkle:edSignature`, an
+Ed25519 signature over the ZIP's bytes. Sparkle checks it against
+`SUPublicEDKey` in `Glimmer/Info.plist`,
+`bUc9IWEtH/FuDUIsGqyDIVy/1gvlPtBkFXNcVO/TrPU=`, before installing. The released
+app's Info.plist carries the same key. To check a ZIP by hand with OpenSSL 3
+(macOS's LibreSSL lacks Ed25519):
+
+```bash
+KEY=bUc9IWEtH/FuDUIsGqyDIVy/1gvlPtBkFXNcVO/TrPU=
+{ printf 302a300506032b6570032100; echo "$KEY" | base64 -d | xxd -p -c 64; } \
+  | xxd -r -p > glimmer-ed25519.der
+echo 'SIGNATURE_FROM_APPCAST' | base64 -d > Glimmer.zip.sig
+openssl pkeyutl -verify -pubin -keyform DER -inkey glimmer-ed25519.der \
+  -rawin -in Glimmer-2026.10.5.zip -sigfile Glimmer.zip.sig
+```
+
+It prints “Signature Verified Successfully”. Glimmer does not set Sparkle's
+`SURequireSignedFeed`, so the appcast itself is unsigned and relies on HTTPS.
+
 ## Disclosure timeline
 
 - **Day 0:** report received. Acknowledgement within 72 hours.

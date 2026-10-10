@@ -110,8 +110,11 @@ own evidence and any applicable qualification.
    `license_per_file` against actual ownership, including ported code. Root GPL
    licensing does not supply every source-file notice. Check `signed_releases`
    for source archives and every distributed artifact as well as the app and
-   Sparkle update. Document public verification steps; signed commits alone do
-   not authenticate every release asset.
+   Sparkle update. Signed commits alone do not authenticate every release asset.
+   Public verification steps are in
+   [SECURITY](SECURITY.md#verifying-a-download), tested on 2026-10-10. The DMG
+   container is unsigned (the app inside is signed, notarized and stapled), and
+   only releases from 2026.10.6-rc.1 on carry build attestations.
 
 ### Coverage commands
 
