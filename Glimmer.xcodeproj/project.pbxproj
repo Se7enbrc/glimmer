@@ -368,6 +368,10 @@
 		DEC0DE202609253500000002 /* HostRouteMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */; };
 		DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */; };
 		DEC0DE202609221700000001 /* StreamHDRTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221700000002 /* StreamHDRTests.swift */; };
+		6E2026101000000000000001 /* VideoDecoderHDRTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000002 /* VideoDecoderHDRTests.swift */; };
+		6E2026101000000000000003 /* VideoDecoderEnqueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */; };
+		6E2026101000000000000005 /* VideoDecoderSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */; };
+		6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */; };
 		DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */; };
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609232100000004 /* LauncherWindowTests.swift */; };
@@ -818,6 +822,10 @@
 		DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostRouteMonitorTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollQuantizerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221700000002 /* StreamHDRTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamHDRTests.swift"; sourceTree = "<group>"; };
+		6E2026101000000000000002 /* VideoDecoderHDRTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderHDRTests.swift"; sourceTree = "<group>"; };
+		6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderEnqueueTests.swift"; sourceTree = "<group>"; };
+		6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderSuppressionTests.swift"; sourceTree = "<group>"; };
+		6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderLifecycleTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerIntentsTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609232100000004 /* LauncherWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherWindowTests.swift"; sourceTree = "<group>"; };
@@ -1309,6 +1317,10 @@
 				DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */,
 				DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */,
 				DEC0DE202609221700000002 /* StreamHDRTests.swift */,
+				6E2026101000000000000002 /* VideoDecoderHDRTests.swift */,
+				6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */,
+				6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */,
+				6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */,
 				DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */,
 				DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */,
 				DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */,
@@ -1842,6 +1854,10 @@
 				DEC0DE202609253500000002 /* HostRouteMonitorTests.swift in Sources */,
 				DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */,
 				DEC0DE202609221700000001 /* StreamHDRTests.swift in Sources */,
+				6E2026101000000000000001 /* VideoDecoderHDRTests.swift in Sources */,
+				6E2026101000000000000003 /* VideoDecoderEnqueueTests.swift in Sources */,
+				6E2026101000000000000005 /* VideoDecoderSuppressionTests.swift in Sources */,
+				6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */,
 				DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */,
 				DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */,
 				DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */,
