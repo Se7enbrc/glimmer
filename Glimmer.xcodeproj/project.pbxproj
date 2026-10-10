@@ -365,6 +365,9 @@
 		DEC0DE202609222200000004 /* StreamButtonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222200000003 /* StreamButtonTests.swift */; };
 		DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */; };
 		DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000DA /* WiredBitrateTests.swift */; };
+		DEC0DE2026101000000A11 /* ModelTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000A12 /* ModelTypesTests.swift */; };
+		DEC0DE2026101000000A21 /* AppModelDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000A22 /* AppModelDecisionTests.swift */; };
+		DEC0DE2026101000000A31 /* GlimmerCLIContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000A32 /* GlimmerCLIContractTests.swift */; };
 		DEC0DE202609253500000002 /* HostRouteMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */; };
 		DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */; };
 		DEC0DE202609221700000001 /* StreamHDRTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221700000002 /* StreamHDRTests.swift */; };
@@ -815,6 +818,9 @@
 		DEC0DE202609222200000003 /* StreamButtonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamButtonTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MiniPlayerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000DA /* WiredBitrateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WiredBitrateTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026101000000A12 /* ModelTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModelTypesTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026101000000A22 /* AppModelDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModelDecisionTests.swift"; sourceTree = "<group>"; };
+		DEC0DE2026101000000A32 /* GlimmerCLIContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerCLIContractTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostRouteMonitorTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollQuantizerTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221700000002 /* StreamHDRTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamHDRTests.swift"; sourceTree = "<group>"; };
@@ -1306,6 +1312,9 @@
 				DEC0DE202609222200000003 /* StreamButtonTests.swift */,
 				DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */,
 				DEC0DE2026092000000000DA /* WiredBitrateTests.swift */,
+				DEC0DE2026101000000A12 /* ModelTypesTests.swift */,
+				DEC0DE2026101000000A22 /* AppModelDecisionTests.swift */,
+				DEC0DE2026101000000A32 /* GlimmerCLIContractTests.swift */,
 				DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */,
 				DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */,
 				DEC0DE202609221700000002 /* StreamHDRTests.swift */,
@@ -1839,6 +1848,9 @@
 				DEC0DE202609222200000004 /* StreamButtonTests.swift in Sources */,
 				DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */,
 				DEC0DE2026092000000000D9 /* WiredBitrateTests.swift in Sources */,
+				DEC0DE2026101000000A11 /* ModelTypesTests.swift in Sources */,
+				DEC0DE2026101000000A21 /* AppModelDecisionTests.swift in Sources */,
+				DEC0DE2026101000000A31 /* GlimmerCLIContractTests.swift in Sources */,
 				DEC0DE202609253500000002 /* HostRouteMonitorTests.swift in Sources */,
 				DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */,
 				DEC0DE202609221700000001 /* StreamHDRTests.swift in Sources */,
