@@ -209,6 +209,8 @@ class ReleasePublicationTests(unittest.TestCase):
         self.zip = self.root / "dist/Glimmer-2026.10.6.zip"
         self.zip.write_bytes(b"prepared update bytes")
         (self.root / "scripts/release_validation.py").write_text("raise SystemExit(0)\n")
+        (self.root).joinpath("scripts/verify-update-signature.swift").write_text("#!/bin/sh\nexit 0\n")
+        (self.root).joinpath("scripts/verify-update-signature.swift").chmod(0o755)
         stubs = {
             "bin/make": "exit 0\n",
             "bin/git": '''shift 2
@@ -265,6 +267,15 @@ exit 1
         self.assertEqual(Path(self.env["FIXTURE_SIGNED_ZIP"]).read_bytes(), b"prepared update bytes")
         self.assertEqual(self.zip.read_bytes(), b"prepared update bytes")
         self.assertFalse(Path(self.env["FIXTURE_DITTO_MARKER"]).exists())
+
+    def test_signature_the_app_would_reject_stops_publication(self):
+        (self.root / "tools/sign_update").write_text(
+            '#!/bin/bash\ncat >/dev/null\nprintf \'sparkle:edSignature="fixture" length="21"\\n\'\n')
+        (self.root / "scripts/verify-update-signature.swift").write_text("#!/bin/sh\nexit 1\n")
+        result = self.publish()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("doesn't match the app's SUPublicEDKey", result.stderr)
+        self.assertFalse(Path(self.env["FIXTURE_PUBLISH_MARKER"]).exists())
 
     def test_missing_or_empty_prepared_zip_stops_before_credentials(self):
         for missing in (True, False):

@@ -116,6 +116,8 @@ class CandidatePublicationTests(unittest.TestCase):
             'from release_validation_actual import *\n'
             'if __name__ == "__main__":\n'
             '    exec(open(__file__.replace("release_validation.py", "validate_actual.py")).read())\n')
+        (self.root).joinpath("scripts/verify-update-signature.swift").write_text("#!/bin/sh\nexit 0\n")
+        (self.root).joinpath("scripts/verify-update-signature.swift").chmod(0o755)
         self.write_tool("bin/git", '''#!/bin/bash
 shift 2
 case "$1" in

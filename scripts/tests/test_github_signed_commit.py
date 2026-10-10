@@ -199,6 +199,8 @@ class AppcastCommitPathTests(unittest.TestCase):
                 original_feed = b"<rss>original</rss>\n"
                 (root / "appcast.xml").write_bytes(original_feed)
                 (root / "scripts/release_validation.py").write_text("pass\n")
+                root.joinpath("scripts/verify-update-signature.swift").write_text("#!/bin/sh\nexit 0\n")
+                root.joinpath("scripts/verify-update-signature.swift").chmod(0o755)
                 (root / "scripts/update-appcast.py").write_text(
                     f'#!{sys.executable}\nimport pathlib, sys\n'
                     'pathlib.Path(sys.argv[1]).write_text("<rss>fixture</rss>\\n")\n')

@@ -87,6 +87,11 @@ fi
 ED_SIG="$(printf '%s' "$SIG_LINE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
 LENGTH="$(printf '%s' "$SIG_LINE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
 [ -n "$ED_SIG" ] && [ -n "$LENGTH" ] || { echo "ERR: sign_update produced no signature" >&2; exit 1; }
+APP_ED_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+"$HERE/scripts/verify-update-signature.swift" "$APP_ED_KEY" "$ED_SIG" "$ZIP" || {
+	echo "ERR: the update signature doesn't match the app's SUPublicEDKey; installed copies would reject it." >&2
+	exit 1
+}
 echo "  ✓ signed ($LENGTH bytes)"
 
 # Release notes: this version's CHANGELOG.md section verbatim, which is also
