@@ -1,0 +1,57 @@
+name: Release candidate
+
+# Label a same-repository pull request `rc` to cut its next candidate once
+# Verify and CodeQL pass. The protected `release` approval stays with the maintainer.
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    if:
+      github.event.label.name == 'rc' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: rc-cut
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Mint a scoped release token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.GLIMMER_RC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GLIMMER_RC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+          permission-actions: write
+          permission-pull-requests: write
+          permission-checks: read
+          permission-security-events: read
+
+      - name: Check out the labelled head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Cut the candidate
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          python3 scripts/release-candidate.py --ci-sha "$HEAD_SHA" --pr "$PR_NUMBER"

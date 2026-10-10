@@ -50,6 +50,19 @@ then moves `release-candidate` to HEAD, creates and pushes the next signed
 protected `release` deployment there is the remaining step. Rerunning prints the
 existing run. `make rc DRY_RUN=1` prints each step without changing anything.
 
+**From the pull request.** Adding the `rc` label to a pull request from this
+repository runs the same cut in the **Release candidate** workflow, which
+comments the Release run on the pull request; approving the deployment is still
+the maintainer's step. To cut again after new commits, remove and re-add the
+label. The workflow tags as the release GitHub App rather than with a personal
+signature; the run's attestation identifies the build. It needs a GitHub App
+installed only on this repository, with read and write access to contents,
+workflows, actions and pull requests and read access to checks and code scanning
+alerts, no webhook, and a bypass on the ruleset that protects
+`release-candidate` and `*-rc.*` tags. Its client ID and private key live in the
+`rc-cut` environment (no required reviewers) as `GLIMMER_RC_APP_CLIENT_ID` and
+`GLIMMER_RC_APP_PRIVATE_KEY`, synced from Doppler like the release secrets.
+
 ## 2. Test, then promote the same files
 
 For the first candidate, download its DMG from the GitHub prerelease and verify

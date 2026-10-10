@@ -38,6 +38,8 @@ elif sys.argv[1:3] == ["workflow", "run"]:
     (state / "runs.json").write_text(json.dumps([run] + runs))
 elif sys.argv[1] == "api":
     print((state / "check-runs.json").read_text())
+elif sys.argv[1:3] == ["pr", "comment"]:
+    pass
 else:
     sys.exit(1)
 '''
@@ -174,6 +176,25 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertIn(f"{tag} already identifies {self.sha}", again.stdout)
         self.assertEqual(len(self.dispatches()), 1)
+
+    def test_ci_cut_tags_as_the_app_and_comments_the_run_on_the_pull_request(self):
+        self.git("checkout", "--quiet", "--detach", self.sha)
+        (self.work / "untracked-ci-file").write_text("runner state\n")
+        result = self.cut("--ci-sha", self.sha, "--pr", "114")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        tag = f"{VERSION}-rc.1"
+        self.assertIn(f"{self.sha}\trefs/tags/{tag}^{{}}", self.remote())
+        self.assertNotIn("SIGNATURE", self.git("cat-file", "tag", tag))
+        url = "https://github.com/Se7enbrc/glimmer/actions/runs/100"
+        comments = [call for call in self.gh_calls() if call[:2] == ["pr", "comment"]]
+        self.assertEqual(len(comments), 1)
+        self.assertEqual(comments[0][2], "114")
+        self.assertIn(url, comments[0][4])
+        self.assertFalse((self.state / "open.log").exists())
+
+    def test_ci_cut_refuses_a_checkout_that_is_not_the_labelled_head(self):
+        self.assert_refused(self.cut("--ci-sha", self.old, "--pr", "114"), "checkout is not the pull request head")
+        self.assertNotEqual(self.cut("--ci-sha", "abc", "--pr", "114").returncode, 0)
 
     def test_tag_on_another_commit_is_refused(self):
         self.git("tag", f"{VERSION}-rc.1", self.old)

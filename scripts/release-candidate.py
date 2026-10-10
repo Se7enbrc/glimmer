@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Cut the next release candidate for the pushed, reviewed HEAD (`make rc`)."""
+"""Cut the next release candidate for the pushed, reviewed HEAD (`make rc`).
+
+The `rc` pull request label runs the same cut in CI with --ci-sha: the app tags as itself
+and the approval link goes to the pull request instead of a browser."""
 
 import argparse
 import importlib.util
@@ -55,10 +58,15 @@ def release_runs(sha):
     return [run for run in runs if run.get("headSha") == sha]
 
 
-def show(url, dry_run):
+def show(url, dry_run, pr=None):
     print(f"Release run: {url}")
     print("Remaining step: approve the protected `release` deployment on that page.")
-    if not dry_run and sys.platform == "darwin":
+    if dry_run:
+        return
+    if pr:
+        body = f"Release candidate dispatched: {url}\n\nApprove the protected `release` deployment there to build it."
+        output(["gh", "pr", "comment", str(pr), "--body", body], "couldn't comment the run on the pull request")
+    elif sys.platform == "darwin":
         subprocess.run(["open", url], timeout=30)
 
 
@@ -133,7 +141,7 @@ def signed(tag):
     return re.search(r"^-----BEGIN [A-Z ]*SIGNATURE-----$", body, re.M) is not None
 
 
-def cut(dry_run):
+def reviewed_head():
     if output(["git", "status", "--porcelain"], "couldn't read the working tree"):
         raise ValueError("working tree is not clean; commit, stash or remove changes first")
     branch = output(["git", "symbolic-ref", "--quiet", "--short", "HEAD"], "HEAD is detached; check out the PR branch")
@@ -142,6 +150,17 @@ def cut(dry_run):
     pushed = output(["git", "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}"])
     if pushed != sha:
         raise ValueError(f"HEAD {sha[:12]} is not pushed; origin/{branch} is {pushed[:12] or 'missing'}")
+    return sha, branch
+
+
+def cut(dry_run, ci_sha=None, pr=None):
+    if ci_sha:
+        # The workflow checks out exactly the labelled pull request head.
+        sha, branch = ci_sha, f"pull request #{pr}"
+        if output(["git", "rev-parse", "HEAD"], "couldn't resolve HEAD") != sha:
+            raise ValueError(f"checkout is not the pull request head {sha[:12]}")
+    else:
+        sha, branch = reviewed_head()
     values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$",
                              Path("Glimmer/Version.xcconfig").read_text(), re.M))
     version, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
@@ -155,7 +174,7 @@ def cut(dry_run):
         tag = numbers[max(current)]
         if runs := release_runs(sha):
             print(f"{tag} already identifies {sha} and has a Release run.")
-            show(runs[0]["url"], dry_run)
+            show(runs[0]["url"], dry_run, pr)
             return
     else:
         tag = f"{version}-rc.{max(numbers, default=0) + 1}"
@@ -167,9 +186,12 @@ def cut(dry_run):
     wait_for_checks(sha, dry_run)
     point_branch(sha, dry_run)
     if tag not in tags:
-        if not local:
+        if ci_sha and not local:
+            # The release app tags as itself; its token and the run's attestation identify it.
+            step(dry_run, ["git", "tag", "-a", tag, sha, "-m", tag], "couldn't create the candidate tag")
+        elif not local:
             step(dry_run, ["git", "tag", "-s", tag, sha, "-m", tag], "tag signing failed; refusing an unsigned tag")
-        if not dry_run and not signed(tag):
+        if not dry_run and not ci_sha and not signed(tag):
             raise ValueError(f"tag {tag} is not signed; refusing to push it")
         step(dry_run, ["git", "push", "origin", f"refs/tags/{tag}"], f"couldn't push {tag}")
     before = {run["databaseId"] for run in release_runs(sha)}
@@ -180,7 +202,7 @@ def cut(dry_run):
         return
     for _ in range(30):
         if new := [run for run in release_runs(sha) if run["databaseId"] not in before]:
-            show(new[0]["url"], dry_run)
+            show(new[0]["url"], dry_run, pr)
             return
         time.sleep(2)
     raise ValueError("dispatched, but the new Release run didn't appear; check the Actions tab")
@@ -189,10 +211,14 @@ def cut(dry_run):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="print every step without pushing, tagging or dispatching")
+    parser.add_argument("--ci-sha", help="CI only: the labelled pull request head to cut")
+    parser.add_argument("--pr", type=int, help="CI only: the pull request to comment the run on")
     args = parser.parse_args()
+    if bool(args.ci_sha) != bool(args.pr) or (args.ci_sha and not re.fullmatch(r"[0-9a-f]{40}", args.ci_sha)):
+        parser.error("--ci-sha needs a full commit SHA and --pr")
     os.chdir(SCRIPTS.parent)
     try:
-        cut(args.dry_run)
+        cut(args.dry_run, args.ci_sha, args.pr)
     except (ValueError, KeyError, OSError, ET.ParseError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"ERR: {error}\n")
 
