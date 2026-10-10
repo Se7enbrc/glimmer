@@ -338,12 +338,14 @@ the attestation step from other trusted build steps. The separate scoped token
 still owns content publication.
 
 If publication succeeds but the tap step fails, the release is already public.
-Retry the promotion with the reviewed current main SHA and the same candidate
-inputs; it reuses the existing assets. Do not rebuild the published version. If
-the appcast push fails after assets publish, preserve the original assets and
-resolve that publication step without replacing them. A new build of the same
-source can contain different signed bytes and must not overwrite an existing
-release.
+The promotion's own appcast commit moves main, so rerunning that run fails its
+main check. Bump the cask from a current main checkout with
+`make brew-bump VERSION=<version>`, which finds the stable release's tag (a
+promoted candidate keeps its `-rc.N` tag) and checksums the published DMG. Do
+not rebuild the published version. If the appcast push fails after assets
+publish, preserve the original assets and resolve that publication step without
+replacing them. A new build of the same source can contain different signed
+bytes and must not overwrite an existing release.
 
 ## 3. Signing credentials
 

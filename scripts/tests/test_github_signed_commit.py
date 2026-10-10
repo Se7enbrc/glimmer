@@ -127,6 +127,8 @@ elif name == "gh":
         print(state.read_text() if state.exists() else "false")
     elif args[:2] == ["release", "view"] and "--json" in args:
         print("false" if os.environ.get("FIXTURE_PRERELEASE") else "true")
+    elif args[:2] == ["release", "list"]:
+        print(os.environ.get("FIXTURE_STABLE_TAG", ""))
     elif args[:2] == ["release", "download"]:
         (pathlib.Path(args[args.index("-D") + 1]) / "Glimmer-2026.10.6.dmg").write_bytes(b"fixture")
     elif args[:2] == ["api", "graphql"]:
@@ -144,9 +146,12 @@ elif name == "ditto":
 class HomebrewCommitPathTests(unittest.TestCase):
     def test_hosted_uses_signed_api_while_local_keeps_normal_git_commits(self):
         import hashlib
-        for hosted, tag, prerelease in ((False, "2026.10.6", False), (True, "2026.10.6", False),
-                                       (True, "2026.10.6-rc.1", False), (True, "2026.10.6-rc.1", True)):
-            with self.subTest(hosted=hosted, tag=tag, prerelease=prerelease), tempfile.TemporaryDirectory() as directory:
+        for hosted, tag, prerelease, implied in ((False, "2026.10.6", False, False), (True, "2026.10.6", False, False),
+                                                 (True, "2026.10.6-rc.1", False, False),
+                                                 (True, "2026.10.6-rc.1", True, False),
+                                                 (False, "2026.10.6-rc.1", False, True)):
+            with self.subTest(hosted=hosted, tag=tag, prerelease=prerelease, implied=implied), \
+                    tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 for name in ("scripts", "bin", "tap/.git", "tap/Casks"):
                     (root / name).mkdir(parents=True)
@@ -171,7 +176,10 @@ class HomebrewCommitPathTests(unittest.TestCase):
                        "FIXTURE_REQUEST": str(request), "GITHUB_ACTIONS": "true" if hosted else "false"}
                 if prerelease:
                     env["FIXTURE_PRERELEASE"] = "1"
-                result = subprocess.run(["bash", str(root / "scripts/homebrew-bump.sh"), "2026.10.6", tag],
+                if implied:
+                    env["FIXTURE_STABLE_TAG"] = tag
+                args = ["2026.10.6"] if implied else ["2026.10.6", tag]
+                result = subprocess.run(["bash", str(root / "scripts/homebrew-bump.sh"), *args],
                                         env=env, capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode == 0, not prerelease, result.stderr)
                 calls = [json.loads(line) for line in log.read_text().splitlines()]
