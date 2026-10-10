@@ -330,6 +330,8 @@
 		D2000035 /* ParserHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000034 /* ParserHelperTests.swift */; };
 		D2000081 /* AnnexBToAVCCTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000080 /* AnnexBToAVCCTests.swift */; };
 		DEC0DE202609255900000001 /* AV1SequenceHeaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609255900000002 /* AV1SequenceHeaderTests.swift */; };
+		A1C0DE202610100100000003 /* StreamTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE202610100100000004 /* StreamTypesTests.swift */; };
+		A1C0DE202610100100000001 /* VideoFormatDescriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE202610100100000002 /* VideoFormatDescriptionTests.swift */; };
 		D2000091 /* ContainerMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000090 /* ContainerMigrationTests.swift */; };
 		D2000095 /* QualityPresetMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000094 /* QualityPresetMigrationTests.swift */; };
 		DEC0DE840000000000000011 /* StreamDisplayModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE840000000000000012 /* StreamDisplayModeTests.swift */; };
@@ -780,6 +782,8 @@
 		D2000034 /* ParserHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserHelperTests.swift; sourceTree = "<group>"; };
 		D2000080 /* AnnexBToAVCCTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnexBToAVCCTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609255900000002 /* AV1SequenceHeaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AV1SequenceHeaderTests.swift; sourceTree = "<group>"; };
+		A1C0DE202610100100000004 /* StreamTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTypesTests.swift; sourceTree = "<group>"; };
+		A1C0DE202610100100000002 /* VideoFormatDescriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFormatDescriptionTests.swift; sourceTree = "<group>"; };
 		D2000090 /* ContainerMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerMigrationTests.swift; sourceTree = "<group>"; };
 		D2000094 /* QualityPresetMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityPresetMigrationTests.swift; sourceTree = "<group>"; };
 		DEC0DE840000000000000012 /* StreamDisplayModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayModeTests.swift; sourceTree = "<group>"; };
@@ -1270,6 +1274,8 @@
 				D2000034 /* ParserHelperTests.swift */,
 				D2000080 /* AnnexBToAVCCTests.swift */,
 				DEC0DE202609255900000002 /* AV1SequenceHeaderTests.swift */,
+				A1C0DE202610100100000004 /* StreamTypesTests.swift */,
+				A1C0DE202610100100000002 /* VideoFormatDescriptionTests.swift */,
 				D2000090 /* ContainerMigrationTests.swift */,
 				D2000094 /* QualityPresetMigrationTests.swift */,
 				DEC0DE840000000000000012 /* StreamDisplayModeTests.swift */,
@@ -1803,6 +1809,8 @@
 				D2000035 /* ParserHelperTests.swift in Sources */,
 				D2000081 /* AnnexBToAVCCTests.swift in Sources */,
 				DEC0DE202609255900000001 /* AV1SequenceHeaderTests.swift in Sources */,
+				A1C0DE202610100100000003 /* StreamTypesTests.swift in Sources */,
+				A1C0DE202610100100000001 /* VideoFormatDescriptionTests.swift in Sources */,
 				D2000091 /* ContainerMigrationTests.swift in Sources */,
 				D2000095 /* QualityPresetMigrationTests.swift in Sources */,
 				DEC0DE840000000000000011 /* StreamDisplayModeTests.swift in Sources */,
