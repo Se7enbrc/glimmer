@@ -341,9 +341,7 @@ struct QualityPane: View {
                     if model.currentDisplayHasNotch {
                         Text("Off, a thin strip of the picture hides behind the notch.")
                     }
-                    if !model.effectiveStreamCoversNotch {
-                        Text("macOS may turn on Game Mode. Change it in Game Overlay › Settings › Game Mode.")
-                    }
+                    Text("macOS may turn on Game Mode. Change it in Game Overlay › Settings › Game Mode.")
                 }
             }
 

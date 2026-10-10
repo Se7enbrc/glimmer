@@ -543,15 +543,15 @@ Both paths support HDR: EDR follows the layer's PQ content, not the window's
 Space membership.
 
 On displays without a notch, “Use a full-screen Space” defaults on. On notched
-displays, “Keep picture below the camera” defaults on and uses the same native
-Space path. Each display type keeps its own saved preference, and changes apply
-to the next stream.
+displays, “Keep picture below the camera” defaults off: a Space can't draw
+beside the camera, so the borderless cover fills the whole panel. Each display
+type keeps its own saved preference, and changes apply to the next stream.
 
 **Game Mode.** `LSSupportsGameMode = true` and the Games application category
 make Glimmer eligible. macOS may activate Game Mode in native fullscreen; the
 persistent per-app on/off control is Game Overlay → Settings → Game Mode. There
-is no app-local runtime setter. Choosing the borderless path does not enter
-native fullscreen. See
+is no app-local runtime setter. The borderless cover qualifies too: gamepolicyd
+starts a full-screen gaming session for it. See
 [Apple's Game Mode guide](https://support.apple.com/en-us/105118) and
 [`LSSupportsGameMode`](https://developer.apple.com/documentation/bundleresources/information-property-list/lssupportsgamemode).
 

@@ -270,7 +270,7 @@ final class AppModel {
     var captureSysKeys: Bool = false {
         didSet { UserDefaults.standard.set(captureSysKeys, forKey: "captureSysKeys") }
     }
-    var streamCoversNotch: Bool = false {
+    var streamCoversNotch: Bool = true {
         didSet { UserDefaults.standard.set(streamCoversNotch, forKey: "streamCoversNotch") }
     }
     var streamUsesFullScreenSpace: Bool = true {

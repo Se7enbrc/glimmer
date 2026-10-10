@@ -52,6 +52,20 @@ struct AppShellTests {
         }
     }
 
+    @Test @MainActor func notchedPanelsCoverTheNotchUnlessTheUserChoseOtherwise() {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "streamCoversNotch")
+        defer {
+            if let saved { defaults.set(saved, forKey: "streamCoversNotch") } else {
+                defaults.removeObject(forKey: "streamCoversNotch")
+            }
+        }
+        defaults.removeObject(forKey: "streamCoversNotch")
+        #expect(AppModel().streamCoversNotch)
+        defaults.set(false, forKey: "streamCoversNotch")
+        #expect(!AppModel().streamCoversNotch)
+    }
+
     @Test @MainActor func loadingQualityDoesNotSaveUntouchedCustomValues() {
         withQualityDefaults {
             let model = AppModel()
