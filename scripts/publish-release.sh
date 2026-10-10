@@ -111,12 +111,6 @@ printf '\nSource: this repo at tag %s (GPLv3).\n' "$TAG" >>"$NOTES"
 echo "Publishing GitHub release ${TAG} to ${REPO}"
 ASSETS=("$ZIP")
 [ -f "$DMG" ] && ASSETS+=("$DMG")
-# The by-tag API returns 404 for a draft, so address the release by its id.
-release_api() {
-	local id
-	id="$(gh release view "$TAG" -R "$REPO" --json databaseId -q .databaseId)"
-	gh api "repos/$REPO/releases/$id" "$@"
-}
 if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
 	# A published version is immutable: Sparkle signatures and the Homebrew
 	# cask checksum already point at these bytes. A retry may only add a
@@ -127,12 +121,12 @@ if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
 		exit 1
 	}
 	if [ "$CHANNEL" = rc ]; then
-		[ "$(release_api --jq .prerelease)" = true ] || {
+		[ "$(gh api "repos/$REPO/releases/tags/$TAG" --jq .prerelease)" = true ] || {
 			echo "ERR: candidate tag is already a stable release" >&2; exit 1; }
 	fi
 	for asset in "${ASSETS[@]}"; do
 		name="$(basename "$asset")"
-		remote="$(release_api \
+		remote="$(gh api "repos/$REPO/releases/tags/$TAG" \
 			--jq ".assets[] | select(.name==\"$name\") | .digest // \"unknown\"" 2>/dev/null || true)"
 		local_digest="sha256:$(shasum -a 256 "$asset" | cut -d' ' -f1)"
 		if [ -z "$remote" ]; then
@@ -155,7 +149,7 @@ else
 	gh release create "$TAG" "${ASSETS[@]}" -R "$REPO" --title "$TITLE" \
 		--notes-file "$NOTES" "${CREATE_ARGS[@]}"
 fi
-if [ "$(release_api --jq .draft)" = true ]; then
+if [ "$(gh api "repos/$REPO/releases/tags/$TAG" --jq .draft)" = true ]; then
 	EDIT_ARGS=(--draft=false)
 	if [ "$CHANNEL" = rc ]; then
 		EDIT_ARGS+=(--prerelease --latest=false)
@@ -164,7 +158,6 @@ if [ "$(release_api --jq .draft)" = true ]; then
 	fi
 	gh release edit "$TAG" -R "$REPO" "${EDIT_ARGS[@]}"
 fi
-[ "$(release_api --jq .draft)" = false ] || { echo "ERR: release $TAG is still a draft" >&2; exit 1; }
 echo "  ✓ release published"
 
 # Commit the appcast after pinning the release tag. Hosted releases use GitHub's
