@@ -140,9 +140,10 @@ def check(sha):
             if len(info.get("parents", [])) == 2:
                 parents[commit] = info["parents"][1].get("sha")
     validate_analyses(analyses, codeql_jobs, sha, ref, parents)
-    pages = api(f"code-scanning/alerts?state=open&ref={quote(ref, safe='')}&per_page=100")
+    # Code findings gate a release; repository-posture tools like Scorecard report elsewhere.
+    pages = api(f"code-scanning/alerts?tool_name=CodeQL&state=open&ref={quote(ref, safe='')}&per_page=100")
     if any(page for page in pages):
-        raise ValueError("open code-scanning alerts must be resolved before release")
+        raise ValueError("open CodeQL alerts must be resolved before release")
 
 
 def main():

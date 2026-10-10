@@ -15,6 +15,10 @@ from release_validation import validate_feed
 REPO = "Se7enbrc/glimmer"
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 WORKFLOW = f"{REPO}/.github/workflows/release.yml"
+# Everything that goes into the shipped bytes; release tooling, docs and tests may move on.
+SHIPPED = ("Glimmer", "helper", "LoginHelper", "Glimmer.xcodeproj", "Makefile",
+           "scripts/generate-build-info.sh", "scripts/generate-dmg-background.swift",
+           "scripts/make-dmg.sh", "scripts/sign-bundle.sh", "scripts/sparkle-tools.sh")
 
 
 def command(args, message):
@@ -53,7 +57,7 @@ def source(tag, sha):
     main = command(["git", "rev-parse", "origin/main"], "cannot resolve main").strip()
     if main != expected or command(["git", "rev-parse", "HEAD"], "cannot resolve checkout").strip() != expected:
         raise ValueError("main moved; review and dispatch its new SHA")
-    command(["git", "diff", "--quiet", sha, expected, "--", ".", ":(exclude)appcast.xml"],
+    command(["git", "diff", "--quiet", sha, expected, "--", *SHIPPED],
             "candidate source differs from reviewed main; build and test a new candidate")
     config = command(["git", "show", f"{sha}:Glimmer/Version.xcconfig"], "cannot read candidate version")
     values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$", config, re.M))

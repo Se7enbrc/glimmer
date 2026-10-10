@@ -410,3 +410,10 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertFalse(self.private.exists())
         self.assertFalse((self.runner / "glimmer-verified-12-1-signed").exists())
+
+class ReleaseWorkflowTests(unittest.TestCase):
+    def test_promotion_validates_with_a_token_before_publishing_credentials(self):
+        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
+        step = workflow.split("- name: Promote tested bytes to stable", 1)[1].split("- name:", 1)[0]
+        self.assertIn("GH_TOKEN: ${{ github.token }}", step)
+        self.assertIn("RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}", step)
