@@ -69,6 +69,9 @@ public struct StreamStatsSnapshot: Sendable {
     /// between `VTDecompressionSessionDecodeFrame` submission and the
     /// matching decompression-output callback fire).
     public var avgDecodeTimeMs: Double?
+    /// `avgDecodeTimeMs` split into VT service time and queue wait behind the prior frame.
+    public var avgDecodeServiceMs: Double?
+    public var avgDecodeWaitMs: Double?
 
     /// Host-side capture + encode latency, in milliseconds, as reported by
     /// Sunshine on each DECODE_UNIT (`frameHostProcessingLatency` in
@@ -330,7 +333,7 @@ public struct StreamStatsSnapshot: Sendable {
         case .decodeTime:
             return StatsRow(
                 kind: .decodeTime, label: "Decode time",
-                value: formatMs(avgDecodeTimeMs),
+                value: formatDecodeTime(),
                 symbolName: "clock",
                 health: decodeTimeHealth(avgDecodeTimeMs, targetFps: targetFps),
                 section: .pipeline)
@@ -514,6 +517,13 @@ public struct StreamStatsSnapshot: Sendable {
     private func formatMs(_ ms: Double?) -> String {
         guard let ms else { return "\u{2014}" }
         return String(format: "%.2f ms", ms)
+    }
+    /// "2.76 ms · 2.41 + 0.35 wait" once frames queue behind each other in VT.
+    private func formatDecodeTime() -> String {
+        guard let service = avgDecodeServiceMs, let wait = avgDecodeWaitMs, wait >= 0.05 else {
+            return formatMs(avgDecodeTimeMs)
+        }
+        return formatMs(avgDecodeTimeMs) + String(format: " \u{00B7} %.2f + %.2f wait", service, wait)
     }
     /// Decimal-ms formatter for the network rows (jitter). Shows two decimals so
     /// a clean wired link's ~0.09ms jitter is legible instead of rounding to

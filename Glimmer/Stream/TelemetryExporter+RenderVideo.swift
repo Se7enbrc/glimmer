@@ -24,6 +24,10 @@ extension TelemetryRenderer {
         // EMA of decode wall-clock (not a quantile). True p50/p95/max tails are
         // in glimmer_decode_time_p_ms / _idr_ms below.
         builder.emit("glimmer_decode_time_ema_ms", "Decode wall-clock EMA, ms.", snap.decodeEmaMs)
+        builder.emit("glimmer_decode_service_ema_ms", "Decode EMA minus queue wait (VT service), ms.",
+                     snap.decodeServiceMs)
+        builder.emit("glimmer_decode_wait_ema_ms", "Decode EMA spent queued behind the prior frame, ms.",
+                     snap.decodeWaitMs)
         builder.emit("glimmer_present_cadence_error_ms",
                      "Mean |present-vs-PTS| cadence error this window, ms.", snap.presentCadenceErrorMs)
         builder.emit("glimmer_present_on_time_percent",

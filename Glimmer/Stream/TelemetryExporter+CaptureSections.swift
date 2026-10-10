@@ -26,6 +26,7 @@ struct StreamTelemetryConfig: Sendable {
     var fps: Int
     var codec: String
     var bitrate: BitrateDecision?
+    var decodeSynchronous = false
 }
 
 extension TelemetryExporter {
@@ -269,7 +270,8 @@ extension TelemetryExporter {
             "\"stream_width\":\(stream.width)",
             "\"stream_height\":\(stream.height)",
             "\"stream_fps\":\(stream.fps)",
-            "\"codec\":\"\(TelemetryRenderer.jsonStringEscape(stream.codec))\""
+            "\"codec\":\"\(TelemetryRenderer.jsonStringEscape(stream.codec))\"",
+            "\"decode_synchronous\":\(stream.decodeSynchronous)"
         ]
         guard let bitrate = stream.bitrate else { return fields }
         fields += [

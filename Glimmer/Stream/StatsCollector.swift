@@ -32,6 +32,11 @@ final class StatsCollector: @unchecked Sendable {
     /// matches moonlight-qt's `m_AverageDecodeTimeMs` smoothing window.
     var decodeTimeEmaSeconds: Double?
     static let decodeTimeEmaAlpha: Double = 0.1
+    /// The same EMA split into VT service time and the wait behind the previous
+    /// frame's decode (`decodeTimeSplit`); the last callback anchors the split.
+    var decodeServiceEmaSeconds: Double?
+    var decodeWaitEmaSeconds: Double?
+    var lastDecodeCallbackTime: CFTimeInterval = 0
 
     // FPS counters. We track running totals plus a window-start time and
     // window-start total; FPS = (total - windowStartTotal) / (now - windowStart).
@@ -242,6 +247,9 @@ final class StatsCollector: @unchecked Sendable {
         dropPendingDecodeSubmits()
         lock.lock()
         decodeTimeEmaSeconds = nil
+        decodeServiceEmaSeconds = nil
+        decodeWaitEmaSeconds = nil
+        lastDecodeCallbackTime = 0
         decoderDroppedFrames = 0
         lastDecodedFrameTime = 0
         lastPresentTime = 0
@@ -332,6 +340,8 @@ final class StatsCollector: @unchecked Sendable {
         if let ema = decodeTimeEmaSeconds {
             snap.avgDecodeTimeMs = ema * 1000.0
         }
+        snap.avgDecodeServiceMs = decodeServiceEmaSeconds.map { $0 * 1000.0 }
+        snap.avgDecodeWaitMs = decodeWaitEmaSeconds.map { $0 * 1000.0 }
         if totalReceived > 0 {
             snap.decoderDroppedPercent = Double(totalDecoderDropped) / Double(totalReceived) * 100.0
         }

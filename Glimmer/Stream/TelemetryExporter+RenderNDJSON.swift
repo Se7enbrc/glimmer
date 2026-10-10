@@ -221,6 +221,8 @@ extension TelemetryRenderer {
         builder.add("fps_decoded", snap.decodedFps)
         builder.add("fps_rendered", snap.renderedFps)
         builder.add("decode_ema_ms", snap.decodeEmaMs)
+        builder.add("decode_service_ms", snap.decodeServiceMs)
+        builder.add("decode_wait_ms", snap.decodeWaitMs)
         builder.add("present_cadence_err_ms", snap.presentCadenceErrorMs)
         builder.addCount("present_on_time", snap.presentOnTimeCount)
         builder.addCount("present_late", snap.presentLateCount)

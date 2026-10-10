@@ -36,6 +36,9 @@ struct TelemetrySnapshot: Sendable {
     // decode time: EMA of decode wall-clock (StatsCollector tracks no per-frame
     // histogram). True quantiles live in glimmer_decode_time_p_ms / _idr_ms.
     var decodeEmaMs: Double?
+    // The same EMA split into VT service time and wait behind the prior frame.
+    var decodeServiceMs: Double?
+    var decodeWaitMs: Double?
 
     // present cadence
     var presentCadenceErrorMs: Double?

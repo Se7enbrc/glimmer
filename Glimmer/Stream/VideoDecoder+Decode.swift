@@ -26,6 +26,9 @@ extension VideoDecoder {
         streamWidth = width
         streamHeight = height
         streamFps = redrawRate
+        decodeSynchronous = UserDefaults.standard.bool(forKey: Self.decodeSynchronousDefaultsKey)
+        Diag.notice("decode synchronous flag = \(decodeSynchronous) "
+            + "(key=\(Self.decodeSynchronousDefaultsKey))", "Stream")
 
         // FPS-SCALE the in-flight decode pool now that we know the frame rate. The
         // bound is a TIME budget (~250ms) / ceiling (~375ms), not a fixed frame
@@ -442,7 +445,9 @@ extension VideoDecoder {
         // the session itself (set in ensureDecompressionSession via
         // kVTDecompressionPropertyKey_RealTime = true) is the right
         // knob; temporal processing was redundant cost on top.
-        let flags: VTDecodeFrameFlags = [._EnableAsynchronousDecompression]
+        // The sync arm blocks only this serial queue; the receive thread hands off
+        // via decodeQueue.async and the output callback never touches this queue.
+        let flags: VTDecodeFrameFlags = decodeSynchronous ? [] : [._EnableAsynchronousDecompression]
         var infoFlagsOut = VTDecodeInfoFlags()
         // Stamp submit-time into the stats collector so the matching output
         // callback can compute wall-clock decode latency. The collector's FIFO
