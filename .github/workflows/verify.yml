@@ -15,10 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The gate's three parts share no build products, so they run side by side.
   verify:
-    name: macOS
+    name: Verify (${{ matrix.part }})
     runs-on: macos-26
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: checks
+            target: check
+          - part: tests
+            target: test
+          - part: fuzz
+            target: test-asan
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -62,6 +73,7 @@ jobs:
 
       - name: Pre-commit
         id: precommit
+        if: matrix.part == 'checks'
         env:
           GLIMMER_SECRET_SCAN_ALL_FILES: "1"
           SCAN_FROM:
@@ -75,7 +87,9 @@ jobs:
 
       - name: Verify
         id: verify
-        run: make verify
+        env:
+          TARGET: ${{ matrix.target }}
+        run: make "$TARGET" TEST_SUITE=
 
       - name: Failure summary
         if: failure()
@@ -83,6 +97,8 @@ jobs:
           TESTED_SHA: ${{ github.sha }}
           PRECOMMIT_OUTCOME: ${{ steps.precommit.outcome }}
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          PART: ${{ matrix.part }}
+          TARGET: ${{ matrix.target }}
         run: |
           {
             printf '## Verification failed\n\n'
@@ -90,7 +106,20 @@ jobs:
             printf '| Check | Outcome | Reproduce locally |\n'
             printf '| --- | --- | --- |\n'
             printf '| Pre-commit | %s | GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files |\n' "$PRECOMMIT_OUTCOME"
-            printf '| Full gate | %s | make verify |\n\n' "$VERIFY_OUTCOME"
+            printf '| %s | %s | make %s |\n\n' "$PART" "$VERIFY_OUTCOME" "$TARGET"
             printf 'Check out the tested commit and open the failed step for details.\n'
             printf 'Credential scanner findings are withheld; never paste keys or tokens into an issue.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The required check: green only when every part of the gate passed.
+  gate:
+    name: macOS
+    needs: verify
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every part
+        env:
+          RESULT: ${{ needs.verify.result }}
+        run: test "$RESULT" = success
