@@ -242,6 +242,7 @@
 		D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */; };
 		D6D80A720000000000000011 /* StreamSession+FrameWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */; };
 		D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000014 /* StreamWindow+Fade.swift */; };
+		B1AC20261010000000000001 /* StreamWindowCloseState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AC20261010000000000002 /* StreamWindowCloseState.swift */; };
 		5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */; };
 		D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */; };
 		D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */; };
@@ -345,6 +346,7 @@
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		DEC0DE202609221400000007 /* StreamWindowFirstFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */; };
 		DEC0DE202610100000000001 /* StreamWindowSlideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */; };
+		B1AC20261010000000000003 /* StreamWindowCloseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AC20261010000000000004 /* StreamWindowCloseTests.swift */; };
 		DEC0DE202609221400000005 /* PasteTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221400000006 /* PasteTextTests.swift */; };
 		DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */; };
 		DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221800000003 /* TelemetryRowTests.swift */; };
@@ -689,6 +691,7 @@
 		D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StatsOverlayTimer.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+FrameWatchdog.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000014 /* StreamWindow+Fade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Fade.swift"; sourceTree = "<group>"; };
+		B1AC20261010000000000002 /* StreamWindowCloseState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindowCloseState.swift"; sourceTree = "<group>"; };
 		5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Slide.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Rows.swift"; sourceTree = "<group>"; };
 		D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Traces.swift"; sourceTree = "<group>"; };
@@ -793,6 +796,7 @@
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowFirstFrameTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowSlideTests.swift"; sourceTree = "<group>"; };
+		B1AC20261010000000000004 /* StreamWindowCloseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowCloseTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221400000006 /* PasteTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PasteTextTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLANTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221800000003 /* TelemetryRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRowTests.swift"; sourceTree = "<group>"; };
@@ -975,6 +979,7 @@
 				D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */,
 				D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */,
 				D6D80A720000000000000014 /* StreamWindow+Fade.swift */,
+				B1AC20261010000000000002 /* StreamWindowCloseState.swift */,
 				5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */,
 				D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */,
 				D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */,
@@ -1281,6 +1286,7 @@
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */,
 				DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */,
+				B1AC20261010000000000004 /* StreamWindowCloseTests.swift */,
 				DEC0DE202609221400000006 /* PasteTextTests.swift */,
 				DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */,
 				DEC0DE202609221800000003 /* TelemetryRowTests.swift */,
@@ -1513,6 +1519,7 @@
 				D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */,
 				D6D80A720000000000000011 /* StreamSession+FrameWatchdog.swift in Sources */,
 				D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */,
+				B1AC20261010000000000001 /* StreamWindowCloseState.swift in Sources */,
 				5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */,
 				D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */,
 				D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */,
@@ -1812,6 +1819,7 @@
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				DEC0DE202609221400000007 /* StreamWindowFirstFrameTests.swift in Sources */,
 				DEC0DE202610100000000001 /* StreamWindowSlideTests.swift in Sources */,
+				B1AC20261010000000000003 /* StreamWindowCloseTests.swift in Sources */,
 				DEC0DE202609221400000005 /* PasteTextTests.swift in Sources */,
 				DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */,
 				DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */,

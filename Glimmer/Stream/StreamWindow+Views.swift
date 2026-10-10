@@ -107,6 +107,28 @@ final class StreamWindowDelegate: NSObject, NSWindowDelegate {
     var isMiniPlayer = false
     var onMiniPlayerExitRequested: (() -> Void)?
 
+    var closeState = StreamWindowCloseState()
+    var onFullScreenSettled: (() -> Void)?
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        closeState.transition = .entering
+    }
+
+    func windowWillExitFullScreen(_ notification: Notification) {
+        closeState.transition = .exiting
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) { fullScreenSettled() }
+    func windowDidExitFullScreen(_ notification: Notification) { fullScreenSettled() }
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) { fullScreenSettled() }
+    func windowDidFailToExitFullScreen(_ window: NSWindow) { fullScreenSettled() }
+
+    private func fullScreenSettled() {
+        closeState.transition = .idle
+        // Let AppKit finish delivering the transition before requesting another one.
+        DispatchQueue.main.async { [weak self] in self?.onFullScreenSettled?() }
+    }
+
     func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
         guard isMiniPlayer else { return true }
         onMiniPlayerExitRequested?()

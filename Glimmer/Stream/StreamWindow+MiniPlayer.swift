@@ -33,6 +33,7 @@ extension StreamWindow {
         if miniPlayerReturnUsesSpace {
             miniPlayerPending = true
             if displayMode == .window { installSpaceExitObservers() }
+            streamDelegate.closeState.transition = .exiting
             window.toggleFullScreen(nil)
             return
         }
@@ -71,7 +72,10 @@ extension StreamWindow {
             configureWindowedChrome()
             NSApp.activate()
             window.makeKeyAndOrderFront(nil)
-            if miniPlayerReturnUsesSpace { window.toggleFullScreen(nil) }
+            if miniPlayerReturnUsesSpace {
+                streamDelegate.closeState.transition = .entering
+                window.toggleFullScreen(nil)
+            }
             Diag.notice("Mini player off - the stream is back in its window", "Stream")
         case .fullScreen:
             // The cover installs its own observers; drop the windowed set.

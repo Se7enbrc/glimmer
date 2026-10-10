@@ -164,6 +164,7 @@ extension StreamWindow {
             // stream (issue #84). It now lands the session in a window - see
             // StreamWindow+Windowed.swift for the conversion these drive.
             installSpaceExitObservers()
+            streamDelegate.closeState.transition = .entering
             window.toggleFullScreen(nil)
         }
 
