@@ -5,6 +5,7 @@
 
 // Xcode build settings for the app: the bridging header and its search path, applied via
 // `xcodebuild -xcconfig` from the Makefile. The streaming engine links no third-party library.
+// xcodebuild keeps using its cached build description after edits here: `make clean` first.
 
 // SRCROOT = repo root (directory containing Glimmer.xcodeproj).
 GLIMMER_REPO_ROOT = $(SRCROOT)
