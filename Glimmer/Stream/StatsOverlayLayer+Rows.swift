@@ -70,6 +70,10 @@ extension StatsOverlayLayer {
         usesDarkInk ? NSColor(red: 0.70, green: 0.35, blue: 0, alpha: 1) : .systemOrange
     }
 
+    private var criticalInk: NSColor {
+        usesDarkInk ? NSColor(red: 0.72, green: 0.10, blue: 0.08, alpha: 1) : .systemRed
+    }
+
     func applyShadow(to target: CALayer) {
         target.shadowColor = (usesDarkInk ? NSColor.white : NSColor.black).cgColor
         target.shadowOpacity = reduceTransparency ? 0.8 : 0.48
@@ -85,7 +89,7 @@ extension StatsOverlayLayer {
         applyShadow(to: sub.labelLayer)
         applyShadow(to: sub.valueLayer)
         if let trace = sub.trace {
-            trace.applyInk(primary: primaryInk, caution: cautionInk, opaque: reduceTransparency)
+            trace.applyInk(primary: primaryInk, caution: cautionInk, critical: criticalInk, opaque: reduceTransparency)
             applyShadow(to: trace.layer)
         }
     }

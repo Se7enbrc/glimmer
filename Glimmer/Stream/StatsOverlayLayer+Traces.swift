@@ -3,9 +3,15 @@ import QuartzCore
 
 /// Forty intervals at the overlay's 4 Hz cadence, with missing readings left as gaps.
 struct StatsTraceHistory {
+    /// Caution is orange, critical (the metric tanking) is red.
+    enum Severity: Int, Comparable {
+        case none, caution, critical
+        static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
+    }
+
     struct Sample {
         var value: Double?
-        var hiccup = false
+        var severity = Severity.none
         var time: Double = 0
     }
 
@@ -31,10 +37,10 @@ struct StatsTraceHistory {
         return readings > 0 ? total / Double(readings) : nil
     }
 
-    mutating func append(value: Double?, hiccup: Bool, time: Double) {
+    mutating func append(value: Double?, severity: Severity, time: Double) {
         if !isEmpty, time - self[count - 1].time > 1 || time < self[count - 1].time { reset() }
         let valid = value.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
-        storage[next] = Sample(value: valid, hiccup: valid != nil && hiccup, time: time)
+        storage[next] = Sample(value: valid, severity: valid != nil ? severity : .none, time: time)
         next = (next + 1) % Self.capacity
         count = min(count + 1, Self.capacity)
     }
@@ -44,8 +50,9 @@ struct StatsTraceHistory {
         count = 0
     }
 
-    static func isHiccupSegment(from: Sample, to: Sample) -> Bool {
-        from.value != nil && to.value != nil && (from.hiccup || to.hiccup)
+    static func segmentSeverity(from: Sample, to: Sample) -> Severity {
+        guard from.value != nil, to.value != nil else { return .none }
+        return max(from.severity, to.severity)
     }
 }
 
@@ -63,17 +70,19 @@ final class StatsTrace {
             }
         }
 
-        func isHiccup(value: Double?, reference: Double?, targetFps: Double, latencyWarning: Double) -> Bool {
-            guard let value, value.isFinite, value >= 0 else { return false }
+        /// Drops are judged against the running average, not the stream's target, so a
+        /// steady 190 FPS on a 240 Hz stream stays calm; latency flags spikes.
+        func severity(value: Double?, reference: Double?, latencyWarning: Double) -> StatsTraceHistory.Severity {
+            guard let value, value.isFinite, value >= 0 else { return .none }
             switch self {
-            case .render: return targetFps > 0 && value < targetFps * 0.9
+            case .render, .bitrate:
+                guard let reference, reference > 0 else { return .none }
+                if value < reference * 0.3 { return .critical }
+                return value < reference * 0.5 ? .caution : .none
             case .latency:
-                if value > latencyWarning { return true }
-                guard let reference else { return false }
-                return value > max(reference + 3, reference * 1.8)
-            case .bitrate:
-                guard let reference, reference > 0 else { return false }
-                return value < reference * 0.75
+                if value > latencyWarning { return .caution }
+                guard let reference else { return .none }
+                return value > max(reference + 3, reference * 1.8) ? .caution : .none
             }
         }
     }
@@ -83,14 +92,15 @@ final class StatsTrace {
     private var history = StatsTraceHistory()
     private let baseline = CAShapeLayer()
     private let line = CAShapeLayer()
-    private let hiccups = CAShapeLayer()
+    private let cautions = CAShapeLayer()
+    private let criticals = CAShapeLayer()
     private let dot = CAShapeLayer()
     private var target = 60.0
 
     init(metric: Metric) {
         self.metric = metric
         layer.actions = StatsOverlayLayer.disabledActions
-        for shape in [baseline, line, hiccups, dot] {
+        for shape in [baseline, line, cautions, criticals, dot] {
             shape.actions = StatsOverlayLayer.disabledActions
             shape.fillColor = nil
             shape.lineCap = .round
@@ -99,13 +109,15 @@ final class StatsTrace {
         }
         baseline.lineWidth = 0.5
         line.lineWidth = 1.1
-        hiccups.lineWidth = 1.4
+        cautions.lineWidth = 1.4
+        criticals.lineWidth = 1.6
     }
 
-    func applyInk(primary: NSColor, caution: NSColor, opaque: Bool) {
+    func applyInk(primary: NSColor, caution: NSColor, critical: NSColor, opaque: Bool) {
         baseline.strokeColor = primary.withAlphaComponent(opaque ? 0.4 : 0.18).cgColor
         line.strokeColor = primary.cgColor
-        hiccups.strokeColor = caution.cgColor
+        cautions.strokeColor = caution.cgColor
+        criticals.strokeColor = critical.cgColor
         dot.fillColor = primary.cgColor
     }
 
@@ -119,15 +131,17 @@ final class StatsTrace {
         case .bitrate: value = snapshot.measuredBitrateMbps
         }
         target = targetFps.isFinite && targetFps > 0 ? targetFps : 60
-        let hiccup = metric.isHiccup(value: value, reference: history.mean, targetFps: targetFps,
-                                     latencyWarning: Double(thresholds.latencyWarningAbove))
-        history.append(value: value, hiccup: hiccup, time: now)
+        let severity = metric.severity(value: value, reference: history.mean,
+                                       latencyWarning: Double(thresholds.latencyWarningAbove))
+        history.append(value: value, severity: severity, time: now)
     }
 
     private var scale: (lower: Double, upper: Double, reference: Double) {
         let reference = history.mean ?? 0
         switch metric {
-        case .render: return (target * 0.7, target * 1.05, target)
+        case .render:
+            let level = reference > 0 ? reference : target
+            return (max(0, level * 0.2), max(level, target) * 1.08, level)
         case .latency: return (0, max(12, reference * 3), reference)
         case .bitrate: return (max(0, reference * 0.4), max(1, reference * 1.4), reference)
         }
@@ -135,7 +149,8 @@ final class StatsTrace {
 
     func draw() {
         let normalPath = CGMutablePath()
-        let hiccupPath = CGMutablePath()
+        let cautionPath = CGMutablePath()
+        let criticalPath = CGMutablePath()
         let referencePath = CGMutablePath()
         let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
         let scale = scale
@@ -156,8 +171,11 @@ final class StatsTrace {
             }
             let point = CGPoint(x: bounds.maxX - CGFloat((endTime - sample.time) / 10) * bounds.width, y: y(value))
             if let previous {
-                let path = StatsTraceHistory.isHiccupSegment(from: history[index - 1], to: sample)
-                    ? hiccupPath : normalPath
+                let path = switch StatsTraceHistory.segmentSeverity(from: history[index - 1], to: sample) {
+                case .none: normalPath
+                case .caution: cautionPath
+                case .critical: criticalPath
+                }
                 path.move(to: previous)
                 path.addLine(to: point)
             }
@@ -166,7 +184,8 @@ final class StatsTrace {
         }
         baseline.path = referencePath
         line.path = normalPath
-        hiccups.path = hiccupPath
+        cautions.path = cautionPath
+        criticals.path = criticalPath
         dot.path = latest.map { CGPath(ellipseIn: CGRect(x: $0.x - 1.5, y: $0.y - 1.5, width: 3, height: 3), transform: nil) }
     }
 }

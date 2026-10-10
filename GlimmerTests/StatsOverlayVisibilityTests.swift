@@ -121,49 +121,52 @@ struct StatsOverlayVisibilityTests {
         #expect(history.isEmpty)
         #expect(history.mean == nil)
         for index in 0..<100 {
-            history.append(value: Double(index), hiccup: index == 99, time: Double(index) / 4)
+            history.append(value: Double(index), severity: index == 99 ? .caution : .none, time: Double(index) / 4)
         }
         #expect(history.count == 41)
         #expect(history[0].value == 59)
         #expect(history[40].value == 99)
         #expect(history[40].time - history[0].time == 10)
         #expect(history.mean == 79)
-        #expect(history[40].hiccup)
-        history.append(value: .nan, hiccup: true, time: 25)
+        #expect(history[40].severity == .caution)
+        history.append(value: .nan, severity: .critical, time: 25)
         #expect(history[40].value == nil)
-        #expect(!history[40].hiccup)
-        history.append(value: nil, hiccup: false, time: 25.25)
+        #expect(history[40].severity == .none)
+        history.append(value: nil, severity: .none, time: 25.25)
         #expect(history[40].value == nil)
-        history.append(value: 60, hiccup: false, time: 30)
+        history.append(value: 60, severity: .none, time: 30)
         #expect(history.count == 1)
         #expect(history[0].value == 60)
         history.reset()
         #expect(history.isEmpty)
     }
 
-    @Test func hiccupsUseMetricThresholdsAndColourBothEdgesOfAnExcursion() {
+    @Test func dropsAreJudgedAgainstTheRunningAverageAndColourBothEdges() {
         let render = StatsTrace.Metric.render
-        #expect(render.isHiccup(value: 53, reference: nil, targetFps: 60, latencyWarning: 50))
-        #expect(!render.isHiccup(value: 54, reference: nil, targetFps: 60, latencyWarning: 50))
-        let latency = StatsTrace.Metric.latency
-        #expect(latency.isHiccup(value: 8, reference: 3.5, targetFps: 60, latencyWarning: 50))
-        #expect(latency.isHiccup(value: 51, reference: nil, targetFps: 60, latencyWarning: 50))
-        #expect(!latency.isHiccup(value: 4, reference: 3.5, targetFps: 60, latencyWarning: 50))
+        #expect(render.severity(value: 190, reference: 192, latencyWarning: 50) == .none)
+        #expect(render.severity(value: 95, reference: 192, latencyWarning: 50) == .caution)
+        #expect(render.severity(value: 57, reference: 192, latencyWarning: 50) == .critical)
+        #expect(render.severity(value: 10, reference: nil, latencyWarning: 50) == .none)
         let bitrate = StatsTrace.Metric.bitrate
-        #expect(bitrate.isHiccup(value: 36, reference: 50, targetFps: 60, latencyWarning: 50))
-        #expect(!bitrate.isHiccup(value: 50, reference: 50, targetFps: 60, latencyWarning: 50))
-        #expect(!bitrate.isHiccup(value: 10, reference: nil, targetFps: 60, latencyWarning: 50))
+        #expect(bitrate.severity(value: 24, reference: 50, latencyWarning: 50) == .caution)
+        #expect(bitrate.severity(value: 14, reference: 50, latencyWarning: 50) == .critical)
+        #expect(bitrate.severity(value: 30, reference: 50, latencyWarning: 50) == .none)
+        let latency = StatsTrace.Metric.latency
+        #expect(latency.severity(value: 8, reference: 3.5, latencyWarning: 50) == .caution)
+        #expect(latency.severity(value: 51, reference: nil, latencyWarning: 50) == .caution)
+        #expect(latency.severity(value: 4, reference: 3.5, latencyWarning: 50) == .none)
         for metric in [render, latency, bitrate] {
-            #expect(!metric.isHiccup(value: nil, reference: 50, targetFps: 60, latencyWarning: 50))
-            #expect(!metric.isHiccup(value: .nan, reference: 50, targetFps: 60, latencyWarning: 50))
+            #expect(metric.severity(value: nil, reference: 50, latencyWarning: 50) == .none)
+            #expect(metric.severity(value: .nan, reference: 50, latencyWarning: 50) == .none)
         }
         let healthy = StatsTraceHistory.Sample(value: 60)
-        let hiccup = StatsTraceHistory.Sample(value: 50, hiccup: true)
+        let caution = StatsTraceHistory.Sample(value: 25, severity: .caution)
+        let critical = StatsTraceHistory.Sample(value: 10, severity: .critical)
         let missing = StatsTraceHistory.Sample()
-        #expect(StatsTraceHistory.isHiccupSegment(from: healthy, to: hiccup))
-        #expect(StatsTraceHistory.isHiccupSegment(from: hiccup, to: healthy))
-        #expect(!StatsTraceHistory.isHiccupSegment(from: healthy, to: healthy))
-        #expect(!StatsTraceHistory.isHiccupSegment(from: missing, to: hiccup))
+        #expect(StatsTraceHistory.segmentSeverity(from: healthy, to: caution) == .caution)
+        #expect(StatsTraceHistory.segmentSeverity(from: caution, to: critical) == .critical)
+        #expect(StatsTraceHistory.segmentSeverity(from: healthy, to: healthy) == .none)
+        #expect(StatsTraceHistory.segmentSeverity(from: missing, to: critical) == .none)
     }
 
     @Test func sampleRectTracksEveryCornerAndLetterboxOnBothAxes() {
