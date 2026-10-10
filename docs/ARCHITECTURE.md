@@ -8,15 +8,36 @@ that crosses the bridging header is an Objective-C exception guard in
 `CHelpers.h`, which Swift can't express; crypto, TLS and audio decode run on
 CryptoKit, CommonCrypto, Security, Network.framework and AudioToolbox.
 
-There is one other process, and it is not in the stream path: an opt-in root
-LaunchDaemon under `helper/` that parks the AirDrop radio (`awdl0`) for the
-duration of a stream. It is loaded through `SMAppService.daemon` and talks XPC.
-See [SECURITY.md](SECURITY.md) for why it exists and what it is allowed to do.
+Two helpers sit outside the stream path. The opt-in root LaunchDaemon under
+`helper/` parks the AirDrop radio (`awdl0`) for the duration of a stream. It is
+loaded through `SMAppService.daemon` and talks XPC. The login item under
+`LoginHelper/` opens Glimmer in the menu bar at login when requested. See
+[SECURITY.md](SECURITY.md) for the root helper's purpose and limits.
+
+The network helper is an app-like bundle under `Contents/Library/LaunchServices`
+with its own Developer ID profile. Its Network Topology Observation entitlement
+authorizes routing-socket observation under macOS 27's privacy rules; it does
+not replace administrator approval or grant network-interface mutation rights.
+
+The root helper associates suppression with the XPC peer that last claimed it;
+an older connection's invalidation cannot release the current owner's claim. An
+explicit release from a replacement connection remains valid for recovery. Its
+`ifconfig` runner owns and reaps each child before another mutation can proceed.
+After two seconds it sends TERM, then KILL after a 250 ms grace period, while
+draining and capping output. A child stuck in the kernel still blocks later
+mutations until it exits.
+
+Login-item reconciliation probes launchd off the main actor with a two-second
+deadline. Only a confirmed missing-service response triggers re-registration;
+unknown responses preserve it. Saved intent, service status and registration
+revision are rechecked after the await so a stale probe cannot undo a new
+choice.
 
 ## Overview
 
-The user picks a PC in the SwiftUI launcher, clicks Stream, and a borderless
-NSWindow takes over the screen. Decoded H.264, HEVC or AV1 (8- or 10-bit, SDR or
+The user picks a PC in the SwiftUI launcher and clicks Stream. A borderless
+window covering the screen is the default; saved window and full-screen Space
+preferences are preserved. Decoded H.264, HEVC or AV1 (8- or 10-bit, SDR or
 HDR10) is paced by a display-link-driven `FramePacer` onto an
 `AVSampleBufferDisplayLayer` for the OS to paint. Mouse, keyboard and gamepad
 input goes to the PC through the `StreamingBackend` input methods (coalesced by
@@ -137,7 +158,25 @@ Components:
 - **Audio receive**: `RtpAudioReceiver` (+`+Socket`, `+Receive`, `+Decrypt`,
   `+Ping`, `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`)
   / `AudioFecDecoder` → `OpusDecoder` (Opus on AudioToolbox) → `AudioDecoder`
-  (AVAudioEngine playout with an adaptive cushion).
+  (AVAudioEngine playout with an adaptive cushion). When that cushion trims a
+  decoded packet, `AudioPacketSplice` retains the first skipped block and blends
+  its first millisecond into the next scheduled block. The blend preserves the
+  original join without adding frames; uninterrupted audio is unchanged. A
+  drained player or a new session discards the pending join.
+- **Spatial audio**: the default stream requests 7.1 from Sunshine so a stereo
+  speaker-to-headphone switch retains a surround source without reconnecting.
+  `AudioOutputRoute` uses CoreAudio stream terminal types, not device names or
+  Bluetooth alone, to identify suitable outputs. `AudioDecoder+Spatial` inserts
+  an `AVAudioEnvironmentNode` after varispeed and renders an ambience bed to
+  stereo, without reverb. macOS handles head tracking on compatible headphones.
+  External stereo speakers use Apple's external-speaker renderer, which keeps
+  the LFE channel that the ordinary stereo mixer omits. Physical surround
+  outputs keep native multichannel playback; stereo sources need no spatial
+  node. A change in spatial renderer rebuilds the graph even when the sample
+  rate and channel count are unchanged. There is no app preference to manage.
+  The app carries Apple's Head Pose and Spatial Audio Profile entitlements;
+  AVAudioEngine applies orientation and any personalized profile within its
+  renderer. Glimmer does not read, store or log raw head-pose or profile data.
 - **`StreamPathMTU`**: a connect-time egress path-MTU probe. It resolves
   `StreamConfig.remoteness == .auto` from the real route, so the SDP packet-size
   clamp (1392 down to 1024 on a tunnelled path) fires on the paths that need it.
@@ -206,6 +245,13 @@ path} can fire back-to-back. `stop()` flips `isStreaming` and `stopInProgress`
 before its first await, and later callers wait on the same `SharedTeardown`
 instead of running it again.
 
+Stopping cancels the initial server-info task as well as a pending launch.
+Native connection events carry their originating backend and preserve arrival
+order, so delayed callbacks cannot revive input or stop a replacement
+connection. Per-PC launch epochs serialize late cleanup against the next launch:
+a new launch waits for an already-sending cancel, while cleanup from an older
+epoch cannot cancel a newer session. Different PCs remain independent.
+
 Teardown order is load-bearing:
 
 1. Invalidate the four main-run-loop timers, hide the overlay, and release held
@@ -261,13 +307,17 @@ at 1 frame and grows one frame per 2 s session tick toward the headroom level
 once the level drops (`FramePacer+AdaptiveDepth.swift`). There is no Metal
 shader: the OS owns color and EDR handling end to end.
 
-The Metal-shader rewrite this used to be is documented in the top-of-file
-comment in `VideoDecoder.swift`. Short version: with a custom MSL fragment
-shader doing the YUV→RGB and PQ EOTF, HDR was visibly wrong (washed highlights,
-milky blacks) on real HDR displays. Apple's Metal docs say it outright: “Don't
-perform tone mapping in your shader. AVSampleBufferDisplayLayer applies tone
-mapping based on the current EDR headroom.” The OS owns the pipeline end to end,
-and HDR works.
+At enqueue, decoded images carry `kCMSampleAttachmentKey_DisplayImmediately`:
+the pacer has already decided when to release them. Their RTP timestamps remain
+intact for ordering and telemetry. The layer has no custom control timebase;
+without this attachment, AVFoundation would interpret those PC timestamps on the
+Mac's host clock.
+
+Glimmer supplies the decoded pixel buffers and their color and HDR metadata to
+AVFoundation rather than implementing its own color-conversion shader. The
+display-layer choice is a product decision, not an Apple restriction on Metal:
+Apple also documents
+[system tone mapping for Metal video layers](https://developer.apple.com/documentation/metal/using-system-tone-mapping-on-video-content).
 
 **HDR pipeline.** Active when all three preconditions hold:
 
@@ -316,6 +366,14 @@ and, after a sustained window, gates VideoToolbox decode entirely (the PC can't
 pause; audio, network and FEC keep running); resume reuses the wait-for-IDR
 recovery path.
 
+The present watchdog recognizes a continuous renderer-refusal window longer than
+250 ms even if every rejected frame empties the pacing queue. It measures time
+between actual attempts, restarts after a 250 ms delivery gap, and requires a
+recent refusal, so a network drought cannot age a brief rejection into a
+renderer freeze. The existing 90-rejection fallback remains for deep bursts.
+Recovery flushes the renderer and requests a keyframe; this limits a freeze's
+duration but does not identify why macOS initially stopped accepting frames.
+
 **Stream-format coverage.** H.264 (8-bit and 4:4:4), HEVC (Main / Main10 / RExt
 4:4:4), AV1 (Main / Main10 / High 4:4:4). The default set is not a hardcoded
 list: `VideoFormats.probedSupported` (`Types.swift`) asks
@@ -345,8 +403,18 @@ from the underlying `CGEvent`'s `kCGMouseEventDeltaX/Y` fields
 (`NSEvent.deltaX/Y` goes to zero when the cursor is frozen). A sub-pixel
 residual accumulator carries fractional motion forward so slow trackpad moves
 don't round to zero. A cursor warp to screen center before associate-false keeps
-hot corners from triggering during a stream: there's no public API to disable
-hot corners, so the workaround is keeping the frozen cursor away from them.
+the pointer away from hot corners on every supported OS. On macOS 27, the
+fullscreen presentation options also disable screen-corner interactions. The
+option uses the public SDK 27 enum value so Xcode 26 builds retain this
+behavior.
+
+`StreamWindow` owns the counted display hide and transparent cursor image
+together. A new input view starts with the pointer visible. Capture enables
+both; release disables the transparent image before balancing the hide count.
+Detach also retires the view's cursor image, so a late tracking event during the
+fullscreen exit animation cannot hide the pointer over the launcher. Closing
+windows immediately pass mouse clicks through while their fade and fullscreen
+exit finish.
 
 **Keyboard.** Positional scancodes via `sendKeyboard`, with the high bit
 (`0x8000`) set to ask the PC to skip layout correction (it otherwise remaps
@@ -355,7 +423,9 @@ physical key-down and key-up emits one keyboard event: no per-event modifier
 reset, no “release before press” coalescing. NKRO works because AppKit delivers
 each transition as its own `NSEvent` and the responder chain hands each to
 `keyDown(with:)` / `keyUp(with:)` independently. Held keys, mouse buttons and
-modifiers are released on focus loss, a paste, a reconnect and `detach()`.
+modifiers are released on focus loss, a paste, a reconnect and `detach()`. Key
+events also release tracked modifiers absent from their current flags,
+recovering a lost modifier-up without pressing additional modifiers.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and
@@ -380,6 +450,13 @@ through `ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`),
 motion-sensor enable (`0x5501`, answered with `sendControllerMotion` samples),
 and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion` and
 `ControllerBattery` own the actuator and sampler sides.
+
+Mini Player keeps controller input active when another Mac app has focus.
+Keyboard and mouse still release on focus loss. A shared ownership set manages
+`GCController.shouldMonitorBackgroundEvents` for Mini Player, Diagnostics and
+the shortcut recorder, restoring its previous value after the last owner leaves.
+Leaving Mini Player in the background releases held controller input; returning
+to the stream resynchronizes the pad's current state.
 
 **Raw-HID gamepads.** Pads GameController doesn't own reach the PC through
 `HIDGamepadManager` (`Glimmer/Stream/HIDGamepad/`). It enumerates joysticks,
@@ -451,36 +528,51 @@ composites the sRGB text against the HDR content correctly.
 **Dual-path fullscreen: the `coversNotch` toggle.** Two paths, picked per
 session config:
 
-- **`coversNotch == true`** (default): a borderless covering window at the
+- **`coversNotch == true`**: a borderless covering window at the
   `mainMenuWindow + 1` level,
-  `collectionBehavior = [.fullScreenPrimary, .stationary]`. No Space-based
-  fullscreen. The window owns the full physical panel, including the notch
-  reserve on notched MacBooks. Bitstreams at the panel's true native resolution
-  render 1:1.
-- **`coversNotch == false`**: `toggleFullScreen(nil)` for Space-based
+  `collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]`.
+  No Space-based fullscreen. The window owns the full physical panel, including
+  the notch reserve on notched MacBooks. Bitstreams at the panel's true native
+  resolution render 1:1.
+- **`coversNotch == false`** (default): `toggleFullScreen(nil)` for Space-based
   fullscreen. AppKit handles the Space creation and reserves the menu-bar and
   notch area as safe inset. Same path SDL's
   `SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES=1` uses.
 
-The `coversNotch == true` path is the default because borderless plus
-`.hideMenuBar` engages display HDR without needing a Space: EDR follows the
-layer's PQ content, not the window's Space membership, which isn't the gating
-condition we once thought it was.
+Both paths support HDR: EDR follows the layer's PQ content, not the window's
+Space membership.
 
-**Backgrounding.** On a genuine resign (debounced 200 ms, so the key flicker of
-a controller connecting doesn't count), the window is `orderOut`'d entirely and
-the cursor is unhidden. The stream session keeps running: the decode pipeline
-and display layer are independent of window visibility (with presentation
-suppressed and decode gated while hidden; see Video pipeline). On the launcher
-side, the “Back to Stream” affordance calls `StreamSession.resumeWindow()` to
-bring it back. We deliberately do not auto-reorder-front on
-`NSApp.didBecomeActive`: that fired on every app activation (clicking the
-launcher, Dock-clicking) and yanked the user back into the stream whenever they
-tried to change a setting.
+On displays without a notch, “Use a full-screen Space” defaults off. On notched
+displays, “Keep picture below the camera” defaults off: a Space can't draw
+beside the camera, so the borderless cover fills the whole panel. Each display
+type keeps its own saved preference, and changes apply to the next stream.
 
-**`NSWindow.sharingType`** = `.none`. The stream window opts out of
-ScreenCaptureKit and `screencapture(1)`; third-party recording and conferencing
-apps see a black surface where the stream is. The threat-model rationale is in
+**Game Mode.** `LSSupportsGameMode = true` and the Games application category
+make Glimmer eligible. macOS may activate Game Mode in native fullscreen; the
+persistent per-app on/off control is Game Overlay → Settings → Game Mode. There
+is no app-local runtime setter. The borderless cover qualifies too: gamepolicyd
+starts a full-screen gaming session for it. See
+[Apple's Game Mode guide](https://support.apple.com/en-us/105118) and
+[`LSSupportsGameMode`](https://developer.apple.com/documentation/bundleresources/information-property-list/lssupportsgamemode).
+
+**Backgrounding.** A resign is debounced 200 ms so transient controller-connect
+focus changes do not hide the cover. The borderless cover is ordered out when
+the app deactivates; a native fullscreen Space stays with the window manager.
+Both release the pointer and update the launcher's “Back to Stream” affordance,
+including when another Glimmer window takes focus from a native Space.
+`onBackgroundedChanged` drives launcher state; the separate
+`onPresentationSuppressedChanged` follows actual visibility, occlusion, and
+minimization. A visible unfocused Space continues presenting. A hidden window
+suppresses presentation and eventually gates decode while audio and receive
+continue. Uncovering it resumes through the existing decoder resynchronization.
+
+“Back to Stream” calls `StreamSession.resumeWindow()` to bring the window back.
+App activation alone does not order it front: clicking the launcher to change a
+setting must not pull the player back into the stream.
+
+**`NSWindow.sharingType`** = `.none` is a best-effort hint for legacy capture
+clients. Modern ScreenCaptureKit ignores it, so the stream can appear in screen
+recordings and shares. It is not a privacy boundary; see
 [SECURITY.md](SECURITY.md#runtime-hardening).
 
 ## Crossing isolation: receive threads ↔ Swift actors
@@ -536,11 +628,11 @@ of this protocol identifies as). Three mode-0600 files under
 - `client-key.pem`
 - `client-uniqueid.txt`
 
-Not the keychain. The top-of-file comment in `Identity.swift` explains why: the
-data-protection keychain needs a provisioning profile a Developer ID app doesn't
-carry, and the login keychain would buy only encryption at rest for a LAN
-streaming identity. Files get mode 0600, atomic writes and a stat-after-chmod
-check (some FUSE and NFS backends silently ignore the chmod).
+The pairing identity remains file-backed. Provisioned capabilities now remove
+one historical obstacle to evaluating the data-protection keychain, but no
+identity migration is part of that signing change. Files get mode 0600, atomic
+writes and a stat-after-chmod check (some FUSE and NFS backends silently ignore
+the chmod). See SECURITY.md for the remaining same-user exposure.
 
 `Pairing.swift`: the PIN handshake, four HTTP rounds plus a final HTTPS
 `pairchallenge`. AES-128-ECB on raw 16-byte buffers (no padding; the protocol
@@ -583,15 +675,15 @@ set in `project.pbxproj`.
 
 Every build that gets installed goes through the same pipeline the shipped build
 does, so there is no ad hoc or Debug divergence in signing, notarization or
-library validation to chase. Without a Developer ID cert on the machine the
-pipeline falls back to an ad hoc Release build. `make app` and `make test` build
-Debug and never sign.
+library validation to chase. Developer ID signing and explicit app and helper
+profiles are required for installation. `make app` and `make test` build Debug
+and never sign; they need no profiles.
 
 | Target                   | What it does                                                                 |
 | ------------------------ | ---------------------------------------------------------------------------- |
 | `make app`               | Compile-only check, no signing or notarization                               |
 | `make test`              | Build + run the `GlimmerTests` bundle                                        |
-| `make verify`            | `swiftlint lint --strict` + `make test`, the gate `dist` runs                |
+| `make verify`            | Strict SwiftLint, release-tool tests and Swift tests; the gate `dist` runs   |
 | `make release`           | Notarized Release build, no install                                          |
 | `make` / `make install`  | `release` + copy to `/Applications/Glimmer.app`                              |
 | `make reinstall`         | `install` + quit and relaunch the running app                                |

@@ -295,7 +295,7 @@ extension AppModel {
                 // "Last played" is the stream-END time, read back as `Host.lastConnected`
                 // for the "last played N ago" label and the PC order. A failed connect
                 // stamps its attempt too, by design.
-                UserDefaults.standard.set(Date(), forKey: "glimmer.lastConnected.\(host.id)")
+                self.recordLastPlayed(hostID: host.id)
             }
         }
         // Wait out /cancel before probing. An established session also holds the chip

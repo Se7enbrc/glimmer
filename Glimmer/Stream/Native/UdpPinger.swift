@@ -12,6 +12,40 @@ import Network
 import Darwin
 
 enum UdpPinger {
+    /// Sunshine can send RTP from a different port than the ping destination.
+    /// Pin the resolved address instead, including the interface for scoped IPv6.
+    static func isExpectedPeer(_ source: sockaddr_storage, length: socklen_t,
+                               expected: sockaddr_storage, expectedLength: socklen_t) -> Bool {
+        guard source.ss_family == expected.ss_family else { return false }
+        return withUnsafeBytes(of: source) { sourceBytes in
+            withUnsafeBytes(of: expected) { expectedBytes in
+                switch Int32(source.ss_family) {
+                case AF_INET:
+                    guard length >= MemoryLayout<sockaddr_in>.size,
+                          expectedLength >= MemoryLayout<sockaddr_in>.size else { return false }
+                    return sourceBytes[4..<8].elementsEqual(expectedBytes[4..<8])
+                case AF_INET6:
+                    guard length >= MemoryLayout<sockaddr_in6>.size,
+                          expectedLength >= MemoryLayout<sockaddr_in6>.size else { return false }
+                    let scope = expectedBytes.loadUnaligned(fromByteOffset: 24, as: UInt32.self)
+                    let sourceScope = sourceBytes.loadUnaligned(fromByteOffset: 24, as: UInt32.self)
+                    return sourceBytes[8..<24].elementsEqual(expectedBytes[8..<24])
+                        && (scope == 0 || scope == sourceScope)
+                default:
+                    return false
+                }
+            }
+        }
+    }
+
+    /// Notes the first datagram from an address other than the PC's, once per receive loop:
+    /// a PC replying from another address would otherwise stream nothing, silently.
+    static func noteForeignPeer(_ noted: inout Bool, stream: String, category: String) {
+        guard !noted else { return }
+        noted = true
+        Diag.notice("\(stream) is ignoring datagrams from an address other than the PC's", category)
+    }
+
     struct SendFailureStreak {
         enum Edge: Equatable {
             case failed
@@ -164,6 +198,7 @@ enum UdpPinger {
             sa.sin6_family = sa_family_t(AF_INET6)
             sa.sin6_port = port.bigEndian
             v6.rawValue.withUnsafeBytes { _ = memcpy(&sa.sin6_addr, $0.baseAddress, 16) }
+            sa.sin6_scope_id = UInt32(v6.interface?.index ?? 0)
             withUnsafeBytes(of: &sa) { _ = memcpy(&storage, $0.baseAddress, MemoryLayout<sockaddr_in6>.size) }
             return (storage, socklen_t(MemoryLayout<sockaddr_in6>.size), AF_INET6)
         default:

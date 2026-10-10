@@ -1,0 +1,90 @@
+name: Release candidate
+
+# A same-repository pull request labelled `rc` gets a candidate for each head
+# once Verify and CodeQL pass. A new push restarts the wait for the new head.
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    # Waits on the required checks without secrets, so the cut runs last.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action == 'labeled' && github.event.label.name == 'rc' ||
+       github.event.action == 'synchronize' &&
+      contains(github.event.pull_request.labels.*.name, 'rc'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # A push or a new `rc` label replaces the wait; other labels never cancel it.
+    concurrency:
+      group:
+        rc-checks-${{ github.event.pull_request.number }}-${{
+        github.event.label.name || 'rc' }}
+      cancel-in-progress: true
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      security-events: read
+    steps:
+      - name: Check out the pull request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Wait for Verify and CodeQL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run:
+          python3 scripts/release-candidate.py --ci-sha "$HEAD_SHA" --pr
+          "$PR_NUMBER" --wait-only
+
+  cut:
+    needs: checks
+    runs-on: ubuntu-latest
+    concurrency:
+      group: rc-cut
+      cancel-in-progress: false
+    environment: rc-cut
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Mint a scoped release token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.GLIMMER_RC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GLIMMER_RC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+          permission-actions: write
+          permission-pull-requests: write
+          permission-checks: read
+          permission-security-events: read
+
+      - name: Check out the labelled head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Cut the candidate
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          python3 scripts/release-candidate.py --ci-sha "$HEAD_SHA" --pr "$PR_NUMBER"

@@ -53,19 +53,21 @@ tests and makes the app worse is a regression with a green check mark.
 
 ## Setup and commands
 
-Xcode 27 or later: the build needs the macOS 27 SDK, while the app still runs on
-macOS 26.
+Xcode 26.6 or later. Hosted verification, CodeQL and releases all use Xcode 26.6
+on macOS 26. Keep their toolchains aligned; the deployment target is 26.0.
 
 ```bash
-brew install swiftlint trufflehog pre-commit
-pre-commit install && pre-commit install --hook-type pre-push
+brew install python swiftlint actionlint trufflehog pre-commit
+pre-commit install
 ```
 
 - `make app`: Debug build, unsigned. A compile check.
 - `make test`: the unit tests. Hostless, no PC needed.
-- `make verify`: `swiftlint lint --strict` plus `make test`. This is the gate.
-  It passes before you call anything done, and `make dist` runs it. It does not
-  fail on compiler warnings, so read the build log: there must be none.
+- `make verify`: Actionlint, strict SwiftLint, release-tool tests, `make test`
+  and protocol fuzz tests under AddressSanitizer. This is the gate: hosted
+  Verify runs it on every push and `make dist` runs it, so nothing is done until
+  it passes there. It does not fail on compiler warnings, so read the build log:
+  there must be none.
 - `make dev`: tests, then the Release build installed and relaunched. On a Mac
   with a Developer ID it signs and notarizes on the way, as every install does.
 
@@ -91,6 +93,30 @@ Signing material lives outside the repo, in
 `~/Library/Keychains/developer-id.keychain-db` and `~/.config/developer-id/`.
 `make app`, `make test` and `make verify` never touch it. Never read, print,
 copy or change it.
+
+Release candidates require successful hosted Verify and all three CodeQL jobs
+for the exact reviewed commit before any candidate build. Build candidates on
+the dedicated `release-candidate` branch through the Release workflow, then
+install and manually test that published artifact before merging. Promotion
+reuses its exact DMG and ZIP; never rebuild accepted bytes. An enrolled tester
+keeps `GlimmerUpdateChannel=rc` across releases. See docs/RELEASE.md for the
+complete procedure and protected-environment requirements.
+
+Hosted releases use the approved copies in Doppler project `glimmer`, config
+`release`, synced to the protected GitHub `release` environment. The workflow
+loads these only for signing and publication. Do not fetch or print cloud secret
+values for debugging. Transferring or replacing signing material requires the
+maintainer's explicit authorization; see RELEASE.md for setup and rotation.
+
+Approved provisioning profiles are separate files under
+`~/.config/glimmer/profiles/`: `Glimmer_Developer_ID.provisionprofile` and
+`Glimmer_Network_Helper_Developer_ID.provisionprofile`. The Makefile uses these
+paths by default and validates and embeds each profile in its own bundle. Normal
+builds may read and embed these profiles; do not print decoded profile contents
+or commit profiles. App capabilities are Head Pose, Spatial Audio Profile and
+Enhanced Security; the helper uses Network Topology Observation. Missing or
+expired profiles stop installation. See RELEASE.md to renew them; do not replace
+certificates or keys to solve a profile problem.
 
 ## Code standards
 
@@ -140,7 +166,10 @@ Each of these gets a pull request sent back.
 These are settled. A pull request is not the place to reopen them.
 
 - The renderer is `AVSampleBufferDisplayLayer`. Not Metal.
-- Glimmer does not use or recommend macOS Game Mode.
+- Fullscreen defaults to a borderless window covering the whole panel, notch
+  included; a native full-screen Space is opt-in. Preserve saved fullscreen
+  preferences. macOS owns the Game Mode toggle; never use private APIs or
+  rewrite the signed Info.plist to control it.
 - The Wi-Fi helper, which parks awdl0, is offered at first open on every Mac,
   whatever the network route, and again each launch until it's on or declined
   for good. awdl0 wrecks streams; deferring, gating, burying or hiding the offer
@@ -246,8 +275,9 @@ anyone else:
   `Glimmer/Info.plist` with your appcast and your key (`make sparkle-keys`).
   Left as they are, the fork keeps checking Glimmer's feed: it either installs
   Glimmer over itself or rejects every update.
-- **Sign as yourself.** The Makefile uses whatever Developer ID is in your
-  keychain. Without one, builds are ad hoc and not notarized.
+- **Sign as yourself.** Installed builds require your Developer ID and explicit
+  app and helper provisioning profiles. Unsigned compile checks and tests need
+  neither. See RELEASE.md for the required capabilities.
 - **Keep `LICENSE` and `CREDITS.md`**, including the moonlight-common-c credit.
 - **A change offered back starts as an issue** the maintainer agrees to; a pull
   request without one is closed. Then it comes as a pull request from the fork
@@ -266,8 +296,8 @@ anyone else:
 - UI that nobody ran and looked at. Layout that floats, clips, jumps or
   stretches. Placeholder copy, em dashes, "host" in copy.
 - Engine, pacing or bitrate changes without telemetry.
-- A Metal renderer, Game Mode, web views, Electron or cross-platform
-  abstractions.
+- A Metal renderer, private Game Mode controls, web views, Electron or
+  cross-platform abstractions.
 - New dependencies for what the platform already does.
 - Speculative abstractions, dead or commented-out code, `TODO`s with no issue.
 - Tool or agent attribution anywhere, secrets anywhere, or `--no-verify`.

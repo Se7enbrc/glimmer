@@ -21,49 +21,56 @@ final class ControllerMonitor {
     private var observers: [NSObjectProtocol] = []
     private var engaged: [ObjectIdentifier: GCController] = [:]
     private var hidRetained = false
-    private var priorBackgroundMonitoring = false
+    private let backgroundEventsID = UUID()
+    private var started = false
     private let isStreaming: () -> Bool
 
     init(isStreaming: @escaping () -> Bool) { self.isStreaming = isStreaming }
 
     func start() {
+        guard !started else { return }
+        started = true
         HIDGamepadManager.shared.retain()
         GCController.startWirelessControllerDiscovery {}
         // Receive controller input even though the Settings window - not a
         // game window - is key. Without this, GameController appears to deliver
         // nothing to a non-game foreground context (GC events stay 0).
-        priorBackgroundMonitoring = GCController.shouldMonitorBackgroundEvents
-        GCController.shouldMonitorBackgroundEvents = true
+        ControllerBackgroundEvents.setEnabled(true, for: backgroundEventsID)
         let nc = NotificationCenter.default
         for name in [NSNotification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
             observers.append(nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.engage() }
             })
         }
-        // Raw-HID side-channel for the DualSense center buttons (Options /
-        // Create / Mute) that GameController doesn't deliver - same source the
-        // stream uses. ONLY when the user has opted in (gates the Input
-        // Monitoring prompt). Refresh the view when they change.
-        // Don't install during a live stream: onChange is a single-owner slot the
-        // stream's ControllerForwarder holds, so grabbing it here would drop the
-        // stream's center-button uplink until a resync.
-        if DualSenseHID.isEnabled, !isStreaming() {
-            DualSenseHID.shared.onChange = { [weak self] _ in self?.revision &+= 1 }
-            DualSenseHID.shared.retain()
-            hidRetained = true
-        }
+        engageHID()
         engage()
     }
 
-    private func engage() {
+    func streamingChanged(controllers: [GCController] = GCController.controllers()) {
+        // The stream replaces these single-owner handlers and clears them before isStreaming turns false.
+        engaged.removeAll()
+        engageHID()
+        engage(controllers: controllers)
+    }
+
+    private func engageHID() {
+        guard DualSenseHID.isEnabled, !isStreaming() else { return }
+        DualSenseHID.shared.onChange = { [weak self] _ in self?.revision &+= 1 }
+        if !hidRetained {
+            DualSenseHID.shared.retain()
+            hidRetained = true
+        }
+    }
+
+    private func engage(controllers: [GCController] = GCController.controllers()) {
         guard !isStreaming() else { revision &+= 1; return }
         DualSenseRouting.shared.syncControllers()
-        let live = Set(GCController.controllers().map(ObjectIdentifier.init))
+        let live = Set(controllers.map(ObjectIdentifier.init))
         for id in engaged.keys where !live.contains(id) {
             engaged[id]?.extendedGamepad?.valueChangedHandler = nil
             engaged[id] = nil
         }
-        for controller in GCController.controllers() {
+        for controller in controllers {
             let id = ObjectIdentifier(controller)
             guard engaged[id] == nil else { continue }
             controller.extendedGamepad?.valueChangedHandler = { [weak self] pad, _ in
@@ -78,8 +85,10 @@ final class ControllerMonitor {
     }
 
     func stop() {
+        guard started else { return }
+        started = false
         HIDGamepadManager.shared.release()
-        GCController.shouldMonitorBackgroundEvents = priorBackgroundMonitoring
+        ControllerBackgroundEvents.setEnabled(false, for: backgroundEventsID)
         // A stream that started meanwhile owns these slots now; leave them to it.
         if !isStreaming() {
             for (_, controller) in engaged { controller.extendedGamepad?.valueChangedHandler = nil }
@@ -101,6 +110,24 @@ final class ControllerMonitor {
 enum ControllerDiscovery {
     static func stopIfIdle(isStreaming: Bool, stop: () -> Void) {
         if !isStreaming { stop() }
+    }
+}
+
+/// Background delivery is process-wide; overlapping consumers must restore only the first baseline.
+@MainActor
+enum ControllerBackgroundEvents {
+    private static var owners: Set<UUID> = []
+    private static var priorValue = false
+
+    static func setEnabled(_ enabled: Bool, for owner: UUID) {
+        if enabled {
+            guard owners.insert(owner).inserted else { return }
+            if owners.count == 1 { priorValue = GCController.shouldMonitorBackgroundEvents }
+            GCController.shouldMonitorBackgroundEvents = true
+        } else {
+            guard owners.remove(owner) != nil, owners.isEmpty else { return }
+            GCController.shouldMonitorBackgroundEvents = priorValue
+        }
     }
 }
 
@@ -143,6 +170,7 @@ struct ControllerInputTest: View {
             monitor?.stop()
             monitor = nil
         }
+        .onChange(of: model.isStreaming) { _, _ in monitor?.streamingChanged() }
     }
 
     /// Live "is anything arriving?" readout (re-read by the parent timeline).
@@ -324,6 +352,8 @@ private struct FlowChips: View {
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .fill(chip.1 ? Color.accentColor : Color.secondary.opacity(0.12))
                     )
+                    .accessibilityLabel(chip.0)
+                    .accessibilityValue(chip.1 ? "Pressed" : "Released")
             }
         }
     }
@@ -357,6 +387,10 @@ private struct StickPad: View {
             .frame(width: size, height: size)
             Text(label).font(.caption2).foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label == "L" ? "Left stick" : "Right stick")
+        .accessibilityValue("Horizontal \(Int((x * 100).rounded()))%, vertical \(Int((y * 100).rounded()))%, "
+                            + (clicked ? "pressed" : "released"))
     }
 }
 

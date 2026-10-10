@@ -201,7 +201,7 @@ final class VideoDepacketizer {
                     return
                 }
             }
-        } else if firstPacket && Self.isIdrFrameStart(Array(payload), hevc: isHEVC) {
+        } else if firstPacket && Self.isIdrFrameStart(payload, hevc: isHEVC) {
             // H.264/HEVC: the NALs decide IDR, not the header's type byte, which
             // moonlight-common-c trusts only for AV1 (c:861-868). No last-packet cut:
             // Annex-B tolerates the FEC zero padding.

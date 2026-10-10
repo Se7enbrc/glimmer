@@ -80,6 +80,35 @@ actor SharedTeardown {
     }
 }
 
+/// Only /cancel is serialized with the next launch; a hung /launch never holds this gate.
+actor HostLaunchMutations {
+    private var epochs: [String: Int] = [:]
+    private var cancellations: [String: Task<Void, Never>] = [:]
+
+    func beginLaunch(for pc: String) async throws -> Int {
+        while let pending = cancellations[pc] {
+            await pending.value
+            if cancellations[pc] == pending { cancellations[pc] = nil }
+        }
+        try Task.checkCancellation()
+        epochs[pc, default: 0] += 1
+        return epochs[pc, default: 0]
+    }
+
+    func cancelIfCurrent(pc: String, epoch: Int, operation: @escaping @Sendable () async -> Void) async {
+        while let pending = cancellations[pc] {
+            await pending.value
+            if cancellations[pc] == pending { cancellations[pc] = nil }
+        }
+        guard epochs[pc, default: 0] == epoch else { return }
+        // Publish before suspending so a newer launch waits through the whole network request.
+        let task = Task { await operation() }
+        cancellations[pc] = task
+        await task.value
+        if cancellations[pc] == task { cancellations[pc] = nil }
+    }
+}
+
 private actor AttemptResult<Value: Sendable> {
     private var result: Result<Value, Error>?
     private var waiter: CheckedContinuation<Result<Value, Error>, Never>?

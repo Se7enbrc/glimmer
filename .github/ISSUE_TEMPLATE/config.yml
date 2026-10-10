@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Help and setup
+    url: https://github.com/Se7enbrc/glimmer/blob/main/.github/SUPPORT.md
+    about: Setup guides, troubleshooting and how to report a problem.
   - name: Security vulnerability
     url: https://github.com/Se7enbrc/glimmer/security/advisories/new
     about:

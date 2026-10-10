@@ -30,10 +30,14 @@ extension AudioDecoder {
     func initDecoderCore(channelCount chCount: Int, sampleRate: Int32,
                          streams strms: Int32, coupledStreams coupled: Int32,
                          samplesPerFrame spf: Int, mapping map: [UInt8]) -> Int32 {
+        let sampledRoute = AudioOutputRoute.current()
         stateLock.lock()
         defer { stateLock.unlock() }
         decoder = nil
+        outputRoute = sampledRoute ?? AudioOutputRoute()
+        packetSplice = AudioPacketSplice()
         engineRestartGeneration &+= 1
+        outputDiagnosticRequests = AudioOutputDiagnosticRequests()
         engineRestartRetries = 0
         primeEdgeRetryAtNanos = 0
         primeEdgeFailureStreak = false
@@ -196,7 +200,7 @@ extension AudioDecoder {
         // The ε correction to frames→ms is ppm-negligible.
         guard gl_objc_try({
             self.engine.connect(self.playerNode, to: self.varispeed, format: fmt)
-            self.engine.connect(self.varispeed, to: self.engine.mainMixerNode, format: fmt)
+            self.connectOutputGraph(format: fmt, route: self.outputRoute)
         }) else {
             Diag.error("audio graph connect raised (device mid-transition?) - init failed", "Stream.Audio")
             return false
@@ -218,6 +222,13 @@ extension AudioDecoder {
     /// graph, a device mid-teardown) RAISE instead of throwing. Returns nil once
     /// running (stream mute re-applied), else what failed. Caller holds `stateLock`.
     func startEngineSafely() -> String? {
+        // A failed route change may leave nodes disconnected; starting alone cannot repair them.
+        if outputGraphNeedsReconnect {
+            guard let inputFormat else { return "audio graph has no input format" }
+            guard gl_objc_try({
+                self.connectOutputGraph(format: inputFormat, route: self.outputRoute)
+            }) else { return "audio graph reconnect raised NSException" }
+        }
         var startError: Error?
         let noRaise = gl_objc_try {
             do { try self.engine.start() } catch { startError = error }
@@ -261,6 +272,7 @@ extension AudioDecoder {
         guard !isShutdown else { return }
         isShutdown = true
         engineRestartGeneration &+= 1
+        outputDiagnosticRequests = AudioOutputDiagnosticRequests()
         // Quiesce the meter's EVIDENCE machinery BEFORE stopping the node:
         // stop() flushes a completion-handler burst for the standing cushion
         // (6-30 buffers), and un-gated its last completion minted a synthetic
@@ -410,6 +422,7 @@ extension AudioDecoder {
             + "slept/vanished?) - rebuilding: node stop → engine ensure-running "
             + "→ re-prime; route \(route, privacy: .private)", "Stream.Audio")
         playerNode.stop()
+        packetSplice = AudioPacketSplice()
         if !engine.isRunning {
             if let failure = startEngineSafely() {
                 Diag.error("audio engine restart in stall recovery FAILED: \(failure, privacy: .private)", "Stream.Audio")
@@ -433,44 +446,38 @@ extension AudioDecoder {
         audioMeterLock.unlock()
     }
 
-    private func handleEngineConfigurationChange() {
+    func handleEngineConfigurationChange() {
+        // Route reads are blocking HAL IPC: sample before taking the decoder lock.
+        let sampled = AudioOutputRoute.current()
         stateLock.lock()
         defer { stateLock.unlock() }
         guard !isShutdown, let fmt = inputFormat else { return }
         let newOutputFormat = engine.outputNode.outputFormat(forBus: 0)
         let formatMoved = lastOutputFormat.map { $0.sampleRate != newOutputFormat.sampleRate
             || $0.channelCount != newOutputFormat.channelCount } ?? true
+        // A device mid-transition can't answer; keep the last route until it can.
+        let route = sampled ?? outputRoute
+        outputRoute = route
+        let spatialMoved = spatialOutputType != route.spatialOutput(sourceChannels: Int(fmt.channelCount))
+        let graphMoved = formatMoved || spatialMoved || outputGraphNeedsReconnect
         lastOutputFormat = newOutputFormat
         let wasRunning = engine.isRunning
-        if formatMoved {
-            // The output route's format changed: stop the player + reconnect the
-            // graph at our (unchanged) decode format - the mixer/output handle SRC
-            // to the new hardware rate. stop() here fires queued completions on the
-            // meter path (no AV calls), and we hold stateLock so no decode races.
-            //
-            // EVIDENCE GATE (audit remainder, 2026-08-26): that completion burst
-            // is the SAME one shutdown() and the stall recovery fire - and
-            // un-gated, its last completion minted a SYNTHETIC under-run on
-            // every mid-stream output-device change (AirPods connect/disconnect,
-            // HDMI unplug, DAC removal): target ratcheted +10ms, floor
-            // EWMA-pulled, both PERSISTED per host - audio latency quietly
-            // crept across sessions for anyone who switches audio devices (the
-            // disguised-permanent-pin class, in the one stop() this file had
-            // left un-gated). Raise the same `meterRecovering` latch the stall
-            // recovery uses; the re-arm below forces the next schedule's arm
-            // edge, which clears it.
+        if graphMoved {
+            // Stopping fires queued completions; suppress synthetic underruns while reconnecting.
             audioMeterLock.lock()
             meterRecovering = true
             audioMeterLock.unlock()
             playerNode.stop()
+            engine.stop()
+            packetSplice = AudioPacketSplice()
             // A device mid-transition can RAISE here; a nil baseline makes the next
             // change notification read "moved" and reconnect.
             let connected = gl_objc_try {
-                self.engine.connect(self.varispeed, to: self.engine.mainMixerNode, format: fmt)
+                self.connectOutputGraph(format: fmt, route: route)
             }
             if !connected {
                 Diag.error("audio graph reconnect after config change raised (device "
-                    + "mid-transition?) - reconnecting on the next change", "Stream.Audio")
+                    + "mid-transition?) - retrying with engine recovery", "Stream.Audio")
                 lastOutputFormat = nil
             }
         }
@@ -491,7 +498,10 @@ extension AudioDecoder {
         let nowRunning = engine.isRunning
         audioMeterLock.lock()
         engineRunning = nowRunning
-        if formatMoved || (!wasRunning && nowRunning) {
+        if graphMoved || (!wasRunning && nowRunning) {
+            // The discarded route's pending drain cannot teach the replacement graph's cushion.
+            pendingUnderrunTargetMs = nil
+            underrunArrivalGapNanos = 0
             primed = false
             playoutStarted = false
             playoutDrained = false
@@ -500,5 +510,6 @@ extension AudioDecoder {
         audioMeterLock.unlock()
         Diag.notice("audio engine config change handled "
             + "(format \(formatMoved ? "moved" : "same"), running \(nowRunning))", "Stream.Audio")
+        queueOutputDiagnosticLocked()
     }
 }

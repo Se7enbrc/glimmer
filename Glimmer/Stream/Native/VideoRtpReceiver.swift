@@ -1,29 +1,9 @@
 //
 //  VideoRtpReceiver.swift
 //
-//  Owns the video UDP flow for the Swift-native backend: ONE UNCONNECTED POSIX
-//  UDP socket (bind a wildcard ephemeral local port; NEVER connect()) used for
-//  BOTH the periodic ping (sendto host:VideoPortNumber - punches NAT + tells the
-//  host where to send video) and RTP receive (recvfrom from ANY source). A
-//  *connected* NWConnection silently drops video because Sunshine sources RTP
-//  from a port != VideoPortNumber and a connected UDP flow filters by the full
-//  4-tuple - that was the "no frames render" bug. Source: VideoStream.c +
-//  PlatformSockets.c (bindUdpSocket = bind only; recvUdpSocket = recvfrom NULL
-//  src).
-//
+//  One unconnected socket sends keepalives and receives video from the resolved PC.
+//  Sunshine can send from a different source port, so connecting the socket would discard valid video.
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
-//
-//  PING (VideoStream.c:54-82): a 20-byte SS_PING, SETUP-video's 16-byte X-SS-Ping-Payload then a big-endian
-//  sequence number from 1, on EnvSignalController's steady cadence (75ms Wi-Fi keepalive, 500ms relaxed).
-//  Sunshine sends no video until it has one, and matches only the payload (we set ML_FF_SESSION_ID_V1).
-//
-//  RECEIVE (VideoStream.c:85-236): drop runts, open SS_ENC_VIDEO packets (only when the PC requires
-//  it) with VideoDecryptor, and hand the rest to RtpVideoQueue, which host-byteswaps the RTP header,
-//  runs FEC and feeds the depacketizer → VideoSink.
-//
-//  Teardown is bounded: stop() only raises the stop flag. The receive loop polls it every 100ms
-//  (SO_RCVTIMEO) and the ping thread every 75ms; each holds the receiver while it uses the fd,
-//  so deinit closes it once, after both have exited.
 
 import Foundation
 import Network
@@ -63,7 +43,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     private let recvQueue = DispatchQueue(
         label: "io.ugfugl.Glimmer.videortp", qos: .userInteractive)
     /// Unconnected bound UDP socket fd: bind to a wildcard ephemeral local port,
-    /// recvfrom from ANY source. A connected NWConnection would drop video that
+    /// Receive from the resolved PC on any source port. A connected socket would drop video that
     /// Sunshine sources from a port != videoPort.
     private var fd: Int32 = -1
     /// Precomputed destination (host:videoPort) for the ping sendto.
@@ -241,7 +221,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
         fd = sock
-        Diag.info("NativeVideo UDP socket ready (unconnected, recvfrom-any) → \(host, privacy: .private):\(videoPort)",
+        Diag.info("NativeVideo UDP socket ready (peer IP filtered, any source port) → \(host, privacy: .private):\(videoPort)",
                   Self.cat)
     }
 
@@ -287,22 +267,19 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             let batch = DatagramBatch(capacity: 32, stride: bufSize)
             var batched = true
             var receiveFailed = false
+            var foreignPeerNoted = false
             while let self, !self.interrupted.load(ordering: .relaxed) {
-                let count: Int
-                if batched {
-                    count = batch.receive(from: sock)
-                    for index in 0..<max(count, 0) {
-                        guard !self.interrupted.load(ordering: .relaxed) else { break }
-                        let datagram = batch.datagram(index)
-                        guard datagram.length > 0 else { continue }
-                        self.receive(datagram.bytes, count: datagram.length, decryptor: decryptor)
+                let count = batched ? batch.receive(from: sock) : batch.receiveOne(from: sock)
+                for index in 0..<max(count, 0) {
+                    guard !self.interrupted.load(ordering: .relaxed) else { break }
+                    guard batch.isExpectedPeer(at: index, expected: self.destAddr,
+                                               expectedLength: self.destAddrLen) else {
+                        UdpPinger.noteForeignPeer(&foreignPeerNoted, stream: "Video", category: Self.cat)
+                        continue
                     }
-                } else {
-                    // Fallback: one recvfrom per datagram, polling the stop flag on the same 100ms timeout.
-                    count = recvfrom(sock, batch.storage, batch.stride, 0, nil, nil)
-                    if count > 0, !self.interrupted.load(ordering: .relaxed) {
-                        self.receive(batch.storage, count: min(count, batch.stride), decryptor: decryptor)
-                    }
+                    let datagram = batch.datagram(index)
+                    guard datagram.length > 0 else { continue }
+                    self.receive(datagram.bytes, count: datagram.length, decryptor: decryptor)
                 }
                 if count < 0 {
                     let err = errno

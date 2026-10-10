@@ -57,8 +57,10 @@ struct AudioPrimeEdgeSafetyTests {
         #expect(decoder.engine.isRunning)
         #expect(decoder.primeEdgeFailureStreak)
         #expect(decoder.engineRestartRetries == 0)
+        // Pin the gate closed so scheduling delays cannot turn this into a later retry.
+        decoder.primeEdgeRetryAtNanos = .max
         #expect(!decoder.startPlayoutAtPrimeEdge())
-        #expect(decoder.primeEdgeRetryAtNanos == firstRetry)
+        #expect(decoder.primeEdgeRetryAtNanos == .max)
         #expect(decoder.engineRestartRetries == 0)
         decoder.primeEdgeRetryAtNanos = 0
         #expect(!decoder.startPlayoutAtPrimeEdge())
@@ -67,11 +69,12 @@ struct AudioPrimeEdgeSafetyTests {
         #expect(decoder.engineRestartRetries == 0)
         // Repair the player so a premature play() would succeed, proving the
         // spacing gate skips the call itself, not just its error breadcrumb.
+        decoder.primeEdgeRetryAtNanos = .max
         decoder.engine.attach(decoder.playerNode)
         decoder.engine.connect(decoder.playerNode, to: decoder.engine.mainMixerNode, format: format)
         #expect(!decoder.startPlayoutAtPrimeEdge())
         #expect(!decoder.playerNode.isPlaying)
-        #expect(decoder.primeEdgeRetryAtNanos == secondRetry)
+        #expect(decoder.primeEdgeRetryAtNanos == .max)
         decoder.primeEdgeRetryAtNanos = 0
         #expect(decoder.startPlayoutAtPrimeEdge())
         #expect(!decoder.primeEdgeFailureStreak)
@@ -98,6 +101,7 @@ struct AudioPrimeEdgeSafetyTests {
         #expect(!decoder.startPlayoutAtPrimeEdge())
         let firstRetry = decoder.primeEdgeRetryAtNanos
         let retriesAfterFirst = decoder.engineRestartRetries
+        decoder.primeEdgeRetryAtNanos = .max
         #expect(!decoder.startPlayoutAtPrimeEdge())
         let errorsAfter = LogStore.shared.snapshot().filter {
             $0.category == "Stream.Audio" && $0.message.contains("at prime edge FAILED")
@@ -105,7 +109,7 @@ struct AudioPrimeEdgeSafetyTests {
         #expect(errorsAfter - errorsBefore == 1)
         #expect(decoder.engineRestartRetries == 1)
         #expect(decoder.engineRestartRetries == retriesAfterFirst)
-        #expect(decoder.primeEdgeRetryAtNanos == firstRetry)
+        #expect(decoder.primeEdgeRetryAtNanos == .max)
         #expect(firstRetry != 0)
         #expect(decoder.primeEdgeFailureStreak)
         // A later packet retries the engine without restarting the ladder.

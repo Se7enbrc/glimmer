@@ -22,10 +22,8 @@ struct GeneralPane: View {
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     @AppStorage("launchMinimized") private var launchMinimized: Bool = false
 
-    /// True when macOS has the login item but it's pending the user's approval
-    /// in System Settings ▸ Login Items - surfaced inline so the user isn't left
-    /// with a toggle that silently does nothing at the next reboot.
-    @State private var loginItemNeedsApproval = false
+    /// Keep failed registration visible beside the saved intent until it succeeds.
+    @State private var loginItemIssue: LoginItemManager.RegistrationIssue?
 
     /// Defer the SMAppService register/unregister off the SwiftUI `.onChange`
     /// transaction - running it inline (synchronous, XPC-backed) mid-update
@@ -35,7 +33,7 @@ struct GeneralPane: View {
         DispatchQueue.main.async {
             let status = LoginItemManager.apply(launchAtLogin: launchAtLogin, minimized: minimized)
             LoginItemManager.syncRelaunchOnLogin(launchAtLogin)
-            loginItemNeedsApproval = (status == .requiresApproval)
+            loginItemIssue = LoginItemManager.registrationIssue(for: status)
         }
     }
 
@@ -87,17 +85,25 @@ struct GeneralPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityLabel("Open in the menu bar only")
                     .onChange(of: launchMinimized) { _, on in
                         scheduleLoginItemRegistration(launchAtLogin: launchAtLogin, minimized: on)
                     }
                 }
-                if loginItemNeedsApproval {
+                if let loginItemIssue {
                     HStack(spacing: 8) {
-                        Label("macOS needs you to approve Glimmer in Login Items, "
-                            + "or it won't start at the next reboot.",
+                        Label(loginItemIssue == .failed
+                              ? "Couldn't update Open at login. Try again."
+                              : "macOS needs you to approve Glimmer in Login Items, "
+                                + "or it won't start at the next reboot.",
                               systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote).foregroundStyle(.orange)
                         Spacer()
+                        if loginItemIssue == .failed {
+                            Button("Try Again") {
+                                scheduleLoginItemRegistration(launchAtLogin: launchAtLogin, minimized: launchMinimized)
+                            }
+                        }
                         Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
                     }
                 }
@@ -110,6 +116,7 @@ struct GeneralPane: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityLabel("Play sound on the PC")
             }
             Section {
                 // Picker sourced from the selected host's announced app
@@ -139,8 +146,11 @@ struct GeneralPane: View {
     /// toggle off, a pending approval shows the warning. Deferred like the
     /// registration above, since reconcile may re-register.
     private func refreshLoginItemState() {
-        DispatchQueue.main.async {
-            loginItemNeedsApproval = (LoginItemManager.reconcile() == .requiresApproval)
+        Task { @MainActor in
+            let status = await LoginItemManager.reconcile()
+            if status != nil || loginItemIssue != .failed {
+                loginItemIssue = LoginItemManager.registrationIssue(for: status)
+            }
         }
     }
 }
@@ -281,6 +291,7 @@ struct QualityPane: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityLabel("Smooth out Wi-Fi stutter while streaming")
                 .help("Installs a small helper that pauses AirDrop's radio for each stream.")
                 if case .requiresApproval = awdl.state {
                     HStack(spacing: 8) {
@@ -314,18 +325,23 @@ struct QualityPane: View {
                 Text("Brighter highlights and deeper color when the PC and this display both support HDR.")
             }
 
-            // Shown only on a notched panel for a full-screen stream: elsewhere the
-            // toggle used to silently switch the fullscreen mechanism to a macOS
-            // Space (issue #84). Default off: covering the whole panel is the stance.
-            if model.currentDisplayHasNotch, model.effectiveDisplayMode == .fullScreen {
+            if model.effectiveDisplayMode == .fullScreen {
                 Section {
-                    Toggle("Keep picture below the camera", isOn: Binding(
-                        get: { !model.streamCoversNotch }, set: { model.streamCoversNotch = !$0 }))
-                        .toggleStyle(.switch)
-                        .help("Uses a macOS full-screen space that stops short of the notch. "
-                            + "Off covers the whole panel, so a panel-native stream renders 1:1.")
+                    if model.currentDisplayHasNotch {
+                        Toggle("Keep picture below the camera", isOn: Binding(
+                            get: { !model.streamCoversNotch }, set: { model.streamCoversNotch = !$0 }))
+                            .toggleStyle(.switch)
+                            .help("Uses a macOS full-screen Space below the notch. Off covers the whole panel.")
+                    } else {
+                        Toggle("Use a full-screen Space", isOn: $model.streamUsesFullScreenSpace)
+                            .toggleStyle(.switch)
+                            .help("Opens the next stream in a separate macOS Space. Off covers the current desktop.")
+                    }
                 } footer: {
-                    Text("Off, a thin strip of the picture hides behind the notch.")
+                    if model.currentDisplayHasNotch {
+                        Text("Off, a thin strip of the picture hides behind the notch.")
+                    }
+                    Text("macOS may turn on Game Mode. Change it in Game Overlay › Settings › Game Mode.")
                 }
             }
 
@@ -338,11 +354,8 @@ struct QualityPane: View {
                     + "the shortcut in Settings › Input.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                // Overlay position lives here (not a right-click menu - the
-                // InputForwarder claims mouse events mid-stream). Position +
-                // preset + custom rows stay editable even when the overlay is
-                // off, so it's gating display, not configuration.
-                Picker("Overlay position", selection: $model.streamStatsCorner) {
+                // Configuration stays available while the HUD is hidden.
+                Picker("Position", selection: $model.streamStatsCorner) {
                     ForEach(StatsOverlayCorner.allCases, id: \.self) { corner in
                         Text(corner.displayName).tag(corner)
                     }
@@ -377,8 +390,6 @@ struct QualityPane: View {
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-
-            // No Experiments section yet. Don't emit an empty `Section { } header: { Label("Experiments", systemImage: "flask") }` — SwiftUI's grouped Form renders the Section header even over an EmptyView body, leaving a dangling flask card. Add the Section back together with the first real dial.
         }
         .formStyle(.grouped)
         .animation(reduceMotion ? nil : .snappy, value: model.qualityPreset)
@@ -479,7 +490,7 @@ struct QualityPane: View {
         // survived microRows growing to 7 with zero signal.
         switch preset {
         case .minimal:
-            return "\(StatsOverlayDefaults.minimalRows.count) metrics: render FPS, latency, bitrate"
+            return "\(StatsOverlayDefaults.minimalRows.count) metrics: FPS, latency, bitrate, codec"
         case .micro:
             return "\(StatsOverlayDefaults.microRows.count) metrics: frame rate, network, bitrate"
         case .extended: return "All stream metrics (not audio or Mac vitals)"
@@ -529,6 +540,7 @@ struct StatsCustomRowsPicker: View {
             (.controllerBattery, "Controller battery")
         ]),
         ("Config", [
+            (.codec, "Video codec"),
             (.audio, "Audio configuration")
         ])
     ]

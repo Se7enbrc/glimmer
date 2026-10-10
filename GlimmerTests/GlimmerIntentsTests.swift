@@ -58,6 +58,32 @@ struct GlimmerIntentsTests {
         #expect(!AppModel.isLiveStream(nil, on: host, live: nil))
     }
 
+    @MainActor @Test func requestedPCAppSurvivesASelectionChangeDuringShortcut() throws {
+        let requested = pc(id: "requested", apps: ["Desktop", "Steam"])
+        let other = pc(id: "other", apps: ["Other Desktop", "Other Game"])
+        let model = AppModel()
+        model.selectedHost = other
+        model.hostLiveStatus = HostLiveStatus(hostID: other.id, state: .streamingApp(name: "Other Game"),
+                                             capturedAt: Date())
+
+        let target = try #require(model.heroTargetApp(on: requested))
+
+        #expect(requested.apps.contains { $0.id == target.id && $0.name == target.name })
+        #expect(model.heroTargetApp?.name == "Other Game")
+    }
+
+    @MainActor @Test func shortcutUsesOnlyAFreshRunningAppFromItsRequestedPC() {
+        let requested = pc(id: "requested", apps: ["Desktop", "Shortcut Test App"])
+        let model = AppModel()
+        model.hostLiveStatus = HostLiveStatus(hostID: requested.id, state: .streamingApp(name: "Shortcut Test App"),
+                                             capturedAt: Date())
+        #expect(model.heroTargetApp(on: requested)?.name == "Shortcut Test App")
+        model.hostLiveStatus = HostLiveStatus(hostID: requested.id, state: .streamingApp(name: "Shortcut Test App"),
+                                             capturedAt: Date(timeIntervalSinceNow: -HostLiveStatus.stale - 1))
+        let expected = requested.apps.first { $0.name == model.defaultLaunchApp } ?? requested.apps[0]
+        #expect(model.heroTargetApp(on: requested) == expected)
+    }
+
     private func sample(_ state: HostLiveStatus.State = .streamingApp(name: "Steam"), age: TimeInterval,
                         before now: Date) -> HostLiveStatus {
         HostLiveStatus(hostID: "pc-1", state: state, rttMs: 3, sunshineVersion: nil,

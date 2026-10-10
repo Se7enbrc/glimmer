@@ -1,302 +1,287 @@
-//
-//  StatsOverlayLayer.swift
-//
-//  The in-stream stats overlay compositor: a CALayer stack that renders the
-//  StreamStatsSnapshot rows (icon + attributed text + health color + dividers)
-//  over the AVSampleBufferDisplayLayer, plus the OneShotObserverBox helper.
-//  Split out of StreamWindow.swift to keep each unit focused.
-//
-//  This file owns the panel: its stored layers, the per-tick row diff, the
-//  visibility transition, and the layout pass. The ROW CONSTRUCTION it calls
-//  into (sublayer build, attributed-string composition, health colors, SF
-//  Symbol rasterisation) is a pure move into StatsOverlayLayer+Rows.swift, so
-//  each unit stays under the file-length budget.
-//
+// Text and traces stay inside the HDR video layer without a panel over the picture.
 
 import AppKit
 import AVFoundation
-import CoreGraphics
 import QuartzCore
-import os.log
 
-// MARK: - StatsOverlayLayer
-
-/// Compact-HUD stats panel rendered above the AVSampleBufferDisplayLayer.
-///
-/// Hierarchy:
-///   displayLayer (AVSampleBufferDisplayLayer, view's root)
-///     └─ StatsOverlayLayer container (CALayer) - rounded translucent panel
-///        ├─ row 0: icon (CALayer.contents = SF Symbol CGImage)
-///        │         + text (CATextLayer with NSAttributedString -
-///        │           SF Pro Text label on the left, SF Mono value on
-///        │           the right with health color)
-///        ├─ row 1: same shape
-///        ├─ divider (1pt CALayer at 8% white) - only between sections
-///        ├─ row 2 ...
-///        └─ row N
-///
-/// Why a row-per-sublayer-pair architecture and not one big newlined
-/// CATextLayer:
-///   * Per-row icons require their own CALayer.contents anyway - once
-///     we have a sublayer per row to host the icon, packing the text
-///     into the same row's text sublayer keeps the icon and its row's
-///     baseline aligned naturally (one CATextLayer line height, one
-///     icon, one frame).
-///   * Per-row health colors are easier to express as
-///     NSAttributedString attributes on a single-row text layer than
-///     on a multi-line block (CATextLayer respects per-range
-///     foregroundColor only via NSAttributedString, so the multi-line
-///     path also pays the attributed-string cost).
-///   * Diffing rows is cheaper: when only the value of one row changes
-///     (the common case), we update one CATextLayer.string and skip
-///     the rest. Newline-joined CATextLayer.string requires re-rendering
-///     the whole block on any line change.
-///
-/// Sizing: a fixed 360pt panel width with the height growing to fit the
-/// current number of rows + dividers. The panel never shrinks below
-/// `padding * 2 + rowHeight` so a zero-rows state still renders a small
-/// visible chip (rather than collapsing to a glyph-less rectangle, which
-/// would surprise a user who toggled all checkboxes off in Custom).
 @MainActor
 public final class StatsOverlayLayer {
-    /// The root layer that holds the background + rows. Public so a
-    /// future caller could re-parent it, but in practice the only
-    /// attachment is in `StreamWindow.init` via `attach(to:)`.
     public let layer: CALayer
 
-    // Layout constants - tuned to match the Liquid Glass aesthetic Apple
-    // ships in macOS 26 for floating in-stream overlays. The ones the row
-    // builder reads are module-internal (not private) so the row
-    // construction in StatsOverlayLayer+Rows.swift can reach them across
-    // the file split; the rest stay private to this file.
-    private static let inset: CGFloat = 20
-    static let padding: CGFloat = 12
-    static let maxWidth: CGFloat = 360
-    private static let cornerRadius: CGFloat = 14
-    /// SF Pro Text + SF Mono row text size. 11pt fits ~30 chars across
-    /// the value column at 360pt panel width with the icon + label
-    /// columns reserved.
-    static let fontSize: CGFloat = 11
-    /// Icon slot width (16pt). SF Symbols at 12pt ascender+descender land
-    /// well under this with a small horizontal breathing margin.
-    static let iconSlotWidth: CGFloat = 16
-    /// Gap between icon and label.
-    static let iconLabelGap: CGFloat = 6
-    /// Per-row height: 11pt text + 7pt line spacing = 18pt slot.
-    private static let rowHeight: CGFloat = 18
-    /// Section divider: 1pt hairline with 4pt of breathing room above
-    /// and below.
-    private static let dividerHeight: CGFloat = 1
-    private static let dividerVerticalPadding: CGFloat = 4
+    static let labelFont = NSFont.preferredFont(forTextStyle: .caption2, options: [:])
+    static let normalValueFont = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .semibold)
+    static let emphasizedValueFont = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .bold)
+    static let detailFont = NSFont.monospacedDigitSystemFont(
+        ofSize: NSFont.preferredFont(forTextStyle: .body, options: [:]).pointSize, weight: .medium)
+    static let coreKinds: [StatsRow.Kind] = [.renderFps, .latency, .bitrate]
 
-    /// Which screen corner the overlay anchors to. Defaults to the
-    /// historical top-left position; the session owner re-sets this from
-    /// `AppModel.streamStatsCorner` at stream-start time. The
-    /// setter re-flows the layout immediately if we're already attached
-    /// to a host layer.
+    weak var displayView: NSView?
+    var videoSize: CGSize = .zero
     public var corner: StatsOverlayCorner = .topLeft {
         didSet {
-            guard oldValue != corner else { return }
-            if let host = layer.superlayer {
-                layoutInHost(host)
-            }
+            guard oldValue != corner, let host = layer.superlayer else { return }
+            layoutInHost(host)
         }
     }
 
-    /// Per-row sublayer pair (icon + text). One of these per visible row;
-    /// the layer holds them in `rowViews` keyed by `StatsRow.Kind` so the
-    /// diff path can reuse layers across ticks instead of tearing them
-    /// down and re-creating them every snapshot. Module-internal (not
-    /// private) so the row construction in StatsOverlayLayer+Rows.swift can
-    /// name it across the file split.
     struct RowSublayers {
-        let container: CALayer       // owns the icon + text, sized to one row
-        let iconLayer: CALayer       // contents = SF Symbol CGImage
-        let textLayer: CATextLayer   // attributed string: label + value
-        /// Last rendered row to skip CATransaction churn when nothing
-        /// actually changed (value strings tick once per second; labels
-        /// never change for a given Kind, and icons change only for the
-        /// battery row's level glyph).
+        let container: CALayer
+        let labelLayer: CATextLayer
+        let valueLayer: CATextLayer
+        let trace: StatsTrace?
         var lastRender: StatsRow?
     }
 
-    /// Live row sublayers keyed by kind. We diff against the new rows[]
-    /// each tick: kinds that appear in both keep their layers; new kinds
-    /// allocate fresh sublayers; kinds that disappeared get pulled from
-    /// the parent and dropped here.
-    private var rowViews: [StatsRow.Kind: RowSublayers] = [:]
-
-    /// Active section-divider layers, top-down. Recycled across ticks
-    /// when the number of dividers doesn't change (the common case once
-    /// the user picks a preset).
-    private var dividerLayers: [CALayer] = []
-
-    /// Cached SF Symbol CGImages keyed by SF Symbol name. The icons are
-    /// rendered once per (name, scale) combo and reused - the alternative
-    /// (NSImage(systemSymbolName:) → CGImage every tick) would re-render
-    /// the symbol bitmap 12 times per snapshot.
-    ///
-    /// We don't bound the cache because the set of icons is closed: one
-    /// static name per `StatsRow.Kind` plus the small `battery.*` level
-    /// family the battery row cycles through. No risk of unbounded growth
-    /// from runtime input. Module-internal (not private) so the symbol
-    /// rasterisation in StatsOverlayLayer+Rows.swift can reach it.
-    var iconCache: [String: CGImage] = [:]
+    private(set) var rowViews: [StatsRow.Kind: RowSublayers] = [:]
+    private(set) var usesDarkInk = false
+    private(set) var reduceTransparency = false
+    private var orderedKinds: [StatsRow.Kind] = []
+    private var enabledRows: Set<StatsRow.Kind> = []
+    private var contentWidth: CGFloat = 160
+    private var needsRowLayout = true
+    private var contentSize: CGSize = .zero
+    private var differentiateWithoutColor = false
+    private let capLayer = CATextLayer()
+    private var capText = ""
 
     public init() {
-        // Container layer - the background rounded rectangle.
-        let bg = CALayer()
-        bg.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 0.42)
-        bg.cornerRadius = StatsOverlayLayer.cornerRadius
-        // 1 pt inner rim - a hairline at the top edge fakes the rim
-        // highlight Liquid Glass surfaces get from real refraction.
-        // Without this the panel reads as a flat dark rectangle against
-        // bright HDR content. We can't use a real backdrop blur here
-        // (would break EDR composition - see StreamWindow.init), so the
-        // rim is doing the work of communicating "floating material".
-        bg.borderColor = CGColor(red: 1, green: 1, blue: 1, alpha: 0.14)
-        bg.borderWidth = 1
-        bg.zPosition = 1_000  // above any future sublayers of displayLayer.
-        bg.contentsScale = NSScreen.main?.backingScaleFactor ?? 2.0
-        bg.actions = StatsOverlayLayer.disabledActions
-        // Born hidden so the layer agrees with `isVisible` (false) from the start;
-        // the owner seeds the real state through `setVisible(_:)`.
-        bg.isHidden = true
-        bg.opacity = 0.0
-
-        self.layer = bg
+        layer = CALayer()
+        layer.zPosition = 1_000
+        layer.actions = Self.disabledActions
+        layer.isHidden = true
+        layer.opacity = 0
+        capLayer.actions = Self.disabledActions
+        layer.addSublayer(capLayer)
+        refreshAccessibility()
     }
 
-    /// Attach the overlay as a sublayer of the host video layer. Called
-    /// once at construction time from `StreamWindow.init`.
+    /// The sampler uses decoded-picture coordinates, independent of letterboxing and HUD scaling.
+    public var backdropSampleRect: CGRect {
+        guard let host = layer.superlayer, videoSize.width > 0, videoSize.height > 0 else { return .zero }
+        let picture = AVMakeRect(aspectRatio: videoSize, insideRect: host.bounds)
+        let rect = layer.frame.intersection(picture)
+        guard !rect.isNull, picture.width > 0, picture.height > 0 else { return .zero }
+        return CGRect(x: (rect.minX - picture.minX) / picture.width,
+                      y: (picture.maxY - rect.maxY) / picture.height,
+                      width: rect.width / picture.width, height: rect.height / picture.height)
+    }
+
+    nonisolated public static func shouldUseDarkInk(luminance: Double, currentlyDark: Bool) -> Bool {
+        guard luminance.isFinite, (0...1).contains(luminance) else { return currentlyDark }
+        return currentlyDark ? luminance >= 0.48 : luminance > 0.62
+    }
+
+    public func updateBackdropLuminance(_ value: Double) {
+        let dark = Self.shouldUseDarkInk(luminance: value, currentlyDark: usesDarkInk)
+        guard dark != usesDarkInk else { return }
+        usesDarkInk = dark
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = 0.3
+            layer.add(fade, forKey: "ink")
+        } else {
+            layer.removeAnimation(forKey: "ink")
+        }
+        refreshInk()
+        CATransaction.commit()
+    }
+
+    private func refreshInk() {
+        for sub in rowViews.values {
+            if let row = sub.lastRender { apply(row: row, to: sub) }
+        }
+        applyCap()
+    }
+
+    private func applyCap() {
+        capLayer.string = NSAttributedString(string: capText, attributes: [
+            .font: Self.labelFont, .foregroundColor: secondaryInk
+        ])
+        applyShadow(to: capLayer)
+    }
+
     public func attach(to host: CALayer) {
         host.addSublayer(layer)
         layoutInHost(host)
     }
 
-    /// Re-flow the panel against the host's current bounds. Cheap; safe
-    /// to call from layout passes (the host view's `layout` doesn't fire
-    /// during a stream because the window covers a fixed screen frame).
+    /// Intersect the picture with the safe area before adding the same inset on every edge.
+    static func availableRect(in bounds: CGRect, videoSize: CGSize, safeArea: NSEdgeInsets) -> CGRect {
+        let safe = CGRect(
+            x: bounds.minX + safeArea.left, y: bounds.minY + safeArea.bottom,
+            width: max(0, bounds.width - safeArea.left - safeArea.right),
+            height: max(0, bounds.height - safeArea.top - safeArea.bottom))
+        let picture = videoSize.width > 0 && videoSize.height > 0
+            ? AVMakeRect(aspectRatio: videoSize, insideRect: bounds) : bounds
+        let available = picture.intersection(safe)
+        return available.isNull ? .zero : available
+    }
+
+    /// Fit the whole HUD in a small player instead of cutting off detailed rows.
+    static func panelFrame(size: CGSize, in available: CGRect, corner: StatsOverlayCorner) -> CGRect {
+        let inset: CGFloat = 16
+        let area = available.insetBy(
+            dx: min(inset, available.width / 2), dy: min(inset, available.height / 2))
+        let scale = min(1, area.width / max(1, size.width), area.height / max(1, size.height))
+        let width = size.width * scale
+        let height = size.height * scale
+        let x: CGFloat
+        let y: CGFloat
+        switch corner {
+        case .topLeft, .bottomLeft: x = area.minX
+        case .topCenter, .bottomCenter: x = area.midX - width / 2
+        case .topRight, .bottomRight: x = area.maxX - width
+        }
+        switch corner {
+        case .topLeft, .topCenter, .topRight: y = area.maxY - height
+        case .bottomLeft, .bottomCenter, .bottomRight: y = area.minY
+        }
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func safeAreaInsets(in bounds: CGRect) -> NSEdgeInsets {
+        guard let view = displayView, let window = view.window, let screen = window.screen else {
+            return NSEdgeInsets()
+        }
+        let insets = screen.safeAreaInsets
+        let frame = screen.frame
+        let safeScreen = CGRect(
+            x: frame.minX + insets.left, y: frame.minY + insets.bottom,
+            width: frame.width - insets.left - insets.right,
+            height: frame.height - insets.top - insets.bottom)
+        let safe = view.convert(window.convertFromScreen(safeScreen), from: nil)
+        return NSEdgeInsets(
+            top: max(0, bounds.maxY - safe.maxY), left: max(0, safe.minX - bounds.minX),
+            bottom: max(0, safe.minY - bounds.minY), right: max(0, bounds.maxX - safe.maxX))
+    }
+
     public func layoutInHost(_ host: CALayer) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
-
-        let inset = StatsOverlayLayer.inset
-        let pad = StatsOverlayLayer.padding
-        let maxW = StatsOverlayLayer.maxWidth
-        let boxWidth = maxW
-        let contentHeight = currentContentHeight()
-        let boxHeight = max(contentHeight, StatsOverlayLayer.rowHeight) + 2 * pad
-
-        let hostWidth = host.bounds.width
-        let hostHeight = host.bounds.height
-        let centerX = (hostWidth - boxWidth) / 2
-        // Top-center clears the camera notch: on a notched panel the safe-area
-        // top inset is the notch band, so anchor below it (with a small gap);
-        // elsewhere safeAreaInsets.top is 0 and this collapses to the normal
-        // inset. CALayer origin is bottom-left, so "top" is the larger y.
-        let notchTop = NSScreen.main?.safeAreaInsets.top ?? 0
-        let topCenterY = hostHeight - max(inset, notchTop + 8) - boxHeight
-        let x: CGFloat
-        let y: CGFloat
-        switch corner {
-        case .topLeft:
-            x = inset
-            y = hostHeight - inset - boxHeight
-        case .topCenter:
-            x = centerX
-            y = topCenterY
-        case .topRight:
-            x = hostWidth - inset - boxWidth
-            y = hostHeight - inset - boxHeight
-        case .bottomLeft:
-            x = inset
-            y = inset
-        case .bottomCenter:
-            x = centerX
-            y = inset
-        case .bottomRight:
-            x = hostWidth - inset - boxWidth
-            y = inset
+        if needsRowLayout {
+            let rows = orderedKinds.compactMap { rowViews[$0]?.lastRender }
+            let rowsHeight = rows.reduce(CGFloat.zero) { $0 + Self.rowHeight(for: $1.kind) + 3 }
+            contentSize = CGSize(width: contentWidth,
+                                 height: max(0, rowsHeight - 3) + (capText.isEmpty ? 0 : 12))
+            layer.bounds = CGRect(origin: .zero, size: contentSize)
+            layoutRows(rows, in: contentSize)
+            needsRowLayout = false
         }
-        layer.frame = CGRect(x: x, y: y, width: boxWidth, height: boxHeight)
-        layoutRowsAndDividers(inWidth: boxWidth, height: boxHeight)
+        let available = Self.availableRect(in: host.bounds, videoSize: videoSize,
+                                           safeArea: safeAreaInsets(in: host.bounds))
+        let frame = Self.panelFrame(size: contentSize, in: available, corner: corner)
+        let scale = frame.width / max(1, contentSize.width)
+        let position = CGPoint(x: frame.midX, y: frame.midY)
+        if layer.position != position { layer.position = position }
+        let transform = CGAffineTransform(scaleX: scale, y: scale)
+        if layer.affineTransform() != transform { layer.setAffineTransform(transform) }
+        let contentsScale = displayView?.window?.backingScaleFactor ?? host.contentsScale
+        if layer.contentsScale != contentsScale {
+            layer.contentsScale = contentsScale
+            capLayer.contentsScale = contentsScale
+            for sub in rowViews.values {
+                sub.labelLayer.contentsScale = contentsScale
+                sub.valueLayer.contentsScale = contentsScale
+            }
+        }
     }
 
-    /// Update changed row content only. Capture FPS and live gauges can change
-    /// each tick; unchanged values avoid unnecessary text-layer updates.
     public func update(
         snapshot: StreamStatsSnapshot,
         enabled: Set<StatsRow.Kind>,
         targetFps: Double,
         thresholds: StatsThresholds = .default
     ) {
-        let rows = snapshot.rows(enabled: enabled, targetFps: targetFps, thresholds: thresholds)
+        let rows = Self.displayRows(snapshot: snapshot, enabled: enabled, targetFps: targetFps, thresholds: thresholds)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
-
-        // 1) Reconcile sublayer set against the new row list.
-        let newKinds = Set(rows.map(\.kind))
-        // Remove rows that dropped out (user toggled them off).
-        for (kind, view) in rowViews where !newKinds.contains(kind) {
-            view.container.removeFromSuperlayer()
-            rowViews.removeValue(forKey: kind)
+        let appearanceChanged = refreshAccessibility()
+        let kinds = rows.map(\.kind)
+        let rowsChanged = kinds != orderedKinds || enabled != enabledRows
+        if rowsChanged {
+            for (kind, sub) in rowViews where !kinds.contains(kind) {
+                sub.container.removeFromSuperlayer()
+                rowViews.removeValue(forKey: kind)
+            }
+            orderedKinds = kinds
+            enabledRows = enabled
+            contentWidth = 160
+            needsRowLayout = true
         }
-        // Add rows that newly appeared, and update content for all of them.
+        let cap = enabled.contains(.bitrate) ? snapshot.negotiatedBitrateMbps : nil
+        let newCap = cap.flatMap { $0.isFinite ? String(format: "Cap %.0f Mbps", $0) : nil } ?? ""
+        if newCap != capText {
+            needsRowLayout = needsRowLayout || capText.isEmpty != newCap.isEmpty
+            capText = newCap
+            applyCap()
+        }
         for row in rows {
-            if let existing = rowViews[row.kind] {
-                if existing.lastRender != row {
-                    apply(row: row, to: existing)
-                    rowViews[row.kind]?.lastRender = row
-                }
-            } else {
-                let sub = makeRow(for: row)
+            if rowViews[row.kind] == nil {
+                let sub = makeRow(kind: row.kind)
                 layer.addSublayer(sub.container)
                 rowViews[row.kind] = sub
             }
+            guard let sub = rowViews[row.kind] else { continue }
+            sub.trace?.append(snapshot: snapshot, targetFps: targetFps, thresholds: thresholds)
+            if sub.lastRender != row || appearanceChanged {
+                apply(row: row, to: sub)
+                rowViews[row.kind]?.lastRender = row
+            }
+            if sub.lastRender != row || rowsChanged || appearanceChanged {
+                measure(row)
+            }
         }
-
-        // 2) Re-flow positions - the row count may have changed (preset
-        //    flip, audio toggled in/out via custom checkboxes), which
-        //    changes the panel height and the per-row Y origins.
-        if let host = layer.superlayer {
-            layoutInHost(host)
-        } else {
-            // No host yet (very early init) - still size ourselves
-            // against the cached width so the next attach() has the
-            // right geometry.
-            layoutRowsAndDividers(inWidth: layer.bounds.width, height: layer.bounds.height)
-        }
+        if let host = layer.superlayer { layoutInHost(host) }
+        for sub in rowViews.values { sub.trace?.draw() }
     }
 
-    /// What the owner last asked for. `setVisible` de-dups against this, never
-    /// `layer.isHidden`: a hide flips that from a deferred completion block, so a
-    /// show in the same turn used to see "not hidden" and return early (#88).
-    public private(set) var isVisible = false
+    private func measure(_ row: StatsRow) {
+        // Width only grows within a preset, so digit changes cannot make the HUD breathe.
+        let value = ceil(attributedValue(row).size().width)
+        guard value > contentWidth else { return }
+        contentWidth = value
+        needsRowLayout = true
+    }
 
-    /// Bumped per `setVisible` call so a hide's completion knows whether a show
-    /// overtook it mid-fade; a stale completion must not hide a re-shown panel.
+    @discardableResult
+    private func refreshAccessibility() -> Bool {
+        let workspace = NSWorkspace.shared
+        let opaque = workspace.accessibilityDisplayShouldReduceTransparency
+        let differentiate = workspace.accessibilityDisplayShouldDifferentiateWithoutColor
+        let changed = reduceTransparency != opaque || differentiateWithoutColor != differentiate
+        reduceTransparency = opaque
+        differentiateWithoutColor = differentiate
+        if changed { refreshInk() }
+        return changed
+    }
+
+    public private(set) var isVisible = false
     private(set) var visibilityGeneration = 0
 
-    /// Show or hide the overlay. Uses a 120 ms crossfade so a hotkey-driven
-    /// toggle feels snappy without being abrupt, matching the design spec.
     public func setVisible(_ visible: Bool) {
-        if visible == isVisible { return }
+        guard visible != isVisible else { return }
         isVisible = visible
         visibilityGeneration &+= 1
         let generation = visibilityGeneration
+        if visible {
+            refreshAccessibility()
+            if let host = layer.superlayer { layoutInHost(host) }
+        }
         CATransaction.begin()
-        CATransaction.setAnimationDuration(0.12)
+        CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.12)
         if visible {
             layer.isHidden = false
-            layer.opacity = 1.0
+            layer.opacity = 1
         } else {
             CATransaction.setCompletionBlock { [weak self] in
                 self?.finishHide(generation: generation)
             }
-            layer.opacity = 0.0
+            layer.opacity = 0
         }
         CATransaction.commit()
     }
@@ -306,145 +291,40 @@ public final class StatsOverlayLayer {
         layer.isHidden = true
     }
 
-    // MARK: Layout ------------------------------------------------------
-
-    /// Position every row + divider sublayer inside the current panel
-    /// bounds. Called from `layoutInHost` and from `update` after row
-    /// reconciliation. Top-down ordering ignores Core Animation's
-    /// bottom-left coordinate origin by translating the cursor through
-    /// `boxHeight - cursorY`.
-    private func layoutRowsAndDividers(inWidth boxWidth: CGFloat, height boxHeight: CGFloat) {
-        let pad = StatsOverlayLayer.padding
-        let rowHeight = StatsOverlayLayer.rowHeight
-        let dividerH = StatsOverlayLayer.dividerHeight
-        let dividerPadV = StatsOverlayLayer.dividerVerticalPadding
-        let icon = StatsOverlayLayer.iconSlotWidth
-        let gap = StatsOverlayLayer.iconLabelGap
-
-        // We iterate rows in catalogue order (the order returned by
-        // StreamStatsSnapshot.rows). Section changes between adjacent
-        // rows emit a divider. We don't track Section explicitly here;
-        // instead we look up each row's section from its last-render
-        // payload - the apply() path always sets lastRender, and a
-        // freshly-created row has its own section in lastRender from
-        // makeRow's apply() call.
-        let ordered: [StatsRow.Kind] = StatsRow.Kind.allCases
-        var visibleRows: [(StatsRow.Kind, StatsRow)] = []
-        for kind in ordered {
-            if let sub = rowViews[kind], let last = sub.lastRender {
-                visibleRows.append((kind, last))
-            }
-        }
-
-        // Decide where the dividers go: between any two adjacent
-        // visible rows whose sections differ.
-        var needsDividerAfter: [Bool] = Array(repeating: false, count: visibleRows.count)
-        for i in 0..<max(0, visibleRows.count - 1)
-            where visibleRows[i].1.section != visibleRows[i + 1].1.section {
-            needsDividerAfter[i] = true
-        }
-
-        // Reuse / create / drop divider sublayers to match the count.
-        let dividerCount = needsDividerAfter.filter { $0 }.count
-        while dividerLayers.count < dividerCount {
-            let divider = CALayer()
-            divider.backgroundColor = CGColor(red: 1, green: 1, blue: 1, alpha: 0.08)
-            divider.actions = StatsOverlayLayer.disabledActions
-            layer.addSublayer(divider)
-            dividerLayers.append(divider)
-        }
-        while dividerLayers.count > dividerCount {
-            dividerLayers.removeLast().removeFromSuperlayer()
-        }
-
-        // Lay out rows top-down. CALayer origin is bottom-left, so we
-        // compute a "from-top" Y for clarity and flip to bottom-left at
-        // assignment time.
-        var fromTop: CGFloat = pad
-        var dividerIndex = 0
-        for (i, (_, payload)) in visibleRows.enumerated() {
-            guard let sub = rowViews[payload.kind] else { continue }
-            // Row container: full content-width band of rowHeight.
-            let rowY = boxHeight - fromTop - rowHeight
-            sub.container.frame = CGRect(
-                x: pad, y: rowY,
-                width: boxWidth - 2 * pad, height: rowHeight)
-            // Icon: left edge of the row.
-            sub.iconLayer.frame = CGRect(
-                x: 0, y: (rowHeight - StatsOverlayLayer.iconSlotWidth) / 2,
-                width: StatsOverlayLayer.iconSlotWidth,
-                height: StatsOverlayLayer.iconSlotWidth)
-            // Text: right of the icon, filling the remaining width. The
-            // tab stop in the attributed string places the value at the
-            // text frame's trailing edge.
-            sub.textLayer.frame = CGRect(
-                x: icon + gap, y: 0,
-                width: sub.container.bounds.width - icon - gap,
-                height: rowHeight)
-            fromTop += rowHeight
-            if i < needsDividerAfter.count, needsDividerAfter[i] {
-                let dY = boxHeight - fromTop - dividerPadV - dividerH
-                dividerLayers[dividerIndex].frame = CGRect(
-                    x: pad, y: dY,
-                    width: boxWidth - 2 * pad, height: dividerH)
-                dividerIndex += 1
-                fromTop += dividerPadV * 2 + dividerH
-            }
-        }
+    /// Row height plus the value and trace bands inside it. Core rows carry the large
+    /// value; other traced rows a smaller value over a shorter trace; the rest are text.
+    static func rowBands(for kind: StatsRow.Kind) -> (height: CGFloat, value: CGFloat, trace: CGFloat) {
+        if coreKinds.contains(kind) { return (54, 24, 17) }
+        return StatsTrace.Metric(kind: kind) == nil ? (32, 19, 0) : (46, 19, 14)
     }
 
-    /// Sum of row heights + section dividers for the current visible
-    /// set. Used to size the panel.
-    private func currentContentHeight() -> CGFloat {
-        let rowHeight = StatsOverlayLayer.rowHeight
-        let dividerBlock = StatsOverlayLayer.dividerHeight + 2 * StatsOverlayLayer.dividerVerticalPadding
+    private static func rowHeight(for kind: StatsRow.Kind) -> CGFloat { rowBands(for: kind).height }
 
-        let ordered: [StatsRow.Kind] = StatsRow.Kind.allCases
-        var visibleSections: [StatsRow.Section] = []
-        var rowCount = 0
-        for kind in ordered {
-            if let sub = rowViews[kind], let last = sub.lastRender {
-                visibleSections.append(last.section)
-                rowCount += 1
-            }
+    private func layoutRows(_ rows: [StatsRow], in size: CGSize) {
+        var top = size.height
+        for row in rows {
+            guard let sub = rowViews[row.kind] else { continue }
+            let bands = Self.rowBands(for: row.kind)
+            top -= bands.height
+            sub.container.frame = CGRect(x: 0, y: top, width: size.width, height: bands.height)
+            sub.labelLayer.frame = CGRect(x: 0, y: bands.height - 13, width: size.width, height: 13)
+            sub.valueLayer.frame = CGRect(x: 0, y: bands.trace, width: size.width, height: bands.value)
+            sub.trace?.layer.frame = CGRect(x: 0, y: 0, width: size.width, height: bands.trace)
+            top -= 3
         }
-        // Count section transitions: a divider between every adjacent
-        // pair of differing sections.
-        var dividerCount = 0
-        for i in 0..<max(0, visibleSections.count - 1)
-            where visibleSections[i] != visibleSections[i + 1] {
-            dividerCount += 1
-        }
-        return CGFloat(rowCount) * rowHeight + CGFloat(dividerCount) * dividerBlock
+        capLayer.frame = CGRect(x: 0, y: 0, width: size.width, height: 12)
     }
 
-    /// Disable all implicit CAAction animations on a layer. CALayer's
-    /// default actions crossfade contents/position/bounds changes,
-    /// which we don't want here - the overlay should snap to its new
-    /// value every tick. Reused across the background, the row
-    /// containers, the icon + text sublayers, and the dividers.
-    /// Module-internal (not private) so the row construction in
-    /// StatsOverlayLayer+Rows.swift installs the same action map.
     static let disabledActions: [String: CAAction] = [
-        "contents": NSNull(),
-        "position": NSNull(),
-        "bounds": NSNull(),
-        "string": NSNull(),
-        "foregroundColor": NSNull(),
-        "backgroundColor": NSNull(),
-        "frame": NSNull(),
-        "opacity": NSNull()
+        "contents": NSNull(), "position": NSNull(), "bounds": NSNull(),
+        "string": NSNull(), "foregroundColor": NSNull(), "backgroundColor": NSNull(),
+        "frame": NSNull(), "opacity": NSNull(), "transform": NSNull(),
+        "path": NSNull(), "strokeColor": NSNull(), "fillColor": NSNull(),
+        "shadowColor": NSNull(), "shadowOpacity": NSNull(), "shadowRadius": NSNull()
     ]
 }
 
-/// Heap-allocated single-slot container for a one-shot NotificationCenter
-/// observer token. The observer's closure needs to know its OWN token so it can
-/// remove itself after firing - but `var token: NSObjectProtocol?` captured by
-/// a `@Sendable` closure is rejected in Swift 6 strict mode (the `var` cannot
-/// be safely shared). Holding the token in a small class lets the closure
-/// capture a reference to the class instead of mutating an in-scope var. We
-/// constrain the box to MainActor because the only call sites set/clear the
-/// token from within MainActor-isolated closures.
+/// Main-actor ownership lets a one-shot observer remove its own token in Swift 6.
 @MainActor
 final class OneShotObserverBox {
     var token: NSObjectProtocol?

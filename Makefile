@@ -5,7 +5,7 @@
 # signing, notarization, and STRICT library validation - so there's no
 # adhoc/Debug divergence to chase:
 #   make                   Build (Release: Dev-ID + notarized) + install to
-#                          /Applications. Falls back to adhoc Release w/o a cert.
+#                          /Applications. Requires Developer ID profiles.
 #   make dev               Run tests, then build + install + relaunch. Inner loop.
 #   make reinstall         Build + install + quit-and-relaunch (no tests).
 #   make install           Build + install, no relaunch (same as bare `make`).
@@ -23,6 +23,9 @@
 #                          notarize → staple → DMG (no publish). This is
 #                          release-publish's first step; run it alone only to
 #                          inspect a DMG before publishing.
+#   make rc                Cut the next candidate for pushed HEAD: wait for checks,
+#                          move release-candidate, sign + push the rc tag, dispatch
+#                          Release. DRY_RUN=1 prints the steps without changing anything.
 #
 # ONE-TIME SETUP (signing / notarization / update keys):
 #   make creds-init        Write the signing credentials file template.
@@ -36,22 +39,34 @@
 #   make enable-telem      Turn the app's opt-in telemetry exporter on.
 #   make disable-telem     Turn the app's opt-in telemetry exporter off.
 
+# Install and packaging stages share outputs; Xcode parallelizes compilation.
+.NOTPARALLEL:
+
 GLIMMER_APP_DST ?= /Applications/Glimmer.app
 CONFIG          ?= Debug
+SWIFTC          ?= xcrun swiftc
+TEST_SUITE      ?=
 DERIVED         := $(CURDIR)/build
 GLIMMER_APP_SRC := $(DERIVED)/Build/Products/$(CONFIG)/Glimmer.app
+# macOS keeps every built or test-hosted app registered after its folder is gone.
+LSREGISTER      := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+UNREGISTER_BUILDS = find "$(DERIVED)/Build/Products" -name "*.app" -exec $(LSREGISTER) -u {} \; 2>/dev/null || true
 STREAM_XCCONFIG := Glimmer/StreamLib.xcconfig
 INSTRUMENTS_DIR := $(HOME)/Library/Developer/Xcode/Instruments
 
 # --- Code signing / notarization -------------------------------------------
 # DEVELOPER_ID is auto-detected across the keychain search list (including the
 # dedicated signing keychain codesign-setup builds) so the Makefile carries no
-# per-machine name. Empty on machines without a Developer ID cert → builds
-# fall back to adhoc (local dev keeps working). Override on the CLI if needed.
+# per-machine name. Unsigned compile checks and tests need no identity.
 DEVELOPER_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null | \
                  sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
 # notarytool keychain profile name (created by `make setup-notary`).
 NOTARY_PROFILE  ?= notary
+# Fixed profile locations, overridable for a fork or another signing machine.
+PROVISIONING_PROFILE ?= $(HOME)/.config/glimmer/profiles/Glimmer_Developer_ID.provisionprofile
+HELPER_PROVISIONING_PROFILE ?= $(HOME)/.config/glimmer/profiles/Glimmer_Network_Helper_Developer_ID.provisionprofile
+export GLIMMER_PROVISIONING_PROFILE := $(PROVISIONING_PROFILE)
+export GLIMMER_HELPER_PROVISIONING_PROFILE := $(HELPER_PROVISIONING_PROFILE)
 # Signing secrets: one KEY=value file, mode 0600, outside the repo, read and
 # written only by scripts/signing-creds.sh. Like the keychain below, it belongs
 # to your Developer ID rather than to Glimmer, so other projects can share both.
@@ -82,24 +97,23 @@ export SPARKLE_VERSION
 # --- Privileged AWDL network helper (root LaunchDaemon) ---------------------
 # A tiny daemon that parks awdl0 (the AirDrop/Continuity radio) while streaming,
 # to kill the multi-second Wi-Fi delivery gaps AWDL contention causes. Built
-# with swiftc (no Xcode target - it's 4 system-framework-only files) and
-# embedded: binary at Contents/MacOS/, launchd plist at
-# Contents/Library/LaunchDaemons/, where SMAppService.daemon loads it. Signed
-# inside-out (its own block in scripts/sign-bundle.sh, hardened runtime, no
-# entitlements) before the app's outer seal.
+# with swiftc using system frameworks and the app's shared process runner.
+# The daemon has its own app-like bundle and provisioning profile, signed
+# before the app's outer seal. SMAppService reads its LaunchDaemons plist.
 HELPER_LABEL  := io.ugfugl.glimmer.helper
-HELPER_SRCS   := helper/Protocol.swift helper/AWDLSuppressor.swift helper/HelperService.swift helper/main.swift
+HELPER_SRCS   := helper/Protocol.swift Glimmer/AWDLProcess.swift helper/AWDLSuppressor.swift helper/HelperService.swift helper/main.swift
 HELPER_PLIST  := helper/$(HELPER_LABEL).plist
 HELPER_BIN    := $(DERIVED)/$(HELPER_LABEL)
 HELPER_SDK    := $(shell xcrun --sdk macosx --show-sdk-path)
 HELPER_TARGET := arm64-apple-macos26.0
+HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Network Helper.app
 
 .PHONY: all release install reinstall uninstall clean app sign open \
         helper-build embed-helper \
-        profile profile-signposts setup-notary notarize dmg dmg-background dist preflight \
-        codesign-setup codesign-teardown ensure-signing dev test \
+        profile profile-signposts setup-notary notarize dmg dmg-background sparkle-zip dist preflight \
+        codesign-setup codesign-teardown ensure-signing dev test test-asan \
         creds-init enable-telem disable-telem release-publish sparkle-keys \
-        guard-clean-tree brew-bump
+        guard-clean-tree guard-release-version check verify test-scripts brew-bump rc
 
 # TIER 1 - "everything but publish": the full release pipeline at Release
 # (xcodebuild -> inside-out sign -> notarize -> staple),
@@ -113,26 +127,30 @@ HELPER_TARGET := arm64-apple-macos26.0
 all: install
 
 # Build the notarized Release app (everything but publish) WITHOUT installing.
-# Falls back to adhoc Release (un-notarized; TCC re-prompts) without a Dev ID cert.
+# Restricted capabilities require Developer ID profiles, including local installs.
 release:
-	@if [ -n "$(strip $(DEVELOPER_ID))" ]; then \
-		echo "  ▶ everything-but-publish: Developer ID + notarized (matches release)"; \
-		$(MAKE) CONFIG=Release notarize; \
-	else \
-		echo "  ▶ everything-but-publish: adhoc Release - no Developer ID cert (un-notarized; TCC re-prompts)"; \
-		$(MAKE) CONFIG=Release sign; \
-	fi
+	@test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: release requires Developer ID signing; use make verify for unsigned checks" >&2; exit 1; }
+	@test -f "$(PROVISIONING_PROFILE)" -a -f "$(HELPER_PROVISIONING_PROFILE)" || { echo "ERR: set PROVISIONING_PROFILE and HELPER_PROVISIONING_PROFILE to the approved Developer ID profiles" >&2; exit 1; }
+	$(MAKE) CONFIG=Release notarize
 
-# Build + run the hostless GlimmerTests unit-test bundle (swift-testing).
-# Mirrors the app build invocation (same xcconfig +
-# CODE_SIGNING_ALLOWED=NO) then runs the scheme's Test action. The shared
-# Glimmer scheme's BuildAction builds ONLY the app, so `make app`/`make dist`
-# are unaffected; only `xcodebuild test` pulls in the GlimmerTests target.
+# Build and run unsigned tests; TEST_SUITE optionally selects one suite or test.
 test:
 	@scripts/generate-build-info.sh
 	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) \
-	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
+	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
+	  $(if $(strip $(TEST_SUITE)),-only-testing:GlimmerTests/$(TEST_SUITE)); \
+	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
+
+# Exercise untrusted protocol input with memory error detection enabled.
+test-asan:
+	@scripts/generate-build-info.sh
+	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	  -xcconfig $(STREAM_XCCONFIG) \
+	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
+	  -enableAddressSanitizer YES -only-testing:GlimmerTests/FuzzTests \
+	  -only-testing:GlimmerTests/StreamFuzzTests; \
+	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
 
 app:
 	@echo "▶ Building Glimmer.app ($(CONFIG))..."
@@ -141,10 +159,11 @@ app:
 		-xcconfig $(STREAM_XCCONFIG) \
 		CODE_SIGNING_ALLOWED=NO \
 		-derivedDataPath $(DERIVED) -destination 'platform=macOS' build
+	@$(UNREGISTER_BUILDS)
 # CODE_SIGNING_ALLOWED=NO: signing is owned EXCLUSIVELY by the `sign` target
 # (keychain-pinned, prompt-free). Xcode's Automatic signing during the build
 # resolves identities from the login keychain and produces a password prompt
-# per nested bundle - the `sign` target re-signs --force --deep right after,
+# per nested bundle - the `sign` target re-signs inside out right after,
 # so xcodebuild's own signatures were pure prompt-noise.
 
 # Before every signing: put the signing keychain first in the search list and
@@ -186,7 +205,7 @@ ensure-signing:
 $(HELPER_BIN): $(HELPER_SRCS)
 	@echo "▶ Building AWDL helper (swiftc, $(HELPER_TARGET))..."
 	@mkdir -p $(DERIVED)
-	xcrun swiftc -O -target $(HELPER_TARGET) -sdk "$(HELPER_SDK)" -o "$(HELPER_BIN)" $(HELPER_SRCS)
+	$(SWIFTC) -warnings-as-errors -O -target $(HELPER_TARGET) -sdk "$(HELPER_SDK)" -o "$(HELPER_BIN)" $(HELPER_SRCS)
 
 helper-build: $(HELPER_BIN)
 
@@ -195,26 +214,26 @@ helper-build: $(HELPER_BIN)
 # daemon inside-out). install(1) overwrites cleanly on every rebuild.
 embed-helper: app $(HELPER_BIN)
 	@echo "▶ Embedding AWDL helper into the app bundle..."
-	@install -m 0755 "$(HELPER_BIN)" "$(GLIMMER_APP_SRC)/Contents/MacOS/$(HELPER_LABEL)"
+	@mkdir -p "$(HELPER_BUNDLE)/Contents/MacOS"
+	@install -m 0755 "$(HELPER_BIN)" "$(HELPER_BUNDLE)/Contents/MacOS/$(HELPER_LABEL)"
+	@install -m 0644 helper/Info.plist "$(HELPER_BUNDLE)/Contents/Info.plist"
+	@/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(MARKETING_VERSION)" "$(HELPER_BUNDLE)/Contents/Info.plist"
+	@/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD_NUMBER)" "$(HELPER_BUNDLE)/Contents/Info.plist"
+	@rm -f "$(GLIMMER_APP_SRC)/Contents/MacOS/$(HELPER_LABEL)"
 	@mkdir -p "$(GLIMMER_APP_SRC)/Contents/Library/LaunchDaemons"
 	@install -m 0644 "$(HELPER_PLIST)" "$(GLIMMER_APP_SRC)/Contents/Library/LaunchDaemons/$(HELPER_LABEL).plist"
-	@echo "  ✓ helper embedded (Contents/MacOS + Contents/Library/LaunchDaemons)"
+	@echo "  ✓ helper bundle and launchd service embedded"
 
-# Release with a Developer ID signs with Glimmer.entitlements (library validation
-# on). Debug and adhoc builds get Glimmer-Debug.entitlements: an adhoc signature
-# has no Team ID for validation to match. See SECURITY.md.
+# Each executable receives only its own profile and entitlements.
 sign: app embed-helper ensure-signing
-ifeq ($(strip $(DEVELOPER_ID)),)
-	@echo "▶ Adhoc-signing bundle inside-out (no Developer ID cert found)..."
-	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "-" "" Glimmer/Glimmer-Debug.entitlements
-else
+	@test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: restricted capabilities require Developer ID signing" >&2; exit 1; }
 	@echo "▶ Signing bundle inside-out with: $(DEVELOPER_ID)"
 	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "$(DEVELOPER_ID)" "$(SIGN_KEYCHAIN)" $(if $(filter Release,$(CONFIG)),Glimmer/Glimmer.entitlements,Glimmer/Glimmer-Debug.entitlements)
-endif
 
 # Install the everything-but-publish build (see `release`) to /Applications.
 # `reinstall`/`open`/`dev` build on this.
 install: release
+	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast appcast.xml --app "$(DERIVED)/Build/Products/Release/Glimmer.app" --validate-distribution
 	@SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
 	echo "▶ Installing Glimmer.app to $(GLIMMER_APP_DST)..."; \
 	if [ -d "$(GLIMMER_APP_DST)" ]; then echo "  removing existing $(GLIMMER_APP_DST)"; rm -rf "$(GLIMMER_APP_DST)"; fi; \
@@ -280,6 +299,7 @@ uninstall:
 	@echo "  ✓ removed"
 
 clean:
+	@$(UNREGISTER_BUILDS)
 	rm -rf $(DERIVED)
 	@echo "  ✓ cleaned"
 
@@ -381,7 +401,8 @@ notarize: sign
 	xcrun stapler staple "$(GLIMMER_APP_SRC)"
 	@rm -f "$(DERIVED)/Glimmer-notarize.zip"
 	@echo "  ✓ notarized + stapled"
-	@spctl --assess --type execute --verbose=2 "$(GLIMMER_APP_SRC)" || true
+	@spctl --assess --type execute --verbose=2 "$(GLIMMER_APP_SRC)"
+	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast appcast.xml --app "$(GLIMMER_APP_SRC)" --validate-distribution
 
 # Build a distributable DMG from the signed (and ideally notarized) bundle.
 # scripts/make-dmg.sh does the hdiutil + Finder-AppleScript dance (background
@@ -396,6 +417,13 @@ dmg:
 	@scripts/make-dmg.sh "$(GLIMMER_APP_SRC)" "$(DIST_DIR)/$(DMG_NAME)" "Glimmer $(MARKETING_VERSION)"
 	@echo "  ✓ $(DIST_DIR)/$(DMG_NAME)"
 	@shasum -a 256 "$(DIST_DIR)/$(DMG_NAME)"
+
+# Package the final stapled app before attestation or publication.
+sparkle-zip:
+	@test -d "$(GLIMMER_APP_SRC)" || { echo "ERR: build first (make release)" >&2; exit 1; }
+	@mkdir -p "$(DIST_DIR)"
+	@rm -f "$(DIST_DIR)/Glimmer-$(MARKETING_VERSION).zip"
+	@ditto -c -k --sequesterRsrc --keepParent "$(GLIMMER_APP_SRC)" "$(DIST_DIR)/Glimmer-$(MARKETING_VERSION).zip"
 
 # Regenerate the DMG window background art (scripts/dmg/*.png). Committed, so
 # this only needs re-running when the layout or palette changes - keep it in
@@ -448,21 +476,37 @@ creds-init:
 guard-clean-tree:
 	@git diff --quiet HEAD || { echo "ERROR: refusing to build a release from a dirty worktree (commit or stash first)"; exit 1; }
 	@git diff --cached --quiet || { echo "ERROR: refusing to build a release with staged changes (commit or stash first)"; exit 1; }
+	@test -z "$$(git ls-files --others --exclude-standard)" || { echo "ERROR: refusing to build a release with untracked files (commit or remove them first)"; exit 1; }
+
+guard-release-version:
+	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast appcast.xml
 
 # Full distribution pipeline: clean-tree gate → preflight (fail fast, see above)
 # → clean Release → Developer ID sign → notarize + staple → DMG. The
 # DMG's app is stapled, so it passes Gatekeeper offline on any Mac.
 # Non-interactive from any session once the one-time setup is done (creds file +
 # codesign-setup + setup-notary - docs/RELEASE.md).
-dist: guard-clean-tree verify
+dist: guard-clean-tree guard-release-version verify
 	$(MAKE) CONFIG=Release preflight clean app notarize dmg
 
-# Release gate: lint clean (strict) and the unit suite green before anything
-# is packaged. `make dist` / `make release-publish` cannot skip it.
-verify:
-	@echo "▶ Verify (lint --strict + tests)..."
+# Keep the shipping gate complete even when a local suite filter is supplied.
+verify: check
+	@$(MAKE) TEST_SUITE= test
+	@$(MAKE) test-asan
+
+check:
+	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
+	@actionlint
 	@swiftlint lint --strict --quiet
-	@$(MAKE) test
+	@$(MAKE) test-scripts
+
+# Fixture repositories need git's own discovery; a hook's GIT_DIR would aim them at this one.
+test-scripts:
+	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+		python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+rc:
+	@python3 scripts/release-candidate.py $(if $(DRY_RUN),--dry-run)
 
 # --- Auto-update publication (Sparkle) -------------------------------------
 
@@ -488,13 +532,10 @@ sparkle-keys:
 	echo "  SUPublicEDKey for Info.plist:"; \
 	"$$TOOLS/generate_keys" -p
 
-# Build + notarize + staple (via `dist`), then publish a Sparkle update: ZIP the
-# notarized bundle, EdDSA-sign it (key from the creds file), upload the ZIP + DMG
-# to the public glimmer GitHub release, and update the Pages-hosted appcast.xml.
-# Prompt-free once the one-time signing / notary / sparkle-keys setup is done.
-# Bump Glimmer/Version.xcconfig + commit FIRST - the appcast version comes from
-# HEAD; the public repo at the tag is the GPL corresponding source.
+# Package before publication so update signing never changes the final assets.
+# Commit the version first; the release tag is the GPL corresponding source.
 release-publish: dist
+	@$(MAKE) CONFIG=Release sparkle-zip
 	@scripts/publish-release.sh \
 		"$(MARKETING_VERSION)" "$(BUILD_NUMBER)" \
 		"$(DERIVED)/Build/Products/Release/Glimmer.app" \

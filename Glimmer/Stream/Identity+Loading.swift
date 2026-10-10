@@ -87,7 +87,7 @@ extension IdentityManager {
         // `adoptMoonlightQtIdentity`.
         // -----------------------------------------------------------------
         let needsMigration = (storedCert?.isEmpty ?? true) || (storedKey?.isEmpty ?? true)
-        if needsMigration, let adopted = adoptMoonlightQtIdentity(currentID: storedID) {
+        if needsMigration, let adopted = try adoptMoonlightQtIdentity(currentID: storedID) {
             storedCert = adopted.certPEM
             storedKey  = adopted.keyPEM
             storedID   = adopted.uniqueID
@@ -164,9 +164,9 @@ extension IdentityManager {
     /// Step 4 helper - read the cert/key (and optional uniqueID) PEMs out of
     /// the moonlight-qt UserDefaults suite. Returns nil when the suite is
     /// unreadable or doesn't carry a usable cert+key pair.
-    private func adoptMoonlightQtIdentity(currentID: String?) -> AdoptedQtIdentity? {
+    private func adoptMoonlightQtIdentity(currentID: String?) throws -> AdoptedQtIdentity? {
         guard let moonlight = UserDefaults(suiteName: Self.moonlightQtSuiteName),
-              let adopted = Self.adoptedIdentity(fromMoonlightQt: moonlight,
+              let adopted = try Self.adoptedIdentity(fromMoonlightQt: moonlight,
                                                  currentID: currentID) else {
             return nil
         }
@@ -178,12 +178,9 @@ extension IdentityManager {
         return adopted
     }
 
-    /// The read itself, as a pure function of a suite, so a test can point it
-    /// at a scratch domain instead of the real moonlight-qt one. QSettings
-    /// persists PEMs as either String or Data, so we accept both shapes.
-    /// Reads only - nothing here writes back to `moonlight`.
+    /// Read and validate without modifying the source suite. QSettings stores PEMs as String or Data.
     static func adoptedIdentity(fromMoonlightQt moonlight: UserDefaults,
-                                currentID: String?) -> AdoptedQtIdentity? {
+                                currentID: String?) throws -> AdoptedQtIdentity? {
         func readPEM(_ key: String) -> String? {
             if let str = moonlight.string(forKey: key), !str.isEmpty { return str }
             if let data = moonlight.data(forKey: key),
@@ -196,6 +193,7 @@ extension IdentityManager {
         guard let mCert = readPEM("certificate"), let mKey = readPEM("key") else {
             return nil
         }
+        _ = try PEM.identity(certPEM: mCert, keyPEM: mKey)
         let mID = moonlight.string(forKey: "uniqueid")
                  ?? moonlight.data(forKey: "uniqueid").flatMap { String(data: $0, encoding: .utf8) }
 
@@ -221,6 +219,7 @@ extension IdentityManager {
               !keyPEM.isEmpty else {
             return nil
         }
+        _ = try PEM.identity(certPEM: certPEM, keyPEM: keyPEM)
         let uid: String
         if let uidData = try FileIdentityStore.read(account: Self.accountUID),
            let stored = String(data: uidData, encoding: .utf8)?
@@ -245,6 +244,7 @@ extension IdentityManager {
     /// `FileIdentityStore.write` which enforces mode 0600 and verifies it
     /// stuck via stat(2).
     func writeIdentityToFileStore(_ identity: Identity) throws {
+        _ = try PEM.identity(certPEM: identity.certPEM, keyPEM: identity.keyPEM)
         try FileIdentityStore.write(Data(identity.certPEM.utf8),
                                     account: Self.accountCert)
         try FileIdentityStore.write(Data(identity.keyPEM.utf8),

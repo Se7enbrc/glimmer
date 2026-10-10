@@ -6,7 +6,7 @@ import Testing
 @testable import Glimmer
 
 @MainActor
-private final class HelperGate {
+final class HelperGate {
     let entered = DispatchSemaphore(value: 0)
     private var continuation: CheckedContinuation<Void, Never>?
 
@@ -24,7 +24,7 @@ private final class HelperGate {
 }
 
 @MainActor
-private final class HelperHarness {
+final class HelperHarness {
     var status: SMAppService.Status = .enabled
     var events: [String] = []
     var gauge = false
@@ -33,6 +33,8 @@ private final class HelperHarness {
     var unregisterGate: HelperGate?
     var reachable = true
     var daemonJobMissing = false
+    var layout: AWDLHelperRecovery.Layout = .current
+    var layoutGate: HelperGate?
     var releaseGate: HelperGate?
     var downGate: HelperGate?
     var client: HelperClient?
@@ -91,6 +93,9 @@ private final class HelperHarness {
                 return 1
             },
             daemonJobMissing: { self.daemonJobMissing },
+            daemonLayout: {
+                await self.layoutGate?.wait(); return self.layout
+            },
             sleep: { duration in
                 if duration == .milliseconds(600) {
                     await self.registrationGate?.wait()
@@ -560,7 +565,7 @@ struct AWDLHelperManagerTests {
         let manager = harness.makeManager()
         manager.reconcileAfterUpdate()
         #expect(await harness.registered.waitAsync(for: .seconds(10)) == .success)
-        #expect(harness.events == ["unregister", "register"])
+        #expect(harness.events == ["helper-update", "restored", "unregister", "register"])
         #expect(manager.isEnabled)
     }
 }

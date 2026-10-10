@@ -30,7 +30,7 @@ final class AWDLSuppressor: @unchecked Sendable {
     private var restorationQueued = false
     private var _initialDownDone = false
     private var _reSuppressCount = 0
-    /// PF_ROUTE fast path — re-down awdl0 the instant the kernel re-raises it,
+    /// PF_ROUTE fast path: disable awdl0 as soon as the kernel raises it,
     /// event-driven (no poll) and far lower latency than SCDynamicStore.
     private var routeFd: Int32 = -1
     private var routeSource: DispatchSourceRead?
@@ -174,12 +174,8 @@ final class AWDLSuppressor: @unchecked Sendable {
     }
 
     private func captureIfconfig() -> String? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
-        task.arguments = [interfaceName]
-        let pipe = Pipe(); task.standardOutput = pipe; task.standardError = Pipe()
-        do { try task.run(); task.waitUntilExit() } catch { return nil }
-        return String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)
+        guard let result = AWDLProcess.run(arguments: [interfaceName]), result.succeeded else { return nil }
+        return String(data: result.output, encoding: .utf8)
     }
 
     // MARK: Routing-socket fast path
@@ -305,18 +301,7 @@ final class AWDLSuppressor: @unchecked Sendable {
     @discardableResult
     private func executeIfconfig(args: [String]) -> Bool {
         if let runIfconfig { return runIfconfig(args) }
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
-        task.arguments = args
-        task.standardError = Pipe()
-        task.standardOutput = Pipe()
-        do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } catch {
-            return false
-        }
+        return AWDLProcess.run(arguments: args)?.succeeded == true
     }
 
     // MARK: SCDynamicStore monitoring

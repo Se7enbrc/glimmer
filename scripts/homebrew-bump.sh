@@ -16,6 +16,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="${1:-$(sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' "$HERE/Glimmer/Version.xcconfig" | tr -d ' ')}"
+TAG="${2:-$VERSION}"
 RELEASES_REPO="${RELEASES_REPO:-Se7enbrc/glimmer}"
 TAP_REPO="${TAP_REPO:-Se7enbrc/homebrew-glimmer}"
 TAP_DIR="${GLIMMER_TAP_CACHE:-$HOME/.cache/glimmer/homebrew-glimmer}"
@@ -23,29 +24,38 @@ CASK="Casks/glimmer.rb"
 DMG="Glimmer-$VERSION.dmg"
 
 [ -n "$VERSION" ] || { echo "ERR: no version given and none found in Glimmer/Version.xcconfig" >&2; exit 1; }
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERR: invalid version" >&2; exit 1; }
+[[ "$TAG" = "$VERSION" || "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]] &&
+    [ "${TAG%-rc.*}" = "$VERSION" ] || { echo "ERR: release tag does not match version" >&2; exit 1; }
+python3 "$HERE/scripts/tap_cache.py" "$TAP_DIR" "$TAP_REPO"
 
 # The cask pins a sha256, so the release asset must already be published.
-gh release view "$VERSION" -R "$RELEASES_REPO" >/dev/null 2>&1 || {
+gh release view "$TAG" -R "$RELEASES_REPO" >/dev/null 2>&1 || {
 	echo "ERR: release $VERSION not found on $RELEASES_REPO - publish it first ('make release-publish')" >&2; exit 1; }
+[ "$(gh release view "$TAG" -R "$RELEASES_REPO" --json isPrerelease,isDraft \
+    --jq '.isPrerelease == false and .isDraft == false')" = true ] || {
+    echo "ERR: Homebrew requires a published stable release" >&2; exit 1; }
 
 echo "▶ Downloading $DMG to checksum it..."
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-gh release download "$VERSION" -R "$RELEASES_REPO" -p "$DMG" -D "$TMP" --clobber
+gh release download "$TAG" -R "$RELEASES_REPO" -p "$DMG" -D "$TMP" --clobber
 SHA="$(shasum -a 256 "$TMP/$DMG" | cut -d' ' -f1)"
 echo "  ✓ sha256 $SHA"
 
-if [ -d "$TAP_DIR/.git" ]; then
+if [ -e "$TAP_DIR/.git" ]; then
 	git -C "$TAP_DIR" fetch --quiet origin main
+	python3 "$HERE/scripts/tap_cache.py" "$TAP_DIR" "$TAP_REPO" --remote-tip origin/main
 	git -C "$TAP_DIR" reset --quiet --hard origin/main
 else
-	rm -rf "$TAP_DIR"
 	mkdir -p "$(dirname "$TAP_DIR")"
 	git clone --quiet "git@github.com:$TAP_REPO.git" "$TAP_DIR"
 fi
+TAP_HEAD="$(git -C "$TAP_DIR" rev-parse HEAD)"
 
 sed -i '' \
 	-e "s|^  version \".*\"$|  version \"$VERSION\"|" \
 	-e "s|^  sha256 \".*\"$|  sha256 \"$SHA\"|" \
+	-e "s|^  url \".*\"$|  url \"https://github.com/$RELEASES_REPO/releases/download/$TAG/Glimmer-#{version}.dmg\"|" \
 	"$TAP_DIR/$CASK"
 
 # The `glimmer` command is the app binary itself, linked under that name; the
@@ -57,6 +67,7 @@ $BINARY|" "$TAP_DIR/$CASK"
 # Fail loud rather than pushing a cask the seds didn't actually touch (a renamed
 # stanza or reindent would silently no-op the expressions above).
 grep -q "^  version \"$VERSION\"$" "$TAP_DIR/$CASK" && grep -q "^  sha256 \"$SHA\"$" "$TAP_DIR/$CASK" \
+	&& grep -qxF "  url \"https://github.com/$RELEASES_REPO/releases/download/$TAG/Glimmer-#{version}.dmg\"" "$TAP_DIR/$CASK" \
 	&& grep -qxF "$BINARY" "$TAP_DIR/$CASK" || {
 	echo "ERR: $CASK does not carry version $VERSION, that sha256 and the glimmer binary after the rewrite - check its stanza format" >&2
 	exit 1
@@ -67,7 +78,13 @@ if git -C "$TAP_DIR" diff --quiet -- "$CASK"; then
 	exit 0
 fi
 
-git -C "$TAP_DIR" add "$CASK"
-git -C "$TAP_DIR" commit --quiet -m "glimmer $VERSION"
-git -C "$TAP_DIR" push --quiet origin HEAD:main
+if [ "${GITHUB_ACTIONS:-}" = true ]; then
+	TAP_SHA="$(python3 "$HERE/scripts/github_signed_commit.py" "$TAP_REPO" "$TAP_HEAD" \
+		"$CASK" "$TAP_DIR/$CASK" "glimmer $VERSION")"
+	echo "  ✓ verified cask commit published → $TAP_SHA"
+else
+	git -C "$TAP_DIR" add "$CASK"
+	git -C "$TAP_DIR" commit --quiet -m "glimmer $VERSION"
+	git -C "$TAP_DIR" push --quiet origin HEAD:main
+fi
 echo "✅ Homebrew cask bumped to $VERSION - 'brew install --cask se7enbrc/glimmer/glimmer'."

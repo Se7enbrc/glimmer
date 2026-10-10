@@ -5,21 +5,30 @@
 Required:
 
 - macOS 26 or newer
-- Xcode 27 or later, for the macOS 27 SDK and its toolchain (Swift 6, `swiftc`,
-  `xcodebuild`, `xcrun`); the app still runs on macOS 26
+- Xcode 26.6 or later (Swift 6, `swiftc`, `xcodebuild`, `xcrun`)
 - Homebrew
+- Python 3.10 or newer, for release tooling and its regression tests
+- TruffleHog 3.97.8 or newer, for the required secret-scan flags
 
 Brew prerequisites:
 
 ```bash
-brew install swiftlint trufflehog pre-commit
+brew install python swiftlint actionlint trufflehog pre-commit
 ```
 
-The app links no third-party library: crypto, TLS and audio decode use Apple's
-frameworks (CryptoKit, CommonCrypto, Security, Network, AudioToolbox), not
-OpenSSL or libopus. There are no submodules and no vendored C library.
+The streaming engine links no third-party library: crypto, TLS and audio decode
+use Apple's frameworks (CryptoKit, CommonCrypto, Security, Network,
+AudioToolbox), not OpenSSL or libopus. Sparkle is the app's only third-party
+framework, for updates. There are no submodules and no vendored C library.
 `swiftlint` and `trufflehog` back pre-commit hooks, and the commit fails without
 them.
+
+`actionlint` checks GitHub workflow syntax and expressions as part of
+`make verify`, before compilation.
+
+The secret hooks check verified credentials and separately reject parseable
+private keys offline. The private-key scan withholds scanner output so a
+rejected key never appears in the commit log.
 
 Clone:
 
@@ -31,26 +40,38 @@ cd glimmer
 Install pre-commit hooks:
 
 ```bash
-pre-commit install                      # lint + secret scan, per commit
-pre-commit install --hook-type pre-push # `make test`, per push
+pre-commit install # lint + secret scan, per commit
 ```
 
 ## Build
 
 ```bash
 make app        # compile-only check (Debug), no signing
+make check      # workflow lint, SwiftLint and release-tool tests, no Swift build
 make test       # unit tests
-make verify     # strict lint + unit tests: the gate
+make test-asan  # protocol fuzz tests with AddressSanitizer, unsigned
+make verify     # lint, release tools, all Swift tests and sanitizer checks
 make            # notarized Release build, installed to /Applications
 make open       # same, then open it
 ```
 
+Use `make check` for quick feedback between edits. Run a focused Swift suite
+with `make test TEST_SUITE=DatagramBatchTests`, or append `/testName` to select
+one test. `make verify` always runs every suite, even if `TEST_SUITE` is set. It
+also runs the parser and stream fuzz suites under AddressSanitizer. A memory
+error fails the gate before a push or release.
+
+The shared scheme runs tests one at a time. Socket deadline tests measure real
+elapsed time; launching every test together can starve their callbacks on hosted
+runners. Each concurrency test still creates its own overlapping tasks or
+threads. Keep those assertions and time limits intact.
+
 `make` and `make open` run the full shipping pipeline: Developer ID signing,
 notarization, strict library validation. That is deliberate: there is no ad hoc
 or Debug divergence in daemon registration, TCC or library validation to chase,
-because you always run what ships. Without a Developer ID certificate on the
-machine it falls back to an ad hoc Release build (not notarized, and TCC asks
-again).
+because you always run what ships. Installed builds require a Developer ID
+certificate and the two explicit provisioning profiles described in
+[RELEASE.md](RELEASE.md). Unsigned compile checks and tests need neither.
 
 The canonical xcodebuild invocation (what `make app` runs) is:
 
@@ -193,9 +214,10 @@ before/after screenshot at the smallest and largest window the change allows.
 
 `swiftlint` runs as a pre-commit hook over `Glimmer/`, `GlimmerTests/`,
 `helper/` and `LoginHelper/`; `scripts/` is build-time tooling and is not held
-to the product lint bar. The commit hook blocks only on errors, but
-`make verify` lints with `--strict`, where any warning fails, and the release
-build runs it. Treat a warning as a failure. Thresholds worth knowing from
+to the product lint bar. Both the commit hook and `make verify` lint with
+`--strict`, where any warning fails. `make verify` also runs release-tool
+regression tests and the Swift suite. `make dist` runs this gate before
+building. Treat a warning as a failure. Thresholds worth knowing from
 `.swiftlint.yml`:
 
 - `force_unwrapping`, `force_cast`, `force_try`: warnings, so strict fails them.
@@ -213,6 +235,12 @@ codebase's trailing-aligned function arguments into a noisier style.
 A `trufflehog` secret scan runs per commit against verified detectors, and
 `prettier`, `markdownlint`, and `yamllint` cover the non-Swift files.
 Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
+
+Hosted PR checks run every pre-commit hook with `pre-commit run --all-files` on
+the same Apple Silicon runner as `make verify`. Credential checks cover all
+tracked files and the PR's commits, including credentials removed before the
+final commit. Scanner findings are withheld from public logs. Formatting hooks
+may fail and modify files for review; CI never commits those changes.
 
 ## Style
 
@@ -322,10 +350,10 @@ the comment at `StreamBridgeContext.eventContinuation` (in
   - `Diag.*` takes the same `privacy:` argument as `Logger`, but defaults to
     `.public`, so mark those values `.private` there too:
     `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
-    Private values reach only the in-app log viewer and what you copy from it.
-    The system log and the session file, which people attach to public issues,
-    show `<private>` in their place. Telemetry names the PC and the Mac by
-    per-install pseudonyms, never their names.
+    Private values reach only the in-app log viewer. Copied logs, the system log
+    and session files, which people attach to public issues, show `<private>` in
+    their place. Telemetry names the PC and the Mac by per-install pseudonyms,
+    never their names.
   - Never log:
     - Key characters from `keyDown` events (a later change fixed the regression
       where `chars=...` leaked at `.public`).
@@ -359,6 +387,13 @@ there. Common prefixes:
 
 Subject line: imperative mood, lowercase after the prefix, no trailing period.
 Body wrapped at about 72 columns when one's needed.
+
+Commits entering `main` must have a signature GitHub verifies. Register your
+signing key with GitHub and enable signing before committing. GitHub's web
+editor signs commits automatically. See
+[signing commits](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
+Keep private signing keys on your own machine; CI uses GitHub's signing service
+for release metadata updates.
 
 **No attribution to tools or agents.** No `Co-Authored-By` trailer, no session
 trailers or links, no “Generated with” line, no model or tool names: not in
@@ -404,12 +439,46 @@ Practically, before you call something done:
   doesn't link an agreed issue is closed.
 - `main` is the active development branch; releases are tags on it.
 - Fork, push your branch to the fork, and open the PR from there against `main`.
-  Only the maintainer can push branches to this repository or merge into `main`.
+  Only the maintainer can merge into `main`. Renovate, run by the maintainer,
+  keeps one grouped update branch; other contributors use forks.
 - Keep a PR scoped to one area, so it can land independently.
 - Leave `CHANGELOG.md` and `Glimmer/Version.xcconfig` alone: the maintainer
   picks the version and writes the release notes when a change ships. Each
-  release there is a `## <version> - <date>` heading over a flat list of
-  bullets, one per change a player will notice, written for them. See
-  [RELEASE.md](RELEASE.md).
+  release there is a `## <version> - <date>` heading with `### Features` and
+  `### Bug fixes` lists, one bullet per change a player will notice, written for
+  them. See [RELEASE.md](RELEASE.md).
 - Before you ask for a merge, run the thing and look at it. [The bar](#the-bar)
   is the checklist.
+- Before merging any PR, including Renovate updates, check out its exact head
+  commit in a clean worktree and run `make verify`. Record that commit SHA and
+  the checks in the review. Hosted CI also runs `make verify` on an Apple
+  Silicon macOS 26 runner with Xcode 26.6 and compiler warnings treated as
+  errors. PR jobs receive no signing credentials and cannot publish releases.
+  The local push hook checks the current worktree and cannot verify a different
+  ref being pushed.
+
+Hosted verification, CodeQL and releases use the same Xcode 26.6 toolchain on
+macOS 26. These checks exercise the minimum supported OS family, but do not
+replace real streaming checks of audio devices, mouse capture and controllers.
+The macOS 27 Hot Corner option uses its documented public enum value so builds
+made with Xcode 26 preserve that behavior on newer systems. Release signing uses
+a separate protected workflow; see [RELEASE.md](RELEASE.md).
+
+CodeQL scans Swift, Python and GitHub Actions with the `security-extended` query
+suite on pull requests, including approved fork PRs, and on `main`. The Swift
+scan compiles the unsigned app, login item and privileged helper with Xcode
+26.6; it receives no release credentials. Compiler-only tracing leaves SwiftPM's
+package sandbox intact. A post-analysis query requires successful extraction of
+every tracked production Swift file, so partial extraction cannot pass. An
+unsupported compiler or failed coverage query blocks the scan. Scheduled scans
+also check for newly added queries. GitHub's AI Scan is advisory and does not
+scan fork or bot PRs. Neither scanner replaces tests or security review.
+
+Hosted verification and releases download TruffleHog 3.97.8 and verify its
+pinned SHA-256 before installation. Scanner output stays suppressed, including
+failure diagnostics, so findings cannot expose credentials in public logs.
+
+Workflow runs from all outside contributors, including returning contributors,
+require a maintainer's approval. GitHub allows anyone with repository write
+access to approve runs; that access is reserved for trusted maintainers.
+Approving a PR workflow never grants it release credentials.

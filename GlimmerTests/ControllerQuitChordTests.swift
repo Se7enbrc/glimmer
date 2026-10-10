@@ -16,6 +16,32 @@ import Testing
 
 struct ControllerQuitChordTests {
 
+    @MainActor @Test(arguments: [false, true])
+    func lostInputOwnershipCancelsQuitDwell(connectionLost: Bool) async throws {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        forwarder.isReady = true
+        forwarder.controllerQuitChordProvider = { .l1r1 }
+        var quits = 0
+        forwarder.onQuitHotkey = { quits += 1 }
+        forwarder.armQuitChordDwell(slot: 0) {
+            (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, InputForwarder.neutralControllerAnalog)
+        }
+        #expect(forwarder.quitChordDwellTask != nil)
+
+        if connectionLost {
+            forwarder.setReady(false)
+            forwarder.isReady = true
+        } else {
+            forwarder.windowResignedKey()
+        }
+
+        #expect(forwarder.quitChordDwellTask == nil)
+        #expect(forwarder.quitChordDwellSlot == nil)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(quits == 0)
+    }
+
     // MARK: - Report builders
 
     private func decode(_ bytes: [UInt8], reportID: UInt32) -> DualSenseDecodedReport? {

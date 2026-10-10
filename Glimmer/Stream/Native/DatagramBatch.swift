@@ -31,6 +31,7 @@ final class DatagramBatch {
     let storage: UnsafeMutablePointer<UInt8>
     private let iovecs: UnsafeMutablePointer<iovec>
     private let records: UnsafeMutablePointer<Record>
+    private let sources: UnsafeMutablePointer<sockaddr_storage>
 
     init(capacity: Int, stride: Int) {
         self.capacity = capacity
@@ -38,6 +39,8 @@ final class DatagramBatch {
         storage = .allocate(capacity: capacity * stride)
         iovecs = .allocate(capacity: capacity)
         records = .allocate(capacity: capacity)
+        sources = .allocate(capacity: capacity)
+        sources.initialize(repeating: sockaddr_storage(), count: capacity)
         for index in 0..<capacity {
             (iovecs + index).initialize(to: iovec(iov_base: storage + index * stride, iov_len: stride))
         }
@@ -48,6 +51,7 @@ final class DatagramBatch {
         storage.deallocate()
         iovecs.deallocate()
         records.deallocate()
+        sources.deallocate()
     }
 
     /// Reads up to `capacity` datagrams in one call: the count, or -1 with errno set (ENOSYS without recvmsg_x,
@@ -57,8 +61,27 @@ final class DatagramBatch {
             errno = ENOSYS
             return -1
         }
-        for index in 0..<capacity { records[index] = Record(iov: iovecs + index, iovCount: 1) }
+        for index in 0..<capacity {
+            records[index] = Record(name: sources + index,
+                                    nameLength: socklen_t(MemoryLayout<sockaddr_storage>.size),
+                                    iov: iovecs + index, iovCount: 1)
+        }
         return receiveX(socket, records, UInt32(capacity), 0)
+    }
+
+    func receiveOne(from socket: Int32) -> Int {
+        var length = socklen_t(MemoryLayout<sockaddr_storage>.size)
+        let count = sources.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            recvfrom(socket, storage, stride, 0, $0, &length)
+        }
+        guard count >= 0 else { return -1 }
+        records[0] = Record(name: sources, nameLength: length, dataLength: count)
+        return 1
+    }
+
+    func isExpectedPeer(at index: Int, expected: sockaddr_storage, expectedLength: socklen_t) -> Bool {
+        UdpPinger.isExpectedPeer(sources[index], length: records[index].nameLength,
+                                expected: expected, expectedLength: expectedLength)
     }
 
     /// Datagram `index` from the last receive, its length clamped to the stride so a misread can't run past it.

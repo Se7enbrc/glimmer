@@ -13,6 +13,31 @@ struct SessionLaunchTests {
         #expect(StreamSession.retainsLaunchOwnership(after: StreamError.launchFailed("Malformed response")))
     }
 
+    @Test func stopCancelsInitialServerInfoBeforeItsTimeout() async {
+        let session = StreamSession()
+        await session.prepareLaunchTestSession()
+        let entered = SafetyTestGate()
+        let request = Task {
+            try await session.fetchInitialServerInfo {
+                await entered.open()
+                try await Task.sleep(for: .seconds(30))
+                return ServerInfo(address: "192.0.2.1", uniqueId: "pc", serverName: "Den PC")
+            }
+        }
+        defer { request.cancel() }
+        await entered.wait()
+        #expect(await session.initialServerInfoTask != nil)
+        let stopping = Task { await session.stop() }
+        // Request cancellation must not wait for unrelated UI and backend teardown.
+        let cancelled = await TerminationGate.runBounded(seconds: 2) { _ = await request.result }
+        #expect(cancelled)
+        request.cancel()
+        await #expect(throws: CancellationError.self) { try await request.value }
+        #expect(await session.initialServerInfoTask == nil)
+        await stopping.value
+        #expect(await !session.stopInProgress)
+    }
+
     @Test(arguments: [false, true])
     func settledLaunchDeterminesWhetherToCancel(refused: Bool) async {
         let session = StreamSession()
@@ -260,6 +285,59 @@ struct SessionLaunchTests {
         await secondResponse.open()
         _ = try await second.value
         #expect(await session.pendingLaunch == nil)
+    }
+
+    @Test func newLaunchWaitsForAnAlreadySendingLateCancel() async throws {
+        let mutations = HostLaunchMutations()
+        let epoch = try await mutations.beginLaunch(for: "pc")
+        let cancelEntered = SafetyTestGate()
+        let cancelResponse = SafetyTestGate()
+        let launchEntered = SafetyTestGate()
+        let launchStarted = SafetyTestGate()
+        let cleanup = Task {
+            await mutations.cancelIfCurrent(pc: "pc", epoch: epoch) {
+                await cancelEntered.open()
+                await cancelResponse.wait()
+            }
+        }
+        await cancelEntered.wait()
+        let launch = Task {
+            await launchEntered.open()
+            let current = try await mutations.beginLaunch(for: "pc")
+            await launchStarted.open()
+            return current
+        }
+        await launchEntered.wait()
+        let overtookCancel = await TerminationGate.runBounded(seconds: 0.05) { await launchStarted.wait() }
+        #expect(!overtookCancel)
+        // An unrelated PC does not wait on this one's HTTPS request.
+        #expect(try await mutations.beginLaunch(for: "other-pc") == 1)
+        await cancelResponse.open()
+        await cleanup.value
+        #expect(try await launch.value == epoch + 1)
+        let staleCancelled = SafetyTestCounter()
+        await mutations.cancelIfCurrent(pc: "pc", epoch: epoch) { await staleCancelled.increment() }
+        #expect(await staleCancelled.value == 0)
+    }
+
+    @Test func cancellingAQueuedLaunchDoesNotClaimThePc() async throws {
+        let mutations = HostLaunchMutations()
+        let epoch = try await mutations.beginLaunch(for: "pc")
+        let entered = SafetyTestGate()
+        let response = SafetyTestGate()
+        let cleanup = Task {
+            await mutations.cancelIfCurrent(pc: "pc", epoch: epoch) {
+                await entered.open()
+                await response.wait()
+            }
+        }
+        await entered.wait()
+        let launch = Task { try await mutations.beginLaunch(for: "pc") }
+        launch.cancel()
+        await response.open()
+        await cleanup.value
+        await #expect(throws: CancellationError.self) { try await launch.value }
+        #expect(try await mutations.beginLaunch(for: "pc") == epoch + 1)
     }
 
     private static var response: LaunchResponse {

@@ -6,7 +6,7 @@
     <string>io.ugfugl.glimmer.helper</string>
     <!-- Path within Glimmer.app to the daemon binary (SMAppService.daemon convention). -->
     <key>BundleProgram</key>
-    <string>Contents/MacOS/io.ugfugl.glimmer.helper</string>
+    <string>Contents/Library/LaunchServices/Glimmer Network Helper.app/Contents/MacOS/io.ugfugl.glimmer.helper</string>
     <!-- launchd starts the daemon on-demand when the app connects to this service;
          SMAppService manages the lifecycle, so no RunAtLoad/KeepAlive/ProcessType. -->
     <key>MachServices</key>

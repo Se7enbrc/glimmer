@@ -44,11 +44,8 @@ extension AppModel {
     private func bootstrap() async {
         // ContainerMigration.runIfNeeded() runs earlier, in GlimmerApp.init(),
         // before AppModel reads any UserDefaults.
-        // Self-heal the login item: if the user wants launch-at-login but the
-        // registration drifted (invalidated by an app update / move), re-assert
-        // it now. This is the fix for "doesn't start after reboot" - the next
-        // reboot picks up the freshly-reconciled registration.
-        LoginItemManager.reconcile()
+        // Repair login registration after moves and updates without blocking the launcher.
+        await LoginItemManager.reconcile()
         LoginItemManager.syncRelaunchOnLogin(UserDefaults.standard.bool(forKey: "launchAtLogin"))
         // Same self-heal for the privileged AWDL daemon: an app update / reinstall
         // swaps the bundle (and the daemon binary inside it), which can wedge the
@@ -253,23 +250,21 @@ extension AppModel {
         return "\(Self.resolutionLabel(width: display.width, height: display.height)) · \(display.fps) Hz"
     }
 
-    /// Whether the display the stream would open on has a camera notch
-    /// (`safeAreaInsets.top > 0`). "Fill the notch" is only shown - and only
-    /// consulted - when this is true: on a notchless panel the toggle used to
-    /// silently switch the fullscreen MECHANISM (borderless cover vs a macOS
-    /// Space), which is how a Mac mini user landed in the vanishing-window
-    /// Space path of issue #84. Same `displayInfoRevision` tracking edge as
-    /// `currentDisplayDescription`, since NSScreen.main is a global.
+    /// The next stream's display chooses the notch or native Space preference.
+    /// The revision makes display changes visible to SwiftUI despite NSScreen.main being global.
     var currentDisplayHasNotch: Bool {
         _ = displayInfoRevision
         return (NSScreen.main?.safeAreaInsets.top ?? 0) > 0
     }
 
-    /// The notch choice the session actually gets: the user's persisted toggle
-    /// on a notched panel, always "cover" (Path A) elsewhere. The persisted
-    /// value is kept untouched for when a notched panel is present again.
+    /// The notch preference applies on notched displays; elsewhere the native Space choice applies.
     var effectiveStreamCoversNotch: Bool {
-        currentDisplayHasNotch ? streamCoversNotch : true
+        Self.streamCoversNotch(displayHasNotch: currentDisplayHasNotch, coversNotch: streamCoversNotch,
+                              usesFullScreenSpace: streamUsesFullScreenSpace)
+    }
+
+    static func streamCoversNotch(displayHasNotch: Bool, coversNotch: Bool, usesFullScreenSpace: Bool) -> Bool {
+        displayHasNotch ? coversNotch : !usesFullScreenSpace
     }
 
     /// The panel's CURRENT refresh (`NSScreen.maximumFramesPerSecond` reflects

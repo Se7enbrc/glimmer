@@ -17,7 +17,6 @@ extension InputForwarder {
         commandKeyUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self] event in
             guard let self, let window = self.window, let view = self.inputView,
                   event.window === window, event.modifierFlags.contains(.command) else { return event }
-            self.log.debug("Cmd-held keyUp rerouted keyCode=\(event.keyCode, privacy: .public)")
             view.keyUp(with: event)
             return nil
         }

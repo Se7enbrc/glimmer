@@ -27,23 +27,27 @@ extension StreamWindow {
     }
 
     func enterMiniPlayer() {
-        guard !didClose, !isMiniPlayer else { return }
+        guard !didClose, !isMiniPlayer, !miniPlayerPending else { return }
         miniPlayerReturnMode = displayMode
+        miniPlayerReturnUsesSpace = window.styleMask.contains(.fullScreen)
+        if miniPlayerReturnUsesSpace {
+            miniPlayerPending = true
+            if displayMode == .window { installSpaceExitObservers() }
+            streamDelegate.closeState.transition = .exiting
+            window.toggleFullScreen(nil)
+            return
+        }
         switch displayMode {
         case .window:
             window.saveFrame(usingName: Self.frameAutosaveName)
             window.setFrameAutosaveName("")
             applyMiniPlayerChrome()
             onMiniPlayerChanged?(true)
-        case .fullScreen where window.styleMask.contains(.fullScreen):
-            // Path B: leave the Space first; the exit observers finish here.
-            miniPlayerPending = true
-            window.toggleFullScreen(nil)
         case .fullScreen:
             retireFullScreenCover()
             applyMiniPlayerChrome()
             installWindowedLifecycleObservers()
-            onBackgroundedChanged?(false)
+            setBackgrounded(false)
             onDidBecomeReadyForInput?()
             onMiniPlayerChanged?(true)
         }
@@ -68,6 +72,10 @@ extension StreamWindow {
             configureWindowedChrome()
             NSApp.activate()
             window.makeKeyAndOrderFront(nil)
+            if miniPlayerReturnUsesSpace {
+                streamDelegate.closeState.transition = .entering
+                window.toggleFullScreen(nil)
+            }
             Diag.notice("Mini player off - the stream is back in its window", "Stream")
         case .fullScreen:
             // The cover installs its own observers; drop the windowed set.
@@ -120,7 +128,7 @@ extension StreamWindow {
         window.setFrame(window.constrainFrameRect(window.frame, to: screen), display: false)
         // A free pointer shows the arrow over the picture; a backgrounded
         // full-screen window comes back on screen here.
-        (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(false)
+        setCursorHidden(false)
         updateMiniPlayerControls()
         window.orderFront(nil)
         let size = window.contentRect(forFrameRect: window.frame).size

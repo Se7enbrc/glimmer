@@ -73,9 +73,8 @@ extension FramePacer {
         /// renderer (`willPresent` returned true). If this stops advancing while
         /// the queue is non-empty, the present path is wedged.
         var lastReleaseHostTime: CFTimeInterval = .nan
-        /// `CFAbsoluteTimeGetCurrent()` when a submit last found the queue empty.
-        /// Only submit refills it and trims/evictions never empty it, so while the
-        /// queue holds frames this is when it last went from empty to non-empty.
+        /// Start of continuously queued, visible time. Refilling an empty queue
+        /// or resuming presentation restarts this stall-evidence window.
         var queueNonEmptySince: CFTimeInterval = .nan
         /// Count of consecutive ticks where the queue was non-empty but nothing was
         /// released (the wedge signature: `due` latched false). Reset on any
@@ -103,6 +102,8 @@ extension FramePacer {
         /// failsafe never armed. Surfaced via LivenessSnapshot so the recovery ladder
         /// reaches for the renderer flush. Guarded by `lock`.
         var presentRejectStreak: Int = 0
+        var firstRejectHostTime: CFAbsoluteTime = .nan
+        var lastRejectHostTime: CFAbsoluteTime = .nan
         /// Latched so the starvation-diagnostic warning logs once per episode, not
         /// every tick. Cleared on the next successful release.
         var loggedStarvation = false

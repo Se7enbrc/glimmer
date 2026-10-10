@@ -31,11 +31,8 @@ extension PairingClient {
 
     // MARK: AES-128-ECB (no padding)
     //
-    // moonlight uses raw ECB for every challenge/response block. ECB is
-    // safe-enough here because every plaintext is 16 random bytes; the usual
-    // ECB pitfalls (repeated-block leaks) don't apply to one-shot 128-bit
-    // values. Padding is disabled because all inputs are exact multiples of
-    // the block size by construction.
+    // Sunshine requires raw ECB for pairing challenges and hashes, with block-aligned inputs.
+    // Signature and challenge checks are separate from this cipher; see SECURITY.md for its limits.
 
     static func aesEcbEncrypt(_ plaintext: Data, key: Data) throws -> Data {
         try aesEcb(plaintext, key: key, encrypt: true)
@@ -99,9 +96,7 @@ extension PairingClient {
         signature: Data,
         serverCertPEM: String
     ) throws -> Bool {
-        guard let cert = PEM.certificate(serverCertPEM), let key = SecCertificateCopyKey(cert) else {
-            throw StreamError.crypto("could not read the PC's certificate key")
-        }
+        let key = try PEM.certificateKey(serverCertPEM, context: "PC certificate")
         // Invalid and malformed both come back false; the caller throws on false.
         return SecKeyVerifySignature(key, .rsaSignatureMessagePKCS1v15SHA256,
                                      data as CFData, signature as CFData, nil)
@@ -113,6 +108,7 @@ extension PairingClient {
         guard let key = PEM.privateKey(privateKeyPEM) else {
             throw StreamError.crypto("could not read the client key")
         }
+        try PEM.requireStrongRSA(key, context: "client private key")
         var error: Unmanaged<CFError>?
         guard let signature = SecKeyCreateSignature(key, .rsaSignatureMessagePKCS1v15SHA256,
                                                     message as CFData, &error) as Data? else {

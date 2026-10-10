@@ -476,7 +476,7 @@ struct StreamPathMTUTests {
     }
 
     @Test func unreachablePortWaitsOnlyToTheCap() async throws {
-        try await Task(priority: .high) {
+        try await withTaskExecutorPreference(TestTaskExecutor()) {
             let port = try #require(LoopbackPort(listening: false))
             let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
             let start = ContinuousClock.now
@@ -484,7 +484,7 @@ struct StreamPathMTUTests {
             let waited = ContinuousClock.now - start
             #expect(waited >= .milliseconds(100) && waited < .seconds(5))
             #expect(sampler.harvest() == nil)
-        }.value
+        }
     }
 
     /// A PC that refuses every handshake used to keep the loop sampling for the

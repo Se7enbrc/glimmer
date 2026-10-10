@@ -212,28 +212,54 @@ struct SessionSafetyTests {
     /// A PC that closes without replying fails the request instead of taking the app down.
     @Test func peerClosingWithoutAReplyFailsTheRequest() async throws {
         let port = try #require(LoopbackPort(listening: true))
-        let request = Task { try await Self.plainGet(host: "127.0.0.1", port: Int(port.port)) }
-        close(try await acceptControlConnection(on: port.fd, requestFinished: ManagedAtomicFlag()))
-        await #expect(throws: StreamError.self) { try await request.value }
+        do {
+            _ = try await withControlPeer(host: "127.0.0.1", port: port) { _ in }
+            Issue.record("A peer closing without a reply returned a response")
+        } catch StreamError.hostUnreachable(let detail) {
+            #expect(detail == "malformed HTTP response (no header terminator)")
+        }
     }
 
     /// A hostname must reach an IPv4-only listener even when it also resolves to IPv6.
     @Test func localhostReachesAnIPv4OnlyListener() async throws {
         let port = try #require(LoopbackPort(listening: true))
-        let request = Task { try await Self.plainGet(host: "localhost", port: Int(port.port)) }
-        let peer = try await acceptControlConnection(on: port.fd, requestFinished: ManagedAtomicFlag())
-        let reply = Array("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".utf8)
-        _ = reply.withUnsafeBytes { write(peer, $0.baseAddress, $0.count) }
-        close(peer)
-        let response = try await request.value
+        let response = try await withControlPeer(host: "localhost", port: port) { peer in
+            let reply = Array("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".utf8)
+            let written = reply.withUnsafeBytes { write(peer, $0.baseAddress, $0.count) }
+            #expect(written == reply.count)
+        }
         #expect(response.status == 200)
         #expect(response.body == Data("ok".utf8))
     }
 
-    private static func plainGet(host: String, port: Int) async throws -> ControlTransport.Response {
-        try await ControlTransport.get(
-            host: host, port: port, target: "/serverinfo", userAgent: "GlimmerTests", tls: false,
-            credential: .init(clientCertPEM: nil, clientKeyPEM: nil, pinnedCertPEM: nil), timeout: 5)
+    @Test func controlPeerFailureIsReportedBeforeTheFixtureReturns() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        await #expect(throws: TestSocketError.setupFailed) {
+            _ = try await withControlPeer(host: "127.0.0.1", port: port) { _ in
+                throw TestSocketError.setupFailed
+            }
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func fixtureReadinessIsCheckedBeforeItsDeadline(hasPendingBytes: Bool) async throws {
+        var descriptors = [Int32](repeating: -1, count: 2)
+        try #require(pipe(&descriptors) == 0)
+        let reader = descriptors[0]
+        defer { close(reader); close(descriptors[1]) }
+        if hasPendingBytes {
+            var byte: UInt8 = 1
+            #expect(write(descriptors[1], &byte, 1) == 1)
+        }
+        let deadline = ContinuousClock.now - .seconds(1)
+        do {
+            try await onTestThread {
+                try waitForControlReadability(reader, requestFinished: ManagedAtomicFlag(), until: deadline)
+            }
+            #expect(hasPendingBytes)
+        } catch TestSocketError.setupTimedOut {
+            #expect(!hasPendingBytes)
+        }
     }
 
     @Test func quitWaitsForOverlappingStop() async {

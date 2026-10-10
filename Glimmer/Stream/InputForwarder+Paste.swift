@@ -41,17 +41,24 @@ extension InputForwarder {
     /// ride another channel. Reading the clipboard here is a user paste.
     func pasteClipboardAsText() {
         guard isReady, let clipboard = NSPasteboard.general.string(forType: .string) else { return }
+        queuePasteText(clipboard)
+    }
+
+    @discardableResult
+    func queuePasteText(_ clipboard: String) -> Task<Void, Never>? {
+        guard isReady, let backend else { return nil }
         let text = PasteText.prepared(clipboard)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else { return nil }
         raiseAllHeldInputs(reason: "paste")
         // Modifiers still down (the chord's own) are up on the PC now: count them
         // as held, so letting go sends a harmless release instead of a press.
         heldModifierVKs = ModifierSides.held(in: NSEvent.modifierFlags, includeCommand: forwardsCommand)
         log.info("Pasting \(text.utf8.count, privacy: .public) bytes as text")
-        Task { [weak self] in
+        let generation = inputGeneration
+        return Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(50))
-            guard let self, self.isReady else { return }
-            self.record("LiSendUtf8TextEvent", self.backend?.sendUtf8Text(text) ?? -2)
+            guard !Task.isCancelled, let self, self.isReady, self.inputGeneration == generation else { return }
+            self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
         }
     }
 }

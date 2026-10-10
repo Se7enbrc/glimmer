@@ -159,7 +159,7 @@ public actor PairingClient {
         // The signature and PIN proof allow an in-memory pin for steps 6 and 7.
         // Save it only after the pinned HTTPS challenge and identity check succeed.
         // This is the only in-memory pin write; /serverinfo cannot silently rebind it.
-        await network.setPinnedHostCert(pem: serverCertPEM)
+        try await network.setPinnedHostCert(pem: serverCertPEM)
 
         try await completeClientPairing(
             clientSecret: clientSecret,
@@ -177,10 +177,8 @@ public actor PairingClient {
         return server
     }
 
-    /// Step 1 (getservercert), split out of `runPairingFlow`: send a fresh salt
-    /// + our PEM cert (hex-encoded), then decode the host's pinned cert from the
-    /// `plaincert` hex blob. From here on we treat that cert as the host's
-    /// identity for all subsequent TLS verification until pairing finishes.
+    /// Decode and check the host's proposed certificate. Only the later PIN and signature proof
+    /// can authorize pinning it; rejecting its key here leaves any existing pin untouched.
     private func fetchServerCert(
         salt: Data,
         clientCertBytes: Data,
@@ -217,6 +215,7 @@ public actor PairingClient {
         guard let serverCertPEM = String(data: serverCertBytes, encoding: .utf8) else {
             throw StreamError.pairingFailed("plaincert was not valid UTF-8 PEM")
         }
+        _ = try PEM.certificateKey(serverCertPEM, context: "PC certificate")
         return serverCertPEM
     }
 

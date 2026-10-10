@@ -47,15 +47,28 @@ extension InputForwarder {
     /// hold. Validate on-device.
     func forwardTouchpad(pad: GCExtendedGamepad, slot: UInt8) {
         guard let tp = touchpadElements(of: pad) else { return }
+        forwardTouchpad(slot: slot, primary: (tp.primary.xAxis.value, tp.primary.yAxis.value),
+                        secondary: (tp.secondary.xAxis.value, tp.secondary.yAxis.value))
+    }
+
+    func forwardTouchpad(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float)) {
+        guard forwardsControllerEvents else { return }
         var state = touchpadStates[slot] ?? TouchpadState()
-        updateFinger(&state.primary, dpad: tp.primary, slot: slot)
-        updateFinger(&state.secondary, dpad: tp.secondary, slot: slot)
+        updateFinger(&state.primary, position: primary, slot: slot)
+        updateFinger(&state.secondary, position: secondary, slot: slot)
         touchpadStates[slot] = state
     }
 
-    private func updateFinger(_ finger: inout TouchpadFinger, dpad: GCControllerDirectionPad, slot: UInt8) {
-        let rawX = dpad.xAxis.value
-        let rawY = dpad.yAxis.value
+    func releaseControllerTouches(slot: UInt8? = nil) {
+        for key in Array(touchpadStates.keys) where slot == nil || slot == key {
+            guard var state = touchpadStates.removeValue(forKey: key), isReady else { continue }
+            endFinger(&state.primary, slot: key)
+            endFinger(&state.secondary, slot: key)
+        }
+    }
+
+    private func updateFinger(_ finger: inout TouchpadFinger, position: (x: Float, y: Float), slot: UInt8) {
+        let (rawX, rawY) = position
         let touching = rawX != 0 || rawY != 0
         // GameController: x ∈ [-1,1] left→right, y ∈ [-1,1] bottom→top.
         // Host touch space: [0,1] with a top-left origin, so flip Y.
@@ -81,11 +94,16 @@ extension InputForwarder {
                 record("LiSendControllerTouchEvent2(move)", rc)
             }
         } else if !touching, finger.active {
-            finger.active = false
-            let rc = backend?.sendControllerTouch(
-                num: slot, eventType: UInt8(StreamProtocol.LI_TOUCH_EVENT_UP),
-                touchpadIndex: 0, pointerId: finger.pointerId, x: finger.x, y: finger.y, pressure: 0.0) ?? -2
-            record("LiSendControllerTouchEvent2(up)", rc)
+            endFinger(&finger, slot: slot)
         }
+    }
+
+    private func endFinger(_ finger: inout TouchpadFinger, slot: UInt8) {
+        guard finger.active else { return }
+        finger.active = false
+        let rc = backend?.sendControllerTouch(
+            num: slot, eventType: UInt8(StreamProtocol.LI_TOUCH_EVENT_UP),
+            touchpadIndex: 0, pointerId: finger.pointerId, x: finger.x, y: finger.y, pressure: 0) ?? -2
+        record("LiSendControllerTouchEvent2(up)", rc)
     }
 }

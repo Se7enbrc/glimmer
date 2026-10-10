@@ -105,15 +105,8 @@ extension StreamWindow {
         let conformed = StreamWindowGeometry.conformed(restored, toAspect: aspect, within: available)
         if conformed != restored { window.setContentSize(conformed) }
         window.setFrame(window.constrainFrameRect(window.frame, to: screen), display: false)
-        // Seed the FREE-pointer state. The per-view transparent-cursor
-        // backstop defaults ON because full screen hides the cursor for the
-        // whole session - but a window opens with the pointer the user's own,
-        // and without this the arrow would be invisible over the picture from
-        // frame zero. It runs before any capture edge can fire (the hover grab
-        // needs a first responder, installed a runloop turn later), so a
-        // bring-up that DOES land under the pointer still ends captured: this
-        // seeds free, the grab then flips it.
-        (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(false)
+        // A window opens with a free pointer; hover capture is installed afterward.
+        setCursorHidden(false)
     }
 
     /// The visible screen area a window's CONTENT can occupy: the visible
@@ -154,7 +147,6 @@ extension StreamWindow {
     func setPointerCaptured(_ captured: Bool) {
         guard displayMode == .window, !didClose else { return }
         setCursorHidden(captured)
-        (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(captured)
         updateMiniPlayerControls()
         if captured {
             showCaptureHintIfBudgetAllows()
@@ -178,7 +170,7 @@ extension StreamWindow {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.didClose else { return }
-                self.onBackgroundedChanged?(true)
+                self.setBackgrounded(true)
                 self.log.info("Stream window miniaturized - present suppressed until it returns")
             }
         })
@@ -187,27 +179,53 @@ extension StreamWindow {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.didClose else { return }
-                self.onBackgroundedChanged?(false)
+                self.setBackgrounded(false)
             }
         })
     }
 
+    /// Input focus and picture visibility are independent when another display shows the stream.
+    func setBackgrounded(_ backgrounded: Bool) {
+        userBackgrounded = backgrounded
+        onBackgroundedChanged?(backgrounded)
+        refreshPresentationVisibility()
+    }
+
+    func installPresentationVisibilityObserver(nc: NotificationCenter) {
+        keyObservers.append(nc.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshPresentationVisibility() }
+        })
+    }
+
+    func refreshPresentationVisibility() {
+        guard !didClose, !awaitingFirstFrameFadeIn, window.alphaValue > 0 else { return }
+        let suppressed = Self.suppressesPresentation(isVisible: window.isVisible,
+            isMiniaturized: window.isMiniaturized, occlusionVisible: window.occlusionState.contains(.visible))
+        guard presentationSuppressed != suppressed else { return }
+        presentationSuppressed = suppressed
+        onPresentationSuppressedChanged?(suppressed)
+    }
+
+    nonisolated static func suppressesPresentation(isVisible: Bool, isMiniaturized: Bool,
+                                                   occlusionVisible: Bool) -> Bool {
+        !isVisible || isMiniaturized || !occlusionVisible
+    }
+
     // MARK: - Path B Space exit → window (issue #84)
 
-    /// Registered by the Path-B bring-up. A user-driven exit from the Space
-    /// (Mission Control, the Esc gesture) converts this window to window mode
-    /// instead of leaving it ordered out: `willExit` disarms the fullscreen
-    /// key observers (so the resign-key orderOut can't fire mid-transition)
-    /// and flips the mode; `didExit` applies the titled chrome once AppKit has
-    /// finished the animation. `close()` sets `didClose` before its own
-    /// toggleFullScreen, so a teardown exit never converts.
+    /// User-driven Space exits convert to a window (#84); teardown exits never convert.
     func installSpaceExitObservers() {
+        guard spaceExitObservers.isEmpty else { return }
         let nc = NotificationCenter.default
         spaceExitObservers.append(nc.addObserver(
             forName: NSWindow.willExitFullScreenNotification, object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, !self.didClose, self.displayMode == .fullScreen else { return }
+                guard let self, !self.didClose,
+                      self.displayMode == .fullScreen || self.miniPlayerPending else { return }
+                self.logSpaceExit()
                 self.retireFullScreenCover()
             }
         })
@@ -219,6 +237,22 @@ extension StreamWindow {
                 self.finishSpaceExitConversion()
             }
         })
+    }
+
+    private func logSpaceExit() {
+        let event = NSApp.currentEvent
+        let isKeyEvent = event?.type == .keyDown || event?.type == .keyUp || event?.type == .flagsChanged
+        let keyCode = isKeyEvent ? event.map { String($0.keyCode) } ?? "none" : "none"
+        let frames = Thread.callStackSymbols.filter {
+            $0.split(whereSeparator: \.isWhitespace).dropFirst().first != "AppKit"
+        }.prefix(2).joined(separator: " | ")
+        let responder = window.firstResponder.map { String(describing: type(of: $0)) } ?? "none"
+        let streamWindow = window as? KeyableWindow
+        let source = streamWindow?.fullScreenExitSource ?? "unobserved"
+        streamWindow?.fullScreenExitSource = "unobserved"
+        Diag.notice("Space exit: type=\(event.map { String($0.type.rawValue) } ?? "none") keyCode=\(keyCode) "
+            + "modifiers=\(event?.modifierFlags.rawValue ?? 0) responder=\(responder) "
+            + "source=\(source) frames=\(frames)", "Stream.Window")
     }
 
     /// Full screen is ending (a Space exit under way, or the mini player
@@ -243,6 +277,7 @@ extension StreamWindow {
         // A Cmd-Tab away belonged to the cover, and the observer that would clear
         // it is gone: left set, the return from the mini player skips the backstop.
         userBackgrounded = false
+        resetCoverSlide()
         displayMode = .window
         streamDelegate.displayMode = .window
         streamDelegate.coversNotch = false
@@ -272,7 +307,7 @@ extension StreamWindow {
             window.makeKeyAndOrderFront(nil)
         }
         installWindowedLifecycleObservers()
-        onBackgroundedChanged?(false)
+        setBackgrounded(false)
         onDidBecomeReadyForInput?()
         if toMiniPlayer {
             onMiniPlayerChanged?(true)

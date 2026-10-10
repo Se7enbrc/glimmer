@@ -38,6 +38,7 @@ extension VideoDecoder {
     /// caller's behaviour.
     public func statsSnapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
         var snap = statsCollector.snapshot(minWindowSeconds: minWindowSeconds)
+        snap.videoCodec = Self.codecDisplayName(for: streamVideoFormat)
         if streamFps > 0 {
             snap.configuredFps = Double(streamFps)
         }
@@ -54,8 +55,7 @@ extension VideoDecoder {
         // (the percentage alone can't show the D/B/L breakdown). Same raw counter
         // the telemetry exporter reads.
         snap.decoderDropCount = statsCollector.decoderDropCount()
-        // Audio config - picked at session start from
-        // AudioConfig.bestForCurrentOutput(); nil before session start.
+        // The source channel layout belongs to the session, even when the output device changes.
         if let audio = activeAudioConfigLabel {
             snap.audioConfigDescription = audio
         }
@@ -70,6 +70,15 @@ extension VideoDecoder {
             droppedPct=\(snap.decoderDroppedPercent ?? 0, privacy: .public)
             """)
         return snap
+    }
+
+    nonisolated static func codecDisplayName(for format: Int32) -> String? {
+        switch codecLabel(for: format) {
+        case "h264": return "H.264"
+        case "hevc": return "HEVC"
+        case "av1": return "AV1"
+        default: return nil
+        }
     }
 
     /// Stash the negotiated bitrate for the overlay and telemetry. Set by

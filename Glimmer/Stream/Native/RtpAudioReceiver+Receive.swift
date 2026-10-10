@@ -32,6 +32,7 @@ extension RtpAudioReceiver {
             defer { pthread_setname_np("") }
             var buf = [UInt8](repeating: 0, count: bufSize)
             var source = sockaddr_storage()
+            var foreignPeerNoted = false
             while let self, !self.interrupted.isSet {
                 var sourceLength = socklen_t(MemoryLayout<sockaddr_storage>.size)
                 let received = withUnsafeMutablePointer(to: &source) { address in
@@ -39,8 +40,9 @@ extension RtpAudioReceiver {
                         recvfrom(sock, &buf, bufSize, 0, $0, &sourceLength)
                     }
                 }
-                if received >= 0, !Self.isExpectedPeer(source, length: sourceLength,
+                if received >= 0, !UdpPinger.isExpectedPeer(source, length: sourceLength,
                                                        expected: self.destAddr, expectedLength: self.destAddrLen) {
+                    UdpPinger.noteForeignPeer(&foreignPeerNoted, stream: "Audio", category: Self.cat)
                     continue
                 }
                 if received > 0 {

@@ -70,7 +70,6 @@ extension StreamSession {
         self.reconnectServer = server
         self.reconnectConfig = config
         self.reconnectAppID = appID
-        audioDecoder.setOutputMuted(config.playAudioOnHost)
 
         // Keep the Mac (and its display) awake AND opt OUT of App Nap for the
         // whole session. Begun here so a slow handshake can't let the machine
@@ -238,7 +237,7 @@ extension StreamSession {
     private func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
         let serverinfoStart = Date()
-        let serverInfo = try await network.fetchServerInfo()
+        let serverInfo = try await fetchInitialServerInfo { try await network.fetchServerInfo() }
         ConnectTimingTelemetry.shared.recordLaunchLeg(
             serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
         log.info("""
@@ -251,6 +250,20 @@ extension StreamSession {
         return serverInfo
     }
 
+    /// Stop must also cancel the first request, before a launch task exists to interrupt.
+    func fetchInitialServerInfo(
+        operation: @escaping @Sendable () async throws -> ServerInfo
+    ) async throws -> ServerInfo {
+        let task = Task { try await operation() }
+        initialServerInfoTask = task
+        defer { if initialServerInfoTask == task { initialServerInfoTask = nil } }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     /// Stand up the window + decoder + input on the MainActor and adopt them as
     /// the session's subsystems. Telemetry: stamps the MainActor
     /// subsystem/window build leg, isolating it from the launch network legs
@@ -259,6 +272,7 @@ extension StreamSession {
     private func buildAndAdoptSubsystems(
         _ options: StreamSetupOptions
     ) async -> (StreamWindow, InputForwarder, VideoDecoder) {
+        audioDecoder.setOutputMuted(options.config.playAudioOnHost)
         let buildStart = Date()
         let setup: (StreamWindow, InputForwarder, VideoDecoder) =
             await buildStreamSubsystems(options)

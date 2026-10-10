@@ -471,6 +471,16 @@ struct FramePacerTests {
     /// scheduling delay between the test's clock read and the beat's can't flip either test.
     private let panelVsync = 0.1
 
+    @Test func acceptedFrameClearsRendererRefusalWindow() throws {
+        let pacer = try makePacer(fps: 120, queued: 0)
+        pacer.noteGateReleaseRejected()
+        pacer.noteFramePresented(try emptySampleBuffer())
+        let live = pacer.livenessSnapshot()
+        #expect(live.presentRejectStreak == 0)
+        #expect(live.rendererRefusalSeconds.isNaN)
+        #expect(live.secondsSinceLastReject.isNaN)
+    }
+
     /// A tick release as `handleTick` makes it with the link at half the panel's
     /// rate: the target two panel vsyncs out, the scanout on the first.
     private func releaseOnHalfRateTick(_ pacer: FramePacer, linkTimestamp: CFTimeInterval) {

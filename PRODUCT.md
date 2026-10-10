@@ -62,13 +62,15 @@ that inspired Glimmer; it is not the protocol's name.
 - No analytics, tracking or third-party network calls. Glimmer talks only to the
   user's PC, the local network for discovery and Wake on LAN, and its update
   feed.
-- The renderer is AVSampleBufferDisplayLayer, not Metal. Glimmer does not use or
-  recommend macOS Game Mode.
+- The renderer is AVSampleBufferDisplayLayer, not Metal. Fullscreen covers the
+  whole screen, notch included, and supports macOS Game Mode; the player changes
+  Game Mode in the system Game Overlay.
 - UI copy follows the "UI and copy" rules in AGENTS.md, which are binding for
   every contributor.
 
 ## Brand Commitments
 
+- Glimmer is free, now and always. Every feature belongs to every user.
 - The name is Glimmer. The app icon (`docs/assets/icon-512.png`) is final.
 - The purple accent is part of the identity; design works inside it.
 - System controls only: SwiftUI and AppKit with Liquid Glass. A custom look is a

@@ -6,6 +6,42 @@ import Testing
 @testable import Glimmer
 
 struct FramePacerTickDeficitTests {
+    @Test(arguments: [0, StreamSession.rendererStarvationStreakTrip])
+    func retainedFrameResumeRestartsStallEvidence(rejectStreak: Int) throws {
+        let pacer = try makePacer()
+        let hiddenAt = CFAbsoluteTimeGetCurrent() - 3
+        pacer.liveness.lastReleaseHostTime = hiddenAt
+        pacer.liveness.releaseCount = 7
+        pacer.liveness.queueNonEmptySince = hiddenAt
+        pacer.liveness.presentRejectStreak = rejectStreak
+        pacer.liveness.firstRejectHostTime = hiddenAt
+        pacer.liveness.lastRejectHostTime = hiddenAt + 0.1
+        pacer.setPresentSuppressed(true)
+
+        pacer.setPresentSuppressed(false)
+
+        let resumedAt = pacer.tickDeficit.rateWindowStartHostTime
+        #expect(pacer.liveness.queueNonEmptySince == resumedAt)
+        #expect(pacer.queue.count == 1)
+        #expect(pacer.liveness.lastReleaseHostTime == hiddenAt)
+        #expect(pacer.liveness.releaseCount == 7)
+        #expect(pacer.liveness.presentRejectStreak == 0)
+        #expect(pacer.liveness.firstRejectHostTime.isNaN)
+        #expect(pacer.liveness.lastRejectHostTime.isNaN)
+        pacer.liveness.lastTickHostTime = resumedAt
+        let resumed = pacer.livenessSnapshot(at: resumedAt)
+        #expect(!StreamSession.presentStallTripped(live: resumed, inStartupGrace: false))
+        #expect(!StreamSession.rendererStarvationTripped(
+            rejectStreak: resumed.presentRejectStreak, inStartupGrace: false,
+            refusalSeconds: resumed.rendererRefusalSeconds, sinceLastReject: resumed.secondsSinceLastReject))
+
+        let stalledAt = resumedAt + StreamSession.presentStallThreshold + 0.01
+        pacer.liveness.lastTickHostTime = stalledAt
+        let stalled = pacer.livenessSnapshot(at: stalledAt)
+        #expect(StreamSession.presentStallTripped(live: stalled, inStartupGrace: false))
+        #expect(stalled.totalReleases == 7)
+    }
+
     @Test func deficitEngagesHoldsAndRecovers() throws {
         let pacer = try makePacer()
         var now = 100.0

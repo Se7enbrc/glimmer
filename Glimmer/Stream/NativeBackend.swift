@@ -282,8 +282,25 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
     private static let logCategory = "NativeConnection"
     /// The session this pipeline started for, not whichever is current when a late event fires.
     weak let bridge: StreamBridgeContext?
+    weak let backend: NativeBackend?
+    // Native callback threads access the task tail only under this lock and never wait on it.
+    private let sessionEvents = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
 
-    init(bridge: StreamBridgeContext? = StreamBridgeContext.current) { self.bridge = bridge }
+    init(bridge: StreamBridgeContext? = StreamBridgeContext.current, backend: NativeBackend? = nil) {
+        self.bridge = bridge
+        self.backend = backend
+    }
+
+    /// Separate Tasks can reorder establish and terminate; chain this pipeline's actor events.
+    private func enqueueSessionEvent(_ operation: @escaping @Sendable () async -> Void) {
+        sessionEvents.withLock { previous in
+            let predecessor = previous
+            previous = Task {
+                await predecessor?.value
+                await operation()
+            }
+        }
+    }
 
     func stageStarting(_ name: String) {
         Diag.info("stage starting: \(name)", Self.logCategory)
@@ -332,8 +349,8 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         bridge?.eventContinuation?.yield(.connectionEstablished)
         // Drive the actor side effect (flip InputForwarder ready,
         // close the ConnectFlow signpost). Best-effort; lossy if torn down.
-        if let session = bridge?.session {
-            Task { await session.nativeConnectionEstablished() }
+        if let session = bridge?.session, let backend {
+            enqueueSessionEvent { await session.nativeConnectionEstablished(from: backend) }
         }
     }
 
@@ -352,8 +369,8 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         // Don't yield `.connectionTerminated` directly: handleHostTerminate
         // classifies it (a recoverable live-session close drives a silent reconnect
         // under the frozen frame). No session → fall back so it's never swallowed.
-        if let session = bridge?.session {
-            Task { await session.handleHostTerminate(code: code) }
+        if let session = bridge?.session, let backend {
+            enqueueSessionEvent { await session.handleHostTerminate(code: code, from: backend) }
         } else {
             bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
         }

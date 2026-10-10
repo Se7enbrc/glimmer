@@ -39,14 +39,8 @@ final class StreamInputView: NSView {
 
     private var trackingArea: NSTrackingArea?
 
-    /// A fully transparent 1×1 cursor. Set in `cursorUpdate(with:)` as a
-    /// belt-and-braces invisibility layer: whenever the pointer is over the
-    /// stream content AppKit asks the view for its cursor, and handing it an
-    /// invisible cursor guarantees no arrow paints even if the CGDisplay hide
-    /// latch slips (e.g. a becomeKey that raced the pointer off-content).
-    /// This layer is inherently self-balancing - AppKit resets the cursor to
-    /// the system default the instant the pointer leaves the view - so it can
-    /// never strand the system cursor invisible the way a counted latch can.
+    /// The invisible image prevents a system reveal from drawing an arrow over
+    /// captured input. Release and teardown must explicitly restore the arrow.
     private static let transparentCursor: NSCursor = {
         let image = NSImage(size: NSSize(width: 1, height: 1))
         image.lockFocus()
@@ -56,11 +50,9 @@ final class StreamInputView: NSView {
         return NSCursor(image: image, hotSpot: .zero)
     }()
 
-    /// Whether the transparent-cursor backstop is in force. Always true in
-    /// full screen (the pointer is hidden for the whole session). Window mode
-    /// flips it with pointer capture: a released pointer must show the arrow
-    /// over the picture, so `cursorUpdate` hands AppKit the arrow instead.
-    private var transparentCursorEnabled = true
+    /// The first frame or windowed capture opts in; connecting and released
+    /// views leave the pointer visible, including during late tracking updates.
+    private var transparentCursorEnabled = false
 
     /// Window mode's capture edge. Applies the matching cursor immediately
     /// rather than waiting for the next motion, so a chord release shows the
@@ -78,9 +70,29 @@ final class StreamInputView: NSView {
     var acceptsActivatingClick = false
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { acceptsActivatingClick }
 
-    /// Set when the stream warps the cursor: the next motion event carries the
-    /// warp's jump rather than the user's hand, so it never reaches the PC.
-    var discardsNextMotion = false
+    private var motionBoundary: TimeInterval?
+    private var needsMotionBaseline = false
+
+    /// Queued motion predating capture or a warp must not consume the reset.
+    /// The first later delta can span the transition, so establish a baseline.
+    func resetMotion(after timestamp: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        motionBoundary = timestamp
+        needsMotionBaseline = true
+    }
+
+    func resumeMotion() {
+        motionBoundary = nil
+        needsMotionBaseline = false
+    }
+
+    func acceptsMotion(_ event: NSEvent) -> Bool {
+        if let motionBoundary, event.timestamp <= motionBoundary { return false }
+        if needsMotionBaseline {
+            needsMotionBaseline = false
+            return false
+        }
+        return true
+    }
 
     override var acceptsFirstResponder: Bool { true }
     override var isOpaque: Bool { true }
@@ -93,21 +105,8 @@ final class StreamInputView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let area = trackingArea { removeTrackingArea(area) }
-        // `.cursorUpdate` is load-bearing: AppKit ONLY calls `cursorUpdate(with:)`
-        // for tracking areas that include it. Without it the transparent-cursor
-        // backstop below was dead code (never invoked), so a system arrow could
-        // paint over the stream whenever the OS re-showed the cursor behind the
-        // CGDisplay hide latch (display/HDR/VRR reconfig, sleep-wake, HID attach).
-        //
-        // `.mouseEnteredAndExited` is what window mode's hover grab rides on,
-        // and `.inVisibleRect` is what keeps it honest across a live resize -
-        // AppKit re-derives the rect itself, so this method being called on
-        // every geometry change cannot leave a stale grab region behind.
-        // `.activeAlways` (rather than `.activeInKeyWindow`) is deliberate and
-        // unchanged: the fullscreen path needs mouseMoved and cursorUpdate
-        // regardless of key status. The "don't grab a background window's
-        // pointer" rule is enforced on the key-window bool in HoverCapture
-        // instead, where it is testable and cannot alter full screen.
+        // Tracking outlives focus and live resizing. The forwarder gates input
+        // on key ownership, and cursorUpdate follows explicit cursor ownership.
         let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseMoved, .activeAlways, .inVisibleRect, .mouseEnteredAndExited, .cursorUpdate],
@@ -118,15 +117,8 @@ final class StreamInputView: NSView {
         trackingArea = area
     }
 
-    /// AppKit calls this whenever the pointer is over the view's tracking area
-    /// and it's time to set the cursor. Returning an invisible cursor is a
-    /// second, self-balancing invisibility layer underneath the authoritative
-    /// CGDisplayHideCursor latch owned by StreamWindow: if that latch ever
-    /// slips (e.g. a becomeKey fired while the pointer was momentarily off
-    /// content), this still guarantees no arrow paints over the stream. Unlike
-    /// the counted latch this is balanced for free - AppKit restores the
-    /// system cursor the moment the pointer leaves the view - so it can never
-    /// leave the system cursor invisible.
+    /// Tracking can continue through a close fade or after key focus changes.
+    /// Released views select the arrow even when AppKit delivers a late update.
     override func cursorUpdate(with event: NSEvent) {
         guard transparentCursorEnabled else {
             NSCursor.arrow.set()
@@ -135,18 +127,8 @@ final class StreamInputView: NSView {
         Self.transparentCursor.set()
     }
 
-    /// Re-apply the transparent cursor directly, without waiting for the next
-    /// `cursorUpdate(with:)`. AppKit re-invokes `cursorUpdate` on every pointer
-    /// motion, so motion already repairs an OS re-show for free - but a display
-    /// reconfig (display/HDR/VRR change, sleep-wake, HID attach) with the pointer
-    /// perfectly STATIONARY produces no motion event until the user moves, so the
-    /// re-shown system arrow could momentarily sit on screen for that zero-motion
-    /// window. The display observers in StreamWindow call this to close that gap.
-    /// Setting an invisible IMAGE (never a CGDisplayShowCursor/HideCursor pair)
-    /// means no frame can ever composite a visible arrow - it cannot flash by
-    /// construction. Self-balancing like `cursorUpdate`: AppKit restores the
-    /// system cursor the instant the pointer leaves the view, so it can never
-    /// strand the cursor invisible.
+    /// Display changes can reveal a stationary cursor without a tracking event.
+    /// Refresh only while the window still owns the transparent image.
     func refreshCursor() {
         guard transparentCursorEnabled else { return }
         Self.transparentCursor.set()
@@ -193,7 +175,7 @@ final class StreamInputView: NSView {
     override func otherMouseDragged(with event: NSEvent) { forwardMotion(event) }
 
     private func forwardMotion(_ event: NSEvent) {
-        guard !discardsNextMotion else { discardsNextMotion = false; return }
+        guard acceptsMotion(event) else { return }
         delegate?.streamView(self, handleMouseMoved: event)
     }
 

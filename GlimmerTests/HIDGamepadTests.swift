@@ -6,6 +6,43 @@ import Testing
 
 struct HIDGamepadTests {
     @MainActor
+    @Test(arguments: [false, true])
+    func backgroundConsumersRestoreTheOriginalValueAfterTheLastOwnerLeaves(prior: Bool) {
+        let saved = GCController.shouldMonitorBackgroundEvents
+        defer { GCController.shouldMonitorBackgroundEvents = saved }
+        GCController.shouldMonitorBackgroundEvents = prior
+        let first = UUID()
+        let second = UUID()
+        ControllerBackgroundEvents.setEnabled(true, for: first)
+        ControllerBackgroundEvents.setEnabled(true, for: first)
+        ControllerBackgroundEvents.setEnabled(true, for: second)
+        #expect(GCController.shouldMonitorBackgroundEvents)
+        ControllerBackgroundEvents.setEnabled(false, for: first)
+        ControllerBackgroundEvents.setEnabled(false, for: first)
+        #expect(GCController.shouldMonitorBackgroundEvents)
+        ControllerBackgroundEvents.setEnabled(false, for: second)
+        #expect(GCController.shouldMonitorBackgroundEvents == prior)
+    }
+
+    @MainActor
+    @Test(arguments: [false, true])
+    func diagnosticsAndMiniPlayerCanReleaseBackgroundDeliveryInEitherOrder(diagnosticsFirst: Bool) {
+        let prior = GCController.shouldMonitorBackgroundEvents
+        defer { GCController.shouldMonitorBackgroundEvents = prior }
+        GCController.shouldMonitorBackgroundEvents = false
+        let monitor = ControllerMonitor(isStreaming: { true })
+        let forwarder = InputForwarder()
+        defer { monitor.stop(); forwarder.detach() }
+        monitor.start()
+        forwarder.isReady = true
+        forwarder.setMiniPlayer(true)
+        if diagnosticsFirst { monitor.stop() } else { forwarder.setMiniPlayer(false) }
+        #expect(GCController.shouldMonitorBackgroundEvents)
+        if diagnosticsFirst { forwarder.setMiniPlayer(false) } else { monitor.stop() }
+        #expect(!GCController.shouldMonitorBackgroundEvents)
+    }
+
+    @MainActor
     @Test func shortcutCaptureEndsAndPassesThroughEventsFromAnotherWindow() {
         let captureWindow = NSWindow()
         let otherWindow = NSWindow()
@@ -32,6 +69,38 @@ struct HIDGamepadTests {
         monitor.start()
         monitor.stop()
         #expect(GCController.shouldMonitorBackgroundEvents == false)
+    }
+
+    @MainActor
+    @Test func controllerMonitorResumesAfterTheStreamReleasesItsHandlers() throws {
+        var streaming = false
+        let pad = GCController.withExtendedGamepad()
+        let gamepad = try #require(pad.extendedGamepad)
+        let monitor = ControllerMonitor(isStreaming: { streaming })
+        monitor.start()
+        defer { monitor.stop() }
+        monitor.streamingChanged(controllers: [pad])
+        let initialHandler = try #require(gamepad.valueChangedHandler)
+        initialHandler(gamepad, gamepad.buttonA)
+        #expect(monitor.gcEventCount == 1)
+
+        streaming = true
+        monitor.streamingChanged(controllers: [pad])
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        forwarder.attach(gamepad: pad)
+        monitor.streamingChanged(controllers: [pad])
+        let streamHandler = try #require(gamepad.valueChangedHandler)
+        streamHandler(gamepad, gamepad.buttonA)
+        #expect(monitor.gcEventCount == 1)
+
+        forwarder.detach()
+        #expect(gamepad.valueChangedHandler == nil)
+        streaming = false
+        monitor.streamingChanged(controllers: [pad])
+        let restoredHandler = try #require(gamepad.valueChangedHandler)
+        restoredHandler(gamepad, gamepad.buttonA)
+        #expect(monitor.gcEventCount == 2)
     }
 
     @Test func ultimate2CMapping() throws {

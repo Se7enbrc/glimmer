@@ -109,6 +109,10 @@ extension InputForwarder {
     }
 
     public func detach() {
+        ControllerBackgroundEvents.setEnabled(false, for: controllerBackgroundEventsID)
+        ControllerHaptics.shared.setBackgroundPlayEnabled(false, for: controllerBackgroundEventsID)
+        releaseControllerTouches()
+        isMiniPlayer = false
         // Raise every held key/button/modifier so a mid-press teardown can't
         // leave the host with phantom-held input.
         raiseAllHeldInputs(reason: "stream teardown")
@@ -134,6 +138,9 @@ extension InputForwarder {
         removeDiagnosticMonitors()
         removeFocusObservers()
 
+        // The view survives in the closing window during its fade. Stop late
+        // cursor updates from selecting its transparent image after teardown.
+        inputView?.setTransparentCursorEnabled(false)
         inputView?.delegate = nil
         inputView = nil
         window = nil
@@ -157,7 +164,9 @@ extension InputForwarder {
     /// queue is closed and would just return -2).
     public func setReady(_ ready: Bool) {
         let was = isReady
+        if !ready { releaseControllerTouches() }
         isReady = ready
+        updateControllerBackgroundEvents()
         if ready != was {
             log.info("Input forwarding ready=\(ready, privacy: .public)")
             if ready {
@@ -169,6 +178,7 @@ extension InputForwarder {
                 announceControllers()
                 installDiagnosticMonitors()
             } else {
+                cancelQuitChordDwell(reason: "connection lost")
                 removeDiagnosticMonitors()
             }
         }

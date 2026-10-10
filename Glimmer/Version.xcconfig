@@ -2,7 +2,7 @@
 //
 // CalVer: YYYY.M.MICRO - no zero-pad on month, MICRO resets to 0 each month.
 //   2026.6.0 = first June 2026 release; 2026.6.1 = same-month hotfix.
-// CURRENT_PROJECT_VERSION (build number) is a monotonic YYYYMMDD stamp.
+// CURRENT_PROJECT_VERSION (build number) is a monotonically increasing integer, not a date.
 //
 // Read by: both Info.plists ($(MARKETING_VERSION)) and the Makefile
 // (DMG_NAME / release tag). Pulled into the build via #include in
@@ -10,5 +10,5 @@
 // because the build is driven by `make` (which passes -xcconfig), the
 // version is NOT set in project.pbxproj - bump it HERE, build with `make`.
 
-MARKETING_VERSION = 2026.10.5
-CURRENT_PROJECT_VERSION = 20261008
+MARKETING_VERSION = 2026.10.6
+CURRENT_PROJECT_VERSION = 20261010

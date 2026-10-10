@@ -45,13 +45,9 @@ public struct StreamConfig: Sendable {
     /// How `bitrateKbps` was chosen, for the telemetry config event only.
     public var bitrateDecision: BitrateDecision?
     public var remoteness: Remoteness = .auto
-    /// Default to whatever the system default-output device can render
-    /// natively (stereo / 5.1 / 7.1). The host will downmix if it doesn't
-    /// support the requested config, but requesting at least what our
-    /// local hardware can render means a Mac plugged into a 5.1 receiver
-    /// gets actual 5.1 from Sunshine instead of stereo upsold by
-    /// AVAudioEngine.
-    public var audio: AudioConfig = .bestForCurrentOutput()
+    /// Keep a surround bed available when outputs change during a stream.
+    /// The Mac renders it for the active speakers or headphones.
+    public var audio: AudioConfig = .surround71
     /// Default to whatever VideoToolbox actually reports as hardware-decodable
     /// on this machine - see `VideoFormats.probedSupported`. Callers can
     /// override (tests pin a specific set; the picker UI may downgrade based
@@ -170,62 +166,6 @@ public enum AudioConfig: Sendable {
         case .surround51: return "5.1 surround"
         case .surround71: return "7.1 surround"
         }
-    }
-
-    /// Pick the richest channel layout the system's current default output
-    /// device can render natively, falling back to stereo if we can't tell.
-    /// Sunshine/GFE will downmix on the host side if they don't support
-    /// the requested config, so requesting more than we need is safe - but
-    /// requesting more than the local hardware supports invites a chain of
-    /// AVAudioEngine downmixes that can blur the front-stage. Probe the
-    /// CoreAudio default-output device once at startup and pick the
-    /// matching tier.
-    public static func bestForCurrentOutput() -> AudioConfig {
-        let channels = currentDefaultOutputChannelCount()
-        if channels >= 8 { return .surround71 }
-        if channels >= 6 { return .surround51 }
-        return .stereo
-    }
-
-    /// Query the CoreAudio default-output device's stream channel count.
-    /// Returns 2 on any probe failure (safest fallback). Run on startup
-    /// rather than per-stream so the cost - a small handful of AudioHAL
-    /// property reads - doesn't sit on the stream-start critical path.
-    private static func currentDefaultOutputChannelCount() -> Int {
-        var deviceID = AudioDeviceID(0)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &addr, 0, nil, &size, &deviceID)
-        guard status == noErr, deviceID != 0 else { return 2 }
-
-        // Ask for the output-scope stream configuration; sum channels across
-        // every buffer in the AudioBufferList (typically one buffer
-        // containing N channels, but multi-stream devices can split).
-        var listSize: UInt32 = 0
-        var listAddr = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain)
-        guard AudioObjectGetPropertyDataSize(deviceID, &listAddr, 0, nil, &listSize) == noErr,
-              listSize > 0 else { return 2 }
-        let listPtr = UnsafeMutablePointer<UInt8>.allocate(capacity: Int(listSize))
-        defer { listPtr.deallocate() }
-        var fetchSize = listSize
-        guard AudioObjectGetPropertyData(
-            deviceID, &listAddr, 0, nil, &fetchSize, listPtr) == noErr else {
-            return 2
-        }
-        let bufferList = listPtr.withMemoryRebound(
-            to: AudioBufferList.self, capacity: 1) { $0 }
-        let unsafeList = UnsafeMutableAudioBufferListPointer(bufferList)
-        var total = 0
-        for buffer in unsafeList { total += Int(buffer.mNumberChannels) }
-        return total > 0 ? total : 2
     }
 }
 

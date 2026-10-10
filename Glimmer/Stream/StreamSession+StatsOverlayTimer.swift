@@ -116,11 +116,15 @@ extension StreamSession {
                     // through statsOverlayPreset + statsOverlayCustomRows.
                     let enabled = statsRowsProvider()
                     let thresholds = statsThresholdsProvider()
+                    win.statsOverlay.videoSize = CGSize(width: CGFloat(dec.streamWidth), height: CGFloat(dec.streamHeight))
                     win.statsOverlay.update(
                         snapshot: snap,
                         enabled: enabled,
                         targetFps: Double(dec.streamFps),
                         thresholds: thresholds)
+                    // The decoder samples the picture under the column for the HUD's ink.
+                    dec.hudBackdropRect = win.statsOverlay.backdropSampleRect
+                    if let luminance = dec.hudBackdropLuminance { win.statsOverlay.updateBackdropLuminance(luminance) }
                 }
             }
             // Tolerance saves the OS some power - at 4 Hz a 30 ms tolerance is
@@ -140,6 +144,11 @@ extension StreamSession {
             if let rtt = dec.telemetryEstimatedRtt() { snap.rttMs = rtt.rttMs }
             return (snap, dec.statsOverlayEnabled)
         }
+    }
+
+    func setStatsOverlayCorner(_ corner: StatsOverlayCorner) async {
+        guard let win = window else { return }
+        await MainActor.run { win.statsOverlay.corner = corner }
     }
 
     /// The current session's overlay, the same switch the keyboard toggle drives.

@@ -30,7 +30,9 @@ extension StreamSession {
     /// Entry point for a host-initiated TERMINATION (routed here from
     /// `NativeBackend.connectionTerminated`). Classifies recoverable-vs-fatal and
     /// either drives a silent reconnect episode or tears down as before.
-    func handleHostTerminate(code: Int32) async {
+    func handleHostTerminate(code: Int32, from source: NativeBackend? = nil) async {
+        guard source == nil || source === backend,
+              isStreaming, !stopInProgress, !isReconnecting else { return }
         // The uplink is dead the instant the host closed - pause input so we
         // don't spew sends at a gone backend. It re-arms on the next
         // `.connectionEstablished` (nativeConnectionEstablished → setReady(true)).
@@ -38,14 +40,6 @@ extension StreamSession {
         // FIFO main-queue hop (NOT Task{}) so this pause can't reorder ahead of the
         // reconnect's setReady(true) - see nativeConnectionEstablished.
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
-
-        // Nothing to recover if the user is already tearing down, or we're not
-        // (or no longer) the live session.
-        guard isStreaming, !stopInProgress else { return }
-        // An episode is already being driven - its retry loop owns the outcome.
-        // A re-terminate fired by the dead/old backend (or a failed reconnect
-        // attempt) must not start a second episode.
-        guard !isReconnecting else { return }
 
         // Recoverable iff we'd already reached a live state AND the cause is one we
         // can resume from: a host terminate in the recoverable set (server restart /

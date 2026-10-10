@@ -184,13 +184,13 @@ extension StatsCollector {
             let head = submitFifo.removeFirst()
             poppedState = head.state
             let elapsed = max(0, now - head.timestamp)
-            if let prev = decodeTimeEmaSeconds {
-                decodeTimeEmaSeconds = StatsCollector.decodeTimeEmaAlpha * elapsed
-                    + (1 - StatsCollector.decodeTimeEmaAlpha) * prev
-            } else {
-                decodeTimeEmaSeconds = elapsed
-            }
+            let split = Self.decodeTimeSplit(
+                submit: head.timestamp, callback: now, previousCallback: lastDecodeCallbackTime)
+            decodeTimeEmaSeconds = Self.foldDecodeEma(decodeTimeEmaSeconds, elapsed)
+            decodeServiceEmaSeconds = Self.foldDecodeEma(decodeServiceEmaSeconds, split.service)
+            decodeWaitEmaSeconds = Self.foldDecodeEma(decodeWaitEmaSeconds, split.wait)
         }
+        lastDecodeCallbackTime = now
         if dropped {
             decoderDroppedFrames &+= 1
             totalDecoderDropped &+= 1
@@ -199,6 +199,21 @@ extension StatsCollector {
             decodedFrames &+= 1
         }
         return poppedState
+    }
+
+    /// Split one submit-to-callback span: a frame submitted before the previous
+    /// callback queued behind it until then (wait); the rest is VT service time.
+    /// Clamped so a stale or out-of-order anchor never yields a negative part.
+    static func decodeTimeSplit(submit: CFTimeInterval, callback: CFTimeInterval,
+                                previousCallback: CFTimeInterval) -> (service: Double, wait: Double) {
+        let end = max(submit, callback)
+        let start = min(max(submit, previousCallback), end)
+        return (service: end - start, wait: start - submit)
+    }
+
+    private static func foldDecodeEma(_ prev: Double?, _ sample: Double) -> Double {
+        guard let prev else { return sample }
+        return decodeTimeEmaAlpha * sample + (1 - decodeTimeEmaAlpha) * prev
     }
 
     /// Abandon a decode submit (e.g. VTDecompressionSessionDecodeFrame

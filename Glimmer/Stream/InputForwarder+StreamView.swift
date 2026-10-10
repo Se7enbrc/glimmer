@@ -22,6 +22,8 @@ import os.log
 extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        releaseStaleModifiers(for: event)
+        noteEscapeModifiersChanged(event.modifierFlags)
 
         // Quit hotkey, key-down only and never forwarded. Checked before the
         // ⌘ gate so a custom chord with ⌘ still quits while ⌘ is the Mac's.
@@ -132,6 +134,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // must behave exactly as it did before the gesture existed, including
         // while the stream is mid-handshake and forwarding nothing.
         noteEscapeKeyUp(event)
+        releaseStaleModifiers(for: event)
         // Only a key the host holds gets an up: a down under the ⌘ gate never
         // went out, and one released on focus loss or a reconnect already did.
         guard isReady, let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)),
@@ -147,6 +150,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
+        noteEscapeModifiersChanged(event.modifierFlags)
         let capsLock = event.modifierFlags.contains(.capsLock)
         let capsChanged = capsLock != lastCapsLock
         lastCapsLock = capsLock
@@ -173,6 +177,17 @@ extension InputForwarder: StreamInputViewDelegate {
         modifiersNeedResync = false
     }
 
+    /// An interrupted client chord can lose its modifier-up. Recover before
+    /// forwarding the next key, including repeats, without latching posted flags.
+    private func releaseStaleModifiers(for event: NSEvent) {
+        guard isReady else { return }
+        let released = ModifierSides.released(from: heldModifierVKs, in: event.modifierFlags,
+                                              includeCommand: forwardsCommand)
+        let modByte = Int8(bitPattern: modifierByte(from: event.modifierFlags))
+        for vk in released.sorted() { sendModifier(vk, down: false, modByte: modByte) }
+        heldModifierVKs.subtract(released)
+    }
+
     /// Before the stream is live, leaving is the launcher's cancel, so the
     /// connect ends as cancelled rather than failed.
     private func quitOrCancelConnect() {
@@ -191,7 +206,7 @@ extension InputForwarder: StreamInputViewDelegate {
     /// the PC can be diagnosed from the log.
     private func noteUnmappedKey(_ keyCode: UInt16) {
         guard loggedUnmappedKeyCodes.insert(keyCode).inserted else { return }
-        Diag.notice("input: key code \(keyCode) has no PC mapping and was not sent", "Stream")
+        Diag.notice("input: an unmapped key was not sent", "Stream")
     }
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
@@ -229,6 +244,7 @@ extension InputForwarder: StreamInputViewDelegate {
             dequeue: { window?.nextEvent(matching: MouseMotionDrain.mask, until: .distantPast,
                                          inMode: .eventTracking, dequeue: true) },
             consume: { queued in
+                guard view.acceptsMotion(queued) else { return }
                 let delta = mouseDelta(from: queued)
                 accumDx += delta.dx
                 accumDy += delta.dy
@@ -327,24 +343,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // deltas, causing jitter. The mouseDown handlers below send a
         // single absolute position so click locations are correct.
 
-        // No warp-to-centre here. Under the SDL associate-false model
-        // (enterCapturedMode) the OS does not move the system cursor at all, so
-        // it can never reach a screen edge / hot corner - the per-motion
-        // warpCursorIfNearEdge defense (and the edge→centre reconciliation delta
-        // it leaked, the P0 mouse-snap bug) is gone by construction. Deltas read
-        // off kCGMouseEventDeltaX/Y are pure relative HID; nothing post-warp can
-        // be injected because nothing warps.
-
-        // No per-motion cursor re-hide here. Steady-state invisibility over the
-        // stream is owned by the transparent NSCursor in
-        // `StreamInputView.cursorUpdate(with:)`, which AppKit re-invokes on every
-        // pointer motion over the view - so after ANY OS-initiated re-show
-        // (display/HDR/VRR reconfig, sleep-wake, HID attach) the very next motion
-        // event re-applies the invisible image with ZERO flash. The old
-        // net-neutral CGDisplayShowCursor→HideCursor reassert fired here on every
-        // move and let the WindowServer (compositing on its own vsync, not our
-        // runloop turn) sample the cursor in the gap between the paired calls -
-        // that was the motion-correlated arrow flash. Deleted.
+        // Cursor visibility belongs to StreamWindow and the input view.
     }
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {

@@ -236,7 +236,7 @@ struct StreamSignalTests {
         #expect(weight(.critical, true) > regular)
         #expect(weight(.neutral, true) == regular)
         #expect(weight(.critical, false) == regular)
-        #expect(StatsOverlayLayer.valueFont(for: .critical, differentiateWithoutColor: true).isFixedPitch)
+        #expect(!StatsOverlayLayer.valueFont(for: .critical, differentiateWithoutColor: true).isFixedPitch)
     }
 }
 

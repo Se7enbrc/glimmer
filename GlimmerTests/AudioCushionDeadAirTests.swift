@@ -14,6 +14,33 @@ import Testing
 // under-run counter that suite's evidence-gate pair brackets.
 extension AudioPlayoutStallTests {
 
+    @Test(arguments: [false, true])
+    func stoppedCompletionsDoNotPostponeQuietDecay(shutdown: Bool) {
+        let decoder = AudioDecoder()
+        let now = DispatchTime.now().uptimeNanoseconds
+        decoder.meterSampleRate = 48_000
+        decoder.framesScheduled = 240
+        decoder.playoutStarted = true
+        decoder.playoutTargetMs = 60
+        decoder.quietSinceNanos = now &- AudioDecoder.playoutDecayQuietNanos
+        decoder.floorQuietSinceNanos = now
+        decoder.quietWindowMinFillMs = 25
+        decoder.meterShutdown = shutdown
+        decoder.meterRecovering = !shutdown
+
+        decoder.meterCompleteOnePlayout(frames: 240)
+
+        #expect(decoder.framesPlayed == 240)
+        #expect(decoder.playoutDrained)
+        #expect(decoder.pendingUnderrunTargetMs == nil)
+        #expect(decoder.quietWindowMinFillMs == 25)
+        decoder.audioMeterLock.lock()
+        let adjustment = decoder.cushionQuietAdjustLocked(now: now)
+        decoder.audioMeterLock.unlock()
+        #expect(adjustment != nil)
+        #expect(decoder.playoutTargetMs == 50)
+    }
+
     /// A primed, playing meter one 5ms buffer from empty on a Wi-Fi-sized cap, whose newest packet
     /// ended an ordinary 5ms gap: the history the old dead-air test misread.
     private func drainingDecoder(targetMs: Double) -> AudioDecoder {

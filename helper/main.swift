@@ -1,6 +1,9 @@
 import Foundation
 import os.log
 
+// Exercises executable authorization without privilege or interface changes.
+if CommandLine.arguments.dropFirst().elementsEqual(["--check-launch"]) { exit(0) }
+
 let log = OSLog(subsystem: "io.ugfugl.glimmer.helper", category: "main")
 os_log("Glimmer helper starting (pid %d)", log: log, type: .info, getpid())
 

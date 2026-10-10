@@ -131,17 +131,8 @@ public final class StreamWindow {
     /// safe thing to do.
     var previousPresentationOptions: NSApplication.PresentationOptions?
 
-    /// Whether to extend the fullscreen window into the notch zone on
-    /// notched MacBook displays. When `true`, we override AppKit's
-    /// `window(_:willUseFullScreenContentSize:)` delegate to claim the
-    /// full physical panel (screen.frame plus the safeAreaInsets.top
-    /// notch reserve), so a bitstream at the panel's true native
-    /// resolution renders 1:1 without letterboxing. When `false`, AppKit's
-    /// default safe-area-trimmed framing is used and a host bitstream
-    /// taller than the trimmed framebuffer letterboxes left/right - the
-    /// classic "panel-native stream content in safe-area fullscreen
-    /// window" symptom. moonlight-qt exposes the same choice as a
-    /// per-host preference.
+    /// True covers the full panel with a borderless window; false uses a native safe-area Space.
+    /// AppModel resolves the per-display preferences before the session starts.
     public var coversNotch: Bool = true
 
     /// How the window presents. Fixed at construction (it picks the style
@@ -162,6 +153,8 @@ public final class StreamWindow {
     public internal(set) var isMiniPlayer = false
     /// The presentation to return to when the mini player is left.
     var miniPlayerReturnMode: StreamDisplayMode = .fullScreen
+    /// The green button can put an ordinary window in a native fullscreen Space too.
+    var miniPlayerReturnUsesSpace = false
     /// Path B: the Space exit in flight was asked for by the mini player.
     var miniPlayerPending = false
     /// Pointer resting on the mini player; drives its hover-shown close button.
@@ -194,11 +187,12 @@ public final class StreamWindow {
     /// these must keep firing until the exit completes. Swept by `close()`.
     var spaceExitObservers: [NSObjectProtocol] = []
 
-    /// Called whenever the window's "is it currently visible or sitting
-    /// orderOut'd in the background?" state flips. The session owner wires
-    /// this to AppModel so the launcher can show a "Back to stream"
-    /// affordance while the stream window is hidden.
+    /// Focus or minimization changed: the launcher offers a way back to the stream.
     public var onBackgroundedChanged: (@MainActor (Bool) -> Void)?
+
+    /// Only hidden presentation suppresses the decoder; a visible unfocused Space keeps playing.
+    public var onPresentationSuppressedChanged: (@MainActor (Bool) -> Void)?
+    var presentationSuppressed = false
 
     /// Called when the stream window moves to a different display (or its
     /// backing display's properties change - refresh rate, wake from sleep).
@@ -244,6 +238,9 @@ public final class StreamWindow {
     /// token changed (a becomeKey landed) or the app never actually
     /// deactivated. Bumped by BOTH observers so the later event always wins.
     var resignGeneration = 0
+
+    /// Bumped by every cover slide and reset; a superseded slide's completion bails.
+    var coverSlideGeneration = 0
 
     /// Called once the window is on screen and key, and again by the first-frame
     /// fade-in: InputForwarder installs its first responder, then takes the
@@ -316,15 +313,8 @@ public final class StreamWindow {
         window.acceptsMouseMovedEvents = true
         window.hidesOnDeactivate = false
 
-        // SECURITY: refuse to be screen-captured. Prevents
-        // ScreenCaptureKit, the screencapture(1) tool, Cmd-Shift-5, Zoom /
-        // Teams / Discord screen-share, and the Quick-Time screen recording
-        // path from pulling the stream surface. Apps capturing the screen
-        // see a black region where the stream is drawn. Same posture as
-        // Apple TV+ and Netflix's macOS playback windows. If a user wants
-        // to record their stream they can use the host PC's own recording
-        // tools, where the underlying stream is unencrypted bytes the host
-        // owns - Glimmer is not the right place to expose that.
+        // Best-effort exclusion for legacy capture clients. Modern
+        // ScreenCaptureKit ignores this flag; it is not a privacy boundary.
         window.sharingType = .none
 
         let view = DisplayContainerView(frame: screen.frame)
@@ -352,19 +342,10 @@ public final class StreamWindow {
         view.wantsLayer = true
         window.contentView = view
 
-        // Stats overlay - sublayer of the display layer, positioned in the
-        // top-left with a fixed inset. We attach it as a sublayer rather than
-        // a sibling because AVSampleBufferDisplayLayer is the view's root
-        // layer (a precondition for HDR-correct compositing - see the long
-        // comment near `view.layer = layer` above). CALayer's sublayer
-        // contract lets us stack arbitrary content on top, and the OS
-        // composites the overlay's sRGB text against the layer's HDR
-        // contents correctly.
-        //
-        // Born hidden (its own init). StreamSession seeds visibility from the
-        // user's preference at stream start, the hotkey flips it, and the overlay
-        // timer pushes text at 4 Hz (FPS rows ~1s average, latency rows live).
+        // Keep the HUD inside the HDR root layer. Its 4 Hz refresh also follows
+        // the picture's letterbox and this window's screen safe area.
         let overlay = StatsOverlayLayer()
+        overlay.displayView = view
         overlay.attach(to: layer)
 
         // Transient signal pills (sibling sublayers of the display layer, above
@@ -424,6 +405,8 @@ public final class StreamWindow {
         layer.frame = frame
         layer.videoGravity = .resizeAspect
         layer.isOpaque = true
+        // Letterbox bars stay black while the cover slides over a clear window.
+        layer.backgroundColor = NSColor.black.cgColor
         return layer
     }
 

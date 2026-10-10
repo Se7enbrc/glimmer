@@ -1,20 +1,4 @@
-//
-//  StreamWindow+Fade.swift
-//
-//  The stream window's two OPACITY TRANSITIONS and the teardown the
-//  fade-out completes: the first-frame fade-in, the menu-bar/Dock
-//  presentation-options handoff that is deliberately deferred until the
-//  window is opaque (the "bare-desktop flash"), and close() with its final
-//  post-fade teardown. Split out of StreamWindow.swift (pure move) to keep
-//  each unit under the length limit; see that file for the window's stored
-//  state and the AVSampleBufferDisplayLayer rationale, and
-//  StreamWindow+Show.swift for the bring-up this pairs with.
-//
-//  Both fades honor Reduce Motion by snapping instead of ramping - a
-//  large-surface opacity animation is exactly what that setting asks us to
-//  drop - and both keep the presentation-options change on the OPAQUE side
-//  of the transition. MainActor throughout (AppKit).
-//
+// First-frame fade-in and close after the native Space has finished exiting.
 
 import AppKit
 import AVFoundation
@@ -51,9 +35,21 @@ extension StreamWindow {
         // setting exists to suppress. We still defer presentationOptions to
         // after alpha is set so the menu bar / Dock never visibly vanish
         // against a transparent window (the "bare-desktop flash").
+        if coverTransition(.firstFrame) == .slide, !userBackgrounded {
+            slideCover(entering: true) { [weak self] in
+                self?.applyPresentationOptions(coversNotch: cover)
+                self?.refreshPresentationVisibility()
+            }
+            // Commit the offscreen start before the window turns visible, so
+            // the picture never shows unslid for a frame.
+            CATransaction.flush()
+            win.alphaValue = 1.0
+            return
+        }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             win.alphaValue = 1.0
             applyPresentationOptions(coversNotch: cover)
+            refreshPresentationVisibility()
             return
         }
         NSAnimationContext.runAnimationGroup({ ctx in
@@ -65,7 +61,10 @@ extension StreamWindow {
             // runAnimationGroup delivers the completion on the main run loop,
             // so we are already on the MainActor - assumeIsolated bridges the
             // SDK's non-isolated @Sendable handler back to MainActor state.
-            MainActor.assumeIsolated { self.applyPresentationOptions(coversNotch: cover) }
+            MainActor.assumeIsolated {
+                self.applyPresentationOptions(coversNotch: cover)
+                self.refreshPresentationVisibility()
+            }
         })
     }
 
@@ -73,109 +72,113 @@ extension StreamWindow {
     /// full-screen cover: a late fade-in completion or a backgrounded window
     /// must not hide the menu bar under the launcher. Window mode keeps both.
     func applyPresentationOptions(coversNotch cover: Bool) {
-        guard displayMode == .fullScreen, !didClose, window.isVisible else { return }
+        guard displayMode == .fullScreen, !didClose, !userBackgrounded,
+              NSApp.isActive, window.isKeyWindow, window.isVisible else { return }
+        // AppKit negotiates Space options on entry; never replace them mid-transition.
+        guard cover || window.styleMask.contains(.fullScreen) else { return }
         NSApp.presentationOptions = Self.streamingPresentationOptions(coversNotch: cover)
     }
 
-    /// Path A hides the menu bar and Dock, Path B auto-hides them; AppKit wants
-    /// a Dock option with either. Both turn off shake-to-find and, on macOS 27,
-    /// Hot Corners, which an uncaptured hidden cursor can still reach.
+    /// Both paths keep the system's gaming presentation active for Game Overlay.
+    /// A native Space also retains AppKit's full-screen flag.
     nonisolated static func streamingPresentationOptions(coversNotch: Bool) -> NSApplication.PresentationOptions {
-        var options: NSApplication.PresentationOptions =
-            coversNotch ? [.hideMenuBar, .hideDock] : [.autoHideMenuBar, .autoHideDock]
+        var options: NSApplication.PresentationOptions = [.hideMenuBar, .hideDock]
+        if !coversNotch { options.insert(.fullScreen) }
         options.insert(.disableCursorLocationAssistance)
-        if #available(macOS 27, *) { options.insert(.disableScreenCornerInteractions) }
+        if #available(macOS 27, *) {
+            // NSApplication.h in SDK 27 defines DisableScreenCornerInteractions as bit 15.
+            // Use its public option value so SDK 26 builds retain the same behavior.
+            let disableScreenCornerInteractions = NSApplication.PresentationOptions(rawValue: 1 << 15)
+            options.insert(disableScreenCornerInteractions)
+        }
         return options
     }
 
-    /// Tear the stream window down cleanly. Safe to call more than once.
+    /// Stop input immediately, but keep the Space and its last frame until AppKit finishes exiting.
     public func close() {
         guard !didClose else { return }
         didClose = true
-
-        // 1. Display-layer flush is DEFERRED to the fade completion (step 5).
-        //    Flushing here (removingDisplayedImage) blanks the layer before the
-        //    fade runs, so the user only ever sees an already-empty window fade
-        //    out - imperceptible. Keeping the last decoded frame on screen
-        //    until the fade finishes makes the fade-out land on the actual
-        //    stream content, mirroring the first-frame fade-in.
-
-        // 2. Restore the cursor. `setCursorHidden(false)` is idempotent and
-        //    drives the counted CGDisplay latch strictly off `didHideCursor`,
-        //    so this brings the count back to exactly 0 - never negative. The
-        //    old unconditional belt-and-braces `NSCursor.unhide()` is gone:
-        //    with the latch capped at 1 by the single-owner helper it could
-        //    only ever over-show and corrupt the count, which is the very
-        //    failure mode (cursor left invisible / over-visible) we're fixing.
+        window.ignoresMouseEvents = true
         setCursorHidden(false)
+        removeCloseObservers()
+        if displayMode == .window {
+            if streamDelegate.closeState.transition == .idle {
+                finishWindowedFrameAutosave()
+            } else {
+                window.setFrameAutosaveName("")
+            }
+        }
+        window.makeFirstResponder(nil)
 
-        // Drop the key-status observers so we don't get a delayed
-        // become/resign callback after the window has been torn down.
-        for token in keyObservers {
-            NotificationCenter.default.removeObserver(token)
+        let fullScreen = window.styleMask.contains(.fullScreen)
+        let transition = streamDelegate.closeState.transition
+        if fullScreen || transition != .idle || (displayMode == .fullScreen && !coversNotch) {
+            Diag.notice("Space close: fullScreen=\(fullScreen) transition=\(transition.rawValue) "
+                + "waitForExit=\(fullScreen || transition != .idle)", "Stream.Window")
         }
+        // The session can release us before the Space exits. finishClose breaks this retention.
+        streamDelegate.onFullScreenSettled = { self.continueClose() }
+        continueClose()
+        // A transition AppKit ignored never settles; don't leave the stream window up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            guard self.streamDelegate.closeState.forceFade() else { return }
+            Diag.notice("Space close: transition never settled - fading anyway", "Stream.Window")
+            self.fadeOutForClose()
+        }
+    }
+
+    private func removeCloseObservers() {
+        for token in keyObservers { NotificationCenter.default.removeObserver(token) }
         keyObservers.removeAll()
-        // Workspace observers live on NSWorkspace's own notification center -
-        // remove them from THAT center, not the default one.
         let wsnc = NSWorkspace.shared.notificationCenter
-        for token in workspaceObservers {
-            wsnc.removeObserver(token)
-        }
+        for token in workspaceObservers { wsnc.removeObserver(token) }
         workspaceObservers.removeAll()
-        // Path B's one-shot didEnterFullScreen token: consumed by its own
-        // closure on the happy path, but a session that ends before AppKit
-        // posts the enter notification leaves it registered - sweep it here.
         if let token = enterFullScreenObserver {
             NotificationCenter.default.removeObserver(token)
             enterFullScreenObserver = nil
         }
-        // Path B's Space-exit observers (StreamWindow+Windowed.swift) - the
-        // toggleFullScreen in step 4 below would otherwise fire them against
-        // a closing window. `didClose` already gates them; sweeping is the
-        // clean cut.
-        for token in spaceExitObservers {
-            NotificationCenter.default.removeObserver(token)
-        }
+        // Stop #84 conversion; the delegate still tracks transitions throughout teardown.
+        for token in spaceExitObservers { NotificationCenter.default.removeObserver(token) }
         spaceExitObservers.removeAll()
-        // Window mode: persist the frame under its autosave name and release
-        // the name, so the next session's window can claim it (see
-        // StreamWindow+Windowed.swift).
-        if displayMode == .window { finishWindowedFrameAutosave() }
+    }
 
-        // 3. Restore the app's presentation options BEFORE orderOut'ing the
-        //    window. Order matters: if we orderOut first, the user briefly
-        //    sees their desktop with the menu bar/Dock still hidden as
-        //    AppKit catches up - a flash of "what happened to my menu bar".
-        //    Restoring first means by the time the window disappears, the
-        //    chrome is already back.
+    private func continueClose() {
+        switch streamDelegate.closeState.nextAction(isFullScreen: window.styleMask.contains(.fullScreen)) {
+        case .wait, .none:
+            return
+        case .exitSpace:
+            // Fade first so the Space's exit animation carries no last frame; a close can
+            // originate inside AppKit's did-enter delivery, hence the hop.
+            DispatchQueue.main.async { self.fadeThenExitSpace() }
+        case .fade:
+            fadeOutForClose()
+        }
+    }
+
+    private func fadeThenExitSpace() {
+        let win = window
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            win.alphaValue = 0
+            win.toggleFullScreen(nil)
+            return
+        }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            win.animator().alphaValue = 0
+        }, completionHandler: {
+            MainActor.assumeIsolated { win.toggleFullScreen(nil) }
+        })
+    }
+
+    private func fadeOutForClose() {
+        // Presentation belongs to AppKit during a Space transition. Restore it only after exit.
         if let saved = previousPresentationOptions {
             NSApp.presentationOptions = saved
             previousPresentationOptions = nil
         }
-
-        // 4. Exit the Space-based fullscreen. If the window never made it
-        //    into fullscreen (early failure path), this is a no-op.
-        //    `toggleFullScreen` runs an async animation; orderOut + activate
-        //    after the exit notification fires would be cleaner, but the
-        //    in-flight orderOut below still works in practice because AppKit
-        //    queues the orderOut after the exit-fullscreen Space animation.
-        if window.styleMask.contains(.fullScreen) {
-            window.toggleFullScreen(nil)
-        }
-
-        // 5. Drop first responder, fade out, orderOut. Fading instead of a
-        //    hard orderOut gives the user a 250ms acknowledgement that the
-        //    stream ended - without the fade the window snaps off and the
-        //    launcher snaps in, which reads as a crash. Apple's first-party
-        //    fullscreen surfaces (Apple TV's playback window, QuickTime's
-        //    presentation mode) all fade on exit.
-        window.makeFirstResponder(nil)
         let win = window
-
-        // Under Reduce Motion, snap instead of the 250ms opacity ramp - same
-        // policy as the first-frame fade-in (a large-surface opacity animation
-        // is exactly what Reduce Motion asks us to drop).
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || win.alphaValue == 0 {
             win.alphaValue = 0.0
             finishClose()
             return
@@ -186,31 +189,16 @@ extension StreamWindow {
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             win.animator().alphaValue = 0.0
         }, completionHandler: {
-            // runAnimationGroup delivers the completion on the main run loop,
-            // so we are already on the MainActor - assumeIsolated bridges the
-            // SDK's non-isolated @Sendable handler back to MainActor state.
             MainActor.assumeIsolated { self.finishClose() }
         })
     }
 
-    /// Final teardown step, run once the close fade has finished (or
-    /// immediately under Reduce Motion). Extracted from `close()` so the fade
-    /// completion handler captures no non-Sendable closure - it runs on the
-    /// main run loop, so MainActor isolation is sound.
-    ///
-    /// Hands off to the launcher only AFTER the stream has faded out. Doing it
-    /// synchronously (during the fade) brings the launcher in front of the
-    /// still-fading stream window, which masks the fade entirely and reads as a
-    /// hard cut. Deferring it makes the exit a real fade-out, mirroring the
-    /// first-frame fade-in. `NSApp.activate()` is the macOS 14+ replacement for
-    /// `activate(ignoringOtherApps:)`.
+    /// Neither the last frame nor the window may disappear while AppKit still owns its Space.
     private func finishClose() {
-        // Now that the window is invisible, drop the last frame + hide it.
-        displayLayer.sampleBufferRenderer.flush(removingDisplayedImage: true) { }
         window.orderOut(nil)
-        // Reset alphaValue so a future show() of this window isn't
-        // invisible (defensive - close() is currently the last call).
-        window.alphaValue = 1.0
+        window.close()
+        displayLayer.sampleBufferRenderer.flush(removingDisplayedImage: true) { }
+        streamDelegate.onFullScreenSettled = nil
         NSApp.activate()
         if let main = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" || $0.title == "Glimmer" }) {
             main.makeKeyAndOrderFront(nil)

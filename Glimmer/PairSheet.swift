@@ -320,6 +320,7 @@ private struct HostChooser: View {
                         .foregroundStyle(.secondary)
                     HStack {
                         TextField("e.g. tower.local or 192.168.1.10", text: $manual)
+                            .accessibilityLabel("PC name or address")
                             .textFieldStyle(.roundedBorder)
                             .disableAutocorrection(true)
                             .onSubmit { submitManual() }

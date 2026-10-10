@@ -303,15 +303,9 @@ extension VideoDecoder {
             return false
         }
 
-        // ---- Renderer backpressure (Apple docs explicitly recommend dropping
-        // for live content). When AVSampleBufferVideoRenderer's internal queue
-        // fills, `isReadyForMoreMediaData` flips to false. The pacer already
-        // bounds our own wall-clock latency upstream, so a not-ready renderer
-        // here is the OS-side queue momentarily full - we drop this frame and
-        // count it, but DON'T request an IDR off it: a single late vsync can
-        // flip the flag for one frame, and an IDR on transient jitter just
-        // compounds lag. A presentation-timing drop of an already-decoded frame
-        // never requests a keyframe - the reference chain is intact.
+        // Bound live-stream latency by dropping decoded images while the renderer isn't ready.
+        // Readiness reports OS queue capacity; the present watchdog handles sustained refusal.
+        // Dropping a decoded image leaves VT's reference chain intact and does not need an IDR.
         if !renderer.isReadyForMoreMediaData {
             let streak = consecutiveBackpressureDrops.add(1, ordering: .relaxed).newValue
             statsCollector.recordRendererBackpressureDrop()
@@ -323,7 +317,11 @@ extension VideoDecoder {
 
         // Healthy frame - reset the backpressure streak and present.
         consecutiveBackpressureDrops.store(0, ordering: .relaxed)
+        // The pacer owns release timing; RTP PTS is not the renderer's Mac host clock.
+        // Keep PTS for pacing and telemetry, but display this decoded image when released.
+        Self.markForImmediateDisplay(sampleBuffer)
         renderer.enqueue(sampleBuffer)
+        sampleHUDBackdrop(sampleBuffer)
 
         // Latency telemetry stage t_present (opt-in; nil = zero cost): the frame
         // just reached the renderer. Recover the rtpTimestamp key from the sample
@@ -347,6 +345,16 @@ extension VideoDecoder {
         // "rendering FPS" row is defined the same way.
         statsCollector.recordRendererEnqueue()
         return true
+    }
+
+    nonisolated static func markForImmediateDisplay(_ sampleBuffer: CMSampleBuffer) {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer, createIfNecessary: true), CFArrayGetCount(attachments) > 0 else { return }
+        let entry = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
+        CFDictionarySetValue(
+            entry,
+            Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+            Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
     }
 
     // A presentation-late / drop-to-newest / sustained-lag drop in the

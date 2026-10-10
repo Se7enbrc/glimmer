@@ -41,4 +41,17 @@ enum ModifierSides {
         }
         return result
     }
+
+    /// Key events can recover a missed modifier release without pressing new
+    /// modifiers. Synthetic flags without side bits preserve either held side.
+    static func released(from held: Set<Int16>, in flags: NSEvent.ModifierFlags,
+                         includeCommand: Bool) -> Set<Int16> {
+        let raw = flags.rawValue
+        return Set(sides.compactMap { side in
+            guard held.contains(side.vk) else { return nil }
+            if !flags.contains(side.flag) || (side.isCommand && !includeCommand) { return side.vk }
+            let anySideBit = sides.contains { $0.flag == side.flag && raw & $0.deviceBit != 0 }
+            return anySideBit && raw & side.deviceBit == 0 ? side.vk : nil
+        })
+    }
 }

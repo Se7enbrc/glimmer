@@ -390,6 +390,8 @@ public actor StreamSession {
     var ownsHostSession = false
     var hostSessionClientID: String?
     var hostSessionAppID: Int?
+    var hostLaunchEpoch = 0
+    var initialServerInfoTask: Task<ServerInfo, Error>?
     var launchTask: Task<LaunchResponse, Error>?
     var pendingLaunch: Task<LaunchResponse, Error>?
 

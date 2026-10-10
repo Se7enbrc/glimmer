@@ -37,9 +37,23 @@ extension InputForwarder {
         let slot: UInt8           // 0..15, used as `controllerNumber`
         let arrival: ControllerArrival
         weak var controller: GCController?
+        let priorPlayerIndex: GCControllerPlayerIndex
+        let priorOptionsGesture: GCControllerElement.SystemGestureState?
+        let priorHomeGesture: GCControllerElement.SystemGestureState?
         /// True if this is a DualSense and we `retain()`ed the raw-HID reader
         /// for it (so detach can `release()` it).
         let retainedHID: Bool
+
+        func restoreSystemState() {
+            guard let controller else { return }
+            controller.playerIndex = priorPlayerIndex
+            if let priorOptionsGesture {
+                controller.extendedGamepad?.buttonOptions?.preferredSystemGestureState = priorOptionsGesture
+            }
+            if let priorHomeGesture {
+                controller.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = priorHomeGesture
+            }
+        }
     }
 
     // MARK: - Lifecycle
@@ -83,6 +97,7 @@ extension InputForwarder {
                     } else {
                         // Controller already deallocated; just clear bookkeeping.
                         if let state = self.attachedControllers.removeValue(forKey: id) {
+                            self.releaseControllerTouches(slot: state.slot)
                             self.dualSenseRouting.syncControllers()
                             self.dualSenseRouting.unregister(slot: state.slot)
                             if state.retainedHID { DualSenseHID.shared.release() }
@@ -124,6 +139,14 @@ extension InputForwarder {
             return
         }
         gamepadMask |= UInt16(1) << slot
+        let priorPlayerIndex = gamepad.playerIndex
+        let priorOptionsGesture = gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState
+        let priorHomeGesture: GCControllerElement.SystemGestureState?
+        if #available(macOS 27, *) {
+            priorHomeGesture = gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState
+        } else {
+            priorHomeGesture = nil
+        }
 
         // Light the controller's player-number LEDs to match its slot - the one
         // native touch the pad was missing. GameController owns this on macOS (it
@@ -148,7 +171,8 @@ extension InputForwarder {
         // Motion caps come from the sampler's per-sensor probe (accel/gyro
         // gated separately), which also maps the slot for the host's 0x5501
         // enable. Registration alone starts no sensors.
-        caps |= ControllerMotion.shared.register(slot: slot, controller: gamepad)
+        caps |= ControllerMotion.shared.register(slot: slot, controller: gamepad,
+                                                 inputEnabled: forwardsControllerEvents)
         // Battery likewise: the monitor's probe returns the bit only when the
         // pad exposes a GCDeviceBattery, and maps the slot for the ~30s
         // report cadence. Registration alone sends nothing.
@@ -223,7 +247,8 @@ extension InputForwarder {
 
         let state = AttachedController(
             slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
-            controller: gamepad, retainedHID: useHID
+            controller: gamepad, priorPlayerIndex: priorPlayerIndex,
+            priorOptionsGesture: priorOptionsGesture, priorHomeGesture: priorHomeGesture, retainedHID: useHID
         )
         attachedControllers[ObjectIdentifier(gamepad)] = state
         dualSenseRouting.register(slot: slot, controller: ObjectIdentifier(gamepad))
@@ -247,12 +272,7 @@ extension InputForwarder {
             + "caps=0x\(String(caps, radix: 16)) buttons=0x\(String(buttons, radix: 16))",
             "Controller")
 
-        // Install the live input handlers (GameController valueChangedHandler +
-        // the raw-HID centre-button onChange). Factored into installInputHandlers
-        // so resyncControllers() can RE-install them on every focus regain: the
-        // Settings chord-capture sheet grabs both single-slot handlers to record a
-        // chord and nils them on dismiss, which otherwise left controller input
-        // dead until a stream restart. See installInputHandlers.
+        // Both sources share the stream's handler ownership, reasserted on focus regain.
         installInputHandlers(for: state)
 
         // If the stream is already up, announce arrival immediately;
@@ -264,10 +284,11 @@ extension InputForwarder {
 
     func detach(gamepad: GCController) {
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
+        state.restoreSystemState()
         dualSenseRouting.disconnectController(ObjectIdentifier(gamepad))
         dualSenseRouting.unregister(slot: state.slot)
         gamepadMask &= ~(UInt16(1) << state.slot)
-        touchpadStates[state.slot] = nil
+        releaseControllerTouches(slot: state.slot)
         // Stop this pad's rumble engines AND motion sampling: a disconnect
         // mid-rumble must never leave motors buzzing, mid-gyro must not strand
         // the host on a stale rotation (the sampler sends the gyro null).
@@ -329,6 +350,7 @@ extension InputForwarder {
         releaseHIDControllers()
         for state in attachedControllers.values {
             state.controller?.extendedGamepad?.valueChangedHandler = nil
+            state.restoreSystemState()
             dualSenseRouting.unregister(slot: state.slot)
             ControllerHaptics.shared.unregister(slot: state.slot)
             ControllerMotion.shared.unregister(slot: state.slot)
@@ -387,10 +409,7 @@ extension InputForwarder {
             announcedControllers[slot] = nil
         }
         for state in attachedControllers.values { sendArrival(slot: state.slot, state.arrival) }
-        for state in attachedHIDControllers.values {
-            sendArrival(slot: state.slot, state.arrival)
-            pushHID(state.device)
-        }
+        for state in attachedHIDControllers.values { sendArrival(slot: state.slot, state.arrival) }
         resyncControllers()
     }
 
@@ -471,16 +490,8 @@ extension InputForwarder {
 
     // MARK: - Input handler install / heal
 
-    /// (Re)install the live input handlers for an attached controller: the
-    /// GameController `valueChangedHandler` (the single full-state forward) and,
-    /// for a raw-HID DualSense, `DualSenseHID.shared.onChange` (the centre-button
-    /// edge GameController never delivers). Idempotent, so it doubles as a HEAL:
-    /// the Settings chord-capture sheet (ChordCaptureSheet.engage/disengage) takes
-    /// over both single-slot handlers to record a chord and sets them to `nil` on
-    /// dismiss - which, with a stream live, left the forwarder's input path dead
-    /// until a session restart re-ran attach(). resyncControllers() calls this on
-    /// every focus regain, so returning to the stream restores input with no
-    /// restart.
+    /// Reassert ownership of GameController state and raw-HID centre-button updates.
+    /// The chord recorder polls independently and leaves these handlers alone.
     func installInputHandlers(for state: AttachedController) {
         guard let gamepad = state.controller else { return }
         let slot = state.slot
@@ -492,7 +503,7 @@ extension InputForwarder {
                 guard let self else { return }
                 // The batcher takes this handler-entry stamp for its deliver leg.
                 // Only stamp while ready, or the next push reads stale latency.
-                if self.isReady {
+                if self.forwardsControllerEvents {
                     InputDeliverStamp.shared.stamp(slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
                 }
                 if routesHID { self.dualSenseRouting.gc(pad: pad) }
@@ -523,18 +534,15 @@ extension InputForwarder {
     /// that used to live here moved to ControllerBattery.swift, with the
     /// host-facing battery uplink.)
     func resyncControllers() {
-        guard isReady else { return }
+        guard forwardsControllerEvents else { return }
         for state in attachedControllers.values {
-            // Re-install handlers FIRST: a component that grabbed the single-slot
-            // valueChangedHandler / DualSenseHID.onChange while we were not key -
-            // the Settings chord-capture sheet - may have nil'd ours, leaving
-            // controller input dead. Healing here means returning focus to the
-            // stream restores live input without a session restart. Then push
-            // current state so a held stick/button snaps to live immediately.
+            // Reassert stream ownership before restoring held state after a focus change.
             installInputHandlers(for: state)
+            ControllerMotion.shared.setInputEnabled(true, slot: state.slot)
             guard let pad = state.controller?.extendedGamepad else { continue }
             sendGamepadUpdate(pad: pad, slot: state.slot)
         }
+        for state in attachedHIDControllers.values { pushHID(state.device) }
     }
 
     // (matchesControllerQuitChord and the shared heldControllerButtons reader

@@ -211,9 +211,8 @@ extension VideoDecoder {
             if let tracker = FrameTimingTracker.shared {
                 tracker.recordOutput(rtpTimestamp: VideoDecoder.rtpTimestamp(from: presentationTimeStamp))
             }
-            // Propagate the host-clock PTS (recovered from the input
-            // sample's rtpTimestamp via VT) into the enqueue path so the
-            // AVSampleBufferDisplayLayer can drop stale frames cleanly.
+            // Preserve the PC's RTP clock for pacing and telemetry. At release, the
+            // renderer displays immediately rather than scheduling against its Mac clock.
             decoder.enqueueDecodedFrame(
                 imageBuffer, hostPTS: presentationTimeStamp)
             // First-frame fade-in trigger. Fires once per session AFTER
@@ -238,8 +237,8 @@ extension VideoDecoder {
         }
 
     /// Runs on VT's output thread for each decoded pixel buffer: tags it, wraps it in a CMSampleBuffer
-    /// stamped with the PC's capture-clock `hostPTS` (so the layer drops stale frames in the PC's
-    /// clock), and hands it to the frame pacer, or presents it directly while pacing is down.
+    /// stamped with the PC's capture-clock `hostPTS` for pacing and telemetry, then hands it to
+    /// the frame pacer, or presents it directly while pacing is down.
     nonisolated func enqueueDecodedFrame(
         _ pixelBuffer: CVPixelBuffer, hostPTS: CMTime
     ) {
@@ -319,16 +318,9 @@ extension VideoDecoder {
 
         guard let formatDescription = fmtDesc else { return }
 
-        // Build the CMSampleBuffer. PTS comes from the host's capture
-        // clock (rtpTimestamp in 90kHz units), recovered by VT through the
-        // input sample's timing info and surfaced as
-        // `presentationTimeStamp` in the output callback. When PTS is
-        // invalid (older Sunshine builds, defensive path), fall back to
-        // `.invalid` - the layer will still render but its stale-frame
-        // drop logic loses precision. We deliberately do NOT synthesize
-        // a local mach_absolute_time PTS here; that's the bug this fix
-        // closes. moonlight-qt's vt_avsamplelayer.mm follows the same
-        // host-PTS path.
+        // Keep the PC's RTP PTS through VT for pacing and telemetry, including invalid PTS.
+        // presentFrame marks the released image display-immediately; this clock is not
+        // the renderer's default Mac host clock and must not schedule its display.
         var timingInfo = CMSampleTimingInfo(
             duration: .invalid,
             presentationTimeStamp: hostPTS,

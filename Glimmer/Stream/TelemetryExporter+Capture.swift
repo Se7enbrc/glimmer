@@ -155,6 +155,8 @@ extension TelemetryExporter {
         // histogram. Surface the raw EMA only - the true tail (p95/max) lives in
         // the glimmer_decode_time_p_ms / _idr_ms histograms, not a multiple of it.
         snap.decodeEmaMs = stats.avgDecodeTimeMs
+        snap.decodeServiceMs = stats.avgDecodeServiceMs
+        snap.decodeWaitMs = stats.avgDecodeWaitMs
 
         snap.presentCadenceErrorMs = stats.avgPresentCadenceErrorMs
         // on-time/late split: per-window frame counts derived from the on-time

@@ -52,8 +52,64 @@ struct PresentTripTests {
 
     /// Threshold boundary: 90 consecutive refusals trips, 89 does not.
     @Test func starvationThresholdBoundary() {
-        #expect(StreamSession.rendererStarvationTripped(rejectStreak: 90, inStartupGrace: false))
-        #expect(!StreamSession.rendererStarvationTripped(rejectStreak: 89, inStartupGrace: false))
+        #expect(StreamSession.rendererStarvationTripped(rejectStreak: 90, inStartupGrace: false, sinceLastReject: 0))
+        #expect(!StreamSession.rendererStarvationTripped(rejectStreak: 89, inStartupGrace: false, sinceLastReject: 0))
+    }
+
+    @Test func sustainedRefusalTripsBeforeNinetyFrames() {
+        #expect(StreamSession.rendererStarvationTripped(
+            rejectStreak: 46, inStartupGrace: false, refusalSeconds: 0.26, sinceLastReject: 0.004))
+        #expect(!StreamSession.rendererStarvationTripped(
+            rejectStreak: 46, inStartupGrace: true, refusalSeconds: 0.26, sinceLastReject: 0.004))
+    }
+
+    @Test func droughtDoesNotAgeTransientRefusalsIntoAStall() {
+        #expect(!StreamSession.rendererStarvationTripped(
+            rejectStreak: 8, inStartupGrace: false, refusalSeconds: 0.04, sinceLastReject: 0.22))
+        #expect(!StreamSession.rendererStarvationTripped(
+            rejectStreak: 46, inStartupGrace: false, refusalSeconds: 0.26, sinceLastReject: 0.3))
+        #expect(!StreamSession.rendererStarvationTripped(
+            rejectStreak: 7, inStartupGrace: false, refusalSeconds: 0.3, sinceLastReject: 0.01))
+        for streak in [90, 500] {
+            #expect(!StreamSession.rendererStarvationTripped(
+                rejectStreak: streak, inStartupGrace: false, refusalSeconds: 0.5, sinceLastReject: 0.3))
+        }
+    }
+
+    @Test func sparseRefusalsCannotAccumulateIntoTheDenseFallback() {
+        let pacer = FramePacer(stats: StatsCollector(), configuredFps: 120)
+        for index in 0..<100 { pacer.noteGateReleaseRejected(at: 100 + Double(index) * 0.3) }
+        let live = pacer.livenessSnapshot()
+        #expect(live.presentRejectStreak == 1)
+        #expect(!StreamSession.rendererStarvationTripped(
+            rejectStreak: live.presentRejectStreak, inStartupGrace: false,
+            refusalSeconds: live.rendererRefusalSeconds, sinceLastReject: 0))
+    }
+
+    @Test func denseFallbackAndLowRateTimedRefusalsStillTrip() {
+        let pacer = FramePacer(stats: StatsCollector(), configuredFps: 120)
+        for index in 0..<90 { pacer.noteGateReleaseRejected(at: 100 + Double(index) * 0.001) }
+        var live = pacer.livenessSnapshot()
+        #expect(live.rendererRefusalSeconds < StreamSession.presentStallThreshold)
+        #expect(StreamSession.rendererStarvationTripped(
+            rejectStreak: live.presentRejectStreak, inStartupGrace: false,
+            refusalSeconds: live.rendererRefusalSeconds, sinceLastReject: 0))
+        for index in 0..<8 { pacer.noteGateReleaseRejected(at: 101 + Double(index) * 0.05) }
+        live = pacer.livenessSnapshot()
+        #expect(live.presentRejectStreak == 8)
+        #expect(StreamSession.rendererStarvationTripped(
+            rejectStreak: live.presentRejectStreak, inStartupGrace: false,
+            refusalSeconds: live.rendererRefusalSeconds, sinceLastReject: 0))
+    }
+
+    @Test func refusalWindowRestartsAfterDrought() {
+        let pacer = FramePacer(stats: StatsCollector(), configuredFps: 120)
+        for index in 0..<40 { pacer.noteGateReleaseRejected(at: 100 + Double(index) / 120) }
+        #expect(pacer.livenessSnapshot().rendererRefusalSeconds > StreamSession.presentStallThreshold)
+        pacer.noteGateReleaseRejected(at: 101)
+        #expect(pacer.livenessSnapshot().rendererRefusalSeconds == 0)
+        pacer.noteGateReleaseRejected(at: 101.01)
+        #expect(abs(pacer.livenessSnapshot().rendererRefusalSeconds - 0.01) < 0.0001)
     }
 
     /// Startup grace suppresses the trip - cadence-lock and priming churn must
@@ -98,6 +154,7 @@ struct PresentTripTests {
             secondsQueueNonEmpty: queueNonEmptyFor, running: true, totalTicks: 5000,
             totalReleases: 4000, streamFrameIntervalSeconds: 1.0 / 120, adaptiveTargetDepth: 1,
             recentTicksPerSecond: 120, recentReleasesPerSecond: 120, tickDeficitSeconds: 0,
-            expectedTickHz: 120, tickDeficitModeActive: false, presentRejectStreak: rejectStreak)
+            expectedTickHz: 120, tickDeficitModeActive: false, presentRejectStreak: rejectStreak,
+            rendererRefusalSeconds: 0, secondsSinceLastReject: .infinity)
     }
 }

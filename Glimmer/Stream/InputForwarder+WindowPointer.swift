@@ -28,20 +28,11 @@ import AppKit
 
 extension InputForwarder {
 
-    /// Whether mouse events reach the host right now.
-    ///
-    /// Full screen: always - capture there tracks key status and the window
-    /// orders out when it resigns, so the view only receives events while it
-    /// owns the input.
-    ///
-    /// Window mode: only while the window is KEY. A window keeps its tracking
-    /// area alive with `.activeAlways` (the stream needs mouseMoved without a
-    /// button held), so without this gate a pointer sweeping over an inactive
-    /// stream window on the way to another app would drag the host's cursor
-    /// around behind the user's back.
+    /// Native fullscreen tracking can outlive focus through a Space transition.
+    /// Relative aim requires capture; a key window also permits a free pointer.
     var forwardsMouseEvents: Bool {
-        guard isWindowMode else { return true }
-        return window?.isKeyWindow ?? false
+        guard let window, window.isKeyWindow, !window.ignoresMouseEvents else { return false }
+        return isWindowMode || isMouseCaptured
     }
 
     /// Whether pointer motion should be sent as an absolute POSITION rather
@@ -75,6 +66,13 @@ extension InputForwarder {
     func setMiniPlayer(_ enabled: Bool) {
         guard isMiniPlayer != enabled else { return }
         isMiniPlayer = enabled
+        updateControllerBackgroundEvents()
+        if enabled {
+            resyncControllers()
+        } else if window?.isKeyWindow == false {
+            cancelQuitChordDwell(reason: "mini player ended in the background")
+            neutralizeControllers()
+        }
         inputView?.acceptsActivatingClick = enabled
         if enabled, isMouseCaptured { releasePointer(reason: "mini player") }
         log.info("Pointer policy: \(enabled ? "click to capture (mini player)" : "capture while over the window", privacy: .public)")

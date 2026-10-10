@@ -1,84 +1,6 @@
-//
-//  VideoDecoder.swift
-//
-//  VideoToolbox + AVSampleBufferDisplayLayer video pipeline for Glimmer.
-//
-//  This file owns the `VideoDecoder` class core: lifecycle, VT session,
-//  packet enqueue, and layer attachment. The HDR pipeline (MDCV/CLL parsing,
-//  PQ colorspace setup, EDR engagement, first-frame probe) lives in
-//  `VideoDecoder+HDR.swift`. Bitstream parsing (H.264/HEVC/AV1 NAL walking,
-//  parameter-set assembly, AVCC conversion, sample buffer construction)
-//  lives in `VideoDecoder+Bitstream.swift`. The per-frame stats counters
-//  (`StatsCollector`) live in `StatsCollector.swift`.
-//
-//  Architecture overview
-//  ---------------------
-//  The native backend hands us Annex-B elementary stream data (H.264 / HEVC /
-//  AV1) on its internal receive threads via the decoder-renderer sink. We
-//  parse the bitstream into a CMSampleBuffer,
-//  push it through a VTDecompressionSession (HW accelerated when the
-//  capability check passes), and enqueue the resulting CVPixelBuffer onto an
-//  AVSampleBufferDisplayLayer for the OS to render.
-//
-//  Why no Metal shader / why AVSampleBufferDisplayLayer
-//  ----------------------------------------------------
-//  This file used to drive a CAMetalLayer through a custom MSL fragment
-//  shader doing BT.2020 NCL YUV→RGB, range scaling, chroma cositing, and
-//  PQ-tagged output for HDR. Three rounds of tuning later, HDR was still
-//  visibly wrong on a 4K240 HDR panel: overbright midtones, washed highlights,
-//  milky blacks vs. moonlight-qt on the same host/display/content showing
-//  inky blacks and full peak luminance.
-//
-//  The cause was architectural, not a CSC math bug. moonlight-qt's
-//  HDR-correct macOS path is `vt_avsamplelayer.mm`, not `vt_metal.mm`. The
-//  latter is a Metal-shader fallback (used on Linux/Windows variants of
-//  their stack); the former is what runs on real macOS clients. It uses
-//  AVSampleBufferDisplayLayer, which:
-//
-//    * Takes a CMSampleBuffer wrapping the CVPixelBuffer that VT produces.
-//    * Reads the pixel buffer's `kCVImageBufferColorPrimariesKey`,
-//      `kCVImageBufferTransferFunctionKey`, `kCVImageBufferYCbCrMatrixKey`
-//      and `kCVImageBufferMasteringDisplayColorVolumeKey` /
-//      `kCVImageBufferContentLightLevelInfoKey` attachments to know what
-//      the pixels mean.
-//    * Reads the CMFormatDescription's extensions for HDR metadata when
-//      the pixel buffer doesn't carry it.
-//    * Reads `layer.colorspace` (kCGColorSpaceITUR_2100_PQ for HDR) to know
-//      how to interpret the bits at composite time.
-//    * Does YUV→RGB conversion, PQ EOTF, and EDR tone-mapping in the OS's
-//      own display pipeline against the panel's actual peak luminance.
-//
-//  There is no shader. There is no manual CSC matrix. The OS owns the
-//  pipeline end-to-end, and that's the only way to get color-correct HDR
-//  on macOS without re-implementing the entire macOS HDR compositor in
-//  Metal - which Apple specifically does NOT want us to do, see
-//  "Using Color Spaces to Display HDR Content" in the Metal docs:
-//  > "Don't perform tone mapping in your shader. AVSampleBufferDisplayLayer
-//  >  applies tone mapping based on the current EDR headroom."
-//
-//  What this file does now
-//  -----------------------
-//   1. Decode H.264 / HEVC / AV1 bitstreams with VTDecompressionSession.
-//   2. For tagged streams: VT already attaches the right
-//      primaries/transfer/matrix to the produced CVPixelBuffer.
-//   3. For untagged streams (some Sunshine builds ship video without VUI
-//      colour info): we attach the right CGColorSpace based on what we
-//      know from the stream config (HDR mode + 10-bit → BT.2020/PQ;
-//      otherwise BT.709).
-//   4. When the host signals HDR via LiSetHdrMode, we pull mastering-display
-//      + content-light metadata via LiGetHdrMetadata and attach it as
-//      CMFormatDescription extensions (MDCV / CLL), in the exact GBR-order
-//      big-endian byte layout HDR10 uses - matching moonlight-qt's
-//      vt_base.mm::setHdrMode byte-for-byte.
-//   5. Wrap the CVPixelBuffer + CMFormatDescription in a CMSampleBuffer
-//      and enqueue it on the AVSampleBufferDisplayLayer.
-//   6. Handle the layer's `AVQueuedSampleBufferRenderingStatusFailed` state
-//      by flushing and rebuilding the format description - without this,
-//      macOS 14+ silently stops rendering after the first decode error.
-//
-//  Threading: receive threads hand units to `decodeQueue` and never block; VT's callback
-//  thread wraps decoded frames for the FramePacer, which presents on vsync; display-layer
-//  mutations (colorspace, wantsEDR, flush) run on the main actor.
+// VideoToolbox decodes frames; AVSampleBufferDisplayLayer presents their color and HDR metadata.
+// Lifecycle and shared state live here; decode, pacing and HDR details live in extensions.
+// See docs/ARCHITECTURE.md for the pipeline and the display-layer choice.
 
 import AppKit
 import AVFoundation
@@ -156,6 +78,10 @@ public final class VideoDecoder {
         didSet {
             guard oldValue != statsOverlayEnabled else { return }
             log.info("Stats overlay \(self.statsOverlayEnabled ? "ON" : "OFF")")
+            backdropBox.withLock { [enabled = statsOverlayEnabled] in
+                $0.overlayEnabled = enabled
+                if !enabled { $0.luminance = nil }
+            }
             onStatsOverlayEnabledChanged?(statsOverlayEnabled)
         }
     }
@@ -164,6 +90,9 @@ public final class VideoDecoder {
     /// session uses this to show/hide the overlay layer instantly without
     /// having to poll the decoder.
     public var onStatsOverlayEnabledChanged: ((Bool) -> Void)?
+
+    /// HUD backdrop sampling state: set on the main actor, sampled on the present path.
+    nonisolated let backdropBox = OSAllocatedUnfairLock(initialState: HUDBackdropState())
 
     // MARK: - Internal state
     //

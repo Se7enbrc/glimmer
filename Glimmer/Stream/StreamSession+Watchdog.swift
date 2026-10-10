@@ -26,22 +26,10 @@ extension StreamSession {
     /// this long (~60 missed vsyncs at 240Hz) means the CADisplayLink stopped
     /// (a same-screen HDR/VRR/mode switch that posted no didChangeScreen).
     static let presentLinkDeadThreshold: Double = 0.25
-    /// Present-FREEZE trip: the present callback is still ticking (the link is
-    /// alive), frames are QUEUED, yet NO frame has reached the renderer for this
-    /// long - the `due` gate has latched false (a timebase discontinuity) and the
-    /// pacer's own starvation failsafe couldn't break it. Same window as
-    /// link-dead. This is the ONLY present-stall signal and it is jitter-proof:
-    /// it keys on the release clock + tick liveness + a NON-EMPTY queue, never on
-    /// how deep the buffer rides. Under zero-loss wifi jitter the FIFO pins full
-    /// and late-drops while the pacer keeps releasing ~1 frame/tick (and the
-    /// present-loop backoff presents the freshest frame on a hopelessly-late
-    /// head), which keeps the release clock fresh - so a full
-    /// buffer never trips this; and an EMPTY queue (a wire/decode drought with
-    /// nothing to release) never trips it either - droughts are the RFI/decode
-    /// machinery's to recover, not a present wedge. Only a genuine screen freeze
-    /// on a ticking link (the 4K240 HDR timebase wedge) holds queued
-    /// frames for 0.25s with zero releases.
-    static let presentStallThreshold: Double = 0.25
+    /// A ticking link with queued frames but no accepted presentation is frozen.
+    /// The same window covers sustained renderer refusals that keep emptying the queue;
+    /// a full buffer that keeps presenting and a network drought never trip by themselves.
+    static let presentStallThreshold = FramePacer.rendererRefusalWindowSeconds
     /// After escalation has run and still no present has resumed within this
     /// long, fall back to direct enqueue (graceful degradation) so we never
     /// hard-freeze. Generous vs the trip thresholds so a transient hiccup that
@@ -232,9 +220,11 @@ extension StreamSession {
             // frameWatchdogTimeout) stays error-level.
             self.log.notice("""
                 Present-path stall detected - linkDead=\(trip.linkDead, privacy: .public) \
+                presentStalled=\(trip.presentStalled, privacy: .public) \
                 tickDeficit=\(trip.tickDeficit, privacy: .public) rendererRejecting=\(trip.rendererRejecting, privacy: .public) \
                 rendererStarved=\(trip.rendererStarved, privacy: .public) \
                 rejectStreak=\(live.presentRejectStreak, privacy: .public) \
+                refusal=\(live.rendererRefusalSeconds * 1000, privacy: .public)ms \
                 sinceTick=\(live.secondsSinceLastTick * 1000, privacy: .public)ms \
                 sinceRelease=\(live.secondsSinceLastRelease * 1000, privacy: .public)ms \
                 ticks/s=\(live.recentTicksPerSecond, privacy: .public) \
@@ -244,10 +234,12 @@ extension StreamSession {
                 """)
             Diag.info(
                 "Present-path stall detected (linkDead=\(trip.linkDead) "
+                + "presentStalled=\(trip.presentStalled) "
                 + "tickDeficit=\(trip.tickDeficit) "
                 + "rendererRejecting=\(trip.rendererRejecting) "
                 + "rendererStarved=\(trip.rendererStarved) "
                 + "rejectStreak=\(live.presentRejectStreak) "
+                + "refusalMs=\(String(format: "%.1f", live.rendererRefusalSeconds * 1000)) "
                 + "ticks/s=\(String(format: "%.1f", live.recentTicksPerSecond)) "
                 + "releases/s=\(String(format: "%.1f", live.recentReleasesPerSecond)) "
                 + "depth=\(live.depth) clusterTrips=\(StreamSession.presentTripsInCluster)); self-healing",

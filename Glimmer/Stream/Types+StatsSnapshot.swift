@@ -12,6 +12,8 @@ import Foundation
 /// The HUD uses estimated PC capture FPS while telemetry retains pipeline rates.
 /// Unavailable measurements stay nil so their rows remain neutral.
 public struct StreamStatsSnapshot: Sendable {
+    /// The codec selected for this connection, not the PC's configured preference.
+    public var videoCodec: String?
     /// Estimated PC capture rate, excluding untimed repeats once timing is available.
     /// Falls back to measured reception without timing support. Captured desktop
     /// updates can differ from the game's own render rate.
@@ -67,6 +69,9 @@ public struct StreamStatsSnapshot: Sendable {
     /// between `VTDecompressionSessionDecodeFrame` submission and the
     /// matching decompression-output callback fire).
     public var avgDecodeTimeMs: Double?
+    /// `avgDecodeTimeMs` split into VT service time and queue wait behind the prior frame.
+    public var avgDecodeServiceMs: Double?
+    public var avgDecodeWaitMs: Double?
 
     /// Host-side capture + encode latency, in milliseconds, as reported by
     /// Sunshine on each DECODE_UNIT (`frameHostProcessingLatency` in
@@ -140,11 +145,8 @@ public struct StreamStatsSnapshot: Sendable {
     /// felt-stutter signal. Session-cumulative; catch-up discards don't count.
     public var presentationGaps: UInt64?
 
-    /// Live audio-config label ("Stereo", "5.1 surround", "7.1 surround").
-    /// Read from the session-active AudioConfig - post-codec-agent the
-    /// default is `AudioConfig.bestForCurrentOutput()` rather than
-    /// hardcoded `.stereo`, and the overlay needs to reflect that. nil
-    /// pre-session-start.
+    /// Source channel layout for the active session, nil before it starts.
+    /// Playback adapts that source to the current speakers or headphones.
     public var audioConfigDescription: String?
 
     /// Mac-side host vitals sampled per-tick from `MacSystemStats.shared`.
@@ -208,7 +210,7 @@ public struct StreamStatsSnapshot: Sendable {
             .latency, .jitter, .networkDrops,
             .decoderDrops, .smoothness, .decodeTime, .bitrate, .hostProcessing,
             .macCpu, .macRam, .macBattery, .controllerBattery,
-            .audio
+            .codec, .audio
         ]
         for kind in plan where enabled.contains(kind) {
             out.append(buildRow(kind: kind, targetFps: targetFps, thresholds: thresholds))
@@ -233,6 +235,10 @@ public struct StreamStatsSnapshot: Sendable {
             return pipelineRow(kind: kind, targetFps: targetFps, thresholds: thresholds)
         case .macCpu, .macRam, .macBattery, .controllerBattery:
             return macRow(kind: kind)
+        case .codec:
+            return StatsRow(
+                kind: .codec, label: "Codec", value: videoCodec ?? "-",
+                symbolName: "film", health: .neutral, section: .config)
         case .audio:
             return StatsRow(
                 kind: .audio, label: "Audio",
@@ -327,9 +333,9 @@ public struct StreamStatsSnapshot: Sendable {
         case .decodeTime:
             return StatsRow(
                 kind: .decodeTime, label: "Decode time",
-                value: formatMs(avgDecodeTimeMs),
+                value: formatDecodeTime(),
                 symbolName: "clock",
-                health: decodeTimeHealth(avgDecodeTimeMs, targetFps: targetFps),
+                health: Self.decodeTimeHealth(avgDecodeTimeMs, targetFps: targetFps),
                 section: .pipeline)
         case .hostProcessing:
             // "PC encode", not "latency": the PC's capture and encode time
@@ -452,16 +458,11 @@ public struct StreamStatsSnapshot: Sendable {
         if pct > thresholds.dropsWarningAbove { return .warning }
         return .healthy
     }
-    /// Warn if decode wall-clock crosses half the frame budget,
-    /// critical if it crosses 90% - at 60Hz that's >8.3ms warn,
-    /// >15ms crit. Frame budget shrinks at higher FPS so the
-    /// thresholds tighten automatically.
-    private func decodeTimeHealth(_ decodeMs: Double?, targetFps: Double) -> StatsRow.Health {
+    /// Decode is pipelined, so time inside the frame budget is latency, not a fault.
+    /// Only a decode longer than the whole frame budget falls behind the stream.
+    static func decodeTimeHealth(_ decodeMs: Double?, targetFps: Double) -> StatsRow.Health {
         guard let decodeMs, targetFps > 0 else { return .neutral }
-        let frameBudget = 1000.0 / targetFps
-        if decodeMs > frameBudget * 0.9 { return .critical }
-        if decodeMs > frameBudget * 0.5 { return .warning }
-        return .healthy
+        return decodeMs > 1000.0 / targetFps ? .critical : .healthy
     }
 
     // MARK: Formatting helpers
@@ -511,6 +512,13 @@ public struct StreamStatsSnapshot: Sendable {
     private func formatMs(_ ms: Double?) -> String {
         guard let ms else { return "\u{2014}" }
         return String(format: "%.2f ms", ms)
+    }
+    /// "2.76 ms · 2.41 + 0.35 wait" once frames queue behind each other in VT.
+    private func formatDecodeTime() -> String {
+        guard let service = avgDecodeServiceMs, let wait = avgDecodeWaitMs, wait >= 0.05 else {
+            return formatMs(avgDecodeTimeMs)
+        }
+        return formatMs(avgDecodeTimeMs) + String(format: " \u{00B7} %.2f + %.2f wait", service, wait)
     }
     /// Decimal-ms formatter for the network rows (jitter). Shows two decimals so
     /// a clean wired link's ~0.09ms jitter is legible instead of rounding to

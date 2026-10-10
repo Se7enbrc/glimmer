@@ -37,6 +37,24 @@ struct HostsStoreTests {
         }
     }
 
+    @MainActor @Test func endingAStreamRefreshesTheVisibleLastPlayedDate() throws {
+        let domain = "io.ugfugl.Glimmer.tests.hosts-last-played"
+        let defaults = try pairedTower(domain)
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let model = AppModel()
+        defer {
+            model.hostStatusTask?.cancel()
+            model.hostPolling.movedHostSearch?.cancel()
+        }
+        model.loadHosts(defaults: defaults)
+        #expect(model.selectedHost?.lastConnected == nil)
+        let ended = Date(timeIntervalSince1970: 1_700_000_000)
+        model.recordLastPlayed(hostID: "TOWER-ID", at: ended, defaults: defaults)
+        #expect(model.selectedHost?.lastConnected == ended)
+        #expect(model.hosts.first?.lastConnected == ended)
+        #expect(defaults.object(forKey: "glimmer.lastConnected.TOWER-ID") as? Date == ended)
+    }
+
     @Test func aFreshListReplacesThePairingStandIn() throws {
         let domain = "io.ugfugl.Glimmer.tests.hosts-fresh-list"
         let defaults = try pairedTower(domain)
@@ -128,15 +146,40 @@ struct HostsStoreTests {
         model.hostStatusTask?.cancel()
         defer { model.hostPolling.movedHostSearch?.cancel() }
         let cycle = AppModel.idleHostStatusPollSeconds + 2 + 2
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
         model.hostLiveStatus = HostLiveStatus(hostID: "tower", state: .idle, rttMs: 3, sunshineVersion: nil,
-                                              capturedAt: Date().addingTimeInterval(-2 * cycle))
+                                              capturedAt: now.addingTimeInterval(-2 * cycle))
         model.hostUnreachableStreak = 1
+        let publishMiss: (String, String) async -> Void = { hostID, expected in
+            await model.publishUnreachable(hostID: hostID, expectedHostID: expected, now: now)
+        }
         _ = await model.pollHostStatusOnce(for: "tower", appListFor: nil,
-                                           probe: { _, _, _ in .unreachable }, macHasRoute: true)
+                                           probe: { _, _, _ in .unreachable }, macHasRoute: true, publishMiss: publishMiss)
         #expect(model.hostLiveStatus?.state == .idle)
         _ = await model.pollHostStatusOnce(for: "tower", appListFor: nil,
-                                           probe: { _, _, _ in .unreachable }, macHasRoute: true)
+                                           probe: { _, _, _ in .unreachable }, macHasRoute: true, publishMiss: publishMiss)
         #expect(model.hostLiveStatus?.state == .asleep)
+        #expect(model.hostLiveStatus?.capturedAt == now)
+    }
+
+    @MainActor @Test(arguments: [HostLiveStatus.stale, HostLiveStatus.stale + 1])
+    func aSecondMissPublishesAsleepOnlyAfterTheGoodAnswerExpires(age: TimeInterval) async {
+        let model = AppModel()
+        model.selectedHost = Self.host("tower", address: "192.0.2.10")
+        model.hostStatusTask?.cancel()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let live = HostLiveStatus(hostID: "tower", state: .idle, rttMs: 3, sunshineVersion: nil,
+                                  capturedAt: now.addingTimeInterval(-age))
+        model.hostLiveStatus = live
+        model.hostUnreachableStreak = 1
+        await model.publishUnreachable(hostID: "tower", expectedHostID: "tower", now: now)
+        #expect(model.hostUnreachableStreak == 2)
+        if age <= HostLiveStatus.stale {
+            #expect(model.hostLiveStatus == live)
+        } else {
+            #expect(model.hostLiveStatus?.state == .asleep)
+            #expect(model.hostLiveStatus?.capturedAt == now)
+        }
     }
 
     @MainActor @Test func aPCThatReplacesTheSelectionGetsAFreshChipAndPoll() {

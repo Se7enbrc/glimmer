@@ -35,11 +35,11 @@ struct ParserHelperTests {
         let (expected, expectedLength, _) = try #require(UdpPinger.makeSockaddr(for: NWEndpoint.Host(peer), port: 48_000))
         let (samePeer, sameLength, _) = try #require(UdpPinger.makeSockaddr(for: NWEndpoint.Host(peer), port: 54_321))
         let (otherPeer, otherLength, _) = try #require(UdpPinger.makeSockaddr(for: NWEndpoint.Host(stranger), port: 48_000))
-        #expect(RtpAudioReceiver.isExpectedPeer(samePeer, length: sameLength,
+        #expect(UdpPinger.isExpectedPeer(samePeer, length: sameLength,
                                               expected: expected, expectedLength: expectedLength))
-        #expect(!RtpAudioReceiver.isExpectedPeer(otherPeer, length: otherLength,
+        #expect(!UdpPinger.isExpectedPeer(otherPeer, length: otherLength,
                                                expected: expected, expectedLength: expectedLength))
-        #expect(!RtpAudioReceiver.isExpectedPeer(samePeer, length: sameLength - 1,
+        #expect(!UdpPinger.isExpectedPeer(samePeer, length: sameLength - 1,
                                                expected: expected, expectedLength: expectedLength))
     }
 
@@ -49,10 +49,27 @@ struct ParserHelperTests {
         var source = expected
         withUnsafeMutableBytes(of: &expected) { $0.storeBytes(of: UInt32(4), toByteOffset: 24, as: UInt32.self) }
         withUnsafeMutableBytes(of: &source) { $0.storeBytes(of: UInt32(5), toByteOffset: 24, as: UInt32.self) }
-        #expect(!RtpAudioReceiver.isExpectedPeer(source, length: length, expected: expected, expectedLength: length))
-        #expect(RtpAudioReceiver.isExpectedPeer(expected, length: length, expected: expected, expectedLength: length))
+        #expect(!UdpPinger.isExpectedPeer(source, length: length, expected: expected, expectedLength: length))
+        #expect(UdpPinger.isExpectedPeer(expected, length: length, expected: expected, expectedLength: length))
         let (ipv4, ipv4Length, _) = try #require(UdpPinger.makeSockaddr(for: "192.0.2.1", port: 48_000))
-        #expect(!RtpAudioReceiver.isExpectedPeer(ipv4, length: ipv4Length, expected: expected, expectedLength: length))
+        #expect(!UdpPinger.isExpectedPeer(ipv4, length: ipv4Length, expected: expected, expectedLength: length))
+    }
+
+    @Test func scopedIPv6DestinationPinsItsInterface() throws {
+        let (expected, length, _) = try #require(UdpPinger.makeSockaddr(for: "fe80::1%lo0", port: 48_000))
+        let scope = withUnsafeBytes(of: expected) { $0.loadUnaligned(fromByteOffset: 24, as: UInt32.self) }
+        #expect(scope == if_nametoindex("lo0"))
+        var otherLink = expected
+        withUnsafeMutableBytes(of: &otherLink) { $0.storeBytes(of: scope &+ 1, toByteOffset: 24, as: UInt32.self) }
+        #expect(!UdpPinger.isExpectedPeer(otherLink, length: length, expected: expected, expectedLength: length))
+    }
+
+    @Test func foreignPeerIsNotedOncePerReceiveLoop() {
+        var noted = false
+        UdpPinger.noteForeignPeer(&noted, stream: "Video", category: "NativeVideo")
+        #expect(noted)
+        UdpPinger.noteForeignPeer(&noted, stream: "Video", category: "NativeVideo")
+        #expect(noted)
     }
 
     private func feedAudioQueue(_ queue: RtpAudioQueue, sequences: [UInt16]) {
@@ -258,6 +275,24 @@ struct ParserHelperTests {
         #expect(!VideoDepacketizer.isIdrFrameStart([0xFF, 0xFF, 0xFF, 0xFF, 0x67], hevc: false))
         #expect(!VideoDepacketizer.isIdrFrameStart([0, 0, 0, 0, 0x67], hevc: false))   // 00 00 00 00 - not a start code
         #expect(!VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0, 0x67], hevc: false))   // 4th byte not 1
+    }
+
+    @Test func isIdrFrameStartRespectsSliceBounds() {
+        let packets: [[UInt8]] = [
+            [], [0], [0, 0, 1, 0x67], [0, 0, 0, 1, 0x40, 0x01],
+            [0, 0, 1, 0x09, 0xF0, 0, 0, 1, 0x06, 0x80, 0, 0, 0, 1, 0x67],
+            [0, 0, 0, 1, 0x46, 0x01, 0, 0, 1, 0x4E, 0x01, 0, 0, 1, 0x40]
+        ]
+        for packet in packets {
+            let storage = [0, 0, 1, 0x67] + packet + [0, 0, 1, 0x40]
+            for count in 0...packet.count {
+                let slice = storage[4..<(4 + count)]
+                for hevc in [false, true] {
+                    #expect(VideoDepacketizer.isIdrFrameStart(slice, hevc: hevc)
+                            == VideoDepacketizer.isIdrFrameStart(Array(slice), hevc: hevc))
+                }
+            }
+        }
     }
 
     // MARK: - VideoDepacketizer.splitAnnexBParamSets (IDR AU NAL routing)

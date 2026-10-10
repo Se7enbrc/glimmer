@@ -1,41 +1,37 @@
 #!/bin/bash
 #
-# sign-bundle.sh - inside-out codesign of Glimmer.app. NO `--deep`.
-#
-# `--deep` is the wrong tool here: it re-signs nested code (Sparkle's framework +
-# its Updater.app / Autoupdate / Installer.xpc / Downloader.xpc, and the Login
-# Helper) with the MAIN app's `--entitlements`, clobbering each component's own
-# entitlements. Verified 2026-06: it stamped Glimmer's device.usb / bluetooth /
-# moonlight shared-preference exceptions onto Sparkle's Downloader.xpc - junk for
-# a downloader, and exactly what breaks the sandboxed installer XPC at runtime.
-# Apple deprecated `--deep` for distribution for the same reason.
-#
-# Instead we sign deepest-first: each Sparkle component re-signed with OUR
-# Developer-ID but PRESERVING its own entitlements/identifier, the Login Helper
-# with its own entitlements, then the app last with Glimmer's entitlements.
-#
-# Args:
-#   $1  app path (Glimmer.app)
-#   $2  signing identity ('-' for adhoc)
-#   $3  keychain to pin identity resolution to (optional)
-#   $4  the app's entitlements file (Glimmer/Glimmer.entitlements)
+# Sign inside-out, preserving Sparkle's own entitlements. Never sign --deep.
+# Args: app, Developer ID identity, optional keychain, app entitlements.
+# Profile inputs are explicit GLIMMER_*PROVISIONING_PROFILE environment values.
 set -euo pipefail
 
 APP="${1:?usage: sign-bundle.sh <app> <identity> [keychain] <app-entitlements>}"
-ID="${2:?identity required ('-' for adhoc)}"
+ID="${2:?Developer ID identity required}"
 KC="${3:-}"
 ENT="${4:?app entitlements file required}"
 HELPER_ENT="LoginHelper/LoginHelper.entitlements"
 
-KCF=""; [ -n "$KC" ] && [ "$ID" != "-" ] && KCF="--keychain $KC"
-if [ "$ID" = "-" ]; then TS="--timestamp=none"; else TS="--timestamp"; fi
+if [ "$ID" = "-" ]; then
+    echo "ERR: restricted capabilities require Developer ID signing" >&2
+    exit 1
+fi
+KCF=(--timestamp); [ -n "$KC" ] && KCF+=(--keychain "$KC")
+DAEMON="$APP/Contents/Library/LaunchServices/Glimmer Network Helper.app"
+PROFILE="${GLIMMER_PROVISIONING_PROFILE:?set the app Developer ID profile path}"
+DAEMON_PROFILE="${GLIMMER_HELPER_PROVISIONING_PROFILE:?set the helper Developer ID profile path}"
+RESOLVED=$(mktemp -d "${TMPDIR:-/tmp}/glimmer-sign.XXXXXX")
+trap 'rm -rf "$RESOLVED"' EXIT
+python3 scripts/provisioning.py --profile "$PROFILE" --app "$APP" \
+    --entitlements "$ENT" --output-entitlements "$RESOLVED/app.entitlements"
+python3 scripts/provisioning.py --profile "$DAEMON_PROFILE" --app "$DAEMON" \
+    --entitlements helper/Helper.entitlements --output-entitlements "$RESOLVED/helper.entitlements"
 
 # Re-sign preserving the target's OWN entitlements + identifier (for Sparkle's
 # nested code). Hardened runtime is set explicitly.
-sign_pres() { codesign --force --options runtime $TS $KCF --sign "$ID" \
+sign_pres() { codesign --force --options runtime "${KCF[@]}" --sign "$ID" \
     --preserve-metadata=entitlements,identifier "$1"; }
 # Sign with no entitlements (framework bundle / bare binary).
-sign_plain() { codesign --force --options runtime $TS $KCF --sign "$ID" "$1"; }
+sign_plain() { codesign --force --options runtime "${KCF[@]}" --sign "$ID" "$1"; }
 
 FW="$APP/Contents/Frameworks/Sparkle.framework"
 if [ -d "$FW" ]; then
@@ -54,7 +50,7 @@ HELPER="$APP/Contents/Library/LoginItems/Glimmer Login Helper.app"
 if [ -d "$HELPER" ]; then
 	echo "Signing Login Helper with its own entitlements"
 	if [ -f "$HELPER_ENT" ]; then
-		codesign --force --options runtime $TS $KCF --sign "$ID" --entitlements "$HELPER_ENT" "$HELPER"
+		codesign --force --options runtime "${KCF[@]}" --sign "$ID" --entitlements "$HELPER_ENT" "$HELPER"
 	else
 		echo "  WARN: $HELPER_ENT not found - preserving the helper's existing entitlements" >&2
 		sign_pres "$HELPER"
@@ -66,14 +62,12 @@ fi
 for dylib in "$APP/Contents/Frameworks/"*.dylib; do
 	[ -f "$dylib" ] && sign_plain "$dylib"
 done
-DAEMON="$APP/Contents/MacOS/io.ugfugl.glimmer.helper"
-if [ -f "$DAEMON" ]; then
-	echo "Signing the AWDL network helper (root LaunchDaemon, hardened runtime, no entitlements)"
-	codesign --force --options runtime $TS $KCF --sign "$ID" --identifier "io.ugfugl.glimmer.helper" "$DAEMON"
-fi
+echo "Signing the AWDL network helper with its own profile and entitlements"
+codesign --force --options runtime "${KCF[@]}" --sign "$ID" \
+    --entitlements "$RESOLVED/helper.entitlements" "$DAEMON"
 
 echo "Signing the app bundle (Glimmer entitlements, no --deep)"
-codesign --force --options runtime $TS $KCF --sign "$ID" --entitlements "$ENT" "$APP"
+codesign --force --options runtime "${KCF[@]}" --sign "$ID" --entitlements "$RESOLVED/app.entitlements" "$APP"
 
 echo "Verifying the whole bundle (deep + strict)"
 codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tail -3

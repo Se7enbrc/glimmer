@@ -44,15 +44,7 @@ extension VideoDecoder {
             allocator: kCFAllocatorDefault, sampleBuffer: sampleBuffer,
             sampleBufferOut: &copy)
         guard status == noErr, let repaint = copy else { return }
-        if let attachments = CMSampleBufferGetSampleAttachmentsArray(
-            repaint, createIfNecessary: true), CFArrayGetCount(attachments) > 0 {
-            let entry = unsafeBitCast(
-                CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
-            CFDictionarySetValue(
-                entry,
-                Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
-                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
-        }
+        Self.markForImmediateDisplay(repaint)
         renderer.enqueue(repaint)
     }
 }

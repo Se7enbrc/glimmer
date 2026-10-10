@@ -106,7 +106,9 @@ extension StreamSession {
     /// `Task` hop. No-op when telemetry is off (`telemetryExporter` is nil) - the
     /// chord is still consumed in the input path, it simply records nothing.
     func recordTelemetryBookmark() {
-        telemetryExporter?.recordBookmark()
+        guard let exporter = telemetryExporter else { return }
+        let marker = exporter.recordBookmark()
+        audioDecoder.requestOutputDiagnostic(bookmark: marker)
     }
 
     /// Stop + drop the telemetry exporter, if one is running. Idempotent. Called

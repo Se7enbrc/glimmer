@@ -60,7 +60,7 @@ extension TelemetryExporter {
             .appendingPathComponent("telemetry-session-\(isoFormatter.string(from: Date())).json")
         do {
             try json.data(using: .utf8)?.write(to: reportURL)
-            log.notice("Telemetry session report → \(reportURL.path, privacy: .public)")
+            log.notice("Telemetry session report → \(reportURL.lastPathComponent, privacy: .public)")
             Diag.notice("Telemetry SESSION REPORT written → \(reportURL.lastPathComponent) "
                 + "(duration \(String(format: "%.1f", durationSeconds))s).", Self.logCategory)
         } catch {
@@ -73,7 +73,8 @@ extension TelemetryExporter {
     /// Record a ⌃B bookmark: bump `bookmark_total` and write a bookmark row to the
     /// NDJSON (on `workQueue`, like the 1 Hz capture), the frame trace and the Diag
     /// log. Before the NDJSON file opens, its row is dropped; the counter still counts.
-    func recordBookmark() {
+    @discardableResult
+    func recordBookmark() -> UInt64 {
         counters.bookmarkTotal.increment()
         let now = DispatchTime.now()
         let sinceConnect =
@@ -95,6 +96,7 @@ extension TelemetryExporter {
                 + "\"bookmark_total\":\(count)}"
             self.appendNDJSON(line)
         }
+        return count
     }
 
     // MARK: - Engine EVENT sink (audio_ttf / audio_pending / loss_episode / video_gap)
@@ -203,7 +205,7 @@ extension TelemetryExporter {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         do {
             fileHandle = try FileHandle(forWritingTo: url)
-            log.notice("Telemetry NDJSON → \(url.path, privacy: .public)")
+            log.notice("Telemetry NDJSON → \(url.lastPathComponent, privacy: .public)")
         } catch {
             log.error("Telemetry: could not open NDJSON file: \(error.localizedDescription, privacy: .private)")
         }

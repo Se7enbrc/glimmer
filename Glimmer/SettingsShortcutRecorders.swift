@@ -82,12 +82,13 @@ struct HotkeyRow: View {
                 }
             }
             Spacer()
-            HotkeyBadge(hotkey: $hotkey, taken: taken.filter { $0.name != label })
+            HotkeyBadge(label: label, hotkey: $hotkey, taken: taken.filter { $0.name != label })
         }
     }
 }
 
 struct HotkeyBadge: View {
+    let label: String
     @Binding var hotkey: HotkeyChord
     let taken: [(name: String, chord: HotkeyChord)]
     @State private var isCapturing = false
@@ -125,6 +126,8 @@ struct HotkeyBadge: View {
                         .foregroundStyle(isCapturing ? Color.accentColor : .primary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Change \(label) shortcut")
+                .accessibilityValue(displayText)
 
                 // Esc-to-cancel hint shown only during capture. Mirrors macOS's
                 // own keyboard-shortcut capture UI (System Settings ›
@@ -248,7 +251,7 @@ struct ChordCaptureSheet: View {
     @State private var captured: Set<ControllerButton> = []
     @State private var recording = true
     @State private var hidRetained = false
-    @State private var priorBackgroundMonitoring = false
+    @State private var backgroundEventsID = UUID()
     // Drives poll(): capture reads pad state, so a live stream keeps its handlers.
     private let tick = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common).autoconnect()
 
@@ -306,8 +309,7 @@ struct ChordCaptureSheet: View {
     /// sheet never takes the single-slot input handlers a live stream owns.
     private func engage() {
         HIDGamepadManager.shared.retain()
-        priorBackgroundMonitoring = GCController.shouldMonitorBackgroundEvents
-        GCController.shouldMonitorBackgroundEvents = true
+        ControllerBackgroundEvents.setEnabled(true, for: backgroundEventsID)
         GCController.startWirelessControllerDiscovery {}
         if DualSenseHID.isEnabled {
             DualSenseHID.shared.retain()
@@ -317,7 +319,7 @@ struct ChordCaptureSheet: View {
 
     private func disengage() {
         HIDGamepadManager.shared.release()
-        GCController.shouldMonitorBackgroundEvents = priorBackgroundMonitoring
+        ControllerBackgroundEvents.setEnabled(false, for: backgroundEventsID)
         ControllerDiscovery.stopIfIdle(isStreaming: model.isStreaming) {
             GCController.stopWirelessControllerDiscovery()
         }

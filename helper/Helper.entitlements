@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Authorizes the PF_ROUTE observation path on macOS 27 and later. -->
+    <key>com.apple.developer.networking.topology-observation</key>
+    <true/>
+</dict>
+</plist>
