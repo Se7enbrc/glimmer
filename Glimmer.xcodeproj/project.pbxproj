@@ -401,6 +401,10 @@
 		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
 		DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */; };
 		DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */; };
+		DEC0DE202610109900000001 /* PEMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000002 /* PEMTests.swift */; };
+		DEC0DE202610109900000003 /* ControllerStatePushTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000004 /* ControllerStatePushTests.swift */; };
+		DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */; };
+		DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */; };
 		DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609233300000002 /* ControllerArrivalTests.swift */; };
 		DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */; };
 		DEC0DE20261009000000CA03 /* FramePacerHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */; };
@@ -879,6 +883,10 @@
 		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseBinderTests.swift"; path = "DualSenseBinderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerLEDsTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610109900000002 /* PEMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PEMTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610109900000004 /* ControllerStatePushTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerStatePushTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioCushionMemoryTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerBatteryMappingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609233300000002 /* ControllerArrivalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerArrivalTests.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InputRecordingBackend.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FramePacerHandoffTests.swift"; sourceTree = "<group>"; };
@@ -1400,6 +1408,10 @@
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
 				DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */,
 				DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */,
+				DEC0DE202610109900000002 /* PEMTests.swift */,
+				DEC0DE202610109900000004 /* ControllerStatePushTests.swift */,
+				DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */,
+				DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */,
 				DEC0DE202609233300000002 /* ControllerArrivalTests.swift */,
 				DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */,
 				DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */,
@@ -1961,6 +1973,10 @@
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,
 				DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */,
 				DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */,
+				DEC0DE202610109900000001 /* PEMTests.swift in Sources */,
+				DEC0DE202610109900000003 /* ControllerStatePushTests.swift in Sources */,
+				DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */,
+				DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */,
 				DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */,
 				DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */,
 				DEC0DE20261009000000CA03 /* FramePacerHandoffTests.swift in Sources */,
