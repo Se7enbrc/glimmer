@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Prove the unsigned Release payload is reproducible (docs/RELEASE.md, "Reproducible
 # payload"): build HEAD twice in fresh clones and compare, or compare two bundles.
 # Usage: compare-builds.sh [WORKDIR] | compare-builds.sh [--normalize] A.app B.app
