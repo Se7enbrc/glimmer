@@ -102,17 +102,6 @@ struct StreamViewKeyboardTests {
         #expect(!backend.keyboard.contains { $0.keyCode == wire(0x51) || $0.keyCode == wire(0x49) })
     }
 
-    /// ⌃B is a bookmark only while telemetry runs; otherwise it is the game's.
-    @Test func bookmarkChordIsTakenOnlyWhileTelemetryRuns() throws {
-        let (forwarder, backend, view) = ready()
-        let marks = Tally()
-        forwarder.onBookmarkHotkey = { marks.calls += 1 }
-        view.keyDown(with: try key(.keyDown, kVK_ANSI_B, mods: [.control], chars: "b"))
-        let sentB = backend.keyboard.contains { $0.keyCode == wire(0x42) }
-        #expect(marks.calls == (TelemetryGate.isEnabled ? 1 : 0))
-        #expect(sentB == !TelemetryGate.isEnabled)
-    }
-
     @Test func bookmarkChordWithoutAHandlerIsAKey() throws {
         let (forwarder, backend, view) = ready()
         view.keyDown(with: try key(.keyDown, kVK_ANSI_B, mods: [.control], chars: "b"))
@@ -174,5 +163,60 @@ struct StreamViewKeyboardTests {
         #expect(view?.acceptsFirstMouse(for: nil) == true)
         forwarder.setMiniPlayer(false)
         #expect(view?.acceptsFirstMouse(for: nil) == false)
+    }
+}
+
+/// ⌃B is a bookmark only while telemetry runs; otherwise it is the game's.
+/// Serialized because both tests pin the shared telemetry preference.
+@MainActor
+@Suite(.serialized)
+struct BookmarkChordTelemetryTests {
+    @MainActor
+    private final class Tally { var calls = 0 }
+
+    /// Runs `body` with TelemetryGate's preference pinned, restoring the prior value.
+    private func withTelemetry(_ enabled: Bool, _ body: () throws -> Void) throws {
+        try #require(getenv("GLIMMER_TELEMETRY").map { String(cString: $0) } != "1")
+        let defaults = UserDefaults.standard
+        let prior = defaults.object(forKey: "telemetryEnabled")
+        defer { defaults.set(prior, forKey: "telemetryEnabled") }
+        defaults.set(enabled, forKey: "telemetryEnabled")
+        try #require(TelemetryGate.isEnabled == enabled)
+        try body()
+    }
+
+    /// One ⌃B with a handler wired: the bookmark count and the keys sent.
+    private func pressBookmark() throws -> (marks: Int, sent: [KeyboardSend]) {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        forwarder.setBackend(backend)
+        forwarder.isReady = true
+        let marks = Tally()
+        forwarder.onBookmarkHotkey = { marks.calls += 1 }
+        let view = StreamInputView()
+        view.delegate = forwarder
+        view.keyDown(with: try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 1, windowNumber: 0,
+            context: nil, characters: "b", charactersIgnoringModifiers: "b", isARepeat: false,
+            keyCode: UInt16(kVK_ANSI_B))))
+        return (marks.calls, backend.keyboard)
+    }
+
+    @Test func withTelemetryOnTheChordIsABookmark() throws {
+        try withTelemetry(true) {
+            let result = try pressBookmark()
+            #expect(result.marks == 1)
+            #expect(result.sent.isEmpty)
+        }
+    }
+
+    @Test func withTelemetryOffTheChordReachesThePC() throws {
+        try withTelemetry(false) {
+            let result = try pressBookmark()
+            #expect(result.marks == 0)
+            #expect(result.sent.last == .init(keyCode: VKScanCode(vk: 0x42).wireCode,
+                                              action: Int8(StreamProtocol.KEY_ACTION_DOWN),
+                                              modifiers: Int8(StreamProtocol.MODIFIER_CTRL), flags: 0))
+        }
     }
 }
