@@ -239,6 +239,9 @@ public final class StreamWindow {
     /// deactivated. Bumped by BOTH observers so the later event always wins.
     var resignGeneration = 0
 
+    /// Bumped by every cover slide and reset; a superseded slide's completion bails.
+    var coverSlideGeneration = 0
+
     /// Called once the window is on screen and key, and again by the first-frame
     /// fade-in: InputForwarder installs its first responder, then takes the
     /// pointer (it holds off while the window passes clicks through).
@@ -411,6 +414,8 @@ public final class StreamWindow {
         layer.frame = frame
         layer.videoGravity = .resizeAspect
         layer.isOpaque = true
+        // Letterbox bars stay black while the cover slides over a clear window.
+        layer.backgroundColor = NSColor.black.cgColor
         return layer
     }
 

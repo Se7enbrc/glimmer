@@ -51,6 +51,17 @@ extension StreamWindow {
         // setting exists to suppress. We still defer presentationOptions to
         // after alpha is set so the menu bar / Dock never visibly vanish
         // against a transparent window (the "bare-desktop flash").
+        if coverTransition(.firstFrame) == .slide, !userBackgrounded {
+            slideCover(entering: true) { [weak self] in
+                self?.applyPresentationOptions(coversNotch: cover)
+                self?.refreshPresentationVisibility()
+            }
+            // Commit the offscreen start before the window turns visible, so
+            // the picture never shows unslid for a frame.
+            CATransaction.flush()
+            win.alphaValue = 1.0
+            return
+        }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             win.alphaValue = 1.0
             applyPresentationOptions(coversNotch: cover)

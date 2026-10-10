@@ -37,6 +37,7 @@ extension StreamWindow {
     /// window-level and presentation restoration; a key notification may be absent.
     func reengageForeground() {
         guard !didClose else { return }
+        let wasAway = userBackgrounded
         userBackgrounded = false
         // Window mode: the cursor follows pointer capture, and the level and
         // presentation options are AppKit's. Only the backgrounded signal applies.
@@ -48,6 +49,7 @@ extension StreamWindow {
         if coversNotch, let level = streamingWindowLevel {
             window.level = level
         }
+        if wasAway, coversNotch { returnCover() }
         // Before the first frame the cursor and the menu bar stay the user's;
         // the fade-in takes them. The re-hide is latch-safe and the transparent
         // cursor backstops an arrow the WindowServer drew while we were away.

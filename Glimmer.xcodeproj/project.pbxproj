@@ -242,6 +242,7 @@
 		D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */; };
 		D6D80A720000000000000011 /* StreamSession+FrameWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */; };
 		D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000014 /* StreamWindow+Fade.swift */; };
+		5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */; };
 		D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */; };
 		D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */; };
 		D6D80A720000000000000019 /* EnvSignalController+Evidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */; };
@@ -340,6 +341,7 @@
 		DEC0DE202609222000000006 /* HostReachabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222000000005 /* HostReachabilityTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		DEC0DE202609221400000007 /* StreamWindowFirstFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */; };
+		DEC0DE202610100000000001 /* StreamWindowSlideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */; };
 		DEC0DE202609221400000005 /* PasteTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221400000006 /* PasteTextTests.swift */; };
 		DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */; };
 		DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221800000003 /* TelemetryRowTests.swift */; };
@@ -683,6 +685,7 @@
 		D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StatsOverlayTimer.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+FrameWatchdog.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000014 /* StreamWindow+Fade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Fade.swift"; sourceTree = "<group>"; };
+		5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Slide.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Rows.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController+Tunables.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController+Evidence.swift"; sourceTree = "<group>"; };
@@ -782,6 +785,7 @@
 		DEC0DE202609222000000005 /* HostReachabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostReachabilityTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowFirstFrameTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowSlideTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221400000006 /* PasteTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PasteTextTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLANTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221800000003 /* TelemetryRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRowTests.swift"; sourceTree = "<group>"; };
@@ -963,6 +967,7 @@
 				D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */,
 				D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */,
 				D6D80A720000000000000014 /* StreamWindow+Fade.swift */,
+				5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */,
 				D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */,
 				D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */,
 				D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */,
@@ -1264,6 +1269,7 @@
 				DEC0DE202609222000000005 /* HostReachabilityTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */,
+				DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */,
 				DEC0DE202609221400000006 /* PasteTextTests.swift */,
 				DEC0DE2026092000000000D4 /* WakeOnLANTests.swift */,
 				DEC0DE202609221800000003 /* TelemetryRowTests.swift */,
@@ -1495,6 +1501,7 @@
 				D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */,
 				D6D80A720000000000000011 /* StreamSession+FrameWatchdog.swift in Sources */,
 				D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */,
+				5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */,
 				D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */,
 				D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */,
 				D6D80A720000000000000019 /* EnvSignalController+Evidence.swift in Sources */,
@@ -1789,6 +1796,7 @@
 				DEC0DE202609222000000006 /* HostReachabilityTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				DEC0DE202609221400000007 /* StreamWindowFirstFrameTests.swift in Sources */,
+				DEC0DE202610100000000001 /* StreamWindowSlideTests.swift in Sources */,
 				DEC0DE202609221400000005 /* PasteTextTests.swift in Sources */,
 				DEC0DE2026092000000000D3 /* WakeOnLANTests.swift in Sources */,
 				DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */,

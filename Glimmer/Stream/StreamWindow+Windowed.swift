@@ -266,6 +266,7 @@ extension StreamWindow {
         // A Cmd-Tab away belonged to the cover, and the observer that would clear
         // it is gone: left set, the return from the mini player skips the backstop.
         userBackgrounded = false
+        resetCoverSlide()
         displayMode = .window
         streamDelegate.displayMode = .window
         streamDelegate.coversNotch = false

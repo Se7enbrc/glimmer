@@ -2,6 +2,9 @@
 
 ## 2026.10.6 - 2026-10-09
 
+- The borderless full-screen stream slides in from the side when it starts and
+  when you come back to it, and slides away when you switch apps, like a
+  full-screen Space. Reduce Motion keeps the plain fade.
 - Returning to a fullscreen stream discards mouse motion from before capture
   resumed, so moving the pointer in another app cannot snap the game camera.
 - Custom resolution and refresh rate survive restarting Glimmer, including

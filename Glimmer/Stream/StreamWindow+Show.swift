@@ -427,7 +427,7 @@ extension StreamWindow {
     /// Release focus without removing a native fullscreen Space from the window manager.
     func backgroundStreamWindow() {
         setCursorHidden(false)
-        if coversNotch { window.orderOut(nil) }
+        if coversNotch { retreatCover() }
         if let saved = previousPresentationOptions {
             NSApp.presentationOptions = saved
         }
