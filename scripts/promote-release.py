@@ -15,6 +15,7 @@ from release_validation import validate_feed
 REPO = "Se7enbrc/glimmer"
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 WORKFLOW = f"{REPO}/.github/workflows/release.yml"
+FEED_BRANCH = "appcast"
 
 
 def command(args, message):
@@ -45,7 +46,8 @@ def source(tag, sha):
         raise ValueError("candidate SHA must be a full lowercase commit SHA")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*", tag):
         raise ValueError("invalid candidate tag")
-    command(["git", "fetch", "--quiet", "origin", "main", f"refs/tags/{tag}"], "cannot fetch candidate source")
+    command(["git", "fetch", "--quiet", "origin", "main", f"refs/tags/{tag}",
+             f"+refs/heads/{FEED_BRANCH}:refs/remotes/origin/{FEED_BRANCH}"], "cannot fetch candidate source")
     actual = command(["gh", "api", f"repos/{REPO}/commits/{tag}", "--jq", ".sha"], "cannot resolve candidate tag").strip()
     if actual != sha:
         raise ValueError("candidate tag does not identify the reviewed source")
@@ -60,7 +62,7 @@ def source(tag, sha):
     short, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
     if tag.rsplit("-rc.", 1)[0] != short or not re.fullmatch(r"[1-9][0-9]*", build):
         raise ValueError("candidate version does not match its tag")
-    return short, build, main
+    return short, build
 
 
 def release(tag, short):
@@ -77,7 +79,10 @@ def release(tag, short):
 
 
 def feed_item(short, build, tag):
-    text = command(["git", "show", "origin/main:appcast.xml"], "cannot read current appcast")
+    head = command(["git", "rev-parse", f"refs/remotes/origin/{FEED_BRANCH}"], "cannot resolve the appcast branch").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", head):
+        raise ValueError("cannot resolve the appcast branch")
+    text = command(["git", "show", f"{head}:appcast.xml"], "cannot read current appcast")
     root = ET.fromstring(text)
     channel = root.find("channel")
     if channel is None:
@@ -91,13 +96,13 @@ def feed_item(short, build, tag):
     url = f"https://github.com/{REPO}/releases/download/{tag}/Glimmer-{short}.zip"
     if enclosure is None or enclosure.get("url") != url:
         raise ValueError("candidate update points at different assets")
-    return text, enclosure.attrib
+    return text, enclosure.attrib, head
 
 
 def prepare(tag, sha):
-    short, build, _ = source(tag, sha)
+    short, build = source(tag, sha)
     data = release(tag, short)
-    _, enclosure = feed_item(short, build, tag)
+    _, enclosure, _ = feed_item(short, build, tag)
     root = directory()
     root.mkdir(mode=0o700)
     command(["gh", "release", "download", tag, "-R", REPO, "-p", f"Glimmer-{short}.dmg",
@@ -120,9 +125,9 @@ def prepare(tag, sha):
 
 
 def validate(tag, sha):
-    short, build, main = source(tag, sha)
+    short, build = source(tag, sha)
     data = release(tag, short)
-    _, enclosure = feed_item(short, build, tag)
+    _, enclosure, _ = feed_item(short, build, tag)
     root = directory()
     proof = json.loads((root / "verified.json").read_text())
     expected = {"tag": tag, "sha": sha, "short": short, "build": build,
@@ -138,12 +143,12 @@ def validate(tag, sha):
         asset = next(asset for asset in data["assets"] if asset["name"] == name)
         if asset.get("digest") != f"sha256:{proof['hashes'][name]}":
             raise ValueError("published candidate asset changed after verification")
-    return proof, main
+    return proof
 
 
 def publish(tag, sha):
-    proof, main = validate(tag, sha)
-    text, enclosure = feed_item(proof["short"], proof["build"], tag)
+    proof = validate(tag, sha)
+    text, enclosure, head = feed_item(proof["short"], proof["build"], tag)
     appcast = directory() / "appcast.xml"
     appcast.write_text(text)
     command([sys.executable, "scripts/update-appcast.py", str(appcast), "--promote",
@@ -153,8 +158,8 @@ def publish(tag, sha):
     command(["gh", "release", "edit", tag, "-R", REPO, "--prerelease=false", "--latest",
              "--title", f"Glimmer {proof['short']}"], "GitHub candidate promotion failed")
     if appcast.read_text() != text:
-        command([sys.executable, "scripts/github_signed_commit.py", REPO, main, "appcast.xml", str(appcast),
-                 f"appcast: promote Glimmer {proof['short']}"], "appcast changed; retry promotion from current main")
+        command([sys.executable, "scripts/github_signed_commit.py", REPO, FEED_BRANCH, head, "appcast.xml",
+                 str(appcast), f"appcast: promote Glimmer {proof['short']}"], "appcast changed; retry the promotion")
 
 
 def main():

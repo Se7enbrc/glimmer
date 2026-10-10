@@ -79,7 +79,7 @@ if git -C "$TAP_DIR" diff --quiet -- "$CASK"; then
 fi
 
 if [ "${GITHUB_ACTIONS:-}" = true ]; then
-	TAP_SHA="$(python3 "$HERE/scripts/github_signed_commit.py" "$TAP_REPO" "$TAP_HEAD" \
+	TAP_SHA="$(python3 "$HERE/scripts/github_signed_commit.py" "$TAP_REPO" main "$TAP_HEAD" \
 		"$CASK" "$TAP_DIR/$CASK" "glimmer $VERSION")"
 	echo "  ✓ verified cask commit published → $TAP_SHA"
 else
