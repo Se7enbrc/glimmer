@@ -391,3 +391,58 @@ make codesign-teardown codesign-setup setup-notary
 Then put the new `.p12` and its passphrase in the 1Password item. The signing
 identity is matched by name and the app's designated requirement by team, so
 updates, privacy permissions and the helpers carry over to the new certificate.
+
+## 4. Reproducible payload
+
+The unsigned Release bundle is a pure function of the commit and the toolchain.
+`make CONFIG=Release app embed-helper`, the build the hosted Release workflow
+goes on to sign, produces a `Glimmer.app` whose every byte, mode and symlink
+matches another clean build of the same commit in another directory. Three
+things used to differ between builds, and the build itself fixes them.
+`BuildInfo.date` stamps the commit time instead of the wall clock
+(`SOURCE_DATE_EPOCH` overrides it; a dirty tree still stamps the clock so local
+builds stay distinguishable). Release binaries are stripped of their debug map
+(`STRIP_STYLE=debugging`): the SO, OSO and AST stabs that named the building
+machine's checkout and DerivedData paths. The symbol table stays, so crash logs
+still name functions without a dSYM. The App Intents metadata processor wrote
+its JSON in Swift's per-process hash order, so `make app` runs xcodebuild with
+`SWIFT_DETERMINISTIC_HASHING=1`. The linker already zeroes stab timestamps,
+derives `LC_UUID` from the content and ad-hoc signs by hashing it, so nothing
+else varies.
+
+Prove it with `scripts/compare-builds.sh [WORKDIR]`: it clones HEAD twice,
+builds each clone from clean and compares the two bundles, every entry's mode
+and link target plus a SHA-256 of every file.
+`scripts/compare-builds.sh A.app B.app` compares two existing bundles the same
+way. One file is compared through `assetutil --info` rather than by bytes:
+actool stamps `Assets.car` with the build time and names the renditions it
+rasterizes from `AppIcon.icon` after temporary files, and those renditions'
+digests change with their names. No environment variable or flag pins them.
+Everything else in the catalog, including every other rendition's digest, must
+match. Byte for byte, the two catalogs of the last proof differed only in the
+header stamp, those seven names and a few index bytes beside them; every
+rendition's image data matched. The **Reproducible build** workflow runs the
+two-clone comparison on the hosted runner on dispatch and monthly; it is not
+part of Verify because it costs two clean Release builds. The comparison holds
+for one toolchain: `Info.plist` records `DTXcodeBuild`, `DTSDKBuild` and
+`BuildMachineOSBuild`, so a different Xcode or macOS build is a different
+payload, and a local rebuild must use the hosted runner's Xcode. Last proved
+locally on 2026-10-10 with Xcode 27.0 (27A266a) on macOS 27.0.1: identical, 69
+files, with `Assets.car` as above.
+
+What is reproducible is the unsigned payload: the app, login helper and network
+helper binaries, the Info.plists, the resources and the Sparkle framework as its
+pinned package ships it. What is not, by design: the Developer ID signatures and
+their timestamps, the embedded provisioning profiles, the stapled notarization
+ticket and `_CodeSignature` seals, the dSYMs (not shipped, and they record the
+build directory), and the DMG and ZIP containers (file times, `.DS_Store`,
+hdiutil layout).
+
+A shipped bundle binds to the payload through normalization.
+`scripts/compare-builds.sh --normalize Shipped.app Local.app` copies both,
+removes the seals, profiles and ticket, strips every Mach-O's signature with
+`codesign --remove-signature` and runs `strip -S` so `__LINKEDIT` is laid out
+without the room the removed signature took, then compares. On a local build
+re-signed ad-hoc with the hardened runtime and the app's entitlements, the
+normalized copies were identical. This has not yet been run against a hosted,
+Developer ID-signed release, so treat that binding as untested until it has.
