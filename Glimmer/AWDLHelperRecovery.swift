@@ -41,8 +41,10 @@ enum AWDLHelperRecovery {
 
     @MainActor static func prepareMigration(layout: () async -> Layout,
                                             release: () async -> Bool, sleep: (Duration) async throws -> Void,
-                                            keepCurrent: () async -> Bool = { true }) async -> Bool {
-        while true {
+                                            keepCurrent: () async -> Bool = { true },
+                                            maxReleases: Int = 30) async -> Bool {
+        // Bounded: an unreachable helper or unparseable launchctl must not stall setup forever.
+        for _ in 0..<maxReleases {
             switch await layout() {
             case .missing, .legacyIdle: return true
             case .current:
@@ -53,6 +55,8 @@ enum AWDLHelperRecovery {
                 try? await sleep(.seconds(1))
             }
         }
+        Diag.notice("AWDL helper release unconfirmed after \(maxReleases) tries; replacing", "Stream")
+        return true
     }
 
     static func confirmsMissingJob(status: Int32?, error: String) -> Bool {

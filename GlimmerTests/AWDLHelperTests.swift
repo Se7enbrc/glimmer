@@ -333,6 +333,15 @@ struct AWDLLayoutMigrationTests {
         #expect(!current && releases == 1)
     }
 
+    @Test func unconfirmableReleaseGivesUpAndReplaces() async {
+        var releases = 0
+        var sleeps = 0
+        let replace = await AWDLHelperRecovery.prepareMigration(layout: { .unknown },
+                                                                release: { releases += 1; return false },
+                                                                sleep: { _ in sleeps += 1 }, maxReleases: 4)
+        #expect(replace && releases == 4 && sleeps == 4)
+    }
+
     @Test func onlyConfirmedCleanLegacyIdleStateSkipsRelease() {
         let clean = """
         system/io.ugfugl.glimmer.helper = {
