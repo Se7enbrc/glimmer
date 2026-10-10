@@ -20,7 +20,7 @@ struct StreamCryptoTests {
 
     // The control-V2 IV: iv[0..3] = seq LE, iv[10] = originator ('C'/'H'),
     // iv[11] = 'C' (0x43, control stream). Mirrors ControlCrypto.iv (private).
-    private static func controlIV(seq: UInt32, originator: UInt8) -> Data {
+    static func controlIV(seq: UInt32, originator: UInt8) -> Data {
         var iv = [UInt8](repeating: 0, count: 12)
         iv[0] = UInt8(seq & 0xFF)
         iv[1] = UInt8((seq >> 8) & 0xFF)

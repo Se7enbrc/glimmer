@@ -41,6 +41,14 @@ struct MouseMoveSend: Equatable, Sendable {
     let dy: Int16
 }
 
+/// Every pointer send other than relative motion, in the order they went out.
+enum PointerSend: Equatable, Sendable {
+    case position(x: Int16, y: Int16, refW: Int16, refH: Int16)
+    case button(action: Int8, button: Int32)
+    case scroll(Int16)
+    case hScroll(Int16)
+}
+
 final class InputRecordingBackend: StreamingBackend {
     private let sends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
 
@@ -49,6 +57,10 @@ final class InputRecordingBackend: StreamingBackend {
     private let motionSends = OSAllocatedUnfairLock(initialState: [ControllerMotionSend]())
     private let keyboardSends = OSAllocatedUnfairLock(initialState: [KeyboardSend]())
     private let mouseMoveSends = OSAllocatedUnfairLock(initialState: [MouseMoveSend]())
+    private let connectStarts = OSAllocatedUnfairLock(initialState: [BackendServerInfo]())
+    private let idrCount = OSAllocatedUnfairLock(initialState: 0)
+    private let hostHDR = OSAllocatedUnfairLock<HdrMetadata?>(initialState: nil)
+    private let pointerSends = OSAllocatedUnfairLock(initialState: [PointerSend]())
 
     var calls: [ControllerSend] { sends.withLock { $0 } }
     var texts: [String] { textSends.withLock { $0 } }
@@ -56,15 +68,24 @@ final class InputRecordingBackend: StreamingBackend {
     var motions: [ControllerMotionSend] { motionSends.withLock { $0 } }
     var keyboard: [KeyboardSend] { keyboardSends.withLock { $0 } }
     var mouseMoves: [MouseMoveSend] { mouseMoveSends.withLock { $0 } }
+    var startedServers: [BackendServerInfo] { connectStarts.withLock { $0 } }
+    var idrRequests: Int { idrCount.withLock { $0 } }
+    var hdr: HdrMetadata? {
+        get { hostHDR.withLock { $0 } }
+        set { hostHDR.withLock { $0 = newValue } }
+    }
+    var pointer: [PointerSend] { pointerSends.withLock { $0 } }
 
-    func startConnection(server: BackendServerInfo, config: BackendStreamConfig) throws {}
+    func startConnection(server: BackendServerInfo, config: BackendStreamConfig) throws {
+        connectStarts.withLock { $0.append(server) }
+    }
     func stopConnection() {}
     func interruptConnection() {}
     func attachVideoSink(_ sink: VideoSink) {}
     func attachAudioSink(_ sink: NativeAudioSink) {}
     func estimatedRtt() -> (rttMs: Double, varianceMs: Double)? { nil }
-    func requestIdrFrame() {}
-    func hdrMetadata() -> HdrMetadata? { nil }
+    func requestIdrFrame() { idrCount.withLock { $0 += 1 } }
+    func hdrMetadata() -> HdrMetadata? { hdr }
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
@@ -75,10 +96,16 @@ final class InputRecordingBackend: StreamingBackend {
         mouseMoveSends.withLock { $0.append(.init(dx: dx, dy: dy)) }
         return 0
     }
-    func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 { 0 }
-    func sendMouseButton(action: Int8, button: Int32) -> Int32 { 0 }
-    func sendScroll(_ amount: Int16) -> Int32 { 0 }
-    func sendHScroll(_ amount: Int16) -> Int32 { 0 }
+    func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
+        recordPointer(.position(x: x, y: y, refW: refW, refH: refH))
+    }
+    func sendMouseButton(action: Int8, button: Int32) -> Int32 { recordPointer(.button(action: action, button: button)) }
+    func sendScroll(_ amount: Int16) -> Int32 { recordPointer(.scroll(amount)) }
+    func sendHScroll(_ amount: Int16) -> Int32 { recordPointer(.hScroll(amount)) }
+    private func recordPointer(_ send: PointerSend) -> Int32 {
+        pointerSends.withLock { $0.append(send) }
+        return 0
+    }
     func sendMultiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> Int32 {
         sends.withLock { $0.append(ControllerSend(num: num, mask: mask, buttons: buttons, analog: analog)) }
         return 0
