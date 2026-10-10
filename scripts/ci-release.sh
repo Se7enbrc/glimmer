@@ -223,6 +223,8 @@ case "${1:-}" in
         require_phase "$PACKAGED"
         require_packaged_bytes
         [[ "${RELEASE_ATTESTATION_ID:-}" =~ ^[0-9]+$ ]] || die "release artifact attestation missing"
+        [ -s "${RELEASE_PROVENANCE_BUNDLE:-}" ] || die "release provenance bundle missing"
+        cp "$RELEASE_PROVENANCE_BUNDLE" "$ROOT/build/dist/Glimmer-$VERSION.intoto.jsonl"
         private_directory
         publish_credentials
         python3 - "$PRIVATE/signing.env" <<'PY'

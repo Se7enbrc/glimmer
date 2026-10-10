@@ -91,6 +91,7 @@ class HostedReleaseTests(unittest.TestCase):
         self.bin.mkdir()
         self.runner = self.root / "runner"
         self.runner.mkdir()
+        (self.runner / "attestation.jsonl").write_text('{"fixture": "bundle"}\n')
         self.private = self.runner / "glimmer-release-12-1"
         self.log = self.root / "calls.jsonl"
         for name in ("make", "git", "security", "rm", "pre-commit", "publish-release.sh", "homebrew-bump.sh",
@@ -107,6 +108,7 @@ class HostedReleaseTests(unittest.TestCase):
             "RELEASE_OPERATION": "candidate", "RC_TAG": "2026.10.6-rc.1", "CANDIDATE_SHA": "b" * 40,
             "GITHUB_SHA": SHA, "EXPECTED_SHA": SHA, "FIXTURE_LOG": str(self.log),
             "GITHUB_OUTPUT": str(self.runner / "workflow-output"), "RELEASE_ATTESTATION_ID": "123",
+            "RELEASE_PROVENANCE_BUNDLE": str(self.runner / "attestation.jsonl"),
             "P12_PASSWORD": "fixture-password", "NOTARY_KEY_ID": "fixture-key-id",
             "NOTARY_ISSUER_ID": "fixture-issuer", "SPARKLE_ED_PRIVATE_KEY": "fixture-sparkle",
             "RELEASE_CONTENTS_TOKEN": "fixture-token-private",
@@ -337,6 +339,13 @@ class HostedReleaseTests(unittest.TestCase):
                 self.assertNotEqual(self.run_phase("publish").returncode, 0)
                 self.assertFalse(self.private.exists())
                 self.assertFalse(any(call["tool"] == "publish-release.sh" for call in self.calls()))
+
+    def test_missing_provenance_bundle_stops_before_publication_credentials(self):
+        self.packaged()
+        Path(self.env["RELEASE_PROVENANCE_BUNDLE"]).unlink(missing_ok=True)
+        self.assertNotEqual(self.run_phase("publish").returncode, 0)
+        self.assertFalse(self.private.exists())
+        self.assertFalse(any(call["tool"] == "publish-release.sh" for call in self.calls()))
 
     def test_notary_key_mask_escapes_multiline_text_before_use(self):
         self.built()
