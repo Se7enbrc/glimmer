@@ -23,7 +23,7 @@
   <a href="docs/RELEASE.md"><img src="https://img.shields.io/badge/releases-signed%20%C2%B7%20notarized%20%C2%B7%20attested-2da44e" alt="Releases are signed, notarized and attested"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/Se7enbrc/glimmer"><img src="https://api.securityscorecards.dev/projects/github.com/Se7enbrc/glimmer/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/en/projects/15346"><img src="https://www.bestpractices.dev/projects/15346/badge" alt="OpenSSF Best Practices status"></a>
-  <a href=".github/dependabot.yml"><img src="https://img.shields.io/badge/updates-Dependabot-2da44e" alt="Dependency updates by Dependabot"></a>
+  <a href="renovate.json"><img src="https://img.shields.io/badge/updates-Renovate-2da44e" alt="Dependency updates by Renovate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Se7enbrc/glimmer" alt="GPL license"></a>
 </p>
 

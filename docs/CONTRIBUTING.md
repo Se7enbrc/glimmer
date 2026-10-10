@@ -440,17 +440,17 @@ Practically, before you call something done:
   doesn't link an agreed issue is closed.
 - `main` is the active development branch; releases are tags on it.
 - Fork, push your branch to the fork, and open the PR from there against `main`.
-  Only the maintainer can merge into `main`. Dependabot can maintain its own
-  update branches; other contributors use forks.
+  Only the maintainer can merge into `main`. Renovate, run by the maintainer,
+  keeps one grouped update branch; other contributors use forks.
 - Keep a PR scoped to one area, so it can land independently.
 - Leave `CHANGELOG.md` and `Glimmer/Version.xcconfig` alone: the maintainer
   picks the version and writes the release notes when a change ships. Each
-  release there is a `## <version> - <date>` heading over a flat list of
-  bullets, one per change a player will notice, written for them. See
-  [RELEASE.md](RELEASE.md).
+  release there is a `## <version> - <date>` heading with `### Features` and
+  `### Bug fixes` lists, one bullet per change a player will notice, written for
+  them. See [RELEASE.md](RELEASE.md).
 - Before you ask for a merge, run the thing and look at it. [The bar](#the-bar)
   is the checklist.
-- Before merging any PR, including Dependabot updates, check out its exact head
+- Before merging any PR, including Renovate updates, check out its exact head
   commit in a clean worktree and run `make verify`. Record that commit SHA and
   the checks in the review. Hosted CI also runs `make verify` on an Apple
   Silicon macOS 26 runner with Xcode 26.6 and compiler warnings treated as
@@ -473,7 +473,7 @@ package sandbox intact. A post-analysis query requires successful extraction of
 every tracked production Swift file, so partial extraction cannot pass. An
 unsupported compiler or failed coverage query blocks the scan. Scheduled scans
 also check for newly added queries. GitHub's AI Scan is advisory and does not
-scan fork or Dependabot PRs. Neither scanner replaces tests or security review.
+scan fork or bot PRs. Neither scanner replaces tests or security review.
 
 Hosted verification and releases download TruffleHog 3.97.8 and verify its
 pinned SHA-256 before installation. Scanner output stays suppressed, including
