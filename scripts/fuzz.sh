@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Coverage-guided libFuzzer runs of the protocol parsers, which Xcode's toolchain can't build.
 # Runs each fuzz/ target for FUZZ_SECONDS (default 60) in the pinned Swift.org Linux image;
 # any crash, leak or hang fails the script and leaves its input under build/fuzz/.
