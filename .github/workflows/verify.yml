@@ -30,10 +30,13 @@ jobs:
         include:
           - part: checks
             target: check
+            coverage: python
           - part: tests
             target: test
+            coverage: swift
           - part: fuzz
             target: test-asan
+            coverage: ""
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -56,6 +59,8 @@ jobs:
           python3 --version
 
       - name: Prepare verification
+        env:
+          COVERAGE_KIND: ${{ matrix.coverage }}
         run: |
           if ! command -v swiftlint >/dev/null 2>&1; then
             brew install swiftlint
@@ -67,6 +72,11 @@ jobs:
             brew install pre-commit
           fi
           scripts/install-ci-scanner.sh
+          if [ "$COVERAGE_KIND" = python ]; then
+            python3 -m venv "$RUNNER_TEMP/coverage"
+            "$RUNNER_TEMP/coverage/bin/python" -m pip install --quiet --require-hashes \
+              --only-binary :all: -r scripts/coverage-requirements.txt
+          fi
           swiftlint version
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
@@ -93,7 +103,29 @@ jobs:
         id: verify
         env:
           TARGET: ${{ matrix.target }}
-        run: make "$TARGET" TEST_SUITE=
+          COVERAGE_KIND: ${{ matrix.coverage }}
+          COVERAGE_PY: ${{ runner.temp }}/coverage/bin/python -m coverage
+        run: make "$TARGET" TEST_SUITE= ${COVERAGE_KIND:+COVERAGE=1}
+
+      - name: Coverage summary
+        if: matrix.coverage != ''
+        env:
+          TESTED_SHA: ${{ github.sha }}
+          COVERAGE_KIND: ${{ matrix.coverage }}
+        run: |
+          {
+            printf 'Measured commit: %s\n\n' "$TESTED_SHA"
+            cat "build/coverage/$COVERAGE_KIND/summary.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage
+        if: matrix.coverage != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.coverage }}
+          path: build/coverage/${{ matrix.coverage }}/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Failure summary
         if: failure()

@@ -1,0 +1,5 @@
+# CI-only measurement tool; PyPI trusted publisher coveragepy/coveragepy publish.yml.
+coverage==7.16.2 \
+    --hash=sha256:a9a638be322a8d76a41cdb17781c7f82aaee6a66493d8ffb7e2c09ee22423d99 \
+    --hash=sha256:0993d0e90858c03943d3cb152e068a20dd4707924deec84dd2230261baae3b1b \
+    --hash=sha256:a2fac6895eb299a2e52d7bbb8fb3903502b9da8d3f5309ceb16ec40c646b58ee
