@@ -167,7 +167,8 @@ see [the signing setup](docs/RELEASE.md#3-signing-credentials). `make app`
 compile-checks, `make test` runs the unit tests, `make uninstall` removes it.
 The engine is under `Glimmer/Stream/`, no submodules.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md),
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Why not Moonlight
 
