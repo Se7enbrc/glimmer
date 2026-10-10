@@ -152,10 +152,12 @@ test-asan:
 	  -only-testing:GlimmerTests/StreamFuzzTests; \
 	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
 
+# appintentsmetadataprocessor writes its JSON in Swift hash order, which is seeded per
+# process; pin it so two builds of one commit stay byte-identical (docs/RELEASE.md).
 app:
 	@echo "▶ Building Glimmer.app ($(CONFIG))..."
 	@scripts/generate-build-info.sh
-	xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration $(CONFIG) \
+	SWIFT_DETERMINISTIC_HASHING=1 xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration $(CONFIG) \
 		-xcconfig $(STREAM_XCCONFIG) \
 		CODE_SIGNING_ALLOWED=NO \
 		-derivedDataPath $(DERIVED) -destination 'platform=macOS' build
