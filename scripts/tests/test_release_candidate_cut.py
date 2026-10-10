@@ -40,6 +40,8 @@ elif sys.argv[1] == "api":
     print((state / "check-runs.json").read_text())
 elif sys.argv[1:3] == ["pr", "comment"]:
     pass
+elif sys.argv[1:3] == ["pr", "view"]:
+    print((state / "pr-head").read_text())
 else:
     sys.exit(1)
 '''
@@ -180,6 +182,7 @@ class ReleaseCandidateCutTests(unittest.TestCase):
     def test_ci_cut_tags_as_the_app_and_comments_the_run_on_the_pull_request(self):
         self.git("checkout", "--quiet", "--detach", self.sha)
         (self.work / "untracked-ci-file").write_text("runner state\n")
+        (self.state / "pr-head").write_text(self.sha)
         result = self.cut("--ci-sha", self.sha, "--pr", "114")
         self.assertEqual(result.returncode, 0, result.stderr)
         tag = f"{VERSION}-rc.1"
@@ -191,6 +194,21 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assertEqual(comments[0][2], "114")
         self.assertIn(url, comments[0][4])
         self.assertFalse((self.state / "open.log").exists())
+
+    def test_ci_cut_refuses_once_the_pull_request_moves_on(self):
+        self.git("checkout", "--quiet", "--detach", self.sha)
+        (self.state / "pr-head").write_text(self.old)
+        self.assert_refused(self.cut("--ci-sha", self.sha, "--pr", "114"), "moved past")
+        self.assertNotIn("refs/tags/", self.remote())
+
+    def test_ci_wait_only_waits_and_changes_nothing(self):
+        self.git("checkout", "--quiet", "--detach", self.sha)
+        before = self.remote()
+        result = self.cut("--ci-sha", self.sha, "--pr", "114", "--wait-only")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"Required checks passed for {self.sha}", result.stdout)
+        self.assertEqual(self.remote(), before)
+        self.assertEqual(self.dispatches(), [])
 
     def test_ci_cut_refuses_a_checkout_that_is_not_the_labelled_head(self):
         self.assert_refused(self.cut("--ci-sha", self.old, "--pr", "114"), "checkout is not the pull request head")

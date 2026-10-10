@@ -153,12 +153,15 @@ def reviewed_head():
     return sha, branch
 
 
-def cut(dry_run, ci_sha=None, pr=None):
+def cut(dry_run, ci_sha=None, pr=None, wait_only=False):
     if ci_sha:
         # The workflow checks out exactly the labelled pull request head.
         sha, branch = ci_sha, f"pull request #{pr}"
         if output(["git", "rev-parse", "HEAD"], "couldn't resolve HEAD") != sha:
             raise ValueError(f"checkout is not the pull request head {sha[:12]}")
+        if wait_only:
+            wait_for_checks(sha, dry_run)
+            return
     else:
         sha, branch = reviewed_head()
     values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$",
@@ -184,6 +187,9 @@ def cut(dry_run, ci_sha=None, pr=None):
     print(f"Candidate {tag}: {version} build {build} at {sha} ({branch})")
     check_build(version, build)
     wait_for_checks(sha, dry_run)
+    if ci_sha and output(["gh", "pr", "view", str(pr), "--json", "headRefOid", "-q", ".headRefOid"],
+                         "couldn't read the pull request head") != sha:
+        raise ValueError(f"pull request #{pr} moved past {sha[:12]}; its new head gets its own candidate")
     point_branch(sha, dry_run)
     if tag not in tags:
         if ci_sha and not local:
@@ -213,12 +219,15 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="print every step without pushing, tagging or dispatching")
     parser.add_argument("--ci-sha", help="CI only: the labelled pull request head to cut")
     parser.add_argument("--pr", type=int, help="CI only: the pull request to comment the run on")
+    parser.add_argument("--wait-only", action="store_true", help="CI only: wait for the required checks, then stop")
     args = parser.parse_args()
     if bool(args.ci_sha) != bool(args.pr) or (args.ci_sha and not re.fullmatch(r"[0-9a-f]{40}", args.ci_sha)):
         parser.error("--ci-sha needs a full commit SHA and --pr")
+    if args.wait_only and not args.ci_sha:
+        parser.error("--wait-only needs --ci-sha and --pr")
     os.chdir(SCRIPTS.parent)
     try:
-        cut(args.dry_run, args.ci_sha, args.pr)
+        cut(args.dry_run, args.ci_sha, args.pr, args.wait_only)
     except (ValueError, KeyError, OSError, ET.ParseError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"ERR: {error}\n")
 
