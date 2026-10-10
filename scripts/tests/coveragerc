@@ -1,0 +1,7 @@
+# Measures release tooling for make test-scripts COVERAGE=1, including Python subprocesses.
+[run]
+branch = True
+source = scripts
+omit = scripts/tests/*
+patch = subprocess
+data_file = build/coverage/python/.coverage

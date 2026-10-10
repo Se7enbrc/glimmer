@@ -46,6 +46,10 @@ GLIMMER_APP_DST ?= /Applications/Glimmer.app
 CONFIG          ?= Debug
 SWIFTC          ?= xcrun swiftc
 TEST_SUITE      ?=
+# COVERAGE=1 measures the test and release-tool runs into build/coverage, with no threshold.
+COVERAGE        ?=
+COVERAGE_PY     ?= python3 -m coverage
+export COVERAGE_PY
 DERIVED         := $(CURDIR)/build
 GLIMMER_APP_SRC := $(DERIVED)/Build/Products/$(CONFIG)/Glimmer.app
 # macOS keeps every built or test-hosted app registered after its folder is gone.
@@ -136,11 +140,14 @@ release:
 # Build and run unsigned tests; TEST_SUITE optionally selects one suite or test.
 test:
 	@scripts/generate-build-info.sh
+	$(if $(COVERAGE),@rm -rf $(DERIVED)/coverage/swift $(DERIVED)/Build/ProfileData)
 	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
-	  $(if $(strip $(TEST_SUITE)),-only-testing:GlimmerTests/$(TEST_SUITE)); \
-	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
+	  $(if $(strip $(TEST_SUITE)),-only-testing:GlimmerTests/$(TEST_SUITE)) \
+	  $(if $(COVERAGE),-enableCodeCoverage YES -resultBundlePath $(DERIVED)/coverage/swift/glimmer.xcresult); \
+	  status=$$?; $(if $(COVERAGE),[ $$status -ne 0 ] || python3 scripts/coverage-report.py swift || status=$$?;) \
+	  $(UNREGISTER_BUILDS); exit $$status
 
 # Exercise untrusted protocol input with memory error detection enabled.
 test-asan:
@@ -502,8 +509,11 @@ check:
 
 # Fixture repositories need git's own discovery; a hook's GIT_DIR would aim them at this one.
 test-scripts:
+	$(if $(COVERAGE),@rm -rf $(DERIVED)/coverage/python && mkdir -p $(DERIVED)/coverage/python)
 	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
-		python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+		$(if $(COVERAGE),$(COVERAGE_PY) run --rcfile=scripts/tests/coveragerc,python3) -m unittest discover \
+		-s scripts/tests -p 'test_*.py'
+	$(if $(COVERAGE),@python3 scripts/coverage-report.py python)
 
 rc:
 	@python3 scripts/release-candidate.py $(if $(DRY_RUN),--dry-run)

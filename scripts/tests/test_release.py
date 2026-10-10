@@ -61,8 +61,11 @@ class ReleaseValidationTests(unittest.TestCase):
             self.assertEqual((output / "Glimmer-2026.10.6.zip").read_bytes(), b"inert zip")
 
     def test_local_suite_filter_cannot_narrow_the_full_gate(self):
+        # The default gate, not one inherited from an outer make such as a COVERAGE=1 run.
+        clean = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "COVERAGE")}
+
         def plan(target):
-            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests"],
+            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests"], env=clean,
                                   cwd=SCRIPTS.parent, capture_output=True, text=True, check=True).stdout
         self.assertIn("-only-testing:GlimmerTests/DatagramBatchTests", plan("test"))
         full = plan("verify")
