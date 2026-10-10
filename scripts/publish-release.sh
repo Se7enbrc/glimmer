@@ -23,6 +23,7 @@ if [ "$#" -ge 6 ]; then
 fi
 ASSET_URL="https://github.com/$REPO/releases/download/$TAG/Glimmer-$SHORT.zip"
 APPCAST="appcast.xml"
+APPCAST_BRANCH="appcast"
 
 [ -d "$APP" ] || { echo "ERR: app bundle not found at $APP - run via 'make release-publish'" >&2; exit 1; }
 make -C "$HERE" --no-print-directory guard-clean-tree
@@ -30,7 +31,7 @@ make -C "$HERE" --no-print-directory guard-clean-tree
 [ -s "$ZIP" ] || { echo "ERR: prepared Sparkle ZIP missing - run 'make CONFIG=Release sparkle-zip'" >&2; exit 1; }
 
 # The release tag must identify the exact source used to build the bundle.
-git -C "$HERE" fetch --quiet origin main
+git -C "$HERE" fetch --quiet origin main "+refs/heads/$APPCAST_BRANCH:refs/remotes/origin/$APPCAST_BRANCH"
 HEAD_SHA="$(git -C "$HERE" rev-parse HEAD)"
 MAIN_SHA="$(git -C "$HERE" rev-parse origin/main)"
 if [ "$CHANNEL" = rc ]; then
@@ -47,11 +48,10 @@ fi
 
 WORK="$(mktemp -d -t glimmer-publication)"
 trap 'rm -rf "$WORK"' EXIT
-FEED="$HERE/$APPCAST"
-if [ "${GITHUB_ACTIONS:-}" = true ]; then
-	FEED="$WORK/$APPCAST"
-	git -C "$HERE" show "$MAIN_SHA:$APPCAST" >"$FEED"
-fi
+# The feed lives alone on its own branch so releases never move main.
+FEED="$WORK/$APPCAST"
+FEED_HEAD="$(git -C "$HERE" rev-parse "origin/$APPCAST_BRANCH")"
+git -C "$HERE" show "$FEED_HEAD:$APPCAST" >"$FEED"
 python3 "$HERE/scripts/release_validation.py" \
 	--config "$HERE/Glimmer/Version.xcconfig" --appcast "$FEED" --channel "$CHANNEL" \
 	--short-version "$SHORT" --build "$BUILD" --app "$APP" --validate-distribution
@@ -175,9 +175,9 @@ if [ -f "$PROVENANCE" ]; then
 	echo "  ✓ provenance attached"
 fi
 
-# Commit the appcast after pinning the release tag. Hosted releases use GitHub's
-# signing key; local releases retain the maintainer's configured Git signing.
-echo "▶ Updating the committed appcast (main:/$APPCAST is what Pages serves)..."
+# Commit the appcast after pinning the release tag, signed by GitHub and only
+# over the feed head read above. The Pages workflow serves it beside main's site.
+echo "▶ Updating the appcast on the $APPCAST_BRANCH branch..."
 cp "$FEED" "$WORK/original-appcast.xml"
 FEED_ARGS=(--changelog "$HERE/CHANGELOG.md")
 if [ "$CHANNEL" = rc ]; then
@@ -189,20 +189,15 @@ fi
 	"${FEED_ARGS[@]}"
 if cmp -s "$FEED" "$WORK/original-appcast.xml"; then
 	echo "  ✓ appcast already current (no change to publish)"
-elif [ "${GITHUB_ACTIONS:-}" = true ]; then
-	APPCAST_SHA="$(python3 "$HERE/scripts/github_signed_commit.py" "$REPO" "$MAIN_SHA" \
+else
+	APPCAST_SHA="$(python3 "$HERE/scripts/github_signed_commit.py" "$REPO" "$APPCAST_BRANCH" "$FEED_HEAD" \
 		"$APPCAST" "$FEED" "appcast: $TITLE")"
 	echo "  ✓ verified appcast commit published → $APPCAST_SHA"
-else
-	git -C "$HERE" add "$APPCAST"
-	# A pre-commit hook may reformat the machine-written appcast and abort the
-	# first commit; re-stage the fixed file and retry once.
-	if ! git -C "$HERE" commit -m "appcast: Glimmer $SHORT" --quiet; then
-		git -C "$HERE" add "$APPCAST"
-		git -C "$HERE" commit -m "appcast: Glimmer $SHORT" --quiet
+	# A hosted Release run redeploys Pages when it finishes; a local one asks.
+	if [ "${GITHUB_ACTIONS:-}" != true ]; then
+		gh workflow run pages.yml -R "$REPO" --ref main ||
+			echo "  ! couldn't start the Pages deploy; run the Pages workflow by hand" >&2
 	fi
-	git -C "$HERE" push --quiet origin HEAD:main
-	echo "  ✓ appcast committed + pushed to main → $(git -C "$HERE" rev-parse --short HEAD)"
 fi
 
 echo "✅ Published $TITLE - Sparkle offers it to the ${CHANNEL:-stable} channel."

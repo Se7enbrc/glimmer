@@ -81,6 +81,7 @@ SIGN_KEYCHAIN   ?= $(HOME)/Library/Keychains/developer-id.keychain-db
 MARKETING_VERSION := $(shell sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' Glimmer/Version.xcconfig | tr -d ' ')
 DMG_NAME        := Glimmer-$(MARKETING_VERSION).dmg
 DIST_DIR        := $(DERIVED)/dist
+APPCAST_FEED    := $(DERIVED)/appcast.xml
 # Build number (CFBundleVersion) - the monotonic stamp Sparkle keys updates on.
 BUILD_NUMBER    := $(shell sed -n 's/^CURRENT_PROJECT_VERSION = \(.*\)/\1/p' Glimmer/Version.xcconfig | tr -d ' ')
 # Repo that hosts the Sparkle appcast (GitHub Pages) + release assets - the
@@ -113,7 +114,7 @@ HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Netw
         profile profile-signposts setup-notary notarize dmg dmg-background sparkle-zip dist preflight \
         codesign-setup codesign-teardown ensure-signing dev test test-asan \
         creds-init enable-telem disable-telem release-publish sparkle-keys \
-        guard-clean-tree guard-release-version check verify test-scripts brew-bump rc
+        guard-clean-tree guard-release-version appcast-feed check verify test-scripts brew-bump rc
 
 # TIER 1 - "everything but publish": the full release pipeline at Release
 # (xcodebuild -> inside-out sign -> notarize -> staple),
@@ -232,8 +233,8 @@ sign: app embed-helper ensure-signing
 
 # Install the everything-but-publish build (see `release`) to /Applications.
 # `reinstall`/`open`/`dev` build on this.
-install: release
-	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast appcast.xml --app "$(DERIVED)/Build/Products/Release/Glimmer.app" --validate-distribution
+install: release appcast-feed
+	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast "$(APPCAST_FEED)" --app "$(DERIVED)/Build/Products/Release/Glimmer.app" --validate-distribution
 	@SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
 	echo "▶ Installing Glimmer.app to $(GLIMMER_APP_DST)..."; \
 	if [ -d "$(GLIMMER_APP_DST)" ]; then echo "  removing existing $(GLIMMER_APP_DST)"; rm -rf "$(GLIMMER_APP_DST)"; fi; \
@@ -390,7 +391,7 @@ setup-notary:
 # Notarize the signed bundle: zip, submit and wait, then staple. Re-runs
 # ensure-signing first: the Release build before it is long enough for a sleep
 # to re-lock the keychain holding the notary profile.
-notarize: sign
+notarize: sign appcast-feed
 	@test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: no Developer ID cert - can't notarize" >&2; exit 1; }
 	@$(MAKE) --no-print-directory ensure-signing
 	@echo "▶ Notarizing $(GLIMMER_APP_SRC)..."
@@ -402,7 +403,7 @@ notarize: sign
 	@rm -f "$(DERIVED)/Glimmer-notarize.zip"
 	@echo "  ✓ notarized + stapled"
 	@spctl --assess --type execute --verbose=2 "$(GLIMMER_APP_SRC)"
-	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast appcast.xml --app "$(GLIMMER_APP_SRC)" --validate-distribution
+	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast "$(APPCAST_FEED)" --app "$(GLIMMER_APP_SRC)" --validate-distribution
 
 # Build a distributable DMG from the signed (and ideally notarized) bundle.
 # scripts/make-dmg.sh does the hdiutil + Finder-AppleScript dance (background
@@ -478,8 +479,16 @@ guard-clean-tree:
 	@git diff --cached --quiet || { echo "ERROR: refusing to build a release with staged changes (commit or stash first)"; exit 1; }
 	@test -z "$$(git ls-files --others --exclude-standard)" || { echo "ERROR: refusing to build a release with untracked files (commit or remove them first)"; exit 1; }
 
-guard-release-version:
-	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast appcast.xml
+# The published feed is the only file on the appcast branch, never on main.
+# Offline, the last fetched copy still gates builds; publication fetches afresh.
+appcast-feed:
+	@mkdir -p "$(DERIVED)"
+	@git fetch --quiet origin "+refs/heads/appcast:refs/remotes/origin/appcast" || \
+		echo "  ! couldn't fetch the appcast branch; checking the last fetched copy" >&2
+	@git show refs/remotes/origin/appcast:appcast.xml >"$(APPCAST_FEED)"
+
+guard-release-version: appcast-feed
+	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast "$(APPCAST_FEED)"
 
 # Full distribution pipeline: clean-tree gate → preflight (fail fast, see above)
 # → clean Release → Developer ID sign → notarize + staple → DMG. The

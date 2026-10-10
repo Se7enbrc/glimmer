@@ -14,9 +14,11 @@ MUTATION = """mutation($input: CreateCommitOnBranchInput!) {
 }"""
 
 
-def commit_file(repository: str, expected_head: str, path: str, file: Path, message: str) -> str:
+def commit_file(repository: str, branch: str, expected_head: str, path: str, file: Path, message: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("Invalid repository for release metadata commit.")
+    if branch not in {"main", "appcast"}:
+        raise ValueError("Release metadata commits go only to main or appcast.")
     if not re.fullmatch(r"[0-9a-f]{40}", expected_head):
         raise ValueError("Release metadata commit needs a full expected head SHA.")
     relative = PurePosixPath(path)
@@ -27,7 +29,7 @@ def commit_file(repository: str, expected_head: str, path: str, file: Path, mess
     request = {
         "query": MUTATION,
         "variables": {"input": {
-            "branch": {"repositoryNameWithOwner": repository, "branchName": "main"},
+            "branch": {"repositoryNameWithOwner": repository, "branchName": branch},
             "expectedHeadOid": expected_head,
             "message": {"headline": message},
             "fileChanges": {"additions": [{"path": path, "contents": base64.b64encode(file.read_bytes()).decode("ascii")}]},
@@ -59,13 +61,14 @@ def commit_file(repository: str, expected_head: str, path: str, file: Path, mess
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repository")
+    parser.add_argument("branch")
     parser.add_argument("expected_head")
     parser.add_argument("path")
     parser.add_argument("file", type=Path)
     parser.add_argument("message")
     args = parser.parse_args()
     try:
-        oid = commit_file(args.repository, args.expected_head, args.path, args.file, args.message)
+        oid = commit_file(args.repository, args.branch, args.expected_head, args.path, args.file, args.message)
     except OSError:
         parser.exit(1, "ERR: Couldn't read the release metadata file.\n")
     except ValueError as error:

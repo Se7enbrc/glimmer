@@ -121,11 +121,16 @@ class CandidatePublicationTests(unittest.TestCase):
         self.write_tool("bin/git", '''#!/bin/bash
 shift 2
 case "$1" in
-    fetch) exit 0 ;;
+    fetch) [ "$5" = +refs/heads/appcast:refs/remotes/origin/appcast ] ;;
     rev-parse)
-        if [ "$2" = origin/main ]; then printf '%040d\\n' 0 | tr 0 b; else printf '%040d\\n' 0 | tr 0 a; fi ;;
+        case "$2" in
+            origin/main) printf '%040d\\n' 0 | tr 0 b ;;
+            origin/appcast) printf '%040d\\n' 0 | tr 0 e ;;
+            *) printf '%040d\\n' 0 | tr 0 a ;;
+        esac ;;
     show)
-        if [[ "$2" = *:appcast.xml ]]; then cat "$FIXTURE_ROOT/live-appcast.xml";
+        if [ "$2" = eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:appcast.xml ]; then cat "$FIXTURE_ROOT/live-appcast.xml";
+        elif [[ "$2" = *:appcast.xml ]]; then exit 1;
         else printf 'MARKETING_VERSION = 2026.10.6\\n'; fi ;;
     *) exit 1 ;;
 esac
@@ -161,7 +166,7 @@ elif args[0] == "api":
 ''')
         (self.root / "scripts/github_signed_commit.py").write_text('''import json, os, pathlib, sys
 root = pathlib.Path(os.environ["FIXTURE_ROOT"])
-(root / "committed-feed.xml").write_bytes(pathlib.Path(sys.argv[4]).read_bytes())
+(root / "committed-feed.xml").write_bytes(pathlib.Path(sys.argv[5]).read_bytes())
 (root / "commit-args").write_text(json.dumps(sys.argv[1:]))
 print("c" * 40)
 ''')
@@ -177,7 +182,7 @@ print("c" * 40)
                                str(self.root / "dist"), "fixture/glimmer", tag],
                               env=self.env, capture_output=True, text=True, timeout=10)
 
-    def test_candidate_uses_live_feed_and_main_cas_without_changing_source_checkout(self):
+    def test_candidate_uses_appcast_branch_feed_and_cas_without_changing_source_checkout(self):
         self.configure_candidate()
         (self.root / "dist/Glimmer-2026.10.6.intoto.jsonl").write_text("{}\n")
         original = self.source_feed.read_bytes()
@@ -185,7 +190,7 @@ print("c" * 40)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.source_feed.read_bytes(), original)
         args = json.loads((self.root / "commit-args").read_text())
-        self.assertEqual(args[1], "b" * 40)
+        self.assertEqual(args[:4], ["fixture/glimmer", "appcast", "e" * 40, "appcast.xml"])
         feed = ET.parse(self.root / "committed-feed.xml").getroot().find("channel")
         self.assertEqual(feed[0].findtext(f"{{{SPARKLE}}}channel"), "rc")
         self.assertEqual(feed[0].findtext(f"{{{SPARKLE}}}shortVersionString"), "2026.10.6")

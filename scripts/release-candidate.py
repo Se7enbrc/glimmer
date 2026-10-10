@@ -22,7 +22,7 @@ SCRIPTS = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("release_checks", SCRIPTS / "release-checks.py")
 CHECKS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECKS)
-LIVE_APPCAST = "https://se7enbrc.github.io/glimmer/appcast.xml"
+FEED_BRANCH = "appcast"
 BRANCH = "release-candidate"
 POLL_SECONDS = 60
 TIMEOUT_SECONDS = 90 * 60
@@ -71,16 +71,10 @@ def show(url, dry_run, pr=None):
 
 
 def check_build(version, build):
-    fetched = subprocess.run(["curl", "-fsSL", "--max-time", "30", LIVE_APPCAST],
-                             capture_output=True, text=True, timeout=60)
-    try:
-        root = ET.fromstring(fetched.stdout) if fetched.returncode == 0 else None
-    except ET.ParseError:
-        root = None
-    if root is None:
-        print("WARNING: couldn't fetch the live appcast; checking the committed appcast.xml", file=sys.stderr)
-        root = ET.parse("appcast.xml").getroot()
-    channel = root.find("channel")
+    output(["git", "fetch", "--quiet", "origin", f"+refs/heads/{FEED_BRANCH}:refs/remotes/origin/{FEED_BRANCH}"],
+           "couldn't fetch the appcast branch")
+    channel = ET.fromstring(output(["git", "show", f"refs/remotes/origin/{FEED_BRANCH}:appcast.xml"],
+                                   "couldn't read the appcast")).find("channel")
     if channel is None:
         raise ValueError("appcast has no channel")
     builds = [int(text) for text in (item.findtext(f"{{{SPARKLE}}}version", "") for item in channel.findall("item"))
