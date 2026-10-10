@@ -50,7 +50,7 @@ extension StreamSession {
             stream: StreamTelemetryConfig(
                 width: Int(decoder.streamWidth), height: Int(decoder.streamHeight),
                 fps: Int(decoder.streamFps), codec: VideoDecoder.codecLabel(for: decoder.streamVideoFormat),
-                bitrate: reconnectConfig?.bitrateDecision, decodeSynchronous: decoder.decodeSynchronous))
+                bitrate: reconnectConfig?.bitrateDecision))
 
         guard let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: serverName) else {
             // Gate off - the default. Nothing allocated, nothing started.

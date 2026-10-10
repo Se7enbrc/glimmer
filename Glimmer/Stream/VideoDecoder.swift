@@ -171,10 +171,6 @@ public final class VideoDecoder {
     nonisolated(unsafe) var streamHeight: Int32 = 0
     nonisolated(unsafe) var streamVideoFormat: Int32 = 0
     nonisolated(unsafe) var streamFps: Int32 = 0
-    /// Hidden A/B arm: decode without async decompression. Latched in setup
-    /// before any decode, read on the decode queue (streamFps's discipline).
-    nonisolated(unsafe) var decodeSynchronous = false
-    nonisolated static let decodeSynchronousDefaultsKey = "decodeSynchronous"
 
     // Cached parameter sets so we can rebuild format descriptions if the
     // server cycles SPS/PPS mid-stream (it does after a network blip + IDR).

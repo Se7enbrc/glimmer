@@ -82,10 +82,10 @@ struct DecodeTimeSplitTests {
         #expect(prom.contains("glimmer_decode_service_ema_ms") && prom.contains("glimmer_decode_wait_ema_ms"))
     }
 
-    @Test func configEventNamesTheDecodeMode() {
-        var stream = StreamTelemetryConfig(width: 1_920, height: 1_080, fps: 240, codec: "av1", bitrate: nil)
-        #expect(TelemetryExporter.streamConfigFields(stream).contains("\"decode_synchronous\":false"))
-        stream.decodeSynchronous = true
-        #expect(TelemetryExporter.streamConfigFields(stream).contains("\"decode_synchronous\":true"))
+    @Test func decodeTimeOnlyFlagsADecodeLongerThanTheFrameBudget() {
+        #expect(StreamStatsSnapshot.decodeTimeHealth(2.76, targetFps: 240) == .healthy)
+        #expect(StreamStatsSnapshot.decodeTimeHealth(4.1, targetFps: 240) == .healthy)
+        #expect(StreamStatsSnapshot.decodeTimeHealth(4.3, targetFps: 240) == .critical)
+        #expect(StreamStatsSnapshot.decodeTimeHealth(nil, targetFps: 240) == .neutral)
     }
 }

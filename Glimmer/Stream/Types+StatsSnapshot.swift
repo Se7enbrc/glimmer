@@ -335,7 +335,7 @@ public struct StreamStatsSnapshot: Sendable {
                 kind: .decodeTime, label: "Decode time",
                 value: formatDecodeTime(),
                 symbolName: "clock",
-                health: decodeTimeHealth(avgDecodeTimeMs, targetFps: targetFps),
+                health: Self.decodeTimeHealth(avgDecodeTimeMs, targetFps: targetFps),
                 section: .pipeline)
         case .hostProcessing:
             // "PC encode", not "latency": the PC's capture and encode time
@@ -458,16 +458,11 @@ public struct StreamStatsSnapshot: Sendable {
         if pct > thresholds.dropsWarningAbove { return .warning }
         return .healthy
     }
-    /// Warn if decode wall-clock crosses half the frame budget,
-    /// critical if it crosses 90% - at 60Hz that's >8.3ms warn,
-    /// >15ms crit. Frame budget shrinks at higher FPS so the
-    /// thresholds tighten automatically.
-    private func decodeTimeHealth(_ decodeMs: Double?, targetFps: Double) -> StatsRow.Health {
+    /// Decode is pipelined, so time inside the frame budget is latency, not a fault.
+    /// Only a decode longer than the whole frame budget falls behind the stream.
+    static func decodeTimeHealth(_ decodeMs: Double?, targetFps: Double) -> StatsRow.Health {
         guard let decodeMs, targetFps > 0 else { return .neutral }
-        let frameBudget = 1000.0 / targetFps
-        if decodeMs > frameBudget * 0.9 { return .critical }
-        if decodeMs > frameBudget * 0.5 { return .warning }
-        return .healthy
+        return decodeMs > 1000.0 / targetFps ? .critical : .healthy
     }
 
     // MARK: Formatting helpers
