@@ -188,24 +188,22 @@ public struct StatsThresholds: Sendable, Equatable, Codable {
 
 // MARK: - Stats overlay corner
 
-/// Where the in-stream stats overlay anchors itself, with a 20pt inset
-/// from the chosen corner. Persisted to UserDefaults under
-/// "streamStatsCorner" via AppModel. A right-click context menu
-/// on the overlay layer isn't viable because mouse events during a
-/// stream are claimed by InputForwarder and forwarded to the host (the
-/// cursor is hidden, right-click is a game input, not a launcher
-/// gesture), so the positional preference lives in Settings.
+/// The HUD position persists as a raw string; existing center positions remain valid.
 public enum StatsOverlayCorner: String, CaseIterable, Sendable {
     // "Corner" by history; now also carries the two edge-centers. Top-center
     // sits clear of the camera notch; bottom-center rides the bottom edge.
     // rawValues are the case names, so adding cases mid-list is persistence-safe.
     case topLeft, topCenter, topRight, bottomLeft, bottomCenter, bottomRight
 
+    static func persisted(defaults: UserDefaults = .standard) -> Self {
+        defaults.string(forKey: "streamStatsCorner").flatMap(Self.init(rawValue:)) ?? .topLeft
+    }
+
     /// Human-readable label for the Settings picker.
     public var displayName: String {
         switch self {
         case .topLeft:      return "Top left"
-        case .topCenter:    return "Top center (under the notch)"
+        case .topCenter:    return "Top center"
         case .topRight:     return "Top right"
         case .bottomLeft:   return "Bottom left"
         case .bottomCenter: return "Bottom center"

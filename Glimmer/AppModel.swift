@@ -201,14 +201,14 @@ final class AppModel {
         didSet { UserDefaults.standard.set(showStreamStats, forKey: "showStreamStats") }
     }
 
-    /// Which screen corner the in-stream stats overlay anchors to.
-    /// Persisted to UserDefaults so the choice survives launches and is
-    /// applied from frame zero of the next stream. The default of
-    /// `.topLeft` matches the historical hardcoded position so existing
-    /// users don't see the panel jump on first launch with this field.
+    /// Persist the HUD position and apply it to an active stream.
     var streamStatsCorner: StatsOverlayCorner = .topLeft {
         didSet {
             UserDefaults.standard.set(streamStatsCorner.rawValue, forKey: "streamStatsCorner")
+            if let session = nativeSession {
+                let corner = streamStatsCorner
+                Task { await session.setStatsOverlayCorner(corner) }
+            }
         }
     }
 
@@ -512,7 +512,7 @@ final class AppModel {
         releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self) ?? releasePointerHotkey
         miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self) ?? miniPlayerHotkey
         showStreamStats = Self.persistedBool("showStreamStats") ?? showStreamStats
-        streamStatsCorner = Self.persistedRawValue("streamStatsCorner", StatsOverlayCorner.self) ?? streamStatsCorner
+        streamStatsCorner = .persisted()
         // Stats overlay preset. Key-absence means the user never touched
         // the Settings picker (didSet is suppressed here and the picker is
         // the only post-init writer), so absent keeps the .minimal default

@@ -2,6 +2,8 @@
 
 ## 2026.10.6 - 2026-10-09
 
+- Stream stats take up less of the picture, combine bitrate and codec, and move
+  between corners while streaming, clear of the camera and letterbox bars.
 - The borderless full-screen stream slides in from the side when it starts and
   when you come back to it, and slides away when you switch apps, like a
   full-screen Space. Reduce Motion keeps the plain fade.

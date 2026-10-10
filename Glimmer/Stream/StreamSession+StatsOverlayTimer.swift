@@ -116,6 +116,7 @@ extension StreamSession {
                     // through statsOverlayPreset + statsOverlayCustomRows.
                     let enabled = statsRowsProvider()
                     let thresholds = statsThresholdsProvider()
+                    win.statsOverlay.videoSize = CGSize(width: CGFloat(dec.streamWidth), height: CGFloat(dec.streamHeight))
                     win.statsOverlay.update(
                         snapshot: snap,
                         enabled: enabled,
@@ -140,6 +141,11 @@ extension StreamSession {
             if let rtt = dec.telemetryEstimatedRtt() { snap.rttMs = rtt.rttMs }
             return (snap, dec.statsOverlayEnabled)
         }
+    }
+
+    func setStatsOverlayCorner(_ corner: StatsOverlayCorner) async {
+        guard let win = window else { return }
+        await MainActor.run { win.statsOverlay.corner = corner }
     }
 
     /// The current session's overlay, the same switch the keyboard toggle drives.

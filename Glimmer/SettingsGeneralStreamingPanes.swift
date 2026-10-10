@@ -354,11 +354,8 @@ struct QualityPane: View {
                     + "the shortcut in Settings › Input.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                // Overlay position lives here (not a right-click menu - the
-                // InputForwarder claims mouse events mid-stream). Position +
-                // preset + custom rows stay editable even when the overlay is
-                // off, so it's gating display, not configuration.
-                Picker("Overlay position", selection: $model.streamStatsCorner) {
+                // Configuration stays available while the HUD is hidden.
+                Picker("Position", selection: $model.streamStatsCorner) {
                     ForEach(StatsOverlayCorner.allCases, id: \.self) { corner in
                         Text(corner.displayName).tag(corner)
                     }

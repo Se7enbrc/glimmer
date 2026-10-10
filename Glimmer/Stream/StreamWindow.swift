@@ -342,19 +342,10 @@ public final class StreamWindow {
         view.wantsLayer = true
         window.contentView = view
 
-        // Stats overlay - sublayer of the display layer, positioned in the
-        // top-left with a fixed inset. We attach it as a sublayer rather than
-        // a sibling because AVSampleBufferDisplayLayer is the view's root
-        // layer (a precondition for HDR-correct compositing - see the long
-        // comment near `view.layer = layer` above). CALayer's sublayer
-        // contract lets us stack arbitrary content on top, and the OS
-        // composites the overlay's sRGB text against the layer's HDR
-        // contents correctly.
-        //
-        // Born hidden (its own init). StreamSession seeds visibility from the
-        // user's preference at stream start, the hotkey flips it, and the overlay
-        // timer pushes text at 4 Hz (FPS rows ~1s average, latency rows live).
+        // Keep the HUD inside the HDR root layer. Its 4 Hz refresh also follows
+        // the picture's letterbox and this window's screen safe area.
         let overlay = StatsOverlayLayer()
+        overlay.displayView = view
         overlay.attach(to: layer)
 
         // Transient signal pills (sibling sublayers of the display layer, above
