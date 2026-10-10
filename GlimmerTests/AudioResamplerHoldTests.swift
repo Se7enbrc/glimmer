@@ -118,7 +118,8 @@ struct AudioResamplerHoldTests {
     @Test(arguments: [(-200.0, 105.0, true), (-501.0, 105.0, false), (-200.0, 5.0, false)])
     func compensatedClockReleasesOnlyAHealthyCushion(ppm: Double, minimumFillMs: Double, releases: Bool) {
         let decoder = steadyDecoder(targetMs: 110, integralPpm: ppm)
-        let now = DispatchTime.now().uptimeNanoseconds
+        // A fixed timeline: a freshly booted runner has less than 400 s of uptime.
+        let now: UInt64 = 1_000_000_000_000
         decoder.meterSampleRate = 48_000
         decoder.playoutStarted = true
         decoder.primed = true
@@ -134,7 +135,7 @@ struct AudioResamplerHoldTests {
         decoder.quietWindowMinFillMs = minimumFillMs
         decoder.quietSinceNanos = now - AudioDecoder.playoutDecayQuietNanos
         decoder.floorQuietSinceNanos = now
-        decoder.publishAudioState()
+        decoder.publishAudioState(now: now)
         decoder.audioMeterLock.lock()
         defer { decoder.audioMeterLock.unlock() }
         #expect((decoder.cushionQuietAdjustLocked(now: now) != nil) == releases)
