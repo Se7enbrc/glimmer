@@ -90,15 +90,16 @@ extension StreamWindow {
     func applyPresentationOptions(coversNotch cover: Bool) {
         guard displayMode == .fullScreen, !didClose, !userBackgrounded,
               NSApp.isActive, window.isKeyWindow, window.isVisible else { return }
+        // AppKit negotiates Space options on entry; never replace them mid-transition.
+        guard cover || window.styleMask.contains(.fullScreen) else { return }
         NSApp.presentationOptions = Self.streamingPresentationOptions(coversNotch: cover)
     }
 
-    /// Path A hides the menu bar and Dock, Path B auto-hides them; AppKit wants
-    /// a Dock option with either. Both turn off shake-to-find and, on macOS 27,
-    /// Hot Corners, which an uncaptured hidden cursor can still reach.
+    /// Both paths keep the system's gaming presentation active for Game Overlay.
+    /// A native Space also retains AppKit's full-screen flag.
     nonisolated static func streamingPresentationOptions(coversNotch: Bool) -> NSApplication.PresentationOptions {
-        var options: NSApplication.PresentationOptions =
-            coversNotch ? [.hideMenuBar, .hideDock] : [.autoHideMenuBar, .autoHideDock]
+        var options: NSApplication.PresentationOptions = [.hideMenuBar, .hideDock]
+        if !coversNotch { options.insert(.fullScreen) }
         options.insert(.disableCursorLocationAssistance)
         if #available(macOS 27, *) {
             // NSApplication.h in SDK 27 defines DisableScreenCornerInteractions as bit 15.

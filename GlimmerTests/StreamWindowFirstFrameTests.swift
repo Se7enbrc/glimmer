@@ -170,8 +170,71 @@ struct StreamWindowFirstFrameTests {
         #expect(covering.isSuperset(of: [.hideMenuBar, .hideDock]))
         #expect(covering.isDisjoint(with: [.autoHideMenuBar, .autoHideDock]))
         let spaced = StreamWindow.streamingPresentationOptions(coversNotch: false)
-        #expect(spaced.isSuperset(of: [.autoHideMenuBar, .autoHideDock]))
-        #expect(spaced.isDisjoint(with: [.hideMenuBar, .hideDock]))
+        #expect(spaced.isSuperset(of: [.fullScreen, .hideMenuBar, .hideDock]))
+        #expect(spaced.isDisjoint(with: [.autoHideMenuBar, .autoHideDock]))
+        #expect(!covering.contains(.fullScreen))
+    }
+
+    @Test func onlyKnownNonRegularAppsKeepTheCoverInPlace() {
+        #expect(StreamWindow.isTransientFocusLoss(.accessory))
+        #expect(StreamWindow.isTransientFocusLoss(.prohibited))
+        #expect(!StreamWindow.isTransientFocusLoss(.regular))
+        #expect(!StreamWindow.isTransientFocusLoss(nil))
+    }
+
+    @Test func anOverlayDoesNotRetreatTheCoverOrMarkItAway() {
+        let stream = StreamWindow()
+        var backgrounded: [Bool] = []
+        stream.onBackgroundedChanged = { backgrounded.append($0) }
+        let generation = stream.coverSlideGeneration
+        let options = NSApp.presentationOptions
+        stream.setCursorHidden(true)
+        defer { stream.setCursorHidden(false) }
+
+        stream.handleFocusLoss(.accessory)
+
+        #expect(!stream.userBackgrounded)
+        #expect(backgrounded.isEmpty)
+        #expect(stream.coverSlideGeneration == generation)
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSApp.presentationOptions == options)
+        stream.awaitingFirstFrameFadeIn = true
+        stream.reengageForeground()
+        #expect(stream.coverSlideGeneration == generation)
+    }
+
+    @Test func aRegularAppAfterAnOverlayBackgroundsTheStreamOnce() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        var backgrounded: [Bool] = []
+        stream.onBackgroundedChanged = { backgrounded.append($0) }
+        stream.handleFocusLoss(.accessory)
+        stream.handleFocusLoss(.regular)
+        stream.handleFocusLoss(.regular)
+        #expect(stream.userBackgrounded)
+        #expect(backgrounded == [true])
+    }
+
+    @Test func spaceOptionsRetainAppKitFlagsWithoutConflictingAutoHideOptions() {
+        let stream = StreamWindow()
+        let proposed: NSApplication.PresentationOptions = [.fullScreen, .autoHideDock, .autoHideMenuBar, .autoHideToolbar]
+        let options = stream.streamDelegate.window(stream.window, willUseFullScreenPresentationOptions: proposed)
+        #expect(options.isSuperset(of: [.fullScreen, .hideDock, .hideMenuBar, .autoHideToolbar]))
+        #expect(options.isDisjoint(with: [.autoHideDock, .autoHideMenuBar]))
+        stream.streamDelegate.displayMode = .window
+        #expect(stream.streamDelegate.window(stream.window, willUseFullScreenPresentationOptions: proposed) == proposed)
+    }
+
+    @Test func onlyCommandEscapeUsesTheOverlayFallbackInASpace() {
+        #expect(KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: .command))
+        #expect(KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .capsLock]))
+        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: false, keyCode: 53, modifiers: .command))
+        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: []))
+        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .option]))
+        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .control]))
+        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .shift]))
+        // The deliberate full-screen command (Control-Command-F) still belongs to AppKit.
+        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 3, modifiers: [.command, .control]))
     }
 
     @Test func coverOptionsTurnOffShakeToFindAndHotCorners() {

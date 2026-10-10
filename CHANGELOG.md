@@ -2,6 +2,8 @@
 
 ## 2026.10.6 - 2026-10-09
 
+- Command-Escape opens macOS Game Overlay over the stream and keeps it open, in
+  a full-screen Space too, instead of leaving full screen.
 - Stream stats take up less of the picture, combine bitrate and codec, and move
   between corners while streaming, clear of the camera and letterbox bars.
 - The borderless full-screen stream slides in from the side when it starts and

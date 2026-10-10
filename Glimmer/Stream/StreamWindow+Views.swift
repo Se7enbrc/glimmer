@@ -9,14 +9,41 @@
 //
 
 import AppKit
+import Carbon.HIToolbox
 
-/// Borderless NSWindow that can become key + main so the responder chain
-/// delivers keyDown / flagsChanged / mouseMoved to our content view. Without
-/// these overrides, AppKit treats borderless windows as decorative panels and
-/// silently drops all key events.
+/// Borderless windows need explicit key eligibility to receive stream input.
 final class KeyableWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    /// The system normally takes this chord before AppKit. If it reaches us,
+    /// let stream shortcuts handle it without AppKit treating Escape as a Space exit.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == .keyDown,
+           Self.isGameOverlayFallback(isFullScreen: styleMask.contains(.fullScreen),
+                                      keyCode: event.keyCode, modifiers: event.modifierFlags),
+           let view = firstResponder as? StreamInputView {
+            view.keyDown(with: event)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    /// AppKit can turn Escape into an action before the input view sees keyDown.
+    /// Keep that fallback from exiting the Space; explicit full-screen commands still work.
+    override func cancelOperation(_ sender: Any?) {
+        if let event = NSApp.currentEvent, event.type == .keyDown,
+           Self.isGameOverlayFallback(isFullScreen: styleMask.contains(.fullScreen),
+                                      keyCode: event.keyCode, modifiers: event.modifierFlags),
+           firstResponder is StreamInputView { return }
+        super.cancelOperation(sender)
+    }
+
+    nonisolated static func isGameOverlayFallback(isFullScreen: Bool, keyCode: UInt16,
+                                                  modifiers: NSEvent.ModifierFlags) -> Bool {
+        isFullScreen && keyCode == UInt16(kVK_Escape)
+            && modifiers.intersection([.command, .control, .option, .shift]) == .command
+    }
 }
 
 /// Window delegate that hands AppKit a custom "fullscreen content size"
@@ -68,6 +95,14 @@ final class StreamWindowDelegate: NSObject, NSWindowDelegate {
         guard displayMode == .window else { return false }
         onCloseRequested?()
         return false
+    }
+
+    func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions)
+        -> NSApplication.PresentationOptions {
+        guard displayMode == .fullScreen else { return proposedOptions }
+        // Replace conflicting auto-hide flags while retaining AppKit's other options.
+        return proposedOptions.subtracting([.autoHideMenuBar, .autoHideDock])
+            .union(StreamWindow.streamingPresentationOptions(coversNotch: false))
     }
 
     func window(_ window: NSWindow, willUseFullScreenContentSize proposedSize: NSSize) -> NSSize {
