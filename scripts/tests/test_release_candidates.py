@@ -154,6 +154,8 @@ elif args[0] == "api":
         print("a" * 40)
     elif ".draft" in args:
         print("true" if state.read_text() == "draft" else "false")
+    elif any(".assets" in arg for arg in args):
+        pass
     else:
         print("true")
 ''')
@@ -177,6 +179,7 @@ print("c" * 40)
 
     def test_candidate_uses_live_feed_and_main_cas_without_changing_source_checkout(self):
         self.configure_candidate()
+        (self.root / "dist/Glimmer-2026.10.6.intoto.jsonl").write_text("{}\n")
         original = self.source_feed.read_bytes()
         result = self.publish_candidate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -197,6 +200,8 @@ print("c" * 40)
         self.assertIn("--latest=false", edit)
         self.assertIn("--draft=false", edit)
         self.assertEqual((self.root / "release-state").read_text(), "published")
+        upload = next(call for call in calls if call[:2] == ["release", "upload"])
+        self.assertTrue(upload[3].endswith("/Glimmer-2026.10.6.intoto.jsonl"))
         self.assertFalse(Path(self.env["FIXTURE_DITTO_MARKER"]).exists())
 
     def test_candidate_requires_hosted_context_and_exact_version_tag_before_credentials(self):

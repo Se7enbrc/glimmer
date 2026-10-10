@@ -9,6 +9,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 CREDS="$HERE/scripts/signing-creds.sh"
 ZIP="$DIST/Glimmer-$SHORT.zip"
 DMG="$DIST/Glimmer-$SHORT.dmg"
+PROVENANCE="$DIST/Glimmer-$SHORT.intoto.jsonl"
 TAG="${6:-$SHORT}"
 CHANNEL=""
 TITLE="Glimmer $SHORT"
@@ -166,6 +167,13 @@ if [ "$(release_api --jq .draft)" = true ]; then
 fi
 [ "$(release_api --jq .draft)" = false ] || { echo "ERR: release $TAG is still a draft" >&2; exit 1; }
 echo "  ✓ release published"
+# The attestation bundle rides along for offline verification; a retry keeps the first one.
+if [ -f "$PROVENANCE" ]; then
+	if [ -z "$(release_api --jq ".assets[] | select(.name==\"$(basename "$PROVENANCE")\") | .id")" ]; then
+		gh release upload "$TAG" "$PROVENANCE" -R "$REPO"
+	fi
+	echo "  ✓ provenance attached"
+fi
 
 # Commit the appcast after pinning the release tag. Hosted releases use GitHub's
 # signing key; local releases retain the maintainer's configured Git signing.
