@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 //
 //  BitrateDownshiftController.swift
 //  Bitrate is set in SDP; 0x5502 collides with IDX_SET_RGB_LED, so recovery needs reconnect.

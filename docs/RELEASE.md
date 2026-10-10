@@ -116,12 +116,15 @@ required checks to pass, then dispatch **Release** on `main` with operation
 full `candidate_sha`.
 
 Promotion verifies the downloaded DMG and ZIP against their attestations and
-published digests. Main must have the same source tree as the candidate, except
-for `appcast.xml`. The workflow marks the existing release stable and latest,
-removes the item's `rc` channel, and updates Homebrew. It never rebuilds,
-re-signs or repackages. The original candidate tag and asset URLs stay in place;
-the stable release title uses the final marketing version. The appcast keeps the
-exact ZIP URL, signature and size that the candidate used.
+published digests. Main must have the same shipped inputs as the candidate: the
+app, login item and helper sources, the Xcode project and package pins, the
+Makefile and the build, signing and packaging scripts (`SHIPPED` in
+`scripts/promote-release.py`). Release tooling, docs and tests may move on. The
+workflow marks the existing release stable and latest, removes the item's `rc`
+channel, and updates Homebrew. It never rebuilds, re-signs or repackages. The
+original candidate tag and asset URLs stay in place; the stable release title
+uses the final marketing version. The appcast keeps the exact ZIP URL, signature
+and size that the candidate used.
 
 Release notes come from the version's `CHANGELOG.md` section: a flat list of
 changes players will notice. The publisher includes these notes in GitHub and

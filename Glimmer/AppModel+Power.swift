@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Wake and Connect work and notifications share per-model cancellation state.
 
 import AppKit

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Publish the prepared notarized DMG and Sparkle ZIP without changing their bytes.
 # Update signing uses signing-creds.sh; GitHub authentication uses gh.
 # Args: <short-version> <build-number> <app-path> <dist-dir> <releases-repo> [rc-tag]

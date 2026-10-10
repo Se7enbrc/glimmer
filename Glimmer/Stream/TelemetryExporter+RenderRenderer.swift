@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // AVFoundation's counters are renderer-scoped, not physical scanout or game FPS.
 
 import Foundation

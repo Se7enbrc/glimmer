@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Stamp the source commit and its time into telemetry, so a clean build is a pure
 # function of the commit (reproducible). Dirty builds stamp the wall clock instead.
 # Generated output is ignored by git and contains no credentials.

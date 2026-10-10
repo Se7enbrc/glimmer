@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 /// AppKit owns the Space until its transition completes, even if the style bit already changed.
 struct StreamWindowCloseState {
     enum Transition: String { case idle, entering, exiting }
