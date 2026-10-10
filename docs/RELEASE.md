@@ -43,10 +43,10 @@ update Homebrew.
 
 **One command.** From the pushed PR branch, `make rc` does the steps above. It
 refuses a dirty or unpushed tree, a build number that doesn't exceed every build
-in the live appcast, and a marketing version that already has a final tag. It
-waits up to 90 minutes for the required checks, stopping at once on a failure,
-then moves `release-candidate` to HEAD, creates and pushes the next signed
-`-rc.N` tag and dispatches **Release**. It opens the run; approving the
+on the `appcast` branch, and a marketing version that already has a final tag.
+It waits up to 90 minutes for the required checks, stopping at once on a
+failure, then moves `release-candidate` to HEAD, creates and pushes the next
+signed `-rc.N` tag and dispatches **Release**. It opens the run; approving the
 protected `release` deployment there is the remaining step. Rerunning prints the
 existing run. `make rc DRY_RUN=1` prints each step without changing anything.
 
@@ -119,7 +119,8 @@ full `candidate_sha`.
 
 Promotion verifies the downloaded DMG and ZIP against their attestations and
 published digests. Main must have the same source tree as the candidate, except
-for `appcast.xml`. The workflow marks the existing release stable and latest,
+for `appcast.xml`, which only candidates cut before the feed moved to its own
+branch still carry. The workflow marks the existing release stable and latest,
 removes the item's `rc` channel, and updates Homebrew. It never rebuilds,
 re-signs or repackages. The original candidate tag and asset URLs stay in place;
 the stable release title uses the final marketing version. The appcast keeps the
@@ -139,13 +140,50 @@ notarization, Gatekeeper acceptance and app/helper launch authorization.
 
 ### Website and update feed
 
-GitHub Pages serves the repository root on `main` at `glimmer.ugfugl.io`.
-`index.html` and `website/` are the static landing page; `.nojekyll` keeps the
-site and `appcast.xml` as plain files. Preview with
-`python3 -m http.server 8765` from the repository root. No site build is needed.
+GitHub Pages serves `glimmer.ugfugl.io` from the **Pages** workflow, which
+uploads `main`'s files as they are (no Jekyll) plus `appcast.xml` from the
+`appcast` branch. `index.html` and `website/` are the static landing page. The
+`appcast` branch holds only the machine-written feed: releases and promotions
+commit there, so they never move `main` or put open pull requests behind it.
+Preview the site with `python3 -m http.server 8765` from the repository root.
+
+The workflow deploys on every push to `main`, after every **Release** run and on
+demand. A push to `appcast` cannot start it, because push events run the
+workflows on the pushed branch and that branch has none. After a manual change
+to the feed, run `gh workflow run pages.yml -R Se7enbrc/glimmer`; local
+`make release-publish` does this itself.
+
+One-time setup, in this order. Promote any pending candidate first with the
+tooling already on `main`, then:
+
+1. Create the `appcast` branch as a single signed commit holding `main`'s
+   current feed blob, and nothing else. The ruleset that covers every branch
+   except `main` and `dependabot/**` already limits it to the maintainer and the
+   release app.
+
+   ```bash
+   git fetch origin main
+   TREE="$(printf '100644 blob %s\tappcast.xml\n' "$(git rev-parse origin/main:appcast.xml)" | git mktree)"
+   COMMIT="$(git commit-tree -S "$TREE" -m "appcast: start the update feed branch")"
+   git push git@github.com:Se7enbrc/glimmer.git "$COMMIT:refs/heads/appcast"
+   git fetch origin appcast
+   git ls-tree -r --name-only origin/appcast   # only appcast.xml
+   curl -fsSL https://se7enbrc.github.io/glimmer/appcast.xml | cmp - <(git show origin/appcast:appcast.xml)
+   ```
+
+2. Switch the Pages source to GitHub Actions:
+   `gh api -X PUT repos/Se7enbrc/glimmer/pages -f build_type=workflow`. The last
+   legacy deployment stays live until the workflow's first deploy.
+3. Merge the pull request that adds the workflow. Its push to `main` deploys the
+   site; confirm the run passed and the live feed still matches the branch.
+
+Until step 3, `main` keeps serving the feed through the legacy build, so the
+order matters: merging before steps 1 and 2 would publish a site without
+`appcast.xml`.
 
 Configure Cloudflare with a DNS-only CNAME to `se7enbrc.github.io` and GitHub's
-domain verification TXT record. Keep the TXT record and the root `CNAME` file.
+domain verification TXT record. Keep the TXT record and the root `CNAME` file; a
+workflow deploy takes the domain from the Pages settings, not from that file.
 After any domain or Pages change, verify that the website has valid HTTPS and
 that `https://se7enbrc.github.io/glimmer/appcast.xml` still resolves to the
 update feed. Released apps use that original URL.
@@ -272,12 +310,13 @@ it is not a guarantee that no credential ever existed in memory or on disk. See
 [GitHub's hosted-runner lifecycle](https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/use-github-hosted-runners).
 
 Publication uses the existing immutable-release checks and commits the appcast
-after pinning the release tag. Hosted appcast and cask updates use GitHub's
-`createCommitOnBranch` API, which signs the commit with GitHub's key. The
-request includes the expected branch-head SHA, so a concurrent update fails
-instead of being overwritten. The script requires GitHub to report both a valid
-signature and its own signing key. No personal SSH signing key goes to the
-runner. Local publication continues using normal Git commits and the
+to the `appcast` branch after pinning the release tag. Every appcast update,
+hosted or local, and hosted cask updates use GitHub's `createCommitOnBranch`
+API, which signs the commit with GitHub's key. The request includes the expected
+branch-head SHA (the `appcast` head the feed was read from), so a concurrent
+update fails instead of being overwritten. The script requires GitHub to report
+both a valid signature and its own signing key. No personal SSH signing key goes
+to the runner. Local cask updates continue using normal Git commits and the
 maintainer's configured signing method.
 
 The API commit updates the remote branch; the disposable hosted checkout keeps
@@ -287,8 +326,8 @@ commit may already exist. The script never retries a commit mutation or falls
 back to an unsigned commit. See
 [GitHub's commit API](https://docs.github.com/en/graphql/reference/commits#createcommitonbranch).
 
-An update authenticated with the scoped token triggers the existing Pages build;
-`GITHUB_TOKEN` would not. Check that Pages finishes and the public appcast
+The Pages workflow deploys the new feed when the Release run finishes, whether
+or not a later step failed. Check that Pages finishes and the public appcast
 contains the new version. The repository token provided automatically by Actions
 has read-only Contents, Actions and Security events access, plus write access to
 Attestations. The job also has OIDC token permission for the attestation
