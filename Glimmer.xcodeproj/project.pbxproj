@@ -379,6 +379,9 @@
 		6A0C06102026101000000003 /* EnetControlLoopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A0C06102026101000000004 /* EnetControlLoopTests.swift */; };
 		6A0C06102026101000000001 /* EnetControlInboundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A0C06102026101000000002 /* EnetControlInboundTests.swift */; };
 		DEC0DE202609252800000001 /* InputBatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609252800000002 /* InputBatcherTests.swift */; };
+		DEC0DE202610100800000001 /* StreamViewPointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000002 /* StreamViewPointerTests.swift */; };
+		DEC0DE202610100800000011 /* StreamViewKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */; };
+		DEC0DE202610100800000021 /* StreamViewCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */; };
 		DEC0DE202609221000000003 /* RtspClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221000000004 /* RtspClientTests.swift */; };
 		DEC0DE202609222200000006 /* HostContextMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222200000005 /* HostContextMenuTests.swift */; };
 		DEC0DE202609222200000004 /* StreamButtonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222200000003 /* StreamButtonTests.swift */; };
@@ -854,6 +857,9 @@
 		6A0C06102026101000000004 /* EnetControlLoopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnetControlLoopTests.swift"; sourceTree = "<group>"; };
 		6A0C06102026101000000002 /* EnetControlInboundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnetControlInboundTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609252800000002 /* InputBatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBatcherTests.swift; sourceTree = "<group>"; };
+		DEC0DE202610100800000002 /* StreamViewPointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewPointerTests.swift; sourceTree = "<group>"; };
+		DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewKeyboardTests.swift; sourceTree = "<group>"; };
+		DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewCaptureTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221000000004 /* RtspClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RtspClientTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609222200000005 /* HostContextMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostContextMenuTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609222200000003 /* StreamButtonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamButtonTests.swift"; sourceTree = "<group>"; };
@@ -1369,6 +1375,9 @@
 				6A0C06102026101000000004 /* EnetControlLoopTests.swift */,
 				6A0C06102026101000000002 /* EnetControlInboundTests.swift */,
 				DEC0DE202609252800000002 /* InputBatcherTests.swift */,
+				DEC0DE202610100800000002 /* StreamViewPointerTests.swift */,
+				DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */,
+				DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */,
 				DEC0DE202609221000000004 /* RtspClientTests.swift */,
 				DEC0DE202609220300000010 /* AppShellTests.swift */,
 				DEC0DE202609222200000005 /* HostContextMenuTests.swift */,
@@ -1927,6 +1936,9 @@
 				6A0C06102026101000000003 /* EnetControlLoopTests.swift in Sources */,
 				6A0C06102026101000000001 /* EnetControlInboundTests.swift in Sources */,
 				DEC0DE202609252800000001 /* InputBatcherTests.swift in Sources */,
+				DEC0DE202610100800000001 /* StreamViewPointerTests.swift in Sources */,
+				DEC0DE202610100800000011 /* StreamViewKeyboardTests.swift in Sources */,
+				DEC0DE202610100800000021 /* StreamViewCaptureTests.swift in Sources */,
 				DEC0DE202609221000000003 /* RtspClientTests.swift in Sources */,
 				DEC0DE20260922030000000F /* AppShellTests.swift in Sources */,
 				DEC0DE202609222200000006 /* HostContextMenuTests.swift in Sources */,
