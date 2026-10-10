@@ -49,7 +49,8 @@ final class InputRecordingBackend: StreamingBackend {
     private let motionSends = OSAllocatedUnfairLock(initialState: [ControllerMotionSend]())
     private let keyboardSends = OSAllocatedUnfairLock(initialState: [KeyboardSend]())
     private let mouseMoveSends = OSAllocatedUnfairLock(initialState: [MouseMoveSend]())
-    private let idrRequests = OSAllocatedUnfairLock(initialState: 0)
+    private let connectStarts = OSAllocatedUnfairLock(initialState: [BackendServerInfo]())
+    private let idrCount = OSAllocatedUnfairLock(initialState: 0)
     private let hostHDR = OSAllocatedUnfairLock<HdrMetadata?>(initialState: nil)
 
     var calls: [ControllerSend] { sends.withLock { $0 } }
@@ -58,19 +59,22 @@ final class InputRecordingBackend: StreamingBackend {
     var motions: [ControllerMotionSend] { motionSends.withLock { $0 } }
     var keyboard: [KeyboardSend] { keyboardSends.withLock { $0 } }
     var mouseMoves: [MouseMoveSend] { mouseMoveSends.withLock { $0 } }
-    var idrRequestCount: Int { idrRequests.withLock { $0 } }
+    var startedServers: [BackendServerInfo] { connectStarts.withLock { $0 } }
+    var idrRequests: Int { idrCount.withLock { $0 } }
     var hdr: HdrMetadata? {
         get { hostHDR.withLock { $0 } }
         set { hostHDR.withLock { $0 = newValue } }
     }
 
-    func startConnection(server: BackendServerInfo, config: BackendStreamConfig) throws {}
+    func startConnection(server: BackendServerInfo, config: BackendStreamConfig) throws {
+        connectStarts.withLock { $0.append(server) }
+    }
     func stopConnection() {}
     func interruptConnection() {}
     func attachVideoSink(_ sink: VideoSink) {}
     func attachAudioSink(_ sink: NativeAudioSink) {}
     func estimatedRtt() -> (rttMs: Double, varianceMs: Double)? { nil }
-    func requestIdrFrame() { idrRequests.withLock { $0 += 1 } }
+    func requestIdrFrame() { idrCount.withLock { $0 += 1 } }
     func hdrMetadata() -> HdrMetadata? { hdr }
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }

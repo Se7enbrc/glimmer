@@ -308,6 +308,9 @@
 		DEC0DE202609258100000001 /* RtpReceiveQualityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258100000002 /* RtpReceiveQualityTests.swift */; };
 		DEC0DE202609253900000001 /* VideoDepacketizerRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */; };
 		D2B0000C /* PresentTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000B /* PresentTripTests.swift */; };
+		D2C7A002 /* StreamSessionDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A001 /* StreamSessionDecisionTests.swift */; };
+		D2C7A004 /* EnvSignalStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A003 /* EnvSignalStateMachineTests.swift */; };
+		D2C7A006 /* BackendGlueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A005 /* BackendGlueTests.swift */; };
 		D1A1B003 /* HUDBackdropLuminanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A1B004 /* HUDBackdropLuminanceTests.swift */; };
 		DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221200000002 /* FramePacerTests.swift */; };
 		DEC0DE202609252400000001 /* FramePacerTickDeficitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */; };
@@ -780,6 +783,9 @@
 		DEC0DE202609258100000002 /* RtpReceiveQualityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RtpReceiveQualityTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDepacketizerRecoveryTests.swift; sourceTree = "<group>"; };
 		D2B0000B /* PresentTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentTripTests.swift; sourceTree = "<group>"; };
+		D2C7A001 /* StreamSessionDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSessionDecisionTests.swift; sourceTree = "<group>"; };
+		D2C7A003 /* EnvSignalStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvSignalStateMachineTests.swift; sourceTree = "<group>"; };
+		D2C7A005 /* BackendGlueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendGlueTests.swift; sourceTree = "<group>"; };
 		D1A1B004 /* HUDBackdropLuminanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDBackdropLuminanceTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221200000002 /* FramePacerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerTickDeficitTests.swift; sourceTree = "<group>"; };
@@ -1292,6 +1298,9 @@
 				DEC0DE202609258100000002 /* RtpReceiveQualityTests.swift */,
 				DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */,
 				D2B0000B /* PresentTripTests.swift */,
+				D2C7A001 /* StreamSessionDecisionTests.swift */,
+				D2C7A003 /* EnvSignalStateMachineTests.swift */,
+				D2C7A005 /* BackendGlueTests.swift */,
 				D1A1B004 /* HUDBackdropLuminanceTests.swift */,
 				DEC0DE202609221200000002 /* FramePacerTests.swift */,
 				DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */,
@@ -1847,6 +1856,9 @@
 				DEC0DE202609258100000001 /* RtpReceiveQualityTests.swift in Sources */,
 				DEC0DE202609253900000001 /* VideoDepacketizerRecoveryTests.swift in Sources */,
 				D2B0000C /* PresentTripTests.swift in Sources */,
+				D2C7A002 /* StreamSessionDecisionTests.swift in Sources */,
+				D2C7A004 /* EnvSignalStateMachineTests.swift in Sources */,
+				D2C7A006 /* BackendGlueTests.swift in Sources */,
 				D1A1B003 /* HUDBackdropLuminanceTests.swift in Sources */,
 				DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */,
 				DEC0DE202609252400000001 /* FramePacerTickDeficitTests.swift in Sources */,

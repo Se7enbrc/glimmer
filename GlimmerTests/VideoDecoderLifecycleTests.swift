@@ -235,7 +235,7 @@ struct VideoDecoderLifecycleTests {
 
         decoder.recoverPresentPath(reason: "test")
 
-        #expect(backend.idrRequestCount == 1)
+        #expect(backend.idrRequests == 1)
         #expect(rebuilds == 0)
     }
 

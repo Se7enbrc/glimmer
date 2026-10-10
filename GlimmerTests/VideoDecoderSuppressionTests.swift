@@ -50,7 +50,7 @@ struct VideoDecoderSuppressionTests {
         #expect(pacer.presentSuppressed)
         #expect(decoder.statsCollector.gapJudgingExcluded)
         #expect(decoder.decodeGateTimer != nil)
-        #expect(backend.idrRequestCount == 0)
+        #expect(backend.idrRequests == 0)
 
         decoder.setPresentSuppressed(false)
         decoder.setPresentSuppressed(false)
@@ -58,7 +58,7 @@ struct VideoDecoderSuppressionTests {
         #expect(!pacer.presentSuppressed)
         #expect(!decoder.statsCollector.gapJudgingExcluded)
         #expect(decoder.decodeGateTimer == nil)
-        #expect(backend.idrRequestCount == 1)
+        #expect(backend.idrRequests == 1)
     }
 
     /// After a gated span the resync latch owns the refocus keyframe: no second request,
@@ -75,7 +75,7 @@ struct VideoDecoderSuppressionTests {
 
         #expect(!decoder.decodeGated)
         #expect(decoder.secondsSinceDecodeGateLifted() < 60)
-        #expect(backend.idrRequestCount == 0)
+        #expect(backend.idrRequests == 0)
         #expect(submit(decoder, idr: false) == StreamProtocol.DR_NEED_IDR)
         #expect(decoder.decodeGateDisposition(isIDR: false) == .feed(epoch: 0))
     }
@@ -210,13 +210,13 @@ struct VideoDecoderSuppressionTests {
         center.post(name: AVSampleBufferVideoRenderer.requiresFlushToResumeDecodingDidChangeNotification,
                     object: layer.sampleBufferRenderer)
         await DispatchQueue.main.drainForTest()
-        #expect(backend.idrRequestCount == 0)
+        #expect(backend.idrRequests == 0)
 
         center.post(name: .AVSampleBufferDisplayLayerFailedToDecode, object: layer)
-        for _ in 0..<200 where backend.idrRequestCount == 0 {
+        for _ in 0..<200 where backend.idrRequests == 0 {
             try await Task.sleep(for: .milliseconds(5))
         }
-        #expect(backend.idrRequestCount == 1)
+        #expect(backend.idrRequests == 1)
     }
 
     private func sampleBuffer() throws -> CMSampleBuffer {
