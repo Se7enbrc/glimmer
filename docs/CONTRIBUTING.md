@@ -488,7 +488,7 @@ picks versions, and approves each release in the protected `release`
 environment. Contributors propose changes through issues and fork pull requests.
 Security reports follow [SECURITY.md](SECURITY.md). Everyone taking part follows
 the [code of conduct](../CODE_OF_CONDUCT.md); report problems to
-conduct@ugfugl.io.
+glimmer-conduct@ugfugl.io.
 
 The maintainer's GitHub account uses a passkey for two-factor authentication,
 and only the maintainer has write access. Release secrets live in Doppler, which
