@@ -1,6 +1,8 @@
 """GitHub commit requests use inert responses and disposable metadata only."""
 
 import base64
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -14,6 +16,7 @@ from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
+import github_signed_commit
 from github_signed_commit import commit_file
 
 HEAD = "a" * 40
@@ -95,6 +98,38 @@ class GitHubSignedCommitTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "may have changed") as raised:
                 self.commit()
         self.assertNotIn("private detail", str(raised.exception))
+
+    def test_multiline_or_empty_message_and_malformed_commit_id_are_refused(self):
+        for message in ("", "a\nb", "a\rb"):
+            with self.subTest(message=message), patch("github_signed_commit.subprocess.run") as run:
+                with self.assertRaisesRegex(ValueError, "single-line message"):
+                    commit_file("Se7enbrc/glimmer", HEAD, "appcast.xml", self.file, message)
+                run.assert_not_called()
+        for oid in ("short", COMMIT.upper(), 7, None):
+            body = json.dumps({"data": {"createCommitOnBranch": {"commit": {
+                "oid": oid, "signature": {"isValid": True, "wasSignedByGitHub": True}}}}})
+            with self.subTest(oid=oid), patch("github_signed_commit.subprocess.run") as run:
+                run.return_value = subprocess.CompletedProcess([], 0, body, "")
+                with self.assertRaisesRegex(ValueError, "did not confirm a verified commit"):
+                    self.commit()
+
+    def test_main_prints_only_the_verified_oid_and_maps_failures_to_exit_one(self):
+        argv = ["x", "Se7enbrc/glimmer", HEAD, "appcast.xml", str(self.file), "msg"]
+        out = io.StringIO()
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(out), \
+                patch("github_signed_commit.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, response(), "")
+            github_signed_commit.main()
+        self.assertEqual(out.getvalue(), COMMIT + "\n")
+        for index, value, message in ((4, "/absent/file", "Couldn't read the release metadata file"),
+                                      (2, "short", "full expected head SHA")):
+            args = [*argv[:index], value, *argv[index + 1:]]
+            err = io.StringIO()
+            with self.subTest(message=message), patch.object(sys, "argv", args), \
+                    contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as status:
+                github_signed_commit.main()
+            self.assertEqual(status.exception.code, 1)
+            self.assertIn(message, err.getvalue())
 
 
 TAP_TOOL = r'''

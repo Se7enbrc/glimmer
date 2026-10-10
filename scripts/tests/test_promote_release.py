@@ -1,7 +1,10 @@
 """Promotion reuses verified public assets and never invokes signing or builds."""
 
+import contextlib
+import copy
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SCRIPTS = Path(__file__).parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -165,6 +168,96 @@ class CandidatePromotionTests(unittest.TestCase):
         self.feed = self.feed.replace("inert-signature", "different-signature")
         with self.assertRaisesRegex(ValueError, "changed after provenance"):
             PROMOTE.validate(TAG, SHA)
+
+    def test_malformed_sha_or_tag_is_refused_before_any_command(self):
+        for tag, sha, message in ((TAG, "B" * 40, "full lowercase"), (TAG, "abc", "full lowercase"),
+                                  ("2026.10.6", SHA, "invalid candidate tag"),
+                                  ("2026.10.6-rc.0", SHA, "invalid candidate tag")):
+            with self.subTest(tag=tag, sha=sha), self.assertRaisesRegex(ValueError, message):
+                PROMOTE.source(tag, sha)
+        self.assertEqual(self.calls, [])
+
+    def test_main_that_moved_or_tag_for_another_version_is_refused(self):
+        real = self.command
+        moved = lambda args, message: "d" * 40 if args == ["git", "rev-parse", "origin/main"] else real(args, message)
+        with patch.object(PROMOTE, "command", side_effect=moved), self.assertRaisesRegex(ValueError, "main moved"):
+            PROMOTE.source(TAG, SHA)
+        with self.assertRaisesRegex(ValueError, "does not match its tag"):
+            PROMOTE.source("2026.10.7-rc.1", SHA)
+
+    def test_release_must_be_published_with_exactly_one_complete_dmg_and_zip(self):
+        zip_name = f"Glimmer-{SHORT}.zip"
+        base = copy.deepcopy(self.data)
+        for label, change, message in (
+                ("draft", {"draft": True}, "not published"),
+                ("tag", {"tag_name": "other"}, "not published"),
+                ("missing", {"assets": self.data["assets"][:1]}, "exactly one DMG and one ZIP"),
+                ("duplicate", {"assets": [*self.data["assets"], self.data["assets"][0]]}, "exactly one"),
+                ("empty", {"assets": [{**a, "size": 0} if a["name"] == zip_name else a
+                                      for a in self.data["assets"]]}, "incomplete"),
+                ("uploading", {"assets": [{**a, "state": "starter"} for a in self.data["assets"]]}, "incomplete")):
+            with self.subTest(label=label):
+                self.data = {**copy.deepcopy(base), **change}
+                with self.assertRaisesRegex(ValueError, message):
+                    PROMOTE.release(TAG, SHORT)
+
+    def test_feed_must_hold_this_candidate_with_matching_assets(self):
+        for label, feed, message in (
+                ("no channel", "<rss/>", "no channel"),
+                ("other asset url", self.feed.replace(f"/{TAG}/", "/other-tag/"), "different assets"),
+                ("no candidate", self.feed.replace(BUILD, "20261001"), "ValueError"),
+                ("other channel", self.feed.replace(">rc<", ">beta<"), "ValueError")):
+            with self.subTest(label=label):
+                self.feed = feed
+                with self.assertRaises(ValueError) as caught:
+                    PROMOTE.feed_item(SHORT, BUILD, TAG)
+                if message != "ValueError":
+                    self.assertIn(message, str(caught.exception))
+
+    def test_empty_download_or_length_mismatch_blocks_the_proof(self):
+        self.assets[f"Glimmer-{SHORT}.dmg"] = b""
+        with self.assertRaisesRegex(ValueError, "download is empty"):
+            PROMOTE.prepare(TAG, SHA)
+        self.assets[f"Glimmer-{SHORT}.dmg"] = b"dmg"
+        self.feed = self.feed.replace('length="9"', 'length="999"')
+        with patch.object(PROMOTE, "directory", return_value=self.root / "second"), \
+                self.assertRaisesRegex(ValueError, "differs from its signed update length"):
+            PROMOTE.prepare(TAG, SHA)
+        self.assertFalse((self.root / "second/verified.json").exists())
+
+    def test_run_directory_rejects_unsafe_runner_environment(self):
+        for env in ({"RUNNER_TEMP": "relative"}, {"RUNNER_TEMP": str(self.root / "missing")},
+                    {"GITHUB_RUN_ID": "1/../x"}, {"GITHUB_RUN_ATTEMPT": "x"}):
+            with self.subTest(env=env), patch.dict(os.environ, env), self.assertRaisesRegex(ValueError, "invalid promotion"):
+                PROMOTE.directory()
+
+    def test_command_raises_the_given_message_on_nonzero_exit(self):
+        self.mock.stop()
+        self.addCleanup(self.mock.start)
+        ok = subprocess.CompletedProcess([], 0, stdout="out", stderr="")
+        bad = subprocess.CompletedProcess([], 1, stdout="", stderr="secret detail")
+        with patch.object(PROMOTE.subprocess, "run", return_value=ok):
+            self.assertEqual(PROMOTE.command(["x"], "failed"), "out")
+        with patch.object(PROMOTE.subprocess, "run", return_value=bad), \
+                self.assertRaisesRegex(ValueError, "^failed$"):
+            PROMOTE.command(["x"], "failed")
+
+    def test_main_reports_errors_on_stderr_with_exit_one_and_success_on_stdout(self):
+        for phase, fails in (("prepare", True), ("validate", False)):
+            err, out = io.StringIO(), io.StringIO()
+            fake = {"prepare": Mock(side_effect=ValueError("boom")), "validate": Mock()}
+            with patch.object(PROMOTE, "prepare", fake["prepare"]), patch.object(PROMOTE, "validate", fake["validate"]), \
+                    patch.object(sys, "argv", ["x", phase, TAG, SHA]), \
+                    contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                if fails:
+                    with self.assertRaises(SystemExit) as caught:
+                        PROMOTE.main()
+                    self.assertEqual(caught.exception.code, 1)
+                    self.assertEqual(err.getvalue(), "ERR: boom\n")
+                else:
+                    PROMOTE.main()
+                    self.assertIn("validate succeeded", out.getvalue())
+                    fake["validate"].assert_called_once_with(TAG, SHA)
 
 
 if __name__ == "__main__":
