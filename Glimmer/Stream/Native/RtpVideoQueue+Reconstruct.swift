@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
 //
 //  RtpVideoQueue+Reconstruct.swift
 //  FEC reconstruction and frame submission on the single RTP receive thread.

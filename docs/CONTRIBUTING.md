@@ -454,8 +454,6 @@ Practically, before you call something done:
   the checks in the review. Hosted CI also runs `make verify` on an Apple
   Silicon macOS 26 runner with Xcode 26.6 and compiler warnings treated as
   errors. PR jobs receive no signing credentials and cannot publish releases.
-  The local push hook checks the current worktree and cannot verify a different
-  ref being pushed.
 
 Hosted verification, CodeQL and releases use the same Xcode 26.6 toolchain on
 macOS 26. These checks exercise the minimum supported OS family, but do not
@@ -482,3 +480,20 @@ Workflow runs from all outside contributors, including returning contributors,
 require a maintainer's approval. GitHub allows anyone with repository write
 access to approve runs; that access is reserved for trusted maintainers.
 Approving a PR workflow never grants it release credentials.
+
+## Roles and continuity
+
+Glimmer has one maintainer, who triages issues, reviews and merges every change,
+picks versions, and approves each release in the protected `release`
+environment. Contributors propose changes through issues and fork pull requests.
+Security reports follow [SECURITY.md](SECURITY.md). Everyone taking part follows
+the [code of conduct](../CODE_OF_CONDUCT.md); report problems to
+glimmer-conduct@ugfugl.io.
+
+The maintainer's GitHub account uses a passkey for two-factor authentication,
+and only the maintainer has write access. Release secrets live in Doppler, which
+is reached through that GitHub account. A designated successor has emergency
+access to the maintainer's password manager, which holds the credentials for
+GitHub, Doppler and the project's domain, and holds the account recovery codes,
+so the repository, releases and update feed can continue if the maintainer
+becomes unavailable or loses a device.

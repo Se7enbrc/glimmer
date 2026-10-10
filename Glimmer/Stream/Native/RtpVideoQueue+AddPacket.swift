@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
 //
 //  RtpVideoQueue+AddPacket.swift
 //  RTP packet assembly on the single receive thread shared with reconstruction.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Receive-thread quality accounting uses fixed storage: no allocation or clock
 // read on the steady path. Only rare gaps and excessive reorder pay locked telemetry.
 

@@ -270,6 +270,29 @@ the cert cannot also produce the PIN.
   rejects unrelated senders; it does not authenticate plaintext video or defeat
   an attacker capable of spoofing the PC's IP address.
 
+### Network paths
+
+Every connection Glimmer makes, as of 2026-10-10. "On-path attacker" means a
+device on the same network that can read, drop, delay or inject packets between
+the Mac and the PC. Stock Sunshine fixes the pairing, RTSP, control and media
+formats; Glimmer implements them and cannot change their primitives.
+
+| Path                                                                                                                   | Transport                                                                                                         | Confidentiality                                                                                          | Integrity and authentication                                                                                        | What an on-path attacker can do                                                                                                                                                                              | Mitigation or constraint                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Discovery (`Stream/Discovery.swift`)                                                                                   | Bonjour (mDNS) browse for `_nvstream._tcp` and `_nvstream-tcp._tcp`                                               | None                                                                                                     | None                                                                                                                | List a look-alike PC in Pair a PC…, or hide a real one                                                                                                                                                       | Pairing still needs the PIN. Address healing (`HostsStore.healAddress`) saves a discovered address only after pinned HTTPS there returns the paired PC's unique ID.  |
+| Reachability (`HostReachability` in `Stream/Network.swift`)                                                            | TCP connect to the PC's HTTP port, no payload                                                                     | Nothing sent                                                                                             | None                                                                                                                | Make the readiness chip show a PC as awake or unreachable                                                                                                                                                    | Status only. Every request that matters goes over pinned HTTPS.                                                                                                      |
+| Pre-pairing `/serverinfo` (`NetworkClient+Endpoints.swift`)                                                            | HTTP on 47989                                                                                                     | None                                                                                                     | None                                                                                                                | Read or forge the PC's name, ports, MAC address and version                                                                                                                                                  | `<PlainCert>` and `<PairStatus>` are ignored, so a forged reply cannot plant a pin or skip pairing. Plain HTTP before pairing is Sunshine's protocol.                |
+| Pairing rounds 1 to 4 (`Stream/Pairing.swift`, `Pairing+Crypto.swift`)                                                 | HTTP on 47989                                                                                                     | Challenges are AES-128-ECB under `SHA-256(salt‖PIN)[0..16]`; certificates and final secrets in the clear | RSA (2048 bits or more) SHA-256 signatures, checked against the PC's certificate, and a PIN proof hash              | Record the exchange and guess the four-digit PIN offline. To impersonate the PC it needs the PIN during the handshake: Glimmer checks the PC's signature and PIN proof before sending its own pairing secret | Pair on a trusted network. ECB and the four-digit PIN are Sunshine's protocol.                                                                                       |
+| Pairing check and control: `pairchallenge`, `/serverinfo`, `/applist`, `/launch`, `/cancel` (`ControlTransport.swift`) | TLS on 47984 (Network.framework)                                                                                  | TLS 1.2 minimum, session resumption off                                                                  | Mutual TLS. The PC's leaf certificate must be byte-equal to the pinned PEM; the system trust store is not consulted | Block requests. Cannot read or change them; a different certificate fails closed and shows Trust needed                                                                                                      | No ephemeral key agreement suite is required, so forward secrecy depends on the suite Sunshine negotiates. `/launch` carries the session keys inside this channel.   |
+| RTSP setup (`Native/RtspClient.swift`, `RtspClient+Handshake.swift`)                                                   | TCP to the `sessionUrl0` address                                                                                  | AES-128-GCM per message when `sessionUrl0` is `rtspenc://`                                               | GCM tag on every message; unencrypted replies are rejected                                                          | Block setup. Cannot read or change the SDP, including the encryption flags                                                                                                                                   | Sunshine returns `rtspenc://` when the client sends `corever=1`, which Glimmer always does. The URL arrives over pinned TLS, so it cannot be downgraded on the path. |
+| Control channel, including keyboard, mouse and controller input (`Native/EnetControlChannel*.swift`)                   | ENet over UDP                                                                                                     | AES-128-GCM for every message, both directions                                                           | GCM tag; inbound messages of unencrypted types are rejected                                                         | Drop or delay packets. Cannot read or forge input                                                                                                                                                            | Deterministic counter IVs with direction bytes under a fresh per-session key (`Native/StreamCrypto.swift`).                                                          |
+| Video RTP (`Native/VideoRtpReceiver.swift`, `Native/StreamCrypto.swift`)                                               | UDP                                                                                                               | Plaintext, unless the PC requires encryption, then AES-128-GCM                                           | Plaintext: source IP check only. Encrypted: GCM tag                                                                 | Plaintext: watch the stream, and inject packets if it can spoof the PC's IP address. Encrypted: drop packets only                                                                                            | Sunshine's mandatory encryption mode, a stock setting, encrypts video, and Glimmer follows it. Parsers are fuzzed under AddressSanitizer.                            |
+| Audio RTP (`Native/RtpAudioReceiver*.swift`)                                                                           | UDP                                                                                                               | AES-128-CBC whenever the PC offers it, which Sunshine always does                                        | None. Source IP check, block-size and padding checks                                                                | Cannot read audio. Can inject or alter packets by spoofing the PC's IP address; they decode as noise or are dropped                                                                                          | IVs derive from a session value and the 16-bit sequence number and repeat when it wraps. Sunshine offers no authenticated audio mode.                                |
+| Stream keepalives (`Native/UdpPinger.swift`)                                                                           | UDP to the video and audio ports                                                                                  | None                                                                                                     | None                                                                                                                | Read the session's ping identifier                                                                                                                                                                           | Sunshine's protocol. They carry no keys or input.                                                                                                                    |
+| Wake on LAN (`WakeOnLAN.swift`)                                                                                        | UDP magic packet to ports 9 and 47009 on broadcast addresses, and to the PC's addresses with Sunshine's ports too | None                                                                                                     | None                                                                                                                | Read the PC's MAC address, already visible on the LAN. Anyone on the network can wake the PC the same way                                                                                                    | Wake on LAN has no authentication.                                                                                                                                   |
+| Update feed and archive (Sparkle, `Glimmer/Info.plist`)                                                                | HTTPS to `se7enbrc.github.io`, archive from GitHub Releases                                                       | TLS with system trust                                                                                    | Ed25519 signature on each ZIP against `SUPublicEDKey`; the feed itself is unsigned                                  | Withhold updates, or list a different archive signed with Glimmer's key, such as an older release. Cannot get an unsigned archive installed                                                                  | On 2026-10-10 the feed URL redirected to `http://glimmer.ugfugl.io/appcast.xml` because GitHub Pages' HTTPS enforcement was off; see the roadmap's `hardened_site`.  |
+| Telemetry `/metrics` (`Stream/TelemetryExporter.swift`)                                                                | HTTP listener on port 9847                                                                                        | None                                                                                                     | None                                                                                                                | Off by default. When telemetry is on, it listens on loopback only; a second opt-in, `telemetryListenLAN`, lets anyone on the LAN read performance numbers                                                    | Performance and input-rate numbers only; the PC and the Mac appear as pseudonyms.                                                                                    |
+
 ## Runtime hardening
 
 **Glimmer runs UNSANDBOXED.** This is a deliberate trade, not an oversight.
@@ -405,6 +428,69 @@ provide DRM or a screen-recording privacy boundary.
   random per-install salt.
 - Pin-mismatch events (no fingerprints).
 - Pairing-step transitions (no payload data).
+
+## Verifying a download
+
+None of these checks installs or opens Glimmer. They were run on 2026-10-10
+against 2026.10.5, the latest stable release, and 2026.10.6-rc.1.
+
+**Build provenance.** Releases built by the hosted Release workflow carry a
+GitHub artifact attestation for the DMG and the Sparkle ZIP. The first is
+2026.10.6-rc.1. Earlier releases have none: for 2026.10.5,
+`gh attestation verify` fails with HTTP 404.
+
+```bash
+gh attestation verify Glimmer-2026.10.6.dmg --repo Se7enbrc/glimmer \
+  --signer-workflow Se7enbrc/glimmer/.github/workflows/release.yml \
+  --source-ref refs/heads/release-candidate --deny-self-hosted-runners
+```
+
+Exit status 0 means the file's SHA-256 matches a Sigstore-signed provenance
+statement issued to that workflow on a GitHub-hosted runner. Add `--format json`
+to see the source commit. Run the same command on the ZIP. To check against a
+saved bundle instead of GitHub's attestation API, pass it with `--bundle`: use a
+release's `.intoto.jsonl` asset where one is attached, otherwise fetch the
+bundle once with `gh attestation download FILE --repo Se7enbrc/glimmer`.
+
+**Apple signature and notarization.** The DMG itself is not code signed.
+`codesign --verify --deep --strict` reports “code object is not signed at all”
+for it, and `spctl --assess --type open --context context:primary-signature`
+rejects it with “no usable signature”. The signature and the stapled
+notarization ticket are on the app inside. Mount the image read-only and check
+the app:
+
+```bash
+mkdir -p /tmp/glimmer-check
+hdiutil attach -readonly -nobrowse -mountpoint /tmp/glimmer-check Glimmer-2026.10.5.dmg
+codesign --verify --deep --strict --verbose=2 /tmp/glimmer-check/Glimmer.app
+spctl -a -vv /tmp/glimmer-check/Glimmer.app
+xcrun stapler validate /tmp/glimmer-check/Glimmer.app
+hdiutil detach /tmp/glimmer-check
+```
+
+Expect “satisfies its Designated Requirement”, then `accepted`,
+`source=Notarized Developer ID` and
+`origin=Developer ID Application: steven Miller (5T7M4RH3F8)`. `5T7M4RH3F8` is
+the team the root helper requires of its caller (`helper/HelperService.swift`).
+
+**Sparkle updates.** Each appcast enclosure carries `sparkle:edSignature`, an
+Ed25519 signature over the ZIP's bytes. Sparkle checks it against
+`SUPublicEDKey` in `Glimmer/Info.plist`,
+`bUc9IWEtH/FuDUIsGqyDIVy/1gvlPtBkFXNcVO/TrPU=`, before installing. The released
+app's Info.plist carries the same key. To check a ZIP by hand with OpenSSL 3
+(macOS's LibreSSL lacks Ed25519):
+
+```bash
+KEY=bUc9IWEtH/FuDUIsGqyDIVy/1gvlPtBkFXNcVO/TrPU=
+{ printf 302a300506032b6570032100; echo "$KEY" | base64 -d | xxd -p -c 64; } \
+  | xxd -r -p > glimmer-ed25519.der
+echo 'SIGNATURE_FROM_APPCAST' | base64 -d > Glimmer.zip.sig
+openssl pkeyutl -verify -pubin -keyform DER -inkey glimmer-ed25519.der \
+  -rawin -in Glimmer-2026.10.5.zip -sigfile Glimmer.zip.sig
+```
+
+It prints “Signature Verified Successfully”. Glimmer does not set Sparkle's
+`SURequireSignedFeed`, so the appcast itself is unsigned and relies on HTTPS.
 
 ## Disclosure timeline
 

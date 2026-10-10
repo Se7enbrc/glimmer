@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 const copyButton = document.querySelector('#copy-brew');
 const copyStatus = document.querySelector('#copy-status');
 const brewCommand = document.querySelector('#brew-command');

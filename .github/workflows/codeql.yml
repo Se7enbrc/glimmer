@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 name: CodeQL
 
 on:
@@ -11,9 +14,10 @@ on:
 permissions:
   contents: read
 
+# A pull request's newer push replaces its run; every main commit keeps its own.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:

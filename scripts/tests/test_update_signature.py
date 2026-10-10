@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Update signatures verify against the app's public key, not the signing key's own."""
 
 import base64

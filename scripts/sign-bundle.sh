@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 #
 # Sign inside-out, preserving Sparkle's own entitlements. Never sign --deep.
 # Args: app, Developer ID identity, optional keychain, app entitlements.

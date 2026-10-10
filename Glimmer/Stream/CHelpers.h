@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Swift cannot catch Objective-C exceptions raised during audio device changes.
 // Callers report the failed operation without logging exception payloads.
 
