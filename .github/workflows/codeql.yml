@@ -110,3 +110,23 @@ jobs:
         run: |
           python3 scripts/codeql-coverage.py \
             --database "$RUNNER_TEMP/codeql-databases/swift"
+
+      - name: Profile Swift extraction
+        if: always() && matrix.language == 'swift'
+        run: |
+          db="$RUNNER_TEMP/codeql-databases/swift"
+          out="$RUNNER_TEMP/swift-profile"
+          mkdir -p "$out"
+          du -sk "$db"/trap/swift/* > "$out/trap-kinds.txt" 2>&1 || true
+          find "$db/trap/swift" -type f -print0 | xargs -0 stat -f '%z %m %N' > "$out/trap-files.txt" 2>&1 || true
+          find "$db" -maxdepth 4 -type d > "$out/db-dirs.txt" 2>&1 || true
+          cp -R "$db/log" "$out/log" 2>/dev/null || true
+          du -sk "$db"/* > "$out/db-top.txt" 2>&1 || true
+
+      - name: Upload Swift extraction profile
+        if: always() && matrix.language == 'swift'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: swift-extraction-profile
+          path: ${{ runner.temp }}/swift-profile
+          retention-days: 3
