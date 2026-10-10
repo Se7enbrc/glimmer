@@ -58,15 +58,16 @@ on macOS 26. Keep their toolchains aligned; the deployment target is 26.0.
 
 ```bash
 brew install python swiftlint actionlint trufflehog pre-commit
-pre-commit install && pre-commit install --hook-type pre-push
+pre-commit install
 ```
 
 - `make app`: Debug build, unsigned. A compile check.
 - `make test`: the unit tests. Hostless, no PC needed.
 - `make verify`: Actionlint, strict SwiftLint, release-tool tests, `make test`
-  and protocol fuzz tests under AddressSanitizer. This is the gate. It passes
-  before you call anything done, and `make dist` runs it. It does not fail on
-  compiler warnings, so read the build log: there must be none.
+  and protocol fuzz tests under AddressSanitizer. This is the gate: hosted
+  Verify runs it on every push and `make dist` runs it, so nothing is done until
+  it passes there. It does not fail on compiler warnings, so read the build log:
+  there must be none.
 - `make dev`: tests, then the Release build installed and relaunched. On a Mac
   with a Developer ID it signs and notarizes on the way, as every install does.
 

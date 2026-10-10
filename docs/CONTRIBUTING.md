@@ -40,8 +40,7 @@ cd glimmer
 Install pre-commit hooks:
 
 ```bash
-pre-commit install                      # lint + secret scan, per commit
-pre-commit install --hook-type pre-push # `make verify`, per push
+pre-commit install # lint + secret scan, per commit
 ```
 
 ## Build

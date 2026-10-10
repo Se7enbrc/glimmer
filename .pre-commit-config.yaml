@@ -107,18 +107,3 @@ repos:
         pass_filenames: false
         require_serial: true
         stages: [pre-commit]
-
-  # Full local gate before pushing: strict lint, release-tool tests and Swift tests.
-  # Hosted CI repeats this gate. Activate the local hook once with:
-  #   pre-commit install --hook-type pre-push
-  - repo: local
-    hooks:
-      - id: make-verify
-        name: make verify (full local gate)
-        description:
-          Run strict lint, release-tool tests and Swift tests before pushing.
-        entry: make verify
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
