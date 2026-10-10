@@ -215,13 +215,7 @@ extension StreamWindow {
 
     // MARK: - Path B Space exit → window (issue #84)
 
-    /// Registered by the Path-B bring-up. A user-driven exit from the Space
-    /// (Mission Control, the Esc gesture) converts this window to window mode
-    /// instead of leaving it ordered out: `willExit` disarms the fullscreen
-    /// key observers (so the resign-key orderOut can't fire mid-transition)
-    /// and flips the mode; `didExit` applies the titled chrome once AppKit has
-    /// finished the animation. `close()` sets `didClose` before its own
-    /// toggleFullScreen, so a teardown exit never converts.
+    /// User-driven Space exits convert to a window (#84); teardown exits never convert.
     func installSpaceExitObservers() {
         guard spaceExitObservers.isEmpty else { return }
         let nc = NotificationCenter.default
@@ -231,6 +225,7 @@ extension StreamWindow {
             MainActor.assumeIsolated {
                 guard let self, !self.didClose,
                       self.displayMode == .fullScreen || self.miniPlayerPending else { return }
+                self.logSpaceExit()
                 self.retireFullScreenCover()
             }
         })
@@ -242,6 +237,22 @@ extension StreamWindow {
                 self.finishSpaceExitConversion()
             }
         })
+    }
+
+    private func logSpaceExit() {
+        let event = NSApp.currentEvent
+        let isKeyEvent = event?.type == .keyDown || event?.type == .keyUp || event?.type == .flagsChanged
+        let keyCode = isKeyEvent ? event.map { String($0.keyCode) } ?? "none" : "none"
+        let frames = Thread.callStackSymbols.filter {
+            $0.split(whereSeparator: \.isWhitespace).dropFirst().first != "AppKit"
+        }.prefix(2).joined(separator: " | ")
+        let responder = window.firstResponder.map { String(describing: type(of: $0)) } ?? "none"
+        let streamWindow = window as? KeyableWindow
+        let source = streamWindow?.fullScreenExitSource ?? "unobserved"
+        streamWindow?.fullScreenExitSource = "unobserved"
+        Diag.notice("Space exit: type=\(event.map { String($0.type.rawValue) } ?? "none") keyCode=\(keyCode) "
+            + "modifiers=\(event?.modifierFlags.rawValue ?? 0) responder=\(responder) "
+            + "source=\(source) frames=\(frames)", "Stream.Window")
     }
 
     /// Full screen is ending (a Space exit under way, or the mini player

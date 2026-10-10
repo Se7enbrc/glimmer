@@ -150,6 +150,13 @@ extension StreamWindow {
                     guard !self.didClose else { return }
                     self.log.info("Stream window entered Space-based fullscreen (safe-area)")
                     self.onDidBecomeReadyForInput?()
+                    // Let AppKit finish committing its Space options before taking presentation back.
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, !self.didClose, self.window.styleMask.contains(.fullScreen) else { return }
+                        self.applyPresentationOptions(coversNotch: false)
+                        Diag.notice("Space presentation: requested=\(NSApp.presentationOptions.rawValue) "
+                            + "effective=\(NSApp.currentSystemPresentationOptions.rawValue)", "Stream.Window")
+                    }
                 }
             }
             // A user-driven exit from this Space (Mission Control, the Esc

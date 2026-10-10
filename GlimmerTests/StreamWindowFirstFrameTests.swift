@@ -217,24 +217,34 @@ struct StreamWindowFirstFrameTests {
 
     @Test func spaceOptionsRetainAppKitFlagsWithoutConflictingAutoHideOptions() {
         let stream = StreamWindow()
-        let proposed: NSApplication.PresentationOptions = [.fullScreen, .autoHideDock, .autoHideMenuBar, .autoHideToolbar]
+        let proposed: NSApplication.PresentationOptions = [
+            .fullScreen, .autoHideDock, .autoHideMenuBar, .autoHideToolbar, .disableProcessSwitching
+        ]
         let options = stream.streamDelegate.window(stream.window, willUseFullScreenPresentationOptions: proposed)
-        #expect(options.isSuperset(of: [.fullScreen, .hideDock, .hideMenuBar, .autoHideToolbar]))
-        #expect(options.isDisjoint(with: [.autoHideDock, .autoHideMenuBar]))
+        #expect(options.isSuperset(of: [.fullScreen, .hideDock, .hideMenuBar, .disableProcessSwitching]))
+        #expect(options.isDisjoint(with: [.autoHideDock, .autoHideMenuBar, .autoHideToolbar]))
         stream.streamDelegate.displayMode = .window
         #expect(stream.streamDelegate.window(stream.window, willUseFullScreenPresentationOptions: proposed) == proposed)
     }
 
+    @Test(arguments: [false, true], [false, true])
+    func overlayFallbackRequiresAKeySpace(isFullScreen: Bool, isKeyWindow: Bool) {
+        #expect(KeyableWindow.isGameOverlayFallback(isFullScreen: isFullScreen, isKeyWindow: isKeyWindow,
+                                                    keyCode: 53, modifiers: .command) == (isFullScreen && isKeyWindow))
+    }
+
     @Test func onlyCommandEscapeUsesTheOverlayFallbackInASpace() {
-        #expect(KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: .command))
-        #expect(KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .capsLock]))
-        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: false, keyCode: 53, modifiers: .command))
-        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: []))
-        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .option]))
-        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .control]))
-        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 53, modifiers: [.command, .shift]))
+        for modifiers: NSEvent.ModifierFlags in [.command, [.command, .capsLock], [.command, .function]] {
+            #expect(KeyableWindow.isGameOverlayFallback(isFullScreen: true, isKeyWindow: true,
+                                                        keyCode: 53, modifiers: modifiers))
+        }
+        for modifiers: NSEvent.ModifierFlags in [[], [.command, .option], [.command, .control], [.command, .shift]] {
+            #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, isKeyWindow: true,
+                                                         keyCode: 53, modifiers: modifiers))
+        }
         // The deliberate full-screen command (Control-Command-F) still belongs to AppKit.
-        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, keyCode: 3, modifiers: [.command, .control]))
+        #expect(!KeyableWindow.isGameOverlayFallback(isFullScreen: true, isKeyWindow: true,
+                                                     keyCode: 3, modifiers: [.command, .control]))
     }
 
     @Test func coverOptionsTurnOffShakeToFindAndHotCorners() {

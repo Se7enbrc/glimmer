@@ -1,12 +1,4 @@
-//
-//  StreamWindow+Views.swift
-//
-//  The AppKit support types backing StreamWindow: the key-eligible borderless
-//  NSWindow, the fullscreen-content-size delegate that covers the notch reserve
-//  zone, and the AVSampleBufferDisplayLayer-hosting container view. Split out of
-//  StreamWindow.swift to keep each unit focused; see that file for the window's
-//  stored state and lifecycle.
-//
+// AppKit support types for the stream window and its display layer.
 
 import AppKit
 import Carbon.HIToolbox
@@ -15,33 +7,68 @@ import Carbon.HIToolbox
 final class KeyableWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+    private var gameOverlayMonitor: Any?
+    var fullScreenExitSource = "unobserved"
 
-    /// The system normally takes this chord before AppKit. If it reaches us,
-    /// let stream shortcuts handle it without AppKit treating Escape as a Space exit.
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.type == .keyDown,
-           Self.isGameOverlayFallback(isFullScreen: styleMask.contains(.fullScreen),
-                                      keyCode: event.keyCode, modifiers: event.modifierFlags),
-           let view = firstResponder as? StreamInputView {
-            view.keyDown(with: event)
-            return true
+    /// The system gets first refusal; consume its fallback before AppKit's main menu.
+    override func becomeKey() {
+        super.becomeKey()
+        guard gameOverlayMonitor == nil else { return }
+        gameOverlayMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.blocksGameOverlayEvent(event) else { return event }
+            return nil
         }
+    }
+
+    override func resignKey() {
+        removeGameOverlayMonitor()
+        super.resignKey()
+    }
+
+    override func close() {
+        removeGameOverlayMonitor()
+        super.close()
+    }
+
+    private func removeGameOverlayMonitor() {
+        if let monitor = gameOverlayMonitor {
+            NSEvent.removeMonitor(monitor)
+            gameOverlayMonitor = nil
+        }
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if blocksGameOverlayEvent(event) { return true }
         return super.performKeyEquivalent(with: event)
     }
 
     /// AppKit can turn Escape into an action before the input view sees keyDown.
     /// Keep that fallback from exiting the Space; explicit full-screen commands still work.
     override func cancelOperation(_ sender: Any?) {
-        if let event = NSApp.currentEvent, event.type == .keyDown,
-           Self.isGameOverlayFallback(isFullScreen: styleMask.contains(.fullScreen),
-                                      keyCode: event.keyCode, modifiers: event.modifierFlags),
-           firstResponder is StreamInputView { return }
+        if blocksGameOverlayEvent(NSApp.currentEvent) { return }
         super.cancelOperation(sender)
     }
 
-    nonisolated static func isGameOverlayFallback(isFullScreen: Bool, keyCode: UInt16,
+    /// Menu actions can bypass both the window's key equivalents and cancelOperation.
+    override func toggleFullScreen(_ sender: Any?) {
+        if blocksGameOverlayEvent(NSApp.currentEvent) { return }
+        if styleMask.contains(.fullScreen) {
+            let senderType = sender.map { String(describing: type(of: $0)) } ?? "nil"
+            let action = (sender as? NSMenuItem)?.action.map(NSStringFromSelector) ?? "none"
+            fullScreenExitSource = "toggleFullScreen: sender=\(senderType) menuAction=\(action)"
+        }
+        super.toggleFullScreen(sender)
+    }
+
+    private func blocksGameOverlayEvent(_ event: NSEvent?) -> Bool {
+        guard let event, !ignoresMouseEvents, event.type == .keyDown else { return false }
+        return Self.isGameOverlayFallback(isFullScreen: styleMask.contains(.fullScreen), isKeyWindow: isKeyWindow,
+                                          keyCode: event.keyCode, modifiers: event.modifierFlags)
+    }
+
+    nonisolated static func isGameOverlayFallback(isFullScreen: Bool, isKeyWindow: Bool, keyCode: UInt16,
                                                   modifiers: NSEvent.ModifierFlags) -> Bool {
-        isFullScreen && keyCode == UInt16(kVK_Escape)
+        isFullScreen && isKeyWindow && keyCode == UInt16(kVK_Escape)
             && modifiers.intersection([.command, .control, .option, .shift]) == .command
     }
 }
@@ -100,8 +127,8 @@ final class StreamWindowDelegate: NSObject, NSWindowDelegate {
     func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions)
         -> NSApplication.PresentationOptions {
         guard displayMode == .fullScreen else { return proposedOptions }
-        // Replace conflicting auto-hide flags while retaining AppKit's other options.
-        return proposedOptions.subtracting([.autoHideMenuBar, .autoHideDock])
+        // Auto-hide toolbar needs auto-hide menu bar, so remove both when hiding the menu bar.
+        return proposedOptions.subtracting([.autoHideMenuBar, .autoHideDock, .autoHideToolbar])
             .union(StreamWindow.streamingPresentationOptions(coversNotch: false))
     }
 
