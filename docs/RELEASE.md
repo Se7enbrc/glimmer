@@ -41,6 +41,15 @@ signs and notarizes, packages the final DMG and ZIP, attests them, then
 publishes a GitHub prerelease and its Sparkle `rc` appcast item. It does not
 update Homebrew.
 
+**One command.** From the pushed PR branch, `make rc` does the steps above. It
+refuses a dirty or unpushed tree, a build number that doesn't exceed every build
+in the live appcast, and a marketing version that already has a final tag. It
+waits up to 90 minutes for the required checks, stopping at once on a failure,
+then moves `release-candidate` to HEAD, creates and pushes the next signed
+`-rc.N` tag and dispatches **Release**. It opens the run; approving the
+protected `release` deployment there is the remaining step. Rerunning prints the
+existing run. `make rc DRY_RUN=1` prints each step without changing anything.
+
 ## 2. Test, then promote the same files
 
 For the first candidate, download its DMG from the GitHub prerelease and verify

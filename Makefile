@@ -23,6 +23,9 @@
 #                          notarize → staple → DMG (no publish). This is
 #                          release-publish's first step; run it alone only to
 #                          inspect a DMG before publishing.
+#   make rc                Cut the next candidate for pushed HEAD: wait for checks,
+#                          move release-candidate, sign + push the rc tag, dispatch
+#                          Release. DRY_RUN=1 prints the steps without changing anything.
 #
 # ONE-TIME SETUP (signing / notarization / update keys):
 #   make creds-init        Write the signing credentials file template.
@@ -107,7 +110,7 @@ HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Netw
         profile profile-signposts setup-notary notarize dmg dmg-background sparkle-zip dist preflight \
         codesign-setup codesign-teardown ensure-signing dev test test-asan \
         creds-init enable-telem disable-telem release-publish sparkle-keys \
-        guard-clean-tree guard-release-version check verify test-scripts brew-bump
+        guard-clean-tree guard-release-version check verify test-scripts brew-bump rc
 
 # TIER 1 - "everything but publish": the full release pipeline at Release
 # (xcodebuild -> inside-out sign -> notarize -> staple),
@@ -494,6 +497,9 @@ check:
 test-scripts:
 	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
 		python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+rc:
+	@python3 scripts/release-candidate.py $(if $(DRY_RUN),--dry-run)
 
 # --- Auto-update publication (Sparkle) -------------------------------------
 
