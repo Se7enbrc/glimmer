@@ -214,15 +214,13 @@ struct TelemetryPrometheusRenderTests {
         #expect(pending["glimmer_renderer_metrics_resets_total"]?.first?.value == 0)
     }
 
-    // `UInt64?.map(Double.init)` binds Double(bitPattern:), so these four gauges render ~0.
-    @Test func uint64GaugesShouldCarryTheirCounts() {
+    // `UInt64?.map(Double.init)` once bound Double(bitPattern:) and rendered these as ~0.
+    @Test func uint64GaugesCarryTheirCounts() {
         let metrics = Fixtures.parseProm(fullBody())
-        withKnownIssue("Double.init binds init(bitPattern:) for UInt64 optionals") {
-            check(metrics, [
-                "glimmer_present_on_time_frames": 900, "glimmer_present_late_frames": 12,
-                "glimmer_awdl_resuppress_total": 8, "glimmer_process_phys_footprint_bytes": 512_000_000
-            ])
-        }
+        check(metrics, [
+            "glimmer_present_on_time_frames": 900, "glimmer_present_late_frames": 12,
+            "glimmer_awdl_resuppress_total": 8, "glimmer_process_phys_footprint_bytes": 512_000_000
+        ])
     }
 
     @Test func wifiMetricsLabelTheRadioAndSkipMissingReadings() {
