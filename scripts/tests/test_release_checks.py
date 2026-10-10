@@ -1,7 +1,11 @@
 """The candidate gate rejects missing, stale or unsuccessful upstream checks."""
 
+import contextlib
 import importlib.util
+import io
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -121,6 +125,76 @@ class RequiredChecksTests(unittest.TestCase):
             alerts.append({"number": 42})
             with self.assertRaisesRegex(ValueError, "open code-scanning alerts"):
                 CHECKS.check(SHA)
+
+    def test_gh_failure_garbage_or_empty_answers_authorize_nothing(self):
+        for result, message in ((subprocess.CompletedProcess([], 1, "", "x"), "lookup failed"),
+                                (subprocess.CompletedProcess([], 0, "not json", ""), "invalid data"),
+                                (subprocess.CompletedProcess([], 0, "[]", ""), "no data"),
+                                (subprocess.CompletedProcess([], 0, '{"a": 1}', ""), "no data")):
+            with self.subTest(message=message), patch.object(CHECKS.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(ValueError, message):
+                    CHECKS.api("x")
+        ok = subprocess.CompletedProcess([], 0, '[{"id": 1}]', "")
+        with patch.object(CHECKS.subprocess, "run", return_value=ok) as called:
+            self.assertEqual(CHECKS.object_api("p"), {"id": 1})
+        self.assertEqual(called.call_args.args[0][:4], ["gh", "api", "--paginate", "--slurp"])
+        for pages in ([{"a": 1}, {"b": 2}], [[1]]):
+            with self.subTest(pages=pages), patch.object(CHECKS, "api", return_value=pages):
+                with self.assertRaisesRegex(ValueError, "unexpected GitHub object"):
+                    CHECKS.object_api("p")
+
+    def test_analysis_ref_needs_one_pull_request_or_a_safe_branch(self):
+        self.assertEqual(CHECKS.analysis_ref(run()), "refs/pull/114/merge")
+        self.assertEqual(CHECKS.analysis_ref({"event": "push", "head_branch": "release/1.0"}), "refs/heads/release/1.0")
+        for bad in (run(pull_requests=[]), run(pull_requests=[{"number": 1}, {"number": 2}]),
+                    run(pull_requests=[{"number": "1"}]), {"event": "push", "head_branch": "a b"},
+                    {"event": "push", "head_branch": "x;rm"}, {"event": "push"}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                CHECKS.analysis_ref(bad)
+
+    def test_inactive_or_misnamed_workflow_stops_the_gate(self):
+        for metadata in ({"path": "other.yml", "state": "active", "id": 1},
+                         {"path": ".github/workflows/verify.yml", "state": "disabled_manually", "id": 1}):
+            with self.subTest(metadata=metadata), patch.object(CHECKS, "object_api", return_value=metadata):
+                with self.assertRaisesRegex(ValueError, "not active"):
+                    CHECKS.check(SHA)
+
+    def test_missing_or_unexpected_runs_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "missing checks"):
+            CHECKS.latest_run([run(head_sha=MERGE)], WORKFLOW, SHA, 2)
+        with self.assertRaisesRegex(ValueError, "unexpected check trigger"):
+            CHECKS.latest_run([run(event="schedule")], WORKFLOW, SHA, 2)
+
+    def test_languages_must_agree_on_one_commit(self):
+        data = analyses()
+        data[0]["commit_sha"] = "d" * 40
+        with self.assertRaisesRegex(ValueError, "different commit"):
+            CHECKS.validate_analyses(data, language_jobs(), SHA, "refs/pull/114/merge", {MERGE: SHA})
+        data = analyses()
+        data[0]["commit_sha"] = SHA
+        with self.assertRaisesRegex(ValueError, "different commits"):
+            CHECKS.validate_analyses(data, language_jobs(), SHA, "refs/pull/114/merge", {MERGE: SHA})
+
+    def test_main_requires_a_full_lowercase_sha_and_reports_failures(self):
+        for argv, code in (([SHA.upper()], 1), (["abc"], 1)):
+            err = io.StringIO()
+            with patch.object(sys, "argv", ["x", *argv]), patch.object(CHECKS, "check") as check, \
+                    contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+                CHECKS.main()
+            self.assertEqual(caught.exception.code, code)
+            self.assertIn("full lowercase", err.getvalue())
+            check.assert_not_called()
+        err = io.StringIO()
+        with patch.object(sys, "argv", ["x", SHA]), patch.object(CHECKS, "check", side_effect=ValueError("red")), \
+                contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            CHECKS.main()
+        self.assertEqual((caught.exception.code, err.getvalue()), (1, "ERR: red\n"))
+        out = io.StringIO()
+        with patch.object(sys, "argv", ["x", SHA]), patch.object(CHECKS, "check") as check, \
+                contextlib.redirect_stdout(out):
+            CHECKS.main()
+        check.assert_called_once_with(SHA)
+        self.assertIn("passed Verify", out.getvalue())
 
 
 if __name__ == "__main__":

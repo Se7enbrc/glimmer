@@ -16,7 +16,7 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 from provisioning import (
     APP_IDENTIFIER, AUDIO_ENTITLEMENTS, HARDENED_PROCESS, TEAM_IDENTIFIER, TOPOLOGY_ENTITLEMENT,
-    VERSION_ENTITLEMENT_TYPES, decode_profile, main, prepare_app, validate_profile,
+    VERSION_ENTITLEMENT_TYPES, decode_profile, main, prepare_app, read_plist, same_entitlement_value, validate_profile,
 )
 
 BUNDLE_ID = "io.example.Glimmer"
@@ -236,6 +236,21 @@ class ProvisioningValidationTests(unittest.TestCase):
                     self.validate(profile, requested)
 
 
+    def test_profile_without_entitlement_grants_is_rejected(self):
+        for grants in (None, ["list"]):
+            profile = approved_profile()
+            profile["Entitlements"] = grants
+            with self.subTest(grants=grants), self.assertRaisesRegex(ValueError, "no entitlement grants"):
+                self.validate(profile)
+
+    def test_entitlement_values_match_by_type_shape_and_content(self):
+        self.assertTrue(same_entitlement_value({"a": [1, "x"]}, {"a": [1, "x"]}))
+        for requested, granted in ((1, True), ([1], [1, 2]), ([1, 2], [1, 3]), ({"a": 1}, {"a": 1, "b": 2}),
+                                   ({"a": 1}, {"a": 2}), ("x", ["x"])):
+            with self.subTest(requested=requested, granted=granted):
+                self.assertFalse(same_entitlement_value(requested, granted))
+
+
 class ProvisioningFileTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -347,6 +362,42 @@ class ProvisioningFileTests(unittest.TestCase):
             self.assertNotIn(secret.decode(), stdout.getvalue() + stderr.getvalue())
             self.assertFalse(self.embedded.exists())
             self.assertFalse(self.output.exists())
+
+    def test_unreadable_or_non_dictionary_plists_are_rejected(self):
+        bad = self.entitlements.parent / "bad.plist"
+        bad.write_bytes(b"garbage")
+        with self.assertRaisesRegex(ValueError, "Couldn't read the thing"):
+            read_plist(bad, "the thing")
+        with self.assertRaisesRegex(ValueError, "Couldn't read"):
+            read_plist(bad.parent / "absent.plist", "the thing")
+        bad.write_bytes(plistlib.dumps([1]))
+        with self.assertRaisesRegex(ValueError, "must contain a property dictionary"):
+            read_plist(bad, "the thing")
+
+    def test_bundle_identifier_must_be_explicit_before_the_profile_is_decoded(self):
+        info = self.app / "Contents/Info.plist"
+        for bundle_id in (None, "", "io.example.*", "io.example. Glimmer", 7):
+            info.write_bytes(plistlib.dumps({} if bundle_id is None else {"CFBundleIdentifier": bundle_id}))
+            with self.subTest(bundle_id=bundle_id), patch("provisioning.subprocess.run") as run:
+                with self.assertRaisesRegex(ValueError, "no valid bundle identifier"):
+                    prepare_app(self.profile, self.app, self.entitlements, self.output)
+                run.assert_not_called()
+
+    def test_cli_io_failure_hides_paths_and_success_names_nothing_secret(self):
+        arguments = ["provisioning.py", "--profile", str(self.profile), "--app", str(self.app),
+                     "--entitlements", str(self.entitlements), "--output-entitlements", str(self.output)]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("sys.argv", arguments), patch("provisioning.prepare_app", side_effect=PermissionError(str(self.profile))):
+            with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(SystemExit) as status:
+                main()
+        self.assertEqual(status.exception.code, 1)
+        self.assertEqual(stderr.getvalue(), "ERR: Couldn't prepare provisioning files. Check the explicit paths and permissions.\n")
+        stdout = io.StringIO()
+        with patch("sys.argv", arguments), patch("provisioning.subprocess.run", return_value=self.decode_result()):
+            with redirect_stdout(stdout):
+                main()
+        self.assertEqual(stdout.getvalue(), "Provisioning profile validated and embedded.\n")
+        self.assertTrue(self.embedded.exists())
 
 
 if __name__ == "__main__":
