@@ -2,8 +2,8 @@
 
 ## 2026.10.6 - 2026-10-09
 
-- Command-Escape opens macOS Game Overlay over the stream and keeps it open, in
-  a full-screen Space too, instead of leaving full screen.
+### Features
+
 - Stream stats are a compact column without a panel, with short traces that
   highlight dips and spikes and ink that adapts to the picture behind them.
   Bitrate and codec share a line, and the stats move between corners while
@@ -11,30 +11,55 @@
 - The borderless full-screen stream slides in from the side when it starts and
   when you come back to it, and slides away when you switch apps, like a
   full-screen Space. Reduce Motion keeps the plain fade.
+- Fullscreen can open in its own macOS Space with “Use a full-screen Space”. The
+  default still covers the whole screen, notch included. Both support Game Mode,
+  with its switch in macOS Game Overlay.
+- A MacBook's built-in display keeps its own full-screen choice, shown as “Keep
+  picture below the camera”, separate from other displays. Settings shows the
+  one for the display Glimmer is on.
+- Audio follows your output when switching between speakers and headphones, with
+  spatial playback and head tracking on compatible AirPods.
+- Audio joins are smoothed when trimming excess buffered sound, without adding
+  playback delay.
+- Controllers keep playing in Mini Player while you use another app. Keyboard
+  and mouse still follow normal focus and capture behavior.
+- If Open at login cannot be registered, Settings explains the problem and
+  offers a retry.
+- VoiceOver names settings switches, shortcut recorders, PC controls and the
+  telemetry folder button by their purpose.
+- Controller diagnostics resume after streaming ends, and VoiceOver describes
+  button and stick states.
+- Video now rejects UDP packets from addresses other than the paired PC,
+  matching the existing audio check.
+- Pairing and secure connections reject RSA keys smaller than 2048 bits,
+  including imported identities, while preserving existing pairings.
+- Added macOS memory protections and explicit authorization for the Wi-Fi
+  helper's network monitoring. Installation now checks that both the app and
+  helper can launch after notarization.
+- Uncommitted builds refresh their telemetry timestamp so successive test builds
+  can be distinguished.
+
+### Bug fixes
+
+- Command-Escape opens macOS Game Overlay over the stream and keeps it open, in
+  a full-screen Space too. No Escape shortcut leaves a full-screen Space;
+  Control-Escape goes to the PC.
+- Quitting a stream from a full-screen Space no longer leaves a black screen
+  behind.
 - Returning to a fullscreen stream discards mouse motion from before capture
   resumed, so moving the pointer in another app cannot snap the game camera.
 - Custom resolution and refresh rate survive restarting Glimmer, including
   choosing 1080p on a 4K display. (#112)
 - The basic stats overlay shows the codec actually selected by the PC, including
   when its codec preference is Auto. (#113)
-- Video now rejects UDP packets from addresses other than the paired PC,
-  matching the existing audio check.
-- Pairing and secure connections reject RSA keys smaller than 2048 bits,
-  including imported identities, while preserving existing pairings.
 - Diagnostics no longer record command-key scan codes, unmapped key codes, audio
   exception details or your home-folder path in system logs.
-- VoiceOver names settings switches, shortcut recorders, PC controls and the
-  telemetry folder button by their purpose.
-- Uncommitted builds refresh their telemetry timestamp so successive test builds
-  can be distinguished.
+- Decode time in the stream stats turns red only when decoding takes longer than
+  a frame, instead of warning at half the frame budget.
 - Renderer freeze recovery recognizes sustained refusals even when the frame
   queue is empty, without waiting for 90 rejected frames.
 - Last played updates when a stream ends and stays current while the launcher or
   PC settings remain open.
-- Audio joins are smoothed when trimming excess buffered sound, without adding
-  playback delay.
-- Audio follows your output when switching between speakers and headphones, with
-  spatial playback and head tracking on compatible AirPods.
 - A queued paste is cancelled if the stream reconnects or loses focus before the
   text is sent.
 - Video frames released by the pacer are displayed immediately, so the PC's
@@ -45,27 +70,10 @@
   selected PC changes while connecting.
 - Controller button behavior and player assignments are restored when a stream
   ends. A pending quit chord is cancelled when the stream loses focus.
-- Controller diagnostics resume after streaming ends, and VoiceOver describes
-  button and stick states.
-- If Open at login cannot be registered, Settings explains the problem and
-  offers a retry.
 - Checking Open at login no longer blocks the interface, and an inconclusive
   check leaves your registration alone.
 - The Wi-Fi helper keeps its current connection in charge when an older one
   disconnects, and recovers from stalled interface commands.
-- Added macOS memory protections and explicit authorization for the Wi-Fi
-  helper's network monitoring. Installation now checks that both the app and
-  helper can launch after notarization.
-- Controllers keep playing in Mini Player while you use another app. Keyboard
-  and mouse still follow normal focus and capture behavior.
-- Fullscreen can open in its own macOS Space with “Use a full-screen Space”. The
-  default still covers the whole screen, notch included. Both support Game Mode,
-  with its switch in macOS Game Overlay.
-- Quitting a stream from a full-screen Space no longer leaves a black screen
-  behind.
-- A MacBook's built-in display keeps its own full-screen choice, shown as “Keep
-  picture below the camera”, separate from other displays. Settings shows the
-  one for the display Glimmer is on.
 - Returning from another Space no longer counts intentionally hidden video as a
   presentation stall.
 - A missed modifier-key release no longer turns later keys into unintended
