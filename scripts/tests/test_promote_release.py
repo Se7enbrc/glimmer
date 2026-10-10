@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Promotion reuses verified public assets and never invokes signing or builds."""
 
 import hashlib
@@ -58,7 +61,7 @@ class CandidatePromotionTests(unittest.TestCase):
         if args[:2] == ["git", "rev-parse"]:
             return os.environ["EXPECTED_SHA"] + "\n"
         if args[:2] == ["git", "diff"]:
-            self.assertEqual(args[-2:], [".", ":(exclude)appcast.xml"])
+            self.assertEqual(args[5:], ["--", *PROMOTE.SHIPPED])
             if self.source_changed:
                 raise ValueError(message)
             return ""
@@ -169,3 +172,31 @@ class CandidatePromotionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShippedSourceTests(unittest.TestCase):
+    def test_only_shipped_inputs_must_match_the_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def git(*args):
+                return subprocess.run(["git", "-C", directory, *args], check=True, capture_output=True,
+                                      text=True, env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull}).stdout.strip()
+            git("init", "-q")
+            git("config", "user.email", "fixture@example.test")
+            git("config", "user.name", "fixture")
+            git("config", "commit.gpgsign", "false")
+            for path in ("Glimmer/App.swift", "scripts/promote-release.py", "docs/RELEASE.md"):
+                (Path(directory) / path).parent.mkdir(parents=True, exist_ok=True)
+                (Path(directory) / path).write_text("one\n")
+            git("add", "-A")
+            git("commit", "-qm", "candidate")
+            candidate = git("rev-parse", "HEAD")
+
+            def changed(path):
+                (Path(directory) / path).write_text(f"{path} changed\n")
+                git("commit", "-qam", path)
+                diff = subprocess.run(["git", "-C", directory, "diff", "--quiet", candidate, "HEAD", "--",
+                                       *PROMOTE.SHIPPED]).returncode
+                return diff != 0
+            self.assertFalse(changed("scripts/promote-release.py"))
+            self.assertFalse(changed("docs/RELEASE.md"))
+            self.assertTrue(changed("Glimmer/App.swift"))

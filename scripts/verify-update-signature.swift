@@ -1,4 +1,7 @@
 #!/usr/bin/swift
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Checks an update's EdDSA signature against the app's SUPublicEDKey, the key installed copies use.
 // Usage: swift scripts/verify-update-signature.swift <base64 public key> <base64 signature> <archive>
 

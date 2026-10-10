@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Samples the picture's brightness behind the stats HUD so the overlay can pick light or dark ink.
 // Runs on the present path after the renderer has the frame, at most 4 Hz, luma plane only.
 

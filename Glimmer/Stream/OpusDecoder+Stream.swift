@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // AudioToolbox decodes one mono/stereo Opus stream; surround uses several of these.
 
 import AudioToolbox

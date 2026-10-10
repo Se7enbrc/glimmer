@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Stamp the source commit and build time into telemetry; refresh time for dirty builds.
 # Clean commits reuse their stamp to keep no-op builds incremental.
 # Generated output is ignored by git and contains no credentials.

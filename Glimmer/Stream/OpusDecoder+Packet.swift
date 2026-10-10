@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // RFC 6716 Appendix B adds one frame length to each stream except the last.
 // Remove that length before giving a stream to AudioToolbox's ordinary Opus decoder.
 

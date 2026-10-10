@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 #
 # homebrew-bump.sh - point the Homebrew cask at a published Glimmer release.
 # Downloads the release DMG, computes its sha256 from the real bytes, rewrites

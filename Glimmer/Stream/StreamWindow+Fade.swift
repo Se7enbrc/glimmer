@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // First-frame fade-in and close after the native Space has finished exiting.
 
 import AppKit

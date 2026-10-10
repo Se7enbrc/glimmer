@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Tap cache safety checks use isolated local fixtures and never fetch or push."""
 
 from pathlib import Path

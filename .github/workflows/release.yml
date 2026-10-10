@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 name: Release
 
 on:
@@ -152,6 +155,8 @@ jobs:
       - name: Promote tested bytes to stable
         if: inputs.operation == 'promote'
         env:
+          # Validation reads with the run token; publishing switches to the contents token.
+          GH_TOKEN: ${{ github.token }}
           RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}
         run: scripts/ci-release.sh promote
 
