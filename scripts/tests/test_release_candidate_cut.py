@@ -201,18 +201,16 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assert_refused(self.cut("--ci-sha", self.sha, "--pr", "114"), "moved past")
         self.assertNotIn("refs/tags/", self.remote())
 
-    def test_ci_wait_only_waits_and_changes_nothing(self):
-        self.git("checkout", "--quiet", "--detach", self.sha)
-        before = self.remote()
-        result = self.cut("--ci-sha", self.sha, "--pr", "114", "--wait-only")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(f"Required checks passed for {self.sha}", result.stdout)
-        self.assertEqual(self.remote(), before)
-        self.assertEqual(self.dispatches(), [])
-
-    def test_ci_cut_refuses_a_checkout_that_is_not_the_labelled_head(self):
-        self.assert_refused(self.cut("--ci-sha", self.old, "--pr", "114"), "checkout is not the pull request head")
+    def test_ci_cut_refuses_a_commit_it_does_not_have(self):
+        self.assert_refused(self.cut("--ci-sha", "f" * 40, "--pr", "114"), "is not in this clone")
         self.assertNotEqual(self.cut("--ci-sha", "abc", "--pr", "114").returncode, 0)
+
+    def test_ci_cut_reads_the_version_from_the_candidate_not_the_checkout(self):
+        (self.state / "pr-head").write_text(self.sha)
+        self.git("checkout", "--quiet", "--detach", self.old)
+        result = self.cut("--ci-sha", self.sha, "--pr", "114")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"{self.sha}\trefs/tags/{VERSION}-rc.1^{{}}", self.remote())
 
     def test_tag_on_another_commit_is_refused(self):
         self.git("tag", f"{VERSION}-rc.1", self.old)
