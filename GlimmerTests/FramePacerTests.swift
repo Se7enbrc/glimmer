@@ -481,6 +481,16 @@ struct FramePacerTests {
         #expect(live.secondsSinceLastReject.isNaN)
     }
 
+    /// A tick that trims to the slack and then backs off still counts every discarded frame once.
+    @Test func backoffTickCountsTheFramesItsTrimDropped() throws {
+        let (pacer, presents) = try makeCountingPacer(queued: 5)
+        pacer.lastPresentMediaTime = 0
+        pacer.releaseDueFrame(targetTimestamp: 1, vsyncInterval: 1.0 / 120, tickScanout: 1)
+        #expect(presents.withLock { $0 } == 1)
+        #expect(pacer.queue.isEmpty)
+        #expect(pacer.stats.presentationLateDropCount() == 4)
+    }
+
     /// A tick release as `handleTick` makes it with the link at half the panel's
     /// rate: the target two panel vsyncs out, the scanout on the first.
     private func releaseOnHalfRateTick(_ pacer: FramePacer, linkTimestamp: CFTimeInterval) {

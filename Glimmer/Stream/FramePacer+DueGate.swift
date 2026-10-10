@@ -321,9 +321,9 @@ extension FramePacer {
             sampledDepth = 0
             tickDeficit.tickScanoutMediaTime = tickScanout
             lock.unlock()
-            presentBackoffAndYield(backoff)
-            // Yield: do NOT fall through to the due gate / starvation failsafe.
-            // The backlog is gone and the newest frame is on screen.
+            // Yield past the due gate and failsafe; this tick's trim rides the beat's drop count.
+            presentBackoffAndYield(BackoffBeat(newest: backoff.newest,
+                                               droppedCount: backoff.droppedCount + trimmed.count))
             return
         }
 
