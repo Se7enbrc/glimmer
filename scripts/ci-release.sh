@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Hosted release entry points. Credentials exist only for their individual phase.
 set +x
 set -euo pipefail

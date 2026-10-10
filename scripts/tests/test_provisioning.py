@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Provisioning preflight regressions using synthetic plists and mocked CMS decoding."""
 
 from contextlib import redirect_stderr, redirect_stdout

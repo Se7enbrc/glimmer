@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Hosted release boundaries with disposable files and inert git/signing tools."""
 
 import base64

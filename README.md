@@ -88,7 +88,8 @@ Homebrew.
 
 Signed and notarized, distributed outside the App Store. Glimmer runs without
 App Sandbox and offers an optional administrator-approved Wi-Fi helper
-([security details](docs/SECURITY.md)).
+([security details](docs/SECURITY.md)). You can
+[verify a download](docs/SECURITY.md#verifying-a-download) before opening it.
 
 Glimmer has earned the
 [OpenSSF Best Practices Passing badge](https://www.bestpractices.dev/en/projects/15346).
@@ -166,7 +167,8 @@ see [the signing setup](docs/RELEASE.md#3-signing-credentials). `make app`
 compile-checks, `make test` runs the unit tests, `make uninstall` removes it.
 The engine is under `Glimmer/Stream/`, no submodules.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md),
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Why not Moonlight
 

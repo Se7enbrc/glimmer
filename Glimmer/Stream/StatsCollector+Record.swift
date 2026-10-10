@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Per-frame recording from the receive, decode, and pacing queues.
 // Accessors feed the watchdog and telemetry through the collector's lock.
 

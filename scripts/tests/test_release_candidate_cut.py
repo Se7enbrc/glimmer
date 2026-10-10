@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """`make rc` against a fixture origin, with inert gh and open; no network or real keys."""
 
 import json

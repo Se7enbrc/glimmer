@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Cut the next release candidate for the pushed, reviewed HEAD (`make rc`).
 
 A labelled pull request runs the same cut in CI with --ci-sha once its checks pass: the app

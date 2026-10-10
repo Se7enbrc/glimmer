@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // One session's overlay counters across connections: receive, decode and pacing write under one
 // short lock, and the overlay (cached ~1s FPS windows, so 60Hz doesn't swing) and exporter read.
 // Exporter reads use fresh windows; live latency gauges refresh on every read.

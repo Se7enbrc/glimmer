@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // VideoToolbox decodes frames; AVSampleBufferDisplayLayer presents their color and HDR metadata.
 // Lifecycle and shared state live here; decode, pacing and HDR details live in extensions.
 // See docs/ARCHITECTURE.md for the pipeline and the display-layer choice.

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 set -euo pipefail
 
 # Trace the compiler without injecting into Xcode or SwiftPM's package sandbox.
