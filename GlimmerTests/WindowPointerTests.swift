@@ -560,7 +560,7 @@ struct WindowPointerTests {
 }
 
 @MainActor
-private final class PointerFocusTestWindow: NSWindow {
+final class PointerFocusTestWindow: NSWindow {
     var focused = true
     var motionQueue: [NSEvent] = []
     override var isKeyWindow: Bool { focused }
