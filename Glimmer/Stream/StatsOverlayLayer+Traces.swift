@@ -90,30 +90,54 @@ struct StatsBaseline {
 @MainActor
 final class StatsTrace {
     enum Metric {
-        case render, latency, bitrate
+        case render, host, network, latency, bitrate, jitter, drops
 
         init?(kind: StatsRow.Kind) {
             switch kind {
             case .renderFps: self = .render
+            case .hostFps: self = .host
+            case .networkFps: self = .network
             case .latency: self = .latency
             case .bitrate: self = .bitrate
+            case .jitter: self = .jitter
+            case .networkDrops: self = .drops
             default: return nil
             }
         }
 
-        /// Drops are judged against the running average, not the stream's target, so a
-        /// steady 190 FPS on a 240 Hz stream stays calm; latency flags spikes.
-        func severity(value: Double?, reference: Double?, latencyWarning: Double) -> StatsTraceHistory.Severity {
-            guard let value, value.isFinite, value >= 0 else { return .none }
+        /// Rates that only matter when they fall are judged against their own median.
+        var judgesDrops: Bool { [.render, .host, .network, .bitrate].contains(self) }
+
+        func value(in snapshot: StreamStatsSnapshot) -> Double? {
             switch self {
-            case .render, .bitrate:
+            case .render: snapshot.renderedFps ?? snapshot.hostFps
+            case .host: snapshot.hostFps
+            case .network: snapshot.receivedFps
+            case .latency: snapshot.rttMs
+            case .bitrate: snapshot.measuredBitrateMbps
+            case .jitter: snapshot.jitterMs
+            case .drops: snapshot.networkDroppedPercent
+            }
+        }
+
+        /// Drops compare with the running median, not the stream's target, so a steady
+        /// 190 FPS on a 240 Hz stream stays calm. The rest reuse the text thresholds.
+        func severity(value: Double?, reference: Double?, thresholds: StatsThresholds) -> StatsTraceHistory.Severity {
+            guard let value, value.isFinite, value >= 0 else { return .none }
+            func above(_ caution: Double, _ critical: Double) -> StatsTraceHistory.Severity {
+                value > critical ? .critical : value > caution ? .caution : .none
+            }
+            switch self {
+            case .render, .host, .network, .bitrate:
                 guard let reference, reference > 0 else { return .none }
                 if value < reference * 0.3 { return .critical }
                 return value < reference * 0.5 ? .caution : .none
             case .latency:
-                if value > latencyWarning { return .caution }
-                guard let reference else { return .none }
+                let level = above(Double(thresholds.latencyWarningAbove), Double(thresholds.latencyCriticalAbove))
+                guard level == .none, let reference else { return level }
                 return value > max(reference + 3, reference * 1.8) ? .caution : .none
+            case .jitter: return above(Double(thresholds.jitterWarningAbove), Double(thresholds.jitterCriticalAbove))
+            case .drops: return above(thresholds.dropsWarningAbove, thresholds.dropsCriticalAbove)
             }
         }
     }
@@ -160,16 +184,10 @@ final class StatsTrace {
             history.reset()
             dipBaseline.reset()
         }
-        let value: Double?
-        switch metric {
-        case .render: value = snapshot.hostFps ?? snapshot.renderedFps
-        case .latency: value = snapshot.rttMs
-        case .bitrate: value = snapshot.measuredBitrateMbps
-        }
+        let value = metric.value(in: snapshot)
         target = targetFps.isFinite && targetFps > 0 ? targetFps : 60
-        reference = metric == .latency ? history.mean : dipBaseline.median()
-        let severity = metric.severity(value: value, reference: reference,
-                                       latencyWarning: Double(thresholds.latencyWarningAbove))
+        reference = metric.judgesDrops ? dipBaseline.median() : history.mean
+        let severity = metric.severity(value: value, reference: reference, thresholds: thresholds)
         history.append(value: value, severity: severity, time: now)
         if let value, value.isFinite, value >= 0, severity == .none { dipBaseline.add(value) }
     }
@@ -177,11 +195,13 @@ final class StatsTrace {
     private var scale: (lower: Double, upper: Double, reference: Double) {
         let reference = self.reference ?? history.mean ?? 0
         switch metric {
-        case .render:
+        case .render, .host, .network:
             let level = reference > 0 ? reference : target
             return (max(0, level * 0.2), max(level, target) * 1.08, level)
         case .latency: return (0, max(12, reference * 3), reference)
-        case .bitrate: return (max(0, reference * 0.4), max(1, reference * 1.4), reference)
+        case .bitrate: return (max(0, reference * 0.2), max(1, reference * 1.4), reference)
+        case .jitter: return (0, max(12, reference * 3), reference)
+        case .drops: return (0, max(2.5, reference * 3), reference)
         }
     }
 

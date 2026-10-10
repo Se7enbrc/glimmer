@@ -143,21 +143,31 @@ struct StatsOverlayVisibilityTests {
 
     @Test func dropsAreJudgedAgainstTheRunningAverageAndColourBothEdges() {
         let render = StatsTrace.Metric.render
-        #expect(render.severity(value: 190, reference: 192, latencyWarning: 50) == .none)
-        #expect(render.severity(value: 95, reference: 192, latencyWarning: 50) == .caution)
-        #expect(render.severity(value: 57, reference: 192, latencyWarning: 50) == .critical)
-        #expect(render.severity(value: 10, reference: nil, latencyWarning: 50) == .none)
+        #expect(render.severity(value: 190, reference: 192, thresholds: StatsThresholds()) == .none)
+        #expect(render.severity(value: 95, reference: 192, thresholds: StatsThresholds()) == .caution)
+        #expect(render.severity(value: 57, reference: 192, thresholds: StatsThresholds()) == .critical)
+        #expect(render.severity(value: 10, reference: nil, thresholds: StatsThresholds()) == .none)
         let bitrate = StatsTrace.Metric.bitrate
-        #expect(bitrate.severity(value: 24, reference: 50, latencyWarning: 50) == .caution)
-        #expect(bitrate.severity(value: 14, reference: 50, latencyWarning: 50) == .critical)
-        #expect(bitrate.severity(value: 30, reference: 50, latencyWarning: 50) == .none)
+        #expect(bitrate.severity(value: 24, reference: 50, thresholds: StatsThresholds()) == .caution)
+        #expect(bitrate.severity(value: 14, reference: 50, thresholds: StatsThresholds()) == .critical)
+        #expect(bitrate.severity(value: 30, reference: 50, thresholds: StatsThresholds()) == .none)
         let latency = StatsTrace.Metric.latency
-        #expect(latency.severity(value: 8, reference: 3.5, latencyWarning: 50) == .caution)
-        #expect(latency.severity(value: 51, reference: nil, latencyWarning: 50) == .caution)
-        #expect(latency.severity(value: 4, reference: 3.5, latencyWarning: 50) == .none)
-        for metric in [render, latency, bitrate] {
-            #expect(metric.severity(value: nil, reference: 50, latencyWarning: 50) == .none)
-            #expect(metric.severity(value: .nan, reference: 50, latencyWarning: 50) == .none)
+        #expect(latency.severity(value: 8, reference: 3.5, thresholds: StatsThresholds()) == .caution)
+        #expect(latency.severity(value: 51, reference: nil, thresholds: StatsThresholds()) == .caution)
+        #expect(latency.severity(value: 4, reference: 3.5, thresholds: StatsThresholds()) == .none)
+        #expect(latency.severity(value: 120, reference: 3.5, thresholds: StatsThresholds()) == .critical)
+        let jitter = StatsTrace.Metric.jitter
+        #expect(jitter.severity(value: 12, reference: nil, thresholds: StatsThresholds()) == .caution)
+        #expect(jitter.severity(value: 30, reference: nil, thresholds: StatsThresholds()) == .critical)
+        let drops = StatsTrace.Metric.drops
+        #expect(drops.severity(value: 0.2, reference: nil, thresholds: StatsThresholds()) == .none)
+        #expect(drops.severity(value: 3, reference: nil, thresholds: StatsThresholds()) == .critical)
+        #expect(StatsTrace.Metric(kind: .hostFps) == .host)
+        #expect(StatsTrace.Metric(kind: .networkFps)?.judgesDrops == true)
+        #expect(StatsTrace.Metric(kind: .codec) == nil)
+        for metric in [render, latency, bitrate, jitter, drops] {
+            #expect(metric.severity(value: nil, reference: 50, thresholds: StatsThresholds()) == .none)
+            #expect(metric.severity(value: .nan, reference: 50, thresholds: StatsThresholds()) == .none)
         }
         let healthy = StatsTraceHistory.Sample(value: 60)
         let caution = StatsTraceHistory.Sample(value: 25, severity: .caution)
