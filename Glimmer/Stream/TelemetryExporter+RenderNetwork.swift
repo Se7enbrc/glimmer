@@ -78,7 +78,7 @@ extension TelemetryRenderer {
         builder.emit("glimmer_awdl_resuppress_total",
                      "Times macOS re-raised awdl0 this stream - the AWDL-contention rate the helper fights "
                      + "(per-stream; high on a contested link).",
-                     snap.awdlReSuppressTotal.map(Double.init))
+                     snap.awdlReSuppressTotal.map { Double($0) })
         builder.emit("glimmer_net_packets_per_second", "Video packets received per second.", snap.packetsPerSecond)
         builder.emit("glimmer_net_rtt_ms", "ENet RTT estimate (high-res local clock), ms.", snap.rttMs)
         builder.emit("glimmer_net_rtt_variance_ms", "ENet RTT variance, ms.", snap.rttVarianceMs)
