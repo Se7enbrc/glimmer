@@ -3,13 +3,17 @@
 
 """Tap cache safety checks use isolated local fixtures and never fetch or push."""
 
+import contextlib
+import io
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import tap_cache
 from tap_cache import paths_alias_or_overlap, validate_cache
 
 REPO = "fixture/homebrew-tap"
@@ -161,6 +165,46 @@ class TapCacheTests(unittest.TestCase):
                 else:
                     validate_cache(self.root, REPO, "origin/main")
                 self.assertEqual(local_path.read_text(), "valuable ignored file\n")
+
+    def test_a_plain_file_is_not_a_cache_directory(self):
+        path = self.root / "file"
+        path.write_text("keep")
+        with self.assertRaisesRegex(ValueError, "not a directory"):
+            validate_cache(path, REPO)
+        self.assertEqual(path.read_text(), "keep")
+
+    def test_nested_directory_inside_another_checkout_is_not_the_root(self):
+        self.checkout()
+        nested = self.root / "nested"
+        (nested / ".git").mkdir(parents=True)
+        parent = subprocess.CompletedProcess([], 0, stdout=f"{self.root}\n", stderr="")
+        with patch.object(tap_cache.subprocess, "run", return_value=parent):
+            with self.assertRaisesRegex(ValueError, "not the checkout root"):
+                validate_cache(nested, REPO)
+
+    def test_missing_paths_never_alias(self):
+        self.assertFalse(paths_alias_or_overlap(self.root, "absent", "other"))
+
+    def test_main_is_silent_on_success_and_exits_one_with_the_reason_on_refusal(self):
+        self.checkout()
+        with patch.object(sys, "argv", ["x", str(self.root), REPO, "--remote-tip", "origin/main"]):
+            tap_cache.main()
+        (self.root / "dirty").write_text("local")
+        err = io.StringIO()
+        with patch.object(sys, "argv", ["x", str(self.root), REPO]), contextlib.redirect_stderr(err), \
+                self.assertRaises(SystemExit) as status:
+            tap_cache.main()
+        self.assertEqual(status.exception.code, 1)
+        self.assertIn("ERR: tap cache has local changes", err.getvalue())
+
+    def test_git_failure_is_reported_not_swallowed(self):
+        self.checkout()
+        self.git("remote", "remove", "origin")
+        err = io.StringIO()
+        with patch.object(sys, "argv", ["x", str(self.root), REPO]), contextlib.redirect_stderr(err), \
+                self.assertRaises(SystemExit) as status:
+            tap_cache.main()
+        self.assertEqual(status.exception.code, 1)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,13 @@
+# Measures release tooling for make test-scripts COVERAGE=1, including Python subprocesses.
+[run]
+branch = True
+source = scripts
+omit = scripts/tests/*
+patch = subprocess
+data_file = build/coverage/python/.coverage
+
+# The cut test runs a copy inside a temp repo; fold it back onto scripts/.
+[paths]
+source =
+    scripts/
+    */scripts/

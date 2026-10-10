@@ -81,11 +81,12 @@ own evidence and any applicable qualification.
 
 ## Work that can ship through normal releases
 
-1. **Measure coverage before setting a gate.** The shared Xcode scheme and
-   Verify workflow do not enable coverage. Establish a production-source
-   inventory covering the app, login item, helper and release tooling. Publish
-   separate results for each component, then add behavioral tests for missing
-   paths. Silver's `test_statement_coverage80` and Gold's
+1. **Measure coverage before setting a gate.** Hosted Verify runs
+   `make verify COVERAGE=1`, publishes per-component tables in the job summary
+   and uploads the reports as the `coverage` artifact, with no threshold. The
+   first recorded results are under "Coverage commands". Next, add behavioral
+   tests for missing paths and give the login item and the installed helper an
+   instrumented execution. Silver's `test_statement_coverage80` and Gold's
    `test_statement_coverage90` / `test_branch_coverage80` require measurements,
    subject to available FLOSS tools. Do not exclude difficult components just to
    raise the aggregate.
@@ -118,57 +119,47 @@ own evidence and any applicable qualification.
 
 ### Coverage commands
 
-These commands are proposed measurement steps, not recorded results. Run them
-when no stream or other Xcode build is using the workspace. Use the existing
-`build` directory. Choose a new result-bundle name for each run.
+`make test COVERAGE=1` and `make test-scripts COVERAGE=1` measure the same runs
+the gate makes, into `build/coverage`; `scripts/coverage-report.py` writes each
+component's summary. The Swift run records an `.xcresult` for xccov and the one
+`Coverage.profdata` of that run for `llvm-cov export -summary-only` against
+`Glimmer.debug.dylib` (the app) and the test bundle (helper sources). Generated
+asset symbols under `DerivedSources` are excluded; nothing else is. Python uses
+[coverage.py](https://coverage.readthedocs.io/en/latest/branch.html) 7.16.2 with
+branch measurement and subprocess patching (`scripts/tests/coveragerc`). Verify
+installs it from `scripts/coverage-requirements.txt` with `--require-hashes`; it
+is not needed for normal builds or tests.
 
-```bash
-scripts/generate-build-info.sh
-xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer \
-  -configuration Debug -xcconfig Glimmer/StreamLib.xcconfig \
-  CODE_SIGNING_ALLOWED=NO -derivedDataPath build \
-  -destination 'platform=macOS' -enableCodeCoverage YES \
-  -resultBundlePath build/coverage.xcresult
-xcrun xccov view --report --json build/coverage.xcresult \
-  > build/coverage-xcode.json
-```
+First recorded run, 2026-10-10, commit `5ace115`, Xcode 27.0 (Hosted Verify uses
+26.6), local Apple silicon Mac:
 
-Xcode reports line coverage. Inspect LLVM's regions and branch counters as well.
-The Debug app currently puts its implementation in `Glimmer.debug.dylib`; use
-the binary matching the instrumented run.
+| Component                                  | Lines (xccov)          | Lines (llvm-cov)       | Regions               | Branches     |
+| ------------------------------------------ | ---------------------- | ---------------------- | --------------------- | ------------ |
+| App, `Glimmer.debug.dylib`                 | 45.11% (25,080/55,599) | 44.92% (24,974/55,599) | 49.95% (9,537/19,095) | No counters  |
+| Helper sources linked into the test bundle | 43.72% (174/398)       | 43.72% (174/398)       | 44.32% (78/176)       | No counters  |
+| Login item                                 | 0.00% (0/36)           | Not executed           | Not executed          | Not executed |
 
-```bash
-find build/Build/ProfileData -name Coverage.profdata -print
-```
+| Python release tooling (`scripts/*.py`) | Statements         | Branches         |
+| --------------------------------------- | ------------------ | ---------------- |
+| All files, tests omitted                | 53.62% (652/1,216) | 49.39% (241/488) |
 
-Set `GLIMMER_COVERAGE_PROFILE` to that run's exact profile path. Do not pick an
-older profile or silently merge unrelated runs.
+Across three local runs the app's xccov covered lines ranged from 25,080 to
+25,083.
 
-```bash
-xcrun llvm-cov report \
-  build/Build/Products/Debug/Glimmer.app/Contents/MacOS/Glimmer.debug.dylib \
-  -instr-profile="$GLIMMER_COVERAGE_PROFILE" \
-  -show-region-summary -show-branch-summary
-xcrun llvm-cov export \
-  build/Build/Products/Debug/Glimmer.app/Contents/MacOS/Glimmer.debug.dylib \
-  -instr-profile="$GLIMMER_COVERAGE_PROFILE" > build/coverage-llvm.json
-```
+What these numbers do not cover:
 
-[LLVM documents the exported metrics](https://llvm.org/docs/CommandGuide/llvm-cov.html).
-Review source-file scope and denominators before publishing percentages. Line
-and region counts are not automatically statement or branch counts. The login
-item and separately compiled privileged helper need their own instrumented
-execution; loading the app's tests does not prove their coverage. Python tooling
-also needs statement and branch measurement, for example with the FLOSS
-[coverage.py](https://coverage.readthedocs.io/en/latest/branch.html) tool,
-rather than inference from unittest counts.
-
-Swift's upstream
-[branch-coverage issue](https://github.com/swiftlang/swift/issues/81730) remains
-open. Confirm the current compiler's behavior with a small known branch case. A
-zero branch denominator means no usable measurement, not full coverage. Any N/A
-answer needs a documented language-specific tool assessment; it does not exempt
-Python or Objective-C, for which coverage tools exist.
+- The login item is built with coverage but never runs under test.
+- The installed helper daemon is compiled separately by `swiftc` and never runs
+  under test. Its sources other than `helper/main.swift` are compiled into the
+  test bundle, and only that copy is measured.
+- Swift emitted no branch counters for either binary, so branch coverage is not
+  measured; the upstream
+  [branch-coverage issue](https://github.com/swiftlang/swift/issues/81730)
+  remains open. A zero denominator is not full coverage. Line and region counts
+  are not statement or branch counts.
+- Shell scripts under `scripts/` run in the tests but no shell coverage tool is
+  in use. Python run from a fixture copy outside `scripts/`, which is how
+  `release-candidate.py` is tested, records nothing, so that file reads 0%.
 
 ### Smallest useful sanitizer run
 
@@ -186,8 +177,8 @@ xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer \
 This covers host-reachable parser and reassembly targets. It does not exercise
 all playback, controller or concurrency lifecycles. Expand the release checks
 with relevant ThreadSanitizer and real streaming checks after validating those
-tools against the platform frameworks. Coverage remains unmeasured; the parser
-sanitizer run is recorded above.
+tools against the platform frameworks. The parser sanitizer run is recorded
+above.
 
 ## Engineering evidence to sustain
 

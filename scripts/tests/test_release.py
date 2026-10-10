@@ -64,8 +64,11 @@ class ReleaseValidationTests(unittest.TestCase):
             self.assertEqual((output / "Glimmer-2026.10.6.zip").read_bytes(), b"inert zip")
 
     def test_local_suite_filter_cannot_narrow_the_full_gate(self):
+        # The default gate, not one inherited from an outer make such as a COVERAGE=1 run.
+        clean = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "COVERAGE")}
+
         def plan(target):
-            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests"],
+            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests"], env=clean,
                                   cwd=SCRIPTS.parent, capture_output=True, text=True, check=True).stdout
         self.assertIn("-only-testing:GlimmerTests/DatagramBatchTests", plan("test"))
         full = plan("verify")
@@ -194,6 +197,78 @@ class ReleaseValidationTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(b"checksum mismatch", result.stderr)
             self.assertFalse((root / "cache/test/.verified-sha256").exists())
+
+
+class ReleaseVersionGateTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.config = self.root / "Version.xcconfig"
+        self.config.write_text("MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 20261009\n")
+        self.appcast = self.root / "appcast.xml"
+        self.appcast.write_text("<rss>" + ET.tostring(channel(), encoding="unicode") + "</rss>")
+        self.app = self.root / "Glimmer.app"
+        (self.app / "Contents").mkdir(parents=True)
+        self.plist(short="2026.10.6", build="20261009")
+
+    def plist(self, short, build):
+        (self.app / "Contents/Info.plist").write_bytes(plistlib.dumps(
+            {"CFBundleShortVersionString": short, "CFBundleVersion": build}))
+
+    def gate(self, *args, env=None):
+        return subprocess.run([sys.executable, str(SCRIPTS / "release_validation.py"), "--config", str(self.config),
+                               "--appcast", str(self.appcast), *args], capture_output=True, text=True,
+                              env={**os.environ, "GLIMMER_RELEASE_CHANNEL": "", **(env or {})})
+
+    def test_matching_config_and_bundle_pass_and_print_the_versions(self):
+        result = self.gate("--app", str(self.app), "--short-version", "2026.10.6", "--build", "20261009")
+        self.assertEqual((result.returncode, result.stdout),
+                         (0, "Release versions verified: 2026.10.6 (20261009)\n"))
+
+    def test_advertised_version_or_build_must_match_the_config(self):
+        for args, message in ((["--short-version", "2026.10.7"], "advertised release version"),
+                              (["--build", "20261010"], "advertised build number")):
+            result = self.gate(*args)
+            with self.subTest(args=args):
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(message, result.stderr)
+
+    def test_unusable_inputs_fail_closed_with_an_error_line(self):
+        self.config.write_text("MARKETING_VERSION = 2026.10.6\n")
+        self.assertIn("ERR:", self.gate().stderr)
+        self.config.write_text("MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 20261001\n")
+        self.assertIn("must exceed published build", self.gate().stderr)
+        self.config.write_text("MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 20261009\n")
+        self.appcast.write_text("<rss/>")
+        self.assertIn("appcast has no channel", self.gate().stderr)
+        self.appcast.write_text("not xml")
+        self.assertEqual(self.gate().returncode, 1)
+        self.config.unlink()
+        self.assertEqual(self.gate().returncode, 1)
+
+    def test_stale_bundle_or_missing_plist_and_misused_flags_are_refused(self):
+        self.plist(short="2026.10.6", build="20261008")
+        result = self.gate("--app", str(self.app))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not match 20261009; rebuild", result.stderr)
+        (self.app / "Contents/Info.plist").unlink()
+        self.assertEqual(self.gate("--app", str(self.app)).returncode, 1)
+        result = self.gate("--validate-distribution")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--validate-distribution requires --app", result.stderr)
+
+    def test_release_channel_comes_from_the_environment_and_must_be_known(self):
+        self.assertEqual(self.gate(env={"GLIMMER_RELEASE_CHANNEL": "rc"}).returncode, 0)
+        result = self.gate(env={"GLIMMER_RELEASE_CHANNEL": "beta"})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ERR:", result.stderr)
+
+    def test_malformed_version_or_build_is_rejected_before_any_artifact_work(self):
+        for values, message in (("MARKETING_VERSION = 2026.10\nCURRENT_PROJECT_VERSION = 20261009\n", "YYYY.M.MICRO"),
+                                ("MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 0\n", "positive integer")):
+            self.config.write_text(values)
+            self.assertIn(message, self.gate().stderr)
 
 
 class ReleasePublicationTests(unittest.TestCase):
