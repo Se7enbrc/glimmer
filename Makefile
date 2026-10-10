@@ -48,6 +48,9 @@ SWIFTC          ?= xcrun swiftc
 TEST_SUITE      ?=
 DERIVED         := $(CURDIR)/build
 GLIMMER_APP_SRC := $(DERIVED)/Build/Products/$(CONFIG)/Glimmer.app
+# macOS keeps every built or test-hosted app registered after its folder is gone.
+LSREGISTER      := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+UNREGISTER_BUILDS = find "$(DERIVED)/Build/Products" -name "*.app" -exec $(LSREGISTER) -u {} \; 2>/dev/null || true
 STREAM_XCCONFIG := Glimmer/StreamLib.xcconfig
 INSTRUMENTS_DIR := $(HOME)/Library/Developer/Xcode/Instruments
 
@@ -133,7 +136,7 @@ release:
 # Build and run unsigned tests; TEST_SUITE optionally selects one suite or test.
 test:
 	@scripts/generate-build-info.sh
-	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	trap '$(UNREGISTER_BUILDS)' EXIT; xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
 	  $(if $(strip $(TEST_SUITE)),-only-testing:GlimmerTests/$(TEST_SUITE))
@@ -141,7 +144,7 @@ test:
 # Exercise untrusted protocol input with memory error detection enabled.
 test-asan:
 	@scripts/generate-build-info.sh
-	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	trap '$(UNREGISTER_BUILDS)' EXIT; xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
 	  -enableAddressSanitizer YES -only-testing:GlimmerTests/FuzzTests \
@@ -154,6 +157,7 @@ app:
 		-xcconfig $(STREAM_XCCONFIG) \
 		CODE_SIGNING_ALLOWED=NO \
 		-derivedDataPath $(DERIVED) -destination 'platform=macOS' build
+	@$(UNREGISTER_BUILDS)
 # CODE_SIGNING_ALLOWED=NO: signing is owned EXCLUSIVELY by the `sign` target
 # (keychain-pinned, prompt-free). Xcode's Automatic signing during the build
 # resolves identities from the login keychain and produces a password prompt
@@ -293,6 +297,7 @@ uninstall:
 	@echo "  ✓ removed"
 
 clean:
+	@$(UNREGISTER_BUILDS)
 	rm -rf $(DERIVED)
 	@echo "  ✓ cleaned"
 
