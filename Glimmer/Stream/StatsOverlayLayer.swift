@@ -291,21 +291,25 @@ public final class StatsOverlayLayer {
         layer.isHidden = true
     }
 
-    private static func rowHeight(for kind: StatsRow.Kind) -> CGFloat {
-        coreKinds.contains(kind) ? 54 : 32
+    /// Row height plus the value and trace bands inside it. Core rows carry the large
+    /// value; other traced rows a smaller value over a shorter trace; the rest are text.
+    static func rowBands(for kind: StatsRow.Kind) -> (height: CGFloat, value: CGFloat, trace: CGFloat) {
+        if coreKinds.contains(kind) { return (54, 24, 17) }
+        return StatsTrace.Metric(kind: kind) == nil ? (32, 19, 0) : (46, 19, 14)
     }
+
+    private static func rowHeight(for kind: StatsRow.Kind) -> CGFloat { rowBands(for: kind).height }
 
     private func layoutRows(_ rows: [StatsRow], in size: CGSize) {
         var top = size.height
         for row in rows {
             guard let sub = rowViews[row.kind] else { continue }
-            let height = Self.rowHeight(for: row.kind)
-            top -= height
-            sub.container.frame = CGRect(x: 0, y: top, width: size.width, height: height)
-            sub.labelLayer.frame = CGRect(x: 0, y: height - 13, width: size.width, height: 13)
-            sub.valueLayer.frame = CGRect(x: 0, y: sub.trace == nil ? 0 : 17,
-                                          width: size.width, height: sub.trace == nil ? 19 : 24)
-            sub.trace?.layer.frame = CGRect(x: 0, y: 0, width: size.width, height: 17)
+            let bands = Self.rowBands(for: row.kind)
+            top -= bands.height
+            sub.container.frame = CGRect(x: 0, y: top, width: size.width, height: bands.height)
+            sub.labelLayer.frame = CGRect(x: 0, y: bands.height - 13, width: size.width, height: 13)
+            sub.valueLayer.frame = CGRect(x: 0, y: bands.trace, width: size.width, height: bands.value)
+            sub.trace?.layer.frame = CGRect(x: 0, y: 0, width: size.width, height: bands.trace)
             top -= 3
         }
         capLayer.frame = CGRect(x: 0, y: 0, width: size.width, height: 12)

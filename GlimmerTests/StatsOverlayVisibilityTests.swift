@@ -192,6 +192,14 @@ struct StatsOverlayVisibilityTests {
         #expect(baseline.median() == nil)
     }
 
+    @Test func everyRowFitsItsLabelValueAndTraceWithoutOverlap() {
+        for kind in StatsRow.Kind.allCases {
+            let bands = StatsOverlayLayer.rowBands(for: kind)
+            #expect(bands.trace + bands.value + 13 <= bands.height, "\(kind) overlaps")
+            #expect((bands.trace > 0) == (StatsTrace.Metric(kind: kind) != nil), "\(kind) trace band")
+        }
+    }
+
     @Test func sampleRectTracksEveryCornerAndLetterboxOnBothAxes() {
         let overlay = StatsOverlayLayer()
         #expect(overlay.backdropSampleRect == .zero)
