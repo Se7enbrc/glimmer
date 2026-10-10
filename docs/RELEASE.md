@@ -13,18 +13,18 @@ Build numbers are increasing integers, not dates, and must exceed every build in
 the shared appcast. GitHub tags distinguish candidates, such as
 `2026.10.6-rc.1`; do not put that suffix in either bundle version field.
 
-Use `make verify` for development checks. It runs workflow lint, strict Swift
-lint, release-tool tests, hostless Swift tests and protocol tests under
-AddressSanitizer. Inspect compiler output for warnings. Ordinary unsigned
-compile checks and tests can run while fixing a failing check; signing or
-packaging a candidate must wait for the hosted checks to pass.
+Use `make verify` for development checks. It runs workflow lint, the SPDX notice
+check, strict Swift lint, release-tool tests, hostless Swift tests and protocol
+tests under AddressSanitizer. Inspect compiler output for warnings. Ordinary
+unsigned compile checks and tests can run while fixing a failing check; signing
+or packaging a candidate must wait for the hosted checks to pass.
 
 Push the reviewed PR commit and wait for Verify's macOS job and all three CodeQL
 jobs (Swift, Python and Actions) to succeed. The release workflow checks that
 exact commit, the upstream workflow identities and their analysis results.
 Missing, pending, skipped, cancelled or failed required checks stop it before
-compilation. Open code-scanning findings on the analyzed ref also stop the
-release.
+compilation. Open CodeQL alerts on the analyzed ref also stop the release;
+findings from other code-scanning tools, such as Scorecard, do not.
 
 Once all checks pass, point the maintainer-controlled `release-candidate` branch
 at that exact reviewed commit. Fork-owned workflow runs cannot authorize a

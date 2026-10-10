@@ -47,7 +47,7 @@ pre-commit install # lint + secret scan, per commit
 
 ```bash
 make app        # compile-only check (Debug), no signing
-make check      # workflow lint, SwiftLint and release-tool tests, no Swift build
+make check      # workflow lint, SPDX notices, SwiftLint, release-tool tests
 make test       # unit tests
 make test-asan  # protocol fuzz tests with AddressSanitizer, unsigned
 make verify     # lint, release tools, all Swift tests and sanitizer checks
@@ -59,7 +59,13 @@ Use `make check` for quick feedback between edits. Run a focused Swift suite
 with `make test TEST_SUITE=DatagramBatchTests`, or append `/testName` to select
 one test. `make verify` always runs every suite, even if `TEST_SUITE` is set. It
 also runs the parser and stream fuzz suites under AddressSanitizer. A memory
-error fails the gate before a push or release.
+error fails the gate before a merge or release.
+
+`make test COVERAGE=1` and `make test-scripts COVERAGE=1` also write coverage
+reports to `build/coverage`, with no threshold. `scripts/fuzz.sh` runs the
+coverage-guided libFuzzer harnesses in `fuzz/` inside a pinned Swift Linux
+container, so it needs Docker; `FUZZ_SECONDS` sets the time per target and a
+crashing input is left under `build/fuzz/`.
 
 The shared scheme runs tests one at a time. Socket deadline tests measure real
 elapsed time; launching every test together can starve their callbacks on hosted
@@ -236,11 +242,12 @@ A `trufflehog` secret scan runs per commit against verified detectors, and
 `prettier`, `markdownlint`, and `yamllint` cover the non-Swift files.
 Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
 
-Hosted PR checks run every pre-commit hook with `pre-commit run --all-files` on
-the same Apple Silicon runner as `make verify`. Credential checks cover all
-tracked files and the PR's commits, including credentials removed before the
-final commit. Scanner findings are withheld from public logs. Formatting hooks
-may fail and modify files for review; CI never commits those changes.
+Hosted Verify's checks job runs every pre-commit hook with
+`pre-commit run --all-files` on the same Apple Silicon runner as the rest of the
+gate. Credential checks cover all tracked files and the PR's commits, including
+credentials removed before the final commit. Scanner findings are withheld from
+public logs. Formatting hooks may fail and modify files for review; CI never
+commits those changes.
 
 ## Style
 
@@ -258,6 +265,10 @@ may fail and modify files for review; CI never commits those changes.
   thread to understand a line, the why goes in the source; the full story goes
   in the commit message.
 - No emoji in source files.
+- A new source file starts with the `SPDX-License-Identifier: GPL-3.0-only` and
+  `SPDX-FileCopyrightText` lines its neighbours carry; `scripts/check-spdx.sh`
+  in `make check` fails a tracked Swift, header, shell, Python, JavaScript,
+  workflow or Makefile file whose first three lines lack the license line.
 
 ## Concurrency
 
@@ -441,6 +452,12 @@ Practically, before you call something done:
 - Fork, push your branch to the fork, and open the PR from there against `main`.
   Only the maintainer can merge into `main`. Renovate, run by the maintainer,
   keeps one grouped update branch; other contributors use forks.
+- Rulesets protect `main`: changes arrive only by pull request and squash merge,
+  after the required `macOS`, `Analyze (swift)`, `Analyze (python)` and
+  `Analyze (actions)` checks pass. Its history must carry verified signatures,
+  and it cannot be force-pushed or deleted. Only the maintainer (and the release
+  app) can create or push other branches. The repository admin role can bypass
+  the pull request and checks rule.
 - Keep a PR scoped to one area, so it can land independently.
 - Leave `CHANGELOG.md` and `Glimmer/Version.xcconfig` alone: the maintainer
   picks the version and writes the release notes when a change ships. Each
@@ -451,9 +468,15 @@ Practically, before you call something done:
   is the checklist.
 - Before merging any PR, including Renovate updates, check out its exact head
   commit in a clean worktree and run `make verify`. Record that commit SHA and
-  the checks in the review. Hosted CI also runs `make verify` on an Apple
-  Silicon macOS 26 runner with Xcode 26.6 and compiler warnings treated as
-  errors. PR jobs receive no signing credentials and cannot publish releases.
+  the checks in the review. Hosted Verify runs the same gate as three parallel
+  jobs (`make check` with every pre-commit hook, `make test`, `make test-asan`)
+  on Apple Silicon macOS 26 runners with Xcode 26.6 and compiler warnings
+  treated as errors; the required `macOS` check passes only when all three do.
+  The checks and tests jobs measure coverage and upload the reports. A separate
+  `libFuzzer` job runs `scripts/fuzz.sh` for 30 seconds per target; it is not
+  part of the required check. Every `main` commit gets its own Verify and CodeQL
+  run, and a newer push to a pull request replaces its older run. PR jobs
+  receive no signing credentials and cannot publish releases.
 
 Hosted verification, CodeQL and releases use the same Xcode 26.6 toolchain on
 macOS 26. These checks exercise the minimum supported OS family, but do not

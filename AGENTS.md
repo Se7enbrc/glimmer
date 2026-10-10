@@ -63,11 +63,13 @@ pre-commit install
 
 - `make app`: Debug build, unsigned. A compile check.
 - `make test`: the unit tests. Hostless, no PC needed.
-- `make verify`: Actionlint, strict SwiftLint, release-tool tests, `make test`
-  and protocol fuzz tests under AddressSanitizer. This is the gate: hosted
-  Verify runs it on every push and `make dist` runs it, so nothing is done until
-  it passes there. It does not fail on compiler warnings, so read the build log:
-  there must be none.
+- `make verify`: Actionlint, the SPDX notice check, strict SwiftLint,
+  release-tool tests, `make test` and protocol fuzz tests under
+  AddressSanitizer. This is the gate: hosted Verify runs its three parts
+  (`make check`, `make test`, `make test-asan`) as parallel jobs under the
+  required `macOS` check on every pull request and `main` commit, and
+  `make dist` runs it, so nothing is done until it passes there. Locally it does
+  not fail on compiler warnings, so read the build log: there must be none.
 - `make dev`: tests, then the Release build installed and relaunched. On a Mac
   with a Developer ID it signs and notarizes on the way, as every install does.
 
@@ -156,6 +158,11 @@ Each of these gets a pull request sent back.
   Never log keystrokes, keys, PINs, certificates or the URL parameters
   `NetworkClient.sensitiveQueryKeys` lists. Nothing per-frame at `.info`. The
   root helper is its own process and logs on `io.ugfugl.glimmer.helper`.
+- **License notice.** A new source file (Swift, header, shell, Python,
+  JavaScript, the Makefile, a workflow) starts with the
+  `SPDX-License-Identifier` and `SPDX-FileCopyrightText` lines its neighbours
+  carry. `scripts/check-spdx.sh` fails `make check` when the license line is
+  missing from the first three lines.
 - **Tests.** New tests use Swift Testing (`@Test`, `#expect`). Pure logic gets a
   test; a bug fix gets a test that fails without it. The project does not use
   synchronized folders, so a new file must be added to `project.pbxproj` by
