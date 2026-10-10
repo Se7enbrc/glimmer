@@ -360,6 +360,11 @@
 		DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */; };
 		DA2026100900000000000017 /* TelemetryGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000018 /* TelemetryGateTests.swift */; };
 		DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000016 /* RendererTelemetryTests.swift */; };
+		C4A400000000000000000102 /* LatencyTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000101 /* LatencyTrackerTests.swift */; };
+		C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000103 /* TelemetryCounterStateTests.swift */; };
+		C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000105 /* StatsCollectorWindowTests.swift */; };
+		C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */; };
+		C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000109 /* StatsSupportTypesTests.swift */; };
 		DEC0DE202609221900000002 /* SessionReceiptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000001 /* SessionReceiptTests.swift */; };
 		DEC0DE202609221900000004 /* AudioVideoSkewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */; };
 		DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */; };
@@ -821,6 +826,11 @@
 		DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DecodeTimeSplitTests.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000018 /* TelemetryGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryGateTests.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000016 /* RendererTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RendererTelemetryTests.swift"; sourceTree = "<group>"; };
+		C4A400000000000000000101 /* LatencyTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LatencyTrackerTests.swift"; sourceTree = "<group>"; };
+		C4A400000000000000000103 /* TelemetryCounterStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCounterStateTests.swift"; sourceTree = "<group>"; };
+		C4A400000000000000000105 /* StatsCollectorWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsCollectorWindowTests.swift"; sourceTree = "<group>"; };
+		C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSnapshotRowsTests.swift"; sourceTree = "<group>"; };
+		C4A400000000000000000109 /* StatsSupportTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSupportTypesTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221900000001 /* SessionReceiptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReceiptTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioVideoSkewTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryConfigRowTests.swift; sourceTree = "<group>"; };
@@ -1322,6 +1332,11 @@
 				DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */,
 				DA2026100900000000000018 /* TelemetryGateTests.swift */,
 				DA2026100900000000000016 /* RendererTelemetryTests.swift */,
+				C4A400000000000000000101 /* LatencyTrackerTests.swift */,
+				C4A400000000000000000103 /* TelemetryCounterStateTests.swift */,
+				C4A400000000000000000105 /* StatsCollectorWindowTests.swift */,
+				C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */,
+				C4A400000000000000000109 /* StatsSupportTypesTests.swift */,
 				DEC0DE202609221900000001 /* SessionReceiptTests.swift */,
 				DEC0DE202609221900000003 /* AudioVideoSkewTests.swift */,
 				DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */,
@@ -1866,6 +1881,11 @@
 				DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */,
 				DA2026100900000000000017 /* TelemetryGateTests.swift in Sources */,
 				DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */,
+				C4A400000000000000000102 /* LatencyTrackerTests.swift in Sources */,
+				C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */,
+				C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */,
+				C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */,
+				C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */,
 				DEC0DE202609221900000002 /* SessionReceiptTests.swift in Sources */,
 				DEC0DE202609221900000004 /* AudioVideoSkewTests.swift in Sources */,
 				DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */,
