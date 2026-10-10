@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 // Window mode's grab and release as the forwarder walks them, and the diagnostic
 // event sampler. No key event reaches the diagnostic log.
 
