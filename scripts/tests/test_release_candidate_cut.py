@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""`make rc` against a fixture origin, with inert gh, curl and open; no network or real keys."""
+"""`make rc` against a fixture origin, with inert gh and open; no network or real keys."""
 
 import json
 import os
@@ -62,12 +62,10 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.env.update(PATH=f"{tools}:/usr/bin:/bin", HOME=str(self.root), GIT_CONFIG_NOSYSTEM="1",
                         GIT_CONFIG_GLOBAL=os.devnull, FIXTURE_STATE=str(self.state))
         (tools / "gh").write_text(GH)
-        (tools / "curl").write_text(f'#!/bin/bash\ncat "{self.state}/live-appcast.xml"\n')
         (tools / "open").write_text(f'#!/bin/bash\necho "$@" >> "{self.state}/open.log"\n')
         for tool in tools.iterdir():
             tool.chmod(0o755)
         (self.state / "runs.json").write_text("[]")
-        (self.state / "live-appcast.xml").write_text(feed("20261007", "20261008"))
         self.check_runs("completed")
         shutil.copy2(SCRIPTS / "release-candidate.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "release_validation.py", self.work / "scripts")
@@ -77,6 +75,7 @@ class ReleaseCandidateCutTests(unittest.TestCase):
             'if __name__ == "__main__" and os.environ.get("FIXTURE_CHECKS"):\n'
             '    sys.exit("ERR: " + os.environ["FIXTURE_CHECKS"])\n')
         (self.work / "Glimmer").mkdir()
+        # A stale copy on the source branch must never stand in for the feed.
         (self.work / "appcast.xml").write_text(feed("20261008"))
         (self.work / ".gitignore").write_text("__pycache__/\n")
         self.git("init", "--quiet", "--bare", str(self.origin), cwd=self.root)
@@ -91,6 +90,19 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.old = self.commit("20261009")
         self.sha = self.commit(BUILD)
         self.git("push", "--quiet", "origin", "HEAD:refs/heads/feat/rc")
+        self.publish_feed("20261007", "20261008")
+        self.git("fetch", "--quiet", "origin")
+
+    def publish_feed(self, *builds):
+        repository = self.root / "feed"
+        if not repository.exists():
+            repository.mkdir()
+            self.git("init", "--quiet", "-b", "appcast", cwd=repository)
+        (repository / "appcast.xml").write_text(feed(*builds))
+        self.git("add", "appcast.xml", cwd=repository)
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.test",
+                 "commit", "--quiet", "-m", "appcast", cwd=repository)
+        self.git("push", "--quiet", str(self.origin), "HEAD:refs/heads/appcast", cwd=repository)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -145,14 +157,12 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assert_refused(self.cut(), "is not pushed")
 
     def test_stale_build_number_is_refused(self):
-        (self.state / "live-appcast.xml").write_text(feed("20261008", BUILD))
+        self.publish_feed("20261008", BUILD)
         self.assert_refused(self.cut(), f"must exceed published build {BUILD}")
 
-    def test_unreachable_live_appcast_falls_back_to_committed_one(self):
-        (self.state / "live-appcast.xml").unlink()
-        result = self.cut("--dry-run")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("checking the committed appcast.xml", result.stderr)
+    def test_missing_appcast_branch_is_refused_rather_than_reading_a_local_copy(self):
+        self.git("push", "--quiet", "origin", ":refs/heads/appcast")
+        self.assert_refused(self.cut("--dry-run"), "couldn't fetch the appcast branch")
 
     def test_existing_final_tag_is_refused(self):
         self.tag_origin(VERSION)
@@ -204,18 +214,16 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assert_refused(self.cut("--ci-sha", self.sha, "--pr", "114"), "moved past")
         self.assertNotIn("refs/tags/", self.remote())
 
-    def test_ci_wait_only_waits_and_changes_nothing(self):
-        self.git("checkout", "--quiet", "--detach", self.sha)
-        before = self.remote()
-        result = self.cut("--ci-sha", self.sha, "--pr", "114", "--wait-only")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(f"Required checks passed for {self.sha}", result.stdout)
-        self.assertEqual(self.remote(), before)
-        self.assertEqual(self.dispatches(), [])
-
-    def test_ci_cut_refuses_a_checkout_that_is_not_the_labelled_head(self):
-        self.assert_refused(self.cut("--ci-sha", self.old, "--pr", "114"), "checkout is not the pull request head")
+    def test_ci_cut_refuses_a_commit_it_does_not_have(self):
+        self.assert_refused(self.cut("--ci-sha", "f" * 40, "--pr", "114"), "is not in this clone")
         self.assertNotEqual(self.cut("--ci-sha", "abc", "--pr", "114").returncode, 0)
+
+    def test_ci_cut_reads_the_version_from_the_candidate_not_the_checkout(self):
+        (self.state / "pr-head").write_text(self.sha)
+        self.git("checkout", "--quiet", "--detach", self.old)
+        result = self.cut("--ci-sha", self.sha, "--pr", "114")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"{self.sha}\trefs/tags/{VERSION}-rc.1^{{}}", self.remote())
 
     def test_tag_on_another_commit_is_refused(self):
         self.git("tag", f"{VERSION}-rc.1", self.old)

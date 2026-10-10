@@ -19,8 +19,12 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="${1:-$(sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' "$HERE/Glimmer/Version.xcconfig" | tr -d ' ')}"
-TAG="${2:-$VERSION}"
 RELEASES_REPO="${RELEASES_REPO:-Se7enbrc/glimmer}"
+# A promoted candidate keeps its rc tag, so find the stable release that carries this version.
+TAG="${2:-$(gh release list -R "$RELEASES_REPO" --exclude-drafts --exclude-pre-releases --limit 50 \
+	--json tagName --jq "[.[].tagName | select(. == \"$VERSION\" or startswith(\"$VERSION-rc.\"))][0] // empty" \
+	2>/dev/null || true)}"
+TAG="${TAG:-$VERSION}"
 TAP_REPO="${TAP_REPO:-Se7enbrc/homebrew-glimmer}"
 TAP_DIR="${GLIMMER_TAP_CACHE:-$HOME/.cache/glimmer/homebrew-glimmer}"
 CASK="Casks/glimmer.rb"
@@ -82,7 +86,7 @@ if git -C "$TAP_DIR" diff --quiet -- "$CASK"; then
 fi
 
 if [ "${GITHUB_ACTIONS:-}" = true ]; then
-	TAP_SHA="$(python3 "$HERE/scripts/github_signed_commit.py" "$TAP_REPO" "$TAP_HEAD" \
+	TAP_SHA="$(python3 "$HERE/scripts/github_signed_commit.py" "$TAP_REPO" main "$TAP_HEAD" \
 		"$CASK" "$TAP_DIR/$CASK" "glimmer $VERSION")"
 	echo "  ✓ verified cask commit published → $TAP_SHA"
 else

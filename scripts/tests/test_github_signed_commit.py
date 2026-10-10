@@ -35,8 +35,8 @@ class GitHubSignedCommitTests(unittest.TestCase):
         self.file = Path(self.temp.name) / "metadata"
         self.file.write_bytes(b'quote " slash \\ line\n\xc3\xa9\x00')
 
-    def commit(self, repository="Se7enbrc/glimmer", head=HEAD, path="appcast.xml"):
-        return commit_file(repository, head, path, self.file, 'appcast: "fixture"')
+    def commit(self, repository="Se7enbrc/glimmer", head=HEAD, path="appcast.xml", branch="appcast"):
+        return commit_file(repository, branch, head, path, self.file, 'appcast: "fixture"')
 
     def test_typed_json_preserves_bytes_expected_head_and_repository(self):
         with patch("github_signed_commit.subprocess.run") as run:
@@ -46,7 +46,7 @@ class GitHubSignedCommitTests(unittest.TestCase):
         request = json.loads(run.call_args.kwargs["input"])
         data = request["variables"]["input"]
         self.assertEqual(data["expectedHeadOid"], HEAD)
-        self.assertEqual(data["branch"], {"repositoryNameWithOwner": "Se7enbrc/glimmer", "branchName": "main"})
+        self.assertEqual(data["branch"], {"repositoryNameWithOwner": "Se7enbrc/glimmer", "branchName": "appcast"})
         self.assertEqual(data["message"]["headline"], 'appcast: "fixture"')
         self.assertEqual(len(data["fileChanges"]["additions"]), 1)
         change = data["fileChanges"]["additions"][0]
@@ -58,14 +58,16 @@ class GitHubSignedCommitTests(unittest.TestCase):
     def test_explicit_fork_repository_is_preserved(self):
         with patch("github_signed_commit.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0, response(), "")
-            self.commit(repository="fixture-fork/homebrew-glimmer", path="Casks/glimmer.rb")
+            self.commit(repository="fixture-fork/homebrew-glimmer", path="Casks/glimmer.rb", branch="main")
         data = json.loads(run.call_args.kwargs["input"])["variables"]["input"]
-        self.assertEqual(data["branch"]["repositoryNameWithOwner"], "fixture-fork/homebrew-glimmer")
+        self.assertEqual(data["branch"], {"repositoryNameWithOwner": "fixture-fork/homebrew-glimmer",
+                                          "branchName": "main"})
         self.assertEqual(data["fileChanges"]["additions"][0]["path"], "Casks/glimmer.rb")
 
     def test_invalid_request_fails_before_network(self):
         for kwargs in ({"repository": "https://github.com/owner/repo"}, {"head": "main"},
-                       {"path": "../secret"}, {"path": "/secret"}, {"path": "a//b"}):
+                       {"path": "../secret"}, {"path": "/secret"}, {"path": "a//b"},
+                       {"branch": "release-candidate"}, {"branch": "refs/heads/appcast"}):
             with self.subTest(kwargs=kwargs), patch("github_signed_commit.subprocess.run") as run:
                 with self.assertRaises(ValueError):
                     self.commit(**kwargs)
@@ -115,10 +117,21 @@ if name == "git":
     elif args[0] == "diff":
         sys.exit(1)
 elif name == "gh":
-    if args[:2] == ["release", "view"] and os.environ.get("FIXTURE_NEW_RELEASE"):
+    state = pathlib.Path(os.environ["FIXTURE_LOG"] + ".release")
+    if args[:2] == ["release", "create"]:
+        state.write_text("true" if "--draft" in args else "false")
+    elif args[:2] == ["release", "edit"] and "--draft=false" in args:
+        state.write_text("false")
+    elif args[:2] == ["release", "view"] and os.environ.get("FIXTURE_NEW_RELEASE") and not state.exists():
         sys.exit(1)
+    elif args[:2] == ["release", "view"] and "databaseId" in args:
+        print(7)
+    elif args[0] == "api" and args[1].endswith("/releases/7") and ".draft" in args:
+        print(state.read_text() if state.exists() else "false")
     elif args[:2] == ["release", "view"] and "--json" in args:
         print("false" if os.environ.get("FIXTURE_PRERELEASE") else "true")
+    elif args[:2] == ["release", "list"]:
+        print(os.environ.get("FIXTURE_STABLE_TAG", ""))
     elif args[:2] == ["release", "download"]:
         (pathlib.Path(args[args.index("-D") + 1]) / "Glimmer-2026.10.6.dmg").write_bytes(b"fixture")
     elif args[:2] == ["api", "graphql"]:
@@ -136,9 +149,12 @@ elif name == "ditto":
 class HomebrewCommitPathTests(unittest.TestCase):
     def test_hosted_uses_signed_api_while_local_keeps_normal_git_commits(self):
         import hashlib
-        for hosted, tag, prerelease in ((False, "2026.10.6", False), (True, "2026.10.6", False),
-                                       (True, "2026.10.6-rc.1", False), (True, "2026.10.6-rc.1", True)):
-            with self.subTest(hosted=hosted, tag=tag, prerelease=prerelease), tempfile.TemporaryDirectory() as directory:
+        for hosted, tag, prerelease, implied in ((False, "2026.10.6", False, False), (True, "2026.10.6", False, False),
+                                                 (True, "2026.10.6-rc.1", False, False),
+                                                 (True, "2026.10.6-rc.1", True, False),
+                                                 (False, "2026.10.6-rc.1", False, True)):
+            with self.subTest(hosted=hosted, tag=tag, prerelease=prerelease, implied=implied), \
+                    tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 for name in ("scripts", "bin", "tap/.git", "tap/Casks"):
                     (root / name).mkdir(parents=True)
@@ -163,7 +179,10 @@ class HomebrewCommitPathTests(unittest.TestCase):
                        "FIXTURE_REQUEST": str(request), "GITHUB_ACTIONS": "true" if hosted else "false"}
                 if prerelease:
                     env["FIXTURE_PRERELEASE"] = "1"
-                result = subprocess.run(["bash", str(root / "scripts/homebrew-bump.sh"), "2026.10.6", tag],
+                if implied:
+                    env["FIXTURE_STABLE_TAG"] = tag
+                args = ["2026.10.6"] if implied else ["2026.10.6", tag]
+                result = subprocess.run(["bash", str(root / "scripts/homebrew-bump.sh"), *args],
                                         env=env, capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode == 0, not prerelease, result.stderr)
                 calls = [json.loads(line) for line in log.read_text().splitlines()]
@@ -180,14 +199,15 @@ class HomebrewCommitPathTests(unittest.TestCase):
                 if hosted:
                     data = json.loads(request.read_text())["variables"]["input"]
                     self.assertEqual(data["expectedHeadOid"], HEAD)
-                    self.assertEqual(data["branch"]["repositoryNameWithOwner"], "fork/homebrew-glimmer")
+                    self.assertEqual(data["branch"], {"repositoryNameWithOwner": "fork/homebrew-glimmer",
+                                                      "branchName": "main"})
                     self.assertEqual(base64.b64decode(data["fileChanges"]["additions"][0]["contents"]),
                                      (root / "tap/Casks/glimmer.rb").read_bytes())
 
 
 class AppcastCommitPathTests(unittest.TestCase):
-    def test_appcast_commits_after_release_with_cas_and_no_unsigned_fallback(self):
-        for hosted, failure in ((False, False), (True, False), (True, True)):
+    def test_appcast_commits_to_its_branch_after_release_with_cas_and_no_unsigned_fallback(self):
+        for hosted, failure in ((False, False), (False, True), (True, False), (True, True)):
             with self.subTest(hosted=hosted, failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 for name in ("scripts", "bin", "tools", "dist", "Glimmer", "Glimmer.app/Contents"):
@@ -235,20 +255,27 @@ class AppcastCommitPathTests(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, not failure, result.stderr)
                 self.assertNotIn("private GraphQL failure detail", result.stdout + result.stderr)
                 calls = [json.loads(line) for line in log.read_text().splitlines()]
-                commands = [call["args"][2] for call in calls if call["tool"] == "git"]
-                self.assertEqual("commit" in commands, not hosted)
-                self.assertEqual("push" in commands, not hosted)
-                if hosted:
-                    data = json.loads(request.read_text())["variables"]["input"]
-                    self.assertEqual(data["expectedHeadOid"], HEAD)
-                    self.assertEqual(data["branch"]["repositoryNameWithOwner"], "fork/glimmer")
-                    self.assertEqual(data["fileChanges"]["additions"][0]["path"], "appcast.xml")
-                    self.assertEqual(base64.b64decode(data["fileChanges"]["additions"][0]["contents"]),
-                                     b"<rss>fixture</rss>\n")
-                    self.assertEqual((root / "appcast.xml").read_bytes(), original_feed)
-                    creation = next(index for index, call in enumerate(calls)
-                                    if call["tool"] == "gh" and call["args"][:2] == ["release", "create"])
-                    mutations = [index for index, call in enumerate(calls)
-                                 if call["tool"] == "gh" and call["args"][:2] == ["api", "graphql"]]
-                    self.assertEqual(len(mutations), 1)
-                    self.assertLess(creation, mutations[0])
+                git = [call["args"][2:] for call in calls if call["tool"] == "git"]
+                self.assertFalse(any(args[0] in {"add", "commit", "push"} for args in git))
+                self.assertIn("+refs/heads/appcast:refs/remotes/origin/appcast",
+                              next(args for args in git if args[0] == "fetch"))
+                self.assertIn(["rev-parse", "origin/appcast"], git)
+                self.assertIn(["show", f"{HEAD}:appcast.xml"], git)
+                self.assertFalse(any(args[0] == "show" and args[1].startswith("origin/main") for args in git))
+                dispatch = [call["args"] for call in calls
+                            if call["tool"] == "gh" and call["args"][:2] == ["workflow", "run"]]
+                self.assertEqual(dispatch, [] if hosted or failure else
+                                 [["workflow", "run", "pages.yml", "-R", "fork/glimmer", "--ref", "main"]])
+                data = json.loads(request.read_text())["variables"]["input"]
+                self.assertEqual(data["expectedHeadOid"], HEAD)
+                self.assertEqual(data["branch"], {"repositoryNameWithOwner": "fork/glimmer", "branchName": "appcast"})
+                self.assertEqual(data["fileChanges"]["additions"][0]["path"], "appcast.xml")
+                self.assertEqual(base64.b64decode(data["fileChanges"]["additions"][0]["contents"]),
+                                 b"<rss>fixture</rss>\n")
+                self.assertEqual((root / "appcast.xml").read_bytes(), original_feed)
+                creation = next(index for index, call in enumerate(calls)
+                                if call["tool"] == "gh" and call["args"][:2] == ["release", "create"])
+                mutations = [index for index, call in enumerate(calls)
+                             if call["tool"] == "gh" and call["args"][:2] == ["api", "graphql"]]
+                self.assertEqual(len(mutations), 1)
+                self.assertLess(creation, mutations[0])

@@ -39,6 +39,7 @@ class CandidatePromotionTests(unittest.TestCase):
         self.source_changed = False
         self.attest_failure = False
         self.cas_response_failure = False
+        self.feed_head = "e" * 40
         self.assets = {f"Glimmer-{SHORT}.{suffix}": f"inert {suffix}".encode() for suffix in ("dmg", "zip")}
         self.data = {"id": 42, "tag_name": TAG, "draft": False, "prerelease": True,
                      "assets": [{"name": name, "size": len(data), "state": "uploaded",
@@ -57,7 +58,10 @@ class CandidatePromotionTests(unittest.TestCase):
     def command(self, args, message):
         self.calls.append(args)
         if args[:2] == ["git", "fetch"]:
+            self.assertIn("+refs/heads/appcast:refs/remotes/origin/appcast", args)
             return ""
+        if args == ["git", "rev-parse", "refs/remotes/origin/appcast"]:
+            return self.feed_head + "\n"
         if args[:2] == ["git", "rev-parse"]:
             return os.environ["EXPECTED_SHA"] + "\n"
         if args[:2] == ["git", "diff"]:
@@ -67,6 +71,7 @@ class CandidatePromotionTests(unittest.TestCase):
             return ""
         if args[:2] == ["git", "show"]:
             if args[2].endswith(":appcast.xml"):
+                self.assertEqual(args[2], f"{self.feed_head}:appcast.xml")
                 return self.feed
             return f"MARKETING_VERSION = {SHORT}\nCURRENT_PROJECT_VERSION = {BUILD}\n"
         if args[:2] == ["gh", "api"]:
@@ -94,10 +99,12 @@ class CandidatePromotionTests(unittest.TestCase):
                 raise ValueError(message)
             return ""
         if args[1] == "scripts/github_signed_commit.py":
-            self.feed = Path(args[5]).read_text()
+            self.assertEqual(args[2:6], [PROMOTE.REPO, "appcast", self.feed_head, "appcast.xml"])
+            self.feed = Path(args[6]).read_text()
             if self.cas_response_failure:
                 raise ValueError(message)
-            return "c" * 40
+            self.feed_head = "f" * 40
+            return self.feed_head
         raise AssertionError(args)
 
     def test_promotes_same_tag_and_exact_verified_bytes_without_builds_or_signing(self):

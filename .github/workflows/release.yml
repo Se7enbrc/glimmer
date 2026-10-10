@@ -142,6 +142,7 @@ jobs:
         if: inputs.operation == 'candidate'
         env:
           RELEASE_ATTESTATION_ID: ${{ steps.provenance.outputs.attestation-id }}
+          RELEASE_PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}
         run: scripts/ci-release.sh publish

@@ -79,6 +79,14 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertIn("swiftlint lint --strict", full)
         self.assertIn("python3 -m unittest", full)
 
+    def test_build_gates_read_the_feed_from_the_appcast_branch(self):
+        makefile = (SCRIPTS.parent / "Makefile").read_text()
+        self.assertNotRegex(makefile, r"--appcast\s+\"?appcast\.xml")
+        plan = subprocess.run(["make", "--dry-run", "guard-release-version"], cwd=SCRIPTS.parent,
+                              capture_output=True, text=True, check=True).stdout
+        self.assertIn("git show refs/remotes/origin/appcast:appcast.xml", plan)
+        self.assertFalse((SCRIPTS.parent / "appcast.xml").exists(), "the feed lives on the appcast branch")
+
     def test_sparkle_app_and_release_tools_share_a_pinned_version(self):
         root = SCRIPTS.parent
         resolved = json.loads((root / "Glimmer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved").read_text())
