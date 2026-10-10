@@ -122,6 +122,9 @@ extension StreamSession {
                         enabled: enabled,
                         targetFps: Double(dec.streamFps),
                         thresholds: thresholds)
+                    // The decoder samples the picture under the column for the HUD's ink.
+                    dec.hudBackdropRect = win.statsOverlay.backdropSampleRect
+                    if let luminance = dec.hudBackdropLuminance { win.statsOverlay.updateBackdropLuminance(luminance) }
                 }
             }
             // Tolerance saves the OS some power - at 4 Hz a 30 ms tolerance is
