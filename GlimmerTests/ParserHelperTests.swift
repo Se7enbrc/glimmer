@@ -55,6 +55,23 @@ struct ParserHelperTests {
         #expect(!UdpPinger.isExpectedPeer(ipv4, length: ipv4Length, expected: expected, expectedLength: length))
     }
 
+    @Test func scopedIPv6DestinationPinsItsInterface() throws {
+        let (expected, length, _) = try #require(UdpPinger.makeSockaddr(for: "fe80::1%lo0", port: 48_000))
+        let scope = withUnsafeBytes(of: expected) { $0.loadUnaligned(fromByteOffset: 24, as: UInt32.self) }
+        #expect(scope == if_nametoindex("lo0"))
+        var otherLink = expected
+        withUnsafeMutableBytes(of: &otherLink) { $0.storeBytes(of: scope &+ 1, toByteOffset: 24, as: UInt32.self) }
+        #expect(!UdpPinger.isExpectedPeer(otherLink, length: length, expected: expected, expectedLength: length))
+    }
+
+    @Test func foreignPeerIsNotedOncePerReceiveLoop() {
+        var noted = false
+        UdpPinger.noteForeignPeer(&noted, stream: "Video", category: "NativeVideo")
+        #expect(noted)
+        UdpPinger.noteForeignPeer(&noted, stream: "Video", category: "NativeVideo")
+        #expect(noted)
+    }
+
     private func feedAudioQueue(_ queue: RtpAudioQueue, sequences: [UInt16]) {
         for sequence in sequences {
             var packet: [UInt8] = []

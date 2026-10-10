@@ -38,6 +38,14 @@ enum UdpPinger {
         }
     }
 
+    /// Notes the first datagram from an address other than the PC's, once per receive loop:
+    /// a PC replying from another address would otherwise stream nothing, silently.
+    static func noteForeignPeer(_ noted: inout Bool, stream: String, category: String) {
+        guard !noted else { return }
+        noted = true
+        Diag.notice("\(stream) is ignoring datagrams from an address other than the PC's", category)
+    }
+
     struct SendFailureStreak {
         enum Edge: Equatable {
             case failed
@@ -190,6 +198,7 @@ enum UdpPinger {
             sa.sin6_family = sa_family_t(AF_INET6)
             sa.sin6_port = port.bigEndian
             v6.rawValue.withUnsafeBytes { _ = memcpy(&sa.sin6_addr, $0.baseAddress, 16) }
+            sa.sin6_scope_id = UInt32(v6.interface?.index ?? 0)
             withUnsafeBytes(of: &sa) { _ = memcpy(&storage, $0.baseAddress, MemoryLayout<sockaddr_in6>.size) }
             return (storage, socklen_t(MemoryLayout<sockaddr_in6>.size), AF_INET6)
         default:

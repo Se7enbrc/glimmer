@@ -267,12 +267,16 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             let batch = DatagramBatch(capacity: 32, stride: bufSize)
             var batched = true
             var receiveFailed = false
+            var foreignPeerNoted = false
             while let self, !self.interrupted.load(ordering: .relaxed) {
                 let count = batched ? batch.receive(from: sock) : batch.receiveOne(from: sock)
                 for index in 0..<max(count, 0) {
                     guard !self.interrupted.load(ordering: .relaxed) else { break }
                     guard batch.isExpectedPeer(at: index, expected: self.destAddr,
-                                               expectedLength: self.destAddrLen) else { continue }
+                                               expectedLength: self.destAddrLen) else {
+                        UdpPinger.noteForeignPeer(&foreignPeerNoted, stream: "Video", category: Self.cat)
+                        continue
+                    }
                     let datagram = batch.datagram(index)
                     guard datagram.length > 0 else { continue }
                     self.receive(datagram.bytes, count: datagram.length, decryptor: decryptor)
