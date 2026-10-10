@@ -3,6 +3,7 @@
 
 """`make rc` against a fixture origin, with inert gh and open; no network or real keys."""
 
+import base64
 import json
 import os
 from pathlib import Path
@@ -61,6 +62,7 @@ class ReleaseCandidateCutTests(unittest.TestCase):
                     if key not in {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "SSH_AUTH_SOCK"}}
         self.env.update(PATH=f"{tools}:/usr/bin:/bin", HOME=str(self.root), GIT_CONFIG_NOSYSTEM="1",
                         GIT_CONFIG_GLOBAL=os.devnull, FIXTURE_STATE=str(self.state))
+        self.measure_copy()
         (tools / "gh").write_text(GH)
         (tools / "open").write_text(f'#!/bin/bash\necho "$@" >> "{self.state}/open.log"\n')
         for tool in tools.iterdir():
@@ -103,6 +105,14 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.test",
                  "commit", "--quiet", "-m", "appcast", cwd=repository)
         self.git("push", "--quiet", str(self.origin), "HEAD:refs/heads/appcast", cwd=repository)
+
+    def measure_copy(self):
+        # Coverage's subprocess config only covers scripts/; add the fixture copy (paths maps it back).
+        config = self.env.get("COVERAGE_PROCESS_CONFIG")
+        if config:
+            data = json.loads(base64.b64decode(config))
+            data["source"] = [*data["source"], os.path.realpath(self.work / "scripts")]
+            self.env["COVERAGE_PROCESS_CONFIG"] = base64.b64encode(json.dumps(data).encode()).decode()
 
     def tearDown(self):
         self.temp.cleanup()

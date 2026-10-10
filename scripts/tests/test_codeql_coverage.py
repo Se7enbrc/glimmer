@@ -3,12 +3,16 @@
 
 """A successful partial Swift analysis must not satisfy the CodeQL gate."""
 
+import contextlib
 import importlib.util
+import io
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("codeql_coverage", Path(__file__).parents[1] / "codeql-coverage.py")
 COVERAGE = importlib.util.module_from_spec(SPEC)
@@ -71,6 +75,61 @@ class CodeQLCoverageTests(unittest.TestCase):
             with self.subTest(failure=failure), patch.object(COVERAGE.subprocess, "run", side_effect=failure):
                 with self.assertRaisesRegex(ValueError, "compiler's CodeQL support"):
                     COVERAGE.codeql_command(["codeql"], Path.cwd())
+
+    def test_tracked_sources_lists_only_tracked_swift_under_production_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True, env=env)
+            for name in ("Glimmer/A.swift", "Glimmer/note.md", "helper/main.swift", "Other/B.swift",
+                         "Glimmer/with space.swift"):
+                (repo / name).parent.mkdir(exist_ok=True)
+                (repo / name).write_text("x")
+            (repo / "Glimmer/untracked.swift").write_text("x")
+            subprocess.run(["git", "add", "Glimmer/A.swift", "Glimmer/note.md", "helper/main.swift",
+                            "Other/B.swift", "Glimmer/with space.swift"], cwd=repo, check=True, env=env)
+            with patch.dict(os.environ, env, clear=True):
+                self.assertEqual(COVERAGE.tracked_sources(repo),
+                                 {"Glimmer/A.swift", "helper/main.swift", "Glimmer/with space.swift"})
+
+    def test_check_requires_a_finalized_database_and_an_initialized_distribution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "database is missing"):
+                COVERAGE.check(root, root / "db", root)
+            (root / "db").mkdir()
+            (root / "db/codeql-database.yml").touch()
+            with patch.object(COVERAGE, "tracked_sources") as tracked, \
+                    self.assertRaisesRegex(ValueError, "distribution and bundled query packs"):
+                COVERAGE.check(root, root / "db", root)
+            tracked.assert_not_called()
+            (root / "codeql").touch()
+            with self.assertRaisesRegex(ValueError, "distribution and bundled query packs"):
+                COVERAGE.check(root, root / "db", root)
+
+    def run_main(self, env, check):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(sys, "argv", ["x", "--database", "db"]), patch.dict(os.environ, env, clear=True), \
+                patch.object(COVERAGE, "check", check), contextlib.redirect_stdout(out), \
+                contextlib.redirect_stderr(err):
+            try:
+                code = COVERAGE.main()
+            except SystemExit as exit_:
+                code = exit_.code
+        return code, out.getvalue(), err.getvalue()
+
+    def test_main_needs_codeql_dist_and_turns_failures_into_exit_one(self):
+        check = Mock(return_value=3)
+        code, _, err = self.run_main({}, check)
+        self.assertEqual(code, 2)
+        self.assertIn("CODEQL_DIST must come from CodeQL initialization", err)
+        check.assert_not_called()
+        code, out, _ = self.run_main({"CODEQL_DIST": "/dist"}, check)
+        self.assertEqual((code, out), (0, "CodeQL successfully extracted all 3 tracked production Swift files\n"))
+        for failure in (ValueError("gap"), OSError("io"), subprocess.CalledProcessError(1, "git")):
+            code, out, err = self.run_main({"CODEQL_DIST": "/dist"}, Mock(side_effect=failure))
+            self.assertEqual((code, out), (1, ""))
+            self.assertIn("Swift CodeQL coverage failed", err)
 
 
 if __name__ == "__main__":

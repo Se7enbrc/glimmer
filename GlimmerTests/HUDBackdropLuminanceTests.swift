@@ -8,6 +8,8 @@
 //
 
 import CoreGraphics
+import CoreMedia
+import CoreVideo
 import Foundation
 import Testing
 @testable import Glimmer
@@ -107,5 +109,112 @@ struct HUDBackdropLuminanceTests {
         #expect(!VideoDecoder.backdropSampleDue(now: 1_000_000_000 + interval - 1, last: 1_000_000_000))
         #expect(VideoDecoder.backdropSampleDue(now: 1_000_000_000 + interval, last: 1_000_000_000))
         #expect(interval == 250_000_000)
+    }
+    // MARK: - Decoded pixel buffers
+
+    private static let tenBit: Set<OSType> = [
+        kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+    ]
+
+    /// A bi-planar buffer whose luma plane holds `code` everywhere; 10-bit codes sit in the high bits.
+    private func pixelBuffer(_ format: OSType, code: UInt16, pq: Bool = false) throws -> CVPixelBuffer {
+        var buffer: CVPixelBuffer?
+        let attrs = [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary
+        #expect(CVPixelBufferCreate(nil, Self.width, Self.height, format, attrs, &buffer) == kCVReturnSuccess)
+        let pixels = try #require(buffer)
+        CVPixelBufferLockBaseAddress(pixels, [])
+        defer { CVPixelBufferUnlockBaseAddress(pixels, []) }
+        let base = try #require(CVPixelBufferGetBaseAddressOfPlane(pixels, 0))
+        let rowBytes = CVPixelBufferGetBytesPerRowOfPlane(pixels, 0)
+        for y in 0..<CVPixelBufferGetHeightOfPlane(pixels, 0) {
+            for x in 0..<CVPixelBufferGetWidthOfPlane(pixels, 0) {
+                if Self.tenBit.contains(format) {
+                    base.storeBytes(of: (code << 6).littleEndian, toByteOffset: y * rowBytes + x * 2, as: UInt16.self)
+                } else {
+                    base.storeBytes(of: UInt8(code), toByteOffset: y * rowBytes + x, as: UInt8.self)
+                }
+            }
+        }
+        if pq {
+            CVBufferSetAttachment(
+                pixels, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ,
+                .shouldPropagate)
+        }
+        return pixels
+    }
+
+    private func luminance(_ format: OSType, code: UInt16, pq: Bool = false) throws -> Double? {
+        VideoDecoder.backdropLuminance(of: try pixelBuffer(format, code: code, pq: pq), in: whole)
+    }
+
+    @Test func pixelFormatSelectsRangeAndBitDepth() throws {
+        // Video-range white (235) is full scale only when the format says video range.
+        let videoWhite = try #require(try luminance(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 235))
+        let fullAt235 = try #require(try luminance(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, code: 235))
+        #expect(videoWhite > 0.999)
+        #expect(fullAt235 > 0.8 && fullAt235 < 0.9)
+        // A 10-bit plane read as 8-bit would see the low byte of each sample.
+        let tenBitWhite = try #require(try luminance(kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange, code: 940))
+        let tenBitBlack = try #require(try luminance(kCVPixelFormatType_420YpCbCr10BiPlanarFullRange, code: 0))
+        #expect(tenBitWhite > 0.999)
+        #expect(tenBitBlack < 0.001)
+    }
+
+    @Test func pqTransferAttachmentSwitchesToNits() throws {
+        let format = kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+        let sdr = try #require(try luminance(format, code: 256))
+        let pq = try #require(try luminance(format, code: 256, pq: true))
+        #expect(abs(sdr - pow(256.0 / 1023, 2.4)) < 0.001)
+        #expect(pq > 0.01 && pq < 0.05)
+    }
+
+    @Test func singlePlaneBufferIsNotSampled() throws {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, Self.width, Self.height, kCVPixelFormatType_32BGRA, nil, &buffer)
+        let bgra = try #require(buffer)
+        #expect(VideoDecoder.backdropLuminance(of: bgra, in: whole) == nil)
+    }
+
+    private func sample(_ pixels: CVPixelBuffer) throws -> CMSampleBuffer {
+        var format: CMVideoFormatDescription?
+        CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: pixels, formatDescriptionOut: &format)
+        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: .zero, decodeTimeStamp: .invalid)
+        var sample: CMSampleBuffer?
+        CMSampleBufferCreateReadyWithImageBuffer(
+            allocator: nil, imageBuffer: pixels, formatDescription: try #require(format),
+            sampleTiming: &timing, sampleBufferOut: &sample)
+        return try #require(sample)
+    }
+
+    @Test @MainActor func presentPathSamplesOnlyWithTheOverlayUpAndARect() throws {
+        let decoder = VideoDecoder()
+        let white = try sample(try pixelBuffer(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 235))
+        decoder.hudBackdropRect = whole
+        decoder.sampleHUDBackdrop(white)
+        #expect(decoder.hudBackdropLuminance == nil)
+
+        decoder.statsOverlayEnabled = true
+        decoder.sampleHUDBackdrop(white)
+        #expect(try #require(decoder.hudBackdropLuminance) > 0.999)
+
+        decoder.hudBackdropRect = .zero
+        #expect(decoder.hudBackdropLuminance == nil)
+        decoder.sampleHUDBackdrop(white)
+        #expect(decoder.hudBackdropLuminance == nil)
+    }
+
+    @Test @MainActor func presentPathHoldsTheSampleUntilTheNextQuarterSecond() throws {
+        let decoder = VideoDecoder()
+        decoder.statsOverlayEnabled = true
+        decoder.hudBackdropRect = whole
+        let white = try sample(try pixelBuffer(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 235))
+        let black = try sample(try pixelBuffer(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 16))
+        decoder.sampleHUDBackdrop(white)
+        // A black frame straight after is inside the 250 ms window, so the reading stands.
+        decoder.sampleHUDBackdrop(black)
+        #expect(try #require(decoder.hudBackdropLuminance) > 0.999)
+
+        decoder.statsOverlayEnabled = false
+        #expect(decoder.hudBackdropLuminance == nil)
     }
 }
