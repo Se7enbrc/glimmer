@@ -26,23 +26,24 @@ struct AudioOutputRoute: Equatable, Sendable {
         return .other
     }
 
-    static func current() -> Self {
+    /// The default output's route, or nil when the HAL can't answer (a device mid-transition).
+    static func current() -> Self? {
         guard let device = uintProperty(AudioObjectID(kAudioObjectSystemObject),
                                         selector: kAudioHardwarePropertyDefaultOutputDevice), device != 0 else {
-            return Self()
+            return nil
         }
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
                                                   mScope: kAudioDevicePropertyScopeOutput,
                                                   mElement: kAudioObjectPropertyElementMain)
         var bytes: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &bytes) == noErr,
-              bytes > 0, bytes.isMultiple(of: UInt32(MemoryLayout<AudioStreamID>.size)) else { return Self() }
+              bytes > 0, bytes.isMultiple(of: UInt32(MemoryLayout<AudioStreamID>.size)) else { return nil }
         var streams = [AudioStreamID](repeating: 0, count: Int(bytes) / MemoryLayout<AudioStreamID>.size)
         let status = streams.withUnsafeMutableBytes { buffer -> OSStatus in
             guard let base = buffer.baseAddress else { return kAudioHardwareUnspecifiedError }
             return AudioObjectGetPropertyData(device, &address, 0, nil, &bytes, base)
         }
-        guard status == noErr else { return Self() }
+        guard status == noErr else { return nil }
         let channels = streams.reduce(0) { $0 + channelCount($1) }
         let terminals = streams.compactMap { uintProperty($0, selector: kAudioStreamPropertyTerminalType) }
         let transport = uintProperty(device, selector: kAudioDevicePropertyTransportType)

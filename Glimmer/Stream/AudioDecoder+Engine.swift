@@ -30,9 +30,11 @@ extension AudioDecoder {
     func initDecoderCore(channelCount chCount: Int, sampleRate: Int32,
                          streams strms: Int32, coupledStreams coupled: Int32,
                          samplesPerFrame spf: Int, mapping map: [UInt8]) -> Int32 {
+        let sampledRoute = AudioOutputRoute.current()
         stateLock.lock()
         defer { stateLock.unlock() }
         decoder = nil
+        outputRoute = sampledRoute ?? AudioOutputRoute()
         packetSplice = AudioPacketSplice()
         engineRestartGeneration &+= 1
         outputDiagnosticRequests = AudioOutputDiagnosticRequests()
@@ -198,7 +200,7 @@ extension AudioDecoder {
         // The ε correction to frames→ms is ppm-negligible.
         guard gl_objc_try({
             self.engine.connect(self.playerNode, to: self.varispeed, format: fmt)
-            self.connectOutputGraph(format: fmt, route: AudioOutputRoute.current())
+            self.connectOutputGraph(format: fmt, route: self.outputRoute)
         }) else {
             Diag.error("audio graph connect raised (device mid-transition?) - init failed", "Stream.Audio")
             return false
@@ -224,7 +226,7 @@ extension AudioDecoder {
         if outputGraphNeedsReconnect {
             guard let inputFormat else { return "audio graph has no input format" }
             guard gl_objc_try({
-                self.connectOutputGraph(format: inputFormat, route: AudioOutputRoute.current())
+                self.connectOutputGraph(format: inputFormat, route: self.outputRoute)
             }) else { return "audio graph reconnect raised NSException" }
         }
         var startError: Error?
@@ -445,13 +447,17 @@ extension AudioDecoder {
     }
 
     func handleEngineConfigurationChange() {
+        // Route reads are blocking HAL IPC: sample before taking the decoder lock.
+        let sampled = AudioOutputRoute.current()
         stateLock.lock()
         defer { stateLock.unlock() }
         guard !isShutdown, let fmt = inputFormat else { return }
         let newOutputFormat = engine.outputNode.outputFormat(forBus: 0)
         let formatMoved = lastOutputFormat.map { $0.sampleRate != newOutputFormat.sampleRate
             || $0.channelCount != newOutputFormat.channelCount } ?? true
-        let route = AudioOutputRoute.current()
+        // A device mid-transition can't answer; keep the last route until it can.
+        let route = sampled ?? outputRoute
+        outputRoute = route
         let spatialMoved = spatialOutputType != route.spatialOutput(sourceChannels: Int(fmt.channelCount))
         let graphMoved = formatMoved || spatialMoved || outputGraphNeedsReconnect
         lastOutputFormat = newOutputFormat

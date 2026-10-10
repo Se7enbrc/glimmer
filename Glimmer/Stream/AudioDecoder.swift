@@ -30,6 +30,8 @@ public final class AudioDecoder: @unchecked Sendable {
     var spatialMixer: AVAudioEnvironmentNode?
     var spatialOutputType: AVAudioEnvironmentOutputType?
     var outputGraphNeedsReconnect = false
+    /// Last sampled output route, read under `stateLock`; HAL sampling happens off the lock.
+    var outputRoute = AudioOutputRoute()
     let engine = AVAudioEngine()
     let playerNode = AVAudioPlayerNode()
     /// Drift-tracking resampler, inserted between `playerNode` and the mixer. A
