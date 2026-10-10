@@ -39,10 +39,10 @@ extension TelemetryRenderer {
         // count as a gauge - the on_time_percent gauge above is the rate signal.
         builder.emit("glimmer_present_on_time_frames",
                      "New-frame presents that landed on-cadence this window (count).",
-                     snap.presentOnTimeCount.map(Double.init))
+                     snap.presentOnTimeCount.map { Double($0) })
         builder.emit("glimmer_present_late_frames",
                      "New-frame presents that landed off-cadence this window (count).",
-                     snap.presentLateCount.map(Double.init))
+                     snap.presentLateCount.map { Double($0) })
         builder.emit("glimmer_host_encode_latency_min_ms",
                      "Host capture+encode latency min this window, ms (host idle-ramp visible).",
                      snap.hostEncodeLatencyMinMs)
