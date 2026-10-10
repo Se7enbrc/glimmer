@@ -5,6 +5,7 @@
 
 // Xcode build settings for the app: the bridging header and its search path, applied via
 // `xcodebuild -xcconfig` from the Makefile. The streaming engine links no third-party library.
+// xcodebuild keeps using its cached build description after edits here: `make clean` first.
 
 // SRCROOT = repo root (directory containing Glimmer.xcodeproj).
 GLIMMER_REPO_ROOT = $(SRCROOT)
@@ -18,6 +19,13 @@ ARCHS = arm64
 
 // Explicit path to the app's sole Objective-C exception boundary.
 SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
+
+// Reproducible Release payload (docs/RELEASE.md): once the dSYM is written, strip the
+// stabs that record checkout paths. The symbol table stays, so crash logs still name
+// functions without a dSYM.
+DEPLOYMENT_POSTPROCESSING[config=Release] = YES
+STRIP_STYLE[config=Release] = debugging
+STRIP_SWIFT_SYMBOLS[config=Release] = NO
 
 // Apply Enhanced Security's compiler protections explicitly while retaining arm64.
 // Pointer authentication requires a separately validated arm64e dependency build.

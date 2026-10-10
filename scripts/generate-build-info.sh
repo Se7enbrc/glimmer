@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-# Stamp the source commit and build time into telemetry; refresh time for dirty builds.
-# Clean commits reuse their stamp to keep no-op builds incremental.
+# Stamp the source commit and its time into telemetry, so a clean build is a pure
+# function of the commit (reproducible). Dirty builds stamp the wall clock instead.
 # Generated output is ignored by git and contains no credentials.
 
 set -euo pipefail
@@ -25,8 +25,12 @@ if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     fi
 fi
 
-# UTC ISO8601 distinguishes successive local test builds.
-build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Clean checkouts use the commit time (or SOURCE_DATE_EPOCH); dirty ones stay distinguishable.
+epoch="${SOURCE_DATE_EPOCH:-}"
+if [ "$dirty" = 0 ] && [ "$commit" != unknown ]; then
+    epoch="${epoch:-$(git -C "$REPO_ROOT" log -1 --format=%ct HEAD)}"
+fi
+build_date="$(date -u -r "${epoch:-$(date +%s)}" +%Y-%m-%dT%H:%M:%SZ)"
 
 contents="$(cat <<EOF
 //
@@ -39,7 +43,7 @@ enum BuildInfo {
     /// Short git HEAD (12 hex) at build time, "-dirty" when the worktree had
     /// uncommitted changes, or "unknown" outside a git checkout.
     static let commit = "$commit"
-    /// UTC ISO8601 build timestamp.
+    /// UTC ISO8601 stamp: the commit time for a clean checkout, otherwise the build time.
     static let date = "$build_date"
 }
 EOF
