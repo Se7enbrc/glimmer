@@ -244,6 +244,7 @@
 		D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000014 /* StreamWindow+Fade.swift */; };
 		5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */; };
 		D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */; };
+		D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */; };
 		D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */; };
 		D6D80A720000000000000019 /* EnvSignalController+Evidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */; };
 		D6D80A720000000000000021 /* TelemetryCounters+AudioSkew.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000022 /* TelemetryCounters+AudioSkew.swift */; };
@@ -687,6 +688,7 @@
 		D6D80A720000000000000014 /* StreamWindow+Fade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Fade.swift"; sourceTree = "<group>"; };
 		5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Slide.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Rows.swift"; sourceTree = "<group>"; };
+		D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Traces.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController+Tunables.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController+Evidence.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000022 /* TelemetryCounters+AudioSkew.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryCounters+AudioSkew.swift"; sourceTree = "<group>"; };
@@ -969,6 +971,7 @@
 				D6D80A720000000000000014 /* StreamWindow+Fade.swift */,
 				5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */,
 				D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */,
+				D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */,
 				D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */,
 				D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */,
 				D6D80A720000000000000022 /* TelemetryCounters+AudioSkew.swift */,
@@ -1503,6 +1506,7 @@
 				D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */,
 				5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */,
 				D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */,
+				D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */,
 				D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */,
 				D6D80A720000000000000019 /* EnvSignalController+Evidence.swift in Sources */,
 				D6D80A720000000000000021 /* TelemetryCounters+AudioSkew.swift in Sources */,

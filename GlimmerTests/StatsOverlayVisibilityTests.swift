@@ -60,7 +60,143 @@ struct StatsOverlayVisibilityTests {
         #expect(originalLayers.count == updatedLayers.count)
         #expect(zip(originalLayers, updatedLayers).allSatisfy { $0 === $1 })
         overlay.update(snapshot: snapshot, enabled: [.renderFps, .latency, .bitrate], targetFps: 60)
-        #expect(overlay.layer.bounds.width < originalFrame.width)
+        #expect(overlay.layer.bounds.width == 160)
+        #expect(overlay.layer.bounds.height == 180)
+        #expect(overlay.layer.backgroundColor == nil)
+        #expect(overlay.layer.borderWidth == 0)
+    }
+
+    @Test func steadyStackFormatsValuesAndRetainsCustomRows() throws {
+        var snapshot = StreamStatsSnapshot()
+        snapshot.measuredBitrateMbps = 52
+        snapshot.negotiatedBitrateMbps = 362
+        snapshot.videoCodec = "AV1"
+        snapshot.rttMs = 3.54
+        snapshot.jitterMs = 0.1
+        let rows = StatsOverlayLayer.displayRows(snapshot: snapshot, enabled: Set(StatsRow.Kind.allCases),
+                                                 targetFps: 60, thresholds: .default)
+        #expect(Array(rows.prefix(3)).map(\.kind) == [.renderFps, .latency, .bitrate])
+        #expect(rows.first { $0.kind == .bitrate }?.value == "52.0 Mbps · AV1")
+        #expect(rows.first { $0.kind == .latency }?.value == "3.54 ms")
+        #expect(rows.count == StatsRow.Kind.allCases.count - 1)
+        let overlay = StatsOverlayLayer()
+        let video = CALayer()
+        video.bounds = CGRect(x: 0, y: 0, width: 1_280, height: 800)
+        overlay.attach(to: video)
+        overlay.update(snapshot: snapshot, enabled: Set(StatsRow.Kind.allCases), targetFps: 60)
+        #expect(overlay.rowViews.count == rows.count)
+        for row in rows {
+            let sub = try #require(overlay.rowViews[row.kind])
+            #expect(sub.lastRender == row)
+            #expect(sub.valueLayer.preferredFrameSize().width <= sub.valueLayer.bounds.width)
+        }
+        overlay.update(snapshot: snapshot, enabled: [.codec], targetFps: 60)
+        #expect(overlay.rowViews[.codec]?.lastRender?.value == "AV1")
+        #expect(overlay.rowViews[.bitrate] == nil)
+    }
+
+    @Test func inkHysteresisHoldsInTheDeadBandAndRejectsInvalidSamples() {
+        for value in [0.48, 0.55, 0.62] {
+            #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: false))
+            #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: true))
+        }
+        #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: 0.621, currentlyDark: false))
+        #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: 0.479, currentlyDark: true))
+        for value in [Double.nan, .infinity, -0.1, 1.1] {
+            #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: false))
+            #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: true))
+        }
+        let overlay = StatsOverlayLayer()
+        #expect(!overlay.usesDarkInk)
+        overlay.updateBackdropLuminance(1)
+        #expect(overlay.usesDarkInk)
+        overlay.updateBackdropLuminance(0.55)
+        #expect(overlay.usesDarkInk)
+        overlay.updateBackdropLuminance(0)
+        #expect(!overlay.usesDarkInk)
+    }
+
+    @Test func traceHistoryWrapsWithoutGrowingAndLeavesMissingReadingsAsGaps() {
+        var history = StatsTraceHistory()
+        #expect(history.isEmpty)
+        #expect(history.mean == nil)
+        for index in 0..<100 {
+            history.append(value: Double(index), hiccup: index == 99, time: Double(index) / 4)
+        }
+        #expect(history.count == 41)
+        #expect(history[0].value == 59)
+        #expect(history[40].value == 99)
+        #expect(history[40].time - history[0].time == 10)
+        #expect(history.mean == 79)
+        #expect(history[40].hiccup)
+        history.append(value: .nan, hiccup: true, time: 25)
+        #expect(history[40].value == nil)
+        #expect(!history[40].hiccup)
+        history.append(value: nil, hiccup: false, time: 25.25)
+        #expect(history[40].value == nil)
+        history.append(value: 60, hiccup: false, time: 30)
+        #expect(history.count == 1)
+        #expect(history[0].value == 60)
+        history.reset()
+        #expect(history.isEmpty)
+    }
+
+    @Test func hiccupsUseMetricThresholdsAndColourBothEdgesOfAnExcursion() {
+        let render = StatsTrace.Metric.render
+        #expect(render.isHiccup(value: 53, reference: nil, targetFps: 60, latencyWarning: 50))
+        #expect(!render.isHiccup(value: 54, reference: nil, targetFps: 60, latencyWarning: 50))
+        let latency = StatsTrace.Metric.latency
+        #expect(latency.isHiccup(value: 8, reference: 3.5, targetFps: 60, latencyWarning: 50))
+        #expect(latency.isHiccup(value: 51, reference: nil, targetFps: 60, latencyWarning: 50))
+        #expect(!latency.isHiccup(value: 4, reference: 3.5, targetFps: 60, latencyWarning: 50))
+        let bitrate = StatsTrace.Metric.bitrate
+        #expect(bitrate.isHiccup(value: 36, reference: 50, targetFps: 60, latencyWarning: 50))
+        #expect(!bitrate.isHiccup(value: 50, reference: 50, targetFps: 60, latencyWarning: 50))
+        #expect(!bitrate.isHiccup(value: 10, reference: nil, targetFps: 60, latencyWarning: 50))
+        for metric in [render, latency, bitrate] {
+            #expect(!metric.isHiccup(value: nil, reference: 50, targetFps: 60, latencyWarning: 50))
+            #expect(!metric.isHiccup(value: .nan, reference: 50, targetFps: 60, latencyWarning: 50))
+        }
+        let healthy = StatsTraceHistory.Sample(value: 60)
+        let hiccup = StatsTraceHistory.Sample(value: 50, hiccup: true)
+        let missing = StatsTraceHistory.Sample()
+        #expect(StatsTraceHistory.isHiccupSegment(from: healthy, to: hiccup))
+        #expect(StatsTraceHistory.isHiccupSegment(from: hiccup, to: healthy))
+        #expect(!StatsTraceHistory.isHiccupSegment(from: healthy, to: healthy))
+        #expect(!StatsTraceHistory.isHiccupSegment(from: missing, to: hiccup))
+    }
+
+    @Test func sampleRectTracksEveryCornerAndLetterboxOnBothAxes() {
+        let overlay = StatsOverlayLayer()
+        #expect(overlay.backdropSampleRect == .zero)
+        let video = CALayer()
+        video.bounds = CGRect(x: 20, y: 30, width: 1_440, height: 900)
+        overlay.attach(to: video)
+        var snapshot = StreamStatsSnapshot()
+        snapshot.negotiatedBitrateMbps = 362
+        let pictures = [CGSize(width: 1_920, height: 1_080), CGSize(width: 1_200, height: 900)]
+        for picture in pictures {
+            overlay.videoSize = picture
+            overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
+            let available = StatsOverlayLayer.availableRect(in: video.bounds, videoSize: picture, safeArea: NSEdgeInsets())
+            for corner in StatsOverlayCorner.allCases {
+                overlay.corner = corner
+                let rect = overlay.backdropSampleRect
+                let expectedX: CGFloat
+                switch corner {
+                case .topLeft, .bottomLeft: expectedX = 16 / available.width
+                case .topCenter, .bottomCenter: expectedX = (available.width - 160) / 2 / available.width
+                case .topRight, .bottomRight: expectedX = (available.width - 176) / available.width
+                }
+                let isTop = [.topLeft, .topCenter, .topRight].contains(corner)
+                let expectedY = (isTop ? 16 : available.height - 196) / available.height
+                #expect(abs(rect.minX - expectedX) < 0.0001)
+                #expect(abs(rect.minY - expectedY) < 0.0001)
+                #expect(abs(rect.width - 160 / available.width) < 0.0001)
+                #expect(abs(rect.height - 180 / available.height) < 0.0001)
+                #expect(CGRect(x: 0, y: 0, width: 1, height: 1).contains(rect))
+            }
+        }
     }
 
     @Test func eachCornerUsesTheSameInset() {

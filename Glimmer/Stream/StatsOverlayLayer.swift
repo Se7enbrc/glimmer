@@ -1,4 +1,4 @@
-// The HUD stays inside the HDR video layer so its scrim never flattens the picture.
+// Text and traces stay inside the HDR video layer without a panel over the picture.
 
 import AppKit
 import AVFoundation
@@ -8,15 +8,12 @@ import QuartzCore
 public final class StatsOverlayLayer {
     public let layer: CALayer
 
-    static let padding: CGFloat = 10
-    static let verticalPadding: CGFloat = 8
-    static let columnGap: CGFloat = 12
-    static let labelFont = NSFont.preferredFont(forTextStyle: .caption1, options: [:])
-    static let fontSize = NSFont.preferredFont(forTextStyle: .body, options: [:]).pointSize
-    static let normalValueFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
-    static let emphasizedValueFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold)
-    private static let rowHeight = ceil(max(labelFont.ascender - labelFont.descender, fontSize * 1.3)) + 4
-    private static let sectionGap: CGFloat = 6
+    static let labelFont = NSFont.preferredFont(forTextStyle: .caption2, options: [:])
+    static let normalValueFont = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .semibold)
+    static let emphasizedValueFont = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .bold)
+    static let detailFont = NSFont.monospacedDigitSystemFont(
+        ofSize: NSFont.preferredFont(forTextStyle: .body, options: [:]).pointSize, weight: .medium)
+    static let coreKinds: [StatsRow.Kind] = [.renderFps, .latency, .bitrate]
 
     weak var displayView: NSView?
     var videoSize: CGSize = .zero
@@ -31,31 +28,79 @@ public final class StatsOverlayLayer {
         let container: CALayer
         let labelLayer: CATextLayer
         let valueLayer: CATextLayer
+        let trace: StatsTrace?
         var lastRender: StatsRow?
     }
 
-    private var rowViews: [StatsRow.Kind: RowSublayers] = [:]
+    private(set) var rowViews: [StatsRow.Kind: RowSublayers] = [:]
+    private(set) var usesDarkInk = false
+    private(set) var reduceTransparency = false
     private var orderedKinds: [StatsRow.Kind] = []
     private var enabledRows: Set<StatsRow.Kind> = []
-    private var dividerLayers: [CALayer] = []
-    private var labelWidth: CGFloat = 0
-    private var valueWidth: CGFloat = 0
+    private var contentWidth: CGFloat = 160
     private var needsRowLayout = true
     private var contentSize: CGSize = .zero
     private var differentiateWithoutColor = false
-    private var reduceTransparency: Bool?
+    private let capLayer = CATextLayer()
+    private var capText = ""
 
     public init() {
         layer = CALayer()
-        layer.cornerRadius = 12
-        layer.cornerCurve = .continuous
-        layer.borderColor = NSColor(white: 1, alpha: 0.16).cgColor
-        layer.borderWidth = 0.5
         layer.zPosition = 1_000
         layer.actions = Self.disabledActions
         layer.isHidden = true
         layer.opacity = 0
+        capLayer.actions = Self.disabledActions
+        layer.addSublayer(capLayer)
         refreshAccessibility()
+    }
+
+    /// The sampler uses decoded-picture coordinates, independent of letterboxing and HUD scaling.
+    public var backdropSampleRect: CGRect {
+        guard let host = layer.superlayer, videoSize.width > 0, videoSize.height > 0 else { return .zero }
+        let picture = AVMakeRect(aspectRatio: videoSize, insideRect: host.bounds)
+        let rect = layer.frame.intersection(picture)
+        guard !rect.isNull, picture.width > 0, picture.height > 0 else { return .zero }
+        return CGRect(x: (rect.minX - picture.minX) / picture.width,
+                      y: (picture.maxY - rect.maxY) / picture.height,
+                      width: rect.width / picture.width, height: rect.height / picture.height)
+    }
+
+    nonisolated public static func shouldUseDarkInk(luminance: Double, currentlyDark: Bool) -> Bool {
+        guard luminance.isFinite, (0...1).contains(luminance) else { return currentlyDark }
+        return currentlyDark ? luminance >= 0.48 : luminance > 0.62
+    }
+
+    public func updateBackdropLuminance(_ value: Double) {
+        let dark = Self.shouldUseDarkInk(luminance: value, currentlyDark: usesDarkInk)
+        guard dark != usesDarkInk else { return }
+        usesDarkInk = dark
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = 0.3
+            layer.add(fade, forKey: "ink")
+        } else {
+            layer.removeAnimation(forKey: "ink")
+        }
+        refreshInk()
+        CATransaction.commit()
+    }
+
+    private func refreshInk() {
+        for sub in rowViews.values {
+            if let row = sub.lastRender { apply(row: row, to: sub) }
+        }
+        applyCap()
+    }
+
+    private func applyCap() {
+        capLayer.string = NSAttributedString(string: capText, attributes: [
+            .font: Self.labelFont, .foregroundColor: secondaryInk
+        ])
+        applyShadow(to: capLayer)
     }
 
     public func attach(to host: CALayer) {
@@ -119,10 +164,9 @@ public final class StatsOverlayLayer {
         defer { CATransaction.commit() }
         if needsRowLayout {
             let rows = orderedKinds.compactMap { rowViews[$0]?.lastRender }
-            contentSize = CGSize(
-                width: labelWidth + Self.columnGap + valueWidth + 2 * Self.padding,
-                height: CGFloat(max(1, rows.count)) * Self.rowHeight
-                    + CGFloat(sectionBreaks(in: rows).count) * Self.sectionGap + 2 * Self.verticalPadding)
+            let rowsHeight = rows.reduce(CGFloat.zero) { $0 + Self.rowHeight(for: $1.kind) + 3 }
+            contentSize = CGSize(width: contentWidth,
+                                 height: max(0, rowsHeight - 3) + (capText.isEmpty ? 0 : 12))
             layer.bounds = CGRect(origin: .zero, size: contentSize)
             layoutRows(rows, in: contentSize)
             needsRowLayout = false
@@ -138,6 +182,7 @@ public final class StatsOverlayLayer {
         let contentsScale = displayView?.window?.backingScaleFactor ?? host.contentsScale
         if layer.contentsScale != contentsScale {
             layer.contentsScale = contentsScale
+            capLayer.contentsScale = contentsScale
             for sub in rowViews.values {
                 sub.labelLayer.contentsScale = contentsScale
                 sub.valueLayer.contentsScale = contentsScale
@@ -151,7 +196,7 @@ public final class StatsOverlayLayer {
         targetFps: Double,
         thresholds: StatsThresholds = .default
     ) {
-        let rows = Self.combinedRows(snapshot.rows(enabled: enabled, targetFps: targetFps, thresholds: thresholds))
+        let rows = Self.displayRows(snapshot: snapshot, enabled: enabled, targetFps: targetFps, thresholds: thresholds)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
@@ -165,35 +210,41 @@ public final class StatsOverlayLayer {
             }
             orderedKinds = kinds
             enabledRows = enabled
-            labelWidth = 0
-            valueWidth = 0
+            contentWidth = 160
             needsRowLayout = true
+        }
+        let cap = enabled.contains(.bitrate) ? snapshot.negotiatedBitrateMbps : nil
+        let newCap = cap.flatMap { $0.isFinite ? String(format: "Cap %.0f Mbps", $0) : nil } ?? ""
+        if newCap != capText {
+            needsRowLayout = needsRowLayout || capText.isEmpty != newCap.isEmpty
+            capText = newCap
+            applyCap()
         }
         for row in rows {
             if rowViews[row.kind] == nil {
-                let sub = makeRow()
+                let sub = makeRow(kind: row.kind)
                 layer.addSublayer(sub.container)
                 rowViews[row.kind] = sub
             }
             guard let sub = rowViews[row.kind] else { continue }
+            sub.trace?.append(snapshot: snapshot, targetFps: targetFps, thresholds: thresholds)
             if sub.lastRender != row || appearanceChanged {
                 apply(row: row, to: sub)
                 rowViews[row.kind]?.lastRender = row
             }
-            if sub.lastRender != row || rowsChanged {
+            if sub.lastRender != row || rowsChanged || appearanceChanged {
                 measure(row)
             }
         }
         if let host = layer.superlayer { layoutInHost(host) }
+        for sub in rowViews.values { sub.trace?.draw() }
     }
 
     private func measure(_ row: StatsRow) {
-        // Width only grows within a preset, so changing digit counts cannot make the HUD breathe.
-        let label = ceil((row.label as NSString).size(withAttributes: [.font: Self.labelFont]).width)
-        let value = ceil((row.value as NSString).size(withAttributes: [.font: Self.emphasizedValueFont]).width)
-        guard label > labelWidth || value > valueWidth else { return }
-        labelWidth = max(labelWidth, label)
-        valueWidth = max(valueWidth, value)
+        // Width only grows within a preset, so digit changes cannot make the HUD breathe.
+        let value = ceil(attributedValue(row).size().width)
+        guard value > contentWidth else { return }
+        contentWidth = value
         needsRowLayout = true
     }
 
@@ -201,14 +252,11 @@ public final class StatsOverlayLayer {
     private func refreshAccessibility() -> Bool {
         let workspace = NSWorkspace.shared
         let opaque = workspace.accessibilityDisplayShouldReduceTransparency
-        if reduceTransparency != opaque {
-            // A strong scrim preserves contrast over bright video without a backdrop filter in the HDR tree.
-            layer.backgroundColor = NSColor(white: 0.06, alpha: opaque ? 1 : 0.88).cgColor
-            reduceTransparency = opaque
-        }
         let differentiate = workspace.accessibilityDisplayShouldDifferentiateWithoutColor
-        let changed = differentiateWithoutColor != differentiate
+        let changed = reduceTransparency != opaque || differentiateWithoutColor != differentiate
+        reduceTransparency = opaque
         differentiateWithoutColor = differentiate
+        if changed { refreshInk() }
         return changed
     }
 
@@ -243,51 +291,32 @@ public final class StatsOverlayLayer {
         layer.isHidden = true
     }
 
-    private func sectionBreaks(in rows: [StatsRow]) -> [Int] {
-        guard rows.count > 3 else { return [] }
-        return rows.indices.dropFirst().filter { rows[$0].section != rows[$0 - 1].section }
+    private static func rowHeight(for kind: StatsRow.Kind) -> CGFloat {
+        coreKinds.contains(kind) ? 54 : 32
     }
 
     private func layoutRows(_ rows: [StatsRow], in size: CGSize) {
-        let breaks = sectionBreaks(in: rows)
-        while dividerLayers.count < breaks.count {
-            let divider = CALayer()
-            divider.actions = Self.disabledActions
-            divider.backgroundColor = NSColor(white: 1, alpha: 0.12).cgColor
-            layer.addSublayer(divider)
-            dividerLayers.append(divider)
-        }
-        while dividerLayers.count > breaks.count {
-            dividerLayers.removeLast().removeFromSuperlayer()
-        }
-        var top = size.height - Self.verticalPadding
-        var dividerIndex = 0
-        for (index, row) in rows.enumerated() {
-            if breaks.contains(index) {
-                dividerLayers[dividerIndex].frame = CGRect(
-                    x: Self.padding, y: top - Self.sectionGap / 2,
-                    width: size.width - 2 * Self.padding, height: 0.5)
-                dividerIndex += 1
-                top -= Self.sectionGap
-            }
+        var top = size.height
+        for row in rows {
             guard let sub = rowViews[row.kind] else { continue }
-            top -= Self.rowHeight
-            sub.container.frame = CGRect(x: Self.padding, y: top,
-                                         width: size.width - 2 * Self.padding, height: Self.rowHeight)
-            let baseline: CGFloat = 4
-            sub.labelLayer.frame = CGRect(
-                x: 0, y: baseline + Self.labelFont.descender,
-                width: labelWidth, height: ceil(Self.labelFont.ascender - Self.labelFont.descender))
-            sub.valueLayer.frame = CGRect(
-                x: labelWidth + Self.columnGap, y: baseline + Self.normalValueFont.descender,
-                width: valueWidth, height: ceil(Self.normalValueFont.ascender - Self.normalValueFont.descender))
+            let height = Self.rowHeight(for: row.kind)
+            top -= height
+            sub.container.frame = CGRect(x: 0, y: top, width: size.width, height: height)
+            sub.labelLayer.frame = CGRect(x: 0, y: height - 13, width: size.width, height: 13)
+            sub.valueLayer.frame = CGRect(x: 0, y: sub.trace == nil ? 0 : 17,
+                                          width: size.width, height: sub.trace == nil ? 19 : 24)
+            sub.trace?.layer.frame = CGRect(x: 0, y: 0, width: size.width, height: 17)
+            top -= 3
         }
+        capLayer.frame = CGRect(x: 0, y: 0, width: size.width, height: 12)
     }
 
     static let disabledActions: [String: CAAction] = [
         "contents": NSNull(), "position": NSNull(), "bounds": NSNull(),
         "string": NSNull(), "foregroundColor": NSNull(), "backgroundColor": NSNull(),
-        "frame": NSNull(), "opacity": NSNull(), "transform": NSNull()
+        "frame": NSNull(), "opacity": NSNull(), "transform": NSNull(),
+        "path": NSNull(), "strokeColor": NSNull(), "fillColor": NSNull(),
+        "shadowColor": NSNull(), "shadowOpacity": NSNull(), "shadowRadius": NSNull()
     ]
 }
 

@@ -4,8 +4,10 @@
 
 - Command-Escape opens macOS Game Overlay over the stream and keeps it open, in
   a full-screen Space too, instead of leaving full screen.
-- Stream stats take up less of the picture, combine bitrate and codec, and move
-  between corners while streaming, clear of the camera and letterbox bars.
+- Stream stats are a compact column without a panel, with short traces that
+  highlight dips and spikes and ink that adapts to the picture behind them.
+  Bitrate and codec share a line, and the stats move between corners while
+  streaming, clear of the camera and letterbox bars.
 - The borderless full-screen stream slides in from the side when it starts and
   when you come back to it, and slides away when you switch apps, like a
   full-screen Space. Reduce Motion keeps the plain fade.
