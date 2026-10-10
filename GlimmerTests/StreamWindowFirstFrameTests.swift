@@ -406,4 +406,11 @@ private final class MotionRecorder: StreamInputViewDelegate {
     func streamViewPointerDidExit(_ view: StreamInputView) {}
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool { false }
     func streamViewPaste(_ view: StreamInputView) {}
+
+    @Test func noEscapeChordLeavesTheSpace() {
+        #expect(KeyableWindow.isSpaceEscape(isFullScreen: true, isKeyWindow: true, keyCode: 53))
+        #expect(!KeyableWindow.isSpaceEscape(isFullScreen: false, isKeyWindow: true, keyCode: 53))
+        #expect(!KeyableWindow.isSpaceEscape(isFullScreen: true, isKeyWindow: false, keyCode: 53))
+        #expect(!KeyableWindow.isSpaceEscape(isFullScreen: true, isKeyWindow: true, keyCode: 3))
+    }
 }

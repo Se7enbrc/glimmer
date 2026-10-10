@@ -39,19 +39,24 @@ final class KeyableWindow: NSWindow {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if blocksGameOverlayEvent(event) { return true }
+        // Other Escape chords (Control-Escape is the PC's Start menu) belong to the stream.
+        if isSpaceEscape(event), let view = firstResponder as? StreamInputView {
+            view.keyDown(with: event)
+            return true
+        }
         return super.performKeyEquivalent(with: event)
     }
 
     /// AppKit can turn Escape into an action before the input view sees keyDown.
     /// Keep that fallback from exiting the Space; explicit full-screen commands still work.
     override func cancelOperation(_ sender: Any?) {
-        if blocksGameOverlayEvent(NSApp.currentEvent) { return }
+        if isSpaceEscape(NSApp.currentEvent) { return }
         super.cancelOperation(sender)
     }
 
     /// Menu actions can bypass both the window's key equivalents and cancelOperation.
     override func toggleFullScreen(_ sender: Any?) {
-        if blocksGameOverlayEvent(NSApp.currentEvent) { return }
+        if isSpaceEscape(NSApp.currentEvent) { return }
         if styleMask.contains(.fullScreen) {
             let senderType = sender.map { String(describing: type(of: $0)) } ?? "nil"
             let action = (sender as? NSMenuItem)?.action.map(NSStringFromSelector) ?? "none"
@@ -64,6 +69,17 @@ final class KeyableWindow: NSWindow {
         guard let event, !ignoresMouseEvents, event.type == .keyDown else { return false }
         return Self.isGameOverlayFallback(isFullScreen: styleMask.contains(.fullScreen), isKeyWindow: isKeyWindow,
                                           keyCode: event.keyCode, modifiers: event.modifierFlags)
+    }
+
+    /// No Escape chord leaves the Space; Control-Command-F, the green button and Mission Control still do.
+    private func isSpaceEscape(_ event: NSEvent?) -> Bool {
+        guard let event, !ignoresMouseEvents, event.type == .keyDown else { return false }
+        return Self.isSpaceEscape(isFullScreen: styleMask.contains(.fullScreen), isKeyWindow: isKeyWindow,
+                                  keyCode: event.keyCode)
+    }
+
+    nonisolated static func isSpaceEscape(isFullScreen: Bool, isKeyWindow: Bool, keyCode: UInt16) -> Bool {
+        isFullScreen && isKeyWindow && keyCode == UInt16(kVK_Escape)
     }
 
     nonisolated static func isGameOverlayFallback(isFullScreen: Bool, isKeyWindow: Bool, keyCode: UInt16,

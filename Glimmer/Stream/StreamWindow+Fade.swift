@@ -147,11 +147,28 @@ extension StreamWindow {
         case .wait, .none:
             return
         case .exitSpace:
-            // A close can originate inside AppKit's did-enter notification delivery.
-            DispatchQueue.main.async { self.window.toggleFullScreen(nil) }
+            // Fade first so the Space's exit animation carries no last frame; a close can
+            // originate inside AppKit's did-enter delivery, hence the hop.
+            DispatchQueue.main.async { self.fadeThenExitSpace() }
         case .fade:
             fadeOutForClose()
         }
+    }
+
+    private func fadeThenExitSpace() {
+        let win = window
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            win.alphaValue = 0
+            win.toggleFullScreen(nil)
+            return
+        }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            win.animator().alphaValue = 0
+        }, completionHandler: {
+            MainActor.assumeIsolated { win.toggleFullScreen(nil) }
+        })
     }
 
     private func fadeOutForClose() {
@@ -161,7 +178,7 @@ extension StreamWindow {
             previousPresentationOptions = nil
         }
         let win = window
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || win.alphaValue == 0 {
             win.alphaValue = 0.0
             finishClose()
             return
