@@ -83,6 +83,7 @@ jobs:
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
 
       - name: Initialize CodeQL
+        id: init
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
@@ -91,6 +92,40 @@ jobs:
           queries: security-extended
           dependency-caching: false
           trap-caching: false
+
+      # Apple's framework declarations are identical for one CodeQL, Xcode and SDK;
+      # the extractor skips any trap file that already exists, so seed them.
+      - name: Key cached framework extraction
+        id: frameworks
+        if: matrix.language == 'swift'
+        env:
+          CODEQL_VERSION: ${{ steps.init.outputs.codeql-version }}
+        run: |
+          # Read versions from files; launching the CodeQL CLI or xcodebuild here costs minutes.
+          xcode="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEVELOPER_DIR/../version.plist")"
+          sdk="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$(xcrun --sdk macosx --show-sdk-path)/System/Library/CoreServices/SystemVersion.plist")"
+          inputs="$CODEQL_VERSION $xcode $sdk $(cat "$XCODE_XCCONFIG_FILE")"
+          headers="$(git ls-files -z '*.h' | xargs -0 shasum -a 256)"
+          key="$(printf '%s\n%s\n' "$inputs" "$headers" | shasum -a 256 | cut -c1-32)"
+          printf 'key=codeql-swift-frameworks-v1-%s\n' "$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached framework extraction
+        id: restore
+        if: matrix.language == 'swift'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/swift-framework-traps
+          key: ${{ steps.frameworks.outputs.key }}
+
+      - name: Seed framework extraction
+        if:
+          matrix.language == 'swift' && steps.restore.outputs.cache-hit ==
+          'true'
+        run: |
+          trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
+          mkdir -p "$trap"
+          cp -R "$RUNNER_TEMP/swift-framework-traps/." "$trap/"
+          du -sh "$trap"
 
       - name: Build app, login item and privileged helper
         if: matrix.language == 'swift'
@@ -101,6 +136,29 @@ jobs:
         run:
           make app helper-build CONFIG=Debug
           SWIFTC="$PWD/scripts/codeql-swiftc.sh"
+
+      # Only imported modules and their lazily extracted declarations are kept;
+      # anything built from this checkout is extracted fresh every run.
+      - name: Collect framework extraction
+        if:
+          matrix.language == 'swift' && steps.restore.outputs.cache-hit !=
+          'true'
+        run: |
+          trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
+          out="$RUNNER_TEMP/swift-framework-traps"
+          mkdir -p "$out"
+          cp -R "$trap/modules" "$trap/lazy_decls" "$out/"
+          find "$out" -path "*${GITHUB_WORKSPACE#/}/*" -delete
+          du -sh "$out"
+
+      - name: Save framework extraction
+        if:
+          matrix.language == 'swift' && steps.restore.outputs.cache-hit !=
+          'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/swift-framework-traps
+          key: ${{ steps.frameworks.outputs.key }}
 
       - name: Analyze
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
