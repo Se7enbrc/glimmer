@@ -250,10 +250,25 @@ enum ResourceTelemetry {
         if tid != 0, tid == mainThreadID { name = "main" }
         // Applying a Mach scheduling policy resets the QoS tier to unspecified;
         // real-time and fixed-priority threads outrank every QoS tier.
-        let qos = info.pth_policy != POLICY_TIMESHARE
+        // macOS 27 can report a time-constraint thread as timeshare for a moment; ask the policy too.
+        let qos = info.pth_policy != POLICY_TIMESHARE || hasTimeConstraintPolicy(thread: thread)
             ? Int(QOS_CLASS_USER_INTERACTIVE.rawValue) : sampleQoS(thread: thread)
         return ThreadResourceSample(
             name: name, tid: tid, cpuPercent: cpuPercent, qos: qos, qosLabel: qosLabel(qos))
+    }
+
+    /// True when the thread carries a non-default real-time (time-constraint) policy.
+    private static func hasTimeConstraintPolicy(thread: thread_t) -> Bool {
+        var policy = thread_time_constraint_policy_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<thread_time_constraint_policy_data_t>.size / MemoryLayout<integer_t>.size)
+        var getDefault: boolean_t = 0
+        let result = withUnsafeMutablePointer(to: &policy) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                thread_policy_get(thread, thread_policy_flavor_t(THREAD_TIME_CONSTRAINT_POLICY), $0, &count, &getDefault)
+            }
+        }
+        return result == KERN_SUCCESS && getDefault == 0
     }
 
     /// The QoS the thread asked for, as a `qos_class_t` raw value;
