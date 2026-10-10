@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """A successful partial Swift analysis must not satisfy the CodeQL gate."""
 
 import importlib.util

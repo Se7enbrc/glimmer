@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Extract one version's section out of CHANGELOG.md, as Markdown or as HTML.
 
 CHANGELOG.md is the single source of truth for "what's new": this module turns

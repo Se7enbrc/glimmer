@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 //  CommandLineToolInstaller.swift
 //  Glimmer › Install Command Line Tool…: links `glimmer` into /usr/local/bin for
 //  installs Homebrew didn't make, after the administrator prompt macOS shows.

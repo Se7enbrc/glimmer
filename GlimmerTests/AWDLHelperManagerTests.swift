@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
 import Combine
 import Foundation
 import ServiceManagement
@@ -9,7 +11,6 @@ import Testing
 final class HelperGate {
     let entered = DispatchSemaphore(value: 0)
     private var continuation: CheckedContinuation<Void, Never>?
-
     func wait() async {
         await withCheckedContinuation {
             continuation = $0

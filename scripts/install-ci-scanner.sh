@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 # Keep hosted scans on the reviewed scanner version, independent of runner images.
 set -euo pipefail
 

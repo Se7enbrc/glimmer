@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Promotion reuses verified public assets and never invokes signing or builds."""
 
 import hashlib

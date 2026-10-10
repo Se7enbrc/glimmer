@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """The candidate gate rejects missing, stale or unsuccessful upstream checks."""
 
 import importlib.util

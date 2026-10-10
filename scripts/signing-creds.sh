@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 #
 # signing-creds.sh - sole reader/writer of the Glimmer signing credentials file.
 #
