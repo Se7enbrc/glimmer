@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
 """Summarize one coverage run per component; measure only, never gate."""
 
 import json
