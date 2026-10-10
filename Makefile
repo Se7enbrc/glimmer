@@ -490,8 +490,10 @@ check:
 	@swiftlint lint --strict --quiet
 	@$(MAKE) test-scripts
 
+# Fixture repositories need git's own discovery; a hook's GIT_DIR would aim them at this one.
 test-scripts:
-	@python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+		python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
 # --- Auto-update publication (Sparkle) -------------------------------------
 
