@@ -16,7 +16,11 @@
 
 <p align="center">
   <a href="https://github.com/Se7enbrc/glimmer/actions/workflows/verify.yml"><img src="https://github.com/Se7enbrc/glimmer/actions/workflows/verify.yml/badge.svg?branch=main" alt="Verification status"></a>
+  <a href="https://github.com/Se7enbrc/glimmer/actions/workflows/codeql.yml"><img src="https://github.com/Se7enbrc/glimmer/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL status"></a>
   <a href="https://github.com/Se7enbrc/glimmer/releases/latest"><img src="https://img.shields.io/github/v/release/Se7enbrc/glimmer?label=release" alt="Latest release"></a>
+  <a href="#install"><img src="https://img.shields.io/badge/macOS-26%2B%20%C2%B7%20Apple%20silicon-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later on Apple silicon"></a>
+  <a href="https://github.com/Se7enbrc/homebrew-glimmer"><img src="https://img.shields.io/badge/Homebrew-se7enbrc%2Fglimmer-fbb040?logo=homebrew&amp;logoColor=white" alt="Homebrew cask in the se7enbrc/glimmer tap"></a>
+  <a href="docs/RELEASE.md"><img src="https://img.shields.io/badge/releases-signed%20%C2%B7%20notarized%20%C2%B7%20attested-2da44e" alt="Releases are signed, notarized and attested"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/Se7enbrc/glimmer"><img src="https://api.securityscorecards.dev/projects/github.com/Se7enbrc/glimmer/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/en/projects/15346"><img src="https://www.bestpractices.dev/projects/15346/badge" alt="OpenSSF Best Practices status"></a>
   <a href=".github/dependabot.yml"><img src="https://img.shields.io/badge/updates-Dependabot-2da44e" alt="Dependency updates by Dependabot"></a>
