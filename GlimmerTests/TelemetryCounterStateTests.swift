@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 //
 //  TelemetryCounterStateTests.swift
 //  Counters, gauges, session resets and the connect and audio telemetry state.

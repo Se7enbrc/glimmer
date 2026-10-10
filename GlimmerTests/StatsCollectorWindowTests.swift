@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
 //
 //  StatsCollectorWindowTests.swift
 //  The stats window: frame rates, host rate, decode EMAs, presents, drops and gaps.
