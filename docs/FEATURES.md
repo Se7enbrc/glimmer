@@ -7,10 +7,10 @@ Everything Glimmer does, in more detail than the [README](../README.md).
 - **Pacing.** Locks the display to the stream cadence, runs passthrough on a
   clean link, buffers only for measured jitter. Tuned against per-frame
   telemetry.
-- **Audio.** Stereo, 5.1 and 7.1, decoded by macOS and played through
-  AVAudioEngine with a small adaptive cushion and recovery after device switches
-  and network interruptions. Spatial playback follows your audio output, with
-  head tracking on compatible AirPods and no in-app setting to manage.
+- **Audio.** Stereo, 5.1 and 7.1, decoded by macOS and played through Core Audio
+  with a small adaptive cushion and recovery after device switches and network
+  interruptions. Spatial playback follows your audio output, with head tracking
+  on compatible AirPods and no in-app setting to manage.
 - **Controllers.** Xbox, DualSense and every other pad macOS supports, plus
   other USB and Bluetooth HID gamepads through SDL's controller database (those
   need Input Monitoring). Rumble, trigger rumble, gyro, touchpad, battery and
@@ -32,4 +32,3 @@ Free, now and always. No accounts, no analytics. Glimmer talks to your own PC
 and, if you leave updates on, to the update feed; nothing else. Diagnostics are
 off by default, write local files under `~/Library/Logs/Glimmer`, and show your
 PC's address and names as short codes.
-

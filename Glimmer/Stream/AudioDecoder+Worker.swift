@@ -6,7 +6,7 @@ import Foundation
 
 extension AudioDecoder {
     /// Lifecycle callers serialize here, then close decode admission before touching the graph.
-    /// The decode lock is released during HAL and AVAudioEngine work; incoming packets never wait on it.
+    /// The decode lock is released during HAL graph work; incoming packets never wait on it.
     func beginGraphChange() {
         graphChangeLock.lock()
         stateLock.lock()
@@ -23,21 +23,13 @@ extension AudioDecoder {
 
     func preparePCMStorage(format: AVAudioFormat) {
         decodeScratch = [Float](repeating: 0, count: samplesPerFrame * channelCount)
-        let generation = audioMeterLock.withLock { meterGeneration }
         let capacity = max(128, Int(format.sampleRate * 0.4) / samplesPerFrame + 2)
-        pcmPool = AudioPCMBufferPool(format: format, frames: AVAudioFrameCount(samplesPerFrame), count: capacity,
-                                     completed: { [weak self] frames in
-            self?.meterCompleteOnePlayout(frames: frames, generation: generation)
-        })
+        pcmPool = AudioPCMBufferPool(format: format, frames: AVAudioFrameCount(samplesPerFrame), count: capacity)
         silencePool = makeSilencePool(format: format)
     }
 
     func makeSilencePool(format: AVAudioFormat) -> AudioPCMBufferPool {
-        let generation = audioMeterLock.withLock { meterGeneration }
-        return AudioPCMBufferPool(format: format, frames: AVAudioFrameCount(format.sampleRate * 0.3), count: 4,
-                                  completed: { [weak self] frames in
-            self?.meterCompleteOnePlayout(frames: frames, isSilence: true, generation: generation)
-        })
+        AudioPCMBufferPool(format: format, frames: AVAudioFrameCount(format.sampleRate * 0.3), count: 4)
     }
 
     func resetPacketSplice() {
@@ -67,7 +59,7 @@ extension AudioDecoder {
             defer { self.endGraphChange() }
             guard !self.isShutdown else { return }
             self.recoverIfPlayoutStalled()
-            if !self.engine.isRunning {
+            if !self.engineRunning {
                 _ = self.ensureEngineAtPrimeEdge(now: DispatchTime.now().uptimeNanoseconds)
             }
         }
@@ -89,17 +81,59 @@ extension AudioDecoder {
         timer.activate()
     }
 
-    func observeRenderClock() -> Int64? {
-        guard playerNode.isPlaying, let render = playerNode.lastRenderTime,
-              let time = playerNode.playerTime(forNodeTime: render), time.isSampleTimeValid else { return nil }
-        if let observation = renderTimeline.observe(sample: time.sampleTime, rate: time.sampleRate) {
-            AudioPipelineTelemetry.shared.noteRender(cushionMs: observation.cushionMs, underrun: observation.underrun)
+    @discardableResult
+    func observeRenderClock(telemetry: AudioPipelineTelemetry = .shared) -> Int64? {
+        guard let output = halOutput else { return nil }
+        let queue = output.queue
+        guard let observation = queue.pointee.observation() else { return nil }
+        let consumed = observation.frames
+        let silent = observation.silence
+        let underruns = observation.underruns
+        let frames = consumed &- observedRingFrames
+        let silenceFrames = silent &- observedRingSilence
+        let edges = underruns &- observedRingUnderruns
+        observedRingFrames = consumed
+        observedRingSilence = silent
+        observedRingUnderruns = underruns
+        audioMeterLock.withLock { pendingSilenceFrames -= min(pendingSilenceFrames, silenceFrames) }
+        if frames > 0 || edges > 0 {
+            meterCompleteOnePlayout(frames: frames, confirmedUnderrun: edges > 0)
         }
-        return time.sampleTime
+        let minimum = queue.pointee.minimumFill.exchange(Int.max, ordering: .relaxed)
+        if minimum != Int.max {
+            let fill = Double(minimum) / meterSampleRate * 1000
+            telemetry.noteRender(cushionMs: fill, underrun: false)
+        }
+        for _ in 0..<edges { telemetry.noteRender(cushionMs: 0, underrun: true) }
+        if deviceRecoveryStarted != 0, frames > 0 {
+            let elapsed = Double(DispatchTime.now().uptimeNanoseconds &- deviceRecoveryStarted) / 1_000_000
+            deviceRecoveryStarted = 0
+            telemetry.noteOutput(latencyMs: output.latencyMs, recoveryMs: elapsed)
+            AudioDiagnostics.notice("audio device recovery: \(elapsed)ms to rendered PCM", "Stream.Audio")
+        }
+        return Int64(consumed)
+    }
+
+    func enqueuePCM(_ buffer: AVAudioPCMBuffer, isSilence: Bool, completion: @Sendable () -> Void) {
+        defer { completion() }
+        guard let output = halOutput, let channels = buffer.floatChannelData else {
+            audioMeterLock.withLock {
+                framesScheduled -= UInt64(buffer.frameLength)
+                if isSilence { pendingSilenceFrames -= min(pendingSilenceFrames, UInt64(buffer.frameLength)) }
+            }
+            return
+        }
+        if !output.queue.pointee.write(channels, frames: Int(buffer.frameLength), isSilence: isSilence) {
+            audioMeterLock.withLock {
+                framesScheduled -= UInt64(buffer.frameLength)
+                if isSilence { pendingSilenceFrames -= min(pendingSilenceFrames, UInt64(buffer.frameLength)) }
+            }
+            TelemetryCounters.shared.audioOverrunTotal.increment()
+        }
     }
 }
 
-/// Slots are leased until dataConsumed returns ownership; the lock guards only the free list.
+/// The worker releases slots after copying PCM into the ring; the lock guards only the free list.
 final class AudioPCMBufferPool: @unchecked Sendable {
     struct Lease {
         let pool: AudioPCMBufferPool
@@ -110,7 +144,7 @@ final class AudioPCMBufferPool: @unchecked Sendable {
     private let lock = NSLock()
     private let buffers: [AVAudioPCMBuffer]
     private var available: [Int]
-    // Created before publication; the worker and AV callbacks only read these closures.
+    // Created before publication; the worker only reads these closures.
     private var completions: [@Sendable () -> Void] = []
 
     init(format: AVAudioFormat, frames: AVAudioFrameCount, count: Int,

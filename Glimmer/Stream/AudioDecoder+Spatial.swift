@@ -1,48 +1,37 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import AVFoundation
+import AVFAudio
+import AudioToolbox
 
-extension AudioDecoder {
-    /// The caller holds `stateLock` and catches Objective-C exceptions around graph changes.
-    func connectOutputGraph(format: AVAudioFormat, route: AudioOutputRoute) {
-        let output = route.spatialOutput(sourceChannels: Int(format.channelCount))
-        outputGraphNeedsReconnect = true
-        engine.disconnectNodeOutput(varispeed)
-        if let spatialMixer { engine.disconnectNodeOutput(spatialMixer) }
-        guard let output else {
-            playerNode.sourceMode = .bypass
-            if let spatialMixer { spatialMixer.isListenerHeadTrackingEnabled = false }
-            engine.connect(varispeed, to: engine.mainMixerNode, format: format)
-            spatialOutputType = nil
-            outputGraphNeedsReconnect = false
+extension AudioHALOutput {
+    // Apple's ambience-bed pull graph preserves speaker directions and delegates head pose to the mixer.
+    // https://developer.apple.com/documentation/audiotoolbox/generating-spatial-audio-from-a-multichannel-audio-stream
+    func spatialSource(_ source: AudioUnit, format: AVAudioFormat, route: AudioOutputRoute) throws -> AudioUnit {
+        guard let outputType = route.spatialOutput(sourceChannels: Int(format.channelCount)) else {
             Diag.info("Audio output: native, \(format.channelCount) source channels", "Stream.Audio")
-            return
+            return source
         }
-        let mixer: AVAudioEnvironmentNode
-        if let spatialMixer {
-            mixer = spatialMixer
-        } else {
-            mixer = AVAudioEnvironmentNode()
-            engine.attach(mixer)
-            spatialMixer = mixer
-        }
-        mixer.outputType = output
-        mixer.reverbParameters.enable = false
-        mixer.isListenerHeadTrackingEnabled = output == .headphones
-        let stereo = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 2)
-        engine.connect(varispeed, to: mixer, format: format)
-        engine.connect(mixer, to: engine.mainMixerNode, format: stereo)
-        playerNode.sourceMode = .ambienceBed
-        playerNode.renderingAlgorithm = .auto
-        spatialOutputType = output
-        outputGraphNeedsReconnect = false
-        let renderer: String = switch output {
-        case .headphones: "headphones"
-        case .builtInSpeakers: "built-in speakers"
-        default: "external speakers"
-        }
-        Diag.info("Audio output: \(renderer), \(format.channelCount) source channels, "
-            + "head tracking \(mixer.isListenerHeadTrackingEnabled)", "Stream.Audio")
+        let headTracking = outputType == .spatialMixerOutputType_Headphones
+        let mixer = try makeUnit(type: kAudioUnitType_Mixer, subtype: kAudioUnitSubType_SpatialMixer)
+        try setFormat(mixer, scope: kAudioUnitScope_Input, rate: sampleRate, channels: format.channelCount,
+                      layout: format.channelLayout?.layoutTag)
+        try setFormat(mixer, scope: kAudioUnitScope_Output, rate: sampleRate, channels: 2,
+                      layout: kAudioChannelLayoutTag_Stereo)
+        try set(mixer, kAudioUnitProperty_SpatializationAlgorithm, scope: kAudioUnitScope_Input,
+                value: AUSpatializationAlgorithm.spatializationAlgorithm_UseOutputType.rawValue)
+        try set(mixer, kAudioUnitProperty_SpatialMixerSourceMode, scope: kAudioUnitScope_Input,
+                value: AUSpatialMixerSourceMode.spatialMixerSourceMode_AmbienceBed.rawValue)
+        try set(mixer, kAudioUnitProperty_SpatialMixerOutputType, value: outputType.rawValue)
+        try set(mixer, kAudioUnitProperty_UsesInternalReverb, value: UInt32(0))
+        try set(mixer, kAudioUnitProperty_SpatialMixerPersonalizedHRTFMode,
+                value: AUSpatialMixerPersonalizedHRTFMode.auto.rawValue)
+        try set(mixer, kAudioUnitProperty_SpatialMixerEnableHeadTracking,
+                value: UInt32(headTracking ? 1 : 0))
+        try connect(source, to: mixer)
+        spatial = true
+        Diag.info("Audio output: spatial, \(format.channelCount) source channels, "
+            + "head tracking \(headTracking)", "Stream.Audio")
+        return mixer
     }
 }

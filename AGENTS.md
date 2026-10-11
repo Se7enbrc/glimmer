@@ -204,9 +204,11 @@ These are settled. A pull request is not the place to reopen them.
 Each one has its reason in a code comment or its commit. Undo one only with new
 numbers or a new platform API, never as cleanup.
 
-- **`Glimmer/Stream/CHelpers.h` is the only non-Swift code**: an Objective-C
-  exception guard. AVAudioEngine can raise an NSException mid device change, and
-  Swift can't catch one. Add no other C or Objective-C.
+- **Audio output uses Swift-controlled AudioToolbox units.** HAL output pulls
+  from a preallocated SPSC PCM ring through varispeed and, on stereo outputs,
+  AUSpatialMixer. Keep callbacks free of locks, allocation and runtime metadata
+  work; graph changes use OSStatus recovery off the render thread. There is no
+  Objective-C exception shim or bridging header.
 - **`DatagramBatch` calls `recvmsg_x` through `dlsym`.** It receives video in
   batches with one syscall, and falls back to `recvfrom` if the symbol is gone.
 - **The FEC kernels in `ReedSolomon.swift` are portable SIMD Swift**, about 2.5×

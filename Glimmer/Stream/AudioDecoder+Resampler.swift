@@ -219,10 +219,15 @@ extension AudioDecoder {
         max(-Self.resamplerBoundPpm, min(Self.resamplerBoundPpm, ppm))
     }
 
-    /// Apply `varispeed.rate` OFF the player-node completion handler: writing it there
-    /// (holding AVAudio's messenger lock) deadlocks against teardown's
-    /// `playerNode.stop()` (engine lock). The hop breaks it; post-shutdown writes no-op.
+    /// AU parameter writes are serialized with teardown on the route queue, outside the meter lock.
     func applyVarispeedRate(_ rate: Float) {
-        varispeedRateQueue.async { [weak self] in self?.varispeed.rate = rate }
+        routeListenerQueue.async { [weak self] in
+            guard let self else { return }
+            self.graphChangeLock.lock()
+            defer { self.graphChangeLock.unlock() }
+            guard !self.isShutdown, let output = self.halOutput else { return }
+            let status = output.setRate(rate)
+            if status != noErr { Diag.error("audio varispeed update failed (OSStatus \(status))", "Stream.Audio") }
+        }
     }
 }

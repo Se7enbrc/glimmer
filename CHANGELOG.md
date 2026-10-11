@@ -23,6 +23,13 @@
   allow it, the controller starts working when you come back to Glimmer, with no
   relaunch.
 
+## 2026.10.7
+
+### Bug fixes
+
+- Audio uses Core Audio directly to recover from output changes without an
+  exception guard, while keeping spatial playback and native surround sound.
+
 ## 2026.10.6 - 2026-10-09
 
 ### Features

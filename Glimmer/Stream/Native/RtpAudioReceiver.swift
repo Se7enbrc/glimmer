@@ -45,12 +45,8 @@ import Foundation
 import Network
 import Darwin
 
-/// The decode/playback sink the native audio receiver feeds. The concrete
-/// implementation (AudioDecoder, adapted by the integrate step) already owns the
-/// OpusMSDecoder + AVAudioEngine; this is just the call surface the receiver
-/// needs. Distinct from `StreamingBackend.AudioSink` because the receiver hands
-/// raw opus BYTES (post-FEC, post-decrypt) and needs an explicit packet-loss
-/// concealment entry point that the existing `AudioSink` lacks.
+/// Receives post-FEC, decrypted Opus bytes and explicit loss concealment requests.
+/// AudioDecoder owns decode and HAL playout; the backend sink lacks an explicit concealment entry point.
 public protocol NativeAudioSink: AnyObject, Sendable {
     /// Configure the opus decoder + audio engine. Returns 0 on success.
     /// `opus` is the negotiated multistream config; `audioConfig` is the

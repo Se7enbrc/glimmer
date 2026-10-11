@@ -21,7 +21,7 @@ struct AudioPlayoutScheduleTests {
         struct Entry { let frames: Int; let silent: Bool; let complete: @Sendable () -> Void }
         var entries: [Entry] = []
 
-        func record(_ buffer: AVAudioPCMBuffer, _ complete: @escaping @Sendable () -> Void) {
+        func record(_ buffer: AVAudioPCMBuffer, _: Bool, _ complete: @escaping @Sendable () -> Void) {
             let frames = Int(buffer.frameLength)
             let channels = (0..<Int(buffer.format.channelCount)).compactMap { buffer.floatChannelData?[$0] }
             let silent = channels.allSatisfy { channel in (0..<frames).allSatisfy { channel[$0] == 0 } }
@@ -57,6 +57,7 @@ struct AudioPlayoutScheduleTests {
         // Playback ran and drained: the next packet re-arms a re-prime and grows the target a step.
         decoder.primed = true
         first.complete()
+        decoder.meterCompleteOnePlayout(frames: UInt64(first.frames), confirmedUnderrun: true)
         #expect(decoder.playoutDrained)
         decoder.decodeAndPlayPLC()
         #expect(recorder.entries.map(\.frames).dropFirst() == [240])
@@ -72,6 +73,7 @@ struct AudioPlayoutScheduleTests {
         #expect(tail.map(\.silent) == [false, true])
         #expect(decoder.pendingSilenceFrames == UInt64(frames(ms: decoder.playoutTargetMs - aheadMs)))
         tail.last?.complete()
+        decoder.meterCompleteOnePlayout(frames: UInt64(tail.last?.frames ?? 0), isSilence: true)
         #expect(decoder.pendingSilenceFrames == 0)
     }
 

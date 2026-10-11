@@ -58,7 +58,8 @@ extension AudioDecoder {
         let system = AudioObjectID(kAudioObjectSystemObject)
         let (key, status) = HALListener.add(system, Self.defaultOutputDeviceAddress) { [weak self] in
             guard let decoder = self else { return }
-            queue.async { decoder.noteRouteChange() }
+            let changedAt = DispatchTime.now().uptimeNanoseconds
+            queue.async { decoder.noteRouteChange(at: changedAt) }
         }
         if status == noErr {
             routeListenerKey = key
@@ -72,7 +73,7 @@ extension AudioDecoder {
     }
 
     /// A default-output change, on the route queue: resample the route and note a real move.
-    private func noteRouteChange() {
+    private func noteRouteChange(at changedAt: UInt64) {
         let fresh = Self.sampleAudioRoute()
         audioMeterLock.lock()
         let previous = audioRouteCache
@@ -82,7 +83,7 @@ extension AudioDecoder {
         if fresh.label != previous {
             Diag.notice("audio route changed: \(previous, privacy: .private) → \(fresh.label, privacy: .private)", "Stream")
         }
-        handleEngineConfigurationChange()
+        handleEngineConfigurationChange(changedAt: changedAt)
     }
 
     /// Remove the route listener. Called from `shutdown()` with `stateLock` held; safe when the install failed
@@ -94,8 +95,7 @@ extension AudioDecoder {
         Diag.notice("audio route listener removed (decoder \(logID), OSStatus \(status))", "Stream")
     }
 
-    /// The HAL address of the system default OUTPUT device - AVAudioEngine's
-    /// outputNode tracks this device, so it IS the playback route.
+    /// HAL output is explicitly bound to the default device when the graph is built.
     private static var defaultOutputDeviceAddress: AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -193,11 +193,10 @@ extension AudioDecoder {
         beginGraphChange()
         guard generation == engineRestartGeneration, !isShutdown else { endGraphChange(); return }
         let bookmarks = outputDiagnosticRequests.take()
-        let format = engine.outputNode.outputFormat(forBus: 0)
         var snapshot = AudioOutputDiagnostic(
-            playerGain: playerNode.volume, mainGain: engine.mainMixerNode.outputVolume,
-            spatialGain: spatialMixer?.outputVolume, sampleRate: format.sampleRate,
-            channels: format.channelCount, muted: outputMuted, running: engine.isRunning)
+            playerGain: 1, mainGain: outputMuted ? 0 : 1,
+            spatialGain: halOutput?.spatial == true ? 1 : nil, sampleRate: halOutput?.sampleRate ?? 0,
+            channels: halOutput?.channels ?? 0, muted: outputMuted, running: engineRunning)
         endGraphChange()
 
         // HAL IPC never holds the decoder lock; a changed default invalidates its volume reading.

@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-// OpusDecoder's PCM into an AVAudioPlayerNode on the main mixer. Stored state lives here,
+// OpusDecoder's PCM into a HAL-driven SPSC ring. Stored state lives here,
 // since extensions can't hold it; the machinery lives in the AudioDecoder+*.swift
 // siblings by topic: engine, decode, meter, prime, route, cushion memory, resampler.
 
 import Foundation
 import AVFoundation
+import CoreAudio
 import os
 public final class AudioDecoder: @unchecked Sendable {
-    // The opus + AVAudioEngine CORE state. Non-private (default internal): the
+    // The opus + Core Audio CORE state. Non-private (default internal): the
     // lifecycle/recovery and decode extensions above own every path that touches
     // it, and stored properties can't live in extensions.
     let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Audio")
 
     /// Decode holds stateLock; graphChanging excludes it while graphChangeLock serializes maintenance.
-    /// Meter state has its own leaf lock. AV callbacks never acquire either lifecycle lock.
+    /// Meter state has its own leaf lock. Render callbacks acquire no locks.
     /// These domains protect the class's unchecked Sendable state.
     let stateLock = NSLock()
     let graphChangeLock = NSLock()
@@ -24,12 +25,11 @@ public final class AudioDecoder: @unchecked Sendable {
     var pcmPool: AudioPCMBufferPool?
     var silencePool: AudioPCMBufferPool?
     var spliceLease: AudioPCMBufferPool.Lease?
-    var renderTimeline = AudioRenderTimeline()
     var renderMonitor: DispatchSourceTimer?
     lazy var maintenanceSource = makeMaintenanceSource()
     lazy var linkResolveSource = makeLinkResolveSource()
     var isShutdown = false
-    /// True while the PC plays this stream's sound: the Mac's main mixer sits at 0
+    /// True while the PC plays this stream's sound: the ring renders zeros
     /// and the engine keeps running. Guarded by `stateLock`; see `setOutputMuted`.
     var outputMuted = false
 
@@ -39,35 +39,21 @@ public final class AudioDecoder: @unchecked Sendable {
     var decodeScratch: [Float] = []
     /// Retains the first skipped block until its join is smoothed, under `stateLock`.
     var packetSplice = AudioPacketSplice()
-    // Audio graph state is serialized by `stateLock`, including output-route changes.
-    var spatialMixer: AVAudioEnvironmentNode?
-    var spatialOutputType: AVAudioEnvironmentOutputType?
-    var outputGraphNeedsReconnect = false
-    /// Last sampled output route, read under `stateLock`; HAL sampling happens off the lock.
+    // Graph objects are accessed only while decode admission or the graph gate is held.
+    var halOutput: AudioHALOutput?
     var outputRoute = AudioOutputRoute()
-    let engine = AVAudioEngine()
-    let playerNode = AVAudioPlayerNode()
-    /// Where every decoded, backfill and top-up buffer is queued for playout.
-    /// Tests swap it to record what is scheduled, in order; the default is the player node.
-    lazy var schedulePlayout: (AVAudioPCMBuffer, @escaping @Sendable () -> Void) -> Void = { [playerNode] in
-        playerNode.scheduleBuffer($0, completionHandler: $1)
-    }
-    /// Drift-tracking resampler, inserted between `playerNode` and the mixer. A
-    /// slew-limited PI loop (`driveResampler`, driven ~1Hz from `publishAudioState`)
-    /// steers `rate = 1+ε` to hold buffer fill at the cushion setpoint, cancelling
-    /// the steady host↔Mac clock drift continuously - replacing the old
-    /// one-directional/clicky silence micro-stretch. ε is ppm-scale (the bound is
-    /// ±500ppm = ±0.5 cents, inaudible; the slew limit keeps the pitch from stepping).
-    let varispeed = AVAudioUnitVarispeed()
-    /// `varispeed.rate` takes the engine lock. Write on this queue, outside the
-    /// completion handler's messenger lock, to avoid deadlocking with teardown.
-    let varispeedRateQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.varispeed-rate", qos: .userInteractive)
+    var outputGraphNeedsReconnect = false
     var inputFormat: AVAudioFormat?
-    /// Last-known engine OUTPUT (hardware) format, captured when the engine
-    /// starts. The config-change handler (H3) compares against this to decide
-    /// whether the output route's format actually moved (so it reconnects
-    /// `varispeed -> mainMixer` only on a real change). Guarded by `stateLock`.
-    var lastOutputFormat: AVAudioFormat?
+    var deviceListeners: [(AudioObjectID, AudioObjectPropertyAddress, Int)] = []
+    var observedRingFrames: UInt64 = 0
+    var observedRingSilence: UInt64 = 0
+    var observedRingUnderruns: UInt64 = 0
+    var deviceRecoveryStarted: UInt64 = 0
+    // Tests replace the OS operation; production builds and starts the complete graph.
+    var startOutput: ((AudioDecoder) -> OSStatus)?
+    lazy var schedulePlayout: (AVAudioPCMBuffer, Bool, @escaping @Sendable () -> Void) -> Void = { [weak self] in
+        self?.enqueuePCM($0, isSilence: $1, completion: $2)
+    }
     var channelCount: Int = 2
     var samplesPerFrame: Int = 240                 // 5ms at 48kHz, common GFE/Sunshine config
     var streams: Int = 1
@@ -78,49 +64,21 @@ public final class AudioDecoder: @unchecked Sendable {
     /// channel order we picked. nil = identity. See `installChannelLayout`.
     var outputReorder: [Int]?
 
-    // MARK: - P1 AUDIO playout telemetry (opt-in; zero-overhead when off)
-    //
-    // The audio OUTPUT-side signals: buffer level / fill, under-runs, trims,
-    // over-runs, and A/V sync drift. All accounting is a handful of integer/double
-    // updates per 5ms packet behind a tiny dedicated lock (`audioMeterLock`) - NEVER
-    // the decoder's `stateLock` - so the off-thread `scheduleBuffer` completion handler
-    // can update the playhead without contending the decode/shutdown path. The
-    // published gauge (`TelemetryCounters.setAudioState`) and the always-live
-    // under-run/trim/over-run counters are READ only by the exporter when telemetry is
-    // on; the per-packet adds are unconditional but sub-microsecond, far below the
-    // 5ms audio budget. No allocation, no clock storm on the hot path.
+    // Meter work runs on the worker or monitor, never in HAL's callback. Its leaf lock
+    // protects cushion policy and counters; the ring publishes consumption through atomics.
     let audioMeterLock = NSLock()
-    /// Total decoded audio frames (samples-per-channel) handed to the player this
-    /// session. Incremented on the decode path as each buffer is scheduled.
+    /// Total input frames copied into the ring; meter accounting stays in the PC sample rate.
     var framesScheduled: UInt64 = 0
-    /// Total decoded audio frames the player has finished playing this session,
-    /// incremented in the scheduleBuffer completion handler (off-thread). The
-    /// scheduled-ahead backlog = framesScheduled − framesPlayed.
+    /// Input frames consumed by the render callback, sampled off-thread.
+    /// The difference from framesScheduled is ring fill, including resident silence.
     var framesPlayed: UInt64 = 0
-    var meterGeneration: UInt64 = 0
-    /// Corrector-inserted silence frames currently RESIDENT in the buffer
-    /// (scheduled but not yet played): the running sum of micro-stretch + backfill
-    /// silence, += at each silence schedule and -= at each silence completion.
-    /// Subtracted from buffer fill before deriving `av_skew_ms` so the audio
-    /// playhead reflects REAL media - inserted silence inflates fill without
-    /// advancing the audio RTP position, which otherwise biases the skew toward
-    /// "audio late" by exactly the resident silence. Guarded by `audioMeterLock`.
+    /// Backfill silence inflates fill without advancing RTP media time. Subtract its resident
+    /// frames for A/V skew; ring consumption removes them under audioMeterLock.
     var pendingSilenceFrames: UInt64 = 0
     /// Output sample rate (Hz) - set at init so the meter can convert frames↔ms.
     var meterSampleRate: Double = 48_000
-    /// Wall-clock (`DispatchTime` ns) anchor for the audio-clock-drift metric: the
-    /// start of the CURRENT continuous-playout SEGMENT. RE-BASELINED whenever
-    /// playout (re)starts after a drain - see `driftAnchorFramesPlayed`. 0 = audio
-    /// playout not started yet.
-    ///
-    /// Why per-segment, not session-monotonic: drift = wall-elapsed − media-played
-    /// − buffer-cushion. On an under-run the player drains to empty, so `framesPlayed`
-    /// STALLS (no completions fire) while wall time keeps advancing AND the cushion
-    /// is 0 - the drain gap would otherwise be folded permanently into drift (a
-    /// multi-second step-jump that then pins). Re-baselining both the wall
-    /// anchor and the media-played reference at each playout restart makes drift
-    /// reflect the CURRENT playout segment's clock slip, not the cumulative drain
-    /// gap. (Measurement-only; the drain itself is still counted as an under-run.)
+    /// Rebase wall time and consumed frames after every drain. Otherwise dead air becomes
+    /// a permanent drift step even after the cushion recovers. Guarded by audioMeterLock.
     var driftAnchorNanos: UInt64 = 0
     /// `framesPlayed` captured at `driftAnchorNanos` - the media-played reference for
     /// the current segment. Drift uses (framesPlayed − this) so a re-baseline after a
@@ -184,85 +142,25 @@ public final class AudioDecoder: @unchecked Sendable {
     /// Maximum drift change within one cushion quiet window. A compensated
     /// clock can accumulate unlimited absolute drift while its buffer stays full.
     static let cushionReleaseDriftBoundMs = 60.0
-    /// Mirror of `isShutdown` in the METER lock's domain, raised by `shutdown()`
-    /// BEFORE `playerNode.stop()`. Stopping a node with a standing cushion fires
-    /// the completion handler of EVERY queued buffer (.dataConsumed semantics:
-    /// consumed OR stopped), and the burst's last completion is indistinguishable,
-    /// inside `meterCompleteOnePlayout`, from a real starvation drain. That
-    /// handler deliberately never touches `stateLock`, so it cannot read
-    /// `isShutdown`; this flag is its only honest view of teardown. Guarded by
-    /// `audioMeterLock`.
+    /// Raise before stopping HAL so discarded PCM cannot teach a deeper cushion.
+    /// Guarded by audioMeterLock; callback storage remains alive until units are disposed.
     var meterShutdown = false
-    /// Mirror of `engine.isRunning` for the `glimmer_audio_engine_running` gauge,
-    /// set under `audioMeterLock` at engine start (initDecoderCore) and cleared in
-    /// shutdown() - so the meter thread reads engine state without touching AVAudio
-    /// off-thread. Proves "packets arriving but playout dead" at a glance.
+    /// Lifecycle mirror for telemetry and decode admission, guarded by audioMeterLock.
+    /// No HAL query belongs in the meter or render callback.
     var engineRunning = false
     /// True once at least one buffer has been scheduled (gates under-run detection
     /// so the initial empty state isn't an under-run).
     var playoutStarted = false
-    /// Latch: true while the playout backlog is at zero, so an under-run is counted
-    /// once on the EDGE into empty (a true drain) rather than on every completion
-    /// that happens to find the queue empty - which at a 1-deep steady queue would
-    /// massively over-count. Cleared the next time a buffer is scheduled.
+    /// Latch actual missing-frame edges, not exact exhaustion at a render boundary.
+    /// The next scheduled block re-arms the cushion without pausing the render thread.
     var playoutDrained = false
     // (The OVER-RUN ceiling constants are link-aware cushion-cap policy and live in
     // AudioDecoder+CushionMemory; the runtime gate uses `effectiveOverrunCeilingMs`.)
 
-    // MARK: - P1 AUDIO playout CUSHION (the under-run fix)
-    //
-    // Root cause of the under-run cluster: there was NO playout cushion.
-    // Each 5ms opus packet was decoded and immediately `play()`ed, so the
-    // scheduled-ahead depth sat at ~0-5ms - ON the under-run floor. Any momentary
-    // slip (host-vs-Mac clock drift on a ~5s cadence; per-event scheduling jitter
-    // under peak high-bitrate video load - NOT CPU saturation) drained it to empty → an
-    // audible gap. 0 over-runs / only-ever-drains was the tell.
-    //
-    // The fix holds a small playout cushion BEFORE starting playback, then lets it
-    // run gapless: defer `play()` until a target of decoded audio is queued
-    // (a PRE-ROLL), so drift + jitter drain into headroom instead of into a
-    // gap. This is audio-only - the latency-critical video path is untouched - and
-    // the cushion (~30ms up to the link-aware cap: 150ms wired / 300ms tunnel) is
-    // within the non-critical audio budget and under the over-run ceiling (cap+40ms),
-    // so audio cannot drift seconds behind. The cushion
-    // ADAPTS like the video pacer's jitter buffer: it starts at the base target and
-    // grows one step per measured under-run (a full drain; at most one per 10s, none
-    // after a gap longer than the cap), so a link whose delivery gaps outpace the
-    // base cushion deepens itself instead of glitching repeatedly.
-    // It only grows on real evidence (an under-run), never blanket-deep - and it
-    // DECAYS one step per sustained under-run-free window, so depth is a temporary,
-    // evidence-keyed state that recovers toward the base, never a permanent pin.
-    //
-    // The paused pre-roll exists at COLD START only. After a mid-stream drain the
-    // node keeps playing - the scheduleBuffer completion path deliberately makes
-    // ZERO AV-node calls (it runs unserialized against `shutdown()`; every AV call
-    // lives on paths the state lock or the meter-lock-then-call discipline covers)
-    // - and the cushion rebuilds via whichever of TWO paths the link offers:
-    //   (1) the post-gap CATCH-UP CLUMP - a jittery link delivers the gap's
-    //       packets in a burst, and the 250ms gate grace shields that clump from
-    //       the trim and the ceiling so it can stack back up to target; or
-    //   (2) the grace-expiry SILENCE BACKFILL - on a STEADY link (host-side audio
-    //       outage, playback-side drain) packets resume at exactly real-time rate,
-    //       no clump ever forms, and standing fill would pin at ~0 while the
-    //       target ratchet climbed uselessly (the under-run cascade). When the
-    //       grace expires with fill still a step short of
-    //       target, the decode path schedules ONE zeroed buffer of (target − fill)
-    //       ms so the cushion reaches target immediately (`backfillCushion`): one
-    //       deliberate, bounded quiet stretch right behind an already-audible gap
-    //       buys the headroom that ends the cascade.
-    // The re-prime is a state-machine re-arm, not a wall-time pause.
-    //
-    // The cap, though, governs only PRE-ROLL - so once steady-state backlog grew (an
-    // early under-run deepening the cushion, or receive briefly outrunning playout) it
-    // had no trim/decay and PINNED deep (~235ms measured = ~235ms pure A/V lag). The
-    // companion fix is a steady-state TRIM-TOWARD-TARGET on the schedule path
-    // (`meterRegisterScheduleOrOverrun`): once primed, packets that would hold the
-    // backlog a hysteresis band past the cushion target are dropped - rate-limited,
-    // and standing down briefly after a re-prime so the post-gap catch-up clump
-    // (the cushion rebuild itself) isn't chopped - walking the queue back DOWN to
-    // the target. Net: backlog rests near the target (~30ms typical on a clean
-    // link; deeper only while gaps recur, decaying back once they stop).
-    //
+    // Cold startup pre-roll absorbs delivery jitter; drains rebuild via catch-up or bounded silence.
+    // Evidence grows depth, quiet windows release it, and trims prevent a standing latency pin.
+    // The unchanged policy and its measurement boundaries are documented in docs/AUDIO.md.
+
     /// Base playout cushion (ms) pre-rolled before playback starts. ≈6 packets at
     /// 5ms; inaudible for non-critical audio yet >> the worst per-event slip and
     /// ~60× the ~0.5ms/5s drift budget at ~100ppm.
@@ -303,13 +201,8 @@ public final class AudioDecoder: @unchecked Sendable {
     /// so the backstop tracks the active cap. Guarded by `audioMeterLock`.
     var effectiveOverrunCeilingMs: Double =
         AudioDecoder.playoutCushionMaxMsTunnel + AudioDecoder.bufferOverrunCeilingSlackMs
-    /// True once `playerNode.play()` has been called (the cold-start pre-roll
-    /// fired). Until then buffers are scheduled but the player is paused, building
-    /// the cushion. Re-armed (set false) on a full drain - a STATE-MACHINE edge
-    /// only: the node keeps playing (the completion path makes no AV calls), so the
-    /// re-prime's `play()` is a no-op and the cushion rebuilds via the post-gap
-    /// catch-up clump under the gate grace - or, when no clump arrives by grace
-    /// expiry, via the one-shot silence backfill - not via a paused pre-roll.
+    /// Cold startup enables ring reads only once the cushion is ready. Mid-stream drains
+    /// keep pulling while the existing grace/backfill policy rebuilds headroom.
     var primed = false
     /// Count of buffers scheduled since the last prime/re-prime - drives the
     /// fallback-prime (COLD START only; a re-prime rebuilds via clump or backfill
@@ -379,11 +272,8 @@ public final class AudioDecoder: @unchecked Sendable {
     /// `DispatchTime` ns of the last stall-recovery attempt - bounds the
     /// rebuild cadence so a truly dead output device retries, not thrashes.
     var stallRecoveryLastAttemptNanos: UInt64 = 0
-    /// True from the recovery's `playerNode.stop()` until the next (re)arm
-    /// edge: the completion handler's EVIDENCE gate treats it like
-    /// `meterShutdown`, so the stop()-fired completion burst can't mint a
-    /// synthetic under-run (ratchet + persisted floor - the
-    /// disguised-permanent-pin class).
+    /// Discarded PCM during graph replacement must not count as an underrun.
+    /// This meter-lock latch stays raised until the next schedule re-arms playback.
     var meterRecovering = false
 
     // MARK: - P1 AUDIO cushion LOSS FLOOR + per-host memory (the limit-cycle fix)
@@ -453,16 +343,6 @@ public final class AudioDecoder: @unchecked Sendable {
     /// Guarded by stateLock; reset for each session.
     var primeEdgeRetryAtNanos: UInt64 = 0
     var primeEdgeFailureStreak = false
-
-    /// `AVAudioEngineConfigurationChange` observer token (held so `shutdown()`
-    /// can remove it). On a mid-stream output-device/format change AVAudioEngine
-    /// STOPS its outputNode; without this, playout goes silent for the rest of
-    /// the session. The handler re-resolves + reconnects + restarts the engine on
-    /// the `stateLock`-serialized path. Fires on a NOTIFICATION (not a player-node
-    /// completion handler), so a node-prop change there is safe - see `handle
-    /// EngineConfigurationChange`. Lifecycle-guarded by `stateLock`. Non-private:
-    /// the install/remove pair lives in AudioDecoder+Engine.swift.
-    var configChangeObserver: NSObjectProtocol?
 
     // MARK: - P1 AUDIO playout MIN-fill telemetry
     //

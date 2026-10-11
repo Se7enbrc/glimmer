@@ -82,6 +82,7 @@ extension AudioDecoder {
             resetPacketSplice()
         }
         // Drop excess audio to bound latency, retaining its start to smooth the next join.
+        observeRenderClock()
         let decodedFrames = UInt64(decoded)
         if meterRegisterScheduleOrOverrun(frames: decodedFrames) {
             if !packetSplice.hasPendingJoin {
@@ -95,10 +96,8 @@ extension AudioDecoder {
         packetSplice.apply(to: pcm)
         if let held = spliceLease { held.pool.release(held.index) }
         spliceLease = nil
-        let rendered = observeRenderClock()
-        renderTimeline.scheduled(frames: Int64(decoded), at: rendered)
         retained = true
-        schedulePlayout(pcm, lease.completion)
+        schedulePlayout(pcm, false, lease.completion)
         // Rebuild the cushion after a drain; steady playback takes the cheap primed path.
         maybePrime(format: fmt, onWorker: true)
         // Drives the drift resampler's PI loop (self-rate-limited to ~4Hz) + the

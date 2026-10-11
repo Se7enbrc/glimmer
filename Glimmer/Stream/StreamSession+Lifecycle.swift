@@ -138,7 +138,7 @@ extension StreamSession {
             win?.close()
         }
 
-        // 3. The AVAudioEngine teardown. Step 1 already drained the audio
+        // 3. The HAL audio output teardown. Step 1 already drained the audio
         //    receive thread, so no final sample can race it.
         audioDecoder.shutdown()
 

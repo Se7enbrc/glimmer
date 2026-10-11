@@ -143,79 +143,23 @@ struct AudioWorkerTests {
         #expect(telemetry.takeSnapshot().receiveGap.observationCount == 0)
     }
 
-    @Test func renderClockDetectsStarvationWithoutAnyCompletionCallbacks() {
-        var clock = AudioRenderTimeline()
-        clock.renderQuantum = 240
-        clock.scheduled(frames: 1_440, at: nil)
-        #expect(clock.observe(sample: 0, rate: 48_000) == nil)
-        #expect(clock.observe(sample: 240, rate: 48_000)?.cushionMs == 25)
-        #expect(clock.observe(sample: 1_440, rate: 48_000)?.underrun == false)
-        #expect(clock.observe(sample: 1_920, rate: 48_000)?.underrun == true)
-        #expect(clock.observe(sample: 2_160, rate: 48_000)?.underrun == false)
-        clock.scheduled(frames: 480, at: 2_160)
-        #expect(clock.observe(sample: 2_400, rate: 48_000)?.underrun == false)
-        #expect(clock.observe(sample: 3_120, rate: 48_000)?.underrun == true)
-        clock = AudioRenderTimeline()
-        #expect(clock.observe(sample: 4_000, rate: 48_000) == nil)
-    }
-
     @Test func bothExportersCarryAudioPipelineMeasurements() {
         let telemetry = AudioPipelineTelemetry()
         telemetry.receiveGap.observe(5)
         telemetry.noteRender(cushionMs: 3, underrun: true)
         telemetry.noteNearMiss()
+        telemetry.noteOutput(latencyMs: 12, recoveryMs: 90)
         let snapshot = telemetry.takeSnapshot()
         var json = TelemetryRenderer.NDJSONBuilder()
         TelemetryRenderer.ndjsonAudioPipeline(&json, snapshot)
         #expect(json.line().contains("\"audio_render_underrun_total\":1"))
         #expect(json.line().contains("\"audio_near_misses_window\":1"))
         #expect(json.line().contains("\"audio_receive_gap_buckets\":"))
+        #expect(json.line().contains("\"audio_device_recovery_ms\":90"))
+        #expect(json.line().contains("\"audio_output_latency_ms\":12"))
         var prom = TelemetryRenderer.PromBuilder(session: "test", host: "pc")
         TelemetryRenderer.promAudioPipeline(&prom, snapshot)
         #expect(prom.out.contains("glimmer_audio_receive_gap_ms_bucket"))
         #expect(prom.out.contains("glimmer_audio_render_cushion_min_ms"))
-    }
-
-    @Test func oldCompletionCannotAdvanceAReconnectedMeter() {
-        let decoder = AudioDecoder()
-        decoder.meterGeneration = 2
-        decoder.framesScheduled = 480
-        decoder.meterCompleteOnePlayout(frames: 240, generation: 1)
-        #expect(decoder.framesPlayed == 0)
-        decoder.meterCompleteOnePlayout(frames: 240, generation: 2)
-        #expect(decoder.framesPlayed == 240)
-        decoder.shutdown()
-    }
-
-    @Test func realPlayerRenderClockContinuesAfterScheduledAudioRunsOut() throws {
-        let engine = AVAudioEngine()
-        let player = AVAudioPlayerNode()
-        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
-        engine.attach(player)
-        engine.connect(player, to: engine.mainMixerNode, format: format)
-        try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 240)
-        let input = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1_440))
-        input.frameLength = 1_440
-        if let channels = input.floatChannelData {
-            for channel in 0..<2 { channels[channel].update(repeating: 0, count: 1_440) }
-        }
-        let output = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 240))
-        player.scheduleBuffer(input)
-        try engine.start()
-        player.play()
-        defer { player.stop(); engine.stop() }
-        var timeline = AudioRenderTimeline()
-        timeline.renderQuantum = 240
-        timeline.scheduled(frames: 1_440, at: nil)
-        var underruns = 0
-        for quantum in 0..<20 {
-            #expect(try engine.renderOffline(240, to: output) == .success)
-            let render = try #require(player.lastRenderTime)
-            let time = try #require(player.playerTime(forNodeTime: render))
-            let observation = timeline.observe(sample: time.sampleTime, rate: time.sampleRate)
-            if observation?.underrun == true { underruns += 1 }
-            if quantum < 6 { #expect(underruns == 0) }
-        }
-        #expect(underruns == 1)
     }
 }

@@ -71,10 +71,7 @@ extension TelemetryCounters {
     /// 1Hz-sampled state gauge, and the lock keeps the multi-field read tear-free.
     /// nil before the first decoded audio packet.
     struct AudioState: Sendable {
-        /// Decoded audio buffered ahead of the playhead (ms): the scheduled-but-
-        /// not-yet-played backlog in the AVAudioPlayerNode. A healthy stream holds a
-        /// small steady cushion; a climb is latency creep, a fall toward 0 precedes
-        /// an under-run (the audio glitch).
+        /// Ring fill in milliseconds: a climb is latency creep, a fall toward zero warns of an underrun.
         var bufferFillMs: Double
         /// ADAPTIVE PLAYOUT TARGET (ms): the cushion the playout path is
         /// currently steering `bufferFillMs` toward. Fill vs target is the
@@ -114,10 +111,8 @@ extension TelemetryCounters {
         /// offset (~tens of ppm) - the direct view of the resampler holding the fill
         /// it's steering (vs the av_skew that bounces with video-side timing).
         var resamplerPpm: Double = 0
-        /// AVAudioEngine running mirror (1 = up). Set under the audio meter lock at
-        /// engine start/stop, so a reconnect that re-inits the decoder but fails to
-        /// bring the engine back reads 0 here while packets still flow - the direct
-        /// "playout dead" signal. nil before the engine first starts.
+        /// Lifecycle mirror, read under the meter lock. Zero while packets arrive exposes dead playout.
+        /// Nil before the engine first starts.
         var engineRunning: Bool?
         /// The cushion cap (ms) for the resolved link (wired 150 / Wi-Fi 200 /
         /// tunnel 300): the ceiling the target grows to, and the dead-air gap bound.

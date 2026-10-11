@@ -73,7 +73,7 @@ OSSignpost categories are a separate axis on the same subsystem (see
 | `Stream.Render`   | VT output → frame pacer submit, plus pacer and present events |
 | `Stream.Network`  | connection bring-up (`startConnection`)                       |
 | `Stream.Pairing`  | five-round PIN handshake                                      |
-| `Stream.Audio`    | Opus decode + `AVAudioPlayerNode` schedule                    |
+| `Stream.Audio`    | Opus decode + PCM ring write                                  |
 
 ### Stream-session lifecycle
 
@@ -306,23 +306,27 @@ carries `audio_timing_bounds_ms` and each family's `_buckets`, `_count`,
 | `audio_queue_wait`                                              | Receive timestamp to worker dequeue; tail should stay well below the standing cushion.                                                |
 | `audio_decode_schedule`                                         | Each Opus/PLC call, including admission-lock wait through schedule/prime; p99 should stay below the 5 ms frame period.                |
 | `audio_state_lock_wait`                                         | Decode admission lock acquisition; graph stop/reconnect/start must not appear as long waits.                                          |
-| `audio_buffer_fill_min_ms`                                      | Existing completion-accounting minimum, reset each capture; should rise or remain safely above zero.                                  |
+| `audio_buffer_fill_min_ms`                                      | Ring consumption accounting minimum, reset each capture; should remain safely above zero.                                             |
 | `audio_near_misses_window`                                      | Existing accounting near-miss edges in this capture window; should decrease. Thresholds remain 15/30 ms.                              |
-| `audio_render_cushion_min_ms`                                   | Minimum scheduled end minus player render sample time this window, clamped at zero; independent of completions.                       |
-| `audio_render_underrun_total`                                   | Advancing player render clock more than one maximum render quantum past scheduled end; require zero additional edges under load.      |
+| `audio_render_cushion_min_ms`                                   | Minimum ring fill after a render pull this window; measured by the callback.                                                          |
+| `audio_render_underrun_total`                                   | Callback requests more PCM than the ring contains; require zero additional edges under load.                                          |
 | `audio_decode_realtime`                                         | Successful Mach policy request (5 ms period/deadline, 1 ms computation, preemptible); true while the worker runs.                     |
 | `audio_worker_overflow_total`, `audio_pcm_pool_exhausted_total` | Require zero growth in steady playback. The full packet queue drops newest, preserving retained order; RTP/FEC handles sequence gaps. |
 | `audio_reconfiguration_drop_total`                              | Packets rejected while graph access is closed; expected only around output changes/maintenance.                                       |
 
-The render check polls `lastRenderTime`/`playerTime` every 10 ms and before
-scheduling. It ignores startup, a stationary clock and stopped graphs, and
-resets on graph replacement. This is conservative evidence of missing scheduled
-PCM, not a hardware speaker probe: gaps shorter than a render quantum may be
-missed, and output-device overload can occur despite sufficient PCM. Check Audio
-System Trace and audible playback as well as `audio_underrun_total`, trims,
-re-primes and engine/stall recovery. A successful Mach request does not prove
-the kernel never later demotes the thread; verify `Glimmer.audioDecode` in
-System Trace. Compare video output-to-present p99 for collateral regressions.
+The HAL render callback counts missing PCM directly and publishes the minimum
+ring fill through atomics. The decode worker and a 10 ms monitor read those
+observations; neither telemetry locks nor logging run on the render thread.
+Startup and stopped graphs do not count underruns. The prior player-clock poll
+could miss gaps shorter than a render quantum, so compare that baseline with
+this measurement change in mind. Check Audio System Trace and audible playback
+alongside `audio_underrun_total`, trims, re-primes and engine/stall recovery.
+`audio_output_latency_ms` is HAL latency + safety offset + buffer duration;
+`audio_device_recovery_ms` measures notification to first replacement-graph PCM,
+observed within the monitor interval. Acoustic latency still needs loopback. A
+successful Mach request does not prove the kernel never later demotes the
+thread; verify `Glimmer.audioDecode` in System Trace. Compare video
+output-to-present p99 for collateral regressions.
 
 The asynchronous packet producer uses Mach scheduling rather than joining the
 device render workgroup, whose deadline it does not share. See

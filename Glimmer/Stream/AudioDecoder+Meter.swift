@@ -235,17 +235,12 @@ extension AudioDecoder {
         return false
     }
 
-    /// One scheduled buffer finished playing (the player's completion handler, on
-    /// an arbitrary thread). Advance the playhead and detect an UNDER-RUN - the
-    /// player drained to empty with the stream still active (an audible gap). Tiny
-    /// meter lock only; no decode/shutdown contention - and deliberately ZERO
-    /// AV-node calls: this thread is never serialized against `shutdown()`, so a
-    /// pause()/play() here would race teardown. The post-drain cushion rebuild
-    /// belongs to the DECODE path - the catch-up clump under the gate grace, or
-    /// the grace-expiry silence backfill - never this handler's.
-    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false, generation: UInt64? = nil) {
+    /// Consume ring observations off the render thread. Only a callback-confirmed shortage is
+    /// underrun evidence; teardown and graph replacement cannot teach the cushion. The optional
+    /// verdict keeps legacy policy tests independent of hardware and ring storage.
+    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false,
+                                 confirmedUnderrun: Bool? = nil) {
         audioMeterLock.lock()
-        guard generation == nil || generation == meterGeneration else { audioMeterLock.unlock(); return }
         framesPlayed &+= frames
         // Stall-watchdog heartbeat: a completion IS consumption. One clock read
         // per completion (~200Hz) - the same budget as the trough math below.
@@ -266,27 +261,9 @@ extension AudioDecoder {
         // limit-cycle fix): a dip inside one step of empty must hold depth.
         let stopping = meterShutdown || meterRecovering
         if !stopping, rate > 0, fillMs < quietWindowMinFillMs { quietWindowMinFillMs = fillMs }
-        // Under-run EDGE: this completion drained the backlog to empty while
-        // playout is active AND we weren't already drained - a true gap, not a
-        // steady 1-deep queue. Latch so we count it once until the next schedule.
-        // TEARDOWN BURST GUARD: `shutdown()` raises `meterShutdown` (this lock's
-        // domain) BEFORE `playerNode.stop()`, because stop() fires the completion
-        // of EVERY still-queued buffer (.dataConsumed semantics: consumed OR
-        // stopped) - with a standing cushion that's a 6-30 handler burst whose
-        // last completion drains the playhead exactly like a starvation drain.
-        // Un-gated, that minted a synthetic under-run on EVERY session end:
-        // target ratcheted +10ms, floor EWMA-pulled, both PERSISTED per-host -
-        // sub-10-min sessions walked toward the 150ms cap across sessions (the
-        // disguised-permanent-pin class; the same completion-handler-vs-shutdown
-        // race the no-AV-calls rule guards, hitting the STATE MACHINE instead of
-        // the node). The burst still drains its bookkeeping above - playhead,
-        // trough, drained latch - so mid-session logic is untouched; ONLY the
-        // evidence edges (ratchet/floor/persist/counter/NOTICE, and the decay
-        // clock below) are gated.
-        // `meterRecovering` rides the same gate: the stall recovery's stop() fires
-        // an identical completion burst, and un-gated it would mint the same
-        // synthetic under-run (ratchet + persisted floor) the shutdown gate blocks.
-        let drainedNow = framesPlayed >= framesScheduled
+        // Teardown and recovery discard PCM without a real shortage. Gate their evidence so short
+        // sessions cannot ratchet and persist a deeper cushion just by stopping. Consumption still reconciles.
+        let drainedNow = confirmedUnderrun ?? (framesPlayed >= framesScheduled)
         let isUnderrunEdge = drainedNow && !playoutDrained && !stopping
         if drainedNow { playoutDrained = true }
         var emitNotice = false
@@ -444,7 +421,7 @@ extension AudioDecoder {
                 rePrimeTotal: rePrimes,
                 // The resampler's applied rate offset - makes the loop visible vs av_skew noise.
                 resamplerPpm: appliedPpm,
-                // Engine-running mirror: 1 = AVAudioEngine up. Catches the post-
+                // Engine-running mirror: 1 = HAL output up. Catches the post-
                 // reconnect "packets flow but playout dead" latch in one query.
                 engineRunning: engineUp,
                 cushionMaxMs: cushionMaxMs))
