@@ -458,6 +458,32 @@ the shortcut recorder, restoring its previous value after the last owner leaves.
 Leaving Mini Player in the background releases held controller input; returning
 to the stream resynchronizes the pad's current state.
 
+**Controller mouse.** Start alone, held longer than 750 ms and released, toggles
+per-slot mouse mode. The shared GameController/HID route keeps short Start presses
+and stop chords, and ignores Home for toggling. Mouse mode neutralizes the virtual
+pad and suppresses controller touch and motion input. It uses the existing backend
+mouse sends at 50 ms intervals: left stick moves, right stick scrolls, A/B/X click
+left/right/middle, L1/R1 click back/forward, and the D-pad scrolls one notch on press.
+The timing, click map, D-pad and cubic pointer curve follow
+[Moonlight's SdlInputHandler](https://github.com/moonlight-stream/moonlight-qt/blob/a57e947d7185fd01384f6973df4df59ae2968d01/app/streaming/input/gamepad.cpp).
+Moonlight uses either stick for movement; Glimmer reserves the right for scrolling
+and makes the cubic deadzone symmetric. Stop chords cancel a mouse-toggle hold,
+including a chord released before its stop dwell expires. Focus loss and reconnect
+release mouse buttons and cancel holds without changing the selected mode.
+
+**Nintendo buttons.** GameController's extended profile names face buttons by
+position, including Nintendo pads: A is bottom, B right, X left, Y top, per the
+[Apple buttonA contract](https://developer.apple.com/documentation/gamecontroller/gcextendedgamepad/buttona)
+and `GCExtendedGamepad.h`'s diamond. SDL's macOS DB also maps to these positions.
+Input settings offers label matching only for connected Nintendo-layout types;
+the per-type default is off. Both input routes swap only outgoing A/B and X/Y,
+after positional mouse and stop-chord handling. Generic GameController pads can
+also identify Nintendo labels through the bottom button's B symbol; generic HID
+pads use their DB type name, including the SN30, Pro 2, Lite 2 and related
+Nintendo-label models. Xbox editions stay excluded. See
+[8BitDo's SN30/Pro 2 Switch labels](https://shop.8bitdo.com/products/8bitdo-abxy-buttons-for-sn30-sn30-pro-sn30-pro-and-pro-4).
+A pad with no trustworthy layout metadata keeps positional mapping.
+
 **Raw-HID gamepads.** Pads GameController doesn't own reach the PC through
 `HIDGamepadManager` (`Glimmer/Stream/HIDGamepad/`). It enumerates joysticks,
 gamepads and multi-axis controllers with `IOHIDManager` and skips any device

@@ -361,10 +361,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // No-op in full screen and while captured.
         sendAbsolutePointer(for: event, in: view)
         let hostButton = button(for: event)
-        let rc = backend?.sendMouseButton(
-            action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: hostButton) ?? -2
-        record("LiSendMouseButtonEvent(press)", rc)
-        heldMouseButtons.insert(hostButton)
+        updatePhysicalMouseButton(hostButton, pressed: true)
     }
 
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent) {
@@ -378,10 +375,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // Land the release where the pointer actually ended up - a drag that
         // moved between down and up must not release at the down position.
         sendAbsolutePointer(for: event, in: view)
-        let rc = backend?.sendMouseButton(
-            action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: hostButton) ?? -2
-        record("LiSendMouseButtonEvent(release)", rc)
-        heldMouseButtons.remove(hostButton)
+        updatePhysicalMouseButton(hostButton, pressed: false)
     }
 
     /// Window mode's grab: the pointer crossing onto the picture takes it, no

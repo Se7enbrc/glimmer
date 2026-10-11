@@ -4,6 +4,10 @@
 
 ### Features
 
+- Hold Menu, Options or Start for a moment, then release it to use the controller
+  as a mouse. Hold and release again to return to the game.
+- Nintendo controllers match the PC's button positions by default. “Use Nintendo
+  button layout” in Input settings matches their labels instead, saved per pad type.
 - Steam shows its own logo in the launcher, the menu and the PC list, instead
   of a generic controller.
 

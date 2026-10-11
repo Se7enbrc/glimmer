@@ -123,6 +123,7 @@ extension StreamSession {
             Task { [weak self] in await self?.refreshPowerAssertion() }
         }
         let inp = InputForwarder()
+        inp.onControllerMouseChanged = { [weak win] enabled in win?.showControllerMouseMode(enabled) }
         // Hotkey chords need to be readable LIVE on every keyDown so
         // changes in Settings take effect without restarting the
         // stream. Capture-at-attach silently strands edits. The
@@ -173,11 +174,7 @@ extension StreamSession {
             guard let win, win.window.isVisible else { return }
             let text = leaveHint()
             guard Self.claimLeaveHintShow(text) else { return }
-            win.leaveHintBanner.setText(text)
-            win.leaveHintBanner.setVisible(true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak win] in
-                win?.leaveHintBanner.setVisible(false)
-            }
+            win.showStreamToast(text, for: 5)
         }
         // Stream window moved to another display / its display woke or
         // changed mode → rebind the pacer's CADisplayLink so frames

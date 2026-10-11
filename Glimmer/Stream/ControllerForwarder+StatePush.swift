@@ -29,7 +29,8 @@ extension InputForwarder {
         ControllerHaptics.shared.setBackgroundPlayEnabled(isMiniPlayer && isReady,
                                                           for: controllerBackgroundEventsID)
         for state in attachedControllers.values {
-            ControllerMotion.shared.setInputEnabled(forwardsControllerEvents, slot: state.slot)
+            ControllerMotion.shared.setInputEnabled(
+                forwardsControllerEvents && controllerMouseStates[state.slot]?.isMouse != true, slot: state.slot)
         }
     }
 
@@ -38,8 +39,8 @@ extension InputForwarder {
     /// FULL-state push from the GameController valueChangedHandler - the SINGLE
     /// source of truth for sticks/triggers/face buttons/touchpad. Pushes the
     /// merged multiController state AND forwards the touchpad surface.
-    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8) {
-        guard pushControllerState(pad: pad, slot: slot) else { return }
+    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8, type: NintendoControllerType? = nil) {
+        guard pushControllerState(pad: pad, slot: slot, type: type) else { return }
         // Forward the touchpad surface (finger contacts) as host touch events.
         // ONLY from this GameController path - touchpad data comes through
         // GameController, so the raw-HID center-button path must NOT re-run this
@@ -78,14 +79,18 @@ extension InputForwarder {
     /// touchpad surface is NOT forwarded here - callers that own the GameController
     /// frame do that separately.
     @discardableResult
-    private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
+    private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8,
+                                     type: NintendoControllerType? = nil) -> Bool {
         guard forwardsControllerEvents else { return false }
         let buttons = pressedButtonFlags(pad: pad)
 
         // The chord ends the stream only after the hold dwell (ControllerForwarder+QuitChord.swift),
         // so an in-game overlap can't. Frames holding it stay off the PC, or the game would act on
         // those buttons for the whole hold.
-        if matchesControllerQuitChord(pad: pad, buttons: buttons) {
+        let analog = controllerAnalog(pad)
+        let chordHeld = matchesControllerQuitChord(pad: pad, buttons: buttons)
+        let isMouse = routeControllerMouse(slot: slot, buttons: buttons, analog: analog, chordHeld: chordHeld)
+        if chordHeld {
             armQuitChordDwell(pad: pad, slot: slot)
             // No frame is enqueued, so its stamp must not age into the next push.
             _ = InputDeliverStamp.shared.take(slot: Int(slot))
@@ -98,23 +103,27 @@ extension InputForwarder {
             cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad)
         }
 
-        let lt = UInt8((pad.leftTrigger.value  * 255).rounded().clamped(to: 0...255))
-        let rt = UInt8((pad.rightTrigger.value * 255).rounded().clamped(to: 0...255))
-        let lx = Int16((pad.leftThumbstick.xAxis.value  * 32767).rounded().clamped(to: -32768...32767))
-        let ly = Int16((pad.leftThumbstick.yAxis.value  * 32767).rounded().clamped(to: -32768...32767))
-        let rx = Int16((pad.rightThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
-        let ry = Int16((pad.rightThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
-
+        guard !isMouse else {
+            _ = InputDeliverStamp.shared.take(slot: Int(slot))
+            return false
+        }
+        let mapped = ControllerButtonLayout.apply(buttons, useNintendoLabels: type.map(nintendoLayoutProvider) ?? false)
         let rc = backend?.sendMultiController(
-            num: Int16(slot),
-            mask: Int16(bitPattern: gamepadMask),
-            buttons: buttons,
-            analog: GamepadAnalog(leftTrigger: lt, rightTrigger: rt,
-                                  leftStickX: lx, leftStickY: ly,
-                                  rightStickX: rx, rightStickY: ry)
+            num: Int16(slot), mask: Int16(bitPattern: gamepadMask), buttons: mapped, analog: analog
         ) ?? -2
         record("LiSendMultiControllerEvent", rc)
         return true
+    }
+
+    private func controllerAnalog(_ pad: GCExtendedGamepad) -> GamepadAnalog {
+        let lt = UInt8((pad.leftTrigger.value * 255).rounded().clamped(to: 0...255))
+        let rt = UInt8((pad.rightTrigger.value * 255).rounded().clamped(to: 0...255))
+        let lx = Int16((pad.leftThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
+        let ly = Int16((pad.leftThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
+        let rx = Int16((pad.rightThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
+        let ry = Int16((pad.rightThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
+        return GamepadAnalog(leftTrigger: lt, rightTrigger: rt, leftStickX: lx, leftStickY: ly,
+                             rightStickX: rx, rightStickY: ry)
     }
 
     /// The host button bitmask for a gamepad's current state. Table-driven so
@@ -176,6 +185,7 @@ extension InputForwarder {
     func neutralizeControllers() {
         guard isReady else { return }
         releaseControllerTouches()
+        suspendControllerMouse()
         for state in attachedControllers.values {
             ControllerMotion.shared.setInputEnabled(false, slot: state.slot)
         }

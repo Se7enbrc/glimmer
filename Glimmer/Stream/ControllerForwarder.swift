@@ -39,6 +39,7 @@ extension InputForwarder {
     struct AttachedController {
         let slot: UInt8           // 0..15, used as `controllerNumber`
         let arrival: ControllerArrival
+        let nintendoType: NintendoControllerType?
         weak var controller: GCController?
         let priorPlayerIndex: GCControllerPlayerIndex
         let priorOptionsGesture: GCControllerElement.SystemGestureState?
@@ -100,6 +101,7 @@ extension InputForwarder {
                     } else {
                         // Controller already deallocated; just clear bookkeeping.
                         if let state = self.attachedControllers.removeValue(forKey: id) {
+                            self.resetControllerMouse(slot: state.slot)
                             self.releaseControllerTouches(slot: state.slot)
                             self.dualSenseRouting.syncControllers()
                             self.dualSenseRouting.unregister(slot: state.slot)
@@ -250,6 +252,7 @@ extension InputForwarder {
 
         let state = AttachedController(
             slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
+            nintendoType: NintendoControllerType.identify(gamepad),
             controller: gamepad, priorPlayerIndex: priorPlayerIndex,
             priorOptionsGesture: priorOptionsGesture, priorHomeGesture: priorHomeGesture, retainedHID: useHID
         )
@@ -288,6 +291,7 @@ extension InputForwarder {
     func detach(gamepad: GCController) {
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
         state.restoreSystemState()
+        resetControllerMouse(slot: state.slot)
         dualSenseRouting.disconnectController(ObjectIdentifier(gamepad))
         dualSenseRouting.unregister(slot: state.slot)
         gamepadMask &= ~(UInt16(1) << state.slot)
@@ -350,6 +354,7 @@ extension InputForwarder {
         // A pad connecting while stop waits on the PC must not retake the HID
         // retain and haptics, motion, or battery slots this walk releases.
         removeGamepadObservers()
+        resetControllerMouse()
         releaseHIDControllers()
         for state in attachedControllers.values {
             state.controller?.extendedGamepad?.valueChangedHandler = nil
@@ -499,6 +504,7 @@ extension InputForwarder {
         guard let gamepad = state.controller else { return }
         let slot = state.slot
         let routesHID = state.retainedHID
+        let nintendoType = state.nintendoType
         // GameController invokes this on the main queue; assume MainActor so
         // Swift 6 strict concurrency is satisfied.
         gamepad.extendedGamepad?.valueChangedHandler = { [weak self] (pad, _) in
@@ -510,7 +516,7 @@ extension InputForwarder {
                     InputDeliverStamp.shared.stamp(slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
                 }
                 if routesHID { self.dualSenseRouting.gc(pad: pad) }
-                self.sendGamepadUpdate(pad: pad, slot: slot)
+                self.sendGamepadUpdate(pad: pad, slot: slot, type: nintendoType)
             }
         }
         // Raw-HID centre buttons (Options/Create/Mute): GameController never fires
@@ -541,9 +547,10 @@ extension InputForwarder {
         for state in attachedControllers.values {
             // Reassert stream ownership before restoring held state after a focus change.
             installInputHandlers(for: state)
-            ControllerMotion.shared.setInputEnabled(true, slot: state.slot)
+            ControllerMotion.shared.setInputEnabled(
+                controllerMouseStates[state.slot]?.isMouse != true, slot: state.slot)
             guard let pad = state.controller?.extendedGamepad else { continue }
-            sendGamepadUpdate(pad: pad, slot: state.slot)
+            sendGamepadUpdate(pad: pad, slot: state.slot, type: state.nintendoType)
         }
         for state in attachedHIDControllers.values { pushHID(state.device) }
     }

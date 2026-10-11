@@ -167,7 +167,10 @@ extension InputForwarder {
     /// queue is closed and would just return -2).
     public func setReady(_ ready: Bool) {
         let was = isReady
-        if !ready { releaseControllerTouches() }
+        if !ready {
+            releaseControllerTouches()
+            suspendControllerMouse()
+        }
         isReady = ready
         updateControllerBackgroundEvents()
         if ready != was {

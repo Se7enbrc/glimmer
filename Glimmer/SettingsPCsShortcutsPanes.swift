@@ -268,6 +268,8 @@ struct ShortcutsPane: View {
                 }
             }
 
+            NintendoLayoutSettings()
+
             Section("macOS keys") {
                 Toggle(isOn: $model.captureSysKeys) {
                     VStack(alignment: .leading, spacing: 2) {
