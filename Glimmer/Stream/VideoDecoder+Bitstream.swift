@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoDecoder+Bitstream.swift
-//
-//  Bitstream parsing and CMVideoFormatDescription / CMSampleBuffer construction
-//  for H.264, HEVC, and AV1. Lives separate from the decoder lifecycle so the
-//  per-codec parameter-set assembly + Annex-B ↔ AVCC plumbing reads in one
-//  place.
+// Build compressed format descriptions and samples separately from decoder lifecycle state.
 
 import CoreMedia
 import Darwin
@@ -100,28 +94,9 @@ extension VideoDecoder {
     }
 
     nonisolated func rebuildAV1FormatDescription(obuData: Data) -> Bool {
-        // For AV1 we need a CMFormatDescription with the AV1C extension
-        // (av1C box per ISO/IEC 23091-2). VideoToolbox surfaces this via
-        // CMVideoFormatDescriptionCreate with a kCMFormatDescriptionExtension
-        // for sample-description-extension-atoms.
-        //
-        // The av1C config record encodes (per the AV1 ISO Base Media File
-        // Format spec) seq_profile / seq_level / seq_tier / high_bitdepth /
-        // twelve_bit / monochrome / chroma_subsampling_x / _y. These come
-        // from the AV1 sequence header OBU's `color_config` block (AV1 spec
-        // §5.5.1, §5.5.2). We parse them out of the first SEQUENCE_HEADER_OBU
-        // in the bitstream so 4:4:4 (HIGH8_444 / HIGH10_444) streams describe
-        // themselves correctly to VT - hardcoding 4:2:0 here silently breaks
-        // any future 4:4:4 path.
-        //
-        // Parser is intentionally minimal: it walks OBU headers (with optional
-        // extension byte + leb128 size), finds the SEQUENCE_HEADER_OBU
-        // (type=1), and bit-reads enough of §5.5.1 to recover the eight
-        // av1C-relevant fields. If parsing fails we fall back to the
-        // negotiated-format hint (Main8/Main10, 4:2:0) - VT's HW AV1 decoder
-        // re-derives the truth from the OBU at decode time, so a mis-tagged
-        // av1C is recoverable for Main; the parser fail-safe just keeps the
-        // pre-fix behavior on edge-case bitstreams.
+        // av1C and colour extensions come from the sequence header so 4:4:4 and HDR describe themselves to VT.
+        // On parse failure, Main 4:2:0 uses the negotiated depth hint; VT re-derives it from the OBU at decode time.
+        // The av1C atom follows the AV1 ISO Base Media File Format record and AV1 §5.5.1/§5.5.2 colour config.
         guard !obuData.isEmpty else { return false }
 
         let parsed = parseAV1SequenceHeader(obuData)
@@ -171,7 +146,8 @@ extension VideoDecoder {
         let atomsDict = [av1CKey: av1cData] as CFDictionary
         let extKey =
             kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms
-        let extensions = [extKey: atomsDict] as CFDictionary
+        var extensions = parsed?.color.formatExtensions ?? [:]
+        extensions[extKey as String] = atomsDict
 
         var newFormat: CMVideoFormatDescription?
         let status = CMVideoFormatDescriptionCreate(
@@ -179,7 +155,7 @@ extension VideoDecoder {
             codecType: kCMVideoCodecType_AV1,
             width: streamWidth,
             height: streamHeight,
-            extensions: extensions,
+            extensions: extensions as CFDictionary,
             formatDescriptionOut: &newFormat)
         if status != noErr {
             log.error("CMVideoFormatDescriptionCreate (AV1) failed: \(status)")

@@ -186,6 +186,18 @@ struct NetworkClientRequestTests {
         #expect(request.timeout <= NetworkClient.launchTimeout && request.timeout > NetworkClient.controlTimeout)
     }
 
+    @Test(arguments: [VideoFormats.h264, .hevc, .hevcMain10, .av1, .av1Main10])
+    func rec709FullDoesNotChangeLaunchHDRIntent(_ formats: VideoFormats) async throws {
+        let sunshine = FakeSunshine { _ in Self.launchReply }
+        var config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)
+        config.videoFormats = formats
+        #expect((config.colorSpace.cValue << 1) | config.colorRange.cValue == 3)
+        _ = try await sunshine.client(FakeSunshine.server(pin: "host-pin")).launch(appID: 1, config: config)
+        let query = try #require(sunshine.requests.first?.query)
+        let hdr = !formats.isDisjoint(with: [.hevcMain10, .av1Main10])
+        #expect(query["hdrMode"] == (hdr ? "1" : nil))
+    }
+
     @Test func resumeOmitsTheAppAndAnEightBitStreamSendsNoHdr() async throws {
         let sunshine = FakeSunshine { _ in Self.launchReply }
         var config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)

@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoDecoder+AV1.swift
-//
-//  AV1 OBU sequence-header parsing: the bit reader and the sequence-header walk
-//  used to derive the format description (resolution, bit depth, color config)
-//  for AV1 streams. Split out of VideoDecoder+Bitstream.swift to keep each unit
-//  focused; see that file for the H.264/HEVC builders and sample-buffer assembly.
-//
+// Parse AV1 sequence colour and chroma declarations so VT receives the same tags as HEVC.
 
 import CoreMedia
+import CoreVideo
 import Foundation
 import VideoToolbox
 
@@ -28,6 +22,7 @@ extension VideoDecoder {
         let monochrome: UInt8    // 0/1
         let subsamplingX: UInt8  // 0/1
         let subsamplingY: UInt8  // 0/1
+        let color: ColorConfig
     }
 
     /// Walk the OBU stream, locate the first SEQUENCE_HEADER_OBU (type=1),
@@ -88,12 +83,7 @@ extension VideoDecoder {
         return nil
     }
 
-    /// Decode the §5.5.1 sequence_header_obu payload up through color_config.
-    /// We only read the fields needed for av1C - once we have them, the rest
-    /// of the sequence header (timing info, tile dims, etc.) is irrelevant.
-    /// The header walk is split across a few private helpers (each consuming
-    /// the shared `inout BitReader`) so no single function carries the whole
-    /// bit-exact §5.5 walk; the read order is identical to the spec.
+    /// Walk §5.5.1 through color_config in spec order; later fields do not affect av1C or colour extensions.
     nonisolated private func decodeSequenceHeader(_ payload: [UInt8]) -> AV1SeqHeader? {
         var reader = BitReader(bytes: payload)
         guard let seqProfile = reader.read(3) else { return nil }
@@ -120,7 +110,8 @@ extension VideoDecoder {
             bitDepth: color.bitDepth,
             monochrome: color.monochrome,
             subsamplingX: color.subsamplingX,
-            subsamplingY: color.subsamplingY)
+            subsamplingY: color.subsamplingY,
+            color: color)
     }
 
     /// §5.5.1 timing_info + decoder_model_info + operating_points loop (the
@@ -259,83 +250,89 @@ extension VideoDecoder {
         return true
     }
 
-    /// The av1C-relevant outputs of §5.5.2 color_config.
     struct ColorConfig {
         let bitDepth: UInt8
         let monochrome: UInt8
         let subsamplingX: UInt8
         let subsamplingY: UInt8
+        let primaries: UInt32
+        let transfer: UInt32
+        let matrix: UInt32
+        let fullRange: Bool
+
+        var formatExtensions: [String: Any] {
+            var result: [String: Any] = [kCMFormatDescriptionExtension_FullRangeVideo as String: fullRange]
+            result[kCMFormatDescriptionExtension_ColorPrimaries as String] =
+                CVColorPrimariesGetStringForIntegerCodePoint(Int32(primaries))?.takeUnretainedValue()
+            result[kCMFormatDescriptionExtension_TransferFunction as String] =
+                CVTransferFunctionGetStringForIntegerCodePoint(Int32(transfer))?.takeUnretainedValue()
+            result[kCMFormatDescriptionExtension_YCbCrMatrix as String] =
+                CVYCbCrMatrixGetStringForIntegerCodePoint(Int32(matrix))?.takeUnretainedValue()
+            return result
+        }
     }
 
-    /// §5.5.2 color_config: bit depth, monochrome flag, and chroma
-    /// subsampling. Returns nil on a parse error.
+    // Preserve unspecified CICP values as absent extensions so negotiated fallback still applies.
     nonisolated private func parseColorConfig(
-        _ reader: inout BitReader,
-        seqProfile: UInt32) -> ColorConfig? {
+        _ reader: inout BitReader, seqProfile: UInt32
+    ) -> ColorConfig? {
         guard let highBitDepth = reader.read(1) else { return nil }
-        var bitDepth: UInt8 = 8
+        var bitDepth: UInt8 = highBitDepth == 1 ? 10 : 8
         if seqProfile == 2 && highBitDepth == 1 {
             guard let twelveBit = reader.read(1) else { return nil }
-            bitDepth = (twelveBit == 1) ? 12 : 10
-        } else if highBitDepth == 1 {
-            bitDepth = 10
+            bitDepth = twelveBit == 1 ? 12 : 10
         }
         var monochrome: UInt8 = 0
-        if seqProfile != 1 {  // monochrome flag only in profiles 0 and 2
+        if seqProfile != 1 {
             guard let monoFlag = reader.read(1) else { return nil }
             monochrome = UInt8(monoFlag)
         }
-        // color_description_present_flag - skip the triple if present
         guard let colorDescPresent = reader.read(1) else { return nil }
+        var primaries: UInt32 = 2
+        var transfer: UInt32 = 2
+        var matrix: UInt32 = 2
         if colorDescPresent == 1 {
-            _ = reader.read(8)  // color_primaries
-            _ = reader.read(8)  // transfer_characteristics
-            _ = reader.read(8)  // matrix_coefficients
+            guard let cp = reader.read(8), let tc = reader.read(8), let mc = reader.read(8) else { return nil }
+            primaries = cp
+            transfer = tc
+            matrix = mc
         }
+        let identityRGB = primaries == 1 && transfer == 13 && matrix == 0
+        let fullRange: Bool
+        let chroma: (x: UInt8, y: UInt8)
         if monochrome == 1 {
-            _ = reader.read(1)  // color_range
-            return ColorConfig(bitDepth: bitDepth,
-                               monochrome: monochrome,
-                               subsamplingX: 1,
-                               subsamplingY: 1)
+            guard let range = reader.read(1) else { return nil }
+            fullRange = range == 1
+            chroma = (1, 1)
+        } else {
+            if identityRGB {
+                fullRange = true
+                chroma = (0, 0)
+            } else {
+                guard let range = reader.read(1),
+                      let sampling = parseChromaSubsampling(&reader, seqProfile: seqProfile, bitDepth: bitDepth)
+                else { return nil }
+                fullRange = range == 1
+                chroma = sampling
+                if chroma.x == 1 && chroma.y == 1 {
+                    guard reader.read(2) != nil else { return nil } // chroma_sample_position
+                }
+            }
+            guard reader.read(1) != nil else { return nil } // separate_uv_delta_q
         }
-        guard let chroma = parseChromaSubsampling(&reader,
-                                                  seqProfile: seqProfile,
-                                                  bitDepth: bitDepth) else {
-            return nil
-        }
-        if chroma.x == 1 && chroma.y == 1 {
-            _ = reader.read(2)  // chroma_sample_position
-        }
-        _ = reader.read(1)  // separate_uv_deltas (irrelevant for av1C)
-        return ColorConfig(bitDepth: bitDepth,
-                           monochrome: monochrome,
-                           subsamplingX: chroma.x,
-                           subsamplingY: chroma.y)
+        return ColorConfig(bitDepth: bitDepth, monochrome: monochrome,
+                           subsamplingX: chroma.x, subsamplingY: chroma.y,
+                           primaries: primaries, transfer: transfer, matrix: matrix, fullRange: fullRange)
     }
 
-    /// §5.5.2 chroma subsampling for the non-monochrome case, reading the
-    /// color_range bit (always) plus profile-2's explicit subsampling bits.
-    /// Returns the (x, y) subsampling pair, or nil on a parse error.
-    ///
-    ///   profile 0 → 4:2:0   (subsampling_x=1, subsampling_y=1)
-    ///   profile 1 → 4:4:4   (subsampling_x=0, subsampling_y=0)
-    ///   profile 2 → depends on bit_depth + explicit bits
+    // Profiles 0/1 imply 4:2:0/4:4:4; only profile 2 carries explicit subsampling bits at 12-bit.
     nonisolated private func parseChromaSubsampling(
         _ reader: inout BitReader,
         seqProfile: UInt32,
         bitDepth: UInt8) -> (x: UInt8, y: UInt8)? {
-        _ = reader.read(1)  // color_range
-        if seqProfile == 0 {
-            return (1, 1)
-        }
-        if seqProfile == 1 {
-            return (0, 0)
-        }
-        // seqProfile == 2
-        guard bitDepth == 12 else {
-            return (1, 0)
-        }
+        if seqProfile == 0 { return (1, 1) }
+        if seqProfile == 1 { return (0, 0) }
+        guard bitDepth == 12 else { return (1, 0) }
         guard let sx = reader.read(1) else { return nil }
         let subsamplingX = UInt8(sx)
         if sx == 1 {

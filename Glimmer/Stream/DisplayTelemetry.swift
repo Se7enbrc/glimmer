@@ -38,8 +38,7 @@ struct DisplayProbe: Sendable {
     /// the stream composites on. 1.0 = SDR / HDR-off; >1.0 = HDR engaged with that
     /// much headroom. The number that proves the panel is (or isn't) in HDR.
     var edrHeadroom: Double
-    /// True iff HDR is active end-to-end (host signalled HDR + 10-bit stream + the
-    /// layer is in the PQ colorspace) - the decoder's own `isHDRActive`.
+    /// HDR input presented on a screen currently reporting EDR headroom above 1.
     var hdrEngaged: Bool
     /// The compositing screen's localized name (e.g. a display name). A label so a
     /// multi-display session is attributable to the panel actually showing it.
@@ -52,6 +51,8 @@ struct DisplayProbe: Sendable {
     /// realized refresh well under it (the pacer's `refresh_min_hz`) reads as a
     /// genuine ramp-down rather than a slow panel.
     var maxRefreshHz: Int
+    /// PQ or HLG input, including when the display maps it to SDR.
+    var hdrInput: Bool = false
 }
 
 /// Accumulator + main-actor sampler for the DISPLAY signals. Owned by the

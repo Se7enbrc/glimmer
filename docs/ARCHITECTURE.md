@@ -329,40 +329,40 @@ display-layer choice is a product decision, not an Apple restriction on Metal:
 Apple also documents
 [system tone mapping for Metal video layers](https://developer.apple.com/documentation/metal/using-system-tone-mapping-on-video-content).
 
-**HDR pipeline.** Active when all three preconditions hold:
+**Resolved colour description.** `VideoDecoder+Color.swift` resolves primaries,
+transfer and YCbCr matrix from VT's pixel-buffer tags, then the compressed
+format's extensions, then the negotiated SDR preference (BT.709 by default).
+Optional gamma comes from the same tags and extensions. HEVC obtains its
+extensions from the parameter sets; AV1 retains the sequence header's colour
+triple and full-range flag in its format extensions. The decoded pixel format
+owns output range because VT may convert full-range input to video-range output.
 
-1. The PC signalled HDR via the control channel's HDR-mode message.
-2. The stream is 10-bit (`streamVideoFormat & VIDEO_FORMAT_MASK_10BIT != 0`).
-3. The bitstream's VUI or AV1 sequence-header `color_config` declares PQ (SMPTE
-   ST 2084), or, for untagged Sunshine bitstreams, we infer PQ from the 10-bit
-   and HDR-mode pair.
+Declared tags survive independently. With neither primaries nor transfer,
+control-channel HDR plus a 10-bit stream supplies BT.2020/PQ, even if VT
+supplied only a matrix. A declared PQ or HLG transfer fills missing primaries
+and matrix with BT.2020. Declared BT.2020 primaries with control HDR and 10-bit
+input fill a missing transfer with PQ. Explicit SDR transfers remain SDR.
 
-When active, `VideoDecoder+HDR.configureLayerColorspace` sets:
+The resolved description supplies the pixel-buffer attachments and the
+`CGColorSpace` created by CoreVideo. Attachment dictionaries are cached when the
+resolved description changes, and range is cached per pixel format. There is no
+KVC layer colour-space override or forced HDR triple. PQ or HLG input sets
+`preferredDynamicRange = .high`; SDR sets `.standard`. macOS owns conversion and
+tone mapping to the destination display. HDR input and HDR output are distinct:
+output also requires current display EDR headroom above 1.
 
-- `layer.preferredDynamicRange = .high` (macOS 26+ API; replaces the older
-  `wantsExtendedDynamicRangeContent` Bool).
-- `layer.setValue(CGColorSpace(name: .itur_2100_PQ), forKey: "colorspace")`, via
-  KVC because the Swift overlay elides the property on the
-  `AVSampleBufferDisplayLayer` subclass.
+HDR10 static metadata comes from the PC through
+`StreamingBackend.hdrMetadata()`.
+`VideoDecoder+HDR.refreshHDRMetadataFromHost()` builds MDCV in GBR, big-endian
+wire order and CLL as four big-endian bytes. These propagate from the pixel
+buffer into the sample format only for HDR input. Colour or metadata changes
+invalidate the cached sample format; SDR removes HDR metadata without replacing
+its declared colour tags.
 
-Per-frame attachments on the `CVPixelBuffer`:
-
-- `kCVImageBufferColorPrimariesKey` = `ITU_R_2020`.
-- `kCVImageBufferTransferFunctionKey` = `SMPTE_ST_2084_PQ`.
-- `kCVImageBufferYCbCrMatrixKey` = `ITU_R_2020`.
-
-HDR10 static metadata comes from the PC (the native engine surfaces it via
-`StreamingBackend.hdrMetadata()`, parsed from the control channel's HDR message)
-and is attached as `CMFormatDescription` extensions in the exact HDR10 wire
-layout (MDCV: GBR ordering, big-endian; CLL: 4 bytes big-endian). See
-`VideoDecoder+HDR.refreshHDRMetadataFromHost()` for the byte-by-byte build. The
-cached HDR format description is rebuilt whenever metadata changes (the PC
-re-signals HDR with new values, e.g. a game changes EOTF or the PC's display is
-hot-swapped).
-
-When HDR drops back to SDR, `preferredDynamicRange` returns to `.standard`, the
-layer's `colorspace` is cleared, and the next-frame fallback attaches BT.709
-primaries.
+The colour probe records raw format extensions and attachments before edits,
+then final attachments and the applied dynamic range. HDR transitions log
+current and potential EDR headroom, repeat at 1, 3 and 5 seconds while the
+transition is still current, and warn when HDR input has no display headroom.
 
 **Backpressure and recovery.** `AVSampleBufferVideoRenderer.status == .failed`
 latches after a bad sample (mid-stream SPS change, dirty AV1 OBU). The present

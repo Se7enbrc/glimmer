@@ -213,6 +213,7 @@ extension TelemetryRenderer {
         builder.add("edr_headroom_max", snap.edrHeadroomMax)
         if let display = snap.displayState {
             builder.addBool("hdr_engaged", display.hdrEngaged)
+            builder.addBool("hdr_input", display.hdrInput)
             builder.addString("screen", display.screenName)
             builder.addBool("promotion_capable", display.proMotionCapable)
             builder.addInt("max_refresh_hz", display.maxRefreshHz)

@@ -153,7 +153,7 @@ enum TelemetryRenderFixtures {
         snap.edrHeadroomAvg = 2.5
         snap.edrHeadroomMax = 4
         snap.displayState = DisplayProbe(edrHeadroom: 2.5, hdrEngaged: true, screenName: "Studio \"Display\"",
-                                         proMotionCapable: true, maxRefreshHz: 120)
+                                         proMotionCapable: true, maxRefreshHz: 120, hdrInput: true)
         snap.decodeState = TelemetryCounters.DecodeState(hwDecode: true, codec: "hevc", pixelFormat: "x420",
                                                          bitDepth: 10, colorSpaceKey: "itur_2100_PQ")
         snap.vtSessionCreateMs = 18.5

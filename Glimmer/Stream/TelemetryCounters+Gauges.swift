@@ -48,8 +48,8 @@ extension TelemetryCounters {
         var pixelFormat: String
         /// Output bit depth (8 or 10), derived from the negotiated stream format.
         var bitDepth: Int
-        /// Effective colorspace key the decode path attached this frame
-        /// ("itur_2100_PQ" / "itur_2020" / "itur_709" / "srgb").
+        /// Resolved input description: primaries, transfer, matrix, output range and optional gamma.
+        /// "pending" until the first frame resolves; independent of display EDR headroom.
         var colorSpaceKey: String
     }
 

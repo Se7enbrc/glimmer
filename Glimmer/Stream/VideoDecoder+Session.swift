@@ -266,11 +266,6 @@ extension VideoDecoder {
         // enqueue happens later in `presentFrame`, which re-reads displayLayer.
         guard displayLayer != nil else { return }
 
-        // `EnqueueFrame` interval: VT output callback → sample buffer built
-        // and handed to the frame pacer's submit (the actual renderer.enqueue
-        // now happens later, on the pacer's serial queue at the due vsync -
-        // see `presentFrame`). Stays entirely on this thread so a per-call
-        // interval state (no FIFO needed). Target is sub-1ms p99 at 4K60.
         let enqueueSignpostID = OSSignposter.render.makeSignpostID()
         let enqueueIntervalState = OSSignposter.render.beginInterval(
             "EnqueueFrame",
@@ -279,41 +274,14 @@ extension VideoDecoder {
             OSSignposter.render.endInterval("EnqueueFrame", enqueueIntervalState)
         }
 
-        // Strip VT-attached pixel-aspect-ratio attachment - verbatim from
-        // moonlight-qt's vt_avsamplelayer.mm:220:
-        //
-        //   // The VideoToolbox decoder attaches pixel aspect ratio information
-        //   // to the CVPixelBuffer which will rescale the video stream in
-        //   // accordance with the host display resolution to preserve the
-        //   // original aspect ratio of the host desktop. This behavior
-        //   // currently differs from the behavior of all other Moonlight Qt
-        //   // renderers, so we will strip these attachments for consistent
-        //   // behavior.
-        //   CVBufferRemoveAttachment(pixBuf, kCVImageBufferPixelAspectRatioKey);
+        let controlHDR = hdrEnabled
+        let color = resolveColorDescription(for: pixelBuffer, controlHDR: controlHDR)
+        let probe = beginColorProbe(pixelBuffer, color: color, controlHDR: controlHDR)
+        // Match the PC's pixel geometry rather than VT's display-aspect hint.
         CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferPixelAspectRatioKey)
+        attachColorAndHDRMetadata(to: pixelBuffer, color: color)
+        finishColorProbe(probe, pixelBuffer: pixelBuffer)
 
-        // Attach the bitstream-derived colorspace, the per-attribute color
-        // triple override, and any host HDR metadata to the pixel buffer (a
-        // verbatim port of vt_avsamplelayer.mm:222-262). Returns the derived
-        // colorspace key the first-frame probe below reports against.
-        let derivedKey = attachColorAndHDRMetadata(to: pixelBuffer)
-
-        // First-frame diagnostic probe AFTER our attaches so the log shows
-        // what the layer will actually see at composite time (pre-attach
-        // state is captured below for comparison).
-        if !didLogFirstPixelBufferProbe {
-            didLogFirstPixelBufferProbe = true
-            probeAndLogPixelBufferAttachments(pixelBuffer, derivedKey: derivedKey)
-        }
-
-        // Rebuild the CMVideoFormatDescription to match the (possibly newly-
-        // attached) pixel buffer. CMVideoFormatDescriptionCreateForImageBuffer
-        // reads the pixel buffer's attachments and propagates them onto the
-        // produced format description's extensions dict, including the HDR10
-        // MDCV/CLL we just attached. moonlight-qt rebuilds this whenever
-        // CMVideoFormatDescriptionMatchesImageBuffer returns false; we cache
-        // off `cachedHDRFormatDescription` and invalidate it whenever the
-        // SPS/PPS/VPS changes or the HDR metadata changes.
         var fmtDesc: CMVideoFormatDescription?
         if let cached = cachedHDRFormatDescription,
            CMVideoFormatDescriptionMatchesImageBuffer(cached, imageBuffer: pixelBuffer) {
@@ -354,26 +322,6 @@ extension VideoDecoder {
             return
         }
 
-        // ---- Hand the ready sample buffer to the FRAME PACER instead of
-        // enqueueing it straight onto the renderer.
-        //
-        // This is the heart of the buttery-smooth pass. Previously we called
-        // renderer.enqueue() right here - the instant VT finished decoding -
-        // so network-arrival jitter on the host capture clock mapped 1:1 onto
-        // screen time and motion juddered even on a perfectly-paced panel. The
-        // pacer interposes a bounded, hostPTS-ordered jitter buffer and a
-        // CADisplayLink-gated release: each frame waits in the buffer until its
-        // due vsync, then presents on the display's true cadence (60 / 120
-        // ProMotion-variable / 240 Hz, read live from the link, never
-        // hardcoded). The renderer-status + backpressure policy that used to
-        // live inline now runs inside `presentFrame(_:)`, which the pacer
-        // invokes via its `willPresent` hook on its dedicated serial queue at
-        // the moment of release. See FramePacer.swift for the model (a port of
-        // moonlight-qt's pacer.cpp two-queue design).
-        //
-        // If the pacer isn't up yet (very early frame before the stream view
-        // has a window+screen, or a defensive path) fall back to presenting
-        // directly so we never black-screen waiting for the link.
         guard let sb = sampleBuffer else { return }
         if let pacer = framePacer {
             pacer.submit(sb, hostPTS: hostPTS)
@@ -381,112 +329,4 @@ extension VideoDecoder {
             _ = presentFrame(sb)
         }
     }
-
-    /// Attach the bitstream-derived CGColorSpace, the per-attribute color-triple
-    /// override, and any cached host HDR metadata onto `pixelBuffer`. A verbatim
-    /// port of moonlight-qt's vt_avsamplelayer.mm:222-262, extracted out of
-    /// `enqueueDecodedFrame` so the per-frame path stays focused. Returns the
-    /// derived colorspace key so the caller's first-frame probe can report it.
-    private nonisolated func attachColorAndHDRMetadata(to pixelBuffer: CVPixelBuffer) -> String {
-        // ---- Colorspace attach (verbatim port of vt_avsamplelayer.mm:222-254)
-        //
-        // Read the bitstream-declared color metadata off the pixel buffer.
-        // VT propagates the VUI / OBU `colour_description_present_flag` data
-        // into kCVImageBufferColorPrimaries / TransferFunction / YCbCrMatrix
-        // attachments on the produced CVPixelBuffer. We derive the effective
-        // colorspace by mapping (primaries, transfer) → CGColorSpace, in the
-        // same order moonlight-qt does: BT.2020 + SMPTE2084 → kCGColorSpace-
-        // ITUR_2100_PQ; BT.2020 (no PQ) → kCGColorSpaceITUR_2020; BT.709 →
-        // kCGColorSpaceITUR_709; everything else → sRGB.
-        //
-        // Critically - and this is where Glimmer used to diverge - we attach
-        // this colorspace on EVERY FRAME unconditionally. VT often leaves an
-        // sRGB-equivalent default attachment on the buffer when the bitstream
-        // didn't tag its color metadata, which the layer then renders as if
-        // sRGB even when PQ codes are sitting in the YUV planes - that's the
-        // washed-out overbright HDR symptom. moonlight-qt's loop always calls
-        // `CVBufferSetAttachment(pixBuf, kCVImageBufferCGColorSpaceKey, ...)`
-        // after computing the colorspace; we match that contract here.
-        let derivedKey = derivedColorSpaceKey(for: pixelBuffer)
-        if derivedKey != lastColorSpaceKey {
-            lastColorSpace = makeCGColorSpace(forKey: derivedKey)
-            lastColorSpaceKey = derivedKey
-            log.info("Bitstream colorspace changed: \(derivedKey, privacy: .public)")
-            // Telemetry (opt-in): refresh the DECODE colorspace label (gate in helper).
-            noteColorSpaceChangeTelemetry(derivedKey)
-        }
-        if let cs = lastColorSpace {
-            CVBufferSetAttachment(
-                pixelBuffer,
-                kCVImageBufferCGColorSpaceKey,
-                cs,
-                .shouldPropagate)
-        }
-
-        // ALSO override the per-attribute color triple (primaries / transfer
-        // function / YCbCr matrix). VT populates these from the bitstream's
-        // VUI / OBU, but Sunshine ships PQ Main10 with the VUI tagged as
-        // BT.709 on a number of GPU/driver combos - so VT writes 709 onto
-        // an actually-PQ frame. macOS's HDR-engagement heuristic cross-
-        // checks the CGColorSpace attachment against these triple attrs
-        // and, if they conflict, refuses to engage display HDR (the symptom:
-        // a single-frame flash of correct HDR brightness when the layer
-        // first comes up, then macOS disengages and the panel falls back
-        // to SDR with PQ codes tone-mapped down → dark and grey).
-        // The fix is to override these to match whatever CGColorSpace we
-        // attached. When SDR, we leave VT's tags alone.
-        if derivedKey == "itur_2100_PQ" {
-            CVBufferSetAttachment(pixelBuffer,
-                kCVImageBufferColorPrimariesKey,
-                kCVImageBufferColorPrimaries_ITU_R_2020,
-                .shouldPropagate)
-            CVBufferSetAttachment(pixelBuffer,
-                kCVImageBufferTransferFunctionKey,
-                kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ,
-                .shouldPropagate)
-            CVBufferSetAttachment(pixelBuffer,
-                kCVImageBufferYCbCrMatrixKey,
-                kCVImageBufferYCbCrMatrix_ITU_R_2020,
-                .shouldPropagate)
-        } else if derivedKey == "itur_2020" {
-            CVBufferSetAttachment(pixelBuffer,
-                kCVImageBufferColorPrimariesKey,
-                kCVImageBufferColorPrimaries_ITU_R_2020,
-                .shouldPropagate)
-            CVBufferSetAttachment(pixelBuffer,
-                kCVImageBufferYCbCrMatrixKey,
-                kCVImageBufferYCbCrMatrix_ITU_R_2020,
-                .shouldPropagate)
-        }
-
-        // Attach HDR metadata to the pixel buffer if the host has provided
-        // it. moonlight-qt's vt_avsamplelayer.mm:257-262 does this via
-        // CVBufferSetAttachment with kCVImageBufferMasteringDisplayColorVolumeKey
-        // / kCVImageBufferContentLightLevelInfoKey on each frame. The
-        // attachments are the same GBR-ordered big-endian byte blobs we
-        // build in refreshHDRMetadataFromHost.
-        let metadata = hdrMetadataStore.snapshot
-        if let mdcv = metadata.mdcv {
-            CVBufferSetAttachment(
-                pixelBuffer,
-                kCVImageBufferMasteringDisplayColorVolumeKey,
-                mdcv as CFData,
-                .shouldPropagate)
-        }
-        if let cll = metadata.contentLightLevel {
-            CVBufferSetAttachment(
-                pixelBuffer,
-                kCVImageBufferContentLightLevelInfoKey,
-                cll as CFData,
-                .shouldPropagate)
-        }
-
-        return derivedKey
-    }
-
-    // The paced present site (`presentFrame` - the renderer-status +
-    // backpressure policy and the single `renderer.enqueue` call the FramePacer
-    // drives through its `willPresent` hook) lives in VideoDecoder+Pacing.swift
-    // alongside the pacer bring-up and the present-path self-heal, split out to
-    // keep this file under the length limit.
 }

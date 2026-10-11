@@ -22,10 +22,13 @@ public final class VideoDecoder {
     nonisolated let now: @Sendable () -> UInt64
 
     // Tests pass a scripted clock, a factory that never reaches VideoToolbox, or both.
-    init(now: @escaping @Sendable () -> UInt64, makeSession: @escaping SessionFactory) {
+    init(now: @escaping @Sendable () -> UInt64, makeSession: @escaping SessionFactory,
+         colorSpace: ColorSpace = .rec709, colorRange: ColorRange = .full) {
         self.log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.VideoDecoder")
         self.now = now
         self.makeSession = makeSession
+        self.requestedColorSpace = colorSpace
+        self.requestedColorRange = colorRange
     }
 
     convenience init(now: @escaping @Sendable () -> UInt64) {
@@ -36,9 +39,17 @@ public final class VideoDecoder {
         self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: makeSession)
     }
 
-    public convenience init() {
-        self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: VideoDecoder.createSession)
+    public convenience init(colorSpace: ColorSpace = .rec709, colorRange: ColorRange = .full) {
+        self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: VideoDecoder.createSession,
+                  colorSpace: colorSpace, colorRange: colorRange)
     }
+
+    nonisolated let requestedColorSpace: ColorSpace
+    nonisolated let requestedColorRange: ColorRange
+    nonisolated let resolvedColor = OSAllocatedUnfairLock<VideoColorDescription?>(initialState: nil)
+    nonisolated let pixelFormatRanges = OSAllocatedUnfairLock(initialState: [OSType: String]())
+    var colorDisplayProbeTask: Task<Void, Never>?
+    nonisolated let colorProbeState = OSAllocatedUnfairLock<ColorProbeKey?>(initialState: nil)
 
     /// Safety-net teardown for the VTDecompressionSession. Normally
     /// `StreamSession.stop()` calls `teardown()` explicitly so the session
@@ -74,10 +85,7 @@ public final class VideoDecoder {
     /// its load and store are atomic on every supported architecture.
     nonisolated(unsafe) internal var hdrEnabled: Bool = false
 
-    /// Whether HDR is *actually* active end-to-end: host said yes, stream is
-    /// 10-bit, and the layer's colorspace is the PQ space. Surfaces upward
-    /// via `onHDRActiveChanged` so the SwiftUI layer can show an HDR chip
-    /// while streaming.
+    /// The resolved input uses PQ or HLG. Display output also requires current EDR headroom.
     public internal(set) var isHDRActive: Bool = false
 
     /// Fired on the main actor whenever the effective HDR-active state flips.
@@ -170,7 +178,12 @@ public final class VideoDecoder {
     nonisolated let makeSession: SessionFactory
     // Decode session + format desc. Both live on the decode queue.
     nonisolated(unsafe) var decompressionSession: VTDecompressionSession?
-    nonisolated(unsafe) var formatDescription: CMVideoFormatDescription?
+    // The decode queue publishes input formats; the output probe reads a retained snapshot.
+    nonisolated let inputFormatBox = OSAllocatedUnfairLock<CMVideoFormatDescription?>(initialState: nil)
+    nonisolated var formatDescription: CMVideoFormatDescription? {
+        get { inputFormatBox.withLock { $0 } }
+        set { inputFormatBox.withLock { $0 = newValue } }
+    }
 
     // The +1 self-retain handed to the VT output-callback refcon when the
     // session is created (see `ensureDecompressionSession`). Balanced by
@@ -289,13 +302,6 @@ public final class VideoDecoder {
     // touch the decode/enqueue path outside that window.
     nonisolated(unsafe) var isStreaming = false
 
-    // One-shot guard: AVSampleBufferDisplayLayer.requiresFlushToResumeDecoding
-    // can latch true after a transient decode failure (e.g. an SPS change
-    // that arrives in the middle of a GOP). We watch the layer's status on
-    // each enqueue and flush + request a new IDR if it goes FAILED.
-    nonisolated(unsafe) var didLogFirstPixelBufferProbe = false
-    nonisolated(unsafe) var didConfigureLayerOnce = false
-
     /// Fires exactly once per session when VT produces its first decoded
     /// pixel buffer. The session owner uses this to flip the stream window
     /// from invisible (alphaValue 0) to a smooth fade-in - without it the
@@ -312,10 +318,7 @@ public final class VideoDecoder {
     nonisolated(unsafe) public var onFirstDecodedFrame: (() -> Void)?
     nonisolated(unsafe) var didFireFirstDecodedFrame = false
 
-    // The colorspace last attached to a pixel buffer (moonlight-qt's m_LastColorSpace), rebuilt
-    // only when the bitstream's (primaries, transfer) changes. VT output thread only; the stop
-    // path clears both on the decode queue after WaitForAsynchronousFrames, so no callback runs.
-    nonisolated(unsafe) var lastColorSpaceKey: String?
+    // VT output owns this cache; teardown clears it only after draining every callback.
     nonisolated(unsafe) var lastColorSpace: CGColorSpace?
 
     // Consecutive frames the renderer refused (`isReadyForMoreMediaData` false). Counted, never

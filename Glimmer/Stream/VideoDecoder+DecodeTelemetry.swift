@@ -102,7 +102,7 @@ extension VideoDecoder {
 
     /// Publish the live DECODE state. The HW-decode property is read back from the live session
     /// (VT resolves it after create) so a silent software fallback shows. The colorspace key
-    /// is the one the VT thread last published, never `lastColorSpaceKey` (VT thread only).
+    /// is the resolved description most recently published by the VT output callback.
     private nonisolated func publishDecodeStateTelemetry(
         session: VTDecompressionSession, outputPixelFormat: OSType
     ) {

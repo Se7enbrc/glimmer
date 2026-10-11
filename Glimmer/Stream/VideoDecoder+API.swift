@@ -198,28 +198,19 @@ extension VideoDecoder {
         framePacer?.refreshWindowSnapshot()
     }
 
-    /// One main-actor PRESENT/DISPLAY probe for the opt-in telemetry sampler
-    /// (P1): the live EDR headroom on the compositing screen, HDR-engaged state,
-    /// the screen name, and the panel's ProMotion / max-refresh capability. All
-    /// are main-actor-isolated (NSScreen / AVSampleBufferDisplayLayer), so this is
-    /// `@MainActor`; the `DisplayTelemetry` sampler calls it from a MAIN-queue 1Hz
-    /// timer that exists ONLY on the gate-on path - never a hot path. Returns nil
-    /// before the layer is bound to a screen (nothing to probe yet).
+    /// Sample current display output separately from the resolved PQ/HLG input.
     @MainActor
     func telemetryDisplayProbe() -> DisplayProbe? {
-        // Resolve the screen the stream actually composites on (the layer's host
-        // view's window's screen), falling back to the main screen. Same walk
-        // `displayEDRHeadroom()` uses, kept local so the probe is one read.
         let view = displayLayer?.delegate as? NSView
         guard let screen = view?.window?.screen ?? NSScreen.main else { return nil }
         let edr = Double(screen.maximumExtendedDynamicRangeColorComponentValue)
         let maxFps = screen.maximumFramesPerSecond
         return DisplayProbe(
             edrHeadroom: edr,
-            hdrEngaged: isHDRActive,
+            hdrEngaged: VideoColorDescription.hdrDisplayOutput(inputHDR: isHDRActive, currentEDR: edr),
             screenName: screen.localizedName,
             proMotionCapable: maxFps > 60,
-            maxRefreshHz: maxFps)
+            maxRefreshHz: maxFps, hdrInput: isHDRActive)
     }
 
     /// Tear down the decode + display pipeline from the main actor. Safe to
@@ -256,6 +247,8 @@ extension VideoDecoder {
         // serial queue no-ops. Drop our reference after.
         framePacer?.stop()
         framePacer = nil
+        colorDisplayProbeTask?.cancel()
+        colorDisplayProbeTask = nil
 
         // Drain any in-flight decode operations before invalidating the
         // session - VTDecompressionSessionWaitForAsynchronousFrames blocks
@@ -282,11 +275,10 @@ extension VideoDecoder {
             self.vpsData = nil
             // HDR caches: clear so the next session starts cold.
             self.hdrMetadataStore.publish(.empty)
-            self.lastColorSpaceKey = nil
             self.lastColorSpace = nil
+            self.resolvedColor.withLock { $0 = nil }
             self.hdrEnabled = false
-            self.didLogFirstPixelBufferProbe = false
-            self.didConfigureLayerOnce = false
+            self.colorProbeState.withLock { $0 = nil }
             self.didFireFirstDecodedFrame = false
         }
 
@@ -316,23 +308,12 @@ extension VideoDecoder {
         // short-circuits at the bridge's weak load.
     }
 
-    /// Wired from the backend's host HDR-mode callback (control 0x010e).
-    /// Pulls the latest mastering-display + content-light values from the host
-    /// via `backend.hdrMetadata()` and stashes them so the next CMFormatDescription
-    /// rebuild can attach them. When HDR drops, the cached metadata is
-    /// cleared and the next frame's format-description rebuild will
-    /// recreate without HDR extensions.
+    /// Control metadata supplies missing input tags; declared frame tags still win.
     public func setHDR(enabled: Bool) {
         log.info("HDR mode: \(enabled)")
         let modeChanged = hdrEnabled != enabled
         hdrEnabled = enabled
 
-        // Snapshot prior metadata so we can detect dynamic mid-stream HDR
-        // metadata refreshes. Sunshine/GFE may resend setHdrMode(true) with
-        // updated MDCV/MaxCLL when the game changes its EOTF (or when the
-        // host display is hot-swapped). We honor the new metadata without
-        // tearing down the layer; the next enqueued sample will pick it up
-        // through the rebuilt format description.
         let priorMetadata = hdrMetadataStore.snapshot
 
         if enabled {
