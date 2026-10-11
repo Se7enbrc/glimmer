@@ -38,40 +38,20 @@ interface. macOS 26 or later, Apple Silicon. Free, open source, and always free.
 
 ## What you get
 
-- **Video.** Hardware-decoded H.264 and HEVC, with AV1 on supported Macs, 8- and
-  10-bit, and a real HDR10 pipeline. Up to 4K 240 Hz.
-- **Pacing.** Locks the display to the stream cadence, runs passthrough on a
-  clean link, buffers only for measured jitter. Tuned against per-frame
-  telemetry.
-- **Audio.** Stereo, 5.1 and 7.1, decoded by macOS and played through
-  AVAudioEngine with a small adaptive cushion and recovery after device switches
-  and network interruptions. Spatial playback follows your audio output, with
-  head tracking on compatible AirPods and no in-app setting to manage.
-- **Controllers.** Xbox, DualSense and every other pad macOS supports, plus
-  other USB and Bluetooth HID gamepads through SDL's controller database (those
-  need Input Monitoring). Rumble, trigger rumble, gyro, touchpad, battery and
-  light bar, whatever the pad has. Hold-to-stop chord. An optional raw-input
-  mode (off by default, needs Input Monitoring) adds the DualSense buttons macOS
-  hides and the game's adaptive-trigger effects.
-- **Mouse and keyboard.** Raw 1:1 aim at your Mac's tracking speed with the
-  acceleration curve removed, an optional velocity-gated boost on fast flicks,
-  optional ⌘-shortcut forwarding.
-- **Wi-Fi.** A helper parks AWDL (AirDrop's radio time-share), which can
-  interrupt Wi-Fi streams. Glimmer offers it the first time it opens.
-- **PCs.** mDNS discovery, PIN pairing, PCs by address or name (Tailscale
-  works), Wake on LAN and a one-time import of moonlight-qt pairings.
-- **Mac things.** Menu bar item, mini player, display-matched quality presets,
-  stats overlay, hotkeys, notarized, self-updating. Shortcuts, Siri and
-  Spotlight actions stream from a PC, wake it, or quit the app it's running.
+- **Video:** H.264, HEVC and AV1, 8- and 10-bit, real HDR10, up to 4K 240 Hz.
+- **Pacing:** the display locks to the stream, tuned against per-frame telemetry.
+- **Audio:** stereo, 5.1 and 7.1, with spatial audio and AirPods head tracking.
+- **Controllers:** Xbox, DualSense and other pads, with rumble, gyro, touchpad
+  and adaptive triggers.
+- **Mouse and keyboard:** raw 1:1 aim with the acceleration curve removed.
+- **Wi-Fi:** a helper that stops AirDrop's radio from interrupting the stream.
+- **The Mac side:** menu bar, mini player, Wake on LAN, Shortcuts, Siri,
+  Spotlight and a `glimmer` command.
 
-Free, now and always. No accounts, no analytics. Glimmer talks to your own PC
-and, if you leave updates on, to the update feed; nothing else. Diagnostics are
-off by default, write local files under `~/Library/Logs/Glimmer`, and show your
-PC's address and names as short codes.
+No accounts, no analytics: Glimmer talks only to your PC and its update feed.
+[Every feature in detail](docs/FEATURES.md).
 
 ## Install
-
-macOS 26+, Apple Silicon.
 
 ```bash
 brew tap se7enbrc/glimmer
@@ -80,79 +60,30 @@ brew install --cask glimmer
 ```
 
 Or the notarized `.dmg` from
-[Releases](https://github.com/Se7enbrc/glimmer/releases). Either way it updates
-itself. The cask also links the `glimmer` command. An existing Homebrew install
-gets it with `brew upgrade --greedy glimmer` (or
-`brew reinstall --cask glimmer`), because the app updates itself outside
-Homebrew.
+[Releases](https://github.com/Se7enbrc/glimmer/releases). Glimmer updates
+itself. Your PC needs Sunshine and a display that can show your Mac's exact
+mode; [set up the PC](docs/HOST_SETUP.md), then see
+[the install guide](docs/INSTALL.md) for the Wi-Fi helper, verifying a
+download and audio tips.
 
-Signed and notarized, distributed outside the App Store. Glimmer runs without
-App Sandbox and offers an optional administrator-approved Wi-Fi helper
-([security details](docs/SECURITY.md)). You can
-[verify a download](docs/SECURITY.md#verifying-a-download) before opening it.
+## Documentation
 
-Glimmer has earned the
-[OpenSSF Best Practices Passing badge](https://www.bestpractices.dev/en/projects/15346).
-The public assessment records the evidence and protocol limitations; the
-[security roadmap](docs/SECURITY_ROADMAP.md) tracks work toward higher levels.
-
-Your PC needs Sunshine and a display that can present the exact mode you ask
-for: a virtual display driver on Windows, a current Sunshine on Linux.
-[docs/HOST_SETUP.md](docs/HOST_SETUP.md) walks through it.
-
-The Wi-Fi helper lives in Settings › Quality › Wi-Fi; macOS asks for one
-approval under Login Items & Extensions. If registration fails, follow the
-recovery guidance shown in Settings. Resetting macOS's entire background-task
-database affects other apps too and is not a routine installation step.
-
-If AirPods playback becomes muffled only while a voice app uses their
-microphone, try selecting your Mac's microphone or a USB microphone in that app
-while leaving AirPods as the output. Apple documents this
-[Bluetooth microphone quality change](https://support.apple.com/en-us/102217).
-See [Audio on macOS](docs/AUDIO.md) for voice-chat and volume-recovery guidance.
-
-The [shortcut guide](docs/SHORTCUTS.md) covers keyboard and controller
-shortcuts, getting the mouse back, and what copy and paste can do. Settings ›
-Input shows your current bindings.
-
-## Command line
-
-`glimmer` is the app itself, run from a terminal: it pairs, lists, wakes and
-quits headless, and hands a stream to the app so it gets its window. Stream
-settings come from Glimmer's Settings. `glimmer help` is the full reference.
-Installed from the `.dmg`, choose Glimmer › Install Command Line Tool… once and
-macOS asks for an administrator password to link `glimmer` into
-`/usr/local/bin`.
-
-```bash
-glimmer pair 192.0.2.10          # prints the PIN to enter in Sunshine
-glimmer list                     # paired PCs and whether each is ready
-glimmer stream "Living Room" Steam --wait
-```
-
-Coming from moonlight-qt:
-
-| moonlight-qt                         | Glimmer                               | Difference                                     |
-| ------------------------------------ | ------------------------------------- | ---------------------------------------------- |
-| `moonlight pair <host> [--pin NNNN]` | `glimmer pair <address> [--pin NNNN]` | None.                                          |
-| `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list [--csv]` lists the paired PCs.   |
-| `moonlight stream <host> <app> ...`  | `glimmer stream <pc> [<app>]`         | The app is optional; see below.                |
-| `moonlight quit <host>`              | `glimmer quit <pc>`                   | None.                                          |
-|                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer. |
-
-Without an app, `glimmer stream` streams the PC's running app, else follows
-Settings › General › Start with. The `--resolution`, `--bitrate` and other
-moonlight-qt stream options are refused, since Settings holds them; Glimmer adds
-`--force`, `--wait`, `--exit-after-first-frame` and `--json`. The CSV from
-`glimmer list <pc> --csv` has Name, ID, HDR Support and Hidden.
-
-`<pc>` is a paired PC's name or address, ignoring case. Exit status: 0 success,
-1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired or no paired PC by
-that name.
+| Guide                                      | What's in it                                             |
+| ------------------------------------------ | -------------------------------------------------------- |
+| [Features](docs/FEATURES.md)               | Video, pacing, audio, controllers, input, Wi-Fi, the Mac |
+| [Install](docs/INSTALL.md)                 | Homebrew, the download, the Wi-Fi helper, audio tips     |
+| [Setting up the PC](docs/HOST_SETUP.md)    | Sunshine and a virtual display                           |
+| [Shortcuts](docs/SHORTCUTS.md)             | Keyboard and controller shortcuts, copy and paste        |
+| [Command line](docs/COMMAND_LINE.md)       | `glimmer`, and moving over from moonlight-qt             |
+| [Audio on macOS](docs/AUDIO.md)            | Voice chat, AirPods and volume recovery                  |
+| [Security](docs/SECURITY.md)               | The Wi-Fi helper, signing and verifying a download       |
+| [Contributing](docs/CONTRIBUTING.md)       | Building, testing and sending a change                   |
+| [Architecture](docs/ARCHITECTURE.md)       | How the engine fits together                             |
+| [Roadmap](docs/ROADMAP.md)                 | What's next                                              |
 
 ## Build
 
-Xcode 26.6 or later (Swift 6, the macOS 26 SDK). Its one third-party library is
+Xcode 26.6 or later. Its one third-party library is
 [Sparkle](https://sparkle-project.org), for updates.
 
 ```bash
@@ -161,14 +92,7 @@ cd glimmer
 make app
 ```
 
-`make` builds and installs to /Applications the same way a release ships.
-Installation requires Developer ID signing and app/helper provisioning profiles;
-see [the signing setup](docs/RELEASE.md#3-signing-credentials). `make app`
-compile-checks, `make test` runs the unit tests, `make uninstall` removes it.
-The engine is under `Glimmer/Stream/`, no submodules.
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md),
-[docs/ROADMAP.md](docs/ROADMAP.md).
+[Contributing](docs/CONTRIBUTING.md) covers tests, signing and installing.
 
 ## Why not Moonlight
 
