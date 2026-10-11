@@ -199,11 +199,13 @@ final class CommandReplies {
             forName: CommandChannel.reply, object: nil, queue: .main
         ) { [weak self] note in
             guard let info = note.userInfo as? [String: String] else { return }
-            MainActor.assumeIsolated {
-                guard let self, info[CommandChannel.Key.id] == self.requestID else { return }
-                self.pending.append(info)
-            }
+            MainActor.assumeIsolated { self?.receive(info) }
         }
+    }
+
+    func receive(_ info: [String: String]) {
+        guard info[CommandChannel.Key.id] == requestID else { return }
+        pending.append(info)
     }
 
     func take() -> [String: String]? {
