@@ -46,6 +46,7 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
+        view.observeInputSource()
 
         if let existing = window.contentView {
             // Re-parent the existing contentView (which hosts the Metal layer)
@@ -100,6 +101,7 @@ extension InputForwarder {
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
         installCommandKeyUpMonitor()
+        updateSystemKeyCapture()
         if window.isKeyWindow, !isWindowMode, fullscreenRelativePointer {
             enterCapturedMode()
         }
@@ -129,6 +131,7 @@ extension InputForwarder {
         // via `setCursorHidden(false)`, so the user is never left with an
         // invisible cursor after teardown.
         exitCapturedMode()
+        GlobalHotKeys.setDisabled(false)
         // An Esc hold can be mid-dwell at teardown. No-op in full screen,
         // where nothing ever arms it.
         cancelEscapeHold()
@@ -145,6 +148,7 @@ extension InputForwarder {
         // cursor updates from selecting its transparent image after teardown.
         inputView?.setTransparentCursorEnabled(false)
         inputView?.cancelComposition()
+        inputView?.stopObservingInputSource()
         inputView?.delegate = nil
         inputView = nil
         window = nil

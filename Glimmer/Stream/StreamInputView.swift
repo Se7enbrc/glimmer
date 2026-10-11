@@ -43,7 +43,13 @@ final class StreamInputView: NSView {
 
     private var trackingArea: NSTrackingArea?
     var textInput = StreamTextInput()
+    var usesInputMethod = false
+    var inputSourceObservation: (NotificationCenter, NSObjectProtocol)?
     var interpretTextEvent: (StreamInputView, NSEvent) -> Void = { $0.interpretKeyEvents([$1]) }
+
+    isolated deinit {
+        if let (center, token) = inputSourceObservation { center.removeObserver(token) }
+    }
 
     override func doCommand(by selector: Selector) {
         // Editing commands outside composition still belong to the PC.

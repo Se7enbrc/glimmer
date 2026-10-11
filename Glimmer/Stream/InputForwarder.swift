@@ -252,10 +252,8 @@ public final class InputForwarder {
     ///     non-Cmd key that happens to be pressed while the user holds
     ///     Cmd doesn't reach the host with a phantom Win-key modifier.
     ///
-    /// When this is `true` and the stream holds the pointer (`forwardsCommand`),
-    /// every Cmd chord is forwarded as a Win-key chord - at the cost of macOS no
-    /// longer reacting to those combos while the pointer is held. That's the
-    /// mode power users on dedicated streaming hardware want.
+    /// When this is `true` and the stream is key (`forwardsCommand`), Cmd chords
+    /// reach the PC as Win-key chords in both absolute and captured pointer modes.
     ///
     /// Note: the configured quit hotkey (see `quitHotkey`) is detected BEFORE
     /// this gate, so it keeps working regardless of capture state - including
@@ -264,6 +262,9 @@ public final class InputForwarder {
 
     /// Delayed input belongs to one ready connection and one uninterrupted focus interval.
     var inputGeneration: UInt64 = 0
+
+    /// Preserve commit order when several modifier-release waits finish together.
+    var pendingTextTask: Task<Void, Never>?
 
     /// Opens when the backend can accept input; reconnects invalidate delayed work.
     public internal(set) var isReady: Bool = false {

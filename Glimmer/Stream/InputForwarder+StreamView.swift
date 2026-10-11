@@ -25,6 +25,7 @@ import os.log
 extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if !mods.isDisjoint(with: [.command, .control]) { view.cancelComposition() }
         releaseStaleModifiers(for: event)
         noteEscapeModifiersChanged(event.modifierFlags)
 
@@ -100,13 +101,14 @@ extension InputForwarder: StreamInputViewDelegate {
             return
         }
 
-        // Unless ⌘ goes to the game (opted in and the pointer held) a ⌘ chord
+        // Composition owns Escape; a reconnect must still allow the pointer hold.
+        if !view.hasMarkedText() { noteEscapeKeyDown(event) }
+
+        // Unless ⌘ goes to the PC (opted in and the stream key) a ⌘ chord
         // is the Mac's and never forwarded. Repeats are dropped: the PC makes its own.
         if mods.contains(.command), !forwardsCommand { return }
         guard isReady else { return }
-        if view.handleTextInput(event) { return }
-        // Composition owns Escape while marked; ordinary taps still reach the game immediately.
-        noteEscapeKeyDown(event)
+        if !isMouseCaptured || view.usesInputMethod, view.handleTextInput(event) { return }
         guard !event.isARepeat else { return }
         guard let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else {
             noteUnmappedKey(event.keyCode)
@@ -336,6 +338,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
+        view.cancelComposition()
         guard isReady, forwardsMouseEvents else { return }
         // Mini player: the click is the grab, and it still reaches the host
         // so the button under the pointer is pressed, not just aimed at.

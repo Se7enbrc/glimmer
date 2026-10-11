@@ -49,10 +49,12 @@ struct StreamViewKeyboardTests {
         #expect(backend.keyboard.map(\.keyCode) == Array(repeating: wire(0x41), count: 8))
     }
 
-    @Test func unmappedPrintableInputUsesTextWhileEmptyInputFallsBack() throws {
+    @Test func unmappedPrintableInputUsesTextWhileEmptyInputFallsBack() async throws {
         let (forwarder, backend, view) = ready()
         view.keyDown(with: try key(.keyDown, 255, chars: "字"))
         view.keyUp(with: try key(.keyUp, 255, chars: "字", at: 2))
+        let pending = try #require(forwarder.pendingTextTask)
+        await pending.value
         #expect(backend.texts == ["字"])
         #expect(backend.keyboard.isEmpty)
         view.keyDown(with: try key(.keyDown, kVK_Function))
@@ -69,8 +71,11 @@ struct StreamViewKeyboardTests {
         #expect(!StreamTextInput.usesPhysicalKey(text: "字", event: unmapped, composing: false))
     }
 
-    @Test func markedInputStaysLocalUntilOneCommit() throws {
+    @Test(arguments: [false, true])
+    func markedInputStaysLocalUntilOneCommit(captured: Bool) async throws {
         let (forwarder, backend, view) = ready()
+        forwarder.isMouseCaptured = captured
+        view.usesInputMethod = true
         forwarder.modifiersNeedResync = false
         view.interpretTextEvent = { view, _ in
             view.setMarkedText(NSAttributedString(string: "ni"), selectedRange: NSRange(location: 2, length: 0),
@@ -88,11 +93,13 @@ struct StreamViewKeyboardTests {
         view.keyDown(with: try key(.keyDown, kVK_Return, chars: "\r", at: 3))
         view.keyUp(with: try key(.keyUp, kVK_Return, chars: "\r", at: 4))
         #expect(!view.hasMarkedText())
+        let pending = try #require(forwarder.pendingTextTask)
+        await pending.value
         #expect(backend.texts == ["你"])
         #expect(backend.keyboard.isEmpty)
     }
 
-    @Test func deadKeyCompositionAndCharacterViewerSendOnlyText() throws {
+    @Test func deadKeyCompositionAndCharacterViewerSendOnlyText() async throws {
         let (forwarder, backend, view) = ready()
         defer { forwarder.isReady = false }
         view.setMarkedText("´", selectedRange: NSRange(location: 1, length: 0),
@@ -102,6 +109,8 @@ struct StreamViewKeyboardTests {
         }
         view.keyDown(with: try key(.keyDown, kVK_ANSI_E, chars: "é"))
         view.insertText("\u{1F642}", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let pending = try #require(forwarder.pendingTextTask)
+        await pending.value
         #expect(backend.texts == ["é", "\u{1F642}"])
         #expect(backend.keyboard.isEmpty)
     }
@@ -120,6 +129,7 @@ struct StreamViewKeyboardTests {
         let (forwarder, backend, view) = ready()
         forwarder.isWindowMode = true
         forwarder.isMouseCaptured = true
+        view.usesInputMethod = true
         view.setMarkedText("ni", selectedRange: NSRange(location: 2, length: 0),
                            replacementRange: NSRange(location: NSNotFound, length: 0))
         view.interpretTextEvent = { view, _ in view.doCommand(by: #selector(NSResponder.cancelOperation(_:))) }
@@ -143,7 +153,7 @@ struct StreamViewKeyboardTests {
         #expect(backend.texts.isEmpty)
     }
 
-    @Test func unmarkCommitsOnlyOnceAndRangesUseUTF16() {
+    @Test func unmarkCommitsOnlyOnceAndRangesUseUTF16() async throws {
         let (forwarder, backend, view) = ready()
         defer { forwarder.isReady = false }
         view.setMarkedText("\u{1F642}", selectedRange: NSRange(location: 2, length: 0),
@@ -156,6 +166,8 @@ struct StreamViewKeyboardTests {
         #expect(actual == NSRange(location: 0, length: 2))
         view.unmarkText()
         view.unmarkText()
+        let pending = try #require(forwarder.pendingTextTask)
+        await pending.value
         #expect(backend.texts == ["\u{1F642}"])
     }
 
@@ -188,8 +200,9 @@ struct StreamViewKeyboardTests {
     @Test func modifierByteFoldsCommandOnlyWhileItIsForwarded() {
         let forwarder = InputForwarder()
         #expect(forwarder.modifierByte(from: [.control, .shift, .option, .command]) == 0x07)
+        let window = PointerFocusTestWindow()
+        forwarder.window = window
         forwarder.captureSysKeys = true
-        forwarder.isMouseCaptured = true
         #expect(forwarder.modifierByte(from: [.control, .shift, .option, .command]) == 0x0F)
         #expect(forwarder.modifierByte(from: [.capsLock, .function]) == 0)
     }
@@ -260,8 +273,9 @@ struct StreamViewKeyboardTests {
         let (forwarder, backend, view) = ready()
         let commandW = try key(.keyDown, kVK_ANSI_W, mods: [.command], chars: "w")
         #expect(!view.performKeyEquivalent(with: commandW))
+        let window = PointerFocusTestWindow()
+        forwarder.window = window
         forwarder.captureSysKeys = true
-        forwarder.isMouseCaptured = true
         #expect(view.performKeyEquivalent(with: commandW))
         #expect(backend.keyboard.last?.keyCode == wire(0x57))
         #expect(backend.keyboard.last?.modifiers == Int8(StreamProtocol.MODIFIER_META))

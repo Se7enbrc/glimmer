@@ -38,8 +38,7 @@ extension InputForwarder {
     func streamView(_ view: StreamInputView, commitText text: String) {
         guard isReady, !text.isEmpty, window?.isKeyWindow != false,
               window?.ignoresMouseEvents != true else { return }
-        raiseAllHeldInputs(reason: "text commit")
-        record("LiSendUtf8TextEvent", backend?.sendUtf8Text(text) ?? -2)
+        queueText(text)
     }
 
     func streamViewPaste(_ view: StreamInputView) {
@@ -58,19 +57,32 @@ extension InputForwarder {
 
     @discardableResult
     func queuePasteText(_ clipboard: String) -> Task<Void, Never>? {
-        guard isReady, let backend else { return nil }
+        guard isReady, backend != nil else { return nil }
         let text = PasteText.prepared(clipboard)
         guard !text.isEmpty else { return nil }
         raiseAllHeldInputs(reason: "paste")
+        log.info("Pasting \(text.utf8.count, privacy: .public) bytes as text")
+        return queueText(text)
+    }
+
+    @discardableResult
+    func queueText(_ text: String, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) -> Task<Void, Never>? {
+        guard isReady, let backend, !text.isEmpty else { return nil }
+        for vk in heldModifierVKs.sorted() { sendModifier(vk, down: false, modByte: 0) }
         // Modifiers still down (the chord's own) are up on the PC now: count them
         // as held, so letting go sends a harmless release instead of a press.
-        heldModifierVKs = ModifierSides.held(in: NSEvent.modifierFlags, includeCommand: forwardsCommand)
-        log.info("Pasting \(text.utf8.count, privacy: .public) bytes as text")
+        heldModifierVKs = ModifierSides.held(in: modifiers, includeCommand: forwardsCommand)
+        modifiersNeedResync = false
         let generation = inputGeneration
-        return Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(50))
+        let previous = pendingTextTask
+        let deadline = ContinuousClock.now.advanced(by: .milliseconds(50))
+        let task = Task { [weak self] in
+            try? await Task.sleep(until: deadline, clock: .continuous)
+            await previous?.value
             guard !Task.isCancelled, let self, self.isReady, self.inputGeneration == generation else { return }
             self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
         }
+        pendingTextTask = task
+        return task
     }
 }
