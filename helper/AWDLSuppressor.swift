@@ -11,7 +11,7 @@ import os
 final class AWDLSuppressor: @unchecked Sendable {
     private let interfaceName = "awdl0"
     private let interfaceIsUp: (@Sendable () -> Bool)?
-    private let runIfconfig: (@Sendable ([String]) -> Bool)?
+    private let runIfconfig: @Sendable ([String]) -> AWDLProcess.Result?
     private let clockNow: @Sendable () -> ContinuousClock.Instant
     private let log = Logger(subsystem: "io.ugfugl.glimmer.helper", category: "AWDL")
     /// Event-servicing queue: route socket, poll timer, SCDynamicStore handler.
@@ -41,9 +41,9 @@ final class AWDLSuppressor: @unchecked Sendable {
     private static let maxDownAttempts = 3
     private static let downRetrySettleUs: UInt32 = 40_000
 
-    // Production uses the kernel and ifconfig; tests supply inert operations.
+    // Production uses the kernel and /sbin/ifconfig; tests supply inert operations.
     init(interfaceIsUp: (@Sendable () -> Bool)? = nil,
-         runIfconfig: (@Sendable ([String]) -> Bool)? = nil,
+         runIfconfig: @escaping @Sendable ([String]) -> AWDLProcess.Result? = { AWDLProcess.run(arguments: $0) },
          clockNow: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }) {
         self.interfaceIsUp = interfaceIsUp
         self.runIfconfig = runIfconfig
@@ -177,7 +177,7 @@ final class AWDLSuppressor: @unchecked Sendable {
     }
 
     private func captureIfconfig() -> String? {
-        guard let result = AWDLProcess.run(arguments: [interfaceName]), result.succeeded else { return nil }
+        guard let result = runIfconfig([interfaceName]), result.succeeded else { return nil }
         return String(data: result.output, encoding: .utf8)
     }
 
@@ -303,8 +303,7 @@ final class AWDLSuppressor: @unchecked Sendable {
 
     @discardableResult
     private func executeIfconfig(args: [String]) -> Bool {
-        if let runIfconfig { return runIfconfig(args) }
-        return AWDLProcess.run(arguments: args)?.succeeded == true
+        runIfconfig(args)?.succeeded == true
     }
 
     // MARK: SCDynamicStore monitoring
