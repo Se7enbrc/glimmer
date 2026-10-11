@@ -21,17 +21,14 @@ extension AppModel {
     // MARK: - Display probe
 
     /// Compute smart defaults from the current display.
-    ///
-    /// Returns the PANEL NATIVE resolution - the actual pixel grid the display
-    /// hardware has, not the framebuffer the user is currently rendering at.
-    ///
-    /// We get panel native by querying CGDisplayCopyAllDisplayModes with no
-    /// options. Without `kCGDisplayShowDuplicateLowResolutionModes`, macOS only
-    /// returns modes the panel really supports - it omits the synthetic
-    /// upscaled HiDPI virtual modes (the "Looks like Larger Text" frame sizes
-    /// that render above panel native and downsample). The largest pixelWidth
-    /// from that list is panel native.
     func smartDefaultsForCurrentDisplay() -> (width: Int, height: Int, fps: Int) {
+        displayProbe()
+    }
+
+    /// The main display's PANEL NATIVE pixel grid, not the scaled framebuffer:
+    /// Core Graphics lists the panel's real modes and the native flag marks the
+    /// one it wants. Falls back to the framebuffer times the backing scale.
+    static func mainDisplayMode() -> (width: Int, height: Int, fps: Int) {
         guard let screen = NSScreen.main else { return (1920, 1080, 60) }
         let fps = screen.maximumFramesPerSecond > 0 ? screen.maximumFramesPerSecond : 60
 

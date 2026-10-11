@@ -82,17 +82,25 @@ extension AppModel {
             }
             let outcome = await sendWakeAndWait(host, waitSeconds: Self.wakeBudgetSeconds)
             guard !Task.isCancelled else { return }
-            if let reason = outcome.failureReason {
-                wakeFailedHostID = host.id
-                wakeFailureReason = reason
-                if !NSApp.isActive { WakeNotifier.shared.postFailed(host, reason: reason) }
-            } else if outcome == .answered, thenConnect, selectedHost?.id == host.id, !isStreaming {
-                // A notice the user won't see would drop the connect they asked for.
-                if !NSApp.isActive, await WakeNotifier.canPost() {
-                    WakeNotifier.shared.postAwake(host)
-                } else if !Task.isCancelled {
-                    streamHeroApp()
-                }
+            await reportWake(outcome, for: host, thenConnect: thenConnect)
+        }
+    }
+
+    /// A failure is shown on the button and, from another app, as a notice; an
+    /// answer connects, or notifies when another app is in front.
+    func reportWake(_ outcome: WakeOutcome, for host: Host, thenConnect: Bool,
+                    appActive: Bool = NSApp.isActive, notifier: WakeNotifier = .shared,
+                    canPost: @MainActor () async -> Bool = { await WakeNotifier.canPost() }) async {
+        if let reason = outcome.failureReason {
+            wakeFailedHostID = host.id
+            wakeFailureReason = reason
+            if !appActive { notifier.postFailed(host, reason: reason) }
+        } else if outcome == .answered, thenConnect, selectedHost?.id == host.id, !isStreaming {
+            // A notice the user won't see would drop the connect they asked for.
+            if !appActive, await canPost() {
+                notifier.postAwake(host)
+            } else if !Task.isCancelled {
+                streamHeroApp()
             }
         }
     }
@@ -218,6 +226,11 @@ extension AppModel {
 final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
     static let shared = WakeNotifier()
     private weak var model: AppModel?
+    private let deliver: (UNNotificationRequest) -> Void
+
+    init(deliver: @escaping (UNNotificationRequest) -> Void = { UNUserNotificationCenter.current().add($0) }) {
+        self.deliver = deliver
+    }
     private static let awakeCategory = "wake.awake"
     private static let failedCategory = "wake.failed"
     private static let connectAction = "wake.connect"
@@ -277,8 +290,7 @@ final class WakeNotifier: NSObject, UNUserNotificationCenterDelegate {
         content.sound = .default
         content.categoryIdentifier = category
         content.userInfo = ["hostID": host.id]
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: Self.identifier(host), content: content, trigger: nil))
+        deliver(UNNotificationRequest(identifier: Self.identifier(host), content: content, trigger: nil))
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,

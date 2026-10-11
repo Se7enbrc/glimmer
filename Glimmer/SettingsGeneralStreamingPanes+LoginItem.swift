@@ -29,12 +29,29 @@ enum LoginItemManager {
         let status: SMAppService.Status
     }
 
-    @MainActor private static func registrationSnapshot() -> RegistrationSnapshot? {
-        let defaults = UserDefaults.standard
+    /// The system side of registration, keyed by helper (true) or main app (false).
+    struct Services {
+        var status: @MainActor (_ helper: Bool) -> SMAppService.Status
+        var register: @MainActor (_ helper: Bool) throws -> Void
+        var unregister: @MainActor (_ helper: Bool) throws -> Void
+        var helperJobLoaded: @MainActor () async -> Bool?
+        var defaults: UserDefaults
+        var currentBuild: () -> String
+
+        static var live: Services {
+            Services(status: { service(helper: $0).status }, register: { try service(helper: $0).register() },
+                     unregister: { try service(helper: $0).unregister() },
+                     helperJobLoaded: { await LoginItemManager.helperJobLoaded() },
+                     defaults: .standard, currentBuild: LoginItemManager.currentBuild)
+        }
+    }
+
+    @MainActor private static func registrationSnapshot(_ services: Services) -> RegistrationSnapshot? {
+        let defaults = services.defaults
         guard defaults.bool(forKey: "launchAtLogin") else { return nil }
         let minimized = defaults.bool(forKey: "launchMinimized")
         return RegistrationSnapshot(revision: registrationRevision, minimized: minimized,
-                                    status: activeService(minimized: minimized).status)
+                                    status: services.status(minimized))
     }
 
     static func acceptsProbe(_ snapshot: RegistrationSnapshot, current: RegistrationSnapshot?, cancelled: Bool) -> Bool {
@@ -46,9 +63,9 @@ enum LoginItemManager {
         case keep, reregister, resubmit, userRemoved
     }
 
-    /// The service that backs the user's current intent.
-    private static func activeService(minimized: Bool) -> SMAppService {
-        minimized ? SMAppService.loginItem(identifier: helperBundleID) : SMAppService.mainApp
+    /// Minimized launches register the helper; otherwise the main app opens itself.
+    private static func service(helper: Bool) -> SMAppService {
+        helper ? SMAppService.loginItem(identifier: helperBundleID) : SMAppService.mainApp
     }
 
     static func isRegistered(_ status: SMAppService.Status) -> Bool {
@@ -97,31 +114,25 @@ enum LoginItemManager {
     /// Keep saved intent and expose registration failures to the caller and in-app log.
     @MainActor
     @discardableResult
-    static func apply(launchAtLogin: Bool, minimized: Bool) -> SMAppService.Status {
+    static func apply(launchAtLogin: Bool, minimized: Bool, services: Services = .live) -> SMAppService.Status {
         registrationRevision &+= 1
-        let helper = SMAppService.loginItem(identifier: helperBundleID)
-        let mainApp = SMAppService.mainApp
         do {
             guard launchAtLogin else {
-                if isRegistered(helper.status) { try helper.unregister() }
-                if isRegistered(mainApp.status) { try mainApp.unregister() }
-                UserDefaults.standard.removeObject(forKey: registeredBuildKey)
+                if isRegistered(services.status(true)) { try services.unregister(true) }
+                if isRegistered(services.status(false)) { try services.unregister(false) }
+                services.defaults.removeObject(forKey: registeredBuildKey)
                 Diag.info("login item disabled", "LoginItem")
                 return .notRegistered
             }
-            if minimized {
-                if isRegistered(mainApp.status) { try mainApp.unregister() }
-                try helper.register()
-                Diag.notice("login item registered (helper) → \(statusLabel(helper.status))", "LoginItem")
-            } else {
-                if isRegistered(helper.status) { try helper.unregister() }
-                try mainApp.register()
-                Diag.notice("login item registered (main app) → \(statusLabel(mainApp.status))", "LoginItem")
-            }
-            UserDefaults.standard.set(currentBuild(), forKey: registeredBuildKey)
-            return activeService(minimized: minimized).status
+            // Only one item may open Glimmer at login.
+            if isRegistered(services.status(!minimized)) { try services.unregister(!minimized) }
+            try services.register(minimized)
+            let label = statusLabel(services.status(minimized))
+            Diag.notice("login item registered (\(minimized ? "helper" : "main app")) → \(label)", "LoginItem")
+            services.defaults.set(services.currentBuild(), forKey: registeredBuildKey)
+            return services.status(minimized)
         } catch {
-            registrationFailed(error)
+            registrationFailed(error, defaults: services.defaults)
             return .notFound
         }
     }
@@ -130,23 +141,23 @@ enum LoginItemManager {
     /// "doesn't start after reboot" fix), a removal turns the toggle off.
     /// Returns the login item's status, nil when Open at login is off.
     @MainActor @discardableResult
-    static func reconcile() async -> SMAppService.Status? {
-        let defaults = UserDefaults.standard
-        guard let snapshot = registrationSnapshot() else { return nil }
+    static func reconcile(services: Services = .live) async -> SMAppService.Status? {
+        let defaults = services.defaults
+        guard let snapshot = registrationSnapshot(services) else { return nil }
         let minimized = snapshot.minimized
         let status = snapshot.status
         var jobLoaded: Bool? = true
         if minimized, status == .enabled {
-            jobLoaded = await helperJobLoaded()
-            let current = registrationSnapshot()
+            jobLoaded = await services.helperJobLoaded()
+            let current = registrationSnapshot(services)
             guard acceptsProbe(snapshot, current: current, cancelled: Task.isCancelled) else { return current?.status }
         }
         switch reconcileAction(status: status, registeredBuild: defaults.string(forKey: registeredBuildKey),
-                               currentBuild: currentBuild(), jobLoaded: jobLoaded) {
+                               currentBuild: services.currentBuild(), jobLoaded: jobLoaded) {
         case .keep:
             // A live registration belongs to this build, including one made
             // before builds kept a record, so a later removal is recognized.
-            defaults.set(currentBuild(), forKey: registeredBuildKey)
+            defaults.set(services.currentBuild(), forKey: registeredBuildKey)
             if status == .requiresApproval {
                 Diag.notice("login item needs approval in System Settings › General › Login Items", "LoginItem")
             } else {
@@ -155,10 +166,10 @@ enum LoginItemManager {
             return status
         case .reregister:
             Diag.notice("login item drifted (\(statusLabel(status))) - re-registering", "LoginItem")
-            return apply(launchAtLogin: true, minimized: minimized)
+            return apply(launchAtLogin: true, minimized: minimized, services: services)
         case .resubmit:
             Diag.notice("login helper enabled but launchd has no job - re-registering", "LoginItem")
-            return resubmitHelper(minimized: minimized)
+            return resubmitHelper(minimized: minimized, services: services)
         case .userRemoved:
             Diag.notice("login item removed in System Settings - Open at login is off", "LoginItem")
             defaults.set(false, forKey: "launchAtLogin")
@@ -168,9 +179,9 @@ enum LoginItemManager {
     }
 
     /// Keep unregister and apply atomic after the asynchronous probe's stale-result check.
-    @MainActor private static func resubmitHelper(minimized: Bool) -> SMAppService.Status {
-        try? SMAppService.loginItem(identifier: helperBundleID).unregister()
-        return apply(launchAtLogin: true, minimized: minimized)
+    @MainActor private static func resubmitHelper(minimized: Bool, services: Services) -> SMAppService.Status {
+        try? services.unregister(true)
+        return apply(launchAtLogin: true, minimized: minimized, services: services)
     }
 
     /// Unknown results preserve registration; only launchd's exact missing-service result permits repair.

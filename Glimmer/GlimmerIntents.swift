@@ -59,7 +59,17 @@ struct StreamIntent: AppIntent {
     }
 
     @MainActor func perform() async throws -> some IntentResult {
-        let model = try await AppModel.forIntent()
+        try await Self.stream(pc, app: app, model: AppModel.forIntent())
+        return .result()
+    }
+
+    /// Tests stand in for the status probe, the route wait and the launch.
+    @MainActor static func stream(
+        _ pc: PCEntity, app: String?, model: AppModel,
+        probe: @MainActor (AppModel, Host) async -> Void = { _ = await $0.pollHostStatusOnce(for: $1.id, appListFor: nil) },
+        settle: @MainActor (AppModel, Host) async -> Void = { await $0.awaitRouteSettled(for: $1) },
+        launch: @MainActor (AppModel, LibraryApp, Host) -> Void = { $0.requestStream(app: $1, on: $2) }
+    ) async throws {
         let host = try model.pairedHost(pc)
         let target = app.flatMap(host.app(named:))
         if let app, target == nil { throw PCIntentError.noApp(app, pc: host.displayName) }
@@ -69,24 +79,23 @@ struct StreamIntent: AppIntent {
                 throw PCIntentError.alreadyStreaming
             }
             model.resumeStreamWindow()
-            return .result()
+            return
         }
         if model.selectedHost?.id != host.id { model.selectHost(host) }
         // The Stream button's app is the PC's running one only while a fresh sample
         // names it; a cold launch or a PC switch has none yet.
         if target == nil, !HostLiveStatus.isFresh(model.hostLiveStatus, for: host.id) {
-            _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
+            await probe(model, host)
         }
         guard let launchApp = target ?? model.heroTargetApp(on: host) else {
             throw PCIntentError.failed("Glimmer doesn't know any apps on \(host.displayName).")
         }
-        await model.awaitRouteSettled(for: host)
+        await settle(model, host)
         try Task.checkCancellation()
         guard !model.isStreaming else { throw PCIntentError.alreadyStreaming }
         let currentHost = try model.pairedHost(pc)
         if model.selectedHost?.id != currentHost.id { model.selectHost(currentHost) }
-        model.requestStream(app: launchApp, on: currentHost)
-        return .result()
+        launch(model, launchApp, currentHost)
     }
 }
 
@@ -155,13 +164,16 @@ struct GlimmerShortcuts: AppShortcutsProvider {
 
     /// Siri learns PC names from the shortcut parameters, so refresh them when
     /// a PC is paired, renamed or removed. Reloading the same PCs is ignored.
-    @MainActor static func trackPCs(of model: AppModel) {
+    @MainActor @discardableResult
+    static func trackPCs(of model: AppModel,
+                         bootstrap: @escaping @MainActor (AppModel) -> Task<Void, Never> = { $0.startBootstrap() },
+                         update: @escaping @MainActor () -> Void = { updateAppShortcutParameters() }) -> Task<Void, Never> {
         Task {
-            await model.startBootstrap().value
+            await bootstrap(model).value
             var known: Set<PCEntity>?
             for await pcs in Observations({ Set(model.hosts.map(PCEntity.init)) }) where pcs != known {
                 known = pcs
-                updateAppShortcutParameters()
+                update()
             }
         }
     }

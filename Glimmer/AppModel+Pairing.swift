@@ -201,10 +201,10 @@ extension AppModel {
 
     /// Sunshine's PIN page in this Mac's browser, for a headless PC. Sunshine
     /// serves it over HTTPS on 47990 with its own self-signed certificate.
-    func openSunshinePINPage(forHost host: String) {
+    func openSunshinePINPage(forHost host: String, open: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         let literal = host.contains(":") ? "[\(host)]" : host
         if let url = URL(string: "https://\(literal):47990/pin") {
-            NSWorkspace.shared.open(url)
+            open(url)
         }
     }
 }
