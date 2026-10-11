@@ -6,14 +6,14 @@
 //
 //  The borderless cover's horizontal slide, its stand-in for the swipe AppKit
 //  gives a full-screen Space: in from the right on the first frame and on
-//  return, out to the right before a switch away orders the cover out.
+//  return, out to the right before a switch away or the stream's end.
 //
 
 import AppKit
 import QuartzCore
 
 /// The moments the cover can move.
-enum CoverSlideEvent { case firstFrame, away, back }
+enum CoverSlideEvent { case firstFrame, away, back, close }
 
 /// How a moment is shown: slid, faded (the first frame's existing fade), or at once.
 enum CoverTransition: Equatable { case slide, fade, snap }
@@ -46,7 +46,7 @@ extension StreamWindow {
     /// Slides the video layer, not the window: a transform runs in the render
     /// server with the picture still live, where a screen-sized setFrame would
     /// re-lay out the window every step. The model transform is never touched.
-    func slideCover(entering: Bool, completion: @escaping @MainActor () -> Void) {
+    func slideCover(entering: Bool, closing: Bool = false, completion: @escaping @MainActor () -> Void) {
         let layer = displayLayer
         let width = window.frame.width
         let inFlight = layer.animation(forKey: Self.coverSlideKey) == nil ? nil
@@ -70,7 +70,7 @@ extension StreamWindow {
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, !self.didClose, self.coverSlideGeneration == generation else { return }
+                guard let self, closing || !self.didClose, self.coverSlideGeneration == generation else { return }
                 if entering { self.resetCoverSlide() }
                 completion()
             }

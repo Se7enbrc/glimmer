@@ -181,6 +181,11 @@ extension StreamWindow {
             previousPresentationOptions = nil
         }
         let win = window
+        // The borderless cover leaves the way it came in, unless it is already off screen.
+        if coverTransition(.close) == .slide, win.isVisible, win.alphaValue > 0, !userBackgrounded {
+            slideCover(entering: false, closing: true) { [weak self] in self?.finishClose() }
+            return
+        }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || win.alphaValue == 0 {
             win.alphaValue = 0.0
             finishClose()

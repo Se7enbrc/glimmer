@@ -4,6 +4,8 @@
 
 ### Features
 
+- The full-screen stream slides away when it ends, the way it slid in, instead
+  of fading. Reduce Motion keeps the fade.
 - Ending a stream, including cancelling while it connects, leaves the game
   running on the PC. Choose it again to resume, or use Quit to close it after
   confirming that unsaved progress may be lost.
