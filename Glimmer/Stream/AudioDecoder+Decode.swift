@@ -16,9 +16,20 @@ extension AudioDecoder {
 
     /// Decode one packet, or conceal one lost frame when `packet` is nil, and schedule the result.
     func decodeCore(_ packet: UnsafeRawBufferPointer?) {
-        // Hold the state lock for the whole decode so `shutdown()` can't release the decoder mid-call.
+        let started = DispatchTime.now().uptimeNanoseconds
         stateLock.lock()
-        defer { stateLock.unlock() }
+        let acquired = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let finished = DispatchTime.now().uptimeNanoseconds
+            stateLock.unlock()
+            AudioPipelineTelemetry.shared.stateLockWait.observe(Double(acquired &- started) / 1_000_000)
+            AudioPipelineTelemetry.shared.decodeSchedule.observe(
+                Double(finished &- started) / 1_000_000)
+        }
+        guard !graphChanging else {
+            AudioPipelineTelemetry.shared.reconfigurationDrops.increment()
+            return
+        }
         guard !isShutdown, let decoder, let fmt = inputFormat else { return }
 
         // `AudioFrame` interval - decode + schedule, one per 5 ms packet; cheap enough not to gate.
@@ -37,17 +48,20 @@ extension AudioDecoder {
     /// player. Returns true iff a frame was scheduled. Caller holds `stateLock`.
     @discardableResult
     private func decodeOneFrame(decoder: OpusDecoder, fmt: AVAudioFormat, packet: UnsafeRawBufferPointer?) -> Bool {
-        let frameCount = AVAudioFrameCount(samplesPerFrame)
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: frameCount),
-              let channelData = pcm.floatChannelData else { return false }
+        guard let lease = pcmPool?.acquire() else {
+            AudioPipelineTelemetry.shared.poolExhausted.increment()
+            maintenanceSource.add(data: 1)
+            return false
+        }
+        let pcm = lease.buffer
+        var retained = false
+        defer { if !retained { lease.pool.release(lease.index) } }
+        guard let channelData = pcm.floatChannelData else { return false }
 
         // The decoder writes interleaved float; the player's format is non-interleaved, so decode into the
         // scratch and demux into channelData[i]. 7.1's reorder swaps surround pairs into AVAudio's layout.
         let channels = channelCount
         let reorder = outputReorder
-        if decodeScratch.count != samplesPerFrame * channels {
-            decodeScratch = [Float](repeating: 0, count: samplesPerFrame * channels)
-        }
         let decoded = decodeScratch.withUnsafeMutableBufferPointer { scratch -> Int in
             guard let interleaved = scratch.baseAddress else { return 0 }
             let frames = decoder.decodeOrConceal(packet, into: interleaved)
@@ -65,22 +79,28 @@ extension AudioDecoder {
 
         // A drained player no longer ends at the skipped block's predecessor.
         if packetSplice.hasPendingJoin, audioMeterLock.withLock({ playoutDrained }) {
-            packetSplice = AudioPacketSplice()
+            resetPacketSplice()
         }
         // Drop excess audio to bound latency, retaining its start to smooth the next join.
         let decodedFrames = UInt64(decoded)
         if meterRegisterScheduleOrOverrun(frames: decodedFrames) {
-            packetSplice.skip(pcm)
-            // Engine recovery stays on this path, serialized against shutdown.
-            recoverIfPlayoutStalled()
+            if !packetSplice.hasPendingJoin {
+                packetSplice.skip(pcm)
+                spliceLease = lease
+                retained = true
+            }
+            if audioMeterLock.withLock({ playoutStallPending }) { maintenanceSource.add(data: 1) }
             return false
         }
         packetSplice.apply(to: pcm)
-        schedulePlayout(pcm) { [weak self] in
-            self?.meterCompleteOnePlayout(frames: decodedFrames)
-        }
+        if let held = spliceLease { held.pool.release(held.index) }
+        spliceLease = nil
+        let rendered = observeRenderClock()
+        renderTimeline.scheduled(frames: Int64(decoded), at: rendered)
+        retained = true
+        schedulePlayout(pcm, lease.completion)
         // Rebuild the cushion after a drain; steady playback takes the cheap primed path.
-        maybePrime(format: fmt)
+        maybePrime(format: fmt, onWorker: true)
         // Drives the drift resampler's PI loop (self-rate-limited to ~4Hz) + the
         // 1Hz audio-state gauge. The resampler replaced the decode-path micro-stretch.
         publishAudioState()

@@ -30,9 +30,8 @@
 //  mismatches (non-4-aligned parity, block-size disagreements) sets `incompatibleServer` and logs why:
 //  data then passes straight through (HANDLE_NOW) and FEC is dropped. One odd packet is only dropped.
 //
-//  THREADING: single-receive-thread access (RtpAudioReceiver's serial queue), so
-//  this class needs no internal locking - exactly like the C single receive
-//  thread. It is a reference type so the block list can be mutated in place.
+// Queue state belongs to RtpAudioReceiver's decode worker. Pooling shards and blocks keeps
+// the packet path allocation-free; startup/test callers may drive it synchronously.
 
 import Foundation
 
@@ -121,9 +120,9 @@ final class RtpAudioQueue {
         var blockSize: Int = 0
         /// Data shard payload bytes (the bytes AFTER the 12-byte RTP header), one
         /// per data slot; empty until received/recovered.
-        var dataShards: [[UInt8]] = Array(repeating: [], count: RtpAudioQueue.dataShards)
+        var dataShards = (0..<RtpAudioQueue.dataShards).map { _ in [UInt8](repeating: 0, count: 1400) }
         /// Parity shard payload bytes, one per parity slot.
-        var parityShards: [[UInt8]] = Array(repeating: [], count: RtpAudioQueue.fecShards)
+        var parityShards = (0..<RtpAudioQueue.fecShards).map { _ in [UInt8](repeating: 0, count: 1400) }
         /// 1 == shard missing, 0 == present (matches C `marks`). Indices 0..3 data,
         /// 4..5 parity.
         var marks: [UInt8] = Array(repeating: 1, count: RtpAudioQueue.totalShards)
@@ -139,6 +138,7 @@ final class RtpAudioQueue {
     /// FEC blocks held in sequence order by baseSequenceNumber (the C ordered
     /// doubly-linked list collapses to a sorted array here). blocks[0] == head.
     var blocks: [FecBlock] = []
+    var freeBlocks = (0...RtpAudioQueue.maxQueuedBlocks).map { _ in FecBlock() }
 
     var nextRtpSequenceNumber: UInt16 = 0
     var oldestRtpBaseSequenceNumber: UInt16 = 0
@@ -180,6 +180,9 @@ final class RtpAudioQueue {
     /// `audioPacketDuration` is AudioPacketDuration in ms (5 by default).
     init(audioPacketDuration: Int) {
         self.audioPacketDuration = audioPacketDuration
+        blocks.reserveCapacity(Self.maxQueuedBlocks + 1)
+        freeBlocks.reserveCapacity(Self.maxQueuedBlocks + 1)
+        _ = GF256.inv
     }
 
     // MARK: - 16-bit wraparound helpers (Limelight-internal.h)
@@ -242,7 +245,7 @@ final class RtpAudioQueue {
                 // Missing data shard: copy the opus payload (after the 12-byte
                 // RTP header) into the slot (:589-594).
                 let payloadStart = Self.fixedRtpHeaderSize
-                block.dataShards[pos] = padShard(Array(packet[payloadStart...]), to: block.blockSize)
+                copyShard(packet[payloadStart...], into: &block.dataShards[pos], size: block.blockSize)
                 block.marks[pos] = 0
                 block.dataShardsReceived += 1
             } else {
@@ -272,7 +275,7 @@ final class RtpAudioQueue {
                 // Missing FEC shard: copy just the parity bytes (after the
                 // 12-byte RTP header + 12-byte FEC header) into the slot (:628-633).
                 let parityStart = Self.fixedRtpHeaderSize + Self.audioFecHeaderSize
-                block.parityShards[shardIndex] = padShard(Array(packet[parityStart...]), to: block.blockSize)
+                copyShard(packet[parityStart...], into: &block.parityShards[shardIndex], size: block.blockSize)
                 block.marks[markIdx] = 0
                 block.fecShardsReceived += 1
             } else {
@@ -300,6 +303,13 @@ final class RtpAudioQueue {
     /// RTP bytes, a PLC placeholder for an unrecovered gap, or nil when nothing is
     /// ready. Call in a loop until nil after a `.packetReady` result.
     func getQueuedPacket() -> RtpaQueuedPacket? {
+        var output: [UInt8] = []
+        guard let lost = getQueuedPacket(into: &output) else { return nil }
+        return lost ? .lostPlaceholder : .bytes(output)
+    }
+
+    /// Reuse the worker's output storage; true means PLC, false means assembled bytes, nil means empty.
+    func getQueuedPacket(into out: inout [UInt8]) -> Bool? {
         // Discontinuity path: fill in placeholders for lost packets (:665-700).
         if let head = blocks.first, head.allowDiscontinuity {
             let idx = head.nextDataPacketIndex
@@ -311,7 +321,7 @@ final class RtpAudioQueue {
                 if head.nextDataPacketIndex == Self.dataShards {
                     freeFecBlockHead()
                 }
-                return .lostPlaceholder
+                return true
             }
             // else fall through to the ready-packet path below.
         }
@@ -325,13 +335,12 @@ final class RtpAudioQueue {
             // for in-order received packets was copied verbatim; for recovered
             // packets it was synthesized in completeFecBlock. We rebuild it here
             // from the FEC header + index so a single code path covers both.
-            var out = [UInt8]()
-            out.reserveCapacity(Self.fixedRtpHeaderSize + head.blockSize)
+            out.removeAll(keepingCapacity: true)
             let seq = head.fecHeader.baseSequenceNumber &+ UInt16(idx)
             let ts = head.fecHeader.baseTimestamp &+ UInt32(idx * audioPacketDuration)
             appendRtpHeader(&out, header: 0x80, packetType: head.fecHeader.payloadType,
                             seq: seq, timestamp: ts, ssrc: head.fecHeader.ssrc)
-            out.append(contentsOf: head.dataShards[idx])
+            out.append(contentsOf: head.dataShards[idx].prefix(head.blockSize))
 
             head.nextDataPacketIndex += 1
             nextRtpSequenceNumber = nextRtpSequenceNumber &+ 1
@@ -339,7 +348,7 @@ final class RtpAudioQueue {
             if head.nextDataPacketIndex == Self.dataShards {
                 freeFecBlockHead()
             }
-            return .bytes(out)
+            return false
         }
 
         return nil
@@ -395,22 +404,13 @@ final class RtpAudioQueue {
         let head = blocks.removeFirst()
         oldestRtpBaseSequenceNumber = head.fecHeader.baseSequenceNumber &+ UInt16(Self.dataShards)
         synchronizing = false
-        // The C free-list cache (RTPA_CACHED_FEC_BLOCK_LIMIT) is a pure perf
-        // optimization; ARC reclaims the block here instead.
+        freeBlocks.append(head)
     }
 
     // MARK: - Helpers
 
-    // internal for testability
-    /// Pad (or, defensively, truncate) a shard to exactly `size` bytes. Sunshine
-    /// uses constant-size shards within a block, but the RS math requires every
-    /// shard be exactly blockSize.
-    func padShard(_ bytes: [UInt8], to size: Int) -> [UInt8] {
-        if bytes.count == size { return bytes }
-        if bytes.count > size { return Array(bytes[0..<size]) }
-        var out = bytes
-        out.append(contentsOf: repeatElement(0, count: size - bytes.count))
-        return out
+    func copyShard(_ bytes: ArraySlice<UInt8>, into storage: inout [UInt8], size: Int) {
+        for index in 0..<size { storage[index] = index < bytes.count ? bytes[bytes.startIndex + index] : 0 }
     }
 
     // internal for testability

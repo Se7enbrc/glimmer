@@ -170,8 +170,14 @@ extension RtpAudioQueue {
             head.allowDiscontinuity = true
         }
 
-        // Allocate a new block and insert in seq order (:334-392).
-        let block = FecBlock()
+        guard blockSize > 0, blockSize <= RtpAudioReceiver.maxPacketSize,
+              let block = freeBlocks.popLast() else { return nil }
+        for index in block.marks.indices { block.marks[index] = 1 }
+        block.dataShardsReceived = 0
+        block.fecShardsReceived = 0
+        block.nextDataPacketIndex = 0
+        block.allowDiscontinuity = false
+        block.fullyReassembled = false
         block.queueTimeUs = UInt64(DispatchTime.now().uptimeNanoseconds / 1000)
         block.blockSize = blockSize
         block.fecHeader.payloadType = fecBlockPayloadType
@@ -196,6 +202,7 @@ extension RtpAudioQueue {
             return false
         }
         pendingSequenceRestart = nil
+        freeBlocks.append(contentsOf: blocks)
         blocks.removeAll(keepingCapacity: true)
         nextRtpSequenceNumber = baseSequence
         oldestRtpBaseSequenceNumber = baseSequence
@@ -208,13 +215,14 @@ extension RtpAudioQueue {
     private func noteLayoutMismatch(_ detail: String) {
         if !loggedLayoutMismatch {
             loggedLayoutMismatch = true
-            Diag.warn("NativeAudio FEC layout mismatch: \(detail); dropping that packet (logged once; "
+            AudioDiagnostics.warn("NativeAudio FEC layout mismatch: \(detail); dropping that packet (logged once; "
                 + "size mismatches count in audio_fec_mismatch_total)", Self.cat)
         }
         layoutMismatchStreak += 1
         guard layoutMismatchStreak >= Self.layoutMismatchStreakLimit else { return }
         incompatibleServer = true
-        Diag.notice("NativeAudio FEC DISABLED for this session: \(layoutMismatchStreak) FEC layout "
+        let streak = layoutMismatchStreak
+        AudioDiagnostics.notice("NativeAudio FEC DISABLED for this session: \(streak) FEC layout "
             + "mismatches in a row (last: \(detail)). Audio continues without FEC: data passes "
             + "straight through, parity is dropped, lost packets fall to PLC.", Self.cat)
     }
@@ -233,29 +241,8 @@ extension RtpAudioQueue {
             return true
         }
 
-        // Build the 6-shard array: data payloads then parity payloads. Missing
-        // slots are zero-filled to blockSize so the RS math is well-defined.
-        var shards = [[UInt8]](repeating: [], count: Self.totalShards)
-        for i in 0..<Self.dataShards {
-            shards[i] = block.marks[i] == 0 ? block.dataShards[i]
-                                            : [UInt8](repeating: 0, count: block.blockSize)
-        }
-        for i in 0..<Self.fecShards {
-            shards[Self.dataShards + i] = block.marks[Self.dataShards + i] == 0
-                ? block.parityShards[i]
-                : [UInt8](repeating: 0, count: block.blockSize)
-        }
-
-        if !fec.decode(shards: &shards, marks: block.marks, blockSize: block.blockSize) {
-            return false
-        }
-
-        // Recover the missing data slots: store the recovered payload and
-        // synthesize the RTP header fields (used on drain) (:454-464).
-        for i in 0..<Self.dataShards where block.marks[i] != 0 {
-            block.dataShards[i] = shards[i]
-            block.marks[i] = 0
-        }
+        guard fec.recover(block) else { return false }
+        for index in 0..<Self.dataShards { block.marks[index] = 0 }
 
         if block.dataShardsReceived != Self.dataShards {
             stats.packetCountFecRecovered += UInt32(Self.dataShards - block.dataShardsReceived)

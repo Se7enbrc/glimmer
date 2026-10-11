@@ -164,8 +164,8 @@ extension AudioDecoder {
 
 extension AudioDecoder {
     func requestOutputDiagnostic(bookmark: UInt64) {
-        stateLock.lock()
-        defer { stateLock.unlock() }
+        beginGraphChange()
+        defer { endGraphChange() }
         queueOutputDiagnosticLocked(bookmark: bookmark)
     }
 
@@ -181,30 +181,30 @@ extension AudioDecoder {
     }
 
     private func captureOutputDiagnostic(generation: UInt64) {
-        stateLock.lock()
-        guard generation == engineRestartGeneration else { stateLock.unlock(); return }
+        beginGraphChange()
+        guard generation == engineRestartGeneration else { endGraphChange(); return }
         guard TelemetryGate.isEnabled, !isShutdown, inputFormat != nil else {
             outputDiagnosticRequests = AudioOutputDiagnosticRequests()
-            stateLock.unlock()
+            endGraphChange()
             return
         }
-        stateLock.unlock()
+        endGraphChange()
         let initialDevice = AudioOutputDiagnostic.defaultOutputDevice()
-        stateLock.lock()
-        guard generation == engineRestartGeneration, !isShutdown else { stateLock.unlock(); return }
+        beginGraphChange()
+        guard generation == engineRestartGeneration, !isShutdown else { endGraphChange(); return }
         let bookmarks = outputDiagnosticRequests.take()
         let format = engine.outputNode.outputFormat(forBus: 0)
         var snapshot = AudioOutputDiagnostic(
             playerGain: playerNode.volume, mainGain: engine.mainMixerNode.outputVolume,
             spatialGain: spatialMixer?.outputVolume, sampleRate: format.sampleRate,
             channels: format.channelCount, muted: outputMuted, running: engine.isRunning)
-        stateLock.unlock()
+        endGraphChange()
 
         // HAL IPC never holds the decoder lock; a changed default invalidates its volume reading.
         snapshot.readDefaultOutputVolume(initialDevice: initialDevice)
 
-        stateLock.lock()
-        defer { stateLock.unlock() }
+        beginGraphChange()
+        defer { endGraphChange() }
         guard generation == engineRestartGeneration, !isShutdown else { return }
         if TelemetryGate.isEnabled {
             TelemetryExporter.recordLiveEvent(snapshot.fields(bookmarks: bookmarks))

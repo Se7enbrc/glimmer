@@ -3,20 +3,8 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  RtpAudioReceiver+Receive.swift
-//
-//  The audio RTP receive loop and the per-datagram path (AudioStream.c:239-383):
-//  the cancellable recvfrom loop on the dedicated high-priority queue, the runt
-//  check + first-packet time-to-first-packet metric, the backlog-aware startup
-//  gate hand-off, the BE→host RTP header byteswap, the queue feed and the drain
-//  of ready packets / PLC placeholders, plus the per-socket GAP-EVENT
-//  accumulation. Split out of RtpAudioReceiver.swift - pure move, the FramePacer
-//  split idiom - to keep that file under the length limit; every line here still
-//  runs on the single receive thread (`recvQueue`), exactly as before.
-//
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
-//
+// The socket loop only timestamps and queues datagrams; the decode worker owns RTP/FEC and startup state.
+// Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
 import Foundation
 import Darwin
@@ -51,13 +39,15 @@ extension RtpAudioReceiver {
                     continue
                 }
                 if received > 0 {
-                    self.handleDatagram(buf, count: received)
+                    let arrival = DispatchTime.now().uptimeNanoseconds
+                    self.noteAudioArrivalGap(now: arrival)
+                    self.decodeWorker.enqueue(buf, count: received, arrival: arrival)
                 } else if received == 0 {
                     // Quiet socket after we've heard from the peer: no kernel
                     // backlog remains, so a pending startup-pacing measurement
                     // resolves to the live edge (AudioStream.c:276-288 clears
                     // its pendingDrops on the same evidence).
-                    self.resolveStartupPacingOnIdle()
+                    self.decodeWorker.enqueue([], count: 0, arrival: DispatchTime.now().uptimeNanoseconds)
                 } else {
                     let err = errno
                     if err == EAGAIN || err == EWOULDBLOCK || err == EINTR {
@@ -65,7 +55,7 @@ extension RtpAudioReceiver {
                         // proof as above - whatever arrives NEXT is delayed LIVE
                         // audio (a radio-coalesced clump), not a host backlog,
                         // and must not be eaten by the startup gate.
-                        self.resolveStartupPacingOnIdle()
+                        self.decodeWorker.enqueue([], count: 0, arrival: DispatchTime.now().uptimeNanoseconds)
                         continue
                     }
                     break // socket closed (stop) or fatal
@@ -74,10 +64,12 @@ extension RtpAudioReceiver {
         }
     }
 
-    func handleDatagram(_ buf: [UInt8], count: Int) {
+    func handleDatagram(_ buf: [UInt8], count: Int, arrival: UInt64? = nil) {
         // Per-socket GAP-EVENT accumulation first (before the runt check - a runt
         // is still a socket arrival, and the counters measure the ARRIVAL process).
-        noteAudioArrivalGap()
+        if arrival == nil { noteAudioArrivalGap(now: DispatchTime.now().uptimeNanoseconds) }
+        let packetArrival = arrival ?? DispatchTime.now().uptimeNanoseconds
+        noteProcessedArrival(packetArrival)
 
         guard count >= RtpAudioQueue.fixedRtpHeaderSize, count <= buf.count, buf[0] == 0x80,
               buf[1] == RtpAudioQueue.payloadTypeAudio || buf[1] == RtpAudioQueue.payloadTypeFec else { return }
@@ -95,13 +87,14 @@ extension RtpAudioReceiver {
             let startUs = pingStartTimeUs.load()
             firstRtpPings = pingsSent.load()
             if startUs != 0 {
-                let nowUs = UInt64(DispatchTime.now().uptimeNanoseconds / 1000)
+                let nowUs = packetArrival / 1000
                 let ttfpMs = Double(nowUs &- startUs) / 1000.0
                 firstRtpPingToRtpMs = ttfpMs
-                Diag.notice("NativeAudio METRIC time-to-first-packet=\(String(format: "%.0f", ttfpMs))ms "
-                    + "pings-until-first-RTP=\(firstRtpPings) (target <1000ms; len=\(count))", Self.cat)
+                let pingCount = firstRtpPings
+                AudioDiagnostics.notice("NativeAudio METRIC time-to-first-packet=\(String(format: "%.0f", ttfpMs))ms "
+                    + "pings-until-first-RTP=\(pingCount) (target <1000ms; len=\(count))", Self.cat)
             } else {
-                Diag.notice("NativeAudio first audio packet received (len=\(count))", Self.cat)
+                AudioDiagnostics.notice("NativeAudio first audio packet received (len=\(count))", Self.cat)
             }
         }
 
@@ -119,12 +112,12 @@ extension RtpAudioReceiver {
         var dropForStartup = false
         if startupPacing != .decided {
             dropForStartup =
-                updateStartupPacing(isData: packetType == RtpAudioQueue.payloadTypeAudio)
+                updateStartupPacing(isData: packetType == RtpAudioQueue.payloadTypeAudio, now: packetArrival)
         }
 
         // Byteswap the multi-byte RTP fields BE→host (AudioStream.c:321-323). The
         // header + packetType bytes are single bytes (no swap).
-        let packet = Array(buf[0..<count])
+        let packet = count == buf.count ? buf : Array(buf[0..<count])
         let rtp = RtpAudioQueue.RtpHeader(
             header: packet[0],
             packetType: packet[1],
@@ -145,7 +138,7 @@ extension RtpAudioReceiver {
             // row is emitted later, at the gate's verdict latch, so it can carry
             // the verdict alongside both TTF spans.
             TelemetryCounters.shared.recordAudioFirstPacket()
-            Diag.notice("NativeAudio first decoded RTP "
+            AudioDiagnostics.notice("NativeAudio first decoded RTP "
                 + "(seq=\(rtp.sequenceNumber) type=\(rtp.packetType) len=\(count))", Self.cat)
         }
 
@@ -176,55 +169,44 @@ extension RtpAudioReceiver {
     }
 
     private func drainQueuedPackets(dropForStartup: Bool) {
-        while let queued = queue.getQueuedPacket() {
-            switch queued {
-            case .bytes(let bytes):
-                if dropForStartup {
-                    startupDroppedPackets += 1
-                } else {
-                    decodePacket(bytes)
-                }
-            case .lostPlaceholder:
-                audioLostInWindow += 1
-                if dropForStartup {
-                    // Loss still counts; startup drops keep the timeline without
-                    // asking the decoder to conceal audio the listener won't hear.
-                    startupDroppedPackets += 1
-                } else {
-                    sink?.decodeAndPlayPLC()
-                }
+        while let lost = queue.getQueuedPacket(into: &recoveredPacket) {
+            if lost { audioLostInWindow += 1 }
+            if dropForStartup {
+                // Lost placeholders still count as loss; the startup gate discards their timeline too.
+                startupDroppedPackets += 1
+            } else if lost {
+                sink?.decodeAndPlayPLC()
+            } else {
+                decodePacket(recoveredPacket)
             }
         }
     }
 
-    /// The AUDIO leg of the cumulative 20/50/100ms gap counters, so a NIC doze vs one stalled path is
-    /// one NDJSON query. Per datagram: a clock read, a compare and the sink's gap store; the locked add
-    /// fires only after a >20ms idle. recvQueue-confined; read only with telemetry on.
-    private func noteAudioArrivalGap() {
-        let now = DispatchTime.now().uptimeNanoseconds
+    /// Receive timestamps distinguish a socket stall from a delayed decoder. No sink work runs here.
+    /// This is recvQueue-confined; startup/reorder state is owned by the worker.
+    private func noteAudioArrivalGap(now: UInt64) {
         let gap: UInt64? = lastDatagramArrivalNanos != 0 ? now &- lastDatagramArrivalNanos : nil
         if let gap {
+            AudioPipelineTelemetry.shared.receiveGap.observe(Double(gap) / 1_000_000)
             if gap > 20_000_000 {
                 let counters = TelemetryCounters.shared
                 counters.audioGapOver20msTotal.increment()
                 if gap > 50_000_000 { counters.audioGapOver50msTotal.increment() }
                 if gap > 100_000_000 { counters.audioGapOver100msTotal.increment() }
             }
-            // FLOW-RESUME edge: past the pair-anchor freshness horizon (2s -
-            // AudioVideoSkewStore.freshnessNanos' rationale) the silence was a
-            // host-idle stretch, not jitter; this first datagram back is a
-            // segment boundary. Tell the sink so stale playout anchors don't
-            // span it (drift re-anchor + cushion rebuild; no-op when the drain
-            // edge already latched). Same recvQueue, one virtual call, only on
-            // a ≥2s-idle edge.
-            if gap >= Self.flowResumeGapNanos {
-                sink?.notePacketFlowResumed(afterGapMs: Double(gap) / 1_000_000)
-            }
-            // The decoder's dead-air test: an under-run after a gap no cushion
-            // could bridge must not deepen the cushion.
-            sink?.noteArrivalGap(nanos: gap)
         }
         lastDatagramArrivalNanos = now
         TelemetryCounters.shared.audioArrivalGaps.noteArrival(at: now, gapNanos: gap)
+    }
+
+    private func noteProcessedArrival(_ now: UInt64) {
+        defer { lastProcessedArrivalNanos = now }
+        guard lastProcessedArrivalNanos != 0, now >= lastProcessedArrivalNanos else { return }
+        let gap = now - lastProcessedArrivalNanos
+        // Deliver flow edges in packet order, so a queued pre-gap packet cannot re-arm the new segment.
+        if gap >= Self.flowResumeGapNanos {
+            sink?.notePacketFlowResumed(afterGapMs: Double(gap) / 1_000_000)
+        }
+        sink?.noteArrivalGap(nanos: gap)
     }
 }

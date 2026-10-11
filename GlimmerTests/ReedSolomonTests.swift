@@ -307,4 +307,33 @@ struct ReedSolomonTests {
         let dec = AudioFecDecoder()
         #expect(dec.decode(shards: &shards, marks: marks, blockSize: bs) == false)
     }
+
+    @Test func pooledAudioRecoveryMatchesParityForEveryRecoverableErasureMask() {
+        let decoder = AudioFecDecoder()
+        for mask in 0..<64 {
+            let data = makeDataShards(ds: 4, bs: 1_388, seed: UInt8(mask + 1))
+            let parity = audioEncode(data: data, blockSize: 1_388)
+            let block = RtpAudioQueue.FecBlock()
+            block.blockSize = 1_388
+            var missingData = 0
+            var presentParity = 0
+            for index in 0..<6 {
+                block.marks[index] = mask & (1 << index) == 0 ? 0 : 1
+                if index < 4 {
+                    if block.marks[index] != 0 { missingData += 1 }
+                    for byte in 0..<block.blockSize {
+                        block.dataShards[index][byte] = block.marks[index] == 0 ? data[index][byte] : 0xAA
+                    }
+                } else {
+                    if block.marks[index] == 0 { presentParity += 1 }
+                    for byte in 0..<block.blockSize { block.parityShards[index - 4][byte] = parity[index - 4][byte] }
+                }
+            }
+            let recovered = decoder.recover(block)
+            #expect(recovered == (missingData <= presentParity))
+            if recovered {
+                for index in 0..<4 { #expect(Array(block.dataShards[index].prefix(block.blockSize)) == data[index]) }
+            }
+        }
+    }
 }

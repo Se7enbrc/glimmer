@@ -126,6 +126,7 @@ extension AudioDecoder {
                 if !nearMissLatched {
                     nearMissLatched = true
                     TelemetryCounters.shared.audioNearMissTotal.increment()
+                    AudioPipelineTelemetry.shared.noteNearMiss()
                 }
             } else if aheadMs > Self.nearMissRearmFillMs {
                 nearMissLatched = false
@@ -227,7 +228,8 @@ extension AudioDecoder {
         audioMeterLock.unlock()
         if let gapMs = settled.deadAirGapMs {
             TelemetryCounters.shared.audioUnderrunDeadairTotal.increment()
-            Diag.notice("audio under-run was dead air: \(Int(gapMs.rounded()))ms arrival gap, cushion unchanged", "Stream")
+            AudioDiagnostics.notice("audio under-run was dead air: \(Int(gapMs.rounded()))ms arrival gap, "
+                + "cushion unchanged", "Stream")
         }
         if let write = settled.memoryWrite { commitCushionMemory(write) }
         return false
@@ -241,8 +243,9 @@ extension AudioDecoder {
     /// pause()/play() here would race teardown. The post-drain cushion rebuild
     /// belongs to the DECODE path - the catch-up clump under the gate grace, or
     /// the grace-expiry silence backfill - never this handler's.
-    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false) {
+    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false, generation: UInt64? = nil) {
         audioMeterLock.lock()
+        guard generation == nil || generation == meterGeneration else { audioMeterLock.unlock(); return }
         framesPlayed &+= frames
         // Stall-watchdog heartbeat: a completion IS consumption. One clock read
         // per completion (~200Hz) - the same budget as the trough math below.
@@ -347,7 +350,7 @@ extension AudioDecoder {
     private func emitUnderrunNotice(route: String, targetMs: Double, suppressed: UInt64) {
         let ordinal = TelemetryCounters.shared.audioUnderrunTotal.value
         let backlog = suppressed > 0 ? " (+\(suppressed) since last line)" : ""
-        Diag.notice(
+        AudioDiagnostics.notice(
             "audio under-run #\(ordinal)\(backlog) - playout drained to empty; route \(route, privacy: .private), "
             + "cushion target \(Int(targetMs))ms",
             "Stream")
@@ -390,7 +393,7 @@ extension AudioDecoder {
         // link resolve (the route probe feeds ~1-2s after audio bring-up).
         let needsLinkResolve = !cushionLinkResolved
         audioMeterLock.unlock()
-        if needsLinkResolve { resolveCushionLink() }
+        if needsLinkResolve { linkResolveSource.add(data: 1) }
         guard rate > 0 else { return }
         // Surface resident corrector-silence to the A/V-skew meter so it subtracts
         // it from buffer fill: the silence is buffered media the audio RTP clock
@@ -497,7 +500,7 @@ extension AudioDecoder {
         if acted { playoutDrained = true }
         audioMeterLock.unlock()
         if acted {
-            Diag.notice("audio flow resumed after \(Int(afterGapMs.rounded()))ms gap "
+            AudioDiagnostics.notice("audio flow resumed after \(Int(afterGapMs.rounded()))ms gap "
                 + "with the drain edge missing - forcing the re-arm (drift "
                 + "re-anchor + cushion rebuild)", "Stream.Audio")
         }

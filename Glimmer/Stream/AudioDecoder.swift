@@ -14,10 +14,20 @@ public final class AudioDecoder: @unchecked Sendable {
     // it, and stored properties can't live in extensions.
     let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Audio")
 
-    /// Serializes the decoder and AVAudioEngine lifecycle against the decode path, which runs on the audio
-    /// receive thread while `shutdown` comes from the sink's cleanup or `StreamSession.stop()`. The class is
-    /// `@unchecked Sendable` on the strength of this lock.
+    /// Decode holds stateLock; graphChanging excludes it while graphChangeLock serializes maintenance.
+    /// Meter state has its own leaf lock. AV callbacks never acquire either lifecycle lock.
+    /// These domains protect the class's unchecked Sendable state.
     let stateLock = NSLock()
+    let graphChangeLock = NSLock()
+    // Admission flag under stateLock; graphChangeLock serializes maintenance while decode admission is closed.
+    var graphChanging = false
+    var pcmPool: AudioPCMBufferPool?
+    var silencePool: AudioPCMBufferPool?
+    var spliceLease: AudioPCMBufferPool.Lease?
+    var renderTimeline = AudioRenderTimeline()
+    var renderMonitor: DispatchSourceTimer?
+    lazy var maintenanceSource = makeMaintenanceSource()
+    lazy var linkResolveSource = makeLinkResolveSource()
     var isShutdown = false
     /// True while the PC plays this stream's sound: the Mac's main mixer sits at 0
     /// and the engine keeps running. Guarded by `stateLock`; see `setOutputMuted`.
@@ -51,7 +61,7 @@ public final class AudioDecoder: @unchecked Sendable {
     let varispeed = AVAudioUnitVarispeed()
     /// `varispeed.rate` takes the engine lock. Write on this queue, outside the
     /// completion handler's messenger lock, to avoid deadlocking with teardown.
-    let varispeedRateQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.varispeed-rate")
+    let varispeedRateQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.varispeed-rate", qos: .userInteractive)
     var inputFormat: AVAudioFormat?
     /// Last-known engine OUTPUT (hardware) format, captured when the engine
     /// starts. The config-change handler (H3) compares against this to decide
@@ -87,6 +97,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// incremented in the scheduleBuffer completion handler (off-thread). The
     /// scheduled-ahead backlog = framesScheduled − framesPlayed.
     var framesPlayed: UInt64 = 0
+    var meterGeneration: UInt64 = 0
     /// Corrector-inserted silence frames currently RESIDENT in the buffer
     /// (scheduled but not yet played): the running sum of micro-stretch + backfill
     /// silence, += at each silence schedule and -= at each silence completion.
@@ -429,7 +440,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// The default-output-device listener's HALListener key and the queue its handler runs on. Key guarded by
     /// `stateLock`; the handler touches only meter state and Diag.
     var routeListenerKey: Int?
-    let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .utility)
+    let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .userInteractive)
     /// Coalesced opt-in snapshots; guarded by stateLock and invalidated with engineRestartGeneration.
     var outputDiagnosticRequests = AudioOutputDiagnosticRequests()
     /// Bounded retry counter for transient route handoffs; guarded by stateLock.

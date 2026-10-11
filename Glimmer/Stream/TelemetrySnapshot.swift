@@ -348,6 +348,7 @@ struct TelemetrySnapshot: Sendable {
     // counters/gauges the audio receive + output path batches into OFF the hot
     // path; nil until audio is flowing. See the AudioSnapshot type below.
     var audio: AudioSnapshot?
+    var audioPipeline: AudioPipelineTelemetry.Snapshot?
 
     // P2 SESSION-LIFECYCLE signals (all read off the always-live counters /
     // `TelemetryCounters.p2` on the exporter's 1Hz queue - never a hot path).

@@ -29,6 +29,7 @@ extension TelemetryRenderer {
         promAudioReceive(&builder, audio, extras)
         promAudioOutput(&builder, audio, extras)
         promAudioSync(&builder, audio, extras)
+        promAudioPipeline(&builder, snap.audioPipeline)
     }
 
     /// Audio RECEIVE quality: the raw packet / loss / FEC totals (so Grafana

@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.10.7 - Unreleased
+## 2026.10.8 - Unreleased
 
 ### Features
 
@@ -8,17 +8,20 @@
   running on the PC. Choose it again to resume, or use Quit to close it after
   confirming that unsaved progress may be lost.
 
-- Steam shows its own logo in the launcher, the menu and the PC list, instead
-  of a generic controller.
+- Steam shows its own logo in the launcher, the menu and the PC list, instead of
+  a generic controller.
 
 ### Bug fixes
+
+- Audio has more protection from other work when the Mac is busy. Switching
+  between speakers and headphones no longer holds up incoming sound.
 
 - Stream diagnostics no longer count packets that arrive late from an earlier
   frame as lost.
 - Turning on a controller that needs Input Monitoring shows macOS's own
   permission prompt instead of opening System Settings on top of it. Once you
-  allow it, the controller starts working when you come back to Glimmer, with
-  no relaunch.
+  allow it, the controller starts working when you come back to Glimmer, with no
+  relaunch.
 
 ## 2026.10.6 - 2026-10-09
 

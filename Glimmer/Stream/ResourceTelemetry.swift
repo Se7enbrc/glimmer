@@ -367,6 +367,7 @@ enum QoSAudit {
     static let expectedHotPathLabels = [
         "Glimmer.videoRecv",
         "Glimmer.audioRecv",
+        "Glimmer.audioDecode",
         "Glimmer.enetControl"]
 
     /// Run the audit over a sample and log the result once. Reports the high-QoS

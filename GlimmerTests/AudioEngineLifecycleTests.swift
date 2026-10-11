@@ -252,7 +252,12 @@ extension AudioPlayoutStallTests {
         decoder.noteArrivalGap(nanos: 5_000_000)
         #expect(decoder.pendingUnderrunTargetMs == 60)
 
-        decoder.handleEngineConfigurationChange()
+        decoder.handleEngineConfigurationChange {
+            let unlocked = decoder.stateLock.try()
+            #expect(unlocked)
+            if unlocked { decoder.stateLock.unlock() }
+            decoder.decodeAndPlayPLC()
+        }
         #expect(decoder.engine.isRunning)
         #expect(decoder.pendingUnderrunTargetMs == (replaceGraph ? nil : 60))
         #expect(decoder.underrunArrivalGapNanos == (replaceGraph ? 0 : 5_000_000))

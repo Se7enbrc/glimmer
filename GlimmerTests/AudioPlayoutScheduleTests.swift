@@ -38,6 +38,7 @@ struct AudioPlayoutScheduleTests {
         decoder.decoder = OpusDecoder(sampleRate: 48_000, channels: 2, streams: 1, coupledStreams: 1,
                                       mapping: [0, 1], samplesPerFrame: 240)
         decoder.inputFormat = format
+        decoder.preparePCMStorage(format: format)
         decoder.primeEdgeRetryAtNanos = .max
         return (decoder, recorder, format)
     }

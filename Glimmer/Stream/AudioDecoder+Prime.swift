@@ -43,7 +43,7 @@ extension AudioDecoder {
     /// Decides under the meter lock; AV calls happen OUTSIDE the lock
     /// (AVAudioPlayerNode is thread-safe and we must not hold the meter lock
     /// across an AV call).
-    func maybePrime(format: AVAudioFormat) {
+    func maybePrime(format: AVAudioFormat, onWorker: Bool = false) {
         audioMeterLock.lock()
         if primed {
             // RESOLVE TOP-UP (one-shot, armed by resolveCushionLink): the link
@@ -60,7 +60,7 @@ extension AudioDecoder {
             let deficitMs = playoutTargetMs - aheadMs
             audioMeterLock.unlock()
             if deficitMs >= Self.playoutCushionStepMs {
-                backfillCushion(deficitMs: deficitMs, format: format)
+                backfillCushion(deficitMs: deficitMs, format: format, onWorker: onWorker)
             }
             return
         }
@@ -73,7 +73,7 @@ extension AudioDecoder {
             // `primed` latches ONLY on a successful start (see
             // startPlayoutAtPrimeEdge - the post-wake stopped-engine crash):
             // on failure the next packet re-enters this edge and retries.
-            guard startPlayoutAtPrimeEdge() else { return }
+            guard startPlayoutAtPrimeEdge(allowRecovery: !onWorker) else { return }
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
@@ -93,7 +93,7 @@ extension AudioDecoder {
                 return
             }
             audioMeterLock.unlock()
-            guard startPlayoutAtPrimeEdge() else { return }
+            guard startPlayoutAtPrimeEdge(allowRecovery: !onWorker) else { return }
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
@@ -109,7 +109,7 @@ extension AudioDecoder {
         }
         let deficitMs = playoutTargetMs - aheadMs
         audioMeterLock.unlock()
-        backfillCushion(deficitMs: deficitMs, format: format)
+        backfillCushion(deficitMs: deficitMs, format: format, onWorker: onWorker)
     }
 
     /// RE-PRIME silence backfill - the steady-link cushion rebuild. Schedules ONE
@@ -128,24 +128,29 @@ extension AudioDecoder {
     /// rate-limited trim - and, past 190ms, the ceiling backstop - walks back
     /// down. Caller is the decode path with `stateLock` held (AV calls serialized
     /// against `shutdown()`).
-    private func backfillCushion(deficitMs: Double, format: AVAudioFormat) {
+    private func backfillCushion(deficitMs: Double, format: AVAudioFormat, onWorker: Bool) {
+        if silencePool == nil && !onWorker {
+            silencePool = makeSilencePool(format: format)
+        }
         let frames = AVAudioFrameCount((deficitMs / 1000.0) * format.sampleRate)
         // Sub-step deficits aren't worth a splice - fill is already within one
         // ratchet quantum of target. That case (and a failed allocation) primes
         // as-is rather than wedging the state machine un-primed.
         guard deficitMs >= Self.playoutCushionStepMs, frames > 0,
-              let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else {
+              let lease = silencePool?.acquire() else {
             // Sub-step deficit / failed alloc: prime as-is - but only if
             // playback actually starts; a play failure (post-wake stopped
             // engine) leaves the machine un-primed and this cheap path
             // retries per packet. Bounded: with fill ≈ target the deficit
             // stays sub-step, so the retries never re-enter the backfill.
-            guard startPlayoutAtPrimeEdge() else { return }
+            guard startPlayoutAtPrimeEdge(allowRecovery: !onWorker) else { return }
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
             return
         }
+        let silence = lease.buffer
+        guard frames <= silence.frameCapacity else { lease.pool.release(lease.index); return }
         silence.frameLength = frames
         // Zero explicitly - AVAudioPCMBuffer does not guarantee zeroed memory, and
         // "silence" must never be heap garbage.
@@ -173,19 +178,18 @@ extension AudioDecoder {
         // Accounted above, scheduled here (outside the meter lock, AV-call
         // discipline): a completion in the sliver between sees fill briefly
         // overstated - harmless, and it can't mistake the moment for a drain.
-        schedulePlayout(silence) { [weak self] in
-            self?.meterCompleteOnePlayout(frames: silenceFrames, isSilence: true)
-        }
+        renderTimeline.scheduled(frames: Int64(frames), at: observeRenderClock())
+        schedulePlayout(silence, lease.completion)
         // Uniform prime edge, made exception-safe: the silence stays scheduled
         // either way (it plays when the engine returns); `primed` latches only
         // on a successful start, and the sub-step guard above makes the
         // per-packet retries cheap (fill ≈ target ⇒ no repeat backfill).
-        if startPlayoutAtPrimeEdge() {
+        if startPlayoutAtPrimeEdge(allowRecovery: !onWorker) {
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
         }
-        Diag.notice(
+        AudioDiagnostics.notice(
             "audio cushion backfill +\(Int(deficitMs.rounded()))ms silence → \(Int(targetMs))ms standing fill "
             + "- no catch-up clump within the re-prime grace (steady link); route \(route, privacy: .private)",
             "Stream")
