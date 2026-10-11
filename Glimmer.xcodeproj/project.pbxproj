@@ -12,6 +12,8 @@
 		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
 		DEC0DE202609258300000001 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000002 /* Protocol.swift */; };
 		DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000002 /* AWDLHelperTests.swift */; };
+		5EA320261010000000001301 /* ProcessRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001302 /* ProcessRunnerTests.swift */; };
+		5EA320261010000000001101 /* AWDLSuppressorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001102 /* AWDLSuppressorTests.swift */; };
 		DEC0DE202609258000000001 /* TestConcurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258000000002 /* TestConcurrency.swift */; };
 		DEC0DE202609253700000003 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000004 /* Protocol.swift */; };
 		DEC0DE202609253700000005 /* AWDLSuppressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000006 /* AWDLSuppressor.swift */; };
@@ -420,6 +422,7 @@
 		6E2026101000000000000003 /* VideoDecoderEnqueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */; };
 		6E2026101000000000000005 /* VideoDecoderSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */; };
 		6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */; };
+		5EA320261010000000001401 /* VideoDecoderSessionFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */; };
 		DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */; };
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609232100000004 /* LauncherWindowTests.swift */; };
@@ -433,6 +436,7 @@
 		DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */; };
 		DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000002 /* HostsPersistenceTests.swift */; };
 		DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000004 /* StoragePersistenceTests.swift */; };
+		5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */; };
 		DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */; };
 		DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609233300000002 /* ControllerArrivalTests.swift */; };
 		DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */; };
@@ -505,6 +509,8 @@
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000002 /* AWDLHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperTests.swift; sourceTree = "<group>"; };
+		5EA320261010000000001302 /* ProcessRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunnerTests.swift; sourceTree = "<group>"; };
+		5EA320261010000000001102 /* AWDLSuppressorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLSuppressorTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258000000002 /* TestConcurrency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestConcurrency.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000004 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000006 /* AWDLSuppressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/AWDLSuppressor.swift; sourceTree = "<group>"; };
@@ -932,6 +938,7 @@
 		6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderEnqueueTests.swift"; sourceTree = "<group>"; };
 		6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderSuppressionTests.swift"; sourceTree = "<group>"; };
 		6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderLifecycleTests.swift"; sourceTree = "<group>"; };
+		5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDecoderSessionFactoryTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerIntentsTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609232100000004 /* LauncherWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherWindowTests.swift"; sourceTree = "<group>"; };
@@ -945,6 +952,7 @@
 		DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioCushionMemoryTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610101000000002 /* HostsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostsPersistenceTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610101000000004 /* StoragePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StoragePersistenceTests.swift"; sourceTree = "<group>"; };
+		5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityKeychainCleanupTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerBatteryMappingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609233300000002 /* ControllerArrivalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerArrivalTests.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InputRecordingBackend.swift"; sourceTree = "<group>"; };
@@ -1350,6 +1358,8 @@
 			isa = PBXGroup;
 			children = (
 				DEC0DE202609253700000002 /* AWDLHelperTests.swift */,
+				5EA320261010000000001302 /* ProcessRunnerTests.swift */,
+				5EA320261010000000001102 /* AWDLSuppressorTests.swift */,
 				DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */,
 				DEC0DE202609258000000002 /* TestConcurrency.swift */,
 				DEC0DE202609256700000004 /* AWDLStreamLease.swift */,
@@ -1483,6 +1493,7 @@
 				6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */,
 				6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */,
 				6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */,
+				5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */,
 				DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */,
 				DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */,
 				5E5A5E202610100000000002 /* LoginItemApplyTests.swift */,
@@ -1500,6 +1511,7 @@
 				DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */,
 				DEC0DE202610101000000002 /* HostsPersistenceTests.swift */,
 				DEC0DE202610101000000004 /* StoragePersistenceTests.swift */,
+				5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */,
 				DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */,
 				DEC0DE202609233300000002 /* ControllerArrivalTests.swift */,
 				DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */,
@@ -1944,6 +1956,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */,
+				5EA320261010000000001301 /* ProcessRunnerTests.swift in Sources */,
+				5EA320261010000000001101 /* AWDLSuppressorTests.swift in Sources */,
 				DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */,
 				DEC0DE202609258000000001 /* TestConcurrency.swift in Sources */,
 				DEC0DE202609256700000005 /* AWDLStreamLease.swift in Sources */,
@@ -2078,6 +2092,7 @@
 				6E2026101000000000000003 /* VideoDecoderEnqueueTests.swift in Sources */,
 				6E2026101000000000000005 /* VideoDecoderSuppressionTests.swift in Sources */,
 				6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */,
+				5EA320261010000000001401 /* VideoDecoderSessionFactoryTests.swift in Sources */,
 				DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */,
 				DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */,
 				5E5A5E202610100000000001 /* LoginItemApplyTests.swift in Sources */,
@@ -2095,6 +2110,7 @@
 				DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */,
 				DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */,
 				DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */,
+				5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */,
 				DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */,
 				DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */,
 				DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */,

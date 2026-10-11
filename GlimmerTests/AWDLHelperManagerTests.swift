@@ -271,7 +271,7 @@ struct AWDLHelperManagerTests {
             started.signal()
             unblock.wait()
             restored.withLock { $0 = true }
-            return true
+            return .ifconfig()
         })
         let service = HelperService(suppressor: suppressor)
         let completed = Mutex(false)

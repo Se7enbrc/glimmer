@@ -12,7 +12,7 @@ struct AWDLHelperTests {
         let up = Mutex(false)
         let suppressor = AWDLSuppressor(interfaceIsUp: { up.withLock { $0 } }, runIfconfig: { _ in
             up.withLock { $0 = true }
-            return true
+            return .ifconfig()
         })
         let service = HelperService(suppressor: suppressor)
         let first = UUID()
@@ -38,7 +38,7 @@ struct AWDLHelperTests {
         let up = Mutex(false)
         let suppressor = AWDLSuppressor(interfaceIsUp: { up.withLock { $0 } }, runIfconfig: { _ in
             up.withLock { $0 = true }
-            return true
+            return .ifconfig()
         })
         let service = HelperService(suppressor: suppressor)
         service.setAWDLDown(true, reason: "first", peer: UUID()) { _ in }
@@ -87,7 +87,7 @@ struct AWDLHelperTests {
                 allowRestore.wait()
                 operations.withLock { $0.append(args.last ?? "") }
                 interfaceUp.withLock { $0 = true }
-                return true
+                return .ifconfig()
             })
         let service = HelperService(suppressor: suppressor)
 
@@ -112,7 +112,7 @@ struct AWDLHelperTests {
         let suppressor = AWDLSuppressor(interfaceIsUp: { interfaceUp.withLock { $0 } }, runIfconfig: { _ in
             attempts.withLock { $0 += 1 }
             if recover.withLock({ $0 }) { interfaceUp.withLock { $0 = true } }
-            return commandSucceeded
+            return .ifconfig(commandSucceeded)
         }, clockNow: { clock.withLock { $0 } })
         let service = HelperService(suppressor: suppressor)
         let released = await withCheckedContinuation { continuation in
@@ -147,7 +147,7 @@ struct AWDLHelperTests {
         let clock = Mutex(start)
         let suppressor = AWDLSuppressor(
             interfaceIsUp: { false },
-            runIfconfig: { _ in true },
+            runIfconfig: { _ in .ifconfig() },
             clockNow: { clock.withLock { $0 } })
         suppressor.setSuppressing(true, reason: "test")
 
@@ -162,7 +162,7 @@ struct AWDLHelperTests {
         let clock = Mutex(start)
         let suppressor = AWDLSuppressor(
             interfaceIsUp: { false },
-            runIfconfig: { _ in true },
+            runIfconfig: { _ in .ifconfig() },
             clockNow: { clock.withLock { $0 } })
         suppressor.setSuppressing(true, reason: "test")
         clock.withLock { $0 = start + .seconds(4) }
@@ -190,7 +190,7 @@ struct AWDLHelperTests {
         let start = ContinuousClock.now
         let clock = Mutex(start)
         let suppressor = AWDLSuppressor(interfaceIsUp: { false },
-                                       runIfconfig: { _ in true }, clockNow: { clock.withLock { $0 } })
+                                       runIfconfig: { _ in .ifconfig() }, clockNow: { clock.withLock { $0 } })
         if suppressing { suppressor.setSuppressing(true, reason: "test") }
         clock.withLock { $0 = start + idle }
         let decisionEntered = DispatchSemaphore(value: 0)
@@ -497,5 +497,11 @@ private final class HelperTestListener: NSObject, NSXPCListenerDelegate, Sendabl
         connection.exportedObject = proxy
         connection.resume()
         return true
+    }
+}
+
+extension AWDLProcess.Result {
+    static func ifconfig(_ succeeded: Bool = true, output: String = "") -> Self {
+        Self(status: succeeded ? 0 : 1, output: Data(output.utf8), timedOut: false, truncated: false)
     }
 }

@@ -77,11 +77,17 @@ extension GlimmerCLI {
 
     /// Open (or bring forward) the app through Launch Services, then post the
     /// request until it answers. Returns after the handoff unless asked to wait.
-    private static func handOff(app: LibraryApp, host: Host, takeover: Bool, command: Command) async -> Int32 {
-        guard let glimmer = await openGlimmer() else { return Exit.failed }
+    static func handOff(
+        app: LibraryApp, host: Host, takeover: Bool, command: Command,
+        open: () async -> NSRunningApplication? = { await openGlimmer() },
+        post: ([String: String], CommandReplies) async -> [String: String]? = {
+            await ask($0, within: .seconds(20), replies: $1)
+        }
+    ) async -> Int32 {
+        guard let glimmer = await open() else { return Exit.failed }
         let replies = CommandReplies()
         let request = [Key.verb: "stream", Key.host: host.id, Key.app: String(app.id), Key.takeover: takeover ? "1" : "0"]
-        guard let first = await ask(request, within: .seconds(20), replies: replies) else {
+        guard let first = await post(request, replies) else {
             printError("Glimmer didn't answer. Open it and try again.")
             return Exit.failed
         }

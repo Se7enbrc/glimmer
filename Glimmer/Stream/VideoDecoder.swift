@@ -21,9 +21,23 @@ public final class VideoDecoder {
     /// Uptime clock for the decode gate's lift stamp; tests script it.
     nonisolated let now: @Sendable () -> UInt64
 
-    public init(now: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }) {
+    // Tests pass a scripted clock, a factory that never reaches VideoToolbox, or both.
+    init(now: @escaping @Sendable () -> UInt64, makeSession: @escaping SessionFactory) {
         self.log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.VideoDecoder")
         self.now = now
+        self.makeSession = makeSession
+    }
+
+    convenience init(now: @escaping @Sendable () -> UInt64) {
+        self.init(now: now, makeSession: VideoDecoder.createSession)
+    }
+
+    convenience init(makeSession: @escaping SessionFactory) {
+        self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: makeSession)
+    }
+
+    public convenience init() {
+        self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: VideoDecoder.createSession)
     }
 
     /// Safety-net teardown for the VTDecompressionSession. Normally
@@ -153,6 +167,7 @@ public final class VideoDecoder {
         _sampleBufferRenderer = renderer
     }
 
+    nonisolated let makeSession: SessionFactory
     // Decode session + format desc. Both live on the decode queue.
     nonisolated(unsafe) var decompressionSession: VTDecompressionSession?
     nonisolated(unsafe) var formatDescription: CMVideoFormatDescription?
