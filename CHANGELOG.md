@@ -6,8 +6,10 @@
 
 - Hold Menu, Options or Start for a moment, then release it to use the controller
   as a mouse. Hold and release again to return to the game.
-- Nintendo controllers match the PC's button positions by default. “Use Nintendo
-  button layout” in Input settings matches their labels instead, saved per pad type.
+- Nintendo controllers send each button in the position of an Xbox controller's
+  by default. “Use Nintendo button layout” in Input settings matches A, B, X and Y
+  by their labels for all Nintendo-layout controllers. Single Joy-Con sides keep
+  their positional layout.
 - Steam shows its own logo in the launcher, the menu and the PC list, instead
   of a generic controller.
 

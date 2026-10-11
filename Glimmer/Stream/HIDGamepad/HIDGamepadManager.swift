@@ -8,6 +8,7 @@ import IOKit.hid
 @MainActor
 final class HIDGamepadManager {
     static let shared = HIDGamepadManager()
+    static let devicesDidChange = Notification.Name("GlimmerHIDGamepadDevicesDidChange")
     private let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
     private var clients = 0
     private var readers = 0
@@ -152,6 +153,7 @@ final class HIDGamepadManager {
         if readers > 0 { pad.startReading() }
         Diag.notice("HID attached: \(pad.name) \(pad.hardwareID) \(pad.transport) registry=\(id) "
             + "mapping=\(pad.mappingSource)", "Controller")
+        NotificationCenter.default.post(name: Self.devicesDidChange, object: nil)
         onAttach?(pad)
         if access != kIOHIDAccessTypeGranted { onPermissionNeeded?(pad) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.recheckOwnership() }
@@ -194,6 +196,7 @@ final class HIDGamepadManager {
 
     private func remove(_ id: UInt64) {
         guard let pad = devices.removeValue(forKey: id) else { return }
+        NotificationCenter.default.post(name: Self.devicesDidChange, object: nil)
         onDetach?(pad)
         pad.close()
     }

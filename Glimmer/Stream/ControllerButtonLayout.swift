@@ -4,21 +4,19 @@
 import Foundation
 import GameController
 
-struct NintendoControllerType: Identifiable, Hashable {
-    let id: String
+struct NintendoControllerType: Equatable {
     let name: String
-    var defaultsKey: String { "nintendoButtonLayout." + id }
 
     static func identify(category: String, name: String, bottomSymbol: String? = nil) -> Self? {
         let text = (category + " " + name).lowercased()
         let compact = text.filter { $0.isLetter || $0.isNumber }
         if compact.contains("joycon") {
-            let side = text.contains("(l)") || category.hasSuffix("Left") ? "left"
-                : text.contains("(r)") || category.hasSuffix("Right") ? "right" : "pair"
-            return Self(id: "joycon." + side, name: side == "pair" ? "Joy-Con" : "Joy-Con (\(side.capitalized))")
+            guard !text.contains("(l)"), !text.contains("(r)"),
+                  !compact.contains("joyconleft"), !compact.contains("joyconright") else { return nil }
+            return Self(name: "Joy-Con")
         }
         if compact.contains("switchpro") {
-            return Self(id: "switchpro", name: "Switch Pro Controller")
+            return Self(name: "Switch Pro Controller")
         }
         guard !text.contains("xbox") else { return nil }
         let families = ["sn30", "sf30", "sfc30", "nes30", "fc30", "snes", "nintendo", "switch"]
@@ -26,8 +24,7 @@ struct NintendoControllerType: Identifiable, Hashable {
         let known = (families + eightBitDo).contains(where: compact.contains)
         guard known || bottomSymbol?.hasPrefix("b.") == true else { return nil }
         let typeName = name.isEmpty ? category : name
-        let key = typeName.lowercased().filter { $0.isLetter || $0.isNumber }
-        return Self(id: key, name: typeName)
+        return Self(name: typeName)
     }
 
     @MainActor static func identify(_ controller: GCController) -> Self? {
@@ -38,11 +35,13 @@ struct NintendoControllerType: Identifiable, Hashable {
     @MainActor static func identify(_ pad: HIDGamepadDevice) -> Self? {
         identify(category: "", name: pad.mapping.isHeuristic ? pad.name : pad.mapping.name)
     }
-
-    func usesLabels(in defaults: UserDefaults = .standard) -> Bool { defaults.bool(forKey: defaultsKey) }
 }
 
 enum ControllerButtonLayout {
+    static let defaultsKey = "nintendoButtonLayout"
+
+    static func usesLabels(in defaults: UserDefaults = .standard) -> Bool { defaults.bool(forKey: defaultsKey) }
+
     // GameController and SDL's macOS DB both expose position; swap only the outgoing PC buttons.
     static func apply(_ buttons: Int32, useNintendoLabels: Bool) -> Int32 {
         guard useNintendoLabels else { return buttons }
@@ -50,6 +49,28 @@ enum ControllerButtonLayout {
         let faceMask = pairs.reduce(Int32(0)) { $0 | $1.0 | $1.1 }
         return pairs.reduce(buttons & ~faceMask) { result, pair in
             result | (buttons & pair.0 != 0 ? pair.1 : 0) | (buttons & pair.1 != 0 ? pair.0 : 0)
+        }
+    }
+}
+
+extension InputForwarder {
+    func refreshNintendoLayout() {
+        useNintendoLabels = nintendoLayoutProvider()
+    }
+
+    func observeNintendoLayout() {
+        refreshNintendoLayout()
+        guard nintendoLayoutObserver == nil else { return }
+        nintendoLayoutObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.refreshNintendoLayout() } }
+    }
+
+    func registerNintendoController(slot: UInt8, type: NintendoControllerType?, bottomSymbol: String? = nil) {
+        nintendoControllerTypes[slot] = type
+        observeNintendoLayout()
+        if type != nil, let bottomSymbol {
+            Diag.notice("controller \(slot): Nintendo buttonA.sfSymbolsName=\(bottomSymbol)", "Controller")
         }
     }
 }

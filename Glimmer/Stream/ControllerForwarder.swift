@@ -39,7 +39,6 @@ extension InputForwarder {
     struct AttachedController {
         let slot: UInt8           // 0..15, used as `controllerNumber`
         let arrival: ControllerArrival
-        let nintendoType: NintendoControllerType?
         weak var controller: GCController?
         let priorPlayerIndex: GCControllerPlayerIndex
         let priorOptionsGesture: GCControllerElement.SystemGestureState?
@@ -101,6 +100,7 @@ extension InputForwarder {
                     } else {
                         // Controller already deallocated; just clear bookkeeping.
                         if let state = self.attachedControllers.removeValue(forKey: id) {
+                            self.nintendoControllerTypes[state.slot] = nil
                             self.resetControllerMouse(slot: state.slot)
                             self.releaseControllerTouches(slot: state.slot)
                             self.dualSenseRouting.syncControllers()
@@ -144,6 +144,8 @@ extension InputForwarder {
             return
         }
         gamepadMask |= UInt16(1) << slot
+        registerNintendoController(slot: slot, type: NintendoControllerType.identify(gamepad),
+                                   bottomSymbol: gamepad.extendedGamepad?.buttonA.sfSymbolsName ?? "unavailable")
         let priorPlayerIndex = gamepad.playerIndex
         let priorOptionsGesture = gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState
         let priorHomeGesture: GCControllerElement.SystemGestureState?
@@ -252,7 +254,6 @@ extension InputForwarder {
 
         let state = AttachedController(
             slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
-            nintendoType: NintendoControllerType.identify(gamepad),
             controller: gamepad, priorPlayerIndex: priorPlayerIndex,
             priorOptionsGesture: priorOptionsGesture, priorHomeGesture: priorHomeGesture, retainedHID: useHID
         )
@@ -291,6 +292,7 @@ extension InputForwarder {
     func detach(gamepad: GCController) {
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
         state.restoreSystemState()
+        nintendoControllerTypes[state.slot] = nil
         resetControllerMouse(slot: state.slot)
         dualSenseRouting.disconnectController(ObjectIdentifier(gamepad))
         dualSenseRouting.unregister(slot: state.slot)
@@ -369,6 +371,7 @@ extension InputForwarder {
             }
         }
         attachedControllers.removeAll()
+        nintendoControllerTypes.removeAll()
         touchpadStates.removeAll()
         gamepadMask = 0
         announcedControllers.removeAll()
@@ -378,6 +381,7 @@ extension InputForwarder {
         let center = NotificationCenter.default
         if let observer = connectObserver { center.removeObserver(observer); connectObserver = nil }
         if let observer = disconnectObserver { center.removeObserver(observer); disconnectObserver = nil }
+        if let observer = nintendoLayoutObserver { center.removeObserver(observer); nintendoLayoutObserver = nil }
     }
 
     func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
@@ -504,7 +508,6 @@ extension InputForwarder {
         guard let gamepad = state.controller else { return }
         let slot = state.slot
         let routesHID = state.retainedHID
-        let nintendoType = state.nintendoType
         // GameController invokes this on the main queue; assume MainActor so
         // Swift 6 strict concurrency is satisfied.
         gamepad.extendedGamepad?.valueChangedHandler = { [weak self] (pad, _) in
@@ -516,7 +519,7 @@ extension InputForwarder {
                     InputDeliverStamp.shared.stamp(slot: Int(slot), nanos: DispatchTime.now().uptimeNanoseconds)
                 }
                 if routesHID { self.dualSenseRouting.gc(pad: pad) }
-                self.sendGamepadUpdate(pad: pad, slot: slot, type: nintendoType)
+                self.sendGamepadUpdate(pad: pad, slot: slot)
             }
         }
         // Raw-HID centre buttons (Options/Create/Mute): GameController never fires
@@ -550,7 +553,7 @@ extension InputForwarder {
             ControllerMotion.shared.setInputEnabled(
                 controllerMouseStates[state.slot]?.isMouse != true, slot: state.slot)
             guard let pad = state.controller?.extendedGamepad else { continue }
-            sendGamepadUpdate(pad: pad, slot: state.slot, type: state.nintendoType)
+            sendGamepadUpdate(pad: pad, slot: state.slot)
         }
         for state in attachedHIDControllers.values { pushHID(state.device) }
     }

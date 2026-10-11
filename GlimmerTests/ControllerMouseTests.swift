@@ -154,7 +154,7 @@ struct ControllerMouseTests {
     @Test func mouseMappingAndToastsArePositionalAndIndependentPerSlot() {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
-        var notifications: [Bool] = []
+        var notifications: [String] = []
         forwarder.onControllerMouseChanged = { notifications.append($0) }
         toggle(forwarder)
         #expect(backend.calls.last?.buttons == 0)
@@ -179,7 +179,45 @@ struct ControllerMouseTests {
         #expect(backend.calls.last?.num == 1)
         #expect(backend.calls.last?.buttons == StreamProtocol.Y_FLAG)
         toggle(forwarder, now: 20)
-        #expect(notifications == [true, false])
+        #expect(notifications == ["Controller 1 is now a mouse. Hold Menu to go back.",
+                                  "Controller 1 is back in the game."])
+    }
+
+    @Test func unchangedClicksAndNormalGamepadFramesSkipMouseButtonWork() {
+        let (forwarder, backend) = rig()
+        defer { forwarder.detach() }
+        #expect(!forwarder.updateControllerMouseClicks(slot: 0, clicks: []))
+        forwarder.routeControllerMouse(slot: 0, buttons: StreamProtocol.A_FLAG,
+                                       analog: neutral, chordHeld: false)
+        #expect(forwarder.controllerMouseStates[0]?.clicks.isEmpty == true)
+        #expect(backend.pointer.isEmpty)
+        toggle(forwarder)
+        let clicks: Set<Int32> = [StreamProtocol.BUTTON_LEFT]
+        let changed = forwarder.updateControllerMouseClicks(slot: 0, clicks: clicks)
+        #expect(changed)
+        #expect(!forwarder.updateControllerMouseClicks(slot: 0, clicks: clicks))
+        #expect(backend.pointer.count == 1)
+        #expect(forwarder.updateControllerMouseClicks(slot: 0, clicks: []))
+        #expect(!forwarder.updateControllerMouseClicks(slot: 0, clicks: []))
+        #expect(backend.pointer.count == 2)
+    }
+
+    @Test func mouseToastNamesThePadOnlyWhenMoreThanOneIsConnected() throws {
+        let (forwarder, _) = rig()
+        defer { forwarder.detach() }
+        let controller = GCController.withExtendedGamepad()
+        forwarder.attach(gamepad: controller)
+        let attached = try #require(forwarder.attachedControllers[ObjectIdentifier(controller)])
+        let name = controller.vendorName ?? controller.productCategory
+        #expect(forwarder.controllerMouseMessage(enabled: true, slot: attached.slot)
+            == "\(name) is now a mouse. Hold Menu to go back.")
+        #expect(forwarder.controllerMouseMessage(enabled: false, slot: attached.slot)
+            == "\(name) is back in the game.")
+        forwarder.gamepadMask = 1 << attached.slot
+        #expect(forwarder.controllerMouseMessage(enabled: true, slot: attached.slot)
+            == "Controller is now a mouse. Hold Menu to go back.")
+        #expect(forwarder.controllerMouseMessage(enabled: false, slot: attached.slot)
+            == "Controller is back in the game.")
     }
 
     @Test func stickPollingMovesLeftStickAndScrollsRightStickUntilNeutral() {
@@ -265,11 +303,13 @@ struct ControllerMouseTests {
         window.leaveHintBanner.announce = { announcements.append($0) }
         window.showStreamToast("Leave hint", for: 5)
         let generation = window.streamToastGeneration
-        window.showControllerMouseMode(true)
-        #expect(window.leaveHintBanner.displayedText == "Controller is now a mouse")
+        let mouse = "Controller is now a mouse. Hold Menu to go back."
+        let game = "Controller is back in the game."
+        window.showControllerMouseMode(mouse)
+        #expect(window.leaveHintBanner.displayedText == mouse)
         #expect(window.streamToastGeneration > generation)
-        window.showControllerMouseMode(false)
-        #expect(window.leaveHintBanner.displayedText == "Controller is back to a controller")
-        #expect(announcements == ["Leave hint", "Controller is now a mouse", "Controller is back to a controller"])
+        window.showControllerMouseMode(game)
+        #expect(window.leaveHintBanner.displayedText == game)
+        #expect(announcements == ["Leave hint", mouse, game])
     }
 }

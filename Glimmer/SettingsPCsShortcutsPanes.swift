@@ -164,6 +164,7 @@ struct PCTile: View {
 struct ShortcutsPane: View {
     @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
+    @State private var nintendoPresence = NintendoControllerPresence()
     // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
     // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
     @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
@@ -268,7 +269,7 @@ struct ShortcutsPane: View {
                 }
             }
 
-            NintendoLayoutSettings()
+            NintendoLayoutSettings(isConnected: nintendoPresence.isConnected)
 
             Section("macOS keys") {
                 Toggle(isOn: $model.captureSysKeys) {
@@ -306,6 +307,8 @@ struct ShortcutsPane: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { nintendoPresence.start() }
+        .onDisappear { nintendoPresence.stop() }
         .sheet(isPresented: $showChordCapture) {
             ChordCaptureSheet().environment(model)
         }

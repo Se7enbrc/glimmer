@@ -4,47 +4,55 @@
 import GameController
 import SwiftUI
 
-struct NintendoLayoutSettings: View {
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let types = Self.connectedTypes()
-            if !types.isEmpty {
-                Section("Controller buttons") {
-                    ForEach(types) { type in NintendoLayoutToggle(type: type) }
-                }
-            }
-        }
-        .onAppear { HIDGamepadManager.shared.retain(reading: false) }
-        .onDisappear { HIDGamepadManager.shared.release(reading: false) }
-    }
+@MainActor @Observable
+final class NintendoControllerPresence {
+    private(set) var isConnected = false
+    private var observers: [NSObjectProtocol] = []
 
-    static func connectedTypes(native: [NintendoControllerType]? = nil,
-                               hid: [NintendoControllerType]? = nil) -> [NintendoControllerType] {
+    static func connected(native: [NintendoControllerType]? = nil, hid: [NintendoControllerType]? = nil) -> Bool {
         let native = native ?? GCController.controllers().compactMap(NintendoControllerType.identify)
         let hid = hid ?? HIDGamepadManager.shared.devices.values.compactMap(NintendoControllerType.identify)
-        let grouped = Dictionary(grouping: native + hid, by: \.id)
-        return grouped.values.compactMap(\.first).sorted { $0.name < $1.name }
+        return !native.isEmpty || !hid.isEmpty
+    }
+
+    func start(connected: @escaping @MainActor () -> Bool = { NintendoControllerPresence.connected() }) {
+        guard observers.isEmpty else { return }
+        let names: [Notification.Name] = [.GCControllerDidConnect, .GCControllerDidDisconnect,
+                                           HIDGamepadManager.devicesDidChange]
+        observers = names.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.isConnected = connected() }
+            }
+        }
+        isConnected = connected()
+    }
+
+    func stop() {
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers.removeAll()
     }
 }
 
-private struct NintendoLayoutToggle: View {
-    let type: NintendoControllerType
-    @AppStorage private var useLabels: Bool
-
-    init(type: NintendoControllerType) {
-        self.type = type
-        _useLabels = AppStorage(wrappedValue: false, type.defaultsKey)
-    }
+struct NintendoLayoutSettings: View {
+    let isConnected: Bool
+    @AppStorage(ControllerButtonLayout.defaultsKey) private var useLabels = false
 
     var body: some View {
-        Toggle(isOn: $useLabels) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Use Nintendo button layout")
-                Text("\(type.name): match A, B, X and Y by their labels. Off matches their positions on the PC.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        Group {
+            if isConnected {
+                Section("Controller buttons") {
+                    Toggle(isOn: $useLabels) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Use Nintendo button layout")
+                            Text("Match A, B, X and Y by their labels. "
+                                + "Off sends each button in the position of an Xbox controller's.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityLabel("Use Nintendo button layout")
+                }
             }
         }
-        .accessibilityLabel("Use Nintendo button layout for \(type.name)")
     }
 }

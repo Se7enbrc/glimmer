@@ -39,8 +39,8 @@ extension InputForwarder {
     /// FULL-state push from the GameController valueChangedHandler - the SINGLE
     /// source of truth for sticks/triggers/face buttons/touchpad. Pushes the
     /// merged multiController state AND forwards the touchpad surface.
-    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8, type: NintendoControllerType? = nil) {
-        guard pushControllerState(pad: pad, slot: slot, type: type) else { return }
+    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8) {
+        guard pushControllerState(pad: pad, slot: slot) else { return }
         // Forward the touchpad surface (finger contacts) as host touch events.
         // ONLY from this GameController path - touchpad data comes through
         // GameController, so the raw-HID center-button path must NOT re-run this
@@ -74,13 +74,10 @@ extension InputForwarder {
         }
     }
 
-    /// Build + push the current multiController state for `slot`. Returns false if
-    /// the push was short-circuited (not ready, or the quit chord fired). The
-    /// touchpad surface is NOT forwarded here - callers that own the GameController
-    /// frame do that separately.
+    /// Only the GameController frame owns touchpad forwarding, so centre-button edges cannot double-feed it.
+    /// Returns false when input is gated, the quit chord is held, or the pad is a mouse.
     @discardableResult
-    private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8,
-                                     type: NintendoControllerType? = nil) -> Bool {
+    private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
         guard forwardsControllerEvents else { return false }
         let buttons = pressedButtonFlags(pad: pad)
 
@@ -107,7 +104,8 @@ extension InputForwarder {
             _ = InputDeliverStamp.shared.take(slot: Int(slot))
             return false
         }
-        let mapped = ControllerButtonLayout.apply(buttons, useNintendoLabels: type.map(nintendoLayoutProvider) ?? false)
+        let mapped = ControllerButtonLayout.apply(
+            buttons, useNintendoLabels: useNintendoLabels && nintendoControllerTypes[slot] != nil)
         let rc = backend?.sendMultiController(
             num: Int16(slot), mask: Int16(bitPattern: gamepadMask), buttons: mapped, analog: analog
         ) ?? -2

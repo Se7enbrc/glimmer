@@ -83,8 +83,8 @@ extension StreamWindow {
         captureHintBanner.setVisible(false)
     }
 
-    func showControllerMouseMode(_ enabled: Bool) {
-        showStreamToast(enabled ? "Controller is now a mouse" : "Controller is back to a controller", for: 2)
+    func showControllerMouseMode(_ message: String) {
+        showStreamToast(message, for: 2)
     }
 
     // Mode changes replace the teaching toast so transient messages occupy one place.

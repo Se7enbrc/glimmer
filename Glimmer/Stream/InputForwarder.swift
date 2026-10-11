@@ -303,8 +303,11 @@ public final class InputForwarder {
 
     var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
     var controllerMouseTask: Task<Void, Never>?
-    var onControllerMouseChanged: (@MainActor (Bool) -> Void)?
-    var nintendoLayoutProvider: @MainActor (NintendoControllerType) -> Bool = { $0.usesLabels() }
+    var onControllerMouseChanged: (@MainActor (String) -> Void)?
+    var nintendoLayoutProvider: @MainActor () -> Bool = { ControllerButtonLayout.usesLabels() }
+    var useNintendoLabels = false
+    var nintendoLayoutObserver: NSObjectProtocol?
+    var nintendoControllerTypes: [UInt8: NintendoControllerType] = [:]
 
     /// What the PC may still hold in each slot. Only a stream start retires an entry,
     /// since a removal sent into a link that is already dead never arrives.

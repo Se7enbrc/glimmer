@@ -50,10 +50,12 @@ extension InputForwarder {
         let previous = state.buttons
         let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now)
         controllerMouseStates[slot] = state
-        let clicks = state.isMouse && !chordHeld ? Set(Self.controllerMouseClicks.compactMap {
-            buttons & $0.0 != 0 ? $0.1 : nil
-        }) : []
-        updateControllerMouseClicks(slot: slot, clicks: clicks)
+        if state.isMouse || !state.clicks.isEmpty {
+            let clicks = state.isMouse && !chordHeld ? Set(Self.controllerMouseClicks.compactMap {
+                buttons & $0.0 != 0 ? $0.1 : nil
+            }) : []
+            updateControllerMouseClicks(slot: slot, clicks: clicks)
+        }
         if toggled {
             releaseControllerTouches(slot: slot)
             ControllerMotion.shared.setInputEnabled(!state.isMouse && forwardsControllerEvents, slot: slot)
@@ -61,11 +63,19 @@ extension InputForwarder {
                                                   buttons: 0, analog: Self.neutralControllerAnalog) ?? -2
             record("LiSendMultiControllerEvent(mouse toggle)", rc)
             Diag.info("controller \(slot): mouse mode \(state.isMouse ? "on" : "off")", "Controller")
-            onControllerMouseChanged?(state.isMouse)
+            onControllerMouseChanged?(controllerMouseMessage(enabled: state.isMouse, slot: slot))
         }
         if state.isMouse && !chordHeld { sendControllerDpadScroll(buttons: buttons & ~previous) }
         updateControllerMousePolling()
         return state.isMouse
+    }
+
+    func controllerMouseMessage(enabled: Bool, slot: UInt8) -> String {
+        let native = attachedControllers.values.first { $0.slot == slot }?.controller
+        let hid = attachedHIDControllers.values.first { $0.slot == slot }?.device
+        let name = gamepadMask.nonzeroBitCount > 1
+            ? native?.vendorName ?? native?.productCategory ?? hid?.name ?? "Controller \(slot + 1)" : "Controller"
+        return enabled ? "\(name) is now a mouse. Hold Menu to go back." : "\(name) is back in the game."
     }
 
     func sendControllerDpadScroll(buttons: Int32) {
@@ -81,10 +91,13 @@ extension InputForwarder {
         if x != 0 { record("LiSendHighResHScrollEvent(controller)", backend?.sendHScroll(x) ?? -2) }
     }
 
-    func updateControllerMouseClicks(slot: UInt8, clicks: Set<Int32>) {
+    @discardableResult
+    func updateControllerMouseClicks(slot: UInt8, clicks: Set<Int32>) -> Bool {
+        guard clicks != (controllerMouseStates[slot]?.clicks ?? []) else { return false }
         let before = controllerMouseButtons.union(heldMouseButtons)
         controllerMouseStates[slot]?.clicks = clicks
         sendMouseButtonEdges(before: before, after: controllerMouseButtons.union(heldMouseButtons))
+        return true
     }
 
     var controllerMouseButtons: Set<Int32> {
