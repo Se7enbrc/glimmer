@@ -424,6 +424,27 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertFalse((self.runner / "glimmer-verified-12-1-signed").exists())
 
 class ReleaseWorkflowTests(unittest.TestCase):
+    def test_final_tag_uses_candidate_app_identity_after_verification_before_publication(self):
+        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
+        prepare = workflow.index("run: scripts/ci-release.sh prepare-promotion")
+        mint = workflow.index("- name: Mint a scoped release tag token")
+        tag = workflow.index("- name: Create final version tag at the verified candidate")
+        publish = workflow.index("- name: Promote tested bytes to stable")
+        self.assertLess(prepare, mint)
+        self.assertLess(mint, tag)
+        self.assertLess(tag, publish)
+        step = workflow[mint:publish]
+        self.assertEqual(step.count("if: inputs.operation == 'promote'"), 2)
+        self.assertIn("secrets.GLIMMER_RC_APP_CLIENT_ID", step)
+        self.assertIn("secrets.GLIMMER_RC_APP_PRIVATE_KEY", step)
+        self.assertIn("permission-contents: write", step)
+        self.assertIn("permission-workflows: write", step)
+        self.assertIn("GH_TOKEN: ${{ steps.tag-app.outputs.token }}", step)
+        self.assertIn("gh auth setup-git", step)
+        self.assertIn('git config user.name "${APP_SLUG}[bot]"', step)
+        self.assertIn('git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"', step)
+        self.assertIn('python3 scripts/promote-release.py tag "$RC_TAG" "$CANDIDATE_SHA"', step)
+
     def test_promotion_validates_with_a_token_before_publishing_credentials(self):
         workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
         step = workflow.split("- name: Promote tested bytes to stable", 1)[1].split("- name:", 1)[0]

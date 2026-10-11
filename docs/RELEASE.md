@@ -125,11 +125,14 @@ published digests. Main must have the same shipped inputs as the candidate: the
 app, login item and helper sources, the Xcode project and package pins, the
 Makefile and the build, signing and packaging scripts (`SHIPPED` in
 `scripts/promote-release.py`). Release tooling, docs and tests may move on. The
-workflow marks the existing release stable and latest, removes the item's `rc`
-channel, and updates Homebrew. It never rebuilds, re-signs or repackages. The
-original candidate tag and asset URLs stay in place; the stable release title
-uses the final marketing version. The appcast keeps the exact ZIP URL, signature
-and size that the candidate used.
+workflow first creates an annotated final marketing-version tag at the exact
+`candidate_sha`, using the release GitHub App. An existing tag at that commit is
+already done; a tag at a different commit stops promotion. It then marks the
+existing release stable and latest, removes the item's `rc` channel, and updates
+Homebrew. It never rebuilds, re-signs or repackages. The original candidate tag
+and asset URLs stay in place; the stable release title uses the final marketing
+version. The appcast keeps the exact ZIP URL, signature and size that the
+candidate used.
 
 Release notes come from the version's `CHANGELOG.md` section: a flat list of
 changes players will notice. The publisher includes these notes in GitHub and
@@ -217,8 +220,11 @@ finish before Apple signing credentials are exposed. Signing reuses those
 outputs; it cannot compile. Completion records bind each phase to this run and
 SHA. Compiler warnings fail both Xcode and standalone helper builds. Pull
 requests receive no release secrets, and releases use no pull-request artifacts
-or restored caches. Promotion receives only the scoped publication token, with
-no Apple signing material or Sparkle private key.
+or restored caches. Promotion receives the release GitHub App token for the
+final tag and the scoped publication token, with no Apple signing material or
+Sparkle private key. Make the existing `GLIMMER_RC_APP_CLIENT_ID` and
+`GLIMMER_RC_APP_PRIVATE_KEY` secrets available in the `release` environment as
+well as `rc-cut`; the App token needs Contents and Workflows write permission.
 
 Store these nine values as **environment secrets**, not repository secrets:
 

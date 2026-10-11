@@ -169,14 +169,35 @@ def publish(tag, sha):
                  str(appcast), f"appcast: promote Glimmer {proof['short']}"], "appcast changed; retry the promotion")
 
 
+def final_tag(tag, sha):
+    proof = validate(tag, sha)
+    short = proof["short"]
+    ref = f"refs/tags/{short}"
+    lines = command(["git", "ls-remote", "origin", ref, f"{ref}^{{}}"], "cannot read final tag").splitlines()
+    refs = dict(line.split("\t", 1)[::-1] for line in lines)
+    target = refs.get(f"{ref}^{{}}", refs.get(ref))
+    if target:
+        if target != sha:
+            raise ValueError(f"final tag {short} identifies a different commit; tags are never replaced")
+        return
+    local = command(["git", "tag", "--list", short], "cannot read local final tag").strip()
+    if local:
+        target = command(["git", "rev-parse", f"{ref}^{{commit}}"], "cannot resolve local final tag").strip()
+        if target != sha:
+            raise ValueError(f"local final tag {short} identifies a different commit; tags are never replaced")
+    else:
+        command(["git", "tag", "-a", short, sha, "-m", short], "cannot create final tag")
+    command(["git", "push", "origin", ref], "cannot push final tag; check its target before retrying")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("prepare", "validate", "publish"))
+    parser.add_argument("phase", choices=("prepare", "validate", "tag", "publish"))
     parser.add_argument("tag")
     parser.add_argument("sha")
     args = parser.parse_args()
     try:
-        {"prepare": prepare, "validate": validate, "publish": publish}[args.phase](args.tag, args.sha)
+        {"prepare": prepare, "validate": validate, "tag": final_tag, "publish": publish}[args.phase](args.tag, args.sha)
     except (ValueError, KeyError, StopIteration, OSError, ET.ParseError,
             subprocess.TimeoutExpired) as error:
         parser.exit(1, f"ERR: {error}\n")

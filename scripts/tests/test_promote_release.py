@@ -22,6 +22,9 @@ sys.path.insert(0, str(SCRIPTS))
 SPEC = importlib.util.spec_from_file_location("promote_release", SCRIPTS / "promote-release.py")
 PROMOTE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PROMOTE)
+SPEC = importlib.util.spec_from_file_location("release_candidate", SCRIPTS / "release-candidate.py")
+CANDIDATE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(CANDIDATE)
 SHA = "b" * 40
 TAG = "2026.10.6-rc.1"
 SHORT = "2026.10.6"
@@ -38,6 +41,8 @@ class CandidatePromotionTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
         self.calls = []
+        self.remote_tags = {}
+        self.local_tags = {}
         self.sha = SHA
         self.source_changed = False
         self.attest_failure = False
@@ -60,6 +65,9 @@ class CandidatePromotionTests(unittest.TestCase):
 
     def command(self, args, message):
         self.calls.append(args)
+        if args[:2] in (["git", "ls-remote"], ["git", "tag"], ["git", "push"]) or (
+                args[:2] == ["git", "rev-parse"] and args[2].startswith("refs/tags/")):
+            return self.tag_command(args, message)
         if args[:2] == ["git", "fetch"]:
             self.assertIn("+refs/heads/appcast:refs/remotes/origin/appcast", args)
             return ""
@@ -110,15 +118,114 @@ class CandidatePromotionTests(unittest.TestCase):
             return self.feed_head
         raise AssertionError(args)
 
+    def tag_command(self, args, message):
+        ref = f"refs/tags/{SHORT}"
+        if args[:2] == ["git", "ls-remote"]:
+            self.assertEqual(args[2:], ["origin", ref, f"{ref}^{{}}"])
+            return "".join(f"{target}\t{name}\n" for name, target in self.remote_tags.items())
+        if args[:3] == ["git", "tag", "--list"]:
+            return SHORT if SHORT in self.local_tags else ""
+        if args[:2] == ["git", "rev-parse"]:
+            self.assertEqual(args[2], f"{ref}^{{commit}}")
+            return self.local_tags[SHORT]
+        if args[:3] == ["git", "tag", "-a"]:
+            self.assertEqual(args, ["git", "tag", "-a", SHORT, SHA, "-m", SHORT])
+            self.assertNotIn(SHORT, self.local_tags)
+            self.local_tags[SHORT] = SHA
+            return ""
+        if args[:2] == ["git", "push"]:
+            self.assertEqual(args, ["git", "push", "origin", ref])
+            self.remote_tags.update({ref: "d" * 40, f"{ref}^{{}}": self.local_tags[SHORT]})
+            return ""
+        raise AssertionError(args)
+
     def test_promotes_same_tag_and_exact_verified_bytes_without_builds_or_signing(self):
         PROMOTE.prepare(TAG, SHA)
         before = {name: (PROMOTE.directory() / name).read_bytes() for name in self.assets}
+        PROMOTE.final_tag(TAG, SHA)
         PROMOTE.publish(TAG, SHA)
         self.assertEqual(before, {name: (PROMOTE.directory() / name).read_bytes() for name in self.assets})
         self.assertFalse(self.data["prerelease"])
         self.assertNotIn("<sparkle:channel>", self.feed)
         self.assertIn(f"/releases/download/{TAG}/", self.feed)
         self.assertFalse(any(args[0] in {"make", "codesign", "ditto", "zip", "xcodebuild"} for args in self.calls))
+
+    def test_final_tag_is_annotated_at_candidate_sha_before_release_becomes_stable(self):
+        PROMOTE.prepare(TAG, SHA)
+        PROMOTE.final_tag(TAG, SHA)
+        self.assertEqual(self.remote_tags[f"refs/tags/{SHORT}^{{}}"], SHA)
+        self.assertNotEqual(SHA, os.environ["EXPECTED_SHA"])
+        self.assertTrue(self.data["prerelease"])
+        PROMOTE.publish(TAG, SHA)
+        self.assertEqual(self.data["tag_name"], TAG)
+        self.assertFalse(self.data["prerelease"])
+
+    def test_final_tag_rerun_accepts_peeled_candidate_without_creating_or_pushing(self):
+        PROMOTE.prepare(TAG, SHA)
+        PROMOTE.final_tag(TAG, SHA)
+        self.assertEqual(self.remote_tags[f"refs/tags/{SHORT}^{{}}"], SHA)
+        PROMOTE.publish(TAG, SHA)
+        self.calls.clear()
+        PROMOTE.final_tag(TAG, SHA)
+        self.assertFalse(any(args[:2] in (["git", "tag"], ["git", "push"]) for args in self.calls))
+
+    def test_conflicting_final_tag_refuses_promotion_without_replacing_it(self):
+        PROMOTE.prepare(TAG, SHA)
+        for target in ({f"refs/tags/{SHORT}": "c" * 40},
+                       {f"refs/tags/{SHORT}": "d" * 40, f"refs/tags/{SHORT}^{{}}": "c" * 40}):
+            with self.subTest(target=target):
+                self.remote_tags = target.copy()
+                self.calls.clear()
+                with self.assertRaisesRegex(ValueError, "different commit; tags are never replaced"):
+                    PROMOTE.final_tag(TAG, SHA)
+                self.assertEqual(self.remote_tags, target)
+                self.assertTrue(self.data["prerelease"])
+                self.assertFalse(any(args[:2] in (["git", "tag"], ["git", "push"]) for args in self.calls))
+
+    def test_final_tag_cannot_be_created_without_valid_provenance(self):
+        PROMOTE.prepare(TAG, SHA)
+        (PROMOTE.directory() / f"Glimmer-{SHORT}.zip").write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "bytes changed"):
+            PROMOTE.final_tag(TAG, SHA)
+        self.assertFalse(self.remote_tags)
+        self.assertFalse(self.local_tags)
+
+    def test_final_tag_retry_pushes_existing_local_tag_and_refuses_local_conflict(self):
+        PROMOTE.prepare(TAG, SHA)
+        self.local_tags[SHORT] = "c" * 40
+        with self.assertRaisesRegex(ValueError, "local final tag.*different commit"):
+            PROMOTE.final_tag(TAG, SHA)
+        self.assertFalse(self.remote_tags)
+        self.local_tags[SHORT] = SHA
+        self.calls.clear()
+        PROMOTE.final_tag(TAG, SHA)
+        self.assertEqual(self.remote_tags[f"refs/tags/{SHORT}^{{}}"], SHA)
+        self.assertFalse(any(args[:3] == ["git", "tag", "-a"] for args in self.calls))
+
+    def test_failed_tag_push_leaves_release_unpublished_and_can_retry(self):
+        PROMOTE.prepare(TAG, SHA)
+        real = self.command
+        def failed_push(args, message):
+            if args[:2] == ["git", "push"]:
+                raise ValueError(message)
+            return real(args, message)
+        with patch.object(PROMOTE, "command", side_effect=failed_push), \
+                self.assertRaisesRegex(ValueError, "cannot push final tag"):
+            PROMOTE.final_tag(TAG, SHA)
+        self.assertTrue(self.data["prerelease"])
+        self.assertFalse(self.remote_tags)
+        PROMOTE.final_tag(TAG, SHA)
+        self.assertEqual(self.remote_tags[f"refs/tags/{SHORT}^{{}}"], SHA)
+
+    def test_candidate_guard_fires_after_promotion_creates_the_final_tag(self):
+        PROMOTE.prepare(TAG, SHA)
+        PROMOTE.final_tag(TAG, SHA)
+        PROMOTE.publish(TAG, SHA)
+        config = f"MARKETING_VERSION = {SHORT}\nCURRENT_PROJECT_VERSION = {BUILD}\n"
+        refs = "".join(f"{target}\t{name}\n" for name, target in self.remote_tags.items())
+        with patch.object(CANDIDATE, "output", side_effect=["", config, refs]), \
+                self.assertRaisesRegex(ValueError, f"{SHORT} already has a final tag; bump MARKETING_VERSION"):
+            CANDIDATE.cut(False, ci_sha=SHA, pr=114)
 
     def test_wrong_source_or_changed_main_stops_before_download_or_publication(self):
         for changed in ("tag", "tree"):
@@ -253,10 +360,11 @@ class CandidatePromotionTests(unittest.TestCase):
             PROMOTE.command(["x"], "failed")
 
     def test_main_reports_errors_on_stderr_with_exit_one_and_success_on_stdout(self):
-        for phase, fails in (("prepare", True), ("validate", False)):
+        for phase, fails in (("prepare", True), ("validate", False), ("tag", False)):
             err, out = io.StringIO(), io.StringIO()
-            fake = {"prepare": Mock(side_effect=ValueError("boom")), "validate": Mock()}
+            fake = {"prepare": Mock(side_effect=ValueError("boom")), "validate": Mock(), "tag": Mock()}
             with patch.object(PROMOTE, "prepare", fake["prepare"]), patch.object(PROMOTE, "validate", fake["validate"]), \
+                    patch.object(PROMOTE, "final_tag", fake["tag"]), \
                     patch.object(sys, "argv", ["x", phase, TAG, SHA]), \
                     contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
                 if fails:
@@ -266,8 +374,8 @@ class CandidatePromotionTests(unittest.TestCase):
                     self.assertEqual(err.getvalue(), "ERR: boom\n")
                 else:
                     PROMOTE.main()
-                    self.assertIn("validate succeeded", out.getvalue())
-                    fake["validate"].assert_called_once_with(TAG, SHA)
+                    self.assertIn(f"{phase} succeeded", out.getvalue())
+                    fake[phase].assert_called_once_with(TAG, SHA)
 
 
 if __name__ == "__main__":
