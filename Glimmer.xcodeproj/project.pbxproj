@@ -433,6 +433,7 @@
 		DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */; };
 		DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000002 /* HostsPersistenceTests.swift */; };
 		DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000004 /* StoragePersistenceTests.swift */; };
+		5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */; };
 		DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */; };
 		DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609233300000002 /* ControllerArrivalTests.swift */; };
 		DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */; };
@@ -945,6 +946,7 @@
 		DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioCushionMemoryTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610101000000002 /* HostsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostsPersistenceTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610101000000004 /* StoragePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StoragePersistenceTests.swift"; sourceTree = "<group>"; };
+		5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityKeychainCleanupTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerBatteryMappingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609233300000002 /* ControllerArrivalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerArrivalTests.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InputRecordingBackend.swift"; sourceTree = "<group>"; };
@@ -1500,6 +1502,7 @@
 				DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */,
 				DEC0DE202610101000000002 /* HostsPersistenceTests.swift */,
 				DEC0DE202610101000000004 /* StoragePersistenceTests.swift */,
+				5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */,
 				DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */,
 				DEC0DE202609233300000002 /* ControllerArrivalTests.swift */,
 				DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */,
@@ -2095,6 +2098,7 @@
 				DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */,
 				DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */,
 				DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */,
+				5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */,
 				DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */,
 				DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */,
 				DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */,
