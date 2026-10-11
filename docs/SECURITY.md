@@ -341,7 +341,8 @@ parsers directly instead:
   first packet shorter than its frame header reaching the decoder as video.
   Coverage-guided libFuzzer harnesses in `fuzz/` (RTSP and SDP, video, audio,
   audio FEC, Opus packets) run the same parsers under AddressSanitizer through
-  `scripts/fuzz.sh`, in a Verify job on every pull request and `main` commit.
+  `scripts/fuzz.sh`, in a Verify job on every `main` commit and every pull
+  request that changes more than documentation.
 - **Hardened Runtime library validation is ON for Release.** Sparkle is the only
   third-party framework, signed inside out with Glimmer's identity. The Release
   entitlements omit `disable-library-validation`. Ad hoc / Debug builds keep it

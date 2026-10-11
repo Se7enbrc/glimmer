@@ -19,24 +19,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The gate's three parts share no build products, so they run side by side.
+  # Main and dispatched runs build everything; a pull request skips the build and
+  # tests only when it changes nothing but documentation and the website.
+  changes:
+    name: Decide what to verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      parts: ${{ steps.decide.outputs.parts }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          build=true
+          if [ -n "$PR_NUMBER" ]; then
+            if paths="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)')" &&
+                [ "$(printf '%s\n' "$paths" | wc -l)" -lt 3000 ] &&
+                ! printf '%s\n' "$paths" | python3 scripts/verify-changed.py; then
+              build=false
+              echo "Documentation only; the build and tests run when main gets it."
+            fi
+          fi
+          checks='{"part":"checks","target":"check","coverage":"python"}'
+          tests='{"part":"tests","target":"test","coverage":"swift"}'
+          fuzz='{"part":"fuzz","target":"test-asan","coverage":""}'
+          if [ "$build" = true ]; then parts="[$checks,$tests,$fuzz]"; else parts="[$checks]"; fi
+          printf 'build=%s\nparts=%s\n' "$build" "$parts" >> "$GITHUB_OUTPUT"
+
+  # The gate's parts share no build products, so they run side by side.
   verify:
     name: Verify (${{ matrix.part }})
+    needs: changes
     runs-on: macos-26
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - part: checks
-            target: check
-            coverage: python
-          - part: tests
-            target: test
-            coverage: swift
-          - part: fuzz
-            target: test-asan
-            coverage: ""
+        include: ${{ fromJSON(needs.changes.outputs.parts) }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -149,6 +181,8 @@ jobs:
 
   fuzz:
     name: libFuzzer
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -164,12 +198,13 @@ jobs:
   # The required check: green only when every part of the gate passed.
   gate:
     name: macOS
-    needs: verify
+    needs: [changes, verify]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every part
         env:
+          DECIDED: ${{ needs.changes.result }}
           RESULT: ${{ needs.verify.result }}
-        run: test "$RESULT" = success
+        run: test "$DECIDED" = success && test "$RESULT" = success
