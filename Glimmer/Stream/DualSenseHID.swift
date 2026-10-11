@@ -55,6 +55,55 @@ struct DualSenseOutputState: Equatable, Sendable {
     var rightTrigger: [UInt8] = [UInt8](repeating: 0, count: 11)
 }
 
+extension DualSenseOutputState {
+    /// One trigger block = [mode][10 params], clamped to 11 bytes. The 0xFC-0xFE
+    /// debug/calibration modes can corrupt trigger state, so they neutralize to off.
+    static func triggerBlock(mode: UInt8, params: [UInt8]) -> [UInt8] {
+        var block = [UInt8](repeating: 0, count: 11)
+        guard mode < 0xFC else { return block } // 0x00 = off
+        block[0] = mode
+        for i in 0..<min(params.count, 10) { block[i + 1] = params[i] }
+        return block
+    }
+
+    /// The 47-byte effects state shared by both transports.
+    var effects: [UInt8] {
+        var d = [UInt8](repeating: 0, count: 47)
+        d[0] = 0x01 | 0x02
+        d[2] = rumbleRight   // ucRumbleRight (high-freq)
+        d[3] = rumbleLeft    // ucRumbleLeft  (low-freq)
+        if lightSet {
+            d[1] = 0x04
+            d[44] = lightR; d[45] = lightG; d[46] = lightB
+        }
+        // rgucRightTriggerEffect[11] @10, rgucLeftTriggerEffect[11] @21.
+        for i in 0..<11 { d[10 + i] = rightTrigger[i] }
+        for i in 0..<11 { d[21 + i] = leftTrigger[i] }
+        return d
+    }
+
+    /// USB 0x02 carries the 47 effects bytes (SetReport data excludes the ID). BT 0x31 is
+    /// 77 bytes: [0x02 flag][effects][pad][CRC32 LE], CRC over 0xA2, the ID, then the data.
+    func report(bluetooth: Bool) -> (reportID: UInt8, data: [UInt8]) {
+        guard bluetooth else { return (0x02, effects) }
+        var data = [UInt8](repeating: 0, count: 77)
+        data[0] = 0x02
+        data.replaceSubrange(1...47, with: effects)
+        let crc = Self.bluetoothCRC(reportID: 0x31, data: data[0..<73])
+        for i in 0..<4 { data[73 + i] = UInt8(truncatingIfNeeded: crc >> (8 * i)) }
+        return (0x31, data)
+    }
+
+    static func bluetoothCRC(reportID: UInt8, data: ArraySlice<UInt8>) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        for byte in [0xA2, reportID] + data {  // 0xA2 = BT output-report CRC seed tag
+            crc ^= UInt32(byte)
+            for _ in 0..<8 { crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB8_8320 : (crc >> 1) }
+        }
+        return crc ^ 0xFFFF_FFFF
+    }
+}
+
 /// Reports per second over the last full one-second window; nil until one
 /// completes. Measures the raw pad cadence next to GameController's.
 struct HIDReportRate: Equatable, Sendable {
@@ -347,8 +396,8 @@ final class DualSenseHID: @unchecked Sendable {
         lock.lock()
         guard let key = UnsafeMutableRawPointer(bitPattern: device),
               var outputState = outputStates[key] else { lock.unlock(); return }
-        if wantLeft { outputState.leftTrigger = Self.triggerBlock(mode: typeLeft, params: left) }
-        if wantRight { outputState.rightTrigger = Self.triggerBlock(mode: typeRight, params: right) }
+        if wantLeft { outputState.leftTrigger = DualSenseOutputState.triggerBlock(mode: typeLeft, params: left) }
+        if wantRight { outputState.rightTrigger = DualSenseOutputState.triggerBlock(mode: typeRight, params: right) }
         outputStates[key] = outputState
         lock.unlock()
         scheduleWrite(device: device)
@@ -390,17 +439,6 @@ final class DualSenseHID: @unchecked Sendable {
         }
     }
 
-    /// One trigger block = [mode][10 params], clamped to 11 bytes. Rejects the
-    /// 0xFC-0xFE debug/calibration modes (they can corrupt trigger state) by
-    /// neutralizing to "off" - defensive against a malformed host value.
-    private static func triggerBlock(mode: UInt8, params: [UInt8]) -> [UInt8] {
-        var block = [UInt8](repeating: 0, count: 11)
-        guard mode < 0xFC else { return block } // 0x00 = off
-        block[0] = mode
-        for i in 0..<min(params.count, 10) { block[i + 1] = params[i] }
-        return block
-    }
-
     private func scheduleWrite(device: DualSenseDeviceKey) {
         guard let key = UnsafeMutableRawPointer(bitPattern: device) else { return }
         lock.lock()
@@ -421,46 +459,9 @@ final class DualSenseHID: @unchecked Sendable {
         writeOutputReport(to: entry.device, bluetooth: entry.bluetooth, state: state)
     }
 
-    private static func effectsState(_ s: DualSenseOutputState) -> [UInt8] {
-        var d = [UInt8](repeating: 0, count: 47)
-        d[0] = 0x01 | 0x02
-        d[2] = s.rumbleRight   // ucRumbleRight (high-freq)
-        d[3] = s.rumbleLeft    // ucRumbleLeft  (low-freq)
-        if s.lightSet {
-            d[1] = 0x04
-            d[44] = s.lightR; d[45] = s.lightG; d[46] = s.lightB
-        }
-        // rgucRightTriggerEffect[11] @10, rgucLeftTriggerEffect[11] @21.
-        for i in 0..<11 { d[10 + i] = s.rightTrigger[i] }
-        for i in 0..<11 { d[21 + i] = s.leftTrigger[i] }
-        return d
-    }
-
     private func writeOutputReport(to device: IOHIDDevice, bluetooth: Bool,
                                    state: DualSenseOutputState) {
-        let payload = Self.effectsState(state)
-        let reportID: UInt8
-        var data: [UInt8]
-        if bluetooth {
-            // BT report 0x31: data = [0x02 seq/feature flag][47-byte effects]
-            // [pad to 74][CRC32 LE 4]. The CRC seed is 0xA2 (the BT output report
-            // tag), then the report-ID byte, then the data-up-to-CRC.
-            reportID = 0x31
-            data = [UInt8](repeating: 0, count: 78 - 1) // 77 data bytes (report total 78 incl. ID)
-            data[0] = 0x02
-            for i in 0..<47 { data[1 + i] = payload[i] }
-            let crc = Self.dualSenseBTCrc(reportID: reportID, data: Array(data[0..<(data.count - 4)]))
-            let base = data.count - 4
-            data[base + 0] = UInt8(crc & 0xFF)
-            data[base + 1] = UInt8((crc >> 8) & 0xFF)
-            data[base + 2] = UInt8((crc >> 16) & 0xFF)
-            data[base + 3] = UInt8((crc >> 24) & 0xFF)
-        } else {
-            // USB report 0x02: data = 47-byte effects state (SDL writes 48 incl.
-            // the report ID; the data we hand SetReport is the 47 after it).
-            reportID = 0x02
-            data = payload
-        }
+        let (reportID, data) = state.report(bluetooth: bluetooth)
         let rc = data.withUnsafeBufferPointer { buf -> IOReturn in
             guard let base = buf.baseAddress else { return kIOReturnBadArgument }
             return IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(reportID), base, buf.count)
@@ -490,19 +491,5 @@ final class DualSenseHID: @unchecked Sendable {
         let was = loggedWriteFailure
         loggedWriteFailure = true
         return was
-    }
-
-    private static func dualSenseBTCrc(reportID: UInt8, data: [UInt8]) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        func feed(_ byte: UInt8) {
-            crc ^= UInt32(byte)
-            for _ in 0..<8 {
-                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB8_8320 : (crc >> 1)
-            }
-        }
-        feed(0xA2)          // BT output-report CRC seed tag
-        feed(reportID)      // 0x31
-        for b in data { feed(b) }
-        return crc ^ 0xFFFF_FFFF
     }
 }

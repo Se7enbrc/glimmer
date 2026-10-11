@@ -78,3 +78,44 @@ extension HIDGamepadMapping {
         return Self(name: "heuristic", bindings: bindings)
     }
 }
+
+/// Element readings folded into a snapshot. Built from descriptors and each element's
+/// logical range, so it decodes values without a live device.
+struct HIDGamepadReadings {
+    private(set) var snapshot = HIDGamepadSnapshot()
+    private let axes: [HIDGamepadElement]
+    private let buttons: [HIDGamepadElement]
+    private let hats: [HIDGamepadElement]
+    private let logical: [UInt32: HIDGamepadElement.AxisRange]
+    private var ranges: [UInt32: HIDGamepadElement.AxisRange]
+
+    init(descriptors: [HIDGamepadElement], logical: [UInt32: HIDGamepadElement.AxisRange]) {
+        let axes = HIDGamepadElement.ordered(descriptors, kind: .axis)
+        self.axes = axes
+        buttons = HIDGamepadElement.ordered(descriptors, kind: .button)
+        hats = HIDGamepadElement.ordered(descriptors, kind: .hat)
+        self.logical = logical
+        ranges = logical.filter { cookie, _ in axes.contains { $0.cookie == cookie } }
+        snapshot.axes = Array(repeating: 0, count: axes.count)
+        snapshot.buttons = Array(repeating: false, count: buttons.count)
+        snapshot.hats = Array(repeating: 0, count: hats.count)
+    }
+
+    mutating func update(cookie: UInt32, raw: Int) {
+        guard let bounds = logical[cookie] else { return }
+        if let index = axes.firstIndex(where: { $0.cookie == cookie }), var range = ranges[cookie] {
+            snapshot.axes[index] = range.scale(raw)
+            ranges[cookie] = range
+        } else if let index = buttons.firstIndex(where: { $0.cookie == cookie }) {
+            snapshot.buttons[index] = raw > 0
+        } else if let index = hats.firstIndex(where: { $0.cookie == cookie }) {
+            snapshot.hats[index] = HIDGamepadElement.hat(value: raw, minimum: bounds.minimum, maximum: bounds.maximum)
+        }
+    }
+
+    static func batteryPercentage(raw: Int, range: HIDGamepadElement.AxisRange) -> UInt8? {
+        guard range.maximum > range.minimum else { return nil }
+        let fraction = Double(raw - range.minimum) / Double(range.maximum - range.minimum)
+        return UInt8((min(1, max(0, fraction)) * 100).rounded())
+    }
+}
