@@ -389,6 +389,9 @@
 		DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000006 /* PairingFlowTests.swift */; };
 		DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */; };
 		DEC0DE20261010E100000009 /* RtspHandshakeLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */; };
+		DEC0DE20261010A1000000B0 /* LoopbackUdpPeer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010A1000000F0 /* LoopbackUdpPeer.swift */; };
+		DEC0DE20261010A1000010B0 /* EnetHandshakeLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010A1000010F0 /* EnetHandshakeLoopbackTests.swift */; };
+		DEC0DE20261010A1000020B0 /* RtpReceiverLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010A1000020F0 /* RtpReceiverLoopbackTests.swift */; };
 		DEC0DE2026101010A0000001 /* RtspHandshakeParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101010A0000002 /* RtspHandshakeParsingTests.swift */; };
 		DEC0DE2026101010A0000003 /* SunshineHTTPParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101010A0000004 /* SunshineHTTPParsingTests.swift */; };
 		DEC0DE2026101010A0000005 /* PairingHandshakeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101010A0000006 /* PairingHandshakeTests.swift */; };
@@ -885,6 +888,9 @@
 		DEC0DE20261010E100000006 /* PairingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingFlowTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostStatusPollerTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RtspHandshakeLoopbackTests.swift; sourceTree = "<group>"; };
+		DEC0DE20261010A1000000F0 /* LoopbackUdpPeer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackUdpPeer.swift; sourceTree = "<group>"; };
+		DEC0DE20261010A1000010F0 /* EnetHandshakeLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnetHandshakeLoopbackTests.swift; sourceTree = "<group>"; };
+		DEC0DE20261010A1000020F0 /* RtpReceiverLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RtpReceiverLoopbackTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026101010A0000002 /* RtspHandshakeParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RtspHandshakeParsingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101010A0000004 /* SunshineHTTPParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SunshineHTTPParsingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101010A0000006 /* PairingHandshakeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingHandshakeTests.swift"; sourceTree = "<group>"; };
@@ -1421,6 +1427,9 @@
 				DEC0DE20261010E100000006 /* PairingFlowTests.swift */,
 				DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */,
 				DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */,
+				DEC0DE20261010A1000000F0 /* LoopbackUdpPeer.swift */,
+				DEC0DE20261010A1000010F0 /* EnetHandshakeLoopbackTests.swift */,
+				DEC0DE20261010A1000020F0 /* RtpReceiverLoopbackTests.swift */,
 				DEC0DE2026101010A0000002 /* RtspHandshakeParsingTests.swift */,
 				DEC0DE2026101010A0000004 /* SunshineHTTPParsingTests.swift */,
 				DEC0DE2026101010A0000006 /* PairingHandshakeTests.swift */,
@@ -2000,6 +2009,9 @@
 				DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */,
 				DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */,
 				DEC0DE20261010E100000009 /* RtspHandshakeLoopbackTests.swift in Sources */,
+				DEC0DE20261010A1000000B0 /* LoopbackUdpPeer.swift in Sources */,
+				DEC0DE20261010A1000010B0 /* EnetHandshakeLoopbackTests.swift in Sources */,
+				DEC0DE20261010A1000020B0 /* RtpReceiverLoopbackTests.swift in Sources */,
 				DEC0DE2026101010A0000001 /* RtspHandshakeParsingTests.swift in Sources */,
 				DEC0DE2026101010A0000003 /* SunshineHTTPParsingTests.swift in Sources */,
 				DEC0DE2026101010A0000005 /* PairingHandshakeTests.swift in Sources */,

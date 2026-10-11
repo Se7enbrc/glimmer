@@ -19,6 +19,30 @@ struct HostReachabilityTests {
         #expect(await HostReachability.measureRTT(host: "127.0.0.1", port: port) == .unreachable)
     }
 
+    @Test func aListeningPortIsReachableOnceLoopbackIsAllowed() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let outcome = await HostReachability.measureRTT(host: "127.0.0.1", port: Int(port.port), timeoutMs: 2_000,
+                                                        prohibitedInterfaces: [])
+        guard case .reachable(let rttMs) = outcome else {
+            Issue.record("expected reachable, got \(outcome)")
+            return
+        }
+        #expect(rttMs >= 0 && rttMs < 2_000)
+    }
+
+    @Test func aRefusedPortIsUnreachable() async throws {
+        let port = try #require(LoopbackPort(listening: false))
+        #expect(await HostReachability.measureRTT(host: "127.0.0.1", port: Int(port.port), timeoutMs: 300,
+                                                  prohibitedInterfaces: []) == .unreachable)
+    }
+
+    /// The launcher's probe never counts loopback, so a listener there still isn't a PC.
+    @Test func theLaunchersProbeRefusesLoopback() async throws {
+        let port = try #require(LoopbackPort(listening: true))
+        let outcome = await HostReachability.measureRTT(host: "127.0.0.1", port: Int(port.port))
+        if case .reachable = outcome { Issue.record("loopback counted as reachable") }
+    }
+
     /// Only the call that resumes the probe learns it won.
     @Test func onlyTheFirstResumeWins() async {
         var wins: [Bool] = []
