@@ -140,10 +140,13 @@ notarization, Gatekeeper acceptance and app/helper launch authorization.
 
 ### Website and update feed
 
-GitHub Pages serves the repository root on `main` at `glimmer.ugfugl.io`.
-`index.html` and `website/` are the static landing page; `.nojekyll` keeps the
-site and `appcast.xml` as plain files. Preview with
-`python3 -m http.server 8765` from the repository root. No site build is needed.
+GitHub Pages serves the repository root on `main` at
+`https://se7enbrc.github.io/glimmer/`, the address `SUFeedURL` reads. A custom
+domain makes Pages redirect that address, so add one only after a release that
+reads the feed from the custom domain directly has reached users. `index.html`
+and `website/` are the static landing page; `.nojekyll` keeps the site and
+`appcast.xml` as plain files. Preview with `python3 -m http.server 8765` from
+the repository root. No site build is needed.
 
 Configure Cloudflare with a DNS-only CNAME to `se7enbrc.github.io` and GitHub's
 domain verification TXT record. Keep the TXT record and the root `CNAME` file.
